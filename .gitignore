@@ -154,6 +154,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# .streamlit/secrets.toml is ignored to keep API keys and creds local
+.streamlit/secrets.toml
+
 # mypy
 .mypy_cache/
 .dmypy.json

@@ -1,3 +1,4 @@
 streamlit
 falkordb
 langchain
+langchain-openai
