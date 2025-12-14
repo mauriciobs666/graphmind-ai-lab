@@ -17,40 +17,17 @@ tools = [
 
 # Create chat history callback
 
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-
-
-class InMemoryChatMessageHistory(BaseChatMessageHistory):
-    def __init__(self):
-        self._messages: List[BaseMessage] = []
-
-    @property
-    def messages(self) -> List[BaseMessage]:
-        return self._messages
-
-    def add_user_message(self, message):
-        self._messages.append(message if isinstance(message, BaseMessage) else HumanMessage(content=message))
-
-    def add_ai_message(self, message):
-        self._messages.append(message if isinstance(message, BaseMessage) else AIMessage(content=message))
-
-    def set_messages(self, messages: List[BaseMessage]):
-        self._messages = list(messages)
-
-    def clear(self):
-        self._messages = []
-
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.messages import AIMessage, BaseMessage
 
 _memory_store: Dict[str, InMemoryChatMessageHistory] = {}
 
 
-def get_memory(session_id: str) -> BaseChatMessageHistory:
+def get_memory(session_id: str) -> InMemoryChatMessageHistory:
     if session_id not in _memory_store:
         _memory_store[session_id] = InMemoryChatMessageHistory()
     return _memory_store[session_id]
 
-# Create the agent
 
 from langchain.agents import create_agent
 
@@ -82,10 +59,6 @@ def _extract_last_ai_message(messages: List[BaseMessage]) -> AIMessage | None:
             return message
     return None
 
-"""
-Call the conversational agent and return a response for the UI.
-"""
-
 def generate_response(user_input: str):
     session_id = get_session_id()
     memory = get_memory(session_id)
@@ -94,7 +67,7 @@ def generate_response(user_input: str):
     state = agent_graph.invoke({"messages": memory.messages})
 
     messages = state["messages"]
-    memory.set_messages(messages)
+    memory.messages = list(messages)
 
     ai_message = _extract_last_ai_message(messages)
     if not ai_message:

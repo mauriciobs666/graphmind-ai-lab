@@ -20,34 +20,45 @@ if not logger.handlers:
 logger.setLevel(logging.DEBUG)
 
 CYPHER_GENERATION_TEMPLATE = """
-Você é um desenvolvedor especialista em FalkorDB.
-Gere apenas uma consulta Cypher para responder a pergunta do usuário
-seguindo o esquema descrito abaixo.
+You are a FalkorDB expert developer.
+Generate exactly one Cypher query that answers the user question,
+based strictly on the schema below.
 
-Esquema:
+Schema:
 {schema}
 
-Regras:
-- Utilize somente os labels, relacionamentos e propriedades mostrados no esquema.
-- Gere apenas consultas de leitura (MATCH/RETURN).
-- Sempre use aliases descritivos com `AS` para cada coluna retornada. Ex: `RETURN p.sabor AS sabor, p.preco AS preco`.
-- Não inclua nenhum texto explicativo, apenas a consulta pura.
-- Quando precisar comparar textos, utilize sempre comparações case-insensitive com toLower(), por exemplo: `WHERE toLower(i.nome) = toLower("queijo")`.
-- SEMPRE que for comparar textos, utilize CONTAINS, por exemplo: `WHERE toLower(i.nome) CONTAINS toLower("queijo")`.
-- Retorne sempre explicitamente cada uma de todas as propriedades dos nós e relacionamentos no RETURN.
+Rules:
+- Use only the labels/relationships/properties described above.
+- Generate read-only statements (MATCH/RETURN) and keep one `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)` block.
+- Always return **all** columns with aliases: `RETURN p.sabor AS sabor, p.preco AS preco, collect(DISTINCT i.nome) AS ingredientes`.
+- When filtering, prefer `p.sabor` for flavor questions. If filtering by ingredient, still collect every ingredient of the pastel (do not limit to the filtered one).
+- Always use case-insensitive comparisons with `toLower()`, preferably with `CONTAINS`.
+- No explanations or comments—only valid Cypher.
+- Always list every property you need explicitly in the RETURN clause.
+- Use only the Portuguese property names shown (e.g., `p.sabor`, `p.preco`, `i.nome`); do not invent English variants.
+- Do not add `LIMIT`, `ORDER BY`, or extra `MATCH`/`OPTIONAL MATCH` clauses unless the user explicitly requests them.
+- Aggregate ingredients even when filtering by a single ingredient (never return just the matched ingredient).
+- When excluding ingredients, filter *after* collecting them for each pastel (e.g., collect into `ingredientes`, then use `WHERE ALL(nome IN ingredientes WHERE ...)`).
+- Example template:
+  `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)`
+  `WHERE toLower(p.sabor) = toLower("Calabresa")`
+  `RETURN p.sabor AS sabor, p.preco AS preco, collect(DISTINCT i.nome) AS ingredientes`
 
-Pergunta:
+Question:
 {question}
 """
 
 ANSWER_TEMPLATE = """
-Você recebeu uma pergunta sobre o grafo de conhecimento.
-Use a consulta Cypher e os resultados devolvidos para responder de forma clara.
-Se a consulta não trouxe registros, diga que não encontrou informação suficiente.
+You are the virtual attendant for “Pastel do Mau”.
+Use only the structured data provided below to answer the customer.
+- Mention flavors, ingredients, and prices returned in the context.
+- If multiple pastéis match, summarize them in natural language (e.g., bullet list or short paragraphs).
+- If the context is empty, politely say that you don’t have enough information.
+- Do **not** invent data beyond what is shown.
 
-Pergunta: {question}
-Consulta Cypher: {cypher_query}
-Resultados: {context}
+Customer Question: {question}
+Cypher Query Used: {cypher_query}
+Query Results (JSON): {context}
 """
 
 cypher_prompt = ChatPromptTemplate.from_template(CYPHER_GENERATION_TEMPLATE)
@@ -59,15 +70,15 @@ answer_chain = answer_prompt | llm | StrOutputParser()
 
 def _extract_cypher(text: str) -> str:
     if not text:
-        logger.debug("LLM returned empty response for Cypher generation.")
+        logger.debug("LLM returned an empty response for Cypher generation.")
         return ""
     fenced_blocks = re.findall(r"```(?:cypher)?(.*?)```", text, flags=re.IGNORECASE | re.DOTALL)
     if fenced_blocks:
         query = fenced_blocks[-1].strip()
-        logger.debug("Extrai bloco Cypher explícito:\n%s", query)
+        logger.debug("Extracted Cypher block:\n%s", query)
         return query
     query = text.strip()
-    logger.debug("Usando resposta completa como Cypher:\n%s", query)
+    logger.debug("Using entire response as Cypher:\n%s", query)
     return query
 
 
@@ -115,38 +126,38 @@ def _format_rows(result) -> List[Dict[str, Any]]:
 
 def _execute_cypher(query: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     try:
-        logger.debug("Executando Cypher:\n%s", query)
+        logger.debug("Running Cypher:\n%s", query)
         query_result = graph.ro_query(query)
     except Exception as exc:
-        logger.exception("Erro ao executar Cypher.")
-        return [], f"Não consegui executar a consulta Cypher: {exc}"
+        logger.exception("Error running Cypher.")
+        return [], f"Failed to execute the Cypher query: {exc}"
     rows = _format_rows(query_result)
-    logger.debug("Consulta retornou %d linha(s).", len(rows))
+    logger.debug("Query returned %d row(s).", len(rows))
     return rows, None
 
 
 def cypher_qa(question: str) -> str:
-    logger.info("Pergunta recebida: %s", question)
+    logger.info("Question received: %s", question)
     schema = get_schema_description()
-    logger.debug("Schema resumido:\n%s", schema)
+    logger.debug("Schema snapshot:\n%s", schema)
     cypher_suggestion = cypher_chain.invoke({"schema": schema, "question": question})
-    logger.debug("Resposta completa do gerador de Cypher:\n%s", cypher_suggestion)
+    logger.debug("Raw Cypher generation output:\n%s", cypher_suggestion)
     cypher_query = _extract_cypher(cypher_suggestion)
 
     if not cypher_query:
-        logger.warning("Falha ao gerar consulta Cypher para a pergunta.")
-        return "Não consegui gerar uma consulta Cypher para essa pergunta."
+        logger.warning("Failed to generate a Cypher query for this question.")
+        return "I could not generate a Cypher query for that question."
 
     rows, error = _execute_cypher(cypher_query)
     if error:
-        logger.error("Erro executando consulta: %s", error)
+        logger.error("Error executing query: %s", error)
         return error
 
-    context = json.dumps(rows, ensure_ascii=False, indent=2) if rows else "Nenhum registro encontrado."
-    logger.debug("Contexto repassado ao LLM:\n%s", context)
+    context = json.dumps(rows, ensure_ascii=False, indent=2) if rows else "No records found."
+    logger.debug("Context passed to the LLM:\n%s", context)
 
     answer = answer_chain.invoke(
         {"question": question, "cypher_query": cypher_query, "context": context}
     )
-    logger.info("Resposta final do atendente: %s", answer)
+    logger.info("Final answer returned to the user: %s", answer)
     return answer
