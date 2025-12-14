@@ -50,7 +50,10 @@ agent_graph = create_agent(
 
 # Create a handler to call the agent
 
-from utils import get_session_id
+from utils_common import get_session_id
+from utils_common import setup_logger
+
+logger = setup_logger("agent")
 
 
 def _extract_last_ai_message(messages: List[BaseMessage]) -> AIMessage | None:
@@ -59,7 +62,16 @@ def _extract_last_ai_message(messages: List[BaseMessage]) -> AIMessage | None:
             return message
     return None
 
-def generate_response(user_input: str):
+def generate_response(user_input: str) -> str:
+    """
+    Generate a response for the given user input using the agent.
+
+    Args:
+        user_input (str): The input message from the user.
+
+    Returns:
+        str: The agent's response to the user input.
+    """
     session_id = get_session_id()
     memory = get_memory(session_id)
     memory.add_user_message(user_input)

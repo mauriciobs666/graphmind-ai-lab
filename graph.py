@@ -1,5 +1,6 @@
 import streamlit as st
 from falkordb import FalkorDB
+from config import Config
 
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
@@ -26,18 +27,25 @@ def _build_url(host: str, port: int, username: Optional[str], password: Optional
     return f"redis://{auth}{host}:{port}"
 
 
-connection_url = _normalize_url(st.secrets.get("FALKORDB_URL"))
-graph_name = st.secrets.get("FALKORDB_GRAPH", "kg_pastel")
+connection_url = Config.get_falkordb_url()
+graph_name = Config.get_falkordb_graph()
 
 if connection_url and connection_url != DEFAULT_URL:
     db = FalkorDB.from_url(connection_url)
 else:
-    host = st.secrets.get("FALKORDB_HOST", "localhost")
-    port = int(st.secrets.get("FALKORDB_PORT", 6379))
-    username = st.secrets.get("FALKORDB_USERNAME")
-    password = st.secrets.get("FALKORDB_PASSWORD")
-    db = FalkorDB(host=host, port=port, username=username, password=password)
-    connection_url = _build_url(host, port, username, password)
+    credentials = Config.get_falkordb_credentials()
+    db = FalkorDB(
+        host=credentials["host"],
+        port=credentials["port"],
+        username=credentials["username"],
+        password=credentials["password"]
+    )
+    connection_url = _build_url(
+        credentials["host"],
+        credentials["port"],
+        credentials["username"],
+        credentials["password"]
+    )
 
 FALKORDB_URL = connection_url
 graph = db.select_graph(graph_name)

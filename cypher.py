@@ -11,13 +11,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from llm import llm
 from graph import get_schema_description, graph
+from utils_common import stringify_value, setup_logger
 
-logger = logging.getLogger("tools.cypher")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+logger = setup_logger("tools.cypher")
 
 CYPHER_GENERATION_TEMPLATE = """
 You are a FalkorDB expert developer.
@@ -82,23 +78,6 @@ def _extract_cypher(text: str) -> str:
     return query
 
 
-def _stringify_value(value: Any) -> Any:
-    if isinstance(value, Node):
-        return {"labels": value.labels, "properties": value.properties}
-    if isinstance(value, Edge):
-        return {
-            "type": value.relation,
-            "source": value.src_node.properties,
-            "target": value.dest_node.properties,
-            "properties": value.properties,
-        }
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, list):
-        return [_stringify_value(item) for item in value]
-    return value
-
-
 def _normalize_header(header: Any, idx: int) -> str:
     if isinstance(header, (list, tuple)):
         header = header[0]
@@ -119,12 +98,22 @@ def _format_rows(result) -> List[Dict[str, Any]]:
     for row in result.result_set:
         record = {}
         for idx, header in enumerate(headers):
-            record[header] = _stringify_value(row[idx])
+            record[header] = stringify_value(row[idx])
         rows.append(record)
     return rows
 
 
 def _execute_cypher(query: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Execute a Cypher query against the FalkorDB graph.
+
+    Args:
+        query (str): The Cypher query to execute.
+
+    Returns:
+        Tuple[List[Dict[str, Any]], Optional[str]]: A tuple containing the query results as a list of dictionaries
+        and an optional error message if the query fails.
+    """
     try:
         logger.debug("Running Cypher:\n%s", query)
         query_result = graph.ro_query(query)

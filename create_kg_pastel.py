@@ -1,11 +1,16 @@
-
 from falkordb import FalkorDB
+from config import Config
 
 # Conecta-se ao FalkorDB
-db = FalkorDB(host='localhost', port=6379)
+credentials = Config.get_falkordb_credentials()
+db = FalkorDB(
+    host=credentials["host"],
+    port=credentials["port"],
+    username=credentials["username"],
+    password=credentials["password"]
+)
 
-# Seleciona o grafo desejado
-graph = db.select_graph('kg_pastel')
+graph = db.select_graph(Config.get_falkordb_graph())
 
 # Limpa qualquer dado pré-existente no grafo
 graph.query('MATCH (n) DETACH DELETE n')
