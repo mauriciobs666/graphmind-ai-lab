@@ -1,7 +1,10 @@
 import streamlit as st
-from agent import generate_response
+from agent import generate_response, get_cart_snapshot
 
 st.set_page_config("Pastel do Mau", page_icon=":cook:")
+
+def format_currency(value: float) -> str:
+    return f"R${value:.2f}".replace(".", ",")
 
 def write_message(role, content, save=True):
     """
@@ -21,6 +24,23 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "Pastel do mau, o mais legal ! Em que posso ajudar?"},
     ]
+
+def render_cart():
+    snapshot = get_cart_snapshot()
+    with st.sidebar:
+        st.subheader("Carrinho")
+        items = snapshot["items"]
+        if not items:
+            st.write("Carrinho vazio.")
+            return
+        for item in items:
+            subtotal = item["preco"] * item["quantidade"]
+            st.write(
+                f"{item['quantidade']}× {item['sabor']} — "
+                f"{format_currency(item['preco'])} "
+                f"(subtotal {format_currency(subtotal)})"
+            )
+        st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
 
 # Submit handler
 def handle_submit(message):
@@ -42,3 +62,5 @@ if question := st.chat_input(". . ."):
 
     # Generate a response
     handle_submit(question)
+
+render_cart()

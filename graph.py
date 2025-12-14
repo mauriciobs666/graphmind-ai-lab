@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 from falkordb import FalkorDB
 from config import Config
@@ -6,6 +7,12 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 DEFAULT_URL = "redis://localhost:6379"
+logger = logging.getLogger("graph")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def _normalize_url(url: str) -> str:
@@ -30,25 +37,38 @@ def _build_url(host: str, port: int, username: Optional[str], password: Optional
 connection_url = Config.get_falkordb_url()
 graph_name = Config.get_falkordb_graph()
 
-if connection_url and connection_url != DEFAULT_URL:
-    db = FalkorDB.from_url(connection_url)
-else:
-    credentials = Config.get_falkordb_credentials()
-    db = FalkorDB(
-        host=credentials["host"],
-        port=credentials["port"],
-        username=credentials["username"],
-        password=credentials["password"]
-    )
-    connection_url = _build_url(
-        credentials["host"],
-        credentials["port"],
-        credentials["username"],
-        credentials["password"]
-    )
+try:
+    if connection_url and connection_url != DEFAULT_URL:
+        db = FalkorDB.from_url(connection_url)
+    else:
+        credentials = Config.get_falkordb_credentials()
+        db = FalkorDB(
+            host=credentials["host"],
+            port=credentials["port"],
+            username=credentials["username"],
+            password=credentials["password"]
+        )
+        connection_url = _build_url(
+            credentials["host"],
+            credentials["port"],
+            credentials["username"],
+            credentials["password"]
+        )
 
-FALKORDB_URL = connection_url
-graph = db.select_graph(graph_name)
+    FALKORDB_URL = connection_url
+    graph = db.select_graph(graph_name)
+except Exception as exc:  # pragma: no cover - defensive fallback for tests/CI
+    logger.warning("Não foi possível conectar ao FalkorDB: %s", exc)
+
+    class _UnavailableGraph:
+        def ro_query(self, *args, **kwargs):
+            raise RuntimeError(
+                "FalkorDB indisponível no momento. "
+                "Verifique a conexão ao banco antes de executar consultas."
+            ) from exc
+
+    graph = _UnavailableGraph()
+    FALKORDB_URL = connection_url or DEFAULT_URL
 
 
 @lru_cache(maxsize=1)

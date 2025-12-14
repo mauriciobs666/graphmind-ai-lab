@@ -61,21 +61,8 @@ streamlit run chatbot.py
 Highlights:
 - Per-session memory to keep the conversation coherent.
 - The `cardapio` tool automatically generates Cypher queries for flavors/ingredients/prices.
+- Integrated cart workflow: the assistant can adicionar/ver/limpar o carrinho via LangGraph tools, and the Streamlit sidebar reflects the current items and total.
 - Verbose logging so you can inspect the generated Cypher and results.
-
-## Repository layout
-
-```
-graphmind-ai-lab/
-├─ agent.py
-├─ chatbot.py
-├─ create_kg_pastel.py
-├─ cypher.py
-├─ graph.py
-├─ llm.py
-├─ utils.py
-└─ .streamlit/
-```
 
 ## Troubleshooting
 
