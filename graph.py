@@ -58,13 +58,13 @@ try:
     FALKORDB_URL = connection_url
     graph = db.select_graph(graph_name)
 except Exception as exc:  # pragma: no cover - defensive fallback for tests/CI
-    logger.warning("Não foi possível conectar ao FalkorDB: %s", exc)
+    logger.warning("Could not connect to FalkorDB: %s", exc)
 
     class _UnavailableGraph:
         def ro_query(self, *args, **kwargs):
             raise RuntimeError(
-                "FalkorDB indisponível no momento. "
-                "Verifique a conexão ao banco antes de executar consultas."
+                "FalkorDB is unavailable. "
+                "Verify the database connection before running queries."
             ) from exc
 
     graph = _UnavailableGraph()

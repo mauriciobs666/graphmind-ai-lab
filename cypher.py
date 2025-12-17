@@ -26,19 +26,19 @@ Schema:
 Rules:
 - Use only the labels/relationships/properties described above.
 - Generate read-only statements (MATCH/RETURN) and keep one `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)` block.
-- Always return **all** columns with aliases: `RETURN p.sabor AS sabor, p.preco AS preco, collect(DISTINCT i.nome) AS ingredientes`.
-- When filtering, prefer `p.sabor` for flavor questions. If filtering by ingredient, still collect every ingredient of the pastel (do not limit to the filtered one).
+- Always return **all** columns with aliases: `RETURN p.flavor AS flavor, p.price AS price, collect(DISTINCT i.name) AS ingredients`.
+- When filtering, prefer `p.flavor` for flavor questions. If filtering by ingredient, still collect every ingredient of the pastel (do not limit to the filtered one).
 - Always use case-insensitive comparisons with `toLower()`, preferably with `CONTAINS`.
 - No explanations or comments—only valid Cypher.
 - Always list every property you need explicitly in the RETURN clause.
-- Use only the Portuguese property names shown (e.g., `p.sabor`, `p.preco`, `i.nome`); do not invent English variants.
+- Use only the property names shown (e.g., `p.flavor`, `p.price`, `i.name`); do not invent new ones.
 - Do not add `LIMIT`, `ORDER BY`, or extra `MATCH`/`OPTIONAL MATCH` clauses unless the user explicitly requests them.
 - Aggregate ingredients even when filtering by a single ingredient (never return just the matched ingredient).
-- When excluding ingredients, filter *after* collecting them for each pastel (e.g., collect into `ingredientes`, then use `WHERE ALL(nome IN ingredientes WHERE ...)`).
+- When excluding ingredients, filter *after* collecting them for each pastel (e.g., collect into `ingredients`, then use `WHERE ALL(name IN ingredients WHERE ...)`).
 - Example template:
   `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)`
-  `WHERE toLower(p.sabor) = toLower("Calabresa")`
-  `RETURN p.sabor AS sabor, p.preco AS preco, collect(DISTINCT i.nome) AS ingredientes`
+  `WHERE toLower(p.flavor) = toLower("Calabresa")`
+  `RETURN p.flavor AS flavor, p.price AS price, collect(DISTINCT i.name) AS ingredients`
 
 Question:
 {question}
@@ -51,6 +51,7 @@ Use only the structured data provided below to answer the customer.
 - If multiple pastéis match, summarize them in natural language (e.g., bullet list or short paragraphs).
 - If the context is empty, politely say that you don’t have enough information.
 - Do **not** invent data beyond what is shown.
+- Respond in Brazilian Portuguese.
 
 Customer Question: {question}
 Cypher Query Used: {cypher_query}
@@ -119,7 +120,7 @@ def _execute_cypher(query: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         query_result = graph.ro_query(query)
     except Exception as exc:
         logger.exception("Error running Cypher.")
-        return [], f"Failed to execute the Cypher query: {exc}"
+        return [], f"Não consegui executar a consulta Cypher: {exc}"
     rows = _format_rows(query_result)
     logger.debug("Query returned %d row(s).", len(rows))
     return rows, None
@@ -135,7 +136,7 @@ def cypher_qa(question: str) -> str:
 
     if not cypher_query:
         logger.warning("Failed to generate a Cypher query for this question.")
-        return "I could not generate a Cypher query for that question."
+        return "Não consegui gerar uma consulta Cypher para essa pergunta."
 
     rows, error = _execute_cypher(cypher_query)
     if error:

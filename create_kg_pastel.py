@@ -1,7 +1,7 @@
 from falkordb import FalkorDB
 from config import Config
 
-# Conecta-se ao FalkorDB
+# Connect to FalkorDB using Streamlit secrets.
 credentials = Config.get_falkordb_credentials()
 db = FalkorDB(
     host=credentials["host"],
@@ -12,10 +12,10 @@ db = FalkorDB(
 
 graph = db.select_graph(Config.get_falkordb_graph())
 
-# Limpa qualquer dado pré-existente no grafo
+# Remove any existing data from the graph.
 graph.query('MATCH (n) DETACH DELETE n')
 
-# Lista de sabores e seus ingredientes
+# Menu flavors with their ingredients and prices.
 pastel_recipes = [
     {'sabor': 'Carne', 'ingredientes': ['Carne moída', 'Cebola', 'Azeitona'], 'preco': 32.0},
     {'sabor': 'Frango', 'ingredientes': ['Frango desfiado', 'Catupiry', 'Milho'], 'preco': 27.0},
@@ -34,32 +34,32 @@ pastel_recipes = [
     {'sabor': 'Camarão', 'ingredientes': ['Camarão', 'Catupiry', 'Alho Poró'], 'preco': 50.0},
 ]
 
-# Cria os nós Pastel, os nós Ingrediente e relacionamentos FEITO_DE
+# Create Pastel/Ingrediente nodes plus the FEITO_DE relationships.
 graph.query(
     '''
     UNWIND $recipes AS pastel
-    CREATE (p:Pastel {sabor: pastel.sabor, preco: pastel.preco})
+    CREATE (p:Pastel {flavor: pastel.sabor, price: pastel.preco})
     WITH p, pastel.ingredientes AS ingredientes
     UNWIND ingredientes AS ingrediente
-    MERGE (i:Ingrediente {nome: ingrediente})
+    MERGE (i:Ingrediente {name: ingrediente})
     CREATE (p)-[:FEITO_DE]->(i)
     ''',
     params={'recipes': pastel_recipes},
 )
 
-# Exibe os sabores e ingredientes associados
+# Display the created flavors and their ingredients.
 result = graph.ro_query(
     '''
     MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)
-    RETURN p.sabor AS sabor, p.preco AS preco, collect(i.nome) AS ingredientes
-    ORDER BY sabor
+    RETURN p.flavor AS flavor, p.price AS price, collect(i.name) AS ingredients
+    ORDER BY flavor
     '''
 ).result_set
-for sabor, preco, ingredientes in result:
-    ingredientes_list = ', '.join(ingredientes)
-    print(f'Pastel sabor: {sabor} | Ingredientes: {ingredientes_list} | Preço: R$ {preco:.2f}')
+for flavor, price, ingredients in result:
+    ingredient_list = ', '.join(ingredients)
+    print(f'Pastel flavor: {flavor} | Ingredients: {ingredient_list} | Price: R$ {price:.2f}')
 
-# Resumo do estado atual do grafo
+# Print a graph summary.
 summary = graph.ro_query(
     '''
     MATCH (p:Pastel)-[r:FEITO_DE]->(i:Ingrediente)

@@ -45,7 +45,7 @@ def render_cart():
 # Submit handler
 def handle_submit(message):
     # Handle the response
-    with st.spinner('Thinking...'):
+    with st.spinner('Pensando...'):
         # Call the agent
         response = generate_response(message)
         write_message('assistant', response)

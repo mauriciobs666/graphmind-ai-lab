@@ -123,12 +123,12 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
 
     query = """
     MATCH (p:Pastel)
-    RETURN p.sabor AS sabor, p.preco AS preco
+    RETURN p.flavor AS sabor, p.price AS preco
     """
     try:
         result = graph.ro_query(query)
     except Exception:
-        logger.exception("Falha ao consultar o pastel %s.", flavor)
+        logger.exception("Failed to query pastel %s.", flavor)
         return None
 
     rows = getattr(result, "result_set", [])
@@ -144,7 +144,7 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
         try:
             price_value = float(preco_raw)
         except (TypeError, ValueError):
-            logger.warning("Preço inválido retornado para %s: %s", sabor_raw, preco_raw)
+            logger.warning("Invalid price returned for %s: %s", sabor_raw, preco_raw)
             continue
 
         if normalized == target:
@@ -254,43 +254,44 @@ tools = [
     Tool.from_function(
         name="cardapio",
         description=(
-            "Consultar o cardápio sobre sabores, ingredientes e preços. "
-            "Use antes de responder dúvidas sobre os pastéis."
+            "Consult the cardápio for flavors, ingredients, and prices. "
+            "Use it before answering any pastel-related question."
         ),
         func=cypher_qa,
     ),
     Tool.from_function(
         name="adicionar_carrinho",
         description=(
-            "Adicionar um pastel ao carrinho depois de confirmar sabor e quantidade."
+            "Add a pastel to the cart after confirming the flavor and quantity."
         ),
         func=add_to_cart_tool,
     ),
     Tool.from_function(
         name="ver_carrinho",
-        description="Mostrar itens e total acumulado do carrinho.",
+        description="Show the cart items and the running total.",
         func=show_cart_tool,
     ),
     Tool.from_function(
         name="limpar_carrinho",
-        description="Esvaziar o carrinho quando o cliente quiser recomeçar.",
+        description="Empty the cart when the customer wants to start over.",
         func=clear_cart_tool,
     ),
 ]
 
 system_prompt = """
-Você é um atendente virtual da pastelaria Pastel do Mau.
-Use sempre os dados do cardápio para sugerir sabores, consultar ingredientes e preços.
-Seja amigável, use um tom acolhedor e ofereça recomendações baseadas nas preferências do cliente.
-Desencoraje perguntas que não estejam relacionadas aos nossos pastéis ou ingredientes disponíveis.
-Sempre que o cliente pedir informações sobre sabores, ingredientes ou preços, consulte a tool cardápio antes de responder.
-Registre pedidos no carrinho usando as ferramentas apropriadas:
-- `adicionar_carrinho` após confirmar sabor e quantidade.
-- `ver_carrinho` para revisar os itens e informar totais.
-- `limpar_carrinho` quando o cliente quiser recomeçar o pedido.
-Se não souber a resposta, admita honestamente.
-Seja sucinto e direto ao ponto em suas respostas.
-Preços devem ser precisos conforme o cardápio e não podem ser alterados.
+You are the virtual attendant for the Pastel do Mau shop.
+Always rely on the cardápio data to suggest flavors, ingredients, and prices.
+Be friendly, keep a warm tone, and recommend items that match the customer's preferences.
+Discourage questions unrelated to our pastéis or ingredients.
+Whenever the customer asks about flavors, ingredients, or prices, consult the `cardapio` tool before replying.
+Record orders in the cart with the proper tools:
+- `adicionar_carrinho` after confirming flavor and quantity.
+- `ver_carrinho` to review the current cart and totals.
+- `limpar_carrinho` when the customer wants to start over.
+If you do not know the answer, say so honestly.
+Keep responses concise and focused.
+Prices must match the menu and cannot be changed.
+Respond to the customer in Brazilian Portuguese.
 """
 
 _system_message = SystemMessage(content=system_prompt.strip())
