@@ -1,5 +1,10 @@
 import streamlit as st
-from agent import generate_response, get_cart_snapshot
+from agent import (
+    generate_response,
+    get_cart_snapshot,
+    get_customer_profile,
+    is_order_ready,
+)
 
 st.set_page_config("Pastel do Mau", page_icon=":cook:")
 
@@ -25,22 +30,29 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "Pastel do mau, o mais legal ! Em que posso ajudar?"},
     ]
 
-def render_cart():
+def render_sidebar():
     snapshot = get_cart_snapshot()
+    profile = get_customer_profile()
+    ready = is_order_ready()
     with st.sidebar:
+        st.subheader("Cliente")
+        st.write(f"Nome: {profile['customer_name'] or '—'}")
+        st.write(f"Endereço: {profile['delivery_address'] or '—'}")
+        st.write(f"Pagamento: {profile['payment_method'] or '—'}")
+        if ready:
+            st.markdown(":green-background[Pedido em preparo]")
+        st.divider()
         st.subheader("Carrinho")
         items = snapshot["items"]
         if not items:
             st.write("Carrinho vazio.")
-            return
-        for item in items:
-            subtotal = item["preco"] * item["quantidade"]
-            st.write(
-                f"{item['quantidade']}× {item['sabor']} — "
-                f"{format_currency(item['preco'])} "
-                f"(subtotal {format_currency(subtotal)})"
-            )
-        st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
+        else:
+            for item in items:
+                st.write(
+                    f"{item['quantidade']}× {item['sabor']} — "
+                    f"{format_currency(item['preco'])}"
+                )
+            st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
 
 # Submit handler
 def handle_submit(message):
@@ -63,4 +75,4 @@ if question := st.chat_input(". . ."):
     # Generate a response
     handle_submit(question)
 
-render_cart()
+render_sidebar()
