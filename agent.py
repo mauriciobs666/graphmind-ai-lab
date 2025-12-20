@@ -1,50 +1,34 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Optional, TypedDict, Literal
+from typing import Annotated, List, Optional, TypedDict, Literal
 
 import re
-import unicodedata
-from difflib import SequenceMatcher
 
-from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import Tool
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from cart import (
+    CartItem,
+    add_to_cart_tool,
+    cart_has_items,
+    clear_cart_tool,
+    get_cart_snapshot,
+    show_cart_tool,
+)
+from customer_profile import (
+    CustomerProfile,
+    InfoStage,
+    get_customer_profile,
+    get_profile,
+    is_order_ready,
+    reset_customer_profile,
+)
 from cypher import cypher_qa
-from graph import graph
 from llm import llm
-from utils_common import get_session_id, setup_logger
-
-
-class CartItem(TypedDict):
-    sabor: str
-    preco: float
-    quantidade: int
-
-
-_memory_store: Dict[str, InMemoryChatMessageHistory] = {}
-_cart_store: Dict[str, List[CartItem]] = {}
-_profile_store: Dict[str, "CustomerProfile"] = {}
-_active_session_id: Optional[str] = None
-
-# NOTE: keep string literals in sync with InfoStage type hints
-InfoStage = Literal[
-    "need_name",
-    "awaiting_name",
-    "idle",
-    "awaiting_address",
-    "awaiting_payment",
-    "complete",
-]
-
-
-class CustomerProfile(TypedDict):
-    customer_name: Optional[str]
-    delivery_address: Optional[str]
-    payment_method: Optional[str]
-    info_stage: InfoStage
+from session_manager import ensure_session_id, get_memory
+from utils_common import setup_logger
 
 
 class AgentState(TypedDict):
@@ -57,148 +41,10 @@ class AgentState(TypedDict):
 logger = setup_logger("agent")
 
 
-def get_memory(session_id: str) -> InMemoryChatMessageHistory:
-    if session_id not in _memory_store:
-        _memory_store[session_id] = InMemoryChatMessageHistory()
-    return _memory_store[session_id]
-
-
-def _get_cart(session_id: str) -> List[CartItem]:
-    if session_id not in _cart_store:
-        _cart_store[session_id] = []
-    return _cart_store[session_id]
-
-
-def _create_default_profile() -> CustomerProfile:
-    return {
-        "customer_name": None,
-        "delivery_address": None,
-        "payment_method": None,
-        "info_stage": "need_name",
-    }
-
-
-def _get_profile(session_id: str) -> CustomerProfile:
-    if session_id not in _profile_store:
-        _profile_store[session_id] = _create_default_profile()
-    return _profile_store[session_id]
-
-
-def get_customer_profile(session_id: Optional[str] = None) -> CustomerProfile:
-    session = _ensure_session_id(session_id)
-    profile = _get_profile(session)
-    return {
-        "customer_name": profile["customer_name"],
-        "delivery_address": profile["delivery_address"],
-        "payment_method": profile["payment_method"],
-        "info_stage": profile["info_stage"],
-    }
-
-
-def reset_customer_profile(session_id: Optional[str] = None) -> None:
-    session = _ensure_session_id(session_id)
-    _profile_store[session] = _create_default_profile()
-
-
-def _ensure_session_id(explicit: Optional[str] = None) -> str:
-    """
-    Resolve the active session id without touching Streamlit in worker threads.
-    """
-
-    global _active_session_id
-
-    if explicit:
-        _active_session_id = explicit
-        return explicit
-
-    if _active_session_id:
-        return _active_session_id
-
-    session_id = get_session_id()
-    _active_session_id = session_id
-    return session_id
-
-
-def get_cart_snapshot(session_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Return a copy of the current cart so the UI can render it.
-    """
-
-    session = _ensure_session_id(session_id)
-    cart = list(_get_cart(session))
-    total = sum(item["preco"] * item["quantidade"] for item in cart)
-    return {
-        "items": [dict(item) for item in cart],
-        "total": total,
-    }
-
-
-def _cart_has_items(session_id: Optional[str] = None) -> bool:
-    session = _ensure_session_id(session_id)
-    return bool(_get_cart(session))
-
-
-def is_order_ready(session_id: Optional[str] = None) -> bool:
-    """
-    Check if the current session has every customer field plus cart items.
-    """
-
-    session = _ensure_session_id(session_id)
-    profile = _get_profile(session)
-    has_profile = all(
-        [
-            profile.get("customer_name"),
-            profile.get("delivery_address"),
-            profile.get("payment_method"),
-        ]
-    )
-    return has_profile and _cart_has_items(session)
-
-
-def _format_currency(value: float) -> str:
-    return f"R${value:.2f}".replace(".", ",")
-
-
-def _normalize_text(value: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", value or "")
-    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    return stripped.lower().strip()
-
-
-_QUANTITY_PREFIX = re.compile(
-    r"""
-    ^\s*(\d+)\s*            # leading quantity
-    (?:x|vez(?:es)?|past[eé]is?|unidades?|pcs?|pçs?)?\s*  # optional unit markers
-    (?:de|do|da)?\s*        # optional filler words
-    (.+)$                   # remaining flavor text
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-
-def _extract_quantity_from_sabor(sabor: str) -> tuple[str, Optional[int]]:
-    """
-    Detect patterns like '2 pastéis de carne' and return ('carne', 2).
-    """
-
-    if not sabor:
-        return "", None
-
-    match = _QUANTITY_PREFIX.match(sabor.strip())
-    if not match:
-        return sabor.strip(), None
-
-    qty = int(match.group(1))
-    remainder = match.group(2).strip()
-    if not remainder:
-        return sabor.strip(), None
-    return remainder, qty
-
-
 _NAME_PATTERNS = [
     re.compile(r"\bmeu nome\s+(?:é|eh)\s+([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
     re.compile(r"\bme chamo\s+([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
-    re.compile(r"\bsou\s+(?:o|a)?\s*([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
+    re.compile(r"\bsou\s+(?:(?:o|a)\s+)?([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
 ]
 
 
@@ -226,140 +72,6 @@ def _extract_name_from_text(text: str, allow_simple: bool = False) -> Optional[s
     if allow_simple:
         return _clean_simple_response(text)
     return None
-
-
-def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
-    target = _normalize_text(flavor)
-    if not target:
-        return None
-
-    query = """
-    MATCH (p:Pastel)
-    RETURN p.flavor AS sabor, p.price AS preco
-    """
-    try:
-        result = graph.ro_query(query)
-    except Exception:
-        logger.exception("Failed to query pastel %s.", flavor)
-        return None
-
-    rows = getattr(result, "result_set", [])
-    best_match: Optional[Dict[str, Any]] = None
-    best_score = 0.0
-
-    for row in rows:
-        sabor_raw, preco_raw = row[:2]
-        normalized = _normalize_text(str(sabor_raw))
-        if not normalized:
-            continue
-
-        try:
-            price_value = float(preco_raw)
-        except (TypeError, ValueError):
-            logger.warning("Invalid price returned for %s: %s", sabor_raw, preco_raw)
-            continue
-
-        if normalized == target:
-            return {"sabor": str(sabor_raw), "preco": price_value}
-
-        if target in normalized or normalized in target:
-            score = 0.9
-        else:
-            score = SequenceMatcher(None, target, normalized).ratio()
-
-        if score > best_score:
-            best_score = score
-            best_match = {"sabor": str(sabor_raw), "preco": price_value}
-
-    # Require a reasonable similarity level to avoid random matches.
-    if best_match and best_score >= 0.55:
-        return best_match
-    return None
-
-
-def _cart_lines(cart: List[CartItem]) -> List[str]:
-    lines = []
-    for item in cart:
-        subtotal = item["preco"] * item["quantidade"]
-        lines.append(
-            f"{item['quantidade']}× {item['sabor']} — "
-            f"{_format_currency(item['preco'])} cada (subtotal {_format_currency(subtotal)})"
-        )
-    return lines
-
-
-def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
-    """
-    Add an item to the session cart after confirming flavor and quantity.
-    """
-
-    flavor_hint, parsed_qty = _extract_quantity_from_sabor(sabor)
-    try:
-        qty = int(quantidade)
-    except (TypeError, ValueError):
-        qty = parsed_qty or 0
-
-    if qty <= 1 and parsed_qty and parsed_qty > 1:
-        qty = parsed_qty
-
-    if qty <= 0:
-        qty = 1
-
-    flavor_query = flavor_hint or sabor
-    pastel = _lookup_pastel(flavor_query)
-    if not pastel:
-        return "Não encontrei esse sabor no cardápio."
-
-    session_id = _ensure_session_id()
-    cart = _get_cart(session_id)
-
-    for item in cart:
-        if item["sabor"].lower() == pastel["sabor"].lower():
-            item["quantidade"] += qty
-            subtotal = item["preco"] * item["quantidade"]
-            return (
-                f"Atualizei o carrinho: agora são {item['quantidade']}× {item['sabor']} "
-                f"(subtotal {_format_currency(subtotal)})."
-            )
-
-    cart.append(
-        {
-            "sabor": pastel["sabor"],
-            "preco": pastel["preco"],
-            "quantidade": qty,
-        }
-    )
-    subtotal = pastel["preco"] * qty
-    return (
-        f"Adicionei {qty}× {pastel['sabor']} ao carrinho "
-        f"(subtotal {_format_currency(subtotal)})."
-    )
-
-
-def show_cart_tool(_: str = "") -> str:
-    """
-    Return a human-friendly summary of the cart contents.
-    """
-
-    session_id = _ensure_session_id()
-    cart = _get_cart(session_id)
-    if not cart:
-        return "O carrinho está vazio."
-
-    total = sum(item["preco"] * item["quantidade"] for item in cart)
-    lines = ["Itens no carrinho:"] + _cart_lines(cart)
-    lines.append(f"Total: {_format_currency(total)}")
-    return "\n".join(lines)
-
-
-def clear_cart_tool(_: str = "") -> str:
-    """
-    Empty the cart for the active session.
-    """
-
-    session_id = _ensure_session_id()
-    _cart_store[session_id] = []
-    return "Esvaziei o carrinho. Pode recomeçar o pedido!"
 
 
 def _extract_last_ai_message(messages: List[BaseMessage]) -> AIMessage | None:
@@ -420,7 +132,7 @@ def _collect_address(state: AgentState):
             return {"info_stage": "idle"}
         return {}
 
-    if not _cart_has_items():
+    if not cart_has_items():
         return {}
 
     user_message = _extract_last_user_message(state["messages"])
@@ -456,7 +168,7 @@ def _collect_payment(state: AgentState):
             return {"info_stage": "complete"}
         return {}
 
-    if not _cart_has_items():
+    if not cart_has_items():
         return {}
 
     user_message = _extract_last_user_message(state["messages"])
@@ -589,7 +301,6 @@ workflow_builder.set_entry_point("collect_name")
 
 agent_workflow = workflow_builder.compile()
 
-
 def generate_response(user_input: str) -> str:
     """
     Generate a response for the given user input using the agent.
@@ -601,10 +312,10 @@ def generate_response(user_input: str) -> str:
         str: The agent's response to the user input.
     """
 
-    session_id = _ensure_session_id()
+    session_id = ensure_session_id()
     memory = get_memory(session_id)
     memory.add_user_message(user_input)
-    profile = _get_profile(session_id)
+    profile = get_profile(session_id)
 
     graph_state: AgentState = {
         "messages": memory.messages,

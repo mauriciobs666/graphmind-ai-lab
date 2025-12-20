@@ -8,6 +8,7 @@ A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by F
 - **graph.py** – central FalkorDB connector plus schema helpers.
 - **cypher.py** – LangChain tool that builds and runs Cypher queries.
 - **agent.py / chatbot.py** – Streamlit UI driving a ReAct-style agent with tools.
+- **visualize_agent_graph.py** – optional helper to export the LangGraph workflow (Mermaid + PNG).
 
 ## Requirements
 
@@ -17,11 +18,11 @@ A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by F
 
 ## Run FalkorDB
 
+Use the helper script (see `start_falkordb.sh` for port/image overrides):
+
 ```bash
-docker run -p 6379:6379 -p 3000:3000 -it --rm falkordb/falkordb:edge
+./start_falkordb.sh
 ```
-- `6379` exposes the Redis/FalkorDB endpoint.
-- `3000` exposes the optional web console.
 
 ## App configuration
 
@@ -57,6 +58,14 @@ This wipes `kg_pastel`, recreates all `Pastel`/`Ingrediente` nodes, adds prices 
 ```bash
 streamlit run chatbot.py
 ```
+
+Want to inspect the agent graph?
+
+```bash
+./.venv/bin/python visualize_agent_graph.py
+```
+
+This writes `agent_workflow.mmd` (Mermaid) and tries to save `agent_workflow.png`. If network rendering is blocked, open the `.mmd` file in a Mermaid viewer (e.g., mermaid.live) or render locally with `mmdc`.
 
 Highlights:
 - Per-session memory to keep the conversation coherent.
