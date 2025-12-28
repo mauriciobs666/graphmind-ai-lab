@@ -40,7 +40,7 @@ def render_sidebar():
         st.write(f"Endereço: {profile['delivery_address'] or '—'}")
         st.write(f"Pagamento: {profile['payment_method'] or '—'}")
         if ready:
-            st.markdown(":green-background[Pedido em preparo]")
+            st.markdown(":green-background[Pedido confirmado]")
         st.divider()
         st.subheader("Carrinho")
         items = snapshot["items"]

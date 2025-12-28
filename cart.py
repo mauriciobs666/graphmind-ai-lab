@@ -188,6 +188,12 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
         }
     )
     subtotal = pastel["preco"] * qty
+    try:
+        from customer_profile import mark_order_unconfirmed
+
+        mark_order_unconfirmed(session_id)
+    except Exception:
+        logger.exception("Failed to mark order as unconfirmed after cart update.")
     return (
         f"Adicionei {qty}× {pastel['sabor']} ao carrinho "
         f"(subtotal {_format_currency(subtotal)})."
@@ -217,4 +223,10 @@ def clear_cart_tool(_: str = "") -> str:
 
     session_id = ensure_session_id()
     _cart_store[session_id] = []
+    try:
+        from customer_profile import mark_order_unconfirmed
+
+        mark_order_unconfirmed(session_id)
+    except Exception:
+        logger.exception("Failed to reset order confirmation after clearing cart.")
     return "Esvaziei o carrinho. Pode recomeçar o pedido!"

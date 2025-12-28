@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, List, Optional, TypedDict, Literal
+from typing import Annotated, Callable, List, Optional, TypedDict, Literal
 
 import re
 
@@ -36,16 +36,10 @@ class AgentState(TypedDict):
     customer_name: Optional[str]
     delivery_address: Optional[str]
     payment_method: Optional[str]
+    order_confirmed: bool
     info_stage: InfoStage
 
 logger = setup_logger("agent")
-
-
-_NAME_PATTERNS = [
-    re.compile(r"\bmeu nome\s+(?:é|eh)\s+([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
-    re.compile(r"\bme chamo\s+([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
-    re.compile(r"\bsou\s+(?:(?:o|a)\s+)?([A-Za-zÀ-ÿ' ]+)", re.IGNORECASE),
-]
 
 
 def _clean_simple_response(text: str) -> Optional[str]:
@@ -58,20 +52,6 @@ def _clean_simple_response(text: str) -> Optional[str]:
     if any(ch.isdigit() for ch in candidate):
         return None
     return " ".join(word.capitalize() for word in words)
-
-
-def _extract_name_from_text(text: str, allow_simple: bool = False) -> Optional[str]:
-    if not text:
-        return None
-    for pattern in _NAME_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            cleaned = match.group(1).strip()
-            if cleaned:
-                return _clean_simple_response(cleaned) or cleaned
-    if allow_simple:
-        return _clean_simple_response(text)
-    return None
 
 
 def _extract_last_ai_message(messages: List[BaseMessage]) -> AIMessage | None:
@@ -88,28 +68,195 @@ def _extract_last_user_message(messages: List[BaseMessage]) -> HumanMessage | No
     return None
 
 
+def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
+    """
+    Let the LLM decide whether the user wants to edit the cart or provide delivery/payment info.
+    """
+
+    last_user = _extract_last_user_message(messages)
+    if not last_user:
+        return "unknown"
+
+    instruction = SystemMessage(
+        content=(
+            "Classifique a última mensagem do cliente em apenas uma opção: "
+            "'cart_edit' (quando quer adicionar, remover ou alterar itens, ou pedir o cardápio), "
+            "'provide_info' (quando está passando endereço ou forma de pagamento), "
+            "ou 'other'. Responda somente com uma dessas palavras."
+        )
+    )
+    try:
+        response = llm.invoke([instruction, last_user])
+        label = response.content.strip().lower()
+        if label in {"cart_edit", "provide_info", "other"}:
+            logger.debug("Intent classified as: %s", label)
+            return label
+    except Exception:
+        logger.exception("LLM intent classification failed.")
+    return "unknown"
+
+
+def _summarize_recent_user_messages(
+    messages: List[BaseMessage], limit: int = 8
+) -> str:
+    """
+    Keep only recent human messages to reduce prompt size for extraction calls.
+    """
+
+    user_messages = [
+        message.content for message in messages if isinstance(message, HumanMessage)
+    ]
+    if not user_messages:
+        return ""
+    trimmed = user_messages[-limit:]
+    return "\n".join(f"Cliente: {msg}" for msg in trimmed)
+
+
+def _format_currency(value: float) -> str:
+    return f"R${value:.2f}".replace(".", ",")
+
+
+def _format_order_summary(state: AgentState) -> str:
+    snapshot = get_cart_snapshot()
+    items = snapshot.get("items", [])
+    total = snapshot.get("total", 0.0)
+    lines: list[str] = []
+    if items:
+        lines.append("Resumo do pedido:")
+        for item in items:
+            preco = _format_currency(item.get("preco", 0.0))
+            qty = item.get("quantidade", 1)
+            sabor = item.get("sabor", "")
+            lines.append(f"- {qty}× {sabor} ({preco} cada)")
+        lines.append(f"Total: {_format_currency(total)}")
+    address = state.get("delivery_address") or "Não informado"
+    payment = state.get("payment_method") or "Não informado"
+    lines.append(f"Endereço: {address}")
+    lines.append(f"Pagamento: {payment}")
+    return "\n".join(lines)
+
+
+def _extract_field_with_llm(
+    messages: List[BaseMessage],
+    system_instruction: str,
+    *,
+    normalize: Optional[Callable[[str], Optional[str]]] = None,
+    log_label: str = "extraction",
+) -> Optional[str]:
+    transcript = _summarize_recent_user_messages(messages)
+    if not transcript:
+        return None
+
+    try:
+        response = llm.invoke(
+            [SystemMessage(content=system_instruction), HumanMessage(content=transcript)]
+        )
+    except Exception:
+        logger.exception("LLM extraction for %s failed.", log_label)
+        return None
+
+    candidate = response.content.strip().strip('"\n ')
+    if not candidate or candidate.upper().startswith("NONE"):
+        return None
+    if normalize:
+        candidate = normalize(candidate)
+        if not candidate:
+            return None
+    return candidate
+
+
+_NAME_EXTRACTION_PROMPT = (
+    "Extraia o nome do cliente usando somente informações explícitas das mensagens "
+    "recentes. Caso não exista um nome claro, responda apenas com 'NONE'. "
+    "Se existir, responda apenas com o nome (até quatro palavras), sem texto extra."
+)
+
+_DELIVERY_EXTRACTION_PROMPT = (
+    "Você extrai endereços completos (rua e número, complemento, bairro e cidade se "
+    "existir) a partir de uma conversa. Use somente o que o cliente informou. "
+    "Se não houver endereço explícito, responda apenas com 'NONE'. "
+    "Responda apenas com o endereço ou 'NONE', sem texto extra."
+)
+
+
+def _normalize_payment_method(text: str) -> Optional[str]:
+    cleaned = text.strip().strip('"\n .,:;').lower()
+    if not cleaned:
+        return None
+    if "pix" in cleaned:
+        return "PIX"
+    if any(keyword in cleaned for keyword in ["cart", "crédito", "credito", "debito", "máquina", "maquina", "visa", "master"]):
+        return "Cartão"
+    if any(keyword in cleaned for keyword in ["dinheiro", "cash", "troco"]):
+        return "Dinheiro"
+    return text.strip()
+
+
+def _normalize_name(text: str) -> Optional[str]:
+    return _clean_simple_response(text)
+
+
+def _extract_name_with_llm(messages: List[BaseMessage]) -> Optional[str]:
+    return _extract_field_with_llm(
+        messages,
+        _NAME_EXTRACTION_PROMPT,
+        normalize=_normalize_name,
+        log_label="customer name",
+    )
+
+
+def _extract_delivery_address_with_llm(messages: List[BaseMessage]) -> Optional[str]:
+    return _extract_field_with_llm(
+        messages,
+        _DELIVERY_EXTRACTION_PROMPT,
+        log_label="delivery address",
+    )
+
+
+def _extract_payment_with_llm(messages: List[BaseMessage]) -> Optional[str]:
+    return _extract_field_with_llm(
+        messages,
+        (
+            "Identifique a forma de pagamento preferida do cliente na conversa. "
+            "Considere PIX, cartão (crédito/débito/maquininha) ou dinheiro. "
+            "Se encontrar, responda apenas com a opção (PIX, Cartão ou Dinheiro). "
+            "Se não existir essa informação, responda apenas com 'NONE'."
+        ),
+        normalize=_normalize_payment_method,
+        log_label="payment method",
+    )
+
+
+_CONFIRM_PATTERNS = [
+    re.compile(r"\bconfirm", re.IGNORECASE),
+    re.compile(r"\bfech(ar|o)\b", re.IGNORECASE),
+    re.compile(r"\bsim\b", re.IGNORECASE),
+    re.compile(r"\bpode (?:mandar|enviar|seguir)\b", re.IGNORECASE),
+]
+
+
+def _user_confirmed_order(text: str) -> bool:
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+    for pattern in _CONFIRM_PATTERNS:
+        if pattern.search(normalized):
+            return True
+    return False
+
+
 def _collect_name(state: AgentState):
     info_stage = state.get("info_stage", "need_name")
-    customer_name = state.get("customer_name")
+    current_name = state.get("customer_name")
 
-    if customer_name:
+    extracted = _extract_name_with_llm(state["messages"])
+    if extracted and extracted != current_name:
+        return {"customer_name": extracted, "info_stage": "idle"}
+
+    if current_name:
         if info_stage in {"need_name", "awaiting_name"}:
             return {"info_stage": "idle"}
         return {}
-
-    user_message = _extract_last_user_message(state["messages"])
-    allow_simple = info_stage == "awaiting_name"
-    extracted = (
-        _extract_name_from_text(
-            user_message.content if user_message else "",
-            allow_simple=allow_simple,
-        )
-        if user_message
-        else None
-    )
-
-    if extracted:
-        return {"customer_name": extracted, "info_stage": "idle"}
 
     prompt = (
         "Antes de continuarmos com o pedido, poderia me dizer seu nome?"
@@ -127,22 +274,35 @@ def _collect_address(state: AgentState):
     if info_stage in {"need_name", "awaiting_name"}:
         return {}
 
-    if state.get("delivery_address"):
+    intent = _classify_intent_with_llm(state["messages"])
+    if intent == "cart_edit":
+        return {
+            "messages": [
+                AIMessage(
+                    content="Sem problemas, vamos seguir editando o pedido. O que mais posso adicionar ou alterar?"
+                )
+            ],
+            "info_stage": "idle",
+            "order_confirmed": False,
+        }
+
+    current_address = state.get("delivery_address")
+    if cart_has_items():
+        extracted = _extract_delivery_address_with_llm(state["messages"])
+        if extracted and extracted != current_address:
+            return {
+                "delivery_address": extracted,
+                "info_stage": "idle",
+                "order_confirmed": False,
+            }
+
+    if current_address:
         if info_stage == "awaiting_address":
             return {"info_stage": "idle"}
         return {}
 
     if not cart_has_items():
         return {}
-
-    user_message = _extract_last_user_message(state["messages"])
-    if info_stage == "awaiting_address" and user_message:
-        address = user_message.content.strip()
-        if address:
-            return {
-                "delivery_address": address,
-                "info_stage": "idle",
-            }
 
     prompt = (
         "Ótimo, agora me informe o endereço completo para entrega, por favor."
@@ -160,25 +320,38 @@ def _collect_payment(state: AgentState):
     if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
         return {}
 
+    intent = _classify_intent_with_llm(state["messages"])
+    if intent == "cart_edit":
+        return {
+            "messages": [
+                AIMessage(
+                    content="Claro, voltamos para o carrinho. Qual pastel ou alteração você quer?"
+                )
+            ],
+            "info_stage": "idle",
+            "order_confirmed": False,
+        }
+
     if not state.get("delivery_address"):
         return {}
 
-    if state.get("payment_method"):
+    current_payment = state.get("payment_method")
+    if cart_has_items():
+        extracted = _extract_payment_with_llm(state["messages"])
+        if extracted and extracted != current_payment:
+            return {
+                "payment_method": extracted,
+                "info_stage": "awaiting_confirmation",
+                "order_confirmed": False,
+            }
+
+    if current_payment:
         if info_stage == "awaiting_payment":
-            return {"info_stage": "complete"}
+            return {"info_stage": "awaiting_confirmation", "order_confirmed": False}
         return {}
 
     if not cart_has_items():
         return {}
-
-    user_message = _extract_last_user_message(state["messages"])
-    if info_stage == "awaiting_payment" and user_message:
-        method = user_message.content.strip()
-        if method:
-            return {
-                "payment_method": method,
-                "info_stage": "complete",
-            }
 
     prompt = (
         "Qual forma de pagamento você prefere (PIX, cartão na entrega ou dinheiro)?"
@@ -213,6 +386,60 @@ def _payment_condition(state: AgentState) -> Literal["ask", "next"]:
     ):
         return "ask"
     return "next"
+
+
+def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
+    info_stage = state.get("info_stage", "need_name")
+    if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
+        return "next"
+    if not cart_has_items():
+        return "next"
+    if state.get("order_confirmed"):
+        return "next"
+    if (
+        state.get("customer_name")
+        and state.get("delivery_address")
+        and state.get("payment_method")
+    ):
+        return "ask"
+    return "next"
+
+
+def _confirm_order(state: AgentState):
+    info_stage = state.get("info_stage", "need_name")
+    if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
+        return {}
+
+    if not cart_has_items():
+        return {}
+
+    if state.get("order_confirmed"):
+        if info_stage == "awaiting_confirmation":
+            return {"info_stage": "complete"}
+        return {}
+
+    user_message = _extract_last_user_message(state["messages"])
+    if user_message and _user_confirmed_order(user_message.content):
+        return {
+            "order_confirmed": True,
+            "info_stage": "complete",
+            "messages": [
+                AIMessage(
+                    content="Pedido confirmado! Vou separar tudo com carinho. Precisa de algo mais?"
+                )
+            ],
+        }
+
+    summary = _format_order_summary(state)
+    prompt = (
+        f"{summary}\nPosso confirmar o pedido com esses itens e dados?"
+        if info_stage != "awaiting_confirmation"
+        else f"{summary}\nPode me confirmar se está tudo certo?"
+    )
+    return {
+        "messages": [AIMessage(content=prompt)],
+        "info_stage": "awaiting_confirmation",
+    }
 
 
 tools = [
@@ -276,6 +503,7 @@ workflow_builder = StateGraph(AgentState)
 workflow_builder.add_node("collect_name", _collect_name)
 workflow_builder.add_node("collect_address", _collect_address)
 workflow_builder.add_node("collect_payment", _collect_payment)
+workflow_builder.add_node("confirm_order", _confirm_order)
 workflow_builder.add_node("agent", _call_agent)
 workflow_builder.add_node("tools", ToolNode(tools))
 workflow_builder.add_conditional_edges(
@@ -291,6 +519,11 @@ workflow_builder.add_conditional_edges(
 workflow_builder.add_conditional_edges(
     "collect_payment",
     _payment_condition,
+    {"ask": END, "next": "confirm_order"},
+)
+workflow_builder.add_conditional_edges(
+    "confirm_order",
+    _confirm_condition,
     {"ask": END, "next": "agent"},
 )
 workflow_builder.add_conditional_edges(
@@ -322,6 +555,7 @@ def generate_response(user_input: str) -> str:
         "customer_name": profile["customer_name"],
         "delivery_address": profile["delivery_address"],
         "payment_method": profile["payment_method"],
+        "order_confirmed": profile["order_confirmed"],
         "info_stage": profile["info_stage"],
     }
 
@@ -342,6 +576,9 @@ def generate_response(user_input: str) -> str:
     new_payment = state.get("payment_method")
     if new_payment is not None:
         profile["payment_method"] = new_payment
+    order_confirmed = state.get("order_confirmed")
+    if order_confirmed is not None:
+        profile["order_confirmed"] = order_confirmed
     new_stage = state.get("info_stage")
     if new_stage:
         profile["info_stage"] = new_stage

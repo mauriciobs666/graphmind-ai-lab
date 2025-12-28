@@ -19,6 +19,7 @@ CYPHER_GENERATION_TEMPLATE = """
 You are a FalkorDB expert developer.
 Generate exactly one Cypher query that answers the user question,
 based strictly on the schema below.
+Return only the Cypher wrapped in a ```cypher``` fenced code block—no explanations.
 
 Schema:
 {schema}
@@ -79,6 +80,24 @@ def _extract_cypher(text: str) -> str:
     return query
 
 
+def _looks_like_cypher(query: str) -> bool:
+    if not query:
+        return False
+    normalized = query.lstrip().lower()
+    return "match" in normalized and "return" in normalized
+
+
+MENU_FALLBACK_QUERY = (
+    "MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)\n"
+    "RETURN p.flavor AS flavor, p.price AS price, collect(DISTINCT i.name) AS ingredients"
+)
+
+
+def _is_menu_request(question: str) -> bool:
+    normalized = question.lower()
+    return any(keyword in normalized for keyword in ["cardapio", "cardápio", "menu"])
+
+
 def _normalize_header(header: Any, idx: int) -> str:
     if isinstance(header, (list, tuple)):
         header = header[0]
@@ -134,9 +153,13 @@ def cypher_qa(question: str) -> str:
     logger.debug("Raw Cypher generation output:\n%s", cypher_suggestion)
     cypher_query = _extract_cypher(cypher_suggestion)
 
-    if not cypher_query:
-        logger.warning("Failed to generate a Cypher query for this question.")
-        return "Não consegui gerar uma consulta Cypher para essa pergunta."
+    if not cypher_query or not _looks_like_cypher(cypher_query):
+        logger.warning("Generated text did not look like a valid Cypher query:\n%s", cypher_query)
+        if _is_menu_request(question):
+            logger.info("Using fallback full-menu query for generic menu request.")
+            cypher_query = MENU_FALLBACK_QUERY
+        else:
+            return "Não consegui gerar uma consulta Cypher para essa pergunta."
 
     rows, error = _execute_cypher(cypher_query)
     if error:
