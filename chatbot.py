@@ -27,7 +27,7 @@ def write_message(role, content, save=True):
 # Set up Session State
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Pastel do mau, o mais legal ! Em que posso ajudar?"},
+        {"role": "assistant", "content": "Bem vindo a loja virtual do Pastel do Mau ! Qual o seu nome? Em que posso ajudar?"},
     ]
 
 def render_sidebar():

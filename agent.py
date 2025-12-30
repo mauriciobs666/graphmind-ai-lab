@@ -274,20 +274,20 @@ def _collect_address(state: AgentState):
     if info_stage in {"need_name", "awaiting_name"}:
         return {}
 
-    intent = _classify_intent_with_llm(state["messages"])
-    if intent == "cart_edit":
-        return {
-            "messages": [
-                AIMessage(
-                    content="Sem problemas, vamos seguir editando o pedido. O que mais posso adicionar ou alterar?"
-                )
-            ],
-            "info_stage": "idle",
-            "order_confirmed": False,
-        }
-
     current_address = state.get("delivery_address")
     if cart_has_items():
+        intent = _classify_intent_with_llm(state["messages"])
+        if intent == "cart_edit":
+            return {
+                "messages": [
+                    AIMessage(
+                        content="Sem problemas, vamos seguir editando o pedido. O que mais posso adicionar ou alterar?"
+                    )
+                ],
+                "info_stage": "idle",
+                "order_confirmed": False,
+            }
+
         extracted = _extract_delivery_address_with_llm(state["messages"])
         if extracted and extracted != current_address:
             return {
@@ -320,23 +320,23 @@ def _collect_payment(state: AgentState):
     if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
         return {}
 
-    intent = _classify_intent_with_llm(state["messages"])
-    if intent == "cart_edit":
-        return {
-            "messages": [
-                AIMessage(
-                    content="Claro, voltamos para o carrinho. Qual pastel ou alteração você quer?"
-                )
-            ],
-            "info_stage": "idle",
-            "order_confirmed": False,
-        }
-
     if not state.get("delivery_address"):
         return {}
 
     current_payment = state.get("payment_method")
     if cart_has_items():
+        intent = _classify_intent_with_llm(state["messages"])
+        if intent == "cart_edit":
+            return {
+                "messages": [
+                    AIMessage(
+                        content="Claro, voltamos para o carrinho. Qual pastel ou alteração você quer?"
+                    )
+                ],
+                "info_stage": "idle",
+                "order_confirmed": False,
+            }
+
         extracted = _extract_payment_with_llm(state["messages"])
         if extracted and extracted != current_payment:
             return {
@@ -471,23 +471,21 @@ tools = [
 ]
 
 system_prompt = """
-You are the virtual attendant for the Pastel do Mau shop.
-Always rely on the cardápio data to suggest flavors, ingredients, and prices.
-Maintain an affectionate, upbeat tone—use pequenos elogios ou agradecimentos—while keeping answers enxutas (no more than a short paragraph or two sentences whenever possible).
-Discourage questions unrelated to our pastéis or ingredients.
-Whenever the customer asks about flavors, ingredients, or prices, consult the `cardapio` tool before replying.
-Record orders in the cart with the proper tools:
-- `adicionar_carrinho` after confirming flavor and quantity.
-- `ver_carrinho` to review the current cart and totals.
-- `limpar_carrinho` when the customer wants to start over.
-If you do not know the answer, say so honestly.
-Keep responses concise and focused even while being warm.
-Prices must match the menu and cannot be changed.
-Respond to the customer in Brazilian Portuguese.
-Use the shared state values when responding:
-- `customer_name`: greet the customer by name once available.
-- `delivery_address` and `payment_method`: confirm them explicitly after they are recorded so the customer can correct mistakes.
-If any of these values are missing the guard nodes will ask the user, so resume the normal conversation once they exist.
+Voce e o atendente virtual do Pastel do Mau. Priorize seguranca -> precisao -> simpatia. Fale sempre em portugues do Brasil, em 1-2 frases, com carinho e elogios sutis.
+
+Regras de ferramentas:
+- Sempre consulte `cardapio` na primeira mencao a sabores/ingredientes/precos ou quando o cliente pedir um item; se falhar ou vier vazio, diga que nao achou e peca para tentar outro sabor.
+- `adicionar_carrinho` so apos confirmar sabor e quantidade; mostre o total com `ver_carrinho` depois de qualquer mudanca.
+- Use `limpar_carrinho` se o cliente quiser recomecar.
+
+Alergias:
+- Pergunte/registre alergias quando surgirem. Considere lactose presente em queijo, catupiry, leite condensado.
+- Nunca sugira itens com ingredientes proibidos; ofereca apenas opcoes seguras e peca confirmacao.
+
+Estado compartilhado:
+- Cumprimente pelo `customer_name` assim que disponivel (uma vez).
+- Confirme `delivery_address` e `payment_method` quando forem informados, permitindo correcoes.
+- Se algo faltar, siga o fluxo normal; caso nao saiba, diga honestamente.
 """
 
 _system_message = SystemMessage(content=system_prompt.strip())
