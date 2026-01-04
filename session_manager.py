@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import uuid
 from typing import Dict, Optional
 
+import streamlit as st
 from langchain_core.chat_history import InMemoryChatMessageHistory
-
-from utils_common import get_session_id
 
 _memory_store: Dict[str, InMemoryChatMessageHistory] = {}
 _active_session_id: Optional[str] = None
@@ -12,7 +12,7 @@ _active_session_id: Optional[str] = None
 
 def ensure_session_id(explicit: Optional[str] = None) -> str:
     """
-    Resolve the active session id without touching Streamlit in worker threads.
+    Resolve the active session id, creating one in Streamlit session state if needed.
     """
 
     global _active_session_id
@@ -24,9 +24,11 @@ def ensure_session_id(explicit: Optional[str] = None) -> str:
     if _active_session_id:
         return _active_session_id
 
-    session_id = get_session_id()
-    _active_session_id = session_id
-    return session_id
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+
+    _active_session_id = st.session_state.session_id
+    return _active_session_id
 
 
 def get_memory(session_id: Optional[str] = None) -> InMemoryChatMessageHistory:

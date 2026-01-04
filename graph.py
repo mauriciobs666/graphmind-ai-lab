@@ -1,10 +1,14 @@
+from functools import lru_cache
 import logging
+from typing import Any, Dict, List
+
 import streamlit as st
 from falkordb import FalkorDB
-from config import Config
+from falkordb.edge import Edge
+from falkordb.node import Node
+from falkordb.path import Path
 
-from functools import lru_cache
-from typing import Any, Dict, List
+from config import Config
 
 DEFAULT_URL = "redis://localhost:6379"
 logger = logging.getLogger("graph")
@@ -13,6 +17,26 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+
+def stringify_value(value: Any) -> Any:
+    """
+    Convert FalkorDB objects to serializable Python types.
+    """
+    if isinstance(value, Node):
+        return {"labels": value.labels, "properties": value.properties}
+    if isinstance(value, Edge):
+        return {
+            "type": value.relation,
+            "source": value.src_node.properties,
+            "target": value.dest_node.properties,
+            "properties": value.properties,
+        }
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, list):
+        return [stringify_value(item) for item in value]
+    return value
 
 
 try:
