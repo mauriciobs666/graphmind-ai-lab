@@ -185,6 +185,9 @@ def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
 
 
 def _collect_name(state: AgentState):
+    if not cart_has_items():
+        return {}
+
     info_stage = state.get("info_stage", "need_name")
     current_name = state.get("customer_name")
 
@@ -316,6 +319,8 @@ def _collect_payment(state: AgentState):
 
 
 def _name_condition(state: AgentState) -> Literal["ask", "next"]:
+    if not cart_has_items():
+        return "next"
     if state.get("customer_name"):
         return "next"
     if state.get("info_stage") in {"need_name", "awaiting_name"}:
@@ -432,6 +437,7 @@ Alergias:
 - Nunca sugira itens com ingredientes proibidos; ofereca apenas opcoes seguras e peca confirmacao.
 
 Estado compartilhado:
+- Nome/endereco/pagamento so sao coletados depois que o carrinho tiver itens; se o cliente interromper para editar o pedido, volte a editar e retome a coleta depois.
 - Cumprimente pelo `customer_name` assim que disponivel (uma vez).
 - Confirme `delivery_address` e `payment_method` quando forem informados, permitindo correcoes.
 - Se algo faltar, siga o fluxo normal; caso nao saiba, diga honestamente.
@@ -474,10 +480,10 @@ workflow_builder.add_conditional_edges(
     {"ask": END, "next": "agent"},
 )
 workflow_builder.add_conditional_edges(
-    "agent", tools_condition, {"tools": "tools", "__end__": END}
+    "agent", tools_condition, {"tools": "tools", "__end__": "collect_name"}
 )
 workflow_builder.add_edge("tools", "agent")
-workflow_builder.set_entry_point("collect_name")
+workflow_builder.set_entry_point("agent")
 
 agent_workflow = workflow_builder.compile()
 
