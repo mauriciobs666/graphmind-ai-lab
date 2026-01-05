@@ -11,13 +11,15 @@ from cart import (
     CartItem,
     add_to_cart_tool,
     cart_has_items,
+    cart_is_confirmed,
     clear_cart_tool,
     get_cart_snapshot,
+    remove_from_cart_tool,
+    set_cart_confirmation,
     show_cart_tool,
 )
 from customer_profile import (
     CustomerProfile,
-    InfoStage,
     get_customer_profile,
     get_profile,
     is_order_ready,
@@ -27,6 +29,16 @@ from cypher import cypher_qa
 from llm import llm
 from session_manager import ensure_session_id, get_memory
 from utils_common import setup_logger
+
+InfoStage = Literal[
+    "need_name",
+    "awaiting_name",
+    "idle",
+    "awaiting_address",
+    "awaiting_payment",
+    "awaiting_confirmation",
+    "complete",
+]
 
 
 class AgentState(TypedDict):
@@ -320,7 +332,7 @@ def _collect_payment(state: AgentState):
 
 def _name_condition(state: AgentState) -> Literal["ask", "next"]:
     if not cart_has_items():
-        return "next"
+        return "ask"
     if state.get("customer_name"):
         return "next"
     if state.get("info_stage") in {"need_name", "awaiting_name"}:
@@ -349,9 +361,9 @@ def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
     if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
         return "next"
     if not cart_has_items():
-        return "next"
+        return "ask"
     if state.get("order_confirmed"):
-        return "next"
+        return "ask"
     if (
         state.get("customer_name")
         and state.get("delivery_address")
@@ -413,6 +425,13 @@ tools = [
         func=add_to_cart_tool,
     ),
     Tool.from_function(
+        name="remover_carrinho",
+        description=(
+            "Remove ou diminui a quantidade de um pastel existente no carrinho."
+        ),
+        func=remove_from_cart_tool,
+    ),
+    Tool.from_function(
         name="ver_carrinho",
         description="Show the cart items and the running total.",
         func=show_cart_tool,
@@ -425,18 +444,17 @@ tools = [
 ]
 
 system_prompt = """
-Voce e o atendente virtual do Pastel do Mau. Priorize seguranca -> precisao -> simpatia. Fale sempre em portugues do Brasil, em 1-2 frases, com carinho e elogios sutis.
+Voce e o atendente virtual do Pastel do Mau. Priorize seguranca -> precisao -> simpatia. Fale sempre em portugues do Brasil, em 1-2 frases, com bom humor e elogios sutis.
 
 Regras de ferramentas:
 - Sempre consulte `cardapio` na primeira mencao a sabores/ingredientes/precos ou quando o cliente pedir um item; se falhar ou vier vazio, diga que nao achou e peca para tentar outro sabor.
 - `adicionar_carrinho` so apos confirmar sabor e quantidade; mostre o total com `ver_carrinho` depois de qualquer mudanca.
+- `remover_carrinho` para tirar itens ou diminuir quantidade quando o cliente pedir.
 - Use `limpar_carrinho` se o cliente quiser recomecar.
 
-Alergias:
-- Pergunte/registre alergias quando surgirem. Considere lactose presente em queijo, catupiry, leite condensado.
-- Nunca sugira itens com ingredientes proibidos; ofereca apenas opcoes seguras e peca confirmacao.
-
 Estado compartilhado:
+- Em toda resposta, pergunte se o cliente quer incluir ou remover mais itens e ofereca trazer detalhes sobre sabores/ingredientes/precos do cardapio. A conversa so termina quando o cliente confirmar que quer fechar o pedido.
+- Em cada turno, use no maximo as ferramentas estritamente necessarias (ex.: cardapio + adicionar_carrinho + ver_carrinho) e finalize com uma mensagem ao cliente sem novas chamadas de ferramenta.
 - Nome/endereco/pagamento so sao coletados depois que o carrinho tiver itens; se o cliente interromper para editar o pedido, volte a editar e retome a coleta depois.
 - Cumprimente pelo `customer_name` assim que disponivel (uma vez).
 - Confirme `delivery_address` e `payment_method` quando forem informados, permitindo correcoes.
@@ -487,7 +505,7 @@ workflow_builder.set_entry_point("agent")
 
 agent_workflow = workflow_builder.compile()
 
-def generate_response(user_input: str) -> str:
+def generate_response(user_input: str) -> dict | str:
     """
     Generate a response for the given user input using the agent.
 
@@ -495,7 +513,7 @@ def generate_response(user_input: str) -> str:
         user_input (str): The input message from the user.
 
     Returns:
-        str: The agent's response to the user input.
+        dict | str: Structured response with reply, transition and intent, or raw text on error.
     """
 
     session_id = ensure_session_id()
@@ -508,7 +526,7 @@ def generate_response(user_input: str) -> str:
         "customer_name": profile["customer_name"],
         "delivery_address": profile["delivery_address"],
         "payment_method": profile["payment_method"],
-        "order_confirmed": profile["order_confirmed"],
+        "order_confirmed": cart_is_confirmed(session_id),
         "info_stage": profile["info_stage"],
         "last_intent": None,
     }
@@ -532,7 +550,7 @@ def generate_response(user_input: str) -> str:
         profile["payment_method"] = new_payment
     order_confirmed = state.get("order_confirmed")
     if order_confirmed is not None:
-        profile["order_confirmed"] = order_confirmed
+        set_cart_confirmation(order_confirmed, session_id)
     new_stage = state.get("info_stage")
     if new_stage:
         profile["info_stage"] = new_stage
@@ -541,4 +559,12 @@ def generate_response(user_input: str) -> str:
     if not ai_message:
         return "Não consegui gerar uma resposta no momento."
 
-    return ai_message.content
+    reply_text = ai_message.content
+    intent_value = state.get("last_intent") or "unknown"
+    transition = "finalize" if state.get("order_confirmed") else "continue"
+
+    return {
+        "reply": reply_text,
+        "transition": transition,
+        "intent": intent_value,
+    }

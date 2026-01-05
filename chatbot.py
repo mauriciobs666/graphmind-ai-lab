@@ -60,7 +60,8 @@ def handle_submit(message):
     with st.spinner('Pensando...'):
         # Call the agent
         response = generate_response(message)
-        write_message('assistant', response)
+        reply_text = response.get("reply") if isinstance(response, dict) else response
+        write_message('assistant', reply_text)
 
 
 # Display messages in Session State

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, TypedDict
 
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from graph import graph
+from llm import llm
 from session_manager import ensure_session_id
 from utils_common import setup_logger
 
@@ -18,7 +22,12 @@ class CartItem(TypedDict):
     quantidade: int
 
 
-_cart_store: Dict[str, List[CartItem]] = {}
+class CartState(TypedDict):
+    items: List[CartItem]
+    order_confirmed: bool
+
+
+_cart_store: Dict[str, CartState] = {}
 
 
 def _format_currency(value: float) -> str:
@@ -31,34 +40,125 @@ def _normalize_text(value: str) -> str:
     return stripped.lower().strip()
 
 
-_QUANTITY_PREFIX = re.compile(
-    r"""
-    ^\s*(\d+)\s*            # leading quantity
-    (?:x|vez(?:es)?|past[eé]is?|unidades?|pcs?|pçs?)?\s*  # optional unit markers
-    (?:de|do|da)?\s*        # optional filler words
-    (.+)$                   # remaining flavor text
-    """,
-    re.IGNORECASE | re.VERBOSE,
+_QUANTITY_EXTRACTION_PROMPT = SystemMessage(
+    content=(
+        "Você extrai a quantidade e o sabor de pedidos de pastel. "
+        "Use apenas números explicitamente informados pelo cliente. "
+        "Responda apenas em JSON no formato "
+        '{"sabor": "<sabor sem a quantidade na frente>", "quantidade": <numero ou null>}. '
+        "Se não houver número claro, devolva quantidade como null e mantenha o sabor original. "
+        "Não invente sabores ou quantidades."
+    )
 )
+
+
+def _parse_llm_quantity_response(
+    response_text: str
+) -> tuple[str, Optional[int]] | None:
+    payload = response_text
+    if not payload:
+        return None
+
+    if not payload.strip().startswith("{"):
+        match = re.search(r"\{.*\}", payload, re.DOTALL)
+        if match:
+            payload = match.group(0)
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    flavor = str(data.get("sabor") or "").strip()
+    qty_raw = data.get("quantidade")
+
+    qty: Optional[int] = None
+    if isinstance(qty_raw, (int, float, str)):
+        try:
+            qty = int(qty_raw)
+            if qty <= 0:
+                qty = None
+        except (TypeError, ValueError):
+            qty = None
+
+    if not flavor:
+        return None
+
+    return flavor, qty
+
+
+_REMOVAL_EXTRACTION_PROMPT = SystemMessage(
+    content=(
+        "Você interpreta pedidos para remover ou diminuir itens do carrinho de pastéis. "
+        "Responda somente em JSON com as chaves: "
+        '{"sabor": "<sabor alvo>", "quantidade_remover": <numero ou null>, "remover_tudo": <true|false>}. '
+        "Se o cliente pedir para remover totalmente (ou não citar número), use remover_tudo=true e quantidade_remover=null. "
+        "Se o cliente pedir para tirar/apenas diminuir uma quantidade específica, use remover_tudo=false e quantidade_remover com esse número. "
+        "Não invente sabores nem quantidades; use apenas o que estiver explícito."
+    )
+)
+
+
+def _parse_llm_removal_response(
+    response_text: str,
+) -> tuple[str, Optional[int], bool] | None:
+    payload = response_text
+    if not payload:
+        return None
+
+    if not payload.strip().startswith("{"):
+        match = re.search(r"\{.*\}", payload, re.DOTALL)
+        if match:
+            payload = match.group(0)
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    flavor = str(data.get("sabor") or "").strip()
+    remove_all = bool(data.get("remover_tudo"))
+    qty_raw = data.get("quantidade_remover")
+
+    qty: Optional[int] = None
+    if isinstance(qty_raw, (int, float, str)):
+        try:
+            qty = int(qty_raw)
+            if qty <= 0:
+                qty = None
+        except (TypeError, ValueError):
+            qty = None
+
+    if not flavor:
+        return None
+
+    return flavor, qty, remove_all
 
 
 def _extract_quantity_from_sabor(sabor: str) -> tuple[str, Optional[int]]:
     """
-    Detect patterns like '2 pastéis de carne' and return ('carne', 2).
+    Use the LLM to detect patterns like '2 pastéis de carne' and return ('carne', 2).
     """
 
     if not sabor:
         return "", None
 
-    match = _QUANTITY_PREFIX.match(sabor.strip())
-    if not match:
-        return sabor.strip(), None
+    user_message = HumanMessage(content=sabor.strip())
+    try:
+        response = llm.invoke([_QUANTITY_EXTRACTION_PROMPT, user_message])
+        parsed = _parse_llm_quantity_response(response.content)
+        if parsed:
+            return parsed
+    except Exception:
+        logger.exception("LLM quantity extraction failed for '%s'.", sabor)
 
-    qty = int(match.group(1))
-    remainder = match.group(2).strip()
-    if not remainder:
-        return sabor.strip(), None
-    return remainder, qty
+    return sabor.strip(), None
 
 
 def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
@@ -110,10 +210,47 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _get_cart(session_id: str) -> List[CartItem]:
+def _create_cart_state() -> CartState:
+    return {"items": [], "order_confirmed": False}
+
+
+def _get_cart_state(session_id: str) -> CartState:
     if session_id not in _cart_store:
-        _cart_store[session_id] = []
+        _cart_store[session_id] = _create_cart_state()
     return _cart_store[session_id]
+
+
+def _get_cart(session_id: str) -> List[CartItem]:
+    return _get_cart_state(session_id)["items"]
+
+
+def cart_is_confirmed(session_id: Optional[str] = None) -> bool:
+    session = ensure_session_id(session_id)
+    return _get_cart_state(session)["order_confirmed"]
+
+
+def _notify_profile_cart_changed(session_id: str) -> None:
+    try:
+        from customer_profile import handle_cart_changed
+
+        handle_cart_changed(session_id)
+    except Exception:
+        logger.exception("Failed to sync profile after cart change.")
+
+
+def mark_cart_unconfirmed(session_id: Optional[str] = None) -> None:
+    session = ensure_session_id(session_id)
+    state = _get_cart_state(session)
+    state["order_confirmed"] = False
+    _notify_profile_cart_changed(session)
+
+
+def set_cart_confirmation(confirmed: bool, session_id: Optional[str] = None) -> None:
+    session = ensure_session_id(session_id)
+    state = _get_cart_state(session)
+    state["order_confirmed"] = bool(confirmed)
+    if not confirmed:
+        _notify_profile_cart_changed(session)
 
 
 def cart_has_items(session_id: Optional[str] = None) -> bool:
@@ -175,6 +312,10 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
         if item["sabor"].lower() == pastel["sabor"].lower():
             item["quantidade"] += qty
             subtotal = item["preco"] * item["quantidade"]
+            try:
+                mark_cart_unconfirmed(session_id)
+            except Exception:
+                logger.exception("Failed to mark cart as unconfirmed after update.")
             return (
                 f"Atualizei o carrinho: agora são {item['quantidade']}× {item['sabor']} "
                 f"(subtotal {_format_currency(subtotal)})."
@@ -189,15 +330,80 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
     )
     subtotal = pastel["preco"] * qty
     try:
-        from customer_profile import mark_order_unconfirmed
-
-        mark_order_unconfirmed(session_id)
+        mark_cart_unconfirmed(session_id)
     except Exception:
-        logger.exception("Failed to mark order as unconfirmed after cart update.")
+        logger.exception("Failed to mark cart as unconfirmed after cart update.")
     return (
         f"Adicionei {qty}× {pastel['sabor']} ao carrinho "
         f"(subtotal {_format_currency(subtotal)})."
     )
+
+
+def remove_from_cart_tool(sabor: str, quantidade: Any = None) -> str:
+    """
+    Remove um item do carrinho ou diminui sua quantidade usando extração via LLM.
+    """
+
+    session_id = ensure_session_id()
+    cart = _get_cart(session_id)
+    if not cart:
+        return "O carrinho já está vazio."
+
+    user_text = sabor.strip()
+    if quantidade not in (None, ""):
+        user_text = f"{user_text} {quantidade}".strip()
+
+    flavor: str = user_text
+    remove_qty: Optional[int] = None
+    remove_all = False
+
+    if user_text:
+        try:
+            response = llm.invoke([_REMOVAL_EXTRACTION_PROMPT, HumanMessage(content=user_text)])
+            parsed = _parse_llm_removal_response(response.content)
+            if parsed:
+                flavor, remove_qty, remove_all = parsed
+        except Exception:
+            logger.exception("LLM removal extraction failed for '%s'.", user_text)
+
+    if not flavor:
+        return "Preciso do sabor para remover do carrinho."
+
+    fallback_flavor, fallback_qty = _extract_quantity_from_sabor(flavor)
+    if not remove_qty:
+        remove_qty = fallback_qty
+    if not remove_all and remove_qty is None:
+        remove_all = True
+    flavor = fallback_flavor or flavor
+
+    target_norm = _normalize_text(flavor)
+    match_item: Optional[CartItem] = None
+    for item in cart:
+        item_norm = _normalize_text(item["sabor"])
+        if item_norm == target_norm or target_norm in item_norm or item_norm in target_norm:
+            match_item = item
+            break
+
+    if not match_item:
+        return "Esse sabor não está no carrinho."
+
+    if remove_all or remove_qty is None or remove_qty >= match_item["quantidade"]:
+        cart.remove(match_item)
+        message = f"Removi {match_item['sabor']} do carrinho."
+    else:
+        match_item["quantidade"] -= remove_qty
+        subtotal = match_item["preco"] * match_item["quantidade"]
+        message = (
+            f"Atualizei {match_item['sabor']} para {match_item['quantidade']}× "
+            f"(subtotal {_format_currency(subtotal)})."
+        )
+
+    try:
+        mark_cart_unconfirmed(session_id)
+    except Exception:
+        logger.exception("Failed to mark cart as unconfirmed after removal.")
+
+    return message
 
 
 def show_cart_tool(_: str = "") -> str:
@@ -222,11 +428,11 @@ def clear_cart_tool(_: str = "") -> str:
     """
 
     session_id = ensure_session_id()
-    _cart_store[session_id] = []
+    state = _get_cart_state(session_id)
+    state["items"] = []
+    state["order_confirmed"] = False
     try:
-        from customer_profile import mark_order_unconfirmed
-
-        mark_order_unconfirmed(session_id)
+        mark_cart_unconfirmed(session_id)
     except Exception:
-        logger.exception("Failed to reset order confirmation after clearing cart.")
+        logger.exception("Failed to reset cart confirmation after clearing cart.")
     return "Esvaziei o carrinho. Pode recomeçar o pedido!"
