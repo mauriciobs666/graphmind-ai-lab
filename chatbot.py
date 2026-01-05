@@ -22,7 +22,8 @@ def write_message(role, content, save=True):
 
     # Write to UI
     with st.chat_message(role):
-        st.markdown(content)
+        safe_content = content.replace("$", "\\$")
+        st.markdown(safe_content)
 
 # Set up Session State
 if "messages" not in st.session_state:

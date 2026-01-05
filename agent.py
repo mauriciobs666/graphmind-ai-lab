@@ -81,7 +81,8 @@ def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
             "Classifique a última mensagem do cliente em apenas uma opção: "
             "'cart_edit' (quando quer adicionar, remover ou alterar itens, ou pedir o cardápio), "
             "'provide_info' (quando está passando dados como nome, endereço ou forma de pagamento), "
-            "'confirm_order' (quando aprova o pedido, diz que pode enviar, que está tudo certo, que pode fechar), "
+            "'confirm_order' (quando confirma ou "
+            " aprova o pedido, diz que pode enviar, que está tudo certo, que pode fechar), "
             "ou 'other'. Responda somente com uma dessas palavras."
         )
     )
@@ -91,6 +92,7 @@ def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
         if label in {"cart_edit", "provide_info", "confirm_order", "other"}:
             logger.debug("Intent classified as: %s", label)
             return label
+        logger.debug("LLM returned unrecognized intent label: %s", label)
     except Exception:
         logger.exception("LLM intent classification failed.")
     return "unknown"
@@ -99,9 +101,11 @@ def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
 def _get_intent(state: AgentState) -> str:
     cached = state.get("last_intent")
     if cached:
+        logger.debug("Using cached intent: %s", cached)
         return cached
     intent = _classify_intent_with_llm(state["messages"])
     state["last_intent"] = intent
+    logger.debug("Intent cached as: %s", intent)
     return intent
 
 
@@ -164,6 +168,7 @@ def _extract_field_with_llm(
         return None
 
     candidate = response.content.strip().strip('"\n ')
+    logger.debug("LLM %s candidate: %s", log_label, candidate)
     if not candidate or candidate.upper().startswith("NONE"):
         return None
     return candidate
@@ -233,7 +238,11 @@ def _collect_address(state: AgentState):
     current_address = state.get("delivery_address")
     if cart_has_items():
         intent = _get_intent(state)
-        if intent == "cart_edit":
+        if intent == "cart_edit" and info_stage not in {
+            "awaiting_address",
+            "awaiting_payment",
+            "awaiting_confirmation",
+        }:
             return {
                 "messages": [
                     AIMessage(
@@ -287,7 +296,7 @@ def _collect_payment(state: AgentState):
     current_payment = state.get("payment_method")
     if cart_has_items():
         intent = _get_intent(state)
-        if intent == "cart_edit":
+        if intent == "cart_edit" and info_stage not in {"awaiting_payment", "awaiting_confirmation"}:
             return {
                 "messages": [
                     AIMessage(
@@ -358,6 +367,8 @@ def _payment_condition(state: AgentState) -> Literal["ask", "next"]:
 
 def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
     info_stage = state.get("info_stage", "need_name")
+    if info_stage == "awaiting_confirmation":
+        return "ask"
     if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
         return "next"
     if not cart_has_items():
@@ -521,6 +532,17 @@ def generate_response(user_input: str) -> dict | str:
     memory.add_user_message(user_input)
     profile = get_profile(session_id)
 
+    logger.debug(
+        "Incoming message | session=%s stage=%s cart_confirmed=%s has_cart_items=%s name=%s address=%s payment=%s",
+        session_id,
+        profile.get("info_stage"),
+        cart_is_confirmed(session_id),
+        cart_has_items(session_id),
+        bool(profile.get("customer_name")),
+        bool(profile.get("delivery_address")),
+        bool(profile.get("payment_method")),
+    )
+
     graph_state: AgentState = {
         "messages": memory.messages,
         "customer_name": profile["customer_name"],
@@ -541,18 +563,30 @@ def generate_response(user_input: str) -> dict | str:
     memory.messages = list(messages)
     new_name = state.get("customer_name")
     if new_name is not None:
+        if new_name != profile.get("customer_name"):
+            logger.debug("Updating profile name: %s -> %s", profile.get("customer_name"), new_name)
         profile["customer_name"] = new_name
     new_address = state.get("delivery_address")
     if new_address is not None:
+        if new_address != profile.get("delivery_address"):
+            logger.debug(
+                "Updating profile address: %s -> %s", profile.get("delivery_address"), new_address
+            )
         profile["delivery_address"] = new_address
     new_payment = state.get("payment_method")
     if new_payment is not None:
+        if new_payment != profile.get("payment_method"):
+            logger.debug(
+                "Updating profile payment: %s -> %s", profile.get("payment_method"), new_payment
+            )
         profile["payment_method"] = new_payment
     order_confirmed = state.get("order_confirmed")
     if order_confirmed is not None:
         set_cart_confirmation(order_confirmed, session_id)
     new_stage = state.get("info_stage")
     if new_stage:
+        if new_stage != profile.get("info_stage"):
+            logger.debug("Advancing info_stage: %s -> %s", profile.get("info_stage"), new_stage)
         profile["info_stage"] = new_stage
 
     ai_message = _extract_last_ai_message(messages)
@@ -562,6 +596,15 @@ def generate_response(user_input: str) -> dict | str:
     reply_text = ai_message.content
     intent_value = state.get("last_intent") or "unknown"
     transition = "finalize" if state.get("order_confirmed") else "continue"
+
+    logger.debug(
+        "Response ready | session=%s intent=%s transition=%s stage=%s cart_confirmed=%s",
+        session_id,
+        intent_value,
+        transition,
+        new_stage or profile.get("info_stage"),
+        state.get("order_confirmed"),
+    )
 
     return {
         "reply": reply_text,

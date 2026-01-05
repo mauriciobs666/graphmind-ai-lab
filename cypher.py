@@ -84,7 +84,7 @@ def _looks_like_cypher(query: str) -> bool:
     return "match" in normalized and "return" in normalized
 
 
-MENU_FALLBACK_QUERY = (
+MENU_STANDARD_QUERY = (
     "MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)\n"
     "RETURN p.flavor AS flavor, p.price AS price, collect(DISTINCT i.name) AS ingredients"
 )
@@ -149,19 +149,28 @@ def cypher_qa(question: str) -> str:
     cypher_suggestion = cypher_chain.invoke({"schema": schema, "question": question})
     logger.debug("Raw Cypher generation output:\n%s", cypher_suggestion)
     cypher_query = _extract_cypher(cypher_suggestion)
+    logger.debug("Cypher after extraction:\n%s", cypher_query)
+    if _is_menu_request(question):
+        logger.debug("Detected menu-style request.")
 
     if not cypher_query or not _looks_like_cypher(cypher_query):
         logger.warning("Generated text did not look like a valid Cypher query:\n%s", cypher_query)
         if _is_menu_request(question):
-            logger.info("Using fallback full-menu query for generic menu request.")
-            cypher_query = MENU_FALLBACK_QUERY
+            logger.info("Using standard full-menu query for generic menu request.")
+            cypher_query = MENU_STANDARD_QUERY
         else:
             return "Não consegui gerar uma consulta Cypher para essa pergunta."
+    else:
+        logger.debug("Validated Cypher shape, proceeding to execute.")
 
     rows, error = _execute_cypher(cypher_query)
     if error:
         logger.error("Error executing query: %s", error)
         return error
+    if not rows:
+        logger.debug("Cypher result set empty.")
+    else:
+        logger.debug("First row sample: %s", rows[0])
 
     context = json.dumps(rows, ensure_ascii=False, indent=2) if rows else "No records found."
     logger.debug("Context passed to the LLM:\n%s", context)

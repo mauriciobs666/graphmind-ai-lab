@@ -154,6 +154,7 @@ def _extract_quantity_from_sabor(sabor: str) -> tuple[str, Optional[int]]:
         response = llm.invoke([_QUANTITY_EXTRACTION_PROMPT, user_message])
         parsed = _parse_llm_quantity_response(response.content)
         if parsed:
+            logger.debug("LLM quantity extraction | input=%s parsed=%s", sabor, parsed)
             return parsed
     except Exception:
         logger.exception("LLM quantity extraction failed for '%s'.", sabor)
@@ -206,7 +207,11 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
 
     # Require a reasonable similarity level to avoid random matches.
     if best_match and best_score >= 0.55:
+        logger.debug(
+            "Pastel lookup match | query=%s match=%s score=%.2f", flavor, best_match, best_score
+        )
         return best_match
+    logger.debug("Pastel lookup had no confident match | query=%s score=%.2f", flavor, best_score)
     return None
 
 
@@ -216,6 +221,7 @@ def _create_cart_state() -> CartState:
 
 def _get_cart_state(session_id: str) -> CartState:
     if session_id not in _cart_store:
+        logger.debug("Initializing cart state for session %s", session_id)
         _cart_store[session_id] = _create_cart_state()
     return _cart_store[session_id]
 
@@ -234,6 +240,7 @@ def _notify_profile_cart_changed(session_id: str) -> None:
         from customer_profile import handle_cart_changed
 
         handle_cart_changed(session_id)
+        logger.debug("Synced profile after cart change | session=%s", session_id)
     except Exception:
         logger.exception("Failed to sync profile after cart change.")
 
@@ -242,6 +249,7 @@ def mark_cart_unconfirmed(session_id: Optional[str] = None) -> None:
     session = ensure_session_id(session_id)
     state = _get_cart_state(session)
     state["order_confirmed"] = False
+    logger.debug("Marked cart as unconfirmed | session=%s", session)
     _notify_profile_cart_changed(session)
 
 
@@ -249,6 +257,7 @@ def set_cart_confirmation(confirmed: bool, session_id: Optional[str] = None) -> 
     session = ensure_session_id(session_id)
     state = _get_cart_state(session)
     state["order_confirmed"] = bool(confirmed)
+    logger.debug("Set cart confirmation | session=%s confirmed=%s", session, confirmed)
     if not confirmed:
         _notify_profile_cart_changed(session)
 
@@ -301,6 +310,14 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
         qty = 1
 
     flavor_query = flavor_hint or sabor
+    logger.debug(
+        "Add to cart requested | sabor=%s quantidade_arg=%s parsed_qty=%s final_qty=%s flavor_query=%s",
+        sabor,
+        quantidade,
+        parsed_qty,
+        qty,
+        flavor_query,
+    )
     pastel = _lookup_pastel(flavor_query)
     if not pastel:
         return "Não encontrei esse sabor no cardápio."
@@ -316,6 +333,13 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
                 mark_cart_unconfirmed(session_id)
             except Exception:
                 logger.exception("Failed to mark cart as unconfirmed after update.")
+            logger.debug(
+                "Updated cart item | session=%s sabor=%s nova_quantidade=%s subtotal=%.2f",
+                session_id,
+                item["sabor"],
+                item["quantidade"],
+                subtotal,
+            )
             return (
                 f"Atualizei o carrinho: agora são {item['quantidade']}× {item['sabor']} "
                 f"(subtotal {_format_currency(subtotal)})."
@@ -333,6 +357,13 @@ def add_to_cart_tool(sabor: str, quantidade: Any = 1) -> str:
         mark_cart_unconfirmed(session_id)
     except Exception:
         logger.exception("Failed to mark cart as unconfirmed after cart update.")
+    logger.debug(
+        "Added new cart item | session=%s sabor=%s quantidade=%s subtotal=%.2f",
+        session_id,
+        pastel["sabor"],
+        qty,
+        subtotal,
+    )
     return (
         f"Adicionei {qty}× {pastel['sabor']} ao carrinho "
         f"(subtotal {_format_currency(subtotal)})."
@@ -363,6 +394,13 @@ def remove_from_cart_tool(sabor: str, quantidade: Any = None) -> str:
             parsed = _parse_llm_removal_response(response.content)
             if parsed:
                 flavor, remove_qty, remove_all = parsed
+                logger.debug(
+                    "LLM removal extraction | input=%s parsed_flavor=%s remove_qty=%s remove_all=%s",
+                    user_text,
+                    flavor,
+                    remove_qty,
+                    remove_all,
+                )
         except Exception:
             logger.exception("LLM removal extraction failed for '%s'.", user_text)
 
@@ -375,6 +413,12 @@ def remove_from_cart_tool(sabor: str, quantidade: Any = None) -> str:
     if not remove_all and remove_qty is None:
         remove_all = True
     flavor = fallback_flavor or flavor
+    logger.debug(
+        "Normalized removal request | flavor=%s remove_qty=%s remove_all=%s",
+        flavor,
+        remove_qty,
+        remove_all,
+    )
 
     target_norm = _normalize_text(flavor)
     match_item: Optional[CartItem] = None
@@ -385,17 +429,31 @@ def remove_from_cart_tool(sabor: str, quantidade: Any = None) -> str:
             break
 
     if not match_item:
+        logger.debug("Removal target not found | session=%s flavor_query=%s", session_id, flavor)
         return "Esse sabor não está no carrinho."
 
     if remove_all or remove_qty is None or remove_qty >= match_item["quantidade"]:
         cart.remove(match_item)
         message = f"Removi {match_item['sabor']} do carrinho."
+        logger.debug(
+            "Removed item from cart | session=%s sabor=%s remove_all=%s",
+            session_id,
+            match_item["sabor"],
+            remove_all or remove_qty is None or remove_qty >= match_item["quantidade"],
+        )
     else:
         match_item["quantidade"] -= remove_qty
         subtotal = match_item["preco"] * match_item["quantidade"]
         message = (
             f"Atualizei {match_item['sabor']} para {match_item['quantidade']}× "
             f"(subtotal {_format_currency(subtotal)})."
+        )
+        logger.debug(
+            "Decreased item quantity | session=%s sabor=%s nova_quantidade=%s subtotal=%.2f",
+            session_id,
+            match_item["sabor"],
+            match_item["quantidade"],
+            subtotal,
         )
 
     try:
