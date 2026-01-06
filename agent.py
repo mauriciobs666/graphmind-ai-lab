@@ -35,7 +35,6 @@ InfoStage = Literal[
     "awaiting_name",
     "idle",
     "awaiting_address",
-    "awaiting_payment",
     "awaiting_confirmation",
     "complete",
 ]
@@ -45,7 +44,6 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     customer_name: Optional[str]
     delivery_address: Optional[str]
-    payment_method: Optional[str]
     order_confirmed: bool
     info_stage: InfoStage
     last_intent: Optional[str]
@@ -80,7 +78,7 @@ def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
         content=(
             "Classifique a última mensagem do cliente em apenas uma opção: "
             "'cart_edit' (quando quer adicionar, remover ou alterar itens, ou pedir o cardápio), "
-            "'provide_info' (quando está passando dados como nome, endereço ou forma de pagamento), "
+            "'provide_info' (quando está passando dados como nome ou endereço de entrega), "
             "'confirm_order' (quando confirma ou "
             " aprova o pedido, diz que pode enviar, que está tudo certo, que pode fechar), "
             "ou 'other'. Responda somente com uma dessas palavras."
@@ -143,9 +141,7 @@ def _format_order_summary(state: AgentState) -> str:
             lines.append(f"- {qty}× {sabor} ({preco} cada)")
         lines.append(f"Total: {_format_currency(total)}")
     address = state.get("delivery_address") or "Não informado"
-    payment = state.get("payment_method") or "Não informado"
     lines.append(f"Endereço: {address}")
-    lines.append(f"Pagamento: {payment}")
     return "\n".join(lines)
 
 
@@ -187,13 +183,6 @@ _DELIVERY_EXTRACTION_PROMPT = (
     "Responda apenas com o endereço ou 'NONE', sem texto extra."
 )
 
-_PAYMENT_EXTRACTION_PROMPT = (
-    "Identifique a forma de pagamento preferida do cliente na conversa. "
-    "Considere PIX, cartão (crédito/débito/maquininha) ou dinheiro. "
-    "Se encontrar, responda exatamente com 'PIX', 'Cartão' ou 'Dinheiro'. "
-    "Se não existir essa informação, responda apenas com 'NONE'."
-)
-
 
 def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
     if info_stage != "awaiting_confirmation":
@@ -202,6 +191,12 @@ def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
 
 
 def _collect_name(state: AgentState):
+    logger.debug(
+        "collect_name | stage=%s has_cart=%s has_name=%s",
+        state.get("info_stage"),
+        cart_has_items(),
+        bool(state.get("customer_name")),
+    )
     if not cart_has_items():
         return {}
 
@@ -231,6 +226,13 @@ def _collect_name(state: AgentState):
 
 
 def _collect_address(state: AgentState):
+    logger.debug(
+        "collect_address | stage=%s has_cart=%s has_name=%s has_address=%s",
+        state.get("info_stage"),
+        cart_has_items(),
+        bool(state.get("customer_name")),
+        bool(state.get("delivery_address")),
+    )
     info_stage = state.get("info_stage", "need_name")
     if info_stage in {"need_name", "awaiting_name"}:
         return {}
@@ -238,11 +240,7 @@ def _collect_address(state: AgentState):
     current_address = state.get("delivery_address")
     if cart_has_items():
         intent = _get_intent(state)
-        if intent == "cart_edit" and info_stage not in {
-            "awaiting_address",
-            "awaiting_payment",
-            "awaiting_confirmation",
-        }:
+        if intent == "cart_edit" and info_stage not in {"awaiting_address", "awaiting_confirmation"}:
             return {
                 "messages": [
                     AIMessage(
@@ -285,108 +283,81 @@ def _collect_address(state: AgentState):
     }
 
 
-def _collect_payment(state: AgentState):
-    info_stage = state.get("info_stage", "need_name")
-    if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
-        return {}
-
-    if not state.get("delivery_address"):
-        return {}
-
-    current_payment = state.get("payment_method")
-    if cart_has_items():
-        intent = _get_intent(state)
-        if intent == "cart_edit" and info_stage not in {"awaiting_payment", "awaiting_confirmation"}:
-            return {
-                "messages": [
-                    AIMessage(
-                        content="Claro, voltamos para o carrinho. Qual pastel ou alteração você quer?"
-                    )
-                ],
-                "info_stage": "idle",
-                "order_confirmed": False,
-                "last_intent": intent,
-            }
-
-        extracted = _extract_field_with_llm(
-            state["messages"], _PAYMENT_EXTRACTION_PROMPT, log_label="payment method"
-        )
-        if extracted and extracted != current_payment:
-            return {
-                "payment_method": extracted,
-                "info_stage": "awaiting_confirmation",
-                "order_confirmed": False,
-                "last_intent": intent,
-            }
-
-    if current_payment:
-        if info_stage == "awaiting_payment":
-            return {"info_stage": "awaiting_confirmation", "order_confirmed": False}
-        return {}
-
-    if not cart_has_items():
-        return {}
-
-    prompt = (
-        "Qual forma de pagamento você prefere (PIX, cartão na entrega ou dinheiro)?"
-        if info_stage != "awaiting_payment"
-        else "Pode confirmar a forma de pagamento (PIX, cartão ou dinheiro)?"
-    )
-    return {
-        "messages": [AIMessage(content=prompt)],
-        "info_stage": "awaiting_payment",
-        "last_intent": state.get("last_intent"),
-    }
-
-
 def _name_condition(state: AgentState) -> Literal["ask", "next"]:
+    decision: Literal["ask", "next"]
     if not cart_has_items():
-        return "ask"
-    if state.get("customer_name"):
-        return "next"
-    if state.get("info_stage") in {"need_name", "awaiting_name"}:
-        return "ask"
-    return "next"
+        decision = "ask"
+    elif state.get("customer_name"):
+        decision = "next"
+    elif state.get("info_stage") in {"need_name", "awaiting_name"}:
+        decision = "ask"
+    else:
+        decision = "next"
+    logger.debug(
+        "name_condition -> %s | stage=%s has_cart=%s has_name=%s",
+        decision,
+        state.get("info_stage"),
+        cart_has_items(),
+        bool(state.get("customer_name")),
+    )
+    return decision
 
 
 def _address_condition(state: AgentState) -> Literal["ask", "next"]:
+    decision: Literal["ask", "next"]
     if state.get("info_stage") == "awaiting_address" and not state.get(
         "delivery_address"
     ):
-        return "ask"
-    return "next"
-
-
-def _payment_condition(state: AgentState) -> Literal["ask", "next"]:
-    if state.get("info_stage") == "awaiting_payment" and not state.get(
-        "payment_method"
-    ):
-        return "ask"
-    return "next"
+        decision = "ask"
+    else:
+        decision = "next"
+    logger.debug(
+        "address_condition -> %s | stage=%s has_address=%s",
+        decision,
+        state.get("info_stage"),
+        bool(state.get("delivery_address")),
+    )
+    return decision
 
 
 def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
+    decision: Literal["ask", "next"]
     info_stage = state.get("info_stage", "need_name")
     if info_stage == "awaiting_confirmation":
-        return "ask"
-    if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
-        return "next"
-    if not cart_has_items():
-        return "ask"
-    if state.get("order_confirmed"):
-        return "ask"
-    if (
-        state.get("customer_name")
-        and state.get("delivery_address")
-        and state.get("payment_method")
-    ):
-        return "ask"
-    return "next"
+        decision = "ask"
+    elif info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
+        decision = "next"
+    elif not cart_has_items():
+        decision = "ask"
+    elif state.get("order_confirmed"):
+        decision = "ask"
+    elif state.get("customer_name") and state.get("delivery_address"):
+        decision = "ask"
+    else:
+        decision = "next"
+    logger.debug(
+        "confirm_condition -> %s | stage=%s has_cart=%s confirmed=%s name=%s address=%s",
+        decision,
+        info_stage,
+        cart_has_items(),
+        state.get("order_confirmed"),
+        bool(state.get("customer_name")),
+        bool(state.get("delivery_address")),
+    )
+    return decision
 
 
 def _confirm_order(state: AgentState):
+    logger.debug(
+        "confirm_order | stage=%s has_cart=%s confirmed=%s name=%s address=%s",
+        state.get("info_stage"),
+        cart_has_items(),
+        state.get("order_confirmed"),
+        bool(state.get("customer_name")),
+        bool(state.get("delivery_address")),
+    )
     info_stage = state.get("info_stage", "need_name")
-    if info_stage in {"need_name", "awaiting_name", "awaiting_address", "awaiting_payment"}:
+    if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
         return {}
 
     if not cart_has_items():
@@ -466,9 +437,9 @@ Regras de ferramentas:
 Estado compartilhado:
 - Em toda resposta, pergunte se o cliente quer incluir ou remover mais itens e ofereca trazer detalhes sobre sabores/ingredientes/precos do cardapio. A conversa so termina quando o cliente confirmar que quer fechar o pedido.
 - Em cada turno, use no maximo as ferramentas estritamente necessarias (ex.: cardapio + adicionar_carrinho + ver_carrinho) e finalize com uma mensagem ao cliente sem novas chamadas de ferramenta.
-- Nome/endereco/pagamento so sao coletados depois que o carrinho tiver itens; se o cliente interromper para editar o pedido, volte a editar e retome a coleta depois.
+- Nome/endereco so sao coletados depois que o carrinho tiver itens; se o cliente interromper para editar o pedido, volte a editar e retome a coleta depois.
 - Cumprimente pelo `customer_name` assim que disponivel (uma vez).
-- Confirme `delivery_address` e `payment_method` quando forem informados, permitindo correcoes.
+- Confirme `delivery_address` quando for informado, permitindo correcoes.
 - Se algo faltar, siga o fluxo normal; caso nao saiba, diga honestamente.
 """
 
@@ -484,7 +455,6 @@ def _call_agent(state: AgentState):
 workflow_builder = StateGraph(AgentState)
 workflow_builder.add_node("collect_name", _collect_name)
 workflow_builder.add_node("collect_address", _collect_address)
-workflow_builder.add_node("collect_payment", _collect_payment)
 workflow_builder.add_node("confirm_order", _confirm_order)
 workflow_builder.add_node("agent", _call_agent)
 workflow_builder.add_node("tools", ToolNode(tools))
@@ -496,11 +466,6 @@ workflow_builder.add_conditional_edges(
 workflow_builder.add_conditional_edges(
     "collect_address",
     _address_condition,
-    {"ask": END, "next": "collect_payment"},
-)
-workflow_builder.add_conditional_edges(
-    "collect_payment",
-    _payment_condition,
     {"ask": END, "next": "confirm_order"},
 )
 workflow_builder.add_conditional_edges(
@@ -533,21 +498,19 @@ def generate_response(user_input: str) -> dict | str:
     profile = get_profile(session_id)
 
     logger.debug(
-        "Incoming message | session=%s stage=%s cart_confirmed=%s has_cart_items=%s name=%s address=%s payment=%s",
+        "Incoming message | session=%s stage=%s cart_confirmed=%s has_cart_items=%s name=%s address=%s",
         session_id,
         profile.get("info_stage"),
         cart_is_confirmed(session_id),
         cart_has_items(session_id),
         bool(profile.get("customer_name")),
         bool(profile.get("delivery_address")),
-        bool(profile.get("payment_method")),
     )
 
     graph_state: AgentState = {
         "messages": memory.messages,
         "customer_name": profile["customer_name"],
         "delivery_address": profile["delivery_address"],
-        "payment_method": profile["payment_method"],
         "order_confirmed": cart_is_confirmed(session_id),
         "info_stage": profile["info_stage"],
         "last_intent": None,
@@ -573,13 +536,6 @@ def generate_response(user_input: str) -> dict | str:
                 "Updating profile address: %s -> %s", profile.get("delivery_address"), new_address
             )
         profile["delivery_address"] = new_address
-    new_payment = state.get("payment_method")
-    if new_payment is not None:
-        if new_payment != profile.get("payment_method"):
-            logger.debug(
-                "Updating profile payment: %s -> %s", profile.get("payment_method"), new_payment
-            )
-        profile["payment_method"] = new_payment
     order_confirmed = state.get("order_confirmed")
     if order_confirmed is not None:
         set_cart_confirmation(order_confirmed, session_id)

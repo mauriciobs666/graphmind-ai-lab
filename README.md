@@ -71,7 +71,7 @@ Highlights:
 - Per-session memory to keep the conversation coherent.
 - The `cardapio` tool automatically generates Cypher queries for flavors/ingredients/prices.
 - Integrated cart workflow: the assistant can adicionar/ver/limpar o carrinho via LangGraph tools, and the Streamlit sidebar reflects the current items and total.
-- Structured customer profile capture: the agent now collects the customer's name upfront and, once there is an order, confirms delivery address and payment method, echoing everything in the sidebar with a quick reset button for demos.
+- Structured customer profile capture: the agent collects the customer's name upfront and, once there is an order, confirms the delivery address, showing everything in the sidebar with a quick reset button for demos.
 - Verbose logging so you can inspect the generated Cypher and results.
 
 ## Troubleshooting

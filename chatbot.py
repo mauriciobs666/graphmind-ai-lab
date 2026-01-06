@@ -39,7 +39,6 @@ def render_sidebar():
         st.subheader("Cliente")
         st.write(f"Nome: {profile['customer_name'] or '—'}")
         st.write(f"Endereço: {profile['delivery_address'] or '—'}")
-        st.write(f"Pagamento: {profile['payment_method'] or '—'}")
         if ready:
             st.markdown(":green-background[Pedido confirmado]")
         st.divider()

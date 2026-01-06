@@ -18,7 +18,6 @@ logger = setup_logger("customer_profile")
 class CustomerProfile(TypedDict):
     customer_name: Optional[str]
     delivery_address: Optional[str]
-    payment_method: Optional[str]
     info_stage: InfoStage
 
 
@@ -29,7 +28,6 @@ def _create_default_profile() -> CustomerProfile:
     return {
         "customer_name": None,
         "delivery_address": None,
-        "payment_method": None,
         "info_stage": "need_name",
     }
 
@@ -52,7 +50,6 @@ def get_customer_profile(session_id: Optional[str] = None) -> CustomerProfile:
     return {
         "customer_name": profile["customer_name"],
         "delivery_address": profile["delivery_address"],
-        "payment_method": profile["payment_method"],
         "info_stage": profile["info_stage"],
     }
 
@@ -76,7 +73,6 @@ def is_order_ready(session_id: Optional[str] = None) -> bool:
         [
             profile.get("customer_name"),
             profile.get("delivery_address"),
-            profile.get("payment_method"),
         ]
     )
     ready = has_profile and cart_has_items(session) and cart_is_confirmed(session)
@@ -102,7 +98,6 @@ def handle_cart_changed(session_id: Optional[str] = None) -> None:
     if (
         profile.get("customer_name")
         and profile.get("delivery_address")
-        and profile.get("payment_method")
         and cart_has_items(session)
     ):
         profile["info_stage"] = "awaiting_confirmation"
