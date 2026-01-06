@@ -139,8 +139,10 @@ def _format_order_summary(state: AgentState) -> str:
             qty = item.get("quantidade", 1)
             sabor = item.get("sabor", "")
             lines.append(f"- {qty}× {sabor} ({preco} cada)")
+        lines.append("")
         lines.append(f"Total: {_format_currency(total)}")
     address = state.get("delivery_address") or "Não informado"
+    lines.append("")
     lines.append(f"Endereço: {address}")
     return "\n".join(lines)
 
@@ -186,8 +188,8 @@ _DELIVERY_EXTRACTION_PROMPT = (
 
 def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
     if info_stage != "awaiting_confirmation":
-        return f"{summary}\nPosso confirmar o pedido com esses itens e dados?"
-    return f"{summary}\nPode me confirmar se está tudo certo?"
+        return f"{summary}\n\nPosso confirmar o pedido com esses itens e dados?"
+    return f"{summary}\n\nPode me confirmar se está tudo certo?"
 
 
 def _collect_name(state: AgentState):
@@ -494,6 +496,7 @@ def generate_response(user_input: str) -> dict | str:
 
     session_id = ensure_session_id()
     memory = get_memory(session_id)
+    logger.debug("User message | session=%s content=%s", session_id, user_input)
     memory.add_user_message(user_input)
     profile = get_profile(session_id)
 
@@ -560,6 +563,14 @@ def generate_response(user_input: str) -> dict | str:
         transition,
         new_stage or profile.get("info_stage"),
         state.get("order_confirmed"),
+    )
+
+    logger.debug(
+        "Assistant reply | session=%s intent=%s transition=%s content=%s",
+        session_id,
+        intent_value,
+        transition,
+        reply_text,
     )
 
     return {

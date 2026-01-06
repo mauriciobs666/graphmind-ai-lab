@@ -477,7 +477,7 @@ def show_cart_tool(_: str = "") -> str:
     total = sum(item["preco"] * item["quantidade"] for item in cart)
     lines = ["Itens no carrinho:"] + _cart_lines(cart)
     lines.append(f"Total: {_format_currency(total)}")
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
 def clear_cart_tool(_: str = "") -> str:
