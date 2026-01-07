@@ -8,7 +8,6 @@ from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from cart import (
-    CartItem,
     add_to_cart_tool,
     cart_has_items,
     cart_is_confirmed,
@@ -18,13 +17,7 @@ from cart import (
     set_cart_confirmation,
     show_cart_tool,
 )
-from customer_profile import (
-    CustomerProfile,
-    get_customer_profile,
-    get_profile,
-    is_order_ready,
-    reset_customer_profile,
-)
+from customer_profile import get_customer_profile, get_profile, is_order_ready
 from cypher import cypher_qa
 from llm import llm
 from session_manager import ensure_session_id, get_memory
@@ -438,7 +431,7 @@ Tool rules:
 - Use `clear_cart` if the customer wants to start over.
 
 Shared state:
-- In every response, ask if the customer wants to add or remove more items and offer details about flavors/ingredients/prices from the menu. The conversation only ends when the customer confirms they want to place the order.
+- When it helps the flow, ask if the customer wants to add or remove more items and offer menu details; avoid repeating this in every response. The conversation only ends when the customer confirms they want to place the order.
 - In each turn, use only the strictly necessary tools (e.g., menu + add_to_cart + view_cart) and finish with a customer-facing message without more tool calls.
 - Collect name/address only after the cart has items; if the customer interrupts to edit the order, return to editing and resume collection afterward.
 - Greet by `customer_name` as soon as it is available (once).
@@ -540,6 +533,11 @@ def generate_response(user_input: str) -> dict | str:
                 "Updating profile address: %s -> %s", profile.get("delivery_address"), new_address
             )
         profile["delivery_address"] = new_address
+    confirmed_now = bool(state.get("order_confirmed"))
+    if confirmed_now:
+ #       state["order_confirmed"] = False
+        state["info_stage"] = "idle"
+
     order_confirmed = state.get("order_confirmed")
     if order_confirmed is not None:
         set_cart_confirmation(order_confirmed, session_id)
@@ -555,7 +553,7 @@ def generate_response(user_input: str) -> dict | str:
 
     reply_text = ai_message.content
     intent_value = state.get("last_intent") or "unknown"
-    transition = "finalize" if state.get("order_confirmed") else "continue"
+    transition = "finalize" if confirmed_now else "continue"
 
     logger.debug(
         "Response ready | session=%s intent=%s transition=%s stage=%s cart_confirmed=%s",
