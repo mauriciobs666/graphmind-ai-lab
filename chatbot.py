@@ -49,8 +49,8 @@ def render_sidebar():
         else:
             for item in items:
                 st.write(
-                    f"{item['quantidade']}× {item['sabor']} — "
-                    f"{format_currency(item['preco'])}"
+                    f"{item['quantity']}× {item['flavor']} — "
+                    f"{format_currency(item['price'])}"
                 )
             st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
 

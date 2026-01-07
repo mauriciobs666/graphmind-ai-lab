@@ -76,12 +76,12 @@ def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
 
     instruction = SystemMessage(
         content=(
-            "Classifique a última mensagem do cliente em apenas uma opção: "
-            "'cart_edit' (quando quer adicionar, remover ou alterar itens, ou pedir o cardápio), "
-            "'provide_info' (quando está passando dados como nome ou endereço de entrega), "
-            "'confirm_order' (quando confirma ou "
-            " aprova o pedido, diz que pode enviar, que está tudo certo, que pode fechar), "
-            "ou 'other'. Responda somente com uma dessas palavras."
+            "Classify the customer's latest message into exactly one option: "
+            "'cart_edit' (when they want to add, remove, or change items, or ask for the menu), "
+            "'provide_info' (when they provide data like name or delivery address), "
+            "'confirm_order' (when they confirm or approve the order, say you can send it, "
+            "say everything is correct, or that you can close the order), "
+            "or 'other'. Reply with only one of these words."
         )
     )
     try:
@@ -120,7 +120,7 @@ def _summarize_recent_user_messages(
     if not user_messages:
         return ""
     trimmed = user_messages[-limit:]
-    return "\n".join(f"Cliente: {msg}" for msg in trimmed)
+    return "\n".join(f"Customer: {msg}" for msg in trimmed)
 
 
 def _format_currency(value: float) -> str:
@@ -135,10 +135,10 @@ def _format_order_summary(state: AgentState) -> str:
     if items:
         lines.append("Resumo do pedido:")
         for item in items:
-            preco = _format_currency(item.get("preco", 0.0))
-            qty = item.get("quantidade", 1)
-            sabor = item.get("sabor", "")
-            lines.append(f"- {qty}× {sabor} ({preco} cada)")
+            price = _format_currency(item.get("price", 0.0))
+            qty = item.get("quantity", 1)
+            flavor = item.get("flavor", "")
+            lines.append(f"- {qty}× {flavor} ({price} cada)")
         lines.append("")
         lines.append(f"Total: {_format_currency(total)}")
     address = state.get("delivery_address") or "Não informado"
@@ -173,16 +173,16 @@ def _extract_field_with_llm(
 
 
 _NAME_EXTRACTION_PROMPT = (
-    "Extraia o nome do cliente usando somente informações explícitas das mensagens "
-    "recentes. Caso não exista um nome claro, responda apenas com 'NONE'. "
-    "Se existir, responda apenas com o nome (até quatro palavras), sem texto extra."
+    "Extract the customer's name using only explicit information from recent messages. "
+    "If there is no clear name, reply only with 'NONE'. "
+    "If a name exists, reply only with the name (up to four words), with no extra text."
 )
 
 _DELIVERY_EXTRACTION_PROMPT = (
-    "Você extrai endereços completos (rua e número, complemento, bairro e cidade se "
-    "existir) a partir de uma conversa. Use somente o que o cliente informou. "
-    "Se não houver endereço explícito, responda apenas com 'NONE'. "
-    "Responda apenas com o endereço ou 'NONE', sem texto extra."
+    "You extract full addresses (street and number, complement, neighborhood, and city if "
+    "present) from a conversation. Use only what the customer provided. "
+    "If there is no explicit address, reply only with 'NONE'. "
+    "Reply only with the address or 'NONE', with no extra text."
 )
 
 
@@ -394,55 +394,56 @@ def _confirm_order(state: AgentState):
 
 tools = [
     Tool.from_function(
-        name="cardapio",
+        name="menu",
         description=(
-            "Consult the cardápio for flavors, ingredients, and prices. "
+            "Consult the menu for flavors, ingredients, and prices. "
             "Use it before answering any pastel-related question."
         ),
         func=cypher_qa,
     ),
     Tool.from_function(
-        name="adicionar_carrinho",
+        name="add_to_cart",
         description=(
             "Add a pastel to the cart after confirming the flavor and quantity."
         ),
         func=add_to_cart_tool,
     ),
     Tool.from_function(
-        name="remover_carrinho",
+        name="remove_from_cart",
         description=(
-            "Remove ou diminui a quantidade de um pastel existente no carrinho."
+            "Remove or decrease the quantity of a pastel already in the cart."
         ),
         func=remove_from_cart_tool,
     ),
     Tool.from_function(
-        name="ver_carrinho",
+        name="view_cart",
         description="Show the cart items and the running total.",
         func=show_cart_tool,
     ),
     Tool.from_function(
-        name="limpar_carrinho",
+        name="clear_cart",
         description="Empty the cart when the customer wants to start over.",
         func=clear_cart_tool,
     ),
 ]
 
 system_prompt = """
-Voce e o atendente virtual do Pastel do Mau. Priorize seguranca -> precisao -> simpatia. Fale sempre em portugues do Brasil, em 1-2 frases, com bom humor e elogios sutis.
+You are the virtual attendant for Pastel do Mau. Prioritize safety -> accuracy -> friendliness.
+Always respond in Brazilian Portuguese, in 1-2 sentences, with good humor and subtle compliments.
 
-Regras de ferramentas:
-- Sempre consulte `cardapio` na primeira mencao a sabores/ingredientes/precos ou quando o cliente pedir um item; se falhar ou vier vazio, diga que nao achou e peca para tentar outro sabor.
-- `adicionar_carrinho` so apos confirmar sabor e quantidade; mostre o total com `ver_carrinho` depois de qualquer mudanca.
-- `remover_carrinho` para tirar itens ou diminuir quantidade quando o cliente pedir.
-- Use `limpar_carrinho` se o cliente quiser recomecar.
+Tool rules:
+- Always consult `menu` on the first mention of flavors/ingredients/prices or when the customer asks for an item; if it fails or returns empty, say you could not find it and ask them to try another flavor.
+- Use `add_to_cart` only after confirming flavor and quantity; show the total with `view_cart` after any change.
+- Use `remove_from_cart` to remove items or reduce quantity when the customer asks.
+- Use `clear_cart` if the customer wants to start over.
 
-Estado compartilhado:
-- Em toda resposta, pergunte se o cliente quer incluir ou remover mais itens e ofereca trazer detalhes sobre sabores/ingredientes/precos do cardapio. A conversa so termina quando o cliente confirmar que quer fechar o pedido.
-- Em cada turno, use no maximo as ferramentas estritamente necessarias (ex.: cardapio + adicionar_carrinho + ver_carrinho) e finalize com uma mensagem ao cliente sem novas chamadas de ferramenta.
-- Nome/endereco so sao coletados depois que o carrinho tiver itens; se o cliente interromper para editar o pedido, volte a editar e retome a coleta depois.
-- Cumprimente pelo `customer_name` assim que disponivel (uma vez).
-- Confirme `delivery_address` quando for informado, permitindo correcoes.
-- Se algo faltar, siga o fluxo normal; caso nao saiba, diga honestamente.
+Shared state:
+- In every response, ask if the customer wants to add or remove more items and offer details about flavors/ingredients/prices from the menu. The conversation only ends when the customer confirms they want to place the order.
+- In each turn, use only the strictly necessary tools (e.g., menu + add_to_cart + view_cart) and finish with a customer-facing message without more tool calls.
+- Collect name/address only after the cart has items; if the customer interrupts to edit the order, return to editing and resume collection afterward.
+- Greet by `customer_name` as soon as it is available (once).
+- Confirm `delivery_address` when it is provided, allowing corrections.
+- If something is missing, follow the normal flow; if you do not know, be honest.
 """
 
 _system_message = SystemMessage(content=system_prompt.strip())
