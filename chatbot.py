@@ -1,4 +1,5 @@
 import streamlit as st
+from utils_common import format_currency
 from agent import (
     generate_response,
     get_cart_snapshot,
@@ -8,10 +9,11 @@ from agent import (
 
 st.set_page_config("Pastel do Mau", page_icon=":cook:")
 
-def format_currency(value: float) -> str:
-    return f"R${value:.2f}".replace(".", ",")
+WELCOME_MESSAGE = "Bem vindo a loja virtual do Pastel do Mau! Em que posso ajudar?"
+SPINNER_TEXT = "Pensando..."
 
-def write_message(role, content, save=True):
+
+def write_message(role: str, content: str, save: bool = True) -> None:
     """
     This is a helper function that saves a message to the
     session state and then writes a message to the UI
@@ -28,10 +30,10 @@ def write_message(role, content, save=True):
 # Set up Session State
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Bem vindo a loja virtual do Pastel do Mau! Em que posso ajudar?"},
+        {"role": "assistant", "content": WELCOME_MESSAGE},
     ]
 
-def render_sidebar():
+def render_sidebar() -> None:
     snapshot = get_cart_snapshot()
     profile = get_customer_profile()
     ready = is_order_ready()
@@ -55,9 +57,9 @@ def render_sidebar():
             st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
 
 # Submit handler
-def handle_submit(message):
+def handle_submit(message: str) -> None:
     # Handle the response
-    with st.spinner('Pensando...'):
+    with st.spinner(SPINNER_TEXT):
         # Call the agent
         response = generate_response(message)
         reply_text = response.get("reply") if isinstance(response, dict) else response

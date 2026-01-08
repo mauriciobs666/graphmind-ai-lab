@@ -9,13 +9,10 @@ from falkordb.node import Node
 from falkordb.path import Path
 
 from config import Config
+from utils_common import setup_logger
 
 DEFAULT_URL = "redis://localhost:6379"
-logger = logging.getLogger("graph")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
+logger = setup_logger("graph")
 logger.setLevel(logging.INFO)
 
 

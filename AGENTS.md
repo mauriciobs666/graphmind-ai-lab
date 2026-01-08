@@ -19,12 +19,6 @@
 - `graph.py`: FalkorDB connection + schema snapshot.
 - `customer_profile.py`, `session_manager.py`: session and profile state.
 
-## Translation rules
-- UI strings shown in the Streamlit app stay in PT-BR.
-- LLM system prompts, tool descriptions and extraction prompts use EN.
-- Source code, methods, variables, tables, columns etc in EN. 
-- Keep Portuguese entity values (e.g., flavors, ingredients) as data.
-
 ## Coding standards
 - Prefer `rg` for searches.
 - Keep edits minimal and localized.

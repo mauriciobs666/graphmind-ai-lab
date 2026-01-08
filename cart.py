@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from graph import graph
 from llm import llm
 from session_manager import ensure_session_id
-from utils_common import setup_logger
+from utils_common import format_currency, setup_logger
 
 logger = setup_logger("cart")
 
@@ -30,14 +30,27 @@ class CartState(TypedDict):
 _cart_store: Dict[str, CartState] = {}
 
 
-def _format_currency(value: float) -> str:
-    return f"R${value:.2f}".replace(".", ",")
-
-
 def _normalize_text(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value or "")
     stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
     return stripped.lower().strip()
+
+
+def _extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+    payload = text
+    if not payload.strip().startswith("{"):
+        match = re.search(r"\{.*\}", payload, re.DOTALL)
+        if match:
+            payload = match.group(0)
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 _QUANTITY_EXTRACTION_PROMPT = SystemMessage(
@@ -55,21 +68,8 @@ _QUANTITY_EXTRACTION_PROMPT = SystemMessage(
 def _parse_llm_quantity_response(
     response_text: str
 ) -> tuple[str, Optional[int]] | None:
-    payload = response_text
-    if not payload:
-        return None
-
-    if not payload.strip().startswith("{"):
-        match = re.search(r"\{.*\}", payload, re.DOTALL)
-        if match:
-            payload = match.group(0)
-
-    try:
-        data = json.loads(payload)
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(data, dict):
+    data = _extract_json_payload(response_text)
+    if not data:
         return None
 
     flavor = str(data.get("flavor") or "").strip()
@@ -105,21 +105,8 @@ _REMOVAL_EXTRACTION_PROMPT = SystemMessage(
 def _parse_llm_removal_response(
     response_text: str,
 ) -> tuple[str, Optional[int], bool] | None:
-    payload = response_text
-    if not payload:
-        return None
-
-    if not payload.strip().startswith("{"):
-        match = re.search(r"\{.*\}", payload, re.DOTALL)
-        if match:
-            payload = match.group(0)
-
-    try:
-        data = json.loads(payload)
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(data, dict):
+    data = _extract_json_payload(response_text)
+    if not data:
         return None
 
     flavor = str(data.get("flavor") or "").strip()
@@ -292,7 +279,7 @@ def _cart_lines(cart: List[CartItem]) -> List[str]:
         subtotal = item["price"] * item["quantity"]
         lines.append(
             f"{item['quantity']}× {item['flavor']} — "
-            f"{_format_currency(item['price'])} cada (subtotal {_format_currency(subtotal)})"
+            f"{format_currency(item['price'])} cada (subtotal {format_currency(subtotal)})"
         )
     return lines
 
@@ -347,7 +334,7 @@ def add_to_cart_tool(flavor: str, quantity: Any = 1) -> str:
             )
             return (
                 f"Atualizei o carrinho: agora são {item['quantity']}× {item['flavor']} "
-                f"(subtotal {_format_currency(subtotal)})."
+                f"(subtotal {format_currency(subtotal)})."
             )
 
     cart.append(
@@ -371,7 +358,7 @@ def add_to_cart_tool(flavor: str, quantity: Any = 1) -> str:
     )
     return (
         f"Adicionei {qty}× {pastel['flavor']} ao carrinho "
-        f"(subtotal {_format_currency(subtotal)})."
+        f"(subtotal {format_currency(subtotal)})."
     )
 
 
@@ -451,7 +438,7 @@ def remove_from_cart_tool(flavor: str, quantity: Any = None) -> str:
         subtotal = match_item["price"] * match_item["quantity"]
         message = (
             f"Atualizei {match_item['flavor']} para {match_item['quantity']}× "
-            f"(subtotal {_format_currency(subtotal)})."
+            f"(subtotal {format_currency(subtotal)})."
         )
         logger.debug(
             "Decreased item quantity | session=%s flavor=%s new_quantity=%s subtotal=%.2f",
@@ -481,7 +468,7 @@ def show_cart_tool(_: str = "") -> str:
 
     total = sum(item["price"] * item["quantity"] for item in cart)
     lines = ["Itens no carrinho:"] + _cart_lines(cart)
-    lines.append(f"Total: {_format_currency(total)}")
+    lines.append(f"Total: {format_currency(total)}")
     return "\n\n".join(lines)
 
 

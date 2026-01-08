@@ -1,5 +1,9 @@
 import logging
 
+
+def format_currency(value: float) -> str:
+    return f"R${value:.2f}".replace(".", ",")
+
 def setup_logger(name: str) -> logging.Logger:
     """
     Set up a logger with a standard format.

@@ -21,7 +21,7 @@ from customer_profile import get_customer_profile, get_profile, is_order_ready
 from cypher import cypher_qa
 from llm import llm
 from session_manager import ensure_session_id, get_memory
-from utils_common import setup_logger
+from utils_common import format_currency, setup_logger
 
 InfoStage = Literal[
     "need_name",
@@ -116,8 +116,8 @@ def _summarize_recent_user_messages(
     return "\n".join(f"Customer: {msg}" for msg in trimmed)
 
 
-def _format_currency(value: float) -> str:
-    return f"R${value:.2f}".replace(".", ",")
+def _has_profile_data(state: AgentState) -> bool:
+    return bool(state.get("customer_name")) and bool(state.get("delivery_address"))
 
 
 def _format_order_summary(state: AgentState) -> str:
@@ -128,12 +128,12 @@ def _format_order_summary(state: AgentState) -> str:
     if items:
         lines.append("Resumo do pedido:")
         for item in items:
-            price = _format_currency(item.get("price", 0.0))
+            price = format_currency(item.get("price", 0.0))
             qty = item.get("quantity", 1)
             flavor = item.get("flavor", "")
             lines.append(f"- {qty}× {flavor} ({price} cada)")
         lines.append("")
-        lines.append(f"Total: {_format_currency(total)}")
+        lines.append(f"Total: {format_currency(total)}")
     address = state.get("delivery_address") or "Não informado"
     lines.append("")
     lines.append(f"Endereço: {address}")
@@ -186,13 +186,15 @@ def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
 
 
 def _collect_name(state: AgentState):
+    has_cart = cart_has_items()
+    has_name = bool(state.get("customer_name"))
     logger.debug(
         "collect_name | stage=%s has_cart=%s has_name=%s",
         state.get("info_stage"),
-        cart_has_items(),
-        bool(state.get("customer_name")),
+        has_cart,
+        has_name,
     )
-    if not cart_has_items():
+    if not has_cart:
         return {}
 
     info_stage = state.get("info_stage", "need_name")
@@ -221,19 +223,22 @@ def _collect_name(state: AgentState):
 
 
 def _collect_address(state: AgentState):
+    has_cart = cart_has_items()
+    has_name = bool(state.get("customer_name"))
+    has_address = bool(state.get("delivery_address"))
     logger.debug(
         "collect_address | stage=%s has_cart=%s has_name=%s has_address=%s",
         state.get("info_stage"),
-        cart_has_items(),
-        bool(state.get("customer_name")),
-        bool(state.get("delivery_address")),
+        has_cart,
+        has_name,
+        has_address,
     )
     info_stage = state.get("info_stage", "need_name")
     if info_stage in {"need_name", "awaiting_name"}:
         return {}
 
     current_address = state.get("delivery_address")
-    if cart_has_items():
+    if has_cart:
         intent = _get_intent(state)
         if intent == "cart_edit" and info_stage not in {"awaiting_address", "awaiting_confirmation"}:
             return {
@@ -263,7 +268,7 @@ def _collect_address(state: AgentState):
             return {"info_stage": "idle"}
         return {}
 
-    if not cart_has_items():
+    if not has_cart:
         return {}
 
     prompt = (
@@ -280,9 +285,11 @@ def _collect_address(state: AgentState):
 
 def _name_condition(state: AgentState) -> Literal["ask", "next"]:
     decision: Literal["ask", "next"]
-    if not cart_has_items():
+    has_cart = cart_has_items()
+    has_name = bool(state.get("customer_name"))
+    if not has_cart:
         decision = "ask"
-    elif state.get("customer_name"):
+    elif has_name:
         decision = "next"
     elif state.get("info_stage") in {"need_name", "awaiting_name"}:
         decision = "ask"
@@ -292,8 +299,8 @@ def _name_condition(state: AgentState) -> Literal["ask", "next"]:
         "name_condition -> %s | stage=%s has_cart=%s has_name=%s",
         decision,
         state.get("info_stage"),
-        cart_has_items(),
-        bool(state.get("customer_name")),
+        has_cart,
+        has_name,
     )
     return decision
 
@@ -318,15 +325,19 @@ def _address_condition(state: AgentState) -> Literal["ask", "next"]:
 def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
     decision: Literal["ask", "next"]
     info_stage = state.get("info_stage", "need_name")
+    has_cart = cart_has_items()
+    has_profile = _has_profile_data(state)
+    confirmed = bool(state.get("order_confirmed"))
+    awaiting_info = info_stage in {"need_name", "awaiting_name", "awaiting_address"}
     if info_stage == "awaiting_confirmation":
         decision = "ask"
-    elif info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
+    elif awaiting_info:
         decision = "next"
-    elif not cart_has_items():
+    elif not has_cart:
         decision = "ask"
-    elif state.get("order_confirmed"):
+    elif confirmed:
         decision = "ask"
-    elif state.get("customer_name") and state.get("delivery_address"):
+    elif has_profile:
         decision = "ask"
     else:
         decision = "next"
@@ -334,8 +345,8 @@ def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
         "confirm_condition -> %s | stage=%s has_cart=%s confirmed=%s name=%s address=%s",
         decision,
         info_stage,
-        cart_has_items(),
-        state.get("order_confirmed"),
+        has_cart,
+        confirmed,
         bool(state.get("customer_name")),
         bool(state.get("delivery_address")),
     )
@@ -343,11 +354,13 @@ def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
 
 
 def _confirm_order(state: AgentState):
+    has_cart = cart_has_items()
+    confirmed = bool(state.get("order_confirmed"))
     logger.debug(
         "confirm_order | stage=%s has_cart=%s confirmed=%s name=%s address=%s",
         state.get("info_stage"),
-        cart_has_items(),
-        state.get("order_confirmed"),
+        has_cart,
+        confirmed,
         bool(state.get("customer_name")),
         bool(state.get("delivery_address")),
     )
@@ -355,10 +368,10 @@ def _confirm_order(state: AgentState):
     if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
         return {}
 
-    if not cart_has_items():
+    if not has_cart:
         return {}
 
-    if state.get("order_confirmed"):
+    if confirmed:
         if info_stage == "awaiting_confirmation":
             return {"info_stage": "complete"}
         return {}
@@ -370,7 +383,7 @@ def _confirm_order(state: AgentState):
             "info_stage": "complete",
             "messages": [
                 AIMessage(
-                    content="Pedido confirmado! Vou separar tudo com carinho. Precisa de algo mais?"
+                    content="Pedido confirmado! Muito obrigado por escolher o Pastel do Mau!"
                 )
             ],
             "last_intent": intent,
@@ -383,6 +396,39 @@ def _confirm_order(state: AgentState):
         "info_stage": "awaiting_confirmation",
         "last_intent": intent,
     }
+
+
+def _apply_state_updates(
+    state: AgentState,
+    profile: dict,
+    session_id: str,
+) -> tuple[bool, Optional[str]]:
+    new_name = state.get("customer_name")
+    if new_name is not None:
+        if new_name != profile.get("customer_name"):
+            logger.debug("Updating profile name: %s -> %s", profile.get("customer_name"), new_name)
+        profile["customer_name"] = new_name
+    new_address = state.get("delivery_address")
+    if new_address is not None:
+        if new_address != profile.get("delivery_address"):
+            logger.debug(
+                "Updating profile address: %s -> %s", profile.get("delivery_address"), new_address
+            )
+        profile["delivery_address"] = new_address
+    confirmed_now = bool(state.get("order_confirmed"))
+    if confirmed_now:
+        state["info_stage"] = "idle"
+
+    order_confirmed = state.get("order_confirmed")
+    if order_confirmed is not None:
+        set_cart_confirmation(order_confirmed, session_id)
+    new_stage = state.get("info_stage")
+    if new_stage:
+        if new_stage != profile.get("info_stage"):
+            logger.debug("Advancing info_stage: %s -> %s", profile.get("info_stage"), new_stage)
+        profile["info_stage"] = new_stage
+
+    return confirmed_now, new_stage
 
 
 tools = [
@@ -521,31 +567,7 @@ def generate_response(user_input: str) -> dict | str:
 
     messages = state["messages"]
     memory.messages = list(messages)
-    new_name = state.get("customer_name")
-    if new_name is not None:
-        if new_name != profile.get("customer_name"):
-            logger.debug("Updating profile name: %s -> %s", profile.get("customer_name"), new_name)
-        profile["customer_name"] = new_name
-    new_address = state.get("delivery_address")
-    if new_address is not None:
-        if new_address != profile.get("delivery_address"):
-            logger.debug(
-                "Updating profile address: %s -> %s", profile.get("delivery_address"), new_address
-            )
-        profile["delivery_address"] = new_address
-    confirmed_now = bool(state.get("order_confirmed"))
-    if confirmed_now:
- #       state["order_confirmed"] = False
-        state["info_stage"] = "idle"
-
-    order_confirmed = state.get("order_confirmed")
-    if order_confirmed is not None:
-        set_cart_confirmation(order_confirmed, session_id)
-    new_stage = state.get("info_stage")
-    if new_stage:
-        if new_stage != profile.get("info_stage"):
-            logger.debug("Advancing info_stage: %s -> %s", profile.get("info_stage"), new_stage)
-        profile["info_stage"] = new_stage
+    confirmed_now, new_stage = _apply_state_updates(state, profile, session_id)
 
     ai_message = _extract_last_ai_message(messages)
     if not ai_message:
