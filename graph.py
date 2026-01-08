@@ -2,7 +2,6 @@ from functools import lru_cache
 import logging
 from typing import Any, Dict, List
 
-import streamlit as st
 from falkordb import FalkorDB
 from falkordb.edge import Edge
 from falkordb.node import Node

@@ -53,6 +53,24 @@ def _extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
     return data
 
 
+def _match_similarity(target: str, candidate: str) -> float:
+    if candidate == target:
+        return 1.0
+    if target in candidate or candidate in target:
+        return 0.9
+    return SequenceMatcher(None, target, candidate).ratio()
+
+
+def _parse_positive_int(value: Any) -> Optional[int]:
+    if not isinstance(value, (int, float, str)):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 _QUANTITY_EXTRACTION_PROMPT = SystemMessage(
     content=(
         "You extract the quantity and flavor from pastel orders. "
@@ -73,16 +91,7 @@ def _parse_llm_quantity_response(
         return None
 
     flavor = str(data.get("flavor") or "").strip()
-    qty_raw = data.get("quantity")
-
-    qty: Optional[int] = None
-    if isinstance(qty_raw, (int, float, str)):
-        try:
-            qty = int(qty_raw)
-            if qty <= 0:
-                qty = None
-        except (TypeError, ValueError):
-            qty = None
+    qty = _parse_positive_int(data.get("quantity"))
 
     if not flavor:
         return None
@@ -111,16 +120,7 @@ def _parse_llm_removal_response(
 
     flavor = str(data.get("flavor") or "").strip()
     remove_all = bool(data.get("remove_all"))
-    qty_raw = data.get("quantity_to_remove")
-
-    qty: Optional[int] = None
-    if isinstance(qty_raw, (int, float, str)):
-        try:
-            qty = int(qty_raw)
-            if qty <= 0:
-                qty = None
-        except (TypeError, ValueError):
-            qty = None
+    qty = _parse_positive_int(data.get("quantity_to_remove"))
 
     if not flavor:
         return None
@@ -180,13 +180,9 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
             logger.warning("Invalid price returned for %s: %s", flavor_raw, price_raw)
             continue
 
-        if normalized == target:
+        score = _match_similarity(target, normalized)
+        if score == 1.0:
             return {"flavor": str(flavor_raw), "price": price_value}
-
-        if target in normalized or normalized in target:
-            score = 0.9
-        else:
-            score = SequenceMatcher(None, target, normalized).ratio()
 
         if score > best_score:
             best_score = score

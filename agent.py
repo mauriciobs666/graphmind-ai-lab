@@ -32,6 +32,9 @@ InfoStage = Literal[
     "complete",
 ]
 
+_NAME_STAGES = {"need_name", "awaiting_name"}
+_AWAITING_INFO_STAGES = {"need_name", "awaiting_name", "awaiting_address"}
+
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -178,6 +181,17 @@ _DELIVERY_EXTRACTION_PROMPT = (
     "Reply only with the address or 'NONE', with no extra text."
 )
 
+_NAME_PROMPT_INITIAL = "Antes de continuarmos com o pedido, poderia me dizer seu nome?"
+_NAME_PROMPT_RETRY = "Ainda preciso do seu nome para continuar. Como posso te chamar?"
+_ADDRESS_PROMPT_INITIAL = "Ótimo, agora me informe o endereço completo para entrega, por favor."
+_ADDRESS_PROMPT_RETRY = "Não consegui entender o endereço. Pode repetir com rua e número?"
+_EDIT_ORDER_PROMPT = (
+    "Sem problemas, vamos seguir editando o pedido. O que mais posso adicionar ou alterar?"
+)
+_CONFIRM_SUCCESS_MESSAGE = (
+    "Pedido confirmado! Muito obrigado por escolher o Pastel do Mau!"
+)
+
 
 def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
     if info_stage != "awaiting_confirmation":
@@ -185,9 +199,18 @@ def _build_confirmation_prompt(info_stage: InfoStage, summary: str) -> str:
     return f"{summary}\n\nPode me confirmar se está tudo certo?"
 
 
+def _is_collecting_name(info_stage: InfoStage) -> bool:
+    return info_stage in _NAME_STAGES
+
+
+def _is_awaiting_profile_info(info_stage: InfoStage) -> bool:
+    return info_stage in _AWAITING_INFO_STAGES
+
+
 def _collect_name(state: AgentState):
     has_cart = cart_has_items()
-    has_name = bool(state.get("customer_name"))
+    current_name = state.get("customer_name")
+    has_name = bool(current_name)
     logger.debug(
         "collect_name | stage=%s has_cart=%s has_name=%s",
         state.get("info_stage"),
@@ -198,7 +221,6 @@ def _collect_name(state: AgentState):
         return {}
 
     info_stage = state.get("info_stage", "need_name")
-    current_name = state.get("customer_name")
 
     extracted = _extract_field_with_llm(
         state["messages"], _NAME_EXTRACTION_PROMPT, log_label="customer name"
@@ -207,14 +229,12 @@ def _collect_name(state: AgentState):
         return {"customer_name": extracted, "info_stage": "idle"}
 
     if current_name:
-        if info_stage in {"need_name", "awaiting_name"}:
+        if _is_collecting_name(info_stage):
             return {"info_stage": "idle"}
         return {}
 
     prompt = (
-        "Antes de continuarmos com o pedido, poderia me dizer seu nome?"
-        if info_stage == "need_name"
-        else "Ainda preciso do seu nome para continuar. Como posso te chamar?"
+        _NAME_PROMPT_INITIAL if info_stage == "need_name" else _NAME_PROMPT_RETRY
     )
     return {
         "messages": [AIMessage(content=prompt)],
@@ -224,17 +244,15 @@ def _collect_name(state: AgentState):
 
 def _collect_address(state: AgentState):
     has_cart = cart_has_items()
-    has_name = bool(state.get("customer_name"))
-    has_address = bool(state.get("delivery_address"))
     logger.debug(
         "collect_address | stage=%s has_cart=%s has_name=%s has_address=%s",
         state.get("info_stage"),
         has_cart,
-        has_name,
-        has_address,
+        bool(state.get("customer_name")),
+        bool(state.get("delivery_address")),
     )
     info_stage = state.get("info_stage", "need_name")
-    if info_stage in {"need_name", "awaiting_name"}:
+    if _is_collecting_name(info_stage):
         return {}
 
     current_address = state.get("delivery_address")
@@ -244,7 +262,7 @@ def _collect_address(state: AgentState):
             return {
                 "messages": [
                     AIMessage(
-                        content="Sem problemas, vamos seguir editando o pedido. O que mais posso adicionar ou alterar?"
+                        content=_EDIT_ORDER_PROMPT
                     )
                 ],
                 "info_stage": "idle",
@@ -272,9 +290,7 @@ def _collect_address(state: AgentState):
         return {}
 
     prompt = (
-        "Ótimo, agora me informe o endereço completo para entrega, por favor."
-        if info_stage != "awaiting_address"
-        else "Não consegui entender o endereço. Pode repetir com rua e número?"
+        _ADDRESS_PROMPT_INITIAL if info_stage != "awaiting_address" else _ADDRESS_PROMPT_RETRY
     )
     return {
         "messages": [AIMessage(content=prompt)],
@@ -287,11 +303,8 @@ def _name_condition(state: AgentState) -> Literal["ask", "next"]:
     decision: Literal["ask", "next"]
     has_cart = cart_has_items()
     has_name = bool(state.get("customer_name"))
-    if not has_cart:
-        decision = "ask"
-    elif has_name:
-        decision = "next"
-    elif state.get("info_stage") in {"need_name", "awaiting_name"}:
+    needs_name = _is_collecting_name(state.get("info_stage", "need_name"))
+    if not has_cart or (not has_name and needs_name):
         decision = "ask"
     else:
         decision = "next"
@@ -328,19 +341,14 @@ def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
     has_cart = cart_has_items()
     has_profile = _has_profile_data(state)
     confirmed = bool(state.get("order_confirmed"))
-    awaiting_info = info_stage in {"need_name", "awaiting_name", "awaiting_address"}
+    awaiting_info = _is_awaiting_profile_info(info_stage)
     if info_stage == "awaiting_confirmation":
         decision = "ask"
     elif awaiting_info:
         decision = "next"
-    elif not has_cart:
-        decision = "ask"
-    elif confirmed:
-        decision = "ask"
-    elif has_profile:
-        decision = "ask"
     else:
-        decision = "next"
+        should_ask = (not has_cart) or confirmed or has_profile
+        decision = "ask" if should_ask else "next"
     logger.debug(
         "confirm_condition -> %s | stage=%s has_cart=%s confirmed=%s name=%s address=%s",
         decision,
@@ -365,7 +373,7 @@ def _confirm_order(state: AgentState):
         bool(state.get("delivery_address")),
     )
     info_stage = state.get("info_stage", "need_name")
-    if info_stage in {"need_name", "awaiting_name", "awaiting_address"}:
+    if _is_awaiting_profile_info(info_stage):
         return {}
 
     if not has_cart:
@@ -383,7 +391,7 @@ def _confirm_order(state: AgentState):
             "info_stage": "complete",
             "messages": [
                 AIMessage(
-                    content="Pedido confirmado! Muito obrigado por escolher o Pastel do Mau!"
+                    content=_CONFIRM_SUCCESS_MESSAGE
                 )
             ],
             "last_intent": intent,
@@ -416,9 +424,6 @@ def _apply_state_updates(
             )
         profile["delivery_address"] = new_address
     confirmed_now = bool(state.get("order_confirmed"))
-    if confirmed_now:
-        state["info_stage"] = "idle"
-
     order_confirmed = state.get("order_confirmed")
     if order_confirmed is not None:
         set_cart_confirmation(order_confirmed, session_id)
