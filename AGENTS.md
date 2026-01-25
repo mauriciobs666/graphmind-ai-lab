@@ -14,6 +14,7 @@
 - `chatbot.py`: Streamlit UI and sidebar labels.
 - `agent.py`: tools and LangGraph workflow.
 - `prompts.py`: system prompts, tool instructions, and customer-facing copy.
+- `diagnostics.py`: session health snapshot for support/debugging.
 - `cart.py`: cart operations, LLM extraction prompts.
 - `cypher.py`: LLM prompts for Cypher and answers.
 - `create_kg_pastel.py`: seed data + console output.

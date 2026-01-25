@@ -9,6 +9,7 @@ A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by F
 - **cypher.py** – LangChain tool that builds and runs Cypher queries.
 - **agent.py / chatbot.py** – Streamlit UI driving a ReAct-style agent with tools.
 - **prompts.py** – central prompt strings for the agent (English internals, PT-BR customer copy).
+- **diagnostics.py** – lightweight session snapshot helper for debugging/support.
 - **visualize_agent_graph.py** – optional helper to export the LangGraph workflow (Mermaid + PNG).
 
 ## Requirements
@@ -35,6 +36,7 @@ OPENAI_API_KEY = "sk-..."
 OPENAI_MODEL = "gpt-4o"
 FALKORDB_URL = "redis://localhost:6379"
 FALKORDB_GRAPH = "kg_pastel"
+LOG_LEVEL = "DEBUG"
 ```
 
 Prefer host/port credentials? Remove `FALKORDB_URL` and set:
@@ -44,6 +46,23 @@ FALKORDB_HOST = "localhost"
 FALKORDB_PORT = 6379
 # FALKORDB_USERNAME = ""
 # FALKORDB_PASSWORD = ""
+LOG_LEVEL = "DEBUG"
+
+Prefer environment variables instead of Streamlit secrets? Use `.env.example` as a reference.
+
+### Configuration reference
+
+| Key | Purpose | Default |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | OpenAI API key | none |
+| `OPENAI_MODEL` | OpenAI model name | none |
+| `FALKORDB_URL` | FalkorDB URL | `redis://localhost:6379` |
+| `FALKORDB_GRAPH` | Graph name | `kg_pastel` |
+| `FALKORDB_HOST` | FalkorDB host (when not using URL) | `localhost` |
+| `FALKORDB_PORT` | FalkorDB port (when not using URL) | `6379` |
+| `FALKORDB_USERNAME` | FalkorDB username | empty |
+| `FALKORDB_PASSWORD` | FalkorDB password | empty |
+| `LOG_LEVEL` | Logging level | `DEBUG` |
 ```
 
 ## Populate the graph
@@ -80,5 +99,13 @@ Highlights:
 - **No data returned**: rerun `create_kg_pastel.py` and confirm the FalkorDB container is running.
 - **Credential errors**: double-check `.streamlit/secrets.toml` and restart Streamlit.
 - **Tool skipping the graph**: watch the `menu` logs in the terminal; they show the Cypher queries and results.
+
+## Support snapshot
+
+Need a quick health check while debugging? Use the session snapshot helper:
+
+```bash
+python3 -c "from diagnostics import get_session_snapshot; print(get_session_snapshot())"
+```
 
 Happy frying! :)

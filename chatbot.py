@@ -1,5 +1,6 @@
 import streamlit as st
 from utils_common import format_currency
+from diagnostics import get_session_snapshot
 from agent import (
     generate_response,
     get_cart_snapshot,
@@ -55,6 +56,15 @@ def render_sidebar() -> None:
                     f"{format_currency(item['price'])}"
                 )
             st.markdown(f"**Total: {format_currency(snapshot['total'])}**")
+        st.divider()
+        show_diagnostics = st.checkbox(
+            "Mostrar diagnóstico",
+            value=False,
+            help="Exibe um resumo técnico da sessão para suporte.",
+        )
+        if show_diagnostics:
+            st.subheader("Diagnóstico")
+            st.json(get_session_snapshot())
 
 # Submit handler
 def handle_submit(message: str) -> None:

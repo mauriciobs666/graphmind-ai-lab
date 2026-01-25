@@ -6,12 +6,13 @@ import unicodedata
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from graph import graph
 from llm import llm
 from session_manager import ensure_session_id
 from utils_common import format_currency, setup_logger
+from prompts import _QUANTITY_EXTRACTION_PROMPT, _REMOVAL_EXTRACTION_PROMPT
 
 logger = setup_logger("cart")
 
@@ -71,18 +72,6 @@ def _parse_positive_int(value: Any) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
-_QUANTITY_EXTRACTION_PROMPT = SystemMessage(
-    content=(
-        "You extract the quantity and flavor from pastel orders. "
-        "Use only numbers explicitly provided by the customer. "
-        "Reply only in JSON with the format "
-        '{"flavor": "<flavor without the leading quantity>", "quantity": <number or null>}. '
-        "If no clear number is provided, return quantity as null and keep the original flavor. "
-        "Do not invent flavors or quantities."
-    )
-)
-
-
 def _parse_llm_quantity_response(
     response_text: str
 ) -> tuple[str, Optional[int]] | None:
@@ -97,18 +86,6 @@ def _parse_llm_quantity_response(
         return None
 
     return flavor, qty
-
-
-_REMOVAL_EXTRACTION_PROMPT = SystemMessage(
-    content=(
-        "You interpret requests to remove or decrease items from the pastel cart. "
-        "Reply only in JSON with the keys: "
-        '{"flavor": "<target flavor>", "quantity_to_remove": <number or null>, "remove_all": <true|false>}. '
-        "If the customer asks to remove the item entirely (or provides no number), use remove_all=true and quantity_to_remove=null. "
-        "If the customer asks to remove/decrease a specific quantity, use remove_all=false and quantity_to_remove with that number. "
-        "Do not invent flavors or quantities; use only what is explicit."
-    )
-)
 
 
 def _parse_llm_removal_response(

@@ -9,52 +9,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from llm import llm
 from graph import get_schema_description, graph, stringify_value
 from utils_common import setup_logger
+from prompts import ANSWER_TEMPLATE, CYPHER_GENERATION_TEMPLATE
 
 logger = setup_logger("tools.cypher")
-
-CYPHER_GENERATION_TEMPLATE = """
-You are a FalkorDB expert developer.
-Generate exactly one Cypher query that answers the user question,
-based strictly on the schema below.
-Return only the Cypher wrapped in a ```cypher``` fenced code block—no explanations.
-
-Schema:
-{schema}
-
-Rules:
-- Use only the labels/relationships/properties described above.
-- Generate read-only statements (MATCH/RETURN) and keep one `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)` block.
-- Always return **all** columns with aliases: `RETURN p.name AS name, p.price AS price, collect(DISTINCT i.name) AS ingredients`.
-- When filtering, prefer `p.name` for flavor questions. If filtering by ingredient, still collect every ingredient of the pastel (do not limit to the filtered one).
-- Always use case-insensitive comparisons with `toLower()`, preferably with `CONTAINS`.
-- No explanations or comments—only valid Cypher.
-- Always list every property you need explicitly in the RETURN clause.
-- Use only the property names shown (e.g., `p.name`, `p.price`, `i.name`); do not invent new ones.
-- Do not add `LIMIT`, `ORDER BY`, or extra `MATCH`/`OPTIONAL MATCH` clauses unless the user explicitly requests them.
-- Aggregate ingredients even when filtering by a single ingredient (never return just the matched ingredient).
-- When excluding ingredients, filter *after* collecting them for each pastel (e.g., collect into `ingredients`, then use `WHERE ALL(name IN ingredients WHERE ...)`).
-- Example template:
-  `MATCH (p:Pastel)-[:FEITO_DE]->(i:Ingrediente)`
-  `WHERE toLower(p.name) = toLower("Calabresa")`
-  `RETURN p.name AS name, p.price AS price, collect(DISTINCT i.name) AS ingredients`
-
-Question:
-{question}
-"""
-
-ANSWER_TEMPLATE = """
-You are the virtual attendant for “Pastel do Mau”.
-Use only the structured data provided below to answer the customer.
-- Mention flavors, ingredients, and prices returned in the context.
-- If multiple pastels match, summarize them in natural language (e.g., bullet list or short paragraphs).
-- If the context is empty, politely say that you don’t have enough information.
-- Do **not** invent data beyond what is shown.
-- Respond in Brazilian Portuguese.
-
-Customer Question: {question}
-Cypher Query Used: {cypher_query}
-Query Results (JSON): {context}
-"""
 
 cypher_prompt = ChatPromptTemplate.from_template(CYPHER_GENERATION_TEMPLATE)
 cypher_chain = cypher_prompt | llm | StrOutputParser()
