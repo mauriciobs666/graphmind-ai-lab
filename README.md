@@ -8,6 +8,7 @@ A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by F
 - **graph.py** – central FalkorDB connector plus schema helpers.
 - **cypher.py** – LangChain tool that builds and runs Cypher queries.
 - **agent.py / chatbot.py** – Streamlit UI driving a ReAct-style agent with tools.
+- **prompts.py** – central prompt strings for the agent (English internals, PT-BR customer copy).
 - **visualize_agent_graph.py** – optional helper to export the LangGraph workflow (Mermaid + PNG).
 
 ## Requirements

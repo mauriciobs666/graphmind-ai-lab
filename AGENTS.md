@@ -12,7 +12,8 @@
 
 ## File map
 - `chatbot.py`: Streamlit UI and sidebar labels.
-- `agent.py`: system prompt, tools, LangGraph workflow.
+- `agent.py`: tools and LangGraph workflow.
+- `prompts.py`: system prompts, tool instructions, and customer-facing copy.
 - `cart.py`: cart operations, LLM extraction prompts.
 - `cypher.py`: LLM prompts for Cypher and answers.
 - `create_kg_pastel.py`: seed data + console output.
