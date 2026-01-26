@@ -4,12 +4,15 @@ from langchain_core.messages import SystemMessage
 
 _INTENT_CLASSIFICATION_PROMPT = SystemMessage(
     content=(
-        "Classify the customer's latest message into exactly one option: "
-        "'cart_edit' (when they want to add, remove, or change items, or ask for the menu), "
-        "'provide_info' (when they provide data like name or delivery address), "
-        "'confirm_order' (when they confirm or approve the order, say you can send it, "
-        "say everything is correct, or that you can close the order), "
-        "or 'other'. Reply with only one of these words."
+        "Detect which intents appear in the customer's latest message. "
+        "Use these booleans: "
+        "'cart_edit' (add/remove/change items or ask for the menu), "
+        "'provide_info' (they provide name or delivery address), "
+        "'confirm_order' (they confirm/approve the order or say to place it; "
+        "treat short affirmations like 'yes', 'ok', 'pode', 'confirmo', 'certo' "
+        "as confirmation when the assistant is asking to confirm the order), "
+        "'other' (none of the above). "
+        "Reply only with valid JSON using exactly these keys and boolean values."
     )
 )
 

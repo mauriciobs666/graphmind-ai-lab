@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, List, Optional, TypedDict, Literal
+import json
+from typing import Annotated, Dict, List, Optional, TypedDict, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import Tool
@@ -55,6 +56,7 @@ class AgentState(TypedDict):
     order_confirmed: bool
     info_stage: InfoStage
     last_intent: Optional[str]
+    intent_flags: Optional[Dict[str, bool]]
 
 logger = setup_logger("agent")
 
@@ -73,36 +75,51 @@ def _extract_last_user_message(messages: List[BaseMessage]) -> HumanMessage | No
     return None
 
 
-def _classify_intent_with_llm(messages: List[BaseMessage]) -> str:
+def _classify_intent_with_llm(messages: List[BaseMessage]) -> Dict[str, bool]:
     """
-    Let the LLM decide whether the user wants to edit the cart, provide data, or confirm the order.
+    Let the LLM mark which intents are present in the user's latest message.
     """
 
     last_user = _extract_last_user_message(messages)
     if not last_user:
-        return "unknown"
+        return {"cart_edit": False, "provide_info": False, "confirm_order": False, "other": True}
 
     try:
         response = llm.invoke([_INTENT_CLASSIFICATION_PROMPT, last_user])
-        label = response.content.strip().lower()
-        if label in {"cart_edit", "provide_info", "confirm_order", "other"}:
-            logger.debug("Intent classified as: %s", label)
-            return label
-        logger.debug("LLM returned unrecognized intent label: %s", label)
+        payload = json.loads(response.content.strip())
+        flags = {
+            "cart_edit": bool(payload.get("cart_edit")),
+            "provide_info": bool(payload.get("provide_info")),
+            "confirm_order": bool(payload.get("confirm_order")),
+            "other": bool(payload.get("other")),
+        }
+        logger.debug("Intent flags classified as: %s", flags)
+        return flags
     except Exception:
         logger.exception("LLM intent classification failed.")
-    return "unknown"
+    return {"cart_edit": False, "provide_info": False, "confirm_order": False, "other": True}
 
 
-def _get_intent(state: AgentState) -> str:
-    cached = state.get("last_intent")
+def _primary_intent_from_flags(flags: Dict[str, bool]) -> str:
+    if flags.get("cart_edit"):
+        return "cart_edit"
+    if flags.get("confirm_order"):
+        return "confirm_order"
+    if flags.get("provide_info"):
+        return "provide_info"
+    return "other"
+
+
+def _get_intent_flags(state: AgentState) -> Dict[str, bool]:
+    cached = state.get("intent_flags")
     if cached:
-        logger.debug("Using cached intent: %s", cached)
+        logger.debug("Using cached intent flags: %s", cached)
         return cached
-    intent = _classify_intent_with_llm(state["messages"])
-    state["last_intent"] = intent
-    logger.debug("Intent cached as: %s", intent)
-    return intent
+    flags = _classify_intent_with_llm(state["messages"])
+    state["intent_flags"] = flags
+    state["last_intent"] = _primary_intent_from_flags(flags)
+    logger.debug("Intent flags cached as: %s", flags)
+    return flags
 
 
 def _summarize_recent_user_messages(
@@ -234,29 +251,37 @@ def _collect_address(state: AgentState):
 
     current_address = state.get("delivery_address")
     if has_cart:
-        intent = _get_intent(state)
-        if intent == "cart_edit" and info_stage not in {"awaiting_address", "awaiting_confirmation"}:
-            return {
-                "messages": [
-                    AIMessage(
-                        content=_EDIT_ORDER_PROMPT
-                    )
-                ],
-                "info_stage": "idle",
-                "order_confirmed": False,
-                "last_intent": intent,
-            }
+        intent_flags = _get_intent_flags(state)
+        primary_intent = _primary_intent_from_flags(intent_flags)
+        updates: Dict[str, object] = {"last_intent": primary_intent}
 
         extracted = _extract_field_with_llm(
             state["messages"], _DELIVERY_EXTRACTION_PROMPT, log_label="delivery address"
         )
         if extracted and extracted != current_address:
-            return {
-                "delivery_address": extracted,
-                "info_stage": "idle",
-                "order_confirmed": False,
-                "last_intent": intent,
-            }
+            updates.update(
+                {
+                    "delivery_address": extracted,
+                    "info_stage": "idle",
+                    "order_confirmed": False,
+                }
+            )
+
+        if intent_flags.get("cart_edit") and info_stage not in {
+            "awaiting_address",
+            "awaiting_confirmation",
+        }:
+            updates.update(
+                {
+                    "messages": [AIMessage(content=_EDIT_ORDER_PROMPT)],
+                    "info_stage": "idle",
+                    "order_confirmed": False,
+                }
+            )
+            return updates
+
+        if "delivery_address" in updates:
+            return updates
 
     if current_address:
         if info_stage == "awaiting_address":
@@ -315,11 +340,14 @@ def _address_condition(state: AgentState) -> Literal["ask", "next"]:
 def _confirm_condition(state: AgentState) -> Literal["ask", "next"]:
     decision: Literal["ask", "next"]
     info_stage = state.get("info_stage", "need_name")
+    intent_flags = state.get("intent_flags") or {}
     has_cart = cart_has_items()
     has_profile = _has_profile_data(state)
     confirmed = bool(state.get("order_confirmed"))
     awaiting_info = _is_awaiting_profile_info(info_stage)
-    if info_stage == "awaiting_confirmation":
+    if intent_flags.get("cart_edit"):
+        decision = "next"
+    elif info_stage == "awaiting_confirmation":
         decision = "ask"
     elif awaiting_info:
         decision = "next"
@@ -361,8 +389,9 @@ def _confirm_order(state: AgentState):
             return {"info_stage": "complete"}
         return {}
 
-    intent = _get_intent(state)
-    if intent == "confirm_order":
+    intent_flags = _get_intent_flags(state)
+    primary_intent = _primary_intent_from_flags(intent_flags)
+    if intent_flags.get("confirm_order") and not intent_flags.get("cart_edit"):
         return {
             "order_confirmed": True,
             "info_stage": "complete",
@@ -371,7 +400,7 @@ def _confirm_order(state: AgentState):
                     content=_CONFIRM_SUCCESS_MESSAGE
                 )
             ],
-            "last_intent": intent,
+            "last_intent": primary_intent,
         }
 
     summary = _format_order_summary(state)
@@ -379,7 +408,7 @@ def _confirm_order(state: AgentState):
     return {
         "messages": [AIMessage(content=prompt)],
         "info_stage": "awaiting_confirmation",
-        "last_intent": intent,
+        "last_intent": primary_intent,
     }
 
 
@@ -409,6 +438,9 @@ def _apply_state_updates(
         if new_stage != profile.get("info_stage"):
             logger.debug("Advancing info_stage: %s -> %s", profile.get("info_stage"), new_stage)
         profile["info_stage"] = new_stage
+    last_intent = state.get("last_intent")
+    if last_intent is not None:
+        profile["last_intent"] = last_intent
 
     return confirmed_now, new_stage
 
@@ -520,6 +552,7 @@ def generate_response(user_input: str) -> dict | str:
         "order_confirmed": cart_is_confirmed(session_id),
         "info_stage": profile["info_stage"],
         "last_intent": None,
+        "intent_flags": None,
     }
 
     try:

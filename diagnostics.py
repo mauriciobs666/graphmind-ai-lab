@@ -22,6 +22,7 @@ def get_session_snapshot(session_id: Optional[str] = None) -> Dict[str, Any]:
         "info_stage": profile.get("info_stage"),
         "has_name": bool(profile.get("customer_name")),
         "has_address": bool(profile.get("delivery_address")),
+        "last_intent": profile.get("last_intent"),
         "cart_items": len(cart.get("items", [])),
         "cart_total": cart.get("total", 0.0),
         "cart_confirmed": cart_is_confirmed(session),

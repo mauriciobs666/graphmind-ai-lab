@@ -19,6 +19,7 @@ class CustomerProfile(TypedDict):
     customer_name: Optional[str]
     delivery_address: Optional[str]
     info_stage: InfoStage
+    last_intent: Optional[str]
 
 
 _profile_store: Dict[str, CustomerProfile] = {}
@@ -29,6 +30,7 @@ def _create_default_profile() -> CustomerProfile:
         "customer_name": None,
         "delivery_address": None,
         "info_stage": "need_name",
+        "last_intent": None,
     }
 
 
@@ -51,6 +53,7 @@ def get_customer_profile(session_id: Optional[str] = None) -> CustomerProfile:
         "customer_name": profile["customer_name"],
         "delivery_address": profile["delivery_address"],
         "info_stage": profile["info_stage"],
+        "last_intent": profile.get("last_intent"),
     }
 
 
@@ -101,6 +104,8 @@ def handle_cart_changed(session_id: Optional[str] = None) -> None:
         and cart_has_items(session)
     ):
         profile["info_stage"] = "awaiting_confirmation"
+    elif not cart_has_items(session):
+        profile["info_stage"] = "need_name"
     elif profile.get("info_stage") == "complete":
         profile["info_stage"] = "idle"
     if profile.get("info_stage") != previous_stage:
