@@ -63,6 +63,9 @@ Prefer environment variables instead of Streamlit secrets? Use `.env.example` as
 | `FALKORDB_USERNAME` | FalkorDB username | empty |
 | `FALKORDB_PASSWORD` | FalkorDB password | empty |
 | `LOG_LEVEL` | Logging level | `DEBUG` |
+| `LOG_DIR` | Log directory | `logs` |
+| `LOG_SESSION_HANDLER_LIMIT` | Max active session log handlers | `100` |
+| `LOG_EXCLUDE_PREFIXES` | Comma-separated logger prefixes to exclude from file logs | `watchdog,streamlit,httpcore` |
 ```
 
 ## Populate the graph
@@ -92,13 +95,20 @@ Highlights:
 - The `menu` tool automatically generates Cypher queries for flavors/ingredients/prices.
 - Integrated cart workflow: the assistant can add/view/clear the cart via LangGraph tools, and the Streamlit sidebar reflects the current items and total.
 - Structured customer profile capture: the agent collects the customer's name upfront and, once there is an order, confirms the delivery address, showing everything in the sidebar with a quick reset button for demos.
-- Verbose logging so you can inspect the generated Cypher and results.
+- Verbose logging so you can inspect the generated Cypher and results (see logs below).
+
+## Logging
+
+- App-wide logs: `logs/app.log`.
+- Per-session logs: `logs/session_<session_id>.log` (created once a session is established).
+- File logs exclude `watchdog`, `streamlit`, and `httpcore` by default to focus on AI/graph activity.
 
 ## Troubleshooting
 
 - **No data returned**: rerun `create_kg_pastel.py` and confirm the FalkorDB container is running.
 - **Credential errors**: double-check `.streamlit/secrets.toml` and restart Streamlit.
 - **Tool skipping the graph**: watch the `menu` logs in the terminal; they show the Cypher queries and results.
+- **Missing file logs**: ensure a session was created and restart Streamlit after changing log-related env vars.
 
 ## Support snapshot
 

@@ -26,6 +26,8 @@
 - Keep edits minimal and localized.
 - Use ASCII by default; preserve existing accents.
 - Add comments only if logic is complex.
+- Logging defaults: file logs go to `logs/app.log` and per-session files under `logs/`, excluding `watchdog`, `streamlit`, and `httpcore` by default.
+- Documentation hygiene: always consider whether a code change should be reflected in `README.md` and `AGENTS.md`, and update them when needed.
 
 ## Testing / verification
 - If modifying prompts/tools: run a quick smoke check via Streamlit if possible.

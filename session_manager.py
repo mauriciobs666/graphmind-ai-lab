@@ -6,6 +6,8 @@ from typing import Dict, Optional
 import streamlit as st
 from langchain_core.chat_history import InMemoryChatMessageHistory
 
+from utils_common import ensure_session_log_handler, set_active_session
+
 _memory_store: Dict[str, InMemoryChatMessageHistory] = {}
 _active_session_id: Optional[str] = None
 
@@ -19,15 +21,21 @@ def ensure_session_id(explicit: Optional[str] = None) -> str:
 
     if explicit:
         _active_session_id = explicit
+        set_active_session(_active_session_id)
+        ensure_session_log_handler(_active_session_id)
         return explicit
 
     if _active_session_id:
+        set_active_session(_active_session_id)
+        ensure_session_log_handler(_active_session_id)
         return _active_session_id
 
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
 
     _active_session_id = st.session_state.session_id
+    set_active_session(_active_session_id)
+    ensure_session_log_handler(_active_session_id)
     return _active_session_id
 
 
