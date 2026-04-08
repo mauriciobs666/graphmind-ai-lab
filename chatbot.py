@@ -1,3 +1,5 @@
+import re
+
 import streamlit as st
 from utils_common import format_currency
 from diagnostics import get_session_snapshot
@@ -14,18 +16,22 @@ WELCOME_MESSAGE = "Bem vindo a loja virtual do Pastel do Mau! Em que posso ajuda
 SPINNER_TEXT = "Pensando..."
 
 
+def _escape_markdown(content: str) -> str:
+    safe = re.sub(r"[`<>\\]", "", content)
+    safe = safe.replace("$", "\\$")
+    return safe
+
+
 def write_message(role: str, content: str, save: bool = True) -> None:
     """
     This is a helper function that saves a message to the
     session state and then writes a message to the UI
     """
-    # Append to session state
     if save:
         st.session_state.messages.append({"role": role, "content": content})
 
-    # Write to UI
     with st.chat_message(role):
-        safe_content = content.replace("$", "\\$")
+        safe_content = _escape_markdown(content)
         st.markdown(safe_content)
 
 # Set up Session State

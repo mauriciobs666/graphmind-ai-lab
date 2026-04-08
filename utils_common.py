@@ -1,11 +1,30 @@
 import contextvars
 import logging
 import os
-from pathlib import Path
+import re
+import time
 from collections import OrderedDict
-from typing import Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 from config import Config
+
+
+class _SecretsFilter(logging.Filter):
+    _pattern = re.compile(r"(sk-|api|key|secret|password|token)\s*[:=]\s*[\"']?([^\s\"'}]+)", re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if hasattr(record, "msg") and isinstance(record.msg, str):
+            record.msg = self._mask(record.msg)
+        if hasattr(record, "args") and record.args:
+            record.args = tuple(
+                self._mask(str(a)) if isinstance(a, str) else a for a in record.args
+            )
+        return True
+
+    @staticmethod
+    def _mask(text: str) -> str:
+        return _SecretsFilter._pattern.sub(r"\1: [REDACTED]", text)
 
 _LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 _LOG_FORMAT = "[%(asctime)s] %(levelname)s - %(name)s - session=%(session_id)s - %(message)s"
@@ -56,6 +75,8 @@ def _ensure_root_level() -> None:
     level = logging.getLevelName(level_name)
     root = logging.getLogger()
     root.setLevel(level if isinstance(level, int) else logging.DEBUG)
+    if not any(isinstance(f, _SecretsFilter) for f in root.filters):
+        root.addFilter(_SecretsFilter())
 
 class _SessionFilter(logging.Filter):
     def __init__(self, session_id: str):
@@ -130,3 +151,31 @@ def setup_logger(name: str) -> logging.Logger:
     else:
         logger.setLevel(logging.DEBUG)
     return logger
+
+
+_SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+_ttl_stores: Dict[str, Tuple[Dict[str, Any], float]] = {}
+
+
+def register_ttl_store(name: str, store: Dict[str, Any]) -> None:
+    _ttl_stores[name] = (store, time.time())
+
+
+def cleanup_expired_sessions() -> int:
+    now = time.time()
+    cleaned = 0
+    for store_name, (store, _last_cleanup) in list(_ttl_stores.items()):
+        expired = [sid for sid in list(store.keys()) if isinstance(store[sid], tuple) and len(store[sid]) == 2 and now - store[sid][1] > _SESSION_TTL_SECONDS]
+        if expired:
+            logger.debug("Cleaning up %d expired sessions from %s", len(expired), store_name)
+            for sid in expired:
+                if sid in store:
+                    del store[sid]
+            cleaned += len(expired)
+    return cleaned
+
+
+def _touch_session(store: Dict[str, Any], session_id: str) -> None:
+    if session_id in store and isinstance(store[session_id], tuple):
+        data, _ = store[session_id]
+        store[session_id] = (data, time.time())

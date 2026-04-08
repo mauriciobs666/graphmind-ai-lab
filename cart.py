@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import unicodedata
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from langchain_core.messages import HumanMessage
 
 from graph import graph
 from llm import llm
 from session_manager import ensure_session_id
-from utils_common import format_currency, setup_logger
+from utils_common import format_currency, register_ttl_store, setup_logger
 from prompts import _QUANTITY_EXTRACTION_PROMPT, _REMOVAL_EXTRACTION_PROMPT
 
 logger = setup_logger("cart")
+
+SIMILARITY_THRESHOLD = 0.55
 
 
 class CartItem(TypedDict):
@@ -28,7 +31,8 @@ class CartState(TypedDict):
     order_confirmed: bool
 
 
-_cart_store: Dict[str, CartState] = {}
+_cart_store: Dict[str, Tuple[CartState, float]] = {}
+register_ttl_store("cart", _cart_store)
 
 
 def _normalize_text(value: str) -> str:
@@ -165,8 +169,7 @@ def _lookup_pastel(flavor: str) -> Optional[Dict[str, Any]]:
             best_score = score
             best_match = {"flavor": str(flavor_raw), "price": price_value}
 
-    # Require a reasonable similarity level to avoid random matches.
-    if best_match and best_score >= 0.55:
+    if best_match and best_score >= SIMILARITY_THRESHOLD:
         logger.debug(
             "Pastel lookup match | query=%s match=%s score=%.2f",
             flavor,
@@ -185,10 +188,13 @@ def _create_cart_state() -> CartState:
 
 
 def _get_cart_state(session_id: str) -> CartState:
+    now = time.time()
     if session_id not in _cart_store:
         logger.debug("Initializing cart state for session %s", session_id)
-        _cart_store[session_id] = _create_cart_state()
-    return _cart_store[session_id]
+        _cart_store[session_id] = (_create_cart_state(), now)
+    state, _ = _cart_store[session_id]
+    _cart_store[session_id] = (state, now)
+    return state
 
 
 def _get_cart(session_id: str) -> List[CartItem]:
@@ -257,7 +263,7 @@ def _cart_lines(cart: List[CartItem]) -> List[str]:
     return lines
 
 
-def add_to_cart_tool(flavor: str, quantity: Any = 1) -> str:
+def add_to_cart_tool(flavor: str, quantity: int | str = 1) -> str:
     """
     Add an item to the session cart after confirming flavor and quantity.
     """
@@ -335,7 +341,7 @@ def add_to_cart_tool(flavor: str, quantity: Any = 1) -> str:
     )
 
 
-def remove_from_cart_tool(flavor: str, quantity: Any = None) -> str:
+def remove_from_cart_tool(flavor: str, quantity: int | str | None = None) -> str:
     """
     Remove an item from the cart or decrease its quantity using LLM extraction.
     """

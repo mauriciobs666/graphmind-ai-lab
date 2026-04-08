@@ -19,6 +19,21 @@ cypher_chain = cypher_prompt | llm | StrOutputParser()
 answer_prompt = ChatPromptTemplate.from_template(ANSWER_TEMPLATE)
 answer_chain = answer_prompt | llm | StrOutputParser()
 
+_ALLOWED_CYPHER_KEYWORDS = {
+    "match", "return", "where", "with", "order", "by", "limit", "skip",
+    "optional", "distinct", "as", "and", "or", "not", "in", "contains",
+    "starts", "ends", "labels", "properties", "collect", "count", "sum",
+    "avg", "min", "max", "head", "tail", "size", "unwind", "range",
+    "tointeger", "tostring", "tofloat", "split", "replace", "trim",
+    "lower", "upper", "left", "right", "substring", "node", "relationship",
+    "type", "id", "start", "end", "p", "n", "r", "i", "m", "c",
+}
+_COMMENT_PATTERN = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
+_DANGEROUS_PATTERN = re.compile(
+    r"\b(create|delete|set|remove|drop|detach|merge)\b",
+    re.IGNORECASE
+)
+
 
 def _extract_cypher(text: str) -> str:
     if not text:
@@ -39,6 +54,20 @@ def _looks_like_cypher(query: str) -> bool:
         return False
     normalized = query.lstrip().lower()
     return "match" in normalized and "return" in normalized
+
+
+def _validate_safe_cypher(query: str) -> Tuple[bool, Optional[str]]:
+    cleaned = _COMMENT_PATTERN.sub("", query)
+    if _DANGEROUS_PATTERN.search(cleaned):
+        logger.warning("Potentially dangerous Cypher query blocked: %s", query[:100])
+        return False, "Query contains disallowed operations."
+    normalized = re.sub(r"[^a-z0-9\s]", " ", cleaned.lower())
+    words = set(normalized.split())
+    allowed = words & _ALLOWED_CYPHER_KEYWORDS
+    unknown = words - _ALLOWED_CYPHER_KEYWORDS - {"the", "a", "an", "is", "are", "from", "all"}
+    if unknown:
+        logger.debug("Unusual Cypher keywords found: %s", unknown)
+    return True, None
 
 
 MENU_STANDARD_QUERY = (
@@ -118,7 +147,11 @@ def cypher_qa(question: str) -> str:
         else:
             return "Não consegui gerar uma consulta Cypher para essa pergunta."
     else:
-        logger.debug("Validated Cypher shape, proceeding to execute.")
+        is_safe, error_msg = _validate_safe_cypher(cypher_query)
+        if not is_safe:
+            logger.error("Cypher validation failed: %s", error_msg)
+            return "Não consegui executar essa consulta de forma segura."
+        logger.debug("Cypher query validated as safe.")
 
     rows, error = _execute_cypher(cypher_query)
     if error:

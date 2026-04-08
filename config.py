@@ -2,6 +2,7 @@ import os
 
 import streamlit as st
 
+
 class Config:
     @staticmethod
     def _get_value(key: str, default=None):

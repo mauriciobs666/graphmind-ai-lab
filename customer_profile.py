@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Dict, Optional, TypedDict, TYPE_CHECKING
+import time
+from typing import Dict, Optional, Tuple, TypedDict, TYPE_CHECKING
 
 from session_manager import ensure_session_id
 from cart import cart_has_items
-from utils_common import setup_logger
+from utils_common import register_ttl_store, setup_logger
 
 if TYPE_CHECKING:
     from agent import InfoStage
@@ -22,7 +23,8 @@ class CustomerProfile(TypedDict):
     last_intent: Optional[str]
 
 
-_profile_store: Dict[str, CustomerProfile] = {}
+_profile_store: Dict[str, Tuple[CustomerProfile, float]] = {}
+register_ttl_store("profile", _profile_store)
 
 
 def _create_default_profile() -> CustomerProfile:
@@ -35,10 +37,13 @@ def _create_default_profile() -> CustomerProfile:
 
 
 def _get_profile(session_id: str) -> CustomerProfile:
+    now = time.time()
     if session_id not in _profile_store:
         logger.debug("Initializing profile for session %s", session_id)
-        _profile_store[session_id] = _create_default_profile()
-    return _profile_store[session_id]
+        _profile_store[session_id] = (_create_default_profile(), now)
+    profile, _ = _profile_store[session_id]
+    _profile_store[session_id] = (profile, now)
+    return profile
 
 
 def get_profile(session_id: Optional[str] = None) -> CustomerProfile:
@@ -59,7 +64,7 @@ def get_customer_profile(session_id: Optional[str] = None) -> CustomerProfile:
 
 def reset_customer_profile(session_id: Optional[str] = None) -> None:
     session = ensure_session_id(session_id)
-    _profile_store[session] = _create_default_profile()
+    _profile_store[session] = (_create_default_profile(), time.time())
     logger.debug("Reset profile to defaults | session=%s", session)
 
 

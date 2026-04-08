@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Dict, List, Optional, TypedDict, Literal
+from typing import Annotated, Dict, List, Optional, TypedDict, Literal, TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
+if TYPE_CHECKING:
+    from customer_profile import CustomerProfile
 from langchain_core.tools import Tool
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -414,7 +417,7 @@ def _confirm_order(state: AgentState):
 
 def _apply_state_updates(
     state: AgentState,
-    profile: dict,
+    profile: "CustomerProfile",
     session_id: str,
 ) -> tuple[bool, Optional[str]]:
     new_name = state.get("customer_name")
@@ -486,6 +489,9 @@ _llm_with_tools = llm.bind_tools(tools)
 
 def _call_agent(state: AgentState):
     response = _llm_with_tools.invoke([_system_message, *state["messages"]])
+    if not isinstance(response, BaseMessage):
+        logger.warning("Unexpected LLM response type: %s. Converting to string.", type(response))
+        response = AIMessage(content=str(response) if response else "")
     return {"messages": [response]}
 
 
