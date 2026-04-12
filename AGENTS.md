@@ -5,12 +5,19 @@ Monorepo with two self-contained components — no root-level build/test scripts
 ## Structure
 - `salesperson/` — Streamlit chatbot (FalkorDB + LangChain + LangGraph)
 - `opencode/` — Personal OpenCode skill configurations
-  - `skills/` — OpenCode skills (python-coding, write-tutorial, comparison-driver, skill-creator)
-  - `agents/` — Custom OpenCode agents (placeholder for future agents; creation/edition per OpenCode standards)
+  - `skills/` — OpenCode skills (python-coding, write-tutorial, comparison-driver, skill-creator, user-preferences)
+  - `agents/` — Custom OpenCode agents (rpg, coding-senior; creation/edition per OpenCode standards)
 
 ## Component docs
 - `salesperson/AGENTS.md` — Chatbot-specific guidance
 - `opencode/skills/*/SKILL.md` — Skill instructions
+
+## User Preferences Skill
+
+The `user-preferences` skill provides persistent memory for conversational agents:
+- Storage: `opencode/skills/user-preferences/storage/` (work.md, hobbies.md, communication.md, general.md)
+- Protocol: Read preference files at conversation start, search with grep, write new preferences to category files
+- Used by: RPG agent
 
 ## Key commands (run from salesperson/)
 
