@@ -5,7 +5,7 @@ Monorepo with two self-contained components — no root-level build/test scripts
 ## Structure
 - `salesperson/` — Streamlit chatbot (FalkorDB + LangChain + LangGraph)
 - `opencode/` — Personal OpenCode skill configurations
-  - `skills/` — OpenCode skills (python-coding, write-tutorial, comparison-driver, skill-creator, user-preferences)
+  - `skills/` — OpenCode skills (python-coding, write-tutorial, comparison-driver, skill-builder, user-preferences)
   - `agents/` — Custom OpenCode agents (rpg, coding-senior; creation/edition per OpenCode standards)
 
 ## Component docs

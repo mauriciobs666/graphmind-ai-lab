@@ -76,7 +76,7 @@ Before implementing, you MUST:
 Automatically load language-specific or task-specific skills when applicable:
 
 - **Python files (.py)**: Load "python-coding" skill for Python-specific conventions, type hints, pytest, and idiomatic patterns
-- **Skill improvements requested**: Load "skill-creator" skill when user asks to create, improve, or update skills
+- **Skill improvements requested**: Load "skill-builder" skill when user asks to create, improve, or update skills
 
 Use the `skill` tool to load the appropriate skill when you detect these patterns.
 
