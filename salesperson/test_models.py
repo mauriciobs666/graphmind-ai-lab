@@ -155,6 +155,14 @@ def call_langchain_client(settings, messages):
     chat = ChatOpenAI(**kwargs)
     lc_messages = build_langchain_messages(st.session_state.system_prompt, messages)
     
+    # === DEBUG CONTEXT PASSED ===
+    print("\n" + "="*40)
+    print("SENDING TO LLM:")
+    for m in lc_messages:
+        print(f"[{m.type.upper()}]: {m.content}")
+    print("="*40 + "\n")
+    # ============================
+    
     try:
         resp = chat.invoke(lc_messages)
         text = resp.content
@@ -168,9 +176,7 @@ def call_langchain_client(settings, messages):
         return f"Error: {str(e)}", 0, 0
 
 def display_stats_panel():
-    # Use a container to cleanly organize the stats module visually
-    with st.container(border=True):
-        st.subheader("Session Statistics")
+    with st.sidebar.expander("📊 Session Statistics", expanded=False):
         stats = st.session_state.session_stats
         total_tokens = stats['prompt_tokens'] + stats['completion_tokens']
         
@@ -181,46 +187,43 @@ def display_stats_panel():
         
         history_ctx = len(st.session_state.messages)
         st.metric("Context Size (Messages)", history_ctx)
+        
+    with st.sidebar.expander("🔍 Debug: Messages Sent", expanded=False):
+        st.json(st.session_state.messages)
 
 def main():
     ensure_state()
     settings = sidebar_controls()
     
-    # 3/1 ratio layout to fake a right sidebar
-    main_col, stats_col = st.columns([3, 1])
-    
-    with stats_col:
-        display_stats_panel()
+    display_stats_panel()
 
-    with main_col:
-        st.header(f"Testing {settings['provider']}")
+    st.header(f"Testing {settings['provider']}")
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    user_input = st.chat_input("Send a message...")
+    if user_input:
+        msg_payload = {"role": "user", "content": user_input}
+        st.session_state.messages.append(msg_payload)
+        with st.chat_message("user"):
+            st.markdown(user_input)
+            
+        with st.spinner("Generating..."):
+            reply, p_tok, c_tok = call_langchain_client(settings, st.session_state.messages)
+            
+        with st.chat_message("assistant"):
+            st.markdown(reply)
         
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-                
-        user_input = st.chat_input("Send a message...")
-        if user_input:
-            msg_payload = {"role": "user", "content": user_input}
-            st.session_state.messages.append(msg_payload)
-            with st.chat_message("user"):
-                st.markdown(user_input)
-                
-            with st.spinner("Generating..."):
-                reply, p_tok, c_tok = call_langchain_client(settings, st.session_state.messages)
-                
-            with st.chat_message("assistant"):
-                st.markdown(reply)
-            
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            
-            # Up stats
-            if not reply.startswith("Error:"):
-                st.session_state.session_stats["total_calls"] += 1
-                st.session_state.session_stats["prompt_tokens"] += p_tok
-                st.session_state.session_stats["completion_tokens"] += c_tok
-                # Trigger a redraw so stats panel updates immediately
-                st.rerun()
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        
+        # Up stats
+        if not reply.startswith("Error:"):
+            st.session_state.session_stats["total_calls"] += 1
+            st.session_state.session_stats["prompt_tokens"] += p_tok
+            st.session_state.session_stats["completion_tokens"] += c_tok
+            # Trigger a redraw so stats panel updates immediately
+            st.rerun()
 
 if __name__ == "__main__":
     main()
