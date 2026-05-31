@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 #
-# run.sh — Severino eval harness (kaizen loop)
+# run.sh — agent eval harness (kaizen loop)
 #
-# Runs each test case under cases/ through `opencode run --agent severino`,
+# Runs each test case under cases/ through `opencode run --agent <AGENT>`,
 # captures the agent's answer as markdown in outputs/, and diffs it against a
 # blessed reference in baseline/. Output is non-deterministic (local LLM), so
 # this is a review aid, not a pass/fail gate: you read the diffs to spot
 # regressions or improvements, then `--bless` to accept a new baseline.
+#
+# A case may also carry an optional expect.md with deterministic substring
+# assertions, checked against the response body:
+#   require: <text>    response MUST contain <text>   (case-insensitive, literal)
+#   reject:  <text>    response must NOT contain <text>
+# Blank lines and '#' comments are ignored. Diffs stay advisory, but a failed
+# assertion makes the whole run exit non-zero (the deterministic gate).
 #
 # Usage:
 #   ./run.sh                 run all cases, diff against baseline
@@ -16,7 +23,7 @@
 #   ./run.sh -h | --help                  this help
 #
 # Env overrides:
-#   AGENT     agent name           (default: severino)
+#   AGENT     agent name           (default: name of the parent directory)
 #   MODEL     provider/model       (default: agent's configured model)
 #   ENDPOINT  LM Studio /v1 URL     (default: http://localhost:1234/v1)
 
@@ -24,12 +31,15 @@ set -euo pipefail
 
 # --- locations -------------------------------------------------------------
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$TESTS_DIR")"   # the severino/ config dir (has opencode.json)
+PROJECT_DIR="$(dirname "$TESTS_DIR")"   # the agent config dir (parent of tests/, has opencode.json)
 CASES_DIR="$TESTS_DIR/cases"
 OUT_DIR="$TESTS_DIR/outputs"
 BASE_DIR="$TESTS_DIR/baseline"
 
-AGENT="${AGENT:-severino}"
+# Agent name defaults to the parent directory's name (e.g. .../agents/severino/tests
+# -> "severino"), so this same script drops into any agent's tests/ unchanged.
+# Override with AGENT=<name> for non-standard layouts.
+AGENT="${AGENT:-$(basename "$PROJECT_DIR")}"
 ENDPOINT="${ENDPOINT:-http://localhost:1234/v1}"
 
 # --- colors (no-op if not a tty) ------------------------------------------
@@ -42,6 +52,10 @@ info() { printf '%s\n' "${B}==>${Z} $*"; }
 warn() { printf '%s\n' "${Y}warning:${Z} $*" >&2; }
 die()  { printf '%s\n' "${R}error:${Z} $*" >&2; exit 1; }
 
+# Suite-wide assertion tally (deterministic; gates the exit code).
+ASSERT_PASS=0
+ASSERT_FAIL=0
+
 # --- helpers ---------------------------------------------------------------
 list_cases() {
   find "$CASES_DIR" -mindepth 1 -maxdepth 1 -type d -exec test -f '{}/prompt.md' ';' -print \
@@ -50,6 +64,45 @@ list_cases() {
 
 # Strip volatile header lines so baseline diffs only compare the answer body.
 strip_volatile() { grep -v -E '^- \*\*(Generated|Duration|Model):\*\*' "$1" 2>/dev/null || true; }
+
+# Run deterministic substring assertions from a case's expect.md against the
+# response body. Format (one directive per line; blanks and '#' comments skipped):
+#   require: <substring>   body MUST contain it  (case-insensitive, literal)
+#   reject:  <substring>   body must NOT contain it
+# Checks the response only (not the echoed prompt), so a prompt quoting the
+# forbidden text won't trip a reject. Updates the global ASSERT_PASS/ASSERT_FAIL.
+check_expectations() {
+  local expect_file="$1" body_file="$2"
+  [ -f "$expect_file" ] || return 0
+
+  local raw line kind sub present ok n=0
+  while IFS= read -r raw || [ -n "$raw" ]; do
+    line="${raw%$'\r'}"                         # tolerate CRLF
+    line="${line#"${line%%[![:space:]]*}"}"     # left-trim
+    case "$line" in
+      ''|'#'*)   continue ;;
+      require:*) kind=require; sub="${line#require:}" ;;
+      reject:*)  kind=reject;  sub="${line#reject:}"  ;;
+      *) warn "expect.md: ignoring unrecognized line: $line"; continue ;;
+    esac
+    sub="${sub#"${sub%%[![:space:]]*}"}"        # left-trim the substring
+    [ -n "$sub" ] || continue
+    n=$((n + 1))
+
+    if grep -iqF -- "$sub" "$body_file"; then present=yes; else present=no; fi
+    if [ "$kind" = require ]; then [ "$present" = yes ] && ok=1 || ok=0
+    else                           [ "$present" = no  ] && ok=1 || ok=0
+    fi
+
+    if [ "$ok" -eq 1 ]; then
+      ASSERT_PASS=$((ASSERT_PASS + 1))
+      printf '      %sPASS%s %-7s %s\n' "$G" "$Z" "$kind" "$sub"
+    else
+      ASSERT_FAIL=$((ASSERT_FAIL + 1))
+      printf '      %sFAIL%s %-7s %s\n' "$R" "$Z" "$kind" "$sub"
+    fi
+  done < "$expect_file"
+}
 
 health_check() {
   info "Checking LM Studio at ${ENDPOINT} ..."
@@ -69,14 +122,17 @@ run_one() {
   local prompt_file="$case_dir/prompt.md"
   [ -f "$prompt_file" ] || die "no prompt.md in case '$case_name'"
 
-  # Fixtures = every file in the case dir except prompt.md / notes.md, attached with -f.
+  # Fixtures = every file in the case dir except the control files (prompt.md,
+  # notes.md, expect.md), attached with -f. Paths are made relative to
+  # PROJECT_DIR (we cd there before running) so the agent sees and echoes
+  # relative paths instead of the absolute home dir / username.
   local -a attach=()
-  local f base
+  local f base rel
   while IFS= read -r -d '' f; do
     base="$(basename "$f")"
     case "$base" in
-      prompt.md|notes.md) ;;
-      *) attach+=( -f "$f" ) ;;
+      prompt.md|notes.md|expect.md) ;;
+      *) rel="${f#"$PROJECT_DIR/"}"; attach+=( -f "$rel" ) ;;
     esac
   done < <(find "$case_dir" -mindepth 1 -maxdepth 1 -type f -print0 | sort -z)
 
@@ -85,21 +141,29 @@ run_one() {
 
   local out_file="$OUT_DIR/$case_name.md"
   local body_file; body_file="$(mktemp)"
+  local err_file;  err_file="$(mktemp)"   # per-run, per-agent: no cross-run collisions
   local prompt; prompt="$(cat "$prompt_file")"
 
   info "Running ${case_name} ${DIM}(${#attach[@]} attach args)${Z}"
   local start end dur rc=0
   start="$(date +%s)"
-  # Run from the project dir so the agent picks up opencode.json + the severino agent.
+  # Run from the project dir so the agent picks up opencode.json + its agent definition.
   # NOTE: `-f`/`--file` is a greedy array option — it swallows any following positional
   # args, so the prompt MUST come before the -f flags or it gets parsed as a filename.
   ( cd "$PROJECT_DIR" && opencode run --agent "$AGENT" "${model_arg[@]}" "$prompt" "${attach[@]}" ) \
-    >"$body_file" 2>/tmp/severino-run.stderr || rc=$?
+    >"$body_file" 2>"$err_file" || rc=$?
   end="$(date +%s)"; dur=$(( end - start ))
 
   if [ "$rc" -ne 0 ]; then
-    warn "opencode exited with code $rc for '$case_name' (see /tmp/severino-run.stderr)"
+    warn "opencode exited with code $rc for '$case_name' (stderr below)"
+    sed 's/^/      /' "$err_file" >&2
   fi
+  rm -f "$err_file"
+
+  # Redact absolute paths the model may have echoed, so committed reports stay
+  # relative and never leak the home dir / username. PROJECT_DIR first (more
+  # specific) -> relative; any remaining $HOME -> ~.
+  sed -i -e "s#${PROJECT_DIR}/##g" -e "s#${HOME}/#~/#g" "$body_file" 2>/dev/null || true
 
   # Assemble the human-readable output markdown.
   {
@@ -117,9 +181,13 @@ run_one() {
     cat "$body_file"
     printf '\n'
   } > "$out_file"
-  rm -f "$body_file"
 
   printf '    %swrote%s %s %s(%ss)%s\n' "$G" "$Z" "outputs/$case_name.md" "$DIM" "$dur" "$Z"
+
+  # Deterministic assertions (optional per-case expect.md) — check against the
+  # response body only, so run before body_file is removed.
+  check_expectations "$case_dir/expect.md" "$body_file"
+  rm -f "$body_file"
 
   # Compare against baseline.
   local base_file="$BASE_DIR/$case_name.md"
@@ -152,7 +220,7 @@ bless() {
 
 # --- arg parsing -----------------------------------------------------------
 case "${1:-}" in
-  -h|--help)  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)  awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
   --list)     list_cases; exit 0 ;;
   --bless)    shift; bless "$@"; exit 0 ;;
 esac
@@ -177,3 +245,12 @@ fi
 health_check
 for c in "${TO_RUN[@]}"; do run_one "$c"; done
 info "done — ${#TO_RUN[@]} case(s). Review diffs above; ${DIM}./run.sh --bless${Z} to accept current outputs."
+
+# Deterministic assertion summary. Diffs are advisory; assertions gate the exit.
+if [ "$(( ASSERT_PASS + ASSERT_FAIL ))" -gt 0 ]; then
+  if [ "$ASSERT_FAIL" -gt 0 ]; then
+    printf '%s\n' "${R}assertions: ${ASSERT_PASS} passed, ${ASSERT_FAIL} failed${Z}"
+    exit 1
+  fi
+  printf '%s\n' "${G}assertions: ${ASSERT_PASS} passed, 0 failed${Z}"
+fi
