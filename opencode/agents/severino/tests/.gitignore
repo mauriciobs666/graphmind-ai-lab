@@ -1,0 +1,3 @@
+# Actual run outputs are regenerated each run and are non-deterministic.
+# The blessed baseline/ is committed; outputs/ is not.
+outputs/
