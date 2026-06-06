@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-06-05 — Dropped tenure-boast framing
+- **What:** Removed "with decades of experience" from the `description` and "with decades of hands-on experience" from the opening body line (now "You are a software engineer who works across many languages, paradigms, and frameworks."). Kept "Senior" in the description as a role/altitude signal.
+- **Why:** User feedback — the "decades of experience" framing reads as cocky and doesn't change behavior. Applied collection-wide (also graph-dba, dra-claudia).
+- **Plan items:** —
+
 ## 2026-06-05 — Implemented K-005 (third cold-start branch: tests can't run in this env)
 - **What:** Edited `tdd-engineer.md` workflow step 3. Added a third sub-branch alongside "greenfield" and "suite already red on arrival": **"Framework exists but the suite can't run here."** It instructs the agent to recognize an environmental block (deps not installed, missing runtime/toolchain, required build/service step) as *not* a code RED, avoid misattributing it or thrashing on setup, report the blocker plainly, propose the bootstrap step (`npm install`, `uv sync`, build, etc.), and ask before installing/changing the environment — establishing a runnable baseline before the first RED.
 - **Why:** Closes K-005. The original two branches silently assumed an existing framework was runnable; in practice a present-but-unexecutable suite is common and was previously unhandled, risking false REDs.
