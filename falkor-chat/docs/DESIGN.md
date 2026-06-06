@@ -1,0 +1,388 @@
+# falkor-chat — Design Document & Blueprint
+
+> **Philosophy:** FalkorDB graph for *everything* — reference data, workflow definitions
+> and runs, chat history, and user/workspace information. No second store for the primary
+> domain. One engine, one query language (OpenCypher), one operational model (Redis).
+
+**Status:** Draft v0.2 — blueprint + live-verified
+**Date:** 2026-06-06
+**Owner:** mauriciobs@gmail.com
+
+---
+
+## 1. Decisions locked in
+
+| Axis | Decision | Consequence |
+|---|---|---|
+| **Chat type** | **Hybrid** — humans chat in channels *and* an AI participant answers from the graph (GraphRAG) | Messages have a `role` (human/assistant/system); AI is a first-class `Agent` author; retrieval = vector + traversal |
+| **Tenancy** | **Per-workspace/team graph** — the graph boundary is a workspace, many users share it | One named graph per workspace; each workspace must fit one shard's RAM; workspaces distribute across a Redis Cluster |
+| **Workflows** | **General workflow engine** — one definition model serves both conversational/agent flows and business processes | Definitions (templates) are reusable + versioned; runs are per-workspace execution traces |
+
+---
+
+## 2. The hard FalkorDB constraints this design is shaped around
+
+These are not style choices — they are engine facts that the topology must respect.
+
+1. **In-memory, RAM-bound.** The whole graph + its sparse adjacency matrices + indexes live in RAM. **Memory is the binding constraint**, sized per graph.
+2. **A single graph lives entirely on one shard.** FalkorDB does *not* split one graph across shards (no Neo4j-Fabric equivalent). We scale by spreading *many* workspace graphs across cluster shards — a natural fit for per-workspace tenancy. **A single workspace can never outgrow one node's RAM.**
+3. **Relationships cannot cross graphs.** An edge can only connect two nodes in the *same* named graph. This is the single most important fact for the reference-data / workflow-definition split (see §4 and §6). Cross-graph references are carried as **properties (keys), resolved at query time**, or by **materializing a copy** of the shared subgraph into the workspace graph.
+4. **OpenCypher subset, not Neo4j.** No APOC, no GDS, no Fabric. Algorithms are built-in `algo.*` procedures; full-text/vector are `db.idx.*` procedures; profiling is the `GRAPH.PROFILE` *command*, not a `PROFILE` keyword prefix.
+5. **Supernodes are dense matrix rows.** Less catastrophic than pointer-chasing engines (traversal is matrix algebra), but a Channel with millions of `HAS_MESSAGE` edges is still a dense row that costs RAM and compute. We avoid it with a linked-list + time-bucket pattern (§5).
+
+> **Live-verified** on this deployment: Redis 8.2.2, FalkorDB module `999999` (edge/main),
+> `vectorset` module also loaded. The findings below in §7 reflect confirmed behavior — not docs
+> assumptions. Details: cross-graph edges confirmed silent (no error, MATCH returns 0); constraint
+> requires an existing range index first; vector indexes use DDL syntax, not a procedure call;
+> `db.idx.vector.createNodeIndex` is **not registered** in this build. See §7 for corrected commands.
+
+---
+
+## 3. Graph topology (multi-graph layout)
+
+We use **four classes of named graph**. Each is an independent Redis key; edges stay within a class.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ identity                 (1 graph, global)                            │
+│   Global user identity, auth principals, cross-workspace membership   │
+│   Read-mostly. Replicated. Small.                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ reference                (1 graph, global, read-mostly)               │
+│   Domain reference data / ontology / catalogs                         │
+│   Canonical WorkflowDef templates (versioned, immutable)              │
+│   Tool registry, prompt templates                                     │
+│   Replicated; served via GRAPH.RO_QUERY                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ ws:{workspaceId}         (N graphs, one per workspace)  ← hot path    │
+│   Workspace-local Users (membership projection of identity)           │
+│   Channels, Threads, Messages (chat history)                          │
+│   WorkflowRun + StepRun execution traces                              │
+│   Chunks/Documents + embeddings (GraphRAG corpus)                     │
+│   Extracted Entities + mentions                                       │
+│   Materialized copy of the WorkflowDef versions this ws uses          │
+├─────────────────────────────────────────────────────────────────────┤
+│ (optional) analytics:{...}  rollups / cross-workspace aggregates      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why per-workspace graphs (not one mega-graph with a `workspaceId` property):**
+- **Blast radius:** corruption, a runaway query, or a delete is scoped to one workspace.
+- **Sharding:** each `ws:{id}` graph hashes to a cluster slot → workspaces spread across shards automatically. A mega-graph would pin *all* tenants to one shard's RAM.
+- **Speed:** every traversal starts already scoped — no `WHERE n.workspaceId = $w` filter threaded through every query, no shared dense matrices.
+- **Lifecycle:** archive/export/delete a workspace = one `GRAPH.DELETE`.
+
+**The cost:** cross-workspace queries (admin analytics) need fan-out across graphs at the
+app layer or a dedicated `analytics` rollup graph. Accepted — cross-workspace reads are rare
+and not latency-critical.
+
+**Naming conventions** (project-wide):
+- Labels: `PascalCase` — `User`, `Channel`, `Message`, `WorkflowRun`
+- Relationship types: `UPPER_SNAKE` — `POSTED_BY`, `REPLY_TO`, `AT_STEP`
+- Properties: `camelCase` — `userId`, `createdAt`, `embedding`
+- Graph keys: `ws:{workspaceId}`, `reference`, `identity`
+
+---
+
+## 4. The cross-graph problem & the definition/instance split
+
+Because **edges can't cross graphs**, a `WorkflowRun` in `ws:acme` cannot have a real
+relationship to a `WorkflowDef` that lives in `reference`. Two ways to bridge:
+
+| Approach | How | When |
+|---|---|---|
+| **A. Property reference** | Run stores `defKey` + `defVersion` as properties; app resolves the def by querying `reference` | Cheap, always correct, but no traversal across the boundary |
+| **B. Materialize (chosen for defs)** | On workflow *publish*, copy the def subgraph (immutable, versioned) into each workspace graph that uses it | Real edges → runs traverse their own steps locally; def graphs stay small and are duplicated cheaply |
+
+**Decision:** canonical definitions live in `reference` (single source of truth, versioned,
+immutable once published). When a workspace first uses `defKey@v`, we **materialize that
+version's step subgraph into `ws:{id}`** under a `WorkflowDefSnapshot`. Runs then have real,
+local edges to their steps — fast, self-contained, and the snapshot is immutable so it never
+drifts. Same pattern applies to any *small, shared, read-mostly* reference subgraph a hot
+traversal needs to walk (e.g. an ontology fragment).
+
+> Large reference catalogs that are only *looked up* (not traversed from workspace nodes) stay
+> in `reference` and are reached by property key — no materialization.
+
+---
+
+## 5. Chat model (hybrid: humans + AI)
+
+### 5.1 Arrow notation
+
+```
+(:User)-[:MEMBER_OF {role, joinedAt}]->(:Channel)
+(:Agent)-[:MEMBER_OF {role:'assistant'}]->(:Channel)        // AI is a member too
+
+(:Message)-[:POSTED_BY]->(:User | :Agent)                    // author is human or AI
+(:Message)-[:IN_THREAD]->(:Thread)
+(:Thread)-[:IN_CHANNEL]->(:Channel)
+(:Message)-[:REPLY_TO]->(:Message)                           // explicit reply edges
+(:Message)-[:NEXT]->(:Message)                               // per-thread ordering (linked list)
+
+// time-bucketing to avoid a dense Channel node (supernode mitigation)
+(:Channel)-[:HAS_BUCKET]->(:DayBucket {day})
+(:DayBucket)-[:HEAD]->(:Message)                             // first msg of the day
+(:DayBucket)-[:TAIL]->(:Message)                             // last msg (O(1) append)
+
+// GraphRAG corpus
+(:Message)-[:HAS_EMBEDDING]->… or  Message.embedding vecf32  // embed inline
+(:Document)-[:HAS_CHUNK]->(:Chunk {embedding: vecf32})
+(:Chunk)-[:DERIVED_FROM]->(:Message | :Document)
+(:Entity)<-[:MENTIONS]-(:Message)                            // extracted entities
+(:Chunk)-[:ABOUT]->(:Entity)
+
+// workflow ↔ chat linkage (all within ws graph)
+(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
+(:StepRun)-[:EMITTED]->(:Message)
+```
+
+### 5.2 Why these choices (traversal cost)
+
+- **`Message.embedding` inline as `vecf32`** rather than a separate `Embedding` node: a single
+  Cypher query can run `db.idx.vector.queryNodes('Message','embedding',$k,$q)` to *seed*
+  semantic recall, then traverse `REPLY_TO` / `MENTIONS` to expand precise context — hybrid
+  retrieval in one round trip. No join hop to a vector node.
+- **`NEXT` linked list + `DayBucket` time-tree** instead of `(:Channel)-[:HAS_MESSAGE]->(:Message)`
+  for every message: appending is O(1) via the bucket `TAIL` pointer, and reading a window is a
+  bounded `NEXT*` walk. This keeps the **Channel node sparse** — a Channel with 10M messages
+  would otherwise be a dense matrix row (RAM + scan cost). Buckets cap the fan-out per node.
+- **AI as `Agent` author, not a magic flag**: assistant messages, tool-call traces, and human
+  messages share one timeline; provenance (`EMITTED` from a `StepRun`) is explicit and
+  explainable — critical for a GraphRAG system you must audit.
+
+### 5.3 Supernode watch
+
+`Channel`, popular `Entity` nodes, and a busy `Agent` are supernode risks. Mitigations:
+direction-specific patterns, time-bucketing (above), and partitioning relationship types so a
+single matrix row never holds the whole history. Re-evaluate with `GRAPH.PROFILE` once real
+data lands.
+
+---
+
+## 6. Workflow engine model (general)
+
+A definition is a directed graph of steps; a run is an execution trace that walks it.
+
+### 6.1 Definition (canonical in `reference`, materialized into `ws:{id}`)
+
+```
+(:WorkflowDef {key, version, name, kind})         // kind: 'conversation' | 'process'
+(:WorkflowDef)-[:START]->(:Step)
+(:Step {key, type, config})                        // type: prompt|tool|decision|human|message|wait
+(:Step)-[:TRANSITION {on, guard, order}]->(:Step)  // edge-labeled state machine
+```
+
+`type` unifies conversational and business flows:
+- `prompt` / `message` / `tool` → agent flows (LLM call, post a message, invoke a tool)
+- `human` / `decision` / `wait` → business processes (assignee task, branch, SLA/timer)
+
+`TRANSITION.guard` is an expression evaluated against run context; `on` is the event/outcome
+that fires it. One model, both worlds.
+
+### 6.2 Run (per-workspace, real local edges to the materialized def)
+
+```
+(:WorkflowRun {runId, defKey, defVersion, status, startedAt, ctx})
+(:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot {key, version})   // local, materialized
+(:WorkflowRun)-[:AT_STEP]->(:Step)                               // current position
+(:WorkflowRun)-[:HAS_STEP_RUN]->(:StepRun)
+(:StepRun {stepKey, status, startedAt, endedAt, input, output})
+(:StepRun)-[:RAN]->(:Step)                                       // which def step
+(:StepRun)-[:NEXT]->(:StepRun)                                   // execution order (audit trail)
+(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)                       // chat linkage
+(:StepRun)-[:EMITTED]->(:Message)
+```
+
+The engine loop: read `AT_STEP` → evaluate outgoing `TRANSITION` guards against `ctx` →
+create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` trace → move
+`AT_STEP`. The whole walk is local to the workspace graph (fast, isolated, fully auditable).
+
+> **`status` as a property, not a label**, so a run's state changes in place without
+> re-labeling churn; index it for "all running workflows" queries.
+
+---
+
+## 7. Indexes, constraints & vector search
+
+### 7.1 Per workspace graph `ws:{id}`
+
+**Critical ordering rule (live-verified):** a `GRAPH.CONSTRAINT CREATE` requires an existing
+range index on the same property. Always create the range index first, then the constraint.
+
+```
+-- Step 1: Range/exact indexes (must exist BEFORE the uniqueness constraints below)
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:User)        ON (n.userId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Channel)     ON (n.channelId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)     ON (n.msgId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun) ON (n.runId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)     ON (n.stepRunId)"
+
+-- Step 2: Uniqueness constraints (backed by the indexes above)
+-- Response: "PENDING" → then goes OPERATIONAL; check with CALL db.constraints()
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE User        PROPERTIES 1 userId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Channel     PROPERTIES 1 channelId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Message     PROPERTIES 1 msgId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowRun PROPERTIES 1 runId
+
+-- Step 3: Additional range indexes for hot filters (no constraint needed here)
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (m:Message)     ON (m.createdAt)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (r:WorkflowRun) ON (r.status)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (s:StepRun)     ON (s.status)"
+
+-- Step 4: Full-text index (RediSearch) for keyword search over message text
+-- Run inside a GRAPH.QUERY:
+CALL db.idx.fulltext.createNodeIndex('Message', 'text')
+
+-- Step 5: Vector indexes for GraphRAG semantic recall
+-- ⚠️  Live-verified: db.idx.vector.createNodeIndex is NOT registered as a procedure.
+-- Use the DDL syntax instead. dim must match your embedding model exactly (e.g. 1536 for ada-002).
+-- Verified working syntax:
+GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Message) ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
+GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Chunk)   ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
+
+-- Vectors are stored and queried as vecf32:
+--   SET:   n.embedding = vecf32([0.1, 0.2, ...])
+--   QUERY: CALL db.idx.vector.queryNodes('Message','embedding', $k, vecf32($vec))
+--          YIELD node, score   ← score is cosine distance (0 = identical, lower = more similar)
+```
+
+### 7.2 `reference` graph
+
+```
+-- Same ordering rule: index first, constraint second
+GRAPH.QUERY reference "CREATE INDEX FOR (n:WorkflowDef) ON (n.key)"
+GRAPH.QUERY reference "CREATE INDEX FOR (n:WorkflowDef) ON (n.version)"
+GRAPH.QUERY reference "CREATE INDEX FOR (n:Entity)      ON (n.entityId)"
+
+GRAPH.CONSTRAINT CREATE reference UNIQUE NODE WorkflowDef PROPERTIES 2 key version
+GRAPH.CONSTRAINT CREATE reference UNIQUE NODE Entity      PROPERTIES 1 entityId
+```
+
+**Rule:** index the *anchor* of a traversal (the start node you look up), not every hop. Always
+confirm the index is actually used with `GRAPH.PROFILE` — an index that isn't hit is just RAM.
+
+### 7.3 Which vector store
+
+Two vector engines are present on this box. **Use FalkorDB's in-graph vector index**
+(`db.idx.vector.queryNodes`) so a single query fuses similarity + traversal — the whole point of
+GraphRAG here. The standalone **Redis Vector Sets (`vectorset`)** module is *not* traversable;
+reserve it only for an out-of-graph, high-throughput ANN index if one is ever needed.
+
+---
+
+## 8. Hybrid retrieval (the GraphRAG read path)
+
+The AI participant answers a question in a channel by combining semantic recall with structured
+traversal — one read-only query, routable to a replica:
+
+```cypher
+// $qVec = vecf32 of query embedding, $k = neighbors to retrieve, $chId = channel
+// score = cosine distance: 0 = identical, lower = more similar → ORDER BY score ASC
+CALL db.idx.vector.queryNodes('Message', 'embedding', $k, $qVec)
+YIELD node AS seed, score
+MATCH (seed)-[:IN_THREAD]->(:Thread)-[:IN_CHANNEL]->(c:Channel {channelId:$chId})
+OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
+WITH seed, score, collect(DISTINCT related)[..5] AS expanded
+RETURN seed.text AS hit, score, [m IN expanded | m.text] AS context
+ORDER BY score ASC
+```
+
+- **Vector** finds *what's semantically relevant*; **traversal** pulls *precise, explainable
+  neighbors* (same thread, shared entities, prior workflow steps). Either alone is weaker.
+- **Score is cosine distance** (live-verified: identical vectors → score `0`). Order `ASC` to
+  rank most-similar first.
+- Served via `GRAPH.RO_QUERY` → can hit read replicas (mind replica lag for just-posted
+  messages; route "include my last message" reads to the primary).
+
+---
+
+## 9. Write paths
+
+| Operation | Pattern | Notes |
+|---|---|---|
+| Post message | `MERGE (m:Message {msgId:$id})` + relink `DayBucket` TAIL → `NEXT` | Idempotent via unique constraint; O(1) append using the bucket tail pointer |
+| Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches |
+| Embed messages | async worker: compute embedding → `SET m.embedding = vecf32($v)` | Decouple embedding latency from the post path |
+| Advance workflow | create `StepRun`, append `NEXT`, move `AT_STEP` | All local to `ws:{id}`; fully transactional within the graph |
+| Publish workflow def | write to `reference`; materialize snapshot into consuming `ws:{id}` graphs | Immutable per version; bump version, never mutate in place |
+
+**Rule:** every `MERGE` is backed by a uniqueness constraint, or it's a duplicate-node bug
+waiting for concurrency.
+
+---
+
+## 10. Architecture & operations
+
+```
+            ┌────────────┐      RESP / Bolt      ┌──────────────────────────┐
+   clients →│  App / API │ ───────────────────── │  FalkorDB (Redis 8.x)     │
+            │  (gateway) │   GRAPH.QUERY (RW) →   │  PRIMARY  ┌─ ws:acme      │
+            └────────────┘   GRAPH.RO_QUERY (RO)  │           ├─ ws:globex    │
+                  │                               │           ├─ reference    │
+                  │ embeddings / LLM              │           └─ identity     │
+            ┌─────▼──────┐                        │  REPLICAS (RO_QUERY, RAG) │
+            │ LLM + embed│                        └──────────────────────────┘
+            │  workers   │     scale out: Redis Cluster — workspace graphs
+            └────────────┘     distributed across shards by key hash slot
+```
+
+- **Client SDK:** `falkordb-py` **pinned 1.6.x** —
+  `db = FalkorDB(host, port)` → `g = db.select_graph(f"ws:{wid}")` →
+  `g.query(cypher, params={...})` / `g.ro_query(...)`. **Always parameterize** (`params=`),
+  never string-concatenate user input into Cypher.
+- **Memory sizing first.** Estimate per workspace: nodes + relationships + properties +
+  per-relationship-type matrices + full-text + **vector indexes (often the biggest line:
+  `dim × 4 bytes × #vectors`)**. A workspace graph must fit one shard's RAM with headroom.
+  Watch `GRAPH.MEMORY USAGE`, `GRAPH.INFO`, Redis `INFO memory`. Set `maxmemory` deliberately
+  and **do not evict** the graph's own keys.
+- **Persistence:** RDB snapshots + AOF; choose AOF fsync policy per RPO. Restart replays into RAM.
+- **HA / scale reads:** primary takes writes; read replicas serve `GRAPH.RO_QUERY` (RAG reads).
+  Async replication → eventual consistency; watch replica lag. Sentinel for failover.
+- **Scale tenants:** Redis Cluster spreads `ws:{id}` graphs across shards by hash slot. Each
+  graph stays whole on one shard. Rebalance by moving slots; isolate hot workspaces onto
+  dedicated shards if needed.
+- **Tuning:** `GRAPH.CONFIG` — `THREAD_COUNT` (size to cores), `QUERY_MEM_CAPACITY`,
+  `MAX_QUEUED_QUERIES`, `TIMEOUT_DEFAULT`/`TIMEOUT_MAX`, `CACHE_SIZE`.
+- **Observability:** `GRAPH.SLOWLOG` for slow queries, `GRAPH.PROFILE` for plans, Redis metrics.
+- **Security:** Redis ACLs scoping `GRAPH.*` per principal (ideally per workspace key pattern),
+  TLS in transit, network isolation; secrets outside the data.
+
+---
+
+## 11. Capacity sketch (fill in with real numbers)
+
+Per workspace, rough RAM order-of-magnitude:
+
+```
+nodes        ≈ (#messages + #chunks + #entities + #runs + #stepruns) × ~payload bytes
+rel matrices ≈ Σ per-type sparse-matrix overhead (sparse → small unless dense nodes)
+vector index ≈ embeddingDim × 4 bytes × (#messages + #chunks)        ← usually dominant
+fulltext     ≈ RediSearch index over Message.text
++ Redis overhead + ~30% headroom
+```
+
+> Action: instrument a pilot workspace, measure `GRAPH.MEMORY USAGE`, and back into a
+> per-workspace RAM budget + a shard:workspace packing ratio before scaling out.
+
+---
+
+## 12. Roadmap
+
+1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, `NEXT` + `DayBucket` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads.
+3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
+4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
+5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
+
+---
+
+## 13. Open questions
+
+- **Embedding model & dimension** (fixes vector index size and RAM line).
+- **Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`?
+- **Identity source of truth** — is `identity` graph authoritative, or a projection of an external IdP?
+- **Retention** — do old messages/embeddings age out (and how does that interact with the always-in-RAM constraint)?
+- **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph.
+- **Bolt vs. RESP** for the app gateway — Bolt port is `65535` (confirmed in `GRAPH.CONFIG`); decide whether to use it or RESP with `falkordb-py`.
+- **Live config defaults noted:** `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `TIMEOUT 1000ms`, `CACHE_SIZE 25`, `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited), `ASYNC_DELETE 1`. Review before production.

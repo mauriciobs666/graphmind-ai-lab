@@ -1,0 +1,28 @@
+# Claude Code session resumption — personal, not project state
+resume.sh
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Docker / local data
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
