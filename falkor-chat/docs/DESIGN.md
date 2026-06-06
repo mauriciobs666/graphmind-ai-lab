@@ -4,7 +4,7 @@
 > and runs, chat history, and user/workspace information. No second store for the primary
 > domain. One engine, one query language (OpenCypher), one operational model (Redis).
 
-**Status:** Draft v0.2 — blueprint + live-verified
+**Status:** Draft v0.3 — thread-scoped model, DayBucket removed
 **Date:** 2026-06-06
 **Owner:** mauriciobs@gmail.com
 
@@ -111,52 +111,85 @@ traversal needs to walk (e.g. an ontology fragment).
 ### 5.1 Arrow notation
 
 ```
+// Membership
 (:User)-[:MEMBER_OF {role, joinedAt}]->(:Channel)
-(:Agent)-[:MEMBER_OF {role:'assistant'}]->(:Channel)        // AI is a member too
+(:Agent)-[:MEMBER_OF {role:'assistant'}]->(:Channel)   // AI is a first-class member
 
-(:Message)-[:POSTED_BY]->(:User | :Agent)                    // author is human or AI
-(:Message)-[:IN_THREAD]->(:Thread)
-(:Thread)-[:IN_CHANNEL]->(:Channel)
-(:Message)-[:REPLY_TO]->(:Message)                           // explicit reply edges
-(:Message)-[:NEXT]->(:Message)                               // per-thread ordering (linked list)
+// Channel → Thread → Message hierarchy
+(:Channel)-[:HAS_THREAD]->(:Thread {threadId, title, createdAt, updatedAt})
+(:Thread)-[:HEAD]->(:Message)                          // first message in thread (set once)
+(:Thread)-[:TAIL]->(:Message)                          // last message (updated on each append)
+(:Message {msgId, text, role, createdAt})-[:NEXT]->(:Message)  // thread-scoped linked list
 
-// time-bucketing to avoid a dense Channel node (supernode mitigation)
-(:Channel)-[:HAS_BUCKET]->(:DayBucket {day})
-(:DayBucket)-[:HEAD]->(:Message)                             // first msg of the day
-(:DayBucket)-[:TAIL]->(:Message)                             // last msg (O(1) append)
+// Authorship & replies
+(:Message)-[:POSTED_BY]->(:User)                       // human author
+(:Message)-[:POSTED_BY]->(:Agent)                      // AI author
+(:Message)-[:REPLY_TO]->(:Message)                     // explicit quote/reply (optional)
 
 // GraphRAG corpus
-(:Message)-[:HAS_EMBEDDING]->… or  Message.embedding vecf32  // embed inline
-(:Document)-[:HAS_CHUNK]->(:Chunk {embedding: vecf32})
-(:Chunk)-[:DERIVED_FROM]->(:Message | :Document)
-(:Entity)<-[:MENTIONS]-(:Message)                            // extracted entities
+(:Document {documentId})-[:HAS_CHUNK]->(:Chunk {chunkId, text, embedding: vecf32})
+(:Chunk)-[:DERIVED_FROM]->(:Message)
+(:Entity {entityId, name, type})<-[:MENTIONS]-(:Message)
 (:Chunk)-[:ABOUT]->(:Entity)
 
-// workflow ↔ chat linkage (all within ws graph)
+// Workflow ↔ chat linkage (all within ws graph)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
 (:StepRun)-[:EMITTED]->(:Message)
 ```
 
+**Key properties:**
+- `Message.role` — `'human'` | `'assistant'` | `'system'` (fast filter without traversing `POSTED_BY`)
+- `Thread.updatedAt` — bumped on every new message; drives "recent threads" listing
+- `Message.embedding` — inline `vecf32`; no separate node needed
+
 ### 5.2 Why these choices (traversal cost)
 
+- **Thread-scoped `NEXT` linked list.** Reading a thread is a bounded `NEXT*` walk from
+  `Thread HEAD`. Thread stays permanently **sparse** — always exactly 2 edges (HEAD and TAIL)
+  regardless of message count. Append is O(1): link new message to current TAIL, move TAIL
+  pointer, all in one atomic query.
+- **No direct `Channel→Message` edges.** Channel fan-out is bounded by thread count, not message
+  count — eliminating the Channel supernode risk entirely. Channel-level time queries use the
+  `Message.createdAt` and `Thread.updatedAt` range indexes, not edge traversal.
 - **`Message.embedding` inline as `vecf32`** rather than a separate `Embedding` node: a single
-  Cypher query can run `db.idx.vector.queryNodes('Message','embedding',$k,$q)` to *seed*
-  semantic recall, then traverse `REPLY_TO` / `MENTIONS` to expand precise context — hybrid
-  retrieval in one round trip. No join hop to a vector node.
-- **`NEXT` linked list + `DayBucket` time-tree** instead of `(:Channel)-[:HAS_MESSAGE]->(:Message)`
-  for every message: appending is O(1) via the bucket `TAIL` pointer, and reading a window is a
-  bounded `NEXT*` walk. This keeps the **Channel node sparse** — a Channel with 10M messages
-  would otherwise be a dense matrix row (RAM + scan cost). Buckets cap the fan-out per node.
-- **AI as `Agent` author, not a magic flag**: assistant messages, tool-call traces, and human
-  messages share one timeline; provenance (`EMITTED` from a `StepRun`) is explicit and
-  explainable — critical for a GraphRAG system you must audit.
+  query seeds with `db.idx.vector.queryNodes` then traverses `REPLY_TO` / `MENTIONS` for precise
+  context — hybrid retrieval in one round trip.
+- **`Message.role` as a property, not derived from `POSTED_BY` label**: lets the app filter by
+  role (`WHERE m.role = 'assistant'`) without an extra hop.
+- **AI as `Agent` author, not a magic flag**: assistant messages share one timeline with human
+  messages; `EMITTED` provenance back to `StepRun` is explicit and auditable.
 
-### 5.3 Supernode watch
+### 5.3 Thread append (write path)
 
-`Channel`, popular `Entity` nodes, and a busy `Agent` are supernode risks. Mitigations:
-direction-specific patterns, time-bucketing (above), and partitioning relationship types so a
-single matrix row never holds the whole history. Re-evaluate with `GRAPH.PROFILE` once real
-data lands.
+Two cases — both must be a single `GRAPH.QUERY` (atomic):
+
+**First message in thread (HEAD and TAIL don't exist yet):**
+```cypher
+MATCH (t:Thread {threadId:$threadId})
+MERGE (m:Message {msgId:$msgId})
+  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
+CREATE (t)-[:HEAD]->(m)
+CREATE (t)-[:TAIL]->(m)
+SET t.updatedAt = $createdAt
+```
+
+**Subsequent messages (move TAIL forward):**
+```cypher
+MATCH (t:Thread {threadId:$threadId})-[tailRel:TAIL]->(prev:Message)
+MERGE (m:Message {msgId:$msgId})
+  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
+CREATE (prev)-[:NEXT]->(m)
+DELETE tailRel
+CREATE (t)-[:TAIL]->(m)
+SET t.updatedAt = $createdAt
+```
+
+### 5.4 Supernode watch
+
+`Channel` (via `HAS_THREAD`) and popular `Entity` nodes are the remaining risks. Channel fan-out
+is threads-per-channel — manageable. Entity fan-out (`MENTIONS`) grows with corpus size; mitigate
+by capping entity extraction per message and partitioning `MENTIONS` by relationship type if
+needed. Re-evaluate with `GRAPH.PROFILE` once real data lands.
 
 ---
 
@@ -207,44 +240,63 @@ create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` 
 
 ### 7.1 Per workspace graph `ws:{id}`
 
-**Critical ordering rule (live-verified):** a `GRAPH.CONSTRAINT CREATE` requires an existing
-range index on the same property. Always create the range index first, then the constraint.
+**Critical ordering rules (live-verified):**
+1. `GRAPH.CONSTRAINT CREATE` requires an existing range index on the same property — always index first.
+2. Composite constraints (`PROPERTIES 2 …`) are documented but not yet live-verified on this build — test before the bootstrap script is finalised.
 
 ```
--- Step 1: Range/exact indexes (must exist BEFORE the uniqueness constraints below)
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:User)        ON (n.userId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Channel)     ON (n.channelId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)     ON (n.msgId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun) ON (n.runId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)     ON (n.stepRunId)"
+-- ── Step 1: Range indexes (must exist BEFORE constraints) ──────────────────
 
--- Step 2: Uniqueness constraints (backed by the indexes above)
--- Response: "PENDING" → then goes OPERATIONAL; check with CALL db.constraints()
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE User        PROPERTIES 1 userId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Channel     PROPERTIES 1 channelId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Message     PROPERTIES 1 msgId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowRun PROPERTIES 1 runId
+-- Identity anchors (back the uniqueness constraints below)
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:User)                ON (n.userId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Channel)             ON (n.channelId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Thread)              ON (n.threadId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)             ON (n.msgId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Agent)               ON (n.agentId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Document)            ON (n.documentId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Chunk)               ON (n.chunkId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Entity)              ON (n.entityId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowDefSnapshot) ON (n.key)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowDefSnapshot) ON (n.version)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun)         ON (n.runId)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)             ON (n.stepRunId)"
 
--- Step 3: Additional range indexes for hot filters (no constraint needed here)
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (m:Message)     ON (m.createdAt)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (r:WorkflowRun) ON (r.status)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (s:StepRun)     ON (s.status)"
+-- Hot filter indexes (no constraint needed)
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Thread)      ON (n.updatedAt)"   -- recent threads
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)     ON (n.createdAt)"   -- time-range reads
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun) ON (n.status)"
+GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)     ON (n.status)"
 
--- Step 4: Full-text index (RediSearch) for keyword search over message text
--- Run inside a GRAPH.QUERY:
-CALL db.idx.fulltext.createNodeIndex('Message', 'text')
+-- ── Step 2: Uniqueness constraints ─────────────────────────────────────────
+-- Response is "PENDING" → becomes OPERATIONAL asynchronously.
+-- Verify with: GRAPH.QUERY ws:acme "CALL db.constraints()"
 
--- Step 5: Vector indexes for GraphRAG semantic recall
--- ⚠️  Live-verified: db.idx.vector.createNodeIndex is NOT registered as a procedure.
--- Use the DDL syntax instead. dim must match your embedding model exactly (e.g. 1536 for ada-002).
--- Verified working syntax:
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE User                PROPERTIES 1 userId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Channel             PROPERTIES 1 channelId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Thread              PROPERTIES 1 threadId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Message             PROPERTIES 1 msgId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Agent               PROPERTIES 1 agentId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Document            PROPERTIES 1 documentId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Chunk               PROPERTIES 1 chunkId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Entity              PROPERTIES 1 entityId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowRun         PROPERTIES 1 runId
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE StepRun             PROPERTIES 1 stepRunId
+-- ⚠️  composite constraint — verify PROPERTIES 2 syntax on live instance first:
+GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowDefSnapshot PROPERTIES 2 key version
+
+-- ── Step 3: Full-text index (RediSearch) ───────────────────────────────────
+GRAPH.QUERY ws:acme "CALL db.idx.fulltext.createNodeIndex('Message', 'text')"
+
+-- ── Step 4: Vector indexes ─────────────────────────────────────────────────
+-- ⚠️  db.idx.vector.createNodeIndex is NOT a registered procedure (live-verified).
+-- Use DDL. Dimension must match the embedding model exactly (e.g. 1536 for text-embedding-ada-002).
 GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Message) ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
 GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Chunk)   ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
 
--- Vectors are stored and queried as vecf32:
---   SET:   n.embedding = vecf32([0.1, 0.2, ...])
---   QUERY: CALL db.idx.vector.queryNodes('Message','embedding', $k, vecf32($vec))
---          YIELD node, score   ← score is cosine distance (0 = identical, lower = more similar)
+-- Vectors stored as vecf32; score is cosine distance (0 = identical, lower = more similar):
+--   WRITE: SET n.embedding = vecf32([0.1, 0.2, ...])
+--   READ:  CALL db.idx.vector.queryNodes('Message','embedding', $k, vecf32($vec))
+--          YIELD node, score  →  ORDER BY score ASC
 ```
 
 ### 7.2 `reference` graph
@@ -277,11 +329,14 @@ The AI participant answers a question in a channel by combining semantic recall 
 traversal — one read-only query, routable to a replica:
 
 ```cypher
-// $qVec = vecf32 of query embedding, $k = neighbors to retrieve, $chId = channel
-// score = cosine distance: 0 = identical, lower = more similar → ORDER BY score ASC
+// $qVec = vecf32 of query embedding, $k = neighbors to retrieve, $chId = channel scope
+// score = cosine distance (0 = identical, lower = more similar) → ORDER BY score ASC
 CALL db.idx.vector.queryNodes('Message', 'embedding', $k, $qVec)
 YIELD node AS seed, score
-MATCH (seed)-[:IN_THREAD]->(:Thread)-[:IN_CHANNEL]->(c:Channel {channelId:$chId})
+// scope to the target channel via Thread
+MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed)
+MATCH (c:Channel {channelId:$chId})-[:HAS_THREAD]->(t)
+// expand to related messages that mention the same entities
 OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
 WITH seed, score, collect(DISTINCT related)[..5] AS expanded
 RETURN seed.text AS hit, score, [m IN expanded | m.text] AS context
@@ -301,7 +356,7 @@ ORDER BY score ASC
 
 | Operation | Pattern | Notes |
 |---|---|---|
-| Post message | `MERGE (m:Message {msgId:$id})` + relink `DayBucket` TAIL → `NEXT` | Idempotent via unique constraint; O(1) append using the bucket tail pointer |
+| Post message | `MERGE (m:Message {msgId:$id})` + relink `Thread TAIL → NEXT` | Idempotent via unique constraint; O(1) append; two Cypher variants (first vs subsequent message — see §5.3) |
 | Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches |
 | Embed messages | async worker: compute embedding → `SET m.embedding = vecf32($v)` | Decouple embedding latency from the post path |
 | Advance workflow | create `StepRun`, append `NEXT`, move `AT_STEP` | All local to `ws:{id}`; fully transactional within the graph |
@@ -370,7 +425,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, `NEXT` + `DayBucket` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
