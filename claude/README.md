@@ -20,6 +20,10 @@ Each agent carries a living improvement plan and change log:
 
 `cobb` additionally maintains [`cobb/TESTING.md`](./cobb/TESTING.md) (agent testing standards).
 
+## Skills
+
+- [**`agent-maintenance`**](./skills/agent-maintenance/SKILL.md) — the maintenance machinery `cobb` follows when it creates/edits/reviews an agent or skill: kaizen plan/history upkeep, dual-audience documentation, file-location conventions, and the drift audit/reconcile method. Progressively-disclosed so cobb's resident prompt stays lean. Source: `claude/skills/agent-maintenance/`, deployed via the `~/.claude/skills` → `claude/skills` symlink.
+
 ## Conventions
 
 - **Folder per agent:** `<name>/<name>.md` is the source; `<name>/kaizen/{plan,history}.md` track improvements.

@@ -18,8 +18,11 @@ and OpenCode artifacts).
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `skills/` — `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences`.
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
-- `claude/` — Custom Claude Code subagents, one folder per agent, each with a `kaizen/` plan +
-  history. See `claude/README.md` (human catalog) and `claude/CLAUDE.md` (agent context).
+- `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
+  history) plus shared `skills/`. See `claude/README.md` (human catalog) and `claude/CLAUDE.md`
+  (agent context).
+  - `skills/` — `agent-maintenance` (kaizen/documentation/drift-audit procedures cobb follows).
+    Deployed via `~/.claude/skills` → `claude/skills`.
 
 ## Component docs (read before working in a component)
 
@@ -30,10 +33,12 @@ and OpenCode artifacts).
 | `opencode/` | `opencode/skills/*/SKILL.md` · `opencode/agents/severino/README.md` · `opencode/local-llm.md` |
 | `claude/` | `claude/README.md` · `claude/CLAUDE.md` |
 
-## Claude Code subagents (`claude/`)
+## Claude Code subagents & skills (`claude/`)
 
 Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`.
-All currently use `model: opus`.
+All currently use `model: opus`. Shared skills live under `claude/skills/<name>/SKILL.md` (the
+collection-level skills home) — currently `agent-maintenance`, the kaizen/documentation/drift-audit
+machinery `cobb` loads on demand so its resident prompt stays lean.
 
 | Agent | What it does | When to use |
 |---|---|---|
@@ -90,9 +95,9 @@ opencode --agent severino      # requires LM Studio server running at :1234
   OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
   query suite green (`./scripts/test_queries.sh`, 64/64).
 - **OpenCode skill/agent tasks** → `opencode/`, follow each `SKILL.md` / the severino docs.
-- **Claude subagent tasks** → `claude/`, follow `claude/CLAUDE.md`. Adding/editing/renaming an
-  agent means updating its source, its `kaizen/{plan,history}.md`, `claude/README.md`, and
-  `claude/CLAUDE.md` in the same change.
+- **Claude subagent / skill tasks** → `claude/`, follow `claude/CLAUDE.md`. Adding/editing/renaming an
+  agent or skill means updating its source, its `kaizen/{plan,history}.md`, `claude/README.md`, and
+  `claude/CLAUDE.md` in the same change (shared skills live in `claude/skills/`).
 - The root `CLAUDE.md` is intentionally empty; per-component context files carry the detail.
 </content>
 </invoke>
