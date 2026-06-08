@@ -23,6 +23,48 @@ Each agent carries a living improvement plan and change log:
 ## Skills
 
 - [**`agent-maintenance`**](./skills/agent-maintenance/SKILL.md) — the maintenance machinery `cobb` follows when it creates/edits/reviews an agent or skill: kaizen plan/history upkeep, dual-audience documentation, file-location conventions, and the drift audit/reconcile method. Progressively-disclosed so cobb's resident prompt stays lean. Source: `claude/skills/agent-maintenance/`, deployed via the `~/.claude/skills` → `claude/skills` symlink.
+- [**`agent-standards`**](./skills/agent-standards/SKILL.md) — the perishable reference specifics `cobb` loads when authoring/porting/debugging a concrete artifact: exact frontmatter fields, directory paths, inclusion modes, and config keys for Claude Code, Kiro, and OpenCode (one per-tool file each, with `Verified:` stamps). Resident prompt keeps only stable mental models + canonical URLs; this skill holds the volatile detail (the single update target for doc-drift refreshes). Source: `claude/skills/agent-standards/`.
+
+## Deployment
+
+These agents and skills live in this repo but run from Claude Code's config dir via symlinks:
+
+- **Agents:** `~/.claude/agents/<name>` → `claude/<name>` (one symlink per agent folder).
+- **Skills:** `~/.claude/skills` → `claude/skills` (the whole collection-level skills home).
+
+So edits here are picked up live, and the definitions stay version-controlled.
+
+### WebFetch / WebSearch allowlist (for `cobb`)
+
+`cobb`'s mandate is to **verify version-sensitive specifics against live official docs** (and the
+[`agent-standards`](./skills/agent-standards/SKILL.md) skill re-checks its `Verified:` stamps the
+same way). To let those fetches run without a confirmation prompt, the official doc domains are
+allowlisted in **`~/.claude/settings.json`** (user scope) under `permissions.allow`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:platform.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:kiro.dev)",
+      "WebFetch(domain:opencode.ai)",
+      "WebSearch"
+    ]
+  }
+}
+```
+
+Notes:
+- **User scope, so it's session-wide** — every agent in the session (not just `cobb`) can fetch
+  these five hosts and run `WebSearch` unprompted; any other URL still prompts. For a strictly
+  cobb-only allowlist you'd use a subagent-scoped `PreToolUse` hook instead (more machinery; see
+  cobb's kaizen history).
+- This file is **personal/global and not in this repo** — re-add the block on a new machine.
+- Takes effect on new sessions; open `/permissions` or restart if it doesn't load immediately.
+- Match the *final* host: `WebFetch` returns cross-host redirects to be re-fetched, so the
+  redirect destination must also be listed (e.g. `docs.anthropic.com`).
 
 ## Conventions
 

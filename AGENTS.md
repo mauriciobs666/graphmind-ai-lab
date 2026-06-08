@@ -21,8 +21,9 @@ and OpenCode artifacts).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history) plus shared `skills/`. See `claude/README.md` (human catalog) and `claude/CLAUDE.md`
   (agent context).
-  - `skills/` — `agent-maintenance` (kaizen/documentation/drift-audit procedures cobb follows).
-    Deployed via `~/.claude/skills` → `claude/skills`.
+  - `skills/` — `agent-maintenance` (kaizen/documentation/drift-audit procedures cobb follows)
+    and `agent-standards` (perishable per-tool reference: frontmatter fields, paths, inclusion
+    modes for Claude Code/Kiro/OpenCode). Deployed via `~/.claude/skills` → `claude/skills`.
 
 ## Component docs (read before working in a component)
 
@@ -37,8 +38,9 @@ and OpenCode artifacts).
 
 Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`.
 All currently use `model: opus`. Shared skills live under `claude/skills/<name>/SKILL.md` (the
-collection-level skills home) — currently `agent-maintenance`, the kaizen/documentation/drift-audit
-machinery `cobb` loads on demand so its resident prompt stays lean.
+collection-level skills home) — `agent-maintenance` (kaizen/documentation/drift-audit machinery)
+and `agent-standards` (perishable per-tool reference specifics), both loaded on demand so cobb's
+resident prompt stays lean.
 
 | Agent | What it does | When to use |
 |---|---|---|
