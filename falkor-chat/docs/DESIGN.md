@@ -509,7 +509,7 @@ changes** — everything below is untouched.
 | Endpoint | Service method | `QUERIES.md` |
 |---|---|---|
 | `POST /channels` | `create_channel` | §3 create a channel |
-| `GET /channels` | `list_channels` | **gap — owned by graph-dba (see `kaizen/plan.md` K-001)** |
+| `GET /channels` | `list_channels` | §3 list channels in a workspace |
 | `POST /channels/{cid}/threads` | `create_thread` | §3 create a thread |
 | `GET /channels/{cid}/threads` | `list_threads` | §3 list recent threads in a channel |
 | `POST /threads/{tid}/messages` | `post_message` | §4 first message / subsequent message |
@@ -537,9 +537,9 @@ falkor-chat/
 Bottom-up, red → green per unit, reusing the isolated-`ws:test`-graph approach `test_queries.sh`
 already uses:
 
-0. **Prerequisite (graph-dba):** the `list_channels` query gap — tracked in `kaizen/plan.md` (K-001),
-   owned by graph-dba. Lands in `QUERIES.md` + `test_queries.sh` (baseline 64/64 → 65/65) before the
-   `list_channels` repository method can be built.
+0. **Prerequisite (graph-dba):** ✅ done — the `list_channels` query gap (K-001) landed in
+   `QUERIES.md` §3 + `test_queries.sh` (baseline 64/64 → 67/67). The `list_channels` repository
+   method can now be built.
 1. **`repository`** — integration tests against an isolated `ws:test` graph, one method at a time.
 2. **`services`** — append-variant dispatch, id-gen, `updatedAt` bumps (fake repo + a few live checks).
 3. **`api`** — FastAPI `TestClient` request/response contract tests.

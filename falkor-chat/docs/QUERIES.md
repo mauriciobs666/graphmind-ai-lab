@@ -69,6 +69,24 @@ ON CREATE SET c.name = $name, c.createdAt = $createdAt
 RETURN c
 ```
 
+### List channels in a workspace
+```cypher
+MATCH (c:Channel)
+WHERE c.channelId > ''
+RETURN c.channelId AS channelId,
+       c.name      AS name,
+       c.createdAt AS createdAt
+ORDER BY c.createdAt DESC
+LIMIT $limit
+```
+*Anchors on the `Channel.channelId` range index — the always-present predicate
+`c.channelId > ''` (every `channelId` is a non-empty string) turns the listing into a
+`Node By Index Scan`, not a `NodeByLabelScan`. Ordered by `createdAt` (channel **creation**
+time, newest first), which is free once the scan is index-backed. True activity-recency
+(most-recent message/thread per channel) would require expanding `HAS_THREAD` to
+`Thread.updatedAt` for every channel — the Channel-level edge traversal §5.2 of `DESIGN.md`
+deliberately avoids — so it is intentionally **not** used here. Route via `GRAPH.RO_QUERY`.*
+
 ### Create a thread
 ```cypher
 MATCH (c:Channel {channelId: $channelId})

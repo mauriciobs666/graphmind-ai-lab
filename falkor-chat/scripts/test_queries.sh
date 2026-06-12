@@ -106,6 +106,21 @@ assert_contains "create channel general" "general" "$out"
 out=$(gq "$WS" "MERGE (c:Channel {channelId:'ch2'}) ON CREATE SET c.name='random', c.createdAt=1001 RETURN c.name")
 assert_contains "create channel random" "random" "$out"
 
+# list channels in the workspace (newest-first by createdAt, index-anchored on channelId)
+out=$(gq "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId AS channelId, c.name AS name, c.createdAt AS createdAt ORDER BY c.createdAt DESC LIMIT 100")
+# ch2 (createdAt 1001) newest-first before ch1 (createdAt 1000); both present
+ch2_line=$(echo "$out" | grep -n "ch2" | head -1 | cut -d: -f1)
+ch1_line=$(echo "$out" | grep -n "ch1" | head -1 | cut -d: -f1)
+if echo "$out" | grep -qF "general" && echo "$out" | grep -qF "random" \
+   && [ -n "$ch2_line" ] && [ -n "$ch1_line" ] && [ "$ch2_line" -lt "$ch1_line" ]; then
+  echo "  ✓ list channels: both channels listed, newest-first (ch2 before ch1)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ list channels: missing channel or wrong order"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
 out=$(gq "$WS" "MATCH (u:User {userId:'u1'}) MATCH (c:Channel {channelId:'ch1'}) MERGE (u)-[r:MEMBER_OF]->(c) ON CREATE SET r.role='member', r.joinedAt=1000 RETURN r.role")
 assert_contains "add Alice to general" "member" "$out"
 
@@ -288,6 +303,9 @@ assert_index_scan "Thread lookup by threadId uses index" "$prof"
 
 prof=$(gp "$WS" "MATCH (c:Channel {channelId:'ch1'}) RETURN c")
 assert_index_scan "Channel lookup by channelId uses index" "$prof"
+
+prof=$(gp "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId, c.name, c.createdAt ORDER BY c.createdAt DESC LIMIT 100")
+assert_index_scan "list channels uses index" "$prof"
 
 # ── §ref: reference graph ────────────────────────────────────────────────────
 

@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-06-11 — K-001: `list_channels` query (list channels in a workspace)
+
+- **What:** Authored and live-verified a `list channels` query and added it to `docs/QUERIES.md`
+  §3 (Channels & threads), with assertions in `scripts/test_queries.sh`. Query:
+  `MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId, c.name, c.createdAt ORDER BY
+  c.createdAt DESC LIMIT $limit`. The always-true `c.channelId > ''` predicate (every `channelId`
+  is a non-empty string) anchors the listing on the **`Channel.channelId` range index** —
+  `GRAPH.PROFILE` confirms `Node By Index Scan`, not `NodeByLabelScan`. Ordered by `createdAt`
+  (channel **creation** time, newest-first), which is free once the scan is index-backed. Marked
+  `GET /channels → list_channels` resolved in `DESIGN.md` §14.4 (was "gap — owned by graph-dba")
+  and flipped the §14.6 prerequisite step to done.
+- **Why:** the M1 REST surface (`GET /channels`, DESIGN §14.4) needed a verified query and
+  `QUERIES.md` had none — it covered channel *members* (§2) and recent *threads* (§3) but not
+  channels. Unblocks the `list_channels` repository method (§14.6 build order).
+- **Trade-off noted:** true activity-recency (most-recent message/thread per channel) would need a
+  `HAS_THREAD` → `Thread.updatedAt` expansion per channel — the Channel-level edge traversal §5.2
+  deliberately avoids — so the cheap, index-backed **creation-time** ordering is used instead, and
+  this is documented inline in `QUERIES.md`. No new index or constraint added; **zero per-workspace
+  RAM cost** (reuses the existing `Channel.channelId` index).
+- **Tests:** suite green at the **new baseline 64/64 → 67/67** (one §3 functional assertion +
+  the standard §8 `assert_index_scan` pair; the plan's "65/65" estimate predated counting each
+  `assert_*` call — the PROFILE proof is a two-line assertion per the existing §8 convention).
+- **Plan items:** K-001 ✅ done.
+
 ## 2026-06-11 — Defined the M1 client/server application architecture
 
 - **What:** Pinned the M1 application architecture and documented it as a new `docs/DESIGN.md` §14.
