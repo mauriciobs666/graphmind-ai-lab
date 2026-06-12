@@ -80,7 +80,7 @@ python visualize_agent_graph.py
 
 **falkor-chat/** (run from that directory):
 ```bash
-./start_falkordb.sh                          # FalkorDB in Docker (foreground); web console :3000
+./scripts/start_falkordb.sh                  # FalkorDB in Docker (foreground); web console :3000
 ./scripts/bootstrap_schema.sh <workspaceId>  # create indexes + constraints (idempotent)
 ./scripts/test_queries.sh                    # end-to-end query suite — baseline 64/64 passed
 ```

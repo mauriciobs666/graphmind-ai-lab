@@ -39,7 +39,7 @@ executed inside the same graph.
 The script runs FalkorDB in the **foreground** so you see the logs. Open a dedicated terminal for it:
 
 ```bash
-./start_falkordb.sh
+./scripts/start_falkordb.sh
 ```
 
 | What | Where |
@@ -63,7 +63,7 @@ docker volume rm falkordb-data
 
 Override default ports:
 ```bash
-FALKORDB_PORT=6380 FALKORDB_WEB_PORT=3001 ./start_falkordb.sh
+FALKORDB_PORT=6380 FALKORDB_WEB_PORT=3001 ./scripts/start_falkordb.sh
 ```
 
 ### 2 — Verify the instance
@@ -169,7 +169,7 @@ falkor-chat/
 │   └── QUERIES.md         # canonical query library — verified against live instance
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
+│   ├── start_falkordb.sh    # spin up FalkorDB in Docker
 │   └── test_queries.sh      # end-to-end query test suite (64 assertions)
-├── start_falkordb.sh      # spin up FalkorDB in Docker
 └── README.md
 ```

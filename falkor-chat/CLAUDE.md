@@ -102,7 +102,7 @@ SET t.updatedAt = $createdAt
 
 | Script | Purpose |
 |---|---|
-| `./start_falkordb.sh` | Start FalkorDB in Docker (foreground). Data in `falkordb-data` volume. |
+| `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
 | `./scripts/test_queries.sh` | 64-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 
