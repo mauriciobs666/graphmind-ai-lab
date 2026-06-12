@@ -425,7 +425,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -441,3 +441,109 @@ fulltext     ≈ RediSearch index over Message.text
 - **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph.
 - **Bolt vs. RESP** for the app gateway — Bolt port is `65535` (confirmed in `GRAPH.CONFIG`); decide whether to use it or RESP with `falkordb-py`.
 - **Live config defaults noted:** `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `TIMEOUT 1000ms`, `CACHE_SIZE 25`, `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited), `ASYNC_DELETE 1`. Review before production.
+
+---
+
+## 14. M1 application architecture (client/server)
+
+§10 sketches the *operational* topology (app ⇄ FalkorDB). This section pins the *application*
+code architecture for **M1 — Chat core**: what the client and server are, the transport between
+them, and the internal layering.
+
+### 14.1 Scope decisions locked for M1
+
+| Axis | Decision | Rationale |
+|---|---|---|
+| **Transport** | **REST/JSON over FastAPI** | The only M1 client is a browser, which speaks HTTP natively — no gRPC-Web bridge tax. Free OpenAPI console to exercise the API. M2 real-time adds native WebSocket/SSE on the same server. |
+| **Client** | **Minimal web UI** (channels list + thread view) | Smallest end-to-end path that exercises the full stack visually. |
+| **Real-time** | **Deferred to M2** | M1 is request/response; the UI re-fetches a thread window after posting. The push path (Redis Pub/Sub → WebSocket) slots onto the same service layer in M2 with no schema change. |
+| **Auth / tenancy** | **Single hardcoded tenant** — `ws=acme`, `user=u1` | Keeps M1 focused on the chat data path. Injected at one seam (see §14.3) so real auth replaces it without touching services/repo. |
+
+> Transport was deliberately re-evaluated away from gRPC: gRPC's wins (polyglot typed contracts,
+> native streaming, service-to-service perf) are all unused when the sole client is a browser, and
+> gRPC-Web can't do client/bidi streaming in browsers anyway — WebSocket/SSE is the stronger M2
+> real-time path. REST keeps the layers below the router transport-agnostic, so a gRPC servicer or
+> a service-to-service hop can still be bolted onto the same `Service` later if a non-browser
+> consumer ever appears.
+
+### 14.2 Layering
+
+```
+┌─ Browser (minimal web UI) ─┐                ┌─ Python server (FastAPI, one process) ───────┐
+│ channels | thread view     │   REST/JSON    │ api.py      router (thin: HTTP ⇄ Service)    │
+│ post / read / search       │ ─────────────▶ │   ▲  CallContext dep = {ws:acme, actor:u1}  │
+└────────────────────────────┘                │ services.py  domain logic, append dispatch   │
+                                              │ repository.py  Cypher ⇄ QUERIES.md (RO|RW)   │
+                                              │ db.py        falkordb-py conn, select_graph  │
+                                              └────────────────────────────────────────────┬─┘
+                                                                                            ▼  FalkorDB
+```
+
+- **`repository.py` is the only place Cypher lives.** Each method maps 1:1 to a verified query in
+  `QUERIES.md`, always parameterised (`params=`), `ro_query` for reads / `query` for writes,
+  `select_graph(f"ws:{id}")` for scoping.
+- **`services.py` owns the invariants** the write-path rules describe: choosing the first-vs-subsequent
+  append variant, id generation, `Thread.updatedAt` bumps, setting `role`/`POSTED_BY`.
+- **`api.py` is the only layer that changes** if the transport is ever revisited.
+
+### 14.3 The auth/tenancy seam
+
+The hardcoded scope lives in **one FastAPI dependency**, not scattered through the code:
+
+```python
+# config.py
+WS_ID = "acme"
+USER_ID = "u1"
+
+# api.py
+def get_context() -> CallContext:        # the seam
+    return CallContext(ws=WS_ID, actor=USER_ID)
+```
+
+Services and the repository already take `ws` / `actor` as parameters, so when auth lands
+(token → user + workspace claim, or the `identity` graph as source of truth) **only `get_context`
+changes** — everything below is untouched.
+
+### 14.4 REST surface → service → verified query
+
+| Endpoint | Service method | `QUERIES.md` |
+|---|---|---|
+| `POST /channels` | `create_channel` | §3 create a channel |
+| `GET /channels` | `list_channels` | **gap — owned by graph-dba (see `kaizen/plan.md` K-001)** |
+| `POST /channels/{cid}/threads` | `create_thread` | §3 create a thread |
+| `GET /channels/{cid}/threads` | `list_threads` | §3 list recent threads in a channel |
+| `POST /threads/{tid}/messages` | `post_message` | §4 first message / subsequent message |
+| `GET /threads/{tid}/messages[?after=]` | `read_thread` | §4 read full thread / read thread window |
+| `GET /threads/{tid}/messages/{mid}` | `get_message` | §4 get a single message |
+| `GET /search?q=` | `search_messages` | §5 full-text keyword search |
+
+The **two append variants** (§5.3) stay hidden inside `post_message`: the service checks whether
+the thread already has a `HEAD`/`TAIL` and dispatches the correct single-`GRAPH.QUERY` write. The
+API only ever sees "post a message."
+
+### 14.5 Proposed layout
+
+```
+falkor-chat/
+├── server/
+│   ├── falkorchat/{config,db,repository,services,schemas,api,app}.py
+│   ├── tests/{test_repository,test_services,test_api}.py
+│   └── pyproject.toml          # fastapi, uvicorn, falkordb-py~=1.6, pytest, httpx
+└── web/{index.html, app.js}    # fetch() against REST; channels | thread view
+```
+
+### 14.6 TDD build order
+
+Bottom-up, red → green per unit, reusing the isolated-`ws:test`-graph approach `test_queries.sh`
+already uses:
+
+0. **Prerequisite (graph-dba):** the `list_channels` query gap — tracked in `kaizen/plan.md` (K-001),
+   owned by graph-dba. Lands in `QUERIES.md` + `test_queries.sh` (baseline 64/64 → 65/65) before the
+   `list_channels` repository method can be built.
+1. **`repository`** — integration tests against an isolated `ws:test` graph, one method at a time.
+2. **`services`** — append-variant dispatch, id-gen, `updatedAt` bumps (fake repo + a few live checks).
+3. **`api`** — FastAPI `TestClient` request/response contract tests.
+4. **`web`** — minimal, verified manually against a running server.
+
+> When this code lands, update `AGENTS.md` (key scripts/commands, working-context rules) and the
+> README repo-layout/roadmap in the same change, per the repo's documentation rule.

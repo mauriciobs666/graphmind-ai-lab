@@ -50,10 +50,10 @@ The script runs FalkorDB in the **foreground** so you see the logs. Open a dedic
 
 Stop with **Ctrl+C**. Data survives in the Docker volume.
 
-Need it in the **background** instead?
+Need it in the **background** instead? Use the `-d` / `--detach` flag:
 ```bash
-docker run --name falkordb-dev -p 6379:6379 -p 3000:3000 -v falkordb-data:/data --rm -d falkordb/falkordb:edge
-docker stop falkordb-dev   # to stop
+./scripts/start_falkordb.sh -d     # run headless
+docker stop falkordb-dev           # to stop
 ```
 
 Wipe all data and start fresh:
@@ -153,7 +153,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (64/64) |
-| **M1** — Chat core | — | Python layer: users, channels, threads, thread-scoped message append, full-text search |
+| **M1** — Chat core | — | FastAPI REST server (router → service → repository over `falkordb-py`) + minimal web UI; single hardcoded tenant; users, channels, threads, thread-scoped append, full-text search. See [DESIGN.md §14](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
@@ -165,8 +165,11 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 ```
 falkor-chat/
 ├── docs/
-│   ├── DESIGN.md          # full blueprint (data model, Cypher, ops)
+│   ├── DESIGN.md          # full blueprint (data model, Cypher, ops, §14 M1 app architecture)
 │   └── QUERIES.md         # canonical query library — verified against live instance
+├── kaizen/
+│   ├── plan.md            # forward-looking backlog (active items + parking lot)
+│   └── history.md         # dated change log
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
