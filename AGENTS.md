@@ -13,7 +13,7 @@ and OpenCode artifacts).
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified; M0 complete. See `falkor-chat/README.md` and
-  `falkor-chat/CLAUDE.md`.
+  `falkor-chat/AGENTS.md`.
 - `opencode/` — Personal OpenCode configuration: custom agents and skills.
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `skills/` — `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences`.
@@ -30,7 +30,7 @@ and OpenCode artifacts).
 | Component | Entry doc(s) |
 |---|---|
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
-| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/CLAUDE.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
+| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/skills/*/SKILL.md` · `opencode/agents/severino/README.md` · `opencode/local-llm.md` |
 | `claude/` | `claude/README.md` · `claude/CLAUDE.md` |
 
@@ -80,7 +80,7 @@ python visualize_agent_graph.py
 
 **falkor-chat/** (run from that directory):
 ```bash
-./scripts/start_falkordb.sh                  # FalkorDB in Docker (foreground); web console :3000
+./scripts/start_falkordb.sh                  # FalkorDB in Docker (foreground; -d for headless); web console :3000
 ./scripts/bootstrap_schema.sh <workspaceId>  # create indexes + constraints (idempotent)
 ./scripts/test_queries.sh                    # end-to-end query suite — baseline 64/64 passed
 ```
@@ -93,13 +93,15 @@ opencode --agent severino      # requires LM Studio server running at :1234
 ## Working in this repo
 
 - **Chatbot tasks** → `salesperson/`, follow `salesperson/AGENTS.md`. No pytest/lint scripts; manual checks.
-- **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/CLAUDE.md`. This is FalkorDB
+- **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/AGENTS.md` (`falkor-chat/CLAUDE.md`
+  imports it). This is FalkorDB
   OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
   query suite green (`./scripts/test_queries.sh`, 64/64).
 - **OpenCode skill/agent tasks** → `opencode/`, follow each `SKILL.md` / the severino docs.
 - **Claude subagent / skill tasks** → `claude/`, follow `claude/CLAUDE.md`. Adding/editing/renaming an
   agent or skill means updating its source, its `kaizen/{plan,history}.md`, `claude/README.md`, and
   `claude/CLAUDE.md` in the same change (shared skills live in `claude/skills/`).
-- The root `CLAUDE.md` is intentionally empty; per-component context files carry the detail.
+- The root `CLAUDE.md` contains only `@AGENTS.md` — this file is the single source of truth for
+  root-level context; per-component context files carry the detail.
 </content>
 </invoke>
