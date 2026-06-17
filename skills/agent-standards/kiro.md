@@ -1,11 +1,13 @@
 # Kiro (spec-driven, agentic IDE) — reference
 
-> **Verified: 2026-06-07** against `kiro.dev/docs/steering`. Specs/Hooks detail on the
-> 2026-05-31 baseline — due for refresh. Re-verify before relying on an exact key.
+> **Verified: 2026-06-16** against `kiro.dev/docs/skills`, `kiro.dev/docs/cli/skills`
+> (Skills section). Steering verified 2026-06-07 against `kiro.dev/docs/steering`;
+> Specs/Hooks detail on the 2026-05-31 baseline — due for refresh. Re-verify before
+> relying on an exact key.
 
-## Three building blocks
+## Building blocks
 
-**Steering Docs**, **Specs**, **Hooks**.
+**Steering Docs**, **Specs**, **Hooks**, and **Agent Skills** (added 2026-02-05).
 
 ## Steering files
 
@@ -37,6 +39,25 @@ generates and iterates these as structured documents that drive implementation.
 
 Agent workflows triggered by **IDE events** (save, create, commit). Like Claude
 Code hooks, these are harness-driven automation, not prompt text.
+
+## Agent Skills (added 2026-02-05)
+
+Kiro implements the **open Agent Skills standard** (`agentskills.io`) — the same
+`SKILL.md` format as Claude Code / OpenCode. Skills are on-demand *capabilities*,
+distinct from always-on *steering* (the docs draw this line deliberately).
+
+- **Location:** `.kiro/skills/<name>/SKILL.md` (workspace) or `~/.kiro/skills/`
+  (global). Workspace **overrides** global on name conflict.
+- **Required frontmatter:** `name` (must match the folder name; lowercase letters,
+  numbers, hyphens only; ≤64 chars) and `description` (when to activate — Kiro
+  matches it against requests; ≤1024 chars). **Optional:** `license`,
+  `compatibility`, `metadata`.
+- **No tool-restriction field documented** — unlike Claude Code's `allowed-tools`.
+  A skill sandboxed via `allowed-tools` elsewhere is **not** sandboxed in Kiro;
+  re-audit security-sensitive skills on port.
+- **Progressive disclosure:** Kiro loads reference files (e.g. a `references/`
+  folder) **only when the SKILL.md body explicitly directs it to** — don't rely on
+  the whole folder being auto-ingested.
 
 ## AGENTS.md
 

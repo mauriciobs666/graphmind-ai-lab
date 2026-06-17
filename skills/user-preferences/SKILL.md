@@ -30,7 +30,7 @@ Use this when:
 
 All preference files are stored in:
 ```
-opencode/skills/user-preferences/storage/
+skills/user-preferences/storage/
 ```
 
 ## Storage Schema
@@ -116,7 +116,7 @@ Use the `grep` tool to search across all preference files:
 
 ```bash
 # Search for a specific keyword
-grep -r "keyword" opencode/skills/user-preferences/storage/
+grep -r "keyword" skills/user-preferences/storage/
 ```
 
 ### Common Search Patterns
@@ -167,7 +167,7 @@ grep -r "keyword" opencode/skills/user-preferences/storage/
 ## Common Issues
 
 ### File not found
-- Verify storage directory exists: `opencode/skills/user-preferences/storage/`
+- Verify storage directory exists: `skills/user-preferences/storage/`
 - Check file path is correct (case-sensitive)
 
 ### Preference not found during search

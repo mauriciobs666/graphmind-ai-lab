@@ -28,6 +28,6 @@ Reference the skill's documentation for detailed procedures.
 - Use the user-preferences skill to add or update preferences when user shares new info
 
 ## Tools
-- read, write (for skill storage: opencode/skills/user-preferences/storage/)
+- read, write (for skill storage: skills/user-preferences/storage/)
 - grep (for searching preferences)
 - chat tools as needed

@@ -22,22 +22,26 @@ Each agent carries a living improvement plan and change log:
 
 ## Skills
 
-- [**`agent-maintenance`**](./skills/agent-maintenance/SKILL.md) — the maintenance machinery `cobb` follows when it creates/edits/reviews an agent or skill: kaizen plan/history upkeep, dual-audience documentation, file-location conventions, and the drift audit/reconcile method. Progressively-disclosed so cobb's resident prompt stays lean. Source: `claude/skills/agent-maintenance/`, deployed via the `~/.claude/skills` → `claude/skills` symlink.
-- [**`agent-standards`**](./skills/agent-standards/SKILL.md) — the perishable reference specifics `cobb` loads when authoring/porting/debugging a concrete artifact: exact frontmatter fields, directory paths, inclusion modes, and config keys for Claude Code, Kiro, and OpenCode (one per-tool file each, with `Verified:` stamps). Resident prompt keeps only stable mental models + canonical URLs; this skill holds the volatile detail (the single update target for doc-drift refreshes). Source: `claude/skills/agent-standards/`.
+Skills were unified into the repo-root [`skills/`](../skills/) home — see [`skills/README.md`](../skills/README.md) for the full catalog. `cobb` relies on two of them:
+
+- [**`agent-maintenance`**](../skills/agent-maintenance/SKILL.md) — kaizen/documentation/file-location/drift-audit machinery `cobb` follows when it creates/edits/reviews an agent or skill.
+- [**`agent-standards`**](../skills/agent-standards/SKILL.md) — perishable per-tool reference specifics (frontmatter fields, paths, inclusion modes) for Claude Code, Kiro, and OpenCode, each `Verified:`-stamped.
 
 ## Deployment
 
-These agents and skills live in this repo but run from Claude Code's config dir via symlinks:
+These agents live in this repo but run from Claude Code's config dir via symlinks:
 
 - **Agents:** `~/.claude/agents/<name>` → `claude/<name>` (one symlink per agent folder).
-- **Skills:** `~/.claude/skills` → `claude/skills` (the whole collection-level skills home).
+- **Skills:** now in the repo-root [`skills/`](../skills/) home, deployed via `~/.claude/skills` →
+  `skills/` (whole-dir symlink; all 7 skills visible to Claude Code). Also symlinked into OpenCode
+  and Kiro — see [`skills/README.md`](../skills/README.md#deployment).
 
 So edits here are picked up live, and the definitions stay version-controlled.
 
 ### WebFetch / WebSearch allowlist (for `cobb`)
 
 `cobb`'s mandate is to **verify version-sensitive specifics against live official docs** (and the
-[`agent-standards`](./skills/agent-standards/SKILL.md) skill re-checks its `Verified:` stamps the
+[`agent-standards`](../skills/agent-standards/SKILL.md) skill re-checks its `Verified:` stamps the
 same way). To let those fetches run without a confirmation prompt, the official doc domains are
 allowlisted in **`~/.claude/settings.json`** (user scope) under `permissions.allow`:
 
