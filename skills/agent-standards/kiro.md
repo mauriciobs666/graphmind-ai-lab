@@ -2,7 +2,9 @@
 
 > **Verified: 2026-06-20** — Subagents/Agents, Steering, Specs, Hooks re-verified
 > against `kiro.dev/docs/chat/subagents`, `kiro.dev/docs/cli/custom-agents/configuration-reference`,
-> `kiro.dev/docs/steering`, plus specs/hooks doc pages. Skills section verified
+> `kiro.dev/docs/steering`, plus specs/hooks doc pages. Knowledge (CLI, experimental)
+> verified 2026-06-20 against `kiro.dev/docs/cli/experimental/knowledge-management`
+> + the custom-agents config reference. Skills section verified
 > 2026-06-16 (`kiro.dev/docs/skills`, `/cli/skills`). Re-verify before relying on
 > an exact key — Kiro ships fast and has **two surfaces (IDE + CLI)** that differ.
 
@@ -146,6 +148,54 @@ from always-on *steering* (the docs draw this line deliberately).
   re-audit security-sensitive skills on port.
 - **Progressive disclosure:** reference files load **only when the SKILL.md body
   explicitly directs it** — don't rely on a whole folder being auto-ingested.
+
+## Knowledge (CLI only, **experimental**)
+
+Persistent, **searchable knowledge base** built by indexing local files/dirs —
+Kiro's RAG-over-your-own-files layer. **CLI-only** (no IDE surface) and flagged
+experimental (may change/break; not for production reliance). Distinct from the
+always-on context mechanisms: **steering/`AGENTS.md`** = injected rules, **Specs**
+= driven workflow, **Knowledge** = large corpus *retrieved on demand* via the
+built-in `knowledge` tool. Reach for it when material is too big to inline (doc
+sets, large codebases, logs, papers).
+
+- **Enable (off by default):** `kiro-cli settings chat.enableKnowledge true`
+  (the `/knowledge` commands only work once on).
+- **`/knowledge` subcommands:**
+  - `/knowledge add --name <name> --path <path> [--include <pat>] [--exclude <pat>] [--index-type Fast|Best]`
+  - `/knowledge show` (entries + dates/counts/persistence) · `/knowledge update`
+    (re-index; no args = all) · `/knowledge remove` (by name/path) ·
+    `/knowledge clear` (wipe all — **irreversible**, confirms) · `/knowledge cancel`
+    (stop background op by ID or `all`).
+- **Index types:** **Fast** = keyword (BM25), low CPU/RAM — logs/configs/large
+  codebases; **Best** = semantic (`all-minilm-l6-v2` embeddings), heavier —
+  docs/research where NL queries matter.
+- **Per-agent isolation:** each agent has its own knowledge base in agent-specific
+  folders. KB resources declared in an agent's config **sync on session init &
+  agent swap.**
+- **Wire into a CLI agent** via a `resources` entry (and expose the `knowledge`
+  tool, which is already in the default subagent toolset):
+  ```json
+  { "type": "knowledgeBase", "source": "file://./docs", "name": "ProjectDocs",
+    "description": "Project docs", "indexType": "best", "autoUpdate": true }
+  ```
+  Required: `type:"knowledgeBase"`, `source` (`file://` path), `name`. Optional:
+  `description`, `indexType` (`best` default | `fast`), `autoUpdate` (re-index on
+  spawn, default `false`).
+- **⚠️ Casing trap:** `/knowledge add --index-type` takes `Fast|Best` (capitalized)
+  but the agent-JSON `knowledgeBase.indexType` takes `fast|best` (lowercase).
+- **Storage:** Linux `~/.local/share/kiro-cli/knowledge_bases/` · macOS
+  `~/Library/Application Support/kiro-cli/knowledge_bases/` · Windows
+  `%LOCALAPPDATA%\kiro-cli\knowledge_bases\`.
+- **Tunables (settings):** `knowledge.maxFiles`, `.chunkSize`, `.chunkOverlap`,
+  `.indexType`, `.defaultIncludePatterns`, `.defaultExcludePatterns`.
+- **Supported:** text, Markdown, JSON, configs (`.ini/.conf/.cfg/.properties/.env`),
+  CSV/TSV, most code languages, special files (Dockerfile/Makefile/LICENSE/
+  CHANGELOG/README). **Caveats:** binaries skipped; very large files chunked (can
+  split related content); **no auto-cleanup** of stale contexts; `clear` has no
+  backup.
+- **Not portable:** Kiro-CLI-specific; no 1:1 Claude Code / OpenCode equivalent
+  (closest analogues are MCP RAG servers or skill reference files).
 
 ## AGENTS.md
 

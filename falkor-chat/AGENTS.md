@@ -104,7 +104,7 @@ SET t.updatedAt = $createdAt
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
-| `./scripts/test_queries.sh` | 64-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/test_queries.sh` | 67-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
@@ -126,7 +126,7 @@ embedding model before creating a workspace.
 2. **Verify dialect before assuming.** This is FalkorDB OpenCypher, not Neo4j. No APOC, no GDS, no `PROFILE` keyword prefix. Check `CALL dbms.procedures()` when unsure.
 3. **Profile before tuning.** Use `GRAPH.PROFILE` to confirm an index is actually hit before declaring a query fast. Look for `Node By Index Scan`, not `NodeByLabelScan`.
 4. **All writes that touch HEAD/TAIL must be a single `GRAPH.QUERY`** — atomicity is per-query.
-5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 64/64 is the baseline.
+5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 67/67 is the baseline.
 6. **RAM is the binding constraint.** Any new node type, index, or vector dimension affects per-workspace RAM. Call it out.
 7. **One graph per workspace.** Never add a `workspaceId` property to filter inside a shared graph.
 8. **`ctx`, `input`, `output` on workflow nodes are serialised strings.** Do not design queries that filter inside them.

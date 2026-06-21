@@ -242,7 +242,7 @@ create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` 
 
 **Critical ordering rules (live-verified):**
 1. `GRAPH.CONSTRAINT CREATE` requires an existing range index on the same property — always index first.
-2. Composite constraints (`PROPERTIES 2 …`) are documented but not yet live-verified on this build — test before the bootstrap script is finalised.
+2. Composite constraints (`PROPERTIES 2 …`) are supported and **live-verified** on this build — `bootstrap_schema.sh` creates them and `test_queries.sh` asserts they block duplicate `key+version`.
 
 ```
 -- ── Step 1: Range indexes (must exist BEFORE constraints) ──────────────────
@@ -281,7 +281,7 @@ GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Chunk               PROPERTIES 1 chu
 GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Entity              PROPERTIES 1 entityId
 GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowRun         PROPERTIES 1 runId
 GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE StepRun             PROPERTIES 1 stepRunId
--- ⚠️  composite constraint — verify PROPERTIES 2 syntax on live instance first:
+-- composite constraint — PROPERTIES 2 syntax live-verified on this build:
 GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowDefSnapshot PROPERTIES 2 key version
 
 -- ── Step 3: Full-text index (RediSearch) ───────────────────────────────────
