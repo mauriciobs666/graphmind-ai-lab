@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `architect` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-06-20
+> Last reviewed: 2026-06-21
 
 ## Active
 
@@ -31,7 +31,7 @@
 - **Priority:** low
 - **Rationale:** `Write` can overwrite any path; only a prompt guardrail keeps the agent from editing code. If that proves leaky, a stricter mechanism may be warranted.
 - **Proposed change:** Evaluate `permissionMode: plan`, a `PreToolUse` hook restricting Write to a plans dir, or dropping Write entirely (inline-only plans). Verify current field semantics against `agent-standards` first.
-- **Notes:** Re-verify Claude Code frontmatter before changing — perishable.
+- **Notes:** Re-verify Claude Code frontmatter before changing — perishable. **Update 2026-06-21:** tooling moved the *opposite* way — `Edit` was added (scoped to plan docs by guardrail) at user request, widening the surface a guardrail must cover (Write *and* Edit can target any path). If "plan docs only" ever proves leaky, the `PreToolUse` hook in this item should restrict both `Write` and `Edit` to a plans dir.
 
 ## Parking lot / ideas
 - A short self-review checklist before delivering a plan (every step concrete & file-specific, alternatives recorded, risks listed, handoff summary present).

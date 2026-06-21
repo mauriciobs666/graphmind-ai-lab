@@ -163,26 +163,18 @@ traversal needs to walk (e.g. an ontology fragment).
 
 Two cases — both must be a single `GRAPH.QUERY` (atomic):
 
-**First message in thread (HEAD and TAIL don't exist yet):**
-```cypher
-MATCH (t:Thread {threadId:$threadId})
-MERGE (m:Message {msgId:$msgId})
-  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
-CREATE (t)-[:HEAD]->(m)
-CREATE (t)-[:TAIL]->(m)
-SET t.updatedAt = $createdAt
-```
+- **First message in a thread** (no `HEAD`/`TAIL` yet) — create the message, link
+  `Thread -[:HEAD]-> m` and `Thread -[:TAIL]-> m`, and attach `(m)-[:POSTED_BY]->(author)`.
+- **Subsequent messages** — match the current `TAIL`, link `prev -[:NEXT]-> m`, move `TAIL` to
+  `m` (delete the old `TAIL` edge, create the new one), and attach `(m)-[:POSTED_BY]->(author)`.
 
-**Subsequent messages (move TAIL forward):**
-```cypher
-MATCH (t:Thread {threadId:$threadId})-[tailRel:TAIL]->(prev:Message)
-MERGE (m:Message {msgId:$msgId})
-  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
-CREATE (prev)-[:NEXT]->(m)
-DELETE tailRel
-CREATE (t)-[:TAIL]->(m)
-SET t.updatedAt = $createdAt
-```
+Both bump `Thread.updatedAt`. The service picks the variant by checking whether the thread
+already has a `HEAD` (§14 keeps this dispatch inside `post_message`).
+
+> **Canonical Cypher: `docs/QUERIES.md` §4.** The exact, live-verified queries live there and
+> nowhere else — this section describes their *shape* only, so the two never drift. Every message
+> must carry `(m)-[:POSTED_BY]->(author)`: the canonical thread-read path requires that edge, so a
+> message written without it is invisible to thread reads.
 
 ### 5.4 Supernode watch
 

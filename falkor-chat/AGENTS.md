@@ -75,26 +75,19 @@ Edges cannot cross graphs. Cross-graph references use property keys or materiali
 
 ## Message write paths (two variants — keep them separate)
 
-**First message in a thread** (no HEAD/TAIL yet):
-```cypher
-MATCH (t:Thread {threadId:$threadId})
-MATCH (author {userId:$authorId})
-MERGE (m:Message {msgId:$msgId})
-  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
-CREATE (t)-[:HEAD]->(m), (t)-[:TAIL]->(m), (m)-[:POSTED_BY]->(author)
-SET t.updatedAt = $createdAt
-```
+The exact, verified Cypher lives in **one place — `docs/QUERIES.md` §4** (single source of
+truth). Do not copy query bodies here or into `DESIGN.md`; link to QUERIES.md instead — the
+duplication is what lets the copies drift. The invariants that govern those queries:
 
-**Subsequent messages** (move TAIL forward — atomic, single query):
-```cypher
-MATCH (t:Thread {threadId:$threadId})-[tailRel:TAIL]->(prev:Message)
-MATCH (author {userId:$authorId})
-MERGE (m:Message {msgId:$msgId})
-  ON CREATE SET m.text=$text, m.role=$role, m.createdAt=$createdAt
-CREATE (prev)-[:NEXT]->(m), (t)-[:TAIL]->(m), (m)-[:POSTED_BY]->(author)
-DELETE tailRel
-SET t.updatedAt = $createdAt
-```
+- **Two separate write paths, never a conditional MERGE:** *first message in a thread*
+  (creates `HEAD` + `TAIL`) vs. *subsequent message* (moves `TAIL` forward via `NEXT`). The
+  service picks the variant by checking whether the thread already has a `HEAD`.
+- **Each write is a single `GRAPH.QUERY`** — atomicity is per-query; the HEAD/TAIL relink must
+  not be split across queries.
+- **Every message records its author** with `(m)-[:POSTED_BY]->(author)`. The canonical
+  thread-read path (`QUERIES.md` §4) *requires* that edge — a message written without it is
+  invisible to thread reads.
+- **Every `MERGE` is backed by a uniqueness constraint** (`Message.msgId`).
 
 ---
 
