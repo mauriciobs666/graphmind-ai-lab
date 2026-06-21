@@ -18,7 +18,8 @@ and OpenCode artifacts).
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history). See `claude/README.md` (human catalog) and `claude/CLAUDE.md` (agent context).
+  history). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
+  `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
   `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
   `agent-standards` (cobb's machinery) and `python-coding`, `write-tutorial`,
@@ -33,7 +34,7 @@ and OpenCode artifacts).
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` |
-| `claude/` | `claude/README.md` · `claude/CLAUDE.md` |
+| `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 
 ## Claude Code subagents (`claude/`)
@@ -45,6 +46,9 @@ not under `claude/`.
 
 | Agent | What it does | When to use |
 |---|---|---|
+| `teco` | Technical coordinator; decomposes a goal into a sequenced work breakdown and delegates each piece to the right specialist (architect, coder, tdd-engineer, graph-dba, cobb), then integrates. Hybrid: drives execution but returns to the user at decision points. Coordinates — doesn't design/code. | A multi-step / multi-specialty task, orchestration, or end-to-end feature delivery. |
+| `architect` | Software architect; investigates code, weighs trade-offs, produces a step-by-step implementation plan/spec. **Read-only on code** (Write = plan doc only). Planning half of an architect→coder handoff. | Wanting a design, approach, impact analysis, or plan before any code is written. |
+| `coder` | Software engineer who implements an approved plan/spec end-to-end — clean, tested, repo-idiomatic code, suite kept green. Implementation half of the handoff. | Building from a ready plan/spec or clear task. (Strict test-first → `tdd-engineer`.) |
 | `cobb` | Agentic-development expert across Claude Code, Kiro, OpenCode, and cross-tool standards (`AGENTS.md`, Agent Skills). | Designing/authoring/reviewing/porting/debugging agents, subagents, skills, steering docs, hooks, slash commands, system prompts. |
 | `dra-claudia` | Médica de homeopatia/medicina alternativa; mantém prontuário markdown por paciente. | Perguntas de saúde/sintomas/tratamentos e registro/consulta de histórico clínico (PT-BR; não substitui consulta presencial). |
 | `graph-dba` | Graph DBA & data architect specialized in **FalkorDB** (GraphBLAS engine, RedisGraph successor, GraphRAG-focused); fluent in Neo4j/openCypher/GQL for porting. | Graph data modeling, FalkorDB Cypher authoring/tuning, indexes/constraints, deployment & RAM sizing, `GRAPH.PROFILE` query tuning, bulk ingestion, GraphRAG layers, ops. |
@@ -59,7 +63,7 @@ not under `claude/`.
 - `severino/` — a full local agent project (own `opencode.json`, `README.md`, tests). Read-only
   coding advisor backed by **LM Studio** (`lmstudio/<model-id>`, default Nemotron 3 Nano 4B).
   Gotchas: top-level key is `agent` (singular), no `name` field on the agent, LM Studio context
-  ≥16K. See `opencode/agents/severino/CLAUDE.md`.
+  ≥16K. See `opencode/agents/severino/AGENTS.md` (with a `CLAUDE.md` = `@AGENTS.md` stub).
 
 ## Skills (`skills/`)
 
@@ -117,9 +121,9 @@ opencode --agent severino      # requires LM Studio server running at :1234
 - **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
 - **Skill tasks** (any tool) → `skills/`, follow each `skills/<name>/SKILL.md` and `skills/README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
-  `claude/CLAUDE.md`. Adding/editing/renaming an agent or skill means updating its source, its
+  `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
-  for skills), and `claude/CLAUDE.md` in the same change.
+  for skills), and `claude/AGENTS.md` in the same change.
 - The root `CLAUDE.md` contains only `@AGENTS.md` — this file is the single source of truth for
   root-level context; per-component context files carry the detail.
 </content>

@@ -4,15 +4,21 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 
 | Agent | What it does | When to use it | Model |
 |-------|--------------|----------------|-------|
-| [`cobb`](./cobb/cobb.md) | Senior practitioner of agentic development; deep, current knowledge of Claude Code, Kiro, and OpenCode agent formats and the cross-tool standards (`AGENTS.md`, Agent Skills). | Designing, authoring, reviewing, porting, or debugging agents, subagents, skills, steering docs, slash commands, hooks, or system prompts. | opus |
+| [`teco`](./teco/teco.md) | Technical coordinator; decomposes a multi-step goal into a sequenced work breakdown and **delegates each piece to the right specialist** (architect, coder, tdd-engineer, graph-dba, cobb), then integrates results. Hybrid: drives execution but pauses to the user at decision points. Coordinates — doesn't design or code itself. | A task that spans several steps/specialties, needs orchestration, or is an end-to-end feature delivery. | opus |
+| [`architect`](./architect/architect.md) | Software architect; investigates the codebase, weighs trade-offs, and produces a step-by-step implementation plan/spec — **without editing code**. The planning half of an architect→coder handoff. | Wanting a design, an approach, an impact analysis, or a plan before any code is written. | opus |
+| [`coder`](./coder/coder.md) | Software engineer who implements an approved plan/spec end-to-end — clean, idiomatic, well-tested code following the repo's conventions; keeps the suite green. The implementation half of an architect→coder handoff. | Building from a ready plan/spec or clear task. (For strict test-first discipline, use `tdd-engineer`.) | opus |
+| [`cobb`](./cobb/cobb.md) | Practitioner of agentic development; deep, current knowledge of Claude Code, Kiro, and OpenCode agent formats and the cross-tool standards (`AGENTS.md`, Agent Skills). | Designing, authoring, reviewing, porting, or debugging agents, subagents, skills, steering docs, slash commands, hooks, or system prompts. | opus |
 | [`dra-claudia`](./dra-claudia/dra-claudia.md) | Dra. Cláudia — médica homeopatia e medicina alternativa; mantém prontuário em markdown de cada paciente. | Perguntas sobre saúde, sintomas, tratamentos, remédios homeopáticos/fitoterápicos, abordagens integrativas, ou registrar/consultar histórico clínico. | opus |
 | [`graph-dba`](./graph-dba/graph-dba.md) | Graph database administrator & data architect specialized in **FalkorDB** (Redis-module, GraphBLAS sparse-matrix engine; RedisGraph successor; built for GraphRAG). Covers its OpenCypher dialect, modeling, vector/full-text indexing, constraints, multi-graph tenancy, in-memory sizing, replication/clustering, and tuning via `GRAPH.PROFILE`. Fluent in the wider LPG world (Neo4j, openCypher, GQL) for porting. | Designing a graph data model, writing/optimizing FalkorDB Cypher, indexes/constraints, FalkorDB deployment (RAM sizing, persistence, replication, Redis Cluster), tuning slow traversals, bulk ingestion/migration, building a GraphRAG/knowledge-graph layer, or FalkorDB ops. | opus |
-| [`tdd-engineer`](./tdd-engineer/tdd-engineer.md) | Senior engineer who implements features and fixes strictly via Test-Driven Development (red → green → refactor), keeping the suite green at every step. | Implementing a feature, fixing a bug, refactoring with a safety net, or adding/improving tests. | opus |
+| [`tdd-engineer`](./tdd-engineer/tdd-engineer.md) | Software engineer who implements features and fixes strictly via Test-Driven Development (red → green → refactor), keeping the suite green at every step. | Implementing a feature, fixing a bug, refactoring with a safety net, or adding/improving tests. | opus |
 
 ## Kaizen
 
 Each agent carries a living improvement plan and change log:
 
+- `teco/kaizen/` — [plan](./teco/kaizen/plan.md) · [history](./teco/kaizen/history.md)
+- `architect/kaizen/` — [plan](./architect/kaizen/plan.md) · [history](./architect/kaizen/history.md)
+- `coder/kaizen/` — [plan](./coder/kaizen/plan.md) · [history](./coder/kaizen/history.md)
 - `cobb/kaizen/` — [plan](./cobb/kaizen/plan.md) · [history](./cobb/kaizen/history.md)
 - `dra-claudia/kaizen/` — [plan](./dra-claudia/kaizen/plan.md) · [history](./dra-claudia/kaizen/history.md)
 - `graph-dba/kaizen/` — [plan](./graph-dba/kaizen/plan.md) · [history](./graph-dba/kaizen/history.md)
@@ -74,4 +80,4 @@ Notes:
 
 - **Folder per agent:** `<name>/<name>.md` is the source; `<name>/kaizen/{plan,history}.md` track improvements.
 - **Frontmatter** drives routing: the `description` says *what the agent does and precisely when to use it* so Claude Code can auto-delegate.
-- When you add, edit, rename, or remove an agent, keep this catalog and `CLAUDE.md` in sync, and update the agent's `kaizen/` files.
+- When you add, edit, rename, or remove an agent, keep this catalog and `AGENTS.md` (the agent-context file; `CLAUDE.md` is a `@AGENTS.md` import stub) in sync, and update the agent's `kaizen/` files.

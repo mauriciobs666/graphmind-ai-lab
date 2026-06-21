@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-06-20 — Dropped "Senior" from description (collection harmonization)
+- **What:** Frontmatter `description` "Senior software engineer who implements…" → "Software engineer who implements…". Catalog row in `claude/README.md` "Senior engineer who implements…" → "Software engineer who implements…".
+- **Why:** Collection-wide harmonization. The new `architect`/`coder` agents dropped "senior" entirely over the overconfidence concern; this brings tdd-engineer in line. **Supersedes the 2026-06-05 decision** that deliberately *kept* "Senior" as a role/altitude signal — the collection now omits it everywhere, relying on concrete process + guardrails for altitude/calibration instead.
+- **Plan items:** —
+
 ## 2026-06-05 — Dropped tenure-boast framing
 - **What:** Removed "with decades of experience" from the `description` and "with decades of hands-on experience" from the opening body line (now "You are a software engineer who works across many languages, paradigms, and frameworks."). Kept "Senior" in the description as a role/altitude signal.
 - **Why:** User feedback — the "decades of experience" framing reads as cocky and doesn't change behavior. Applied collection-wide (also graph-dba, dra-claudia).
