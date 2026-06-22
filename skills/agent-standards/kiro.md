@@ -4,7 +4,9 @@
 > against `kiro.dev/docs/chat/subagents`, `kiro.dev/docs/cli/custom-agents/configuration-reference`,
 > `kiro.dev/docs/steering`, plus specs/hooks doc pages. Knowledge (CLI, experimental)
 > verified 2026-06-20 against `kiro.dev/docs/cli/experimental/knowledge-management`
-> + the custom-agents config reference. Skills section verified
+> + the custom-agents config reference. **Subagent communication model + `delegate`
+> re-verified 2026-06-21** (`kiro.dev/docs/chat/subagents`, `/cli/experimental/delegate`):
+> report-back only, no agent-to-agent messaging. Skills section verified
 > 2026-06-16 (`kiro.dev/docs/skills`, `/cli/skills`). Re-verify before relying on
 > an exact key — Kiro ships fast and has **two surfaces (IDE + CLI)** that differ.
 
@@ -79,6 +81,20 @@ definition you can invoke directly or hand a subagent task to.
   agents can be spawned, which run **without prompting**, and what each may do.
 - **Nesting (a subagent spawning further subagents): NOT documented** — verify per
   release before designing a multi-level orchestrator on Kiro.
+
+### Communication model — report-back only (verified 2026-06-21 against `kiro.dev/docs/chat/subagents` + `/cli/experimental/delegate`)
+- Kiro has **only the report-back model**: subagents *"communicate only with the
+  main agent, not with each other"* and *"automatically return their results back
+  to the main agent"*; the main agent **waits** for all to finish before
+  proceeding. **There is NO agent-to-agent messaging primitive** — no
+  `SendMessage`/mailbox equivalent to Claude Code's Agent Teams.
+- The experimental **`delegate`** CLI feature (gate: `kiro-cli settings
+  chat.enableDelegate true`, or `/experiment`) is **parallel async task
+  delegation**, results-based (not message-passing) — and is **being deprecated
+  in favor of the official subagents** ("use subagents for new workflows").
+- **Contrast:** Claude Code offers *two* models (subagents = report-back; Agent
+  Teams = mailbox + `SendMessage`, experimental). Kiro offers only the first.
+  OpenCode likewise has no SendMessage-style mailbox (subagents via `@mention`).
 
 > **Porting vs. Claude Code:** an IDE Kiro subagent (`.kiro/agents/<name>.md`,
 > frontmatter `name`/`description`/`tools`/`model`) maps almost 1:1 to a Claude

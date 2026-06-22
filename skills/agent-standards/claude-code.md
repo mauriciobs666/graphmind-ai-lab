@@ -2,6 +2,8 @@
 
 > **Verified:** subagents (frontmatter, tool inheritance, discovery, what-loads,
 > multi-agent primitives) **2026-06-20** against `code.claude.com/docs/en/sub-agents`.
+> **Agent Teams + `SendMessage` re-verified 2026-06-21** against `code.claude.com/docs/en/agent-teams`
+> (experimental, env-var-gated; see the multi-agent-primitives section).
 > Skills / Memory / Hooks / MCP / SDK on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -61,16 +63,39 @@
 - To stop delegation entirely, deny the `Agent` tool via `permissions.deny`;
   in headless/SDK, `CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1` removes built-ins.
 
-### Built-in subagents & multi-agent primitives (verified 2026-06-20)
+### Built-in subagents & multi-agent primitives (agent-teams re-verified 2026-06-21 against `/en/agent-teams`)
 
 - **Built-ins** always registered interactively: **Explore** (wide read-only
   search), **Plan** (quick implementation plan), **general-purpose**.
-- **Agent teams** (`/en/agent-teams`) — multiple sessions that *communicate*;
-  a teammate can reference a subagent definition (uses its `tools`/`model`, body
-  appended as instructions). **Background agents** (`/en/agent-view`) — many
-  independent sessions run in parallel, monitored from one place; `background:
-  true` frontmatter opts a subagent into this. Prefer these over hand-rolled
-  nested delegation for parallel/long-running multi-agent work.
+- **Two communication models — know which you're in:**
+  - **Subagents (default):** workers run in their own context and **only report
+    results back to the main agent — they never talk to each other.** No
+    inter-agent messaging tool is exposed.
+  - **Agent teams (`/en/agent-teams`):** teammates share a task list + a
+    **mailbox** and **message each other by name** via the **`SendMessage`**
+    tool. `SendMessage` + the task-management tools are **always available to a
+    teammate even when its `tools` allowlist restricts everything else.**
+- **⚠️ `SendMessage` only exists inside Agent Teams, which is EXPERIMENTAL and
+  OFF by default** — gated behind the env var **`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`**
+  (set in `settings.json` `env` or the shell). Without it, no team is formed and
+  **`SendMessage` is not exposed in the session at all** — so it can't be
+  conjured via an agent's `tools:` frontmatter (the allowlist filters from what
+  the runtime exposes; it can't add a tool the harness isn't shipping). The lever
+  to "give an agent SendMessage" is the env-var flag, not the frontmatter. (As of
+  v2.1.178 the old `TeamCreate`/`TeamDelete` tools no longer exist; spawning a
+  teammate needs no setup step.)
+- A **subagent *definition*** can be **reused as a teammate** (mention its type
+  when spawning): the teammate honors that def's `tools` allowlist + `model`, the
+  body is *appended* (not replacing), and it then gets `SendMessage` + task tools
+  automatically. (`skills`/`mcpServers` frontmatter is **ignored** for teammates —
+  they load skills/MCP from project+user settings.)
+- **Agent-teams limits:** one team per session; **no nested teams** (teammates
+  can't spawn teammates); lead is fixed for the session's lifetime; `/resume` +
+  `/rewind` don't restore in-process teammates.
+- **Background agents** (`/en/agent-view`) — many independent sessions run in
+  parallel, monitored from one place; `background: true` frontmatter opts a
+  subagent into this. Prefer teams/background over hand-rolled nested delegation
+  for parallel/long-running multi-agent work.
 
 ### What loads into a subagent (verified 2026-06-20)
 
