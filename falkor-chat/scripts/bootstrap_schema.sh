@@ -104,6 +104,9 @@ bootstrap_workspace() {
   echo "[index] StepRun.stepRunId"
   gquery "$g" "CREATE INDEX FOR (n:StepRun) ON (n.stepRunId)"
 
+  echo "[index] ReadCursor.cursorId"
+  gquery "$g" "CREATE INDEX FOR (n:ReadCursor) ON (n.cursorId)"
+
   # ── hot-filter indexes (no constraint needed) ────────────────
   echo "[index] Thread.updatedAt"
   gquery "$g" "CREATE INDEX FOR (n:Thread) ON (n.updatedAt)"
@@ -150,6 +153,9 @@ bootstrap_workspace() {
 
   echo "[constraint] WorkflowDefSnapshot unique {key, version}"
   gconstraint "$g" UNIQUE NODE WorkflowDefSnapshot PROPERTIES 2 key version
+
+  echo "[constraint] ReadCursor unique {cursorId}"
+  gconstraint "$g" UNIQUE NODE ReadCursor PROPERTIES 1 cursorId
 
   # ── full-text index ─────────────────────────────────────────
   echo "[fulltext] Message.text"

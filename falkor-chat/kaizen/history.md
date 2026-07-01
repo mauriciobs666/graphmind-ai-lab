@@ -2,6 +2,39 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-01 — K-002 Step 1 (gate): schema + queries for mentions & read-cursors
+
+- **What:** Landed the graph-dba gate for the M1 Chat MCP transport (`docs/plans/m1-chat-mcp.md`),
+  all live-verified against `falkordb/falkordb:edge`. (1) `bootstrap_schema.sh`: added
+  `ReadCursor.cursorId` range index + uniqueness constraint (index-before-constraint). (2)
+  `QUERIES.md` §4: both message write paths now carry a `$mentions` list and append a
+  `MENTIONS_MEMBER` write-block, atomically inside the single write query. (3) `QUERIES.md` new §9:
+  `read_messages` since-reads — §9.1 thread-scoped, §9.2 workspace-wide, §9.3 monotonic cursor
+  advance, §9.4 cursor read. (4) `test_queries.sh`: +25 assertions.
+- **Q#2 resolved (member-match index strategy).** `GRAPH.PROFILE` showed `WHERE n.userId=$x OR
+  n.agentId=$x` as a scan anchor degrading to an `All Node Scan`; the write path instead resolves
+  each mention with dual `OPTIONAL MATCH (u:User)/(a:Agent)` + `coalesce` → two `Node By Index
+  Scan`s. The `OR` form is kept only where `me`/`mem` is already bound (mention-flag, cursor read).
+- **Two live gotchas found & mitigated (now in AGENTS.md):** (a) a bare empty `UNWIND` collapses the
+  row stream, so `RETURN m` came back empty on a `$mentions=[]` post despite the writes committing —
+  guarded with `UNWIND (CASE WHEN $mentions=[] THEN [null] ELSE $mentions END)` + a non-filtering
+  `FOREACH`; (b) `collect(DISTINCT coalesce(u,a))` gives free dedup + unknown-skip and collapses the
+  per-mention rows back to a single result row. Both proven: `$mentions=[]` is byte-identical to a
+  plain post; `['u3','u3','a7','nope']` → 2 edges `[u3,a7]`, one row.
+- **Corrections vs. the plan's candidate Cypher:** mention-flag match handles **Agent** readers
+  (`me.userId=$meId OR me.agentId=$meId`, not `me {userId:…}`); author id returned via
+  `coalesce(author.userId, author.agentId)` so Agent authors aren't null. §9.3 monotonic guard
+  (`CASE WHEN $now > coalesce(rc.lastReadAt,0) …`) verified on this build (300 → stale 200 stays
+  300 → 400).
+- **RAM (rule #6):** +1 range index and +1 constraint per workspace; growth term is one `ReadCursor`
+  node per *(member, thread)* read and one `MENTIONS_MEMBER` edge per mention. No new vector
+  dimension → no embedding-RAM change.
+- **Tests:** suite green at **new baseline 67/67 → 92/92** (+25: mention write-path incl.
+  empty/dedup/unknown, §9.1 prioritised since-read + exclusion, §9.2 index-scan proof, §9.3
+  monotonic/idempotent cursor + constraint block, §9.4 read + index-scan proof).
+- **Plan items:** K-002 Step 1 ✅ (gate passed); Step 2 (repository → services → `mcp.py`/`app.py`
+  → REST parity) unblocked.
+
 ## 2026-06-11 — K-001: `list_channels` query (list channels in a workspace)
 
 - **What:** Authored and live-verified a `list channels` query and added it to `docs/QUERIES.md`

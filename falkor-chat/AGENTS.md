@@ -47,6 +47,9 @@ These diverge from general docs or Neo4j assumptions — treat them as ground tr
 - **`GRAPH.RO_QUERY`** routes to replicas — use for all read-only queries (RAG retrieval, thread reads).
 - **Bolt port** is `65535` per `GRAPH.CONFIG`.
 - **Default `TIMEOUT` is 1000ms** — may fire on GraphRAG queries over large workspaces; review before M2.
+- **Empty `UNWIND` collapses the row stream.** `WITH m UNWIND [] AS x …` drops `m` and a trailing `RETURN m` comes back empty even though earlier writes committed. The mention write-block guards this with `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid` + a `FOREACH` that never filters — verified regression-safe (see `QUERIES.md` §4 mentions note).
+- **`FOREACH (x IN CASE … | CREATE …)`** is the idiom for conditional writes without dropping rows — confirmed on this build.
+- **Member resolution must be label-specific.** `WHERE n.userId = $x OR n.agentId = $x` as a *scan anchor* profiles as an `All Node Scan`; two `OPTIONAL MATCH (u:User {userId:mid}) / (a:Agent {agentId:mid})` + `coalesce(u,a)` gives two `Node By Index Scan`s. The `OR` form is fine only when `n` is already bound by a traversal/indexed anchor (mention-flag and cursor reads).
 
 ---
 
@@ -64,8 +67,8 @@ Edges cannot cross graphs. Cross-graph references use property keys or materiali
 
 ## Schema conventions
 
-- Labels: `PascalCase` — `User`, `Channel`, `Thread`, `Message`, `Agent`
-- Relationship types: `UPPER_SNAKE` — `POSTED_BY`, `REPLY_TO`, `HAS_THREAD`, `NEXT`
+- Labels: `PascalCase` — `User`, `Channel`, `Thread`, `Message`, `Agent`, `ReadCursor`
+- Relationship types: `UPPER_SNAKE` — `POSTED_BY`, `REPLY_TO`, `HAS_THREAD`, `NEXT`, `MENTIONS_MEMBER`, `HAS_CURSOR`
 - Properties: `camelCase` — `userId`, `createdAt`, `embedding`
 - Graph keys: `ws:{workspaceId}`, `reference`, `identity`
 - Every entity node has a stable `{label}Id` property, a range index, and a uniqueness constraint
@@ -87,7 +90,12 @@ duplication is what lets the copies drift. The invariants that govern those quer
 - **Every message records its author** with `(m)-[:POSTED_BY]->(author)`. The canonical
   thread-read path (`QUERIES.md` §4) *requires* that edge — a message written without it is
   invisible to thread reads.
-- **Every `MERGE` is backed by a uniqueness constraint** (`Message.msgId`).
+- **Participant mentions ride inside the same write query.** Both write paths carry a `$mentions`
+  list and append the mention block (`QUERIES.md` §4) that writes `(m)-[:MENTIONS_MEMBER]->(member)`
+  edges atomically — never a follow-up query (atomicity rule). `MENTIONS_MEMBER` (participants) is
+  **distinct from** `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) — do not conflate them.
+  `$mentions = []` is a verified no-op.
+- **Every `MERGE` is backed by a uniqueness constraint** (`Message.msgId`; `ReadCursor.cursorId`).
 
 ---
 
@@ -97,7 +105,7 @@ duplication is what lets the copies drift. The invariants that govern those quer
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
-| `./scripts/test_queries.sh` | 67-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/test_queries.sh` | 92-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
@@ -119,7 +127,7 @@ embedding model before creating a workspace.
 2. **Verify dialect before assuming.** This is FalkorDB OpenCypher, not Neo4j. No APOC, no GDS, no `PROFILE` keyword prefix. Check `CALL dbms.procedures()` when unsure.
 3. **Profile before tuning.** Use `GRAPH.PROFILE` to confirm an index is actually hit before declaring a query fast. Look for `Node By Index Scan`, not `NodeByLabelScan`.
 4. **All writes that touch HEAD/TAIL must be a single `GRAPH.QUERY`** — atomicity is per-query.
-5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 67/67 is the baseline.
+5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 92/92 is the baseline.
 6. **RAM is the binding constraint.** Any new node type, index, or vector dimension affects per-workspace RAM. Call it out.
 7. **One graph per workspace.** Never add a `workspaceId` property to filter inside a shared graph.
 8. **`ctx`, `input`, `output` on workflow nodes are serialised strings.** Do not design queries that filter inside them.

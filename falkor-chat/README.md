@@ -106,7 +106,7 @@ wiped before and after:
 ./scripts/test_queries.sh
 ```
 
-Expected output: `67/67 passed`.
+Expected output: `92/92 passed`.
 
 ### 5 — Browse the graph (optional)
 
@@ -152,7 +152,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 
 | Milestone | Status | Scope |
 |---|---|---|
-| **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (67/67) |
+| **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92) |
 | **M1** — Chat core | — | FastAPI REST server (router → service → repository over `falkordb-py`) + minimal web UI; single hardcoded tenant; users, channels, threads, thread-scoped append, full-text search. See [DESIGN.md §14](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
@@ -173,6 +173,6 @@ falkor-chat/
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
-│   └── test_queries.sh      # end-to-end query test suite (67 assertions)
+│   └── test_queries.sh      # end-to-end query test suite (92 assertions)
 └── README.md
 ```
