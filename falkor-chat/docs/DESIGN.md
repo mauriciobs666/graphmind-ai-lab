@@ -417,7 +417,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Server layers (repository → services → MCP + REST, mounted in `app.py`) are built and green (51 tests); web UI still deferred.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -513,16 +513,19 @@ The **two append variants** (§5.3) stay hidden inside `post_message`: the servi
 the thread already has a `HEAD`/`TAIL` and dispatches the correct single-`GRAPH.QUERY` write. The
 API only ever sees "post a message."
 
-### 14.5 Proposed layout
+### 14.5 Layout (as built, M1)
 
 ```
 falkor-chat/
 ├── server/
-│   ├── falkorchat/{config,db,repository,services,schemas,api,app}.py
-│   ├── tests/{test_repository,test_services,test_api}.py
-│   └── pyproject.toml          # fastapi, uvicorn, falkordb-py~=1.6, pytest, httpx
-└── web/{index.html, app.js}    # fetch() against REST; channels | thread view
+│   ├── falkorchat/{config,db,repository,services,schemas,api,mcp,app}.py
+│   ├── tests/{test_repository,test_services,test_services_live,test_mcp,test_api,test_app}.py
+│   ├── pyproject.toml          # fastapi, uvicorn, falkordb, mcp, pytest, httpx
+│   └── .venv/                  # python3 -m venv (no uv on the box)
+└── web/{index.html, app.js}    # fetch() against REST; channels | thread view (deferred)
 ```
+
+`mcp.py` is the second front door — see §15. `app.py` mounts both on one process.
 
 ### 14.6 TDD build order
 
@@ -539,3 +542,62 @@ already uses:
 
 > When this code lands, update `AGENTS.md` (key scripts/commands, working-context rules) and the
 > README repo-layout/roadmap in the same change, per the repo's documentation rule.
+
+---
+
+## 15. MCP transport (K-002) — the agent front door
+
+M1 exposes a second, additive transport for AI agents: **MCP over Streamable-HTTP**, mounted on
+the *same* FastAPI process and calling the *same* `services.py` as the REST router. Full spec and
+rationale: `docs/plans/m1-chat-mcp.md`. Two capabilities were folded into M1 to support it:
+participant **@mentions** (`MENTIONS_MEMBER` edge) and per-member **read-cursors** (`ReadCursor`).
+
+### 15.1 Shape
+
+```
+browser ── REST/JSON ──┐
+                       ├─▶ services.py ─▶ repository.py ─▶ FalkorDB
+agents  ── MCP/HTTP ───┘   (all invariants here; both front doors call the SAME methods)
+```
+
+`mcp.py` is a thin adapter (peer of `api.py`), no business logic. `app.py`'s `create_app()`
+builds one `Services`, `mcp.configure(services)`, then:
+
+```python
+mcp_app = mcp.streamable_http_app()
+app = FastAPI(lifespan=mcp_app.router.lifespan_context)  # MUST forward, or session mgr never inits
+app.include_router(api.build_router(services))
+app.mount("/mcp", mcp_app)                                # agents connect at /mcp
+```
+
+> **Lifespan gotcha (python-sdk #1367):** forward the MCP app's lifespan to FastAPI or the
+> Streamable-HTTP session manager is never started (requests 500 with "task group not
+> initialized"). On this `mcp` build the lifespan is `mcp_app.router.lifespan_context`, and the
+> handler's own path is set to `/` (`mcp.settings.streamable_http_path = "/"`) so mounting under
+> `/mcp` yields a clean `/mcp` endpoint rather than `/mcp/mcp`.
+
+### 15.2 Tools → service → query
+
+| MCP tool | Service method | Query |
+|---|---|---|
+| `send_message(body, re, mentions=[], frm=None)` | `post_message` | §4 first/subsequent (+ mentions) |
+| `read_messages(re?, since?, limit, advance=True)` | `read_messages` | §9.1 (thread) / §9.2 (room-wide) |
+| `create_thread(channel_id, title)` | `create_thread` | §3 create a thread |
+
+- **Actor identity (Q#1):** MCP ignores any client-supplied `frm`; every call is attributed to the
+  `get_context()` actor (§14.3). M1's actor is the single configured `User` (role `user`).
+- **`read_messages` is RW when it advances a cursor.** Explicit `since` → pure read; otherwise the
+  per-thread cursor is read and (unless `since` given) advanced to the server clock. Room-wide reads
+  (no `re`) default `since` to epoch 0 and never advance (no room cursor in M1, Q#3).
+- **REST mention parity:** `POST /threads/{tid}/messages` also accepts an optional `mentions[]`.
+
+### 15.3 Client connection contract
+
+Streamable-HTTP; a consuming agent points at the URL (no subprocess):
+
+```json
+{ "mcpServers": { "falkor-chat": { "type": "streamable-http", "url": "http://localhost:8000/mcp" } } }
+```
+
+Unauthenticated in M1 — bind to localhost / a trusted network only. Run:
+`cd server && .venv/bin/uvicorn falkorchat.app:app` (bootstrap `ws:acme` first).

@@ -28,7 +28,7 @@ executed inside the same graph.
 
 - [Docker](https://docs.docker.com/get-docker/)
 - `redis-cli` — for local inspection (`sudo apt install redis-tools` / `brew install redis`)
-- Python 3.11+ with `falkordb-py` 1.6.x (coming in M1)
+- Python 3.12+ for the M1 server (`server/` — FastAPI + `falkordb-py` 1.6.x + `mcp`)
 
 ---
 
@@ -153,7 +153,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92) |
-| **M1** — Chat core | — | FastAPI REST server (router → service → repository over `falkordb-py`) + minimal web UI; single hardcoded tenant; users, channels, threads, thread-scoped append, full-text search. See [DESIGN.md §14](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors. Server layers built & green (51 tests); web UI deferred. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
@@ -174,5 +174,32 @@ falkor-chat/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
 │   └── test_queries.sh      # end-to-end query test suite (92 assertions)
+├── server/                  # M1 app: FastAPI REST + MCP on one process
+│   ├── falkorchat/{config,db,repository,services,schemas,api,mcp,app}.py
+│   ├── tests/               # pytest — repository/services (live), MCP, REST, app-mount
+│   └── pyproject.toml       # fastapi, uvicorn, falkordb, mcp, pytest, httpx
 └── README.md
 ```
+
+---
+
+## Run the M1 server (REST + MCP)
+
+The server hosts the browser REST API and the MCP agent front door on one process.
+
+```bash
+cd server
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
+./../scripts/bootstrap_schema.sh acme                        # schema for the default tenant (ws:acme)
+.venv/bin/uvicorn falkorchat.app:app                         # REST under /, MCP at /mcp
+```
+
+Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph):
+
+```bash
+cd server && .venv/bin/python -m pytest -q      # 51 passed
+```
+
+Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`). The endpoint is
+unauthenticated in M1 — bind to localhost / a trusted network only. Tools: `send_message`,
+`read_messages`, `create_thread` (see [DESIGN.md §15](docs/DESIGN.md#15-mcp-transport-k-002--the-agent-front-door)).

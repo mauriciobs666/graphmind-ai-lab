@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-01 — K-002 Step 2: M1 server (repository → services → MCP + REST), one process
+
+- **What:** Built the first application code for the component (greenfield `server/` tree), bottom-up
+  and test-first, completing K-002 (`docs/plans/m1-chat-mcp.md`). All against live FalkorDB.
+  - **`repository.py`** — every method 1:1 with a verified `QUERIES.md` query: channels/threads (§3),
+    `ensure_user`/`ensure_agent` (§2/§7), both message write paths with the atomic `MENTIONS_MEMBER`
+    block (§4), `read_thread` (§4), `read_thread_since` (§9.1), `read_ws_since` (§9.2),
+    `advance_cursor`/`get_cursor` (§9.3/9.4), `get_message` (§4), plus validation reads
+    (`thread_exists`/`channel_exists`/`existing_members`/`thread_has_head`).
+  - **`services.py`** — invariants: id/clock generation (server clock), first-vs-subsequent write
+    dispatch, mention validation (`UnknownMemberError`), RO/RW `read_messages` dispatch + `cursorId`
+    construction, `Channel`/`ThreadNotFoundError`.
+  - **`mcp.py`** — FastMCP adapter; tools `send_message`/`read_messages`/`create_thread`, injectable
+    service + context (Q#1: `frm` ignored, actor = `get_context()`).
+  - **`api.py` + `schemas.py`** — REST surface (DESIGN §14.4) incl. optional `mentions[]` parity;
+    `ServiceError` → 404/400.
+  - **`app.py`** — `create_app()` mounts REST + MCP on one FastAPI process.
+- **Live gotchas found & mitigated (now in AGENTS.md):** (a) `exists((t)-[:HEAD]->())` returns `true`
+  with no edge on this build and `count{}` is unsupported → existence via `OPTIONAL MATCH … IS NOT
+  NULL`; (b) MCP lifespan wiring (python-sdk #1367) — forward `mcp_app.router.lifespan_context` to
+  `FastAPI(lifespan=…)` or the session manager never starts; set `streamable_http_path="/"` so the
+  mount lands cleanly at `/mcp`; (c) `call_tool` returns `(content, structured)` with list results
+  wrapped as `{"result": […]}`.
+- **Env:** no `uv` on the box → `server/.venv` via `python3 -m venv`; deps fastapi/uvicorn/falkordb
+  1.6.1/mcp 1.28.1/pytest/httpx.
+- **Tests:** **51 passed** — repository (24 live), services (12 unit fake-repo + 2 live), MCP (4
+  in-memory), REST (7 TestClient), app-mount/lifespan (2). Query suite regression **92/92**.
+- **Verified end-to-end:** REST round-trip through the assembled app; MCP tool discovery lists the
+  three tools; mention-prioritised reads; monotonic cursor advance.
+- **Plan items:** K-002 Step 2 ✅ → **K-002 complete.** Deferred: web UI (M1), `create_channel` over
+  MCP (Q#4), full-text `search` REST endpoint.
+
 ## 2026-07-01 — K-002 Step 1 (gate): schema + queries for mentions & read-cursors
 
 - **What:** Landed the graph-dba gate for the M1 Chat MCP transport (`docs/plans/m1-chat-mcp.md`),

@@ -2,34 +2,26 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-01 (K-002 Step 1 gate done — schema + queries + tests; suite at 92/92)
+> Last reviewed: 2026-07-01 (K-002 complete — M1 server built: repo→services→MCP+REST; 51 server
+> tests + query suite 92/92)
 
 ## Active
 
-- 🟡 **K-002 — M1 Chat MCP transport (mentions + read-cursors).** Add an MCP (Streamable-HTTP)
-  front door for AI agents alongside the M1 REST API, on the shared `services.py`. Folds two
-  capabilities into M1: participant `@mentions` (`MENTIONS_MEMBER` edge — distinct from the existing
-  GraphRAG `MENTIONS`→`Entity`) and per-agent read-cursors (`ReadCursor` node). Decisions: A
-  (additive transport) · 2a (chat-only; coordination deferred to M3) · Streamable-HTTP. Full spec:
-  **`docs/plans/m1-chat-mcp.md`**.
-  - ✅ **Step 1 (gate — graph-dba) — DONE 2026-07-01.** `ReadCursor` index+constraint in
-    `bootstrap_schema.sh`; §4 write paths extended with the `MENTIONS_MEMBER` block and new
-    `QUERIES.md` §9 (§9.1–9.4) authored & `GRAPH.PROFILE`-verified; `test_queries.sh` extended.
-    **Suite green at new baseline 92/92**, all index scans confirmed. **Q#2 resolved:** member
-    resolution in the write path uses dual `OPTIONAL MATCH` + `coalesce` (two `Node By Index Scan`s);
-    the `OR` form is reserved for already-bound `me`/`mem` in reads. Two live gotchas captured in
-    AGENTS.md: empty-`UNWIND` row collapse (guarded via `CASE`+`FOREACH`) and the `All Node Scan`
-    trap on `OR` scan-anchors.
-  - 🔵 **Step 2 (coder/tdd-engineer):** repository → services → `mcp.py` + `app.py` mount → REST
-    mention parity; then docs (`DESIGN.md` §14/§15 MCP surface, `README.md` roadmap, kaizen) in the
-    same change. **Unblocked — the Step 1 gate has passed.**
-  - **Open:** `create_channel` over MCP (deferred, Q#4). Locked: MCP actor = `get_context()` (Q#1);
-    per-thread cursors only (Q#3); member-match index strategy resolved (Q#2, Step 1).
+- ✅ **K-002 — M1 Chat MCP transport (mentions + read-cursors) — COMPLETE 2026-07-01.** Both steps
+  landed; full detail in `kaizen/history.md` (Step 1 gate + Step 2 server). Step 2 built the
+  greenfield `server/` tree (repository → services → `mcp.py` + `api.py` mounted by `app.py`), with
+  REST `mentions[]` parity and docs (`DESIGN.md` §14–§15, `README.md`, `AGENTS.md`) in the same
+  change. **51 server tests green; query suite 92/92.** Locked: MCP actor = `get_context()` (Q#1),
+  per-thread cursors only (Q#3), member-match strategy (Q#2). **Deferred:** `create_channel` over MCP
+  (Q#4), full-text `search` REST endpoint, and the minimal **web UI** (M1 §14.5) — the next M1 step.
 
 ## Parking lot / ideas
+
+- **M1 web UI** — minimal `web/{index.html,app.js}` (channels list + thread view) over the REST API;
+  the last piece of M1 chat core (DESIGN §14.5). Server front doors are done.
+- **Full-text `search` REST endpoint** — `GET /search?q=` → `QUERIES.md` §5 (deferred from K-002).
 
 - The DESIGN §13 open questions are the larger backlog seeds — resolve as their milestones arrive:
   embedding model & dimension (M2), workflow guard expression language (M3), `identity` source of
   truth + real auth (replaces the M1 hardcoded-tenant seam, §14.3), message/embedding retention,
   cross-workspace analytics, Bolt vs RESP for the gateway.
-- M1 app build (tdd-engineer) starts at the repository layer once K-001 lands — see `docs/DESIGN.md` §14.6.

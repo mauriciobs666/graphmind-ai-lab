@@ -49,6 +49,7 @@ These diverge from general docs or Neo4j assumptions — treat them as ground tr
 - **Default `TIMEOUT` is 1000ms** — may fire on GraphRAG queries over large workspaces; review before M2.
 - **Empty `UNWIND` collapses the row stream.** `WITH m UNWIND [] AS x …` drops `m` and a trailing `RETURN m` comes back empty even though earlier writes committed. The mention write-block guards this with `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid` + a `FOREACH` that never filters — verified regression-safe (see `QUERIES.md` §4 mentions note).
 - **`FOREACH (x IN CASE … | CREATE …)`** is the idiom for conditional writes without dropping rows — confirmed on this build.
+- **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is absent** (broken on this build), and `count{ … }` subquery syntax is unsupported. For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL` instead (used by `repository.thread_has_head`/`thread_exists`).
 - **Member resolution must be label-specific.** `WHERE n.userId = $x OR n.agentId = $x` as a *scan anchor* profiles as an `All Node Scan`; two `OPTIONAL MATCH (u:User {userId:mid}) / (a:Agent {agentId:mid})` + `coalesce(u,a)` gives two `Node By Index Scan`s. The `OR` form is fine only when `n` is already bound by a traversal/indexed anchor (mention-flag and cursor reads).
 
 ---
@@ -110,14 +111,33 @@ duplication is what lets the copies drift. The invariants that govern those quer
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
 
+### M1 server (`server/`)
+
+The M1 app (FastAPI REST + MCP Streamable-HTTP on one process) lives in `server/`. No `uv` on the
+box — use a `venv`.
+
+```bash
+cd server
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
+.venv/bin/python -m pytest -q                                # 51 passed (needs FalkorDB up)
+.venv/bin/uvicorn falkorchat.app:app                         # REST under /, MCP at /mcp
+```
+
+- **Layering (locked):** `api.py` (REST) and `mcp.py` (MCP) are thin adapters over `services.py`;
+  all Cypher lives in `repository.py` (1:1 with `QUERIES.md`); the tenant seam is `config.get_context`.
+- Repository/services tests run against the isolated `ws:test` graph (same approach as
+  `test_queries.sh`); the `conftest` fixture bootstraps schema + wipes node data per test.
+- MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.
+
 ---
 
 ## Key documents
 
 | File | Contents |
 |---|---|
-| `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap |
+| `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP |
 | `docs/QUERIES.md` | Canonical query library — all verified against the live instance |
+| `docs/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
 
 ---
 
