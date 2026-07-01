@@ -12,6 +12,7 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 | [`saul`](./saul/saul.md) | Saul — assessor jurídico (foro de SP) de direito **civil e penal**, com foco aprofundado em **direito condominial** (condomínio edilício). Monta dossiês em markdown (`$AGENT_WORKDIR/saul/dossies/{cliente}/{caso}.md`), cita os dispositivos legais e busca a vigência atual na web, separa 🟢 verificado / 🟡 tese / 🔴 a confirmar, e redige minutas marcadas como rascunho. Não substitui advogado(a) OAB. | Perguntas de direito civil/penal, condomínio, cobrança de cotas, assembleias/convenção, contratos, notificações, defesa/acusação, ou montar/consultar o dossiê de um caso. | opus |
 | [`graph-dba`](./graph-dba/graph-dba.md) | Graph database administrator & data architect specialized in **FalkorDB** (Redis-module, GraphBLAS sparse-matrix engine; RedisGraph successor; built for GraphRAG). Covers its OpenCypher dialect, modeling, vector/full-text indexing, constraints, multi-graph tenancy, in-memory sizing, replication/clustering, and tuning via `GRAPH.PROFILE`. Fluent in the wider LPG world (Neo4j, openCypher, GQL) for porting. | Designing a graph data model, writing/optimizing FalkorDB Cypher, indexes/constraints, FalkorDB deployment (RAM sizing, persistence, replication, Redis Cluster), tuning slow traversals, bulk ingestion/migration, building a GraphRAG/knowledge-graph layer, or FalkorDB ops. | opus |
 | [`tdd-engineer`](./tdd-engineer/tdd-engineer.md) | Software engineer who implements features and fixes strictly via Test-Driven Development (red → green → refactor), keeping the suite green at every step. | Implementing a feature, fixing a bug, refactoring with a safety net, or adding/improving tests. | opus |
+| [`qa-engineer`](./qa-engineer/qa-engineer.md) | QA / functional-testing engineer; reasons about risk to build a test strategy, writes it to a versioned **test plan** (`docs/test-plans/<kebab>.md`), executes it (authors automated functional/acceptance tests, runs existing suites, **and** drives the running app black-box), then delivers a **test report** (`docs/test-reports/<kebab>-report.md`) with results, defects, and feedback. Behavior/acceptance altitude — the black-box complement to `tdd-engineer`'s unit-level TDD. | Wanting a test strategy/plan, functional/acceptance/integration/e2e/exploratory testing, a QA pass on a feature or release, or a written report of what was tested and what broke. | opus |
 
 ## Kaizen
 
@@ -25,6 +26,7 @@ Each agent carries a living improvement plan and change log:
 - `saul/kaizen/` — [plan](./saul/kaizen/plan.md) · [history](./saul/kaizen/history.md)
 - `graph-dba/kaizen/` — [plan](./graph-dba/kaizen/plan.md) · [history](./graph-dba/kaizen/history.md)
 - `tdd-engineer/kaizen/` — [plan](./tdd-engineer/kaizen/plan.md) · [history](./tdd-engineer/kaizen/history.md)
+- `qa-engineer/kaizen/` — [plan](./qa-engineer/kaizen/plan.md) · [history](./qa-engineer/kaizen/history.md)
 
 `cobb` additionally maintains [`cobb/TESTING.md`](./cobb/TESTING.md) (agent testing standards).
 

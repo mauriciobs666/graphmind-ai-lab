@@ -2,6 +2,22 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-01 — QA: functional test pass on M1 (REST + MCP)
+
+- **What:** first black-box/acceptance QA pass on the M1 server, driving the *running* process
+  (curl over REST + a real `mcp` Streamable-HTTP client session) on top of the 57-test baseline.
+  Added `docs/test-plans/m1-chat-mcp.md` and `docs/test-reports/m1-chat-mcp-report.md`.
+- **Result:** 22/22 functional+contract items PASS · baseline 57/57. Verified both front doors over
+  one service layer, error→status mapping (404/404/400), input validation (422), full-text search,
+  read-cursor advance vs. explicit-`since` read-only, and REST↔MCP cross-door parity.
+- **Defect found (DEF-1, low-med):** MCP endpoint 405s at `POST /mcp`; only `/mcp/` (trailing slash)
+  completes the handshake — but README/DESIGN Appendix A advertise `/mcp`. Fix = alias/redirect
+  `/mcp`→`/mcp/` **or** correct the docs, plus a regression test. See the report §3.
+- **Feedback:** `bootstrap_schema.sh` seeds no members, so the mention happy-path needs manual seeding
+  (consider a `seed_demo.sh`); per-endpoint response shapes vary (documented schema would make them
+  testable); channel names non-unique. Details in the report §5.
+- **Why:** first spin of the new `claude/qa-engineer` agent (proxy-run). No code under test changed.
+
 ## 2026-07-01 — K-003: M1 chat core finish — full-text search endpoint + web UI
 
 - **What:** Closed out M1 chat core on top of the K-002 server, TDD and search-first.
