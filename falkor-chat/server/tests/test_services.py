@@ -79,6 +79,10 @@ class FakeRepo:
         self.calls.append(("read_ws_since", me_id, since, limit))
         return self.since_rows
 
+    def search_messages(self, ws, *, query, limit=50):
+        self.calls.append(("search_messages", query, limit))
+        return self.since_rows
+
 
 def make_service(repo, *, now=1000):
     ids = (f"id{n}" for n in itertools.count(1))
@@ -224,3 +228,17 @@ def test_read_messages_room_wide_requires_no_thread_and_no_advance():
 
     assert ("read_ws_since", "u1", 0, 50) in repo.calls
     assert not any(c[0] == "advance_cursor" for c in repo.calls)
+
+
+# ── search: thin passthrough ────────────────────────────────────────────────────
+
+
+def test_search_messages_passes_query_and_limit_through():
+    repo = FakeRepo()
+    repo.since_rows = [{"msgId": "m1", "text": "hello", "createdAt": 120, "score": 1.5}]
+    svc = make_service(repo)
+
+    hits = svc.search_messages(CTX, query="hello", limit=10)
+
+    assert ("search_messages", "hello", 10) in repo.calls
+    assert hits == repo.since_rows

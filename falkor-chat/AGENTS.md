@@ -113,18 +113,23 @@ embedding model before creating a workspace.
 
 ### M1 server (`server/`)
 
-The M1 app (FastAPI REST + MCP Streamable-HTTP on one process) lives in `server/`. No `uv` on the
-box — use a `venv`.
+The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) lives in `server/`
+(and `web/`). No `uv` on the box — use a `venv`.
 
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # 51 passed (needs FalkorDB up)
-.venv/bin/uvicorn falkorchat.app:app                         # REST under /, MCP at /mcp
+.venv/bin/python -m pytest -q                                # 57 passed (needs FalkorDB up)
+.venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
 - **Layering (locked):** `api.py` (REST) and `mcp.py` (MCP) are thin adapters over `services.py`;
   all Cypher lives in `repository.py` (1:1 with `QUERIES.md`); the tenant seam is `config.get_context`.
+- **Front doors on one process:** `app.py` mounts REST + MCP, and serves the repo-root `web/`
+  (`index.html` + `app.js`) as static files at `/`. The static mount is registered **last** — `/`
+  is a catch-all that must sit behind the REST routes and the `/mcp` mount. Same-origin ⇒ no CORS.
+- **Full-text search:** `GET /search?q=` → `services.search_messages` → `repository.search_messages`
+  (`QUERIES.md` §5, workspace-wide — the channel-scoping MATCH is omitted).
 - Repository/services tests run against the isolated `ws:test` graph (same approach as
   `test_queries.sh`); the `conftest` fixture bootstraps schema + wipes node data per test.
 - MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.

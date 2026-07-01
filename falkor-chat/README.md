@@ -153,7 +153,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92) |
-| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors. Server layers built & green (51 tests); web UI deferred. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (57 tests). Code-complete; hardening/real-time deferred to M2. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
@@ -178,6 +178,7 @@ falkor-chat/
 │   ├── falkorchat/{config,db,repository,services,schemas,api,mcp,app}.py
 │   ├── tests/               # pytest — repository/services (live), MCP, REST, app-mount
 │   └── pyproject.toml       # fastapi, uvicorn, falkordb, mcp, pytest, httpx
+├── web/                     # minimal browser client (index.html + app.js) served by app.py
 └── README.md
 ```
 
@@ -191,13 +192,17 @@ The server hosts the browser REST API and the MCP agent front door on one proces
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 ./../scripts/bootstrap_schema.sh acme                        # schema for the default tenant (ws:acme)
-.venv/bin/uvicorn falkorchat.app:app                         # REST under /, MCP at /mcp
+.venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
+
+Then open **http://localhost:8000/** for the minimal web client (channels · threads · messages ·
+search). It talks to the REST API on the same origin (no CORS). The browser and MCP front doors
+share one `services.py`.
 
 Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph):
 
 ```bash
-cd server && .venv/bin/python -m pytest -q      # 51 passed
+cd server && .venv/bin/python -m pytest -q      # 57 passed
 ```
 
 Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`). The endpoint is

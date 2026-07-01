@@ -102,3 +102,21 @@ def test_get_missing_message_404(client):
     tid = _new_thread(client, cid)
     r = client.get(f"/threads/{tid}/messages/nope")
     assert r.status_code == 404
+
+
+def test_search_returns_matching_messages(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    client.post(f"/threads/{tid}/messages", json={"text": "hello world"})
+    client.post(f"/threads/{tid}/messages", json={"text": "goodbye moon"})
+
+    r = client.get("/search", params={"q": "hello"})
+
+    assert r.status_code == 200
+    hits = r.json()
+    assert [h["text"] for h in hits] == ["hello world"]
+
+
+def test_search_requires_q(client):
+    r = client.get("/search")
+    assert r.status_code == 422

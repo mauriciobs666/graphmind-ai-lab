@@ -265,6 +265,38 @@ def test_get_message_none_when_absent(repo):
     assert repo.get_message("test", msg_id="nope") is None
 
 
+# ── §5 Full-text search ────────────────────────────────────────────────────────
+
+
+def test_search_messages_finds_by_keyword(repo):
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="hello world", role="user", created_at=120,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m2", author_id="u1",
+        text="goodbye moon", role="user", created_at=130,
+    )
+
+    hits = repo.search_messages("test", query="hello")
+
+    assert [h["msgId"] for h in hits] == ["m1"]
+    assert hits[0]["text"] == "hello world"
+    assert hits[0]["createdAt"] == 120
+    assert "score" in hits[0]
+
+
+def test_search_messages_empty_when_no_match(repo):
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="hello world", role="user", created_at=120,
+    )
+
+    assert repo.search_messages("test", query="nonexistentterm") == []
+
+
 # ── validation reads (used by services) ────────────────────────────────────────
 
 

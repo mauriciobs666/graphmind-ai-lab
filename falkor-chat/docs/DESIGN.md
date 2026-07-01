@@ -417,7 +417,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Server layers (repository → services → MCP + REST, mounted in `app.py`) are built and green (51 tests); web UI still deferred.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (57 tests). M1 chat core is code-complete.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -522,10 +522,13 @@ falkor-chat/
 │   ├── tests/{test_repository,test_services,test_services_live,test_mcp,test_api,test_app}.py
 │   ├── pyproject.toml          # fastapi, uvicorn, falkordb, mcp, pytest, httpx
 │   └── .venv/                  # python3 -m venv (no uv on the box)
-└── web/{index.html, app.js}    # fetch() against REST; channels | thread view (deferred)
+└── web/{index.html, app.js}    # fetch() against REST; channels | threads | messages + search
 ```
 
-`mcp.py` is the second front door — see §15. `app.py` mounts both on one process.
+`mcp.py` is the second front door — see §15. `app.py` mounts both on one process, and also
+serves `web/` as static files at `/` (mounted **last**, since `/` is a catch-all that must sit
+behind the REST routes and the `/mcp` mount). Serving the UI from the same process means there is
+no CORS seam. The mount is skipped gracefully if the `web/` directory is absent.
 
 ### 14.6 TDD build order
 
@@ -537,8 +540,11 @@ already uses:
    method can now be built.
 1. **`repository`** — integration tests against an isolated `ws:test` graph, one method at a time.
 2. **`services`** — append-variant dispatch, id-gen, `updatedAt` bumps (fake repo + a few live checks).
-3. **`api`** — FastAPI `TestClient` request/response contract tests.
-4. **`web`** — minimal, verified manually against a running server.
+3. **`api`** — FastAPI `TestClient` request/response contract tests. ✅ done — incl.
+   `GET /search?q=` (full-text, `search_messages` → `QUERIES.md` §5).
+4. **`web`** — ✅ done — minimal `web/{index.html,app.js}` (channels · threads · messages · search),
+   served as static files by `app.py`; the mount seam is unit-tested, the UI itself verified
+   manually against a running server.
 
 > When this code lands, update `AGENTS.md` (key scripts/commands, working-context rules) and the
 > README repo-layout/roadmap in the same change, per the repo's documentation rule.

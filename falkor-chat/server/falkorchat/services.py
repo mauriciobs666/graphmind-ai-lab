@@ -178,6 +178,12 @@ class Services:
             ctx.ws, me_id=ctx.actor, since=eff_since, limit=limit
         )
 
+    def search_messages(
+        self, ctx: CallContext, *, query: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Workspace-wide full-text keyword search. QUERIES.md §5."""
+        return self._repo.search_messages(ctx.ws, query=query, limit=limit)
+
     # ── reads (thin passthroughs) ───────────────────────────────────────────────
 
     def read_thread(self, ctx: CallContext, *, thread_id: str) -> list[dict[str, Any]]:

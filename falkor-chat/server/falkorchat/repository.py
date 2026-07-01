@@ -220,6 +220,29 @@ class Repository:
             for row in res.result_set
         ]
 
+    # ── §5 Full-text search ─────────────────────────────────────────────────────
+
+    def search_messages(
+        self, ws: str, *, query: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Workspace-wide full-text keyword search over message text. QUERIES.md §5.
+
+        Anchored on the `Message` full-text index; the channel-scoping MATCH from
+        §5 is omitted for the workspace-wide search surface (DESIGN §14.4).
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.fulltext.queryNodes('Message', $query) "
+            "YIELD node AS m, score "
+            "RETURN m.msgId AS msgId, m.text AS text, "
+            "m.createdAt AS createdAt, score "
+            "ORDER BY score DESC LIMIT $limit",
+            {"query": query, "limit": limit},
+        )
+        return [
+            {"msgId": row[0], "text": row[1], "createdAt": row[2], "score": row[3]}
+            for row in res.result_set
+        ]
+
     # ── §9 Read-cursors & since-reads ───────────────────────────────────────────
 
     @staticmethod

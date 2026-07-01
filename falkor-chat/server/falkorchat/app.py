@@ -11,9 +11,11 @@ Run:  uvicorn falkorchat.app:app   (agents connect at /mcp; REST under /)
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import api, db
 from . import mcp as mcp_mod
@@ -25,6 +27,10 @@ from .services import (
     ServiceError,
     ThreadNotFoundError,
 )
+
+# The minimal browser client (DESIGN §14.5) lives at the repo root `web/`,
+# a sibling of `server/`. Served from this process so there is no CORS seam.
+_DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
 
 def _register_error_handlers(app: FastAPI) -> None:
@@ -42,12 +48,15 @@ def create_app(
     *,
     context_provider: Callable[[], CallContext] | None = None,
     mount_mcp: bool = True,
+    web_dir: Path | None = None,
 ) -> FastAPI:
     """Build the FastAPI app.
 
     `services`/`context_provider` are injectable for tests (target `ws:test`).
     `mount_mcp=False` skips the MCP mount — used by REST tests so the FastMCP
     session manager (run-once per instance) isn't started repeatedly.
+    `web_dir` overrides where the static browser client is served from; it
+    defaults to the repo-root `web/` and is skipped if that directory is absent.
     """
     if services is None:
         services = Services(Repository(db.connect()))
@@ -70,6 +79,12 @@ def create_app(
 
     if mount_mcp:
         app.mount("/mcp", mcp_app)
+
+    # Static UI mounts LAST: "/" is a catch-all, so it must sit behind the REST
+    # routes and the /mcp mount (Starlette matches routes in registration order).
+    web = _DEFAULT_WEB_DIR if web_dir is None else web_dir
+    if web.is_dir():
+        app.mount("/", StaticFiles(directory=str(web), html=True), name="web")
 
     return app
 

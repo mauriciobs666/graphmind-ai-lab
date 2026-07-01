@@ -7,7 +7,7 @@ A thin router over the shared `Services`. `get_context` is a FastAPI dependency
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .config import CallContext, get_context as _resolve_context
 from .schemas import CreateChannelIn, CreateThreadIn, PostMessageIn
@@ -49,6 +49,14 @@ def build_router(services: Services) -> APIRouter:
         return services.post_message(
             ctx, thread_id=thread_id, text=body.text, mentions=body.mentions
         )
+
+    @router.get("/search")
+    def search_messages(
+        q: str = Query(..., min_length=1),
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.search_messages(ctx, query=q, limit=limit)
 
     @router.get("/threads/{thread_id}/messages")
     def read_thread(thread_id: str, ctx: CallContext = Depends(get_context)):

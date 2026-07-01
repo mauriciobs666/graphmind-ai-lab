@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>falkor-chat</title>
+  <style>
+    :root {
+      --bg: #0f1115; --panel: #171a21; --line: #262b36; --fg: #e6e9ef;
+      --muted: #8b93a7; --accent: #6ea8fe; --mention: #3a2f14; --mention-line: #7a6320;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font: 14px/1.5 system-ui, sans-serif;
+      background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+      border-bottom: 1px solid var(--line); background: var(--panel);
+    }
+    header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+    header .tenant { color: var(--muted); font-size: 12px; }
+    header form { margin-left: auto; display: flex; gap: 6px; }
+    input, button {
+      font: inherit; color: var(--fg); background: #10131a;
+      border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px;
+    }
+    button { background: #1d2430; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    main { display: grid; grid-template-columns: 220px 240px 1fr; flex: 1; min-height: 0; }
+    .col { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+    .col h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--muted); margin: 0; padding: 10px 12px 6px; }
+    .list { overflow-y: auto; flex: 1; }
+    .item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #1b1f28; }
+    .item:hover { background: #1b202a; }
+    .item.active { background: #222b3a; border-left: 2px solid var(--accent); }
+    .item .sub { color: var(--muted); font-size: 12px; }
+    .new { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); }
+    .new input { flex: 1; }
+    .thread { display: flex; flex-direction: column; min-height: 0; }
+    .messages { overflow-y: auto; flex: 1; padding: 12px 16px; }
+    .msg { padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; background: var(--panel); }
+    .msg.mention { background: var(--mention); border: 1px solid var(--mention-line); }
+    .msg .who { font-weight: 600; }
+    .msg .meta { color: var(--muted); font-size: 12px; margin-left: 8px; }
+    .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+    .composer input[type=text] { flex: 1; }
+    .empty { color: var(--muted); padding: 16px; }
+    #results { position: absolute; right: 16px; top: 52px; width: 380px; max-height: 60vh;
+      overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 8px; box-shadow: 0 8px 30px #0008; z-index: 10; display: none; }
+    #results header { position: sticky; top: 0; }
+    #results .item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>falkor-chat</h1>
+    <span class="tenant" id="tenant"></span>
+    <form id="search-form">
+      <input type="text" id="search-q" placeholder="Search messages…" autocomplete="off" />
+      <button type="submit">Search</button>
+    </form>
+  </header>
+
+  <main>
+    <section class="col">
+      <h2>Channels</h2>
+      <div class="list" id="channels"></div>
+      <form class="new" id="new-channel">
+        <input type="text" id="channel-name" placeholder="New channel" autocomplete="off" />
+        <button type="submit">+</button>
+      </form>
+    </section>
+
+    <section class="col">
+      <h2>Threads</h2>
+      <div class="list" id="threads"></div>
+      <form class="new" id="new-thread">
+        <input type="text" id="thread-title" placeholder="New thread" autocomplete="off" />
+        <button type="submit">+</button>
+      </form>
+    </section>
+
+    <section class="col thread">
+      <h2 id="thread-heading">Messages</h2>
+      <div class="messages" id="messages">
+        <div class="empty">Select a thread to read its messages.</div>
+      </div>
+      <form class="composer" id="composer" hidden>
+        <input type="text" id="message-text" placeholder="Write a message… (@id @id to mention)" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="results">
+    <header><h1>Search results</h1><button type="button" id="results-close" style="margin-left:auto">✕</button></header>
+    <div class="list" id="results-list"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

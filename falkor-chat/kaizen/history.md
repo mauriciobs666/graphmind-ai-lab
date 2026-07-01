@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-01 — K-003: M1 chat core finish — full-text search endpoint + web UI
+
+- **What:** Closed out M1 chat core on top of the K-002 server, TDD and search-first.
+  - **Full-text search (red→green per layer):** `repository.search_messages` (workspace-wide
+    `db.idx.fulltext.queryNodes('Message', …)`, `QUERIES.md` §5 with the channel-scoping MATCH
+    omitted) → `services.search_messages` (thin passthrough) → REST `GET /search?q=&limit=`
+    (`q` required via `Query(..., min_length=1)`; `limit` bounded 1–200). **+5 tests** (2 live repo,
+    1 fake-repo service, 2 TestClient incl. the `422` missing-`q` guard).
+  - **Web UI:** minimal `web/{index.html, app.js}` — vanilla `fetch` over the same-origin REST API:
+    channels list/create, threads list/create, thread messages + composer (parses `@id` handles into
+    `mentions[]`), and a full-text search panel. HTML-escaped throughout.
+  - **Serving:** `app.py` gained a `web_dir` param and mounts `StaticFiles(html=True)` at `/`
+    **last** — `/` is a catch-all that must sit behind the REST routes and the `/mcp` mount
+    (Starlette matches in registration order). Same-origin ⇒ no CORS. Mount is skipped if `web/` is
+    absent. **+1 test** pinning "serves index at `/` **and** `/channels` still returns JSON."
+- **Verified:** full server suite **57 passed** (was 51); query suite regression **92/92**. Smoke:
+  assembled app serves the real `web/index.html` at `/`, `web/app.js` as `text/javascript`, and
+  `/channels` JSON alongside — one process, three front doors (web, REST, MCP).
+- **Docs (same change):** `DESIGN.md` §12 roadmap + §14.5 layout/serving note + §14.6 build order
+  (steps 3–4 ✅); `README.md` roadmap/layout/run + "open http://localhost:8000/"; `AGENTS.md` server
+  surface (static-mount-last rule, `/search`) and test count 51→57.
+- **Plan items:** K-003 ✅ → **M1 chat core code-complete.** Parking lot now: `search` over MCP,
+  `create_channel` over MCP (Q#4).
+
 ## 2026-07-01 — K-002 Step 2: M1 server (repository → services → MCP + REST), one process
 
 - **What:** Built the first application code for the component (greenfield `server/` tree), bottom-up
