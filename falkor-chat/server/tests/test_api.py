@@ -120,3 +120,9 @@ def test_search_returns_matching_messages(client):
 def test_search_requires_q(client):
     r = client.get("/search")
     assert r.status_code == 422
+
+
+def test_search_syntax_error_is_400_not_500(client):
+    r = client.get("/search", params={"q": 'hello"unbalanced'})
+    assert r.status_code == 400
+    assert r.json()["error"] == "InvalidSearchQueryError"

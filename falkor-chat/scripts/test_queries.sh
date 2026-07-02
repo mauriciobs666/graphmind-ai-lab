@@ -317,20 +317,22 @@ assert_contains "mn3 dedups duplicate mention to a single edge" "1" "$out"
 assert_not_contains "mn3 drops unknown mention 'nope'" "nope" "$out"
 
 echo ""
-echo "▶ §9.1/§9.2 since-reads with mention prioritisation"
+echo "▶ §9.1/§9.2 since-reads with mention flag (chronological)"
 
-# §9.1 thread-scoped, reader = bot1, since 3999 → mn1,mn2,mn3; mn2 (mentions bot1) flagged & first
-out=$(rq "$WS" "CYPHER threadId='th2' since=3999 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, coalesce(author.userId,author.agentId) AS authorId, isMention ORDER BY isMention DESC, m.createdAt LIMIT \$limit")
+# §9.1 thread-scoped, reader = bot1, since 3999 → mn1,mn2,mn3 chronological; mn2 (mentions bot1) flagged
+out=$(rq "$WS" "CYPHER threadId='th2' since=3999 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, coalesce(author.userId,author.agentId) AS authorId, isMention ORDER BY m.createdAt LIMIT \$limit")
 assert_contains "§9.1 returns mn1 (after since)" "mn1" "$out"
 assert_contains "§9.1 returns mn2" "mn2" "$out"
-# mn2 mentions the reader (bot1) → must appear before the non-mention mn1
-mn2_line=$(echo "$out" | grep -n "mn2" | head -1 | cut -d: -f1)
+# chronological order — the cursor-pagination invariant: a LIMIT-truncated page
+# must be the earliest rows (mention-first sorting + LIMIT loses messages);
+# mn2's mention of the reader is carried by the isMention flag instead
 mn1_line=$(echo "$out" | grep -n "mn1" | head -1 | cut -d: -f1)
-if [ -n "$mn2_line" ] && [ -n "$mn1_line" ] && [ "$mn2_line" -lt "$mn1_line" ]; then
-  echo "  ✓ §9.1 mention of reader sorts first (mn2 before mn1)"
+mn2_line=$(echo "$out" | grep -n "mn2" | head -1 | cut -d: -f1)
+if [ -n "$mn1_line" ] && [ -n "$mn2_line" ] && [ "$mn1_line" -lt "$mn2_line" ]; then
+  echo "  ✓ §9.1 chronological order (mn1 before mn2; mention flagged, not resorted)"
   PASS=$((PASS+1))
 else
-  echo "  ✗ §9.1 mention prioritisation wrong (mn2 line ${mn2_line}, mn1 line ${mn1_line})"
+  echo "  ✗ §9.1 chronological ordering wrong (mn1 line ${mn1_line}, mn2 line ${mn2_line})"
   echo "    got: ${out}"
   FAIL=$((FAIL+1))
 fi
@@ -342,7 +344,7 @@ assert_not_contains "§9.1 since=4001 excludes mn1" "mn1" "$out"
 assert_not_contains "§9.1 since=4001 excludes mn2" "mn2" "$out"
 
 # §9.2 workspace-wide since read must be an index scan on Message.createdAt
-prof=$(gp "$WS" "CYPHER since=3999 meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, isMention ORDER BY isMention DESC, m.createdAt LIMIT \$limit")
+prof=$(gp "$WS" "CYPHER since=3999 meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, isMention ORDER BY m.createdAt LIMIT \$limit")
 assert_index_scan "§9.2 workspace-wide since-read uses Message.createdAt index" "$prof"
 
 echo ""

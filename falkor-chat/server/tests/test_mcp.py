@@ -74,7 +74,7 @@ def test_create_thread_send_and_read_roundtrip(repo):
     assert [r["text"] for r in rows] == ["hello world"]
 
 
-def test_send_message_prioritises_mention(repo):
+def test_send_message_mention_flagged_in_chronological_read(repo):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     repo.ensure_user("test", user_id="u2", display_name="Bob")
     svc = _configure(repo)
@@ -96,8 +96,8 @@ def test_send_message_prioritises_mention(repo):
         ))
 
     rows = asyncio.run(scenario())
-    assert rows[0]["text"] == "hey bob"
-    assert rows[0]["isMention"] is True
+    assert [r["text"] for r in rows] == ["plain", "hey bob"]
+    assert [r["isMention"] for r in rows] == [False, True]
 
 
 def test_send_message_unknown_mention_errors(repo):

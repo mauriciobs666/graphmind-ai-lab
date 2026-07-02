@@ -153,7 +153,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92) |
-| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (57 tests). Code-complete; hardening/real-time deferred to M2. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (68 tests). Code-complete; hardening/real-time deferred to M2. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
@@ -202,9 +202,10 @@ share one `services.py`.
 Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph):
 
 ```bash
-cd server && .venv/bin/python -m pytest -q      # 57 passed
+cd server && .venv/bin/python -m pytest -q      # 68 passed
 ```
 
-Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`). The endpoint is
-unauthenticated in M1 — bind to localhost / a trusted network only. Tools: `send_message`,
+Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`; the trailing-slash
+spelling `/mcp/` works too). The endpoint is unauthenticated in M1 — bind to localhost / a trusted
+network only. Tools: `send_message`,
 `read_messages`, `create_thread` (see [DESIGN.md §15](docs/DESIGN.md#15-mcp-transport-k-002--the-agent-front-door)).

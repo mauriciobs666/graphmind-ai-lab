@@ -417,7 +417,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (57 tests). M1 chat core is code-complete.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (68 tests). M1 chat core is code-complete.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -580,7 +580,13 @@ app.mount("/mcp", mcp_app)                                # agents connect at /m
 > Streamable-HTTP session manager is never started (requests 500 with "task group not
 > initialized"). On this `mcp` build the lifespan is `mcp_app.router.lifespan_context`, and the
 > handler's own path is set to `/` (`mcp.settings.streamable_http_path = "/"`) so mounting under
-> `/mcp` yields a clean `/mcp` endpoint rather than `/mcp/mcp`.
+> `/mcp` yields a clean `/mcp` endpoint rather than `/mcp/mcp`. The app's lifespan also runs
+> `services.ensure_actor()` so the configured actor node exists before the first write (the §4
+> write paths anchor on the author node — QUERIES.md §4 zero-rows note).
+>
+> **Trailing-slash gotcha (QA DEF-1, fixed):** Starlette's Mount serves the sub-app only under
+> `/mcp/`; a bare `POST /mcp` was 405 and MCP clients don't auto-append the slash. `create_app`
+> adds an ASGI path-alias middleware rewriting `/mcp` → `/mcp/` so both spellings work.
 
 ### 15.2 Tools → service → query
 
@@ -593,8 +599,11 @@ app.mount("/mcp", mcp_app)                                # agents connect at /m
 - **Actor identity (Q#1):** MCP ignores any client-supplied `frm`; every call is attributed to the
   `get_context()` actor (§14.3). M1's actor is the single configured `User` (role `user`).
 - **`read_messages` is RW when it advances a cursor.** Explicit `since` → pure read; otherwise the
-  per-thread cursor is read and (unless `since` given) advanced to the server clock. Room-wide reads
-  (no `re`) default `since` to epoch 0 and never advance (no room cursor in M1, Q#3).
+  per-thread cursor is read and (unless `since` given) advanced to the newest `createdAt` actually
+  delivered — never the server clock, which would permanently skip rows a `limit` truncated (an
+  empty page advances nothing). Rows are chronological with reader-mentions carried by the
+  `isMention` flag (see `QUERIES.md` §9 ordering note). Room-wide reads (no `re`) default `since`
+  to epoch 0 and never advance (no room cursor in M1, Q#3).
 - **REST mention parity:** `POST /threads/{tid}/messages` also accepts an optional `mentions[]`.
 
 ### 15.3 Client connection contract

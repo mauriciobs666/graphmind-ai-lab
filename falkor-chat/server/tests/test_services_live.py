@@ -51,7 +51,25 @@ def test_mention_prioritised_and_validated_live(repo):
     svc.post_message(CTX, thread_id="t1", text="plain")
     svc.post_message(CTX, thread_id="t1", text="hey bob", mentions=["u2"])
 
-    # Bob reads from epoch: the message mentioning him sorts first
+    # Bob reads from epoch: chronological order, his mention flagged
     rows = svc.read_messages(ctx_bob, thread_id="t1", since=0, advance=False)
-    assert rows[0]["text"] == "hey bob"
-    assert rows[0]["isMention"] is True
+    assert [r["text"] for r in rows] == ["plain", "hey bob"]
+    assert [r["isMention"] for r in rows] == [False, True]
+
+
+def test_cursor_pagination_is_lossless_under_limit(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _svc(repo, ids=["c1", "t1", "m1", "m2", "m3"])
+
+    svc.create_channel(CTX, name="general")
+    svc.create_thread(CTX, channel_id="c1", title="hi")
+    for text in ("one", "two", "three"):
+        svc.post_message(CTX, thread_id="t1", text=text)
+
+    # page 1: the two earliest; the cursor must advance only to what was delivered
+    page1 = svc.read_messages(CTX, thread_id="t1", limit=2, advance=True)
+    assert [r["text"] for r in page1] == ["one", "two"]
+
+    # page 2: the truncated remainder — not lost to a clock-advanced cursor
+    page2 = svc.read_messages(CTX, thread_id="t1", limit=2, advance=True)
+    assert [r["text"] for r in page2] == ["three"]

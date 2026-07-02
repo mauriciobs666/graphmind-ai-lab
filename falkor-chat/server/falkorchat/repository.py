@@ -98,9 +98,6 @@ class Repository:
         # NOTE (live gotcha): `exists((t)-[:HEAD]->())` returns true even when no
         # HEAD edge exists on this build; `count{ }` isn't supported. An
         # OPTIONAL MATCH + `IS NOT NULL` is the reliable existence check here.
-        # NOTE (live gotcha): `exists((t)-[:HEAD]->())` returns true even when no
-        # HEAD edge exists on this build; `count{ }` isn't supported. An
-        # OPTIONAL MATCH + `IS NOT NULL` is the reliable existence check here.
         res = self._graph(ws).ro_query(
             "MATCH (t:Thread {threadId: $threadId}) "
             "OPTIONAL MATCH (t)-[:HEAD]->(h) "
@@ -150,6 +147,21 @@ class Repository:
         "RETURN m"
     )
 
+    @staticmethod
+    def _assert_written(res, *, thread_id: str, author_id: str) -> None:
+        """Fail loudly when a §4 write query matched nothing.
+
+        The write anchors on MATCH (thread / author / TAIL); if any anchor is
+        missing the whole query no-ops with zero rows — silent message loss.
+        The service validates first, so reaching this means a broken invariant
+        (or a lost race on the thread pointers).
+        """
+        if not res.result_set:
+            raise RuntimeError(
+                "message write was a no-op — thread, author, or TAIL not found "
+                f"(thread={thread_id!r}, author={author_id!r})"
+            )
+
     def post_first_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
         text: str, role: str, created_at: int, mentions: list[str] | None = None,
@@ -158,7 +170,7 @@ class Repository:
 
         Mentions ride inside this single GRAPH.QUERY (atomicity rule).
         """
-        self._graph(ws).query(
+        res = self._graph(ws).query(
             "MATCH (t:Thread {threadId: $threadId}) "
             "MATCH (author {userId: $authorId}) "
             "MERGE (m:Message {msgId: $msgId}) "
@@ -173,6 +185,7 @@ class Repository:
                 "mentions": list(mentions or []),
             },
         )
+        self._assert_written(res, thread_id=thread_id, author_id=author_id)
 
     def post_subsequent_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
@@ -182,7 +195,7 @@ class Repository:
 
         Mentions ride inside this single GRAPH.QUERY (atomicity rule).
         """
-        self._graph(ws).query(
+        res = self._graph(ws).query(
             "MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message) "
             "MATCH (author {userId: $authorId}) "
             "MERGE (m:Message {msgId: $msgId}) "
@@ -198,6 +211,7 @@ class Repository:
                 "mentions": list(mentions or []),
             },
         )
+        self._assert_written(res, thread_id=thread_id, author_id=author_id)
 
     def read_thread(self, ws: str, *, thread_id: str) -> list[dict[str, Any]]:
         """Read a full thread in order. QUERIES.md §4."""
@@ -255,7 +269,13 @@ class Repository:
     def read_thread_since(
         self, ws: str, *, thread_id: str, me_id: str, since: int, limit: int = 50
     ) -> list[dict[str, Any]]:
-        """Thread-scoped since-read; reader-mentions flagged & sorted first. §9.1."""
+        """Thread-scoped since-read; chronological, reader-mentions flagged. §9.1.
+
+        Chronological order is the cursor-pagination invariant: a truncated
+        page must be the earliest rows so advancing the cursor to the last
+        delivered `createdAt` never skips anything (mention-first sorting +
+        LIMIT loses messages). `isMention` stays a flag for the client.
+        """
         res = self._graph(ws).ro_query(
             "MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message) "
             "MATCH (first)-[:NEXT*0..]->(m:Message) "
@@ -267,7 +287,7 @@ class Repository:
             "RETURN m.msgId, m.text, m.role, m.createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
             "labels(author) AS authorType, isMention "
-            "ORDER BY isMention DESC, m.createdAt "
+            "ORDER BY m.createdAt "
             "LIMIT $limit",
             {"threadId": thread_id, "meId": me_id, "since": since, "limit": limit},
         )
@@ -278,7 +298,8 @@ class Repository:
     ) -> list[dict[str, Any]]:
         """Workspace-wide since-read across all threads. §9.2.
 
-        Anchors on the `Message.createdAt` index. Reader-mentions flagged first.
+        Anchors on the `Message.createdAt` index. Chronological (see
+        `read_thread_since`); reader-mentions flagged via `isMention`.
         """
         res = self._graph(ws).ro_query(
             "MATCH (m:Message) WHERE m.createdAt > $since "
@@ -289,7 +310,7 @@ class Repository:
             "RETURN m.msgId, m.text, m.role, m.createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
             "labels(author) AS authorType, isMention "
-            "ORDER BY isMention DESC, m.createdAt "
+            "ORDER BY m.createdAt "
             "LIMIT $limit",
             {"meId": me_id, "since": since, "limit": limit},
         )
@@ -297,11 +318,13 @@ class Repository:
 
     def advance_cursor(
         self, ws: str, *, me_id: str, thread_id: str, cursor_id: str, now: int
-    ) -> int:
+    ) -> int | None:
         """MERGE/advance a read-cursor monotonically; returns lastReadAt. §9.3.
 
         The CASE guard makes advancing never move the cursor backward
-        (live-verified on this build).
+        (live-verified on this build). When the member node doesn't exist the
+        anchor MATCH yields no rows — the advance is a no-op returning None
+        (never an IndexError).
         """
         res = self._graph(ws).query(
             "MATCH (mem) WHERE mem.userId = $meId OR mem.agentId = $meId "
@@ -312,7 +335,7 @@ class Repository:
             "RETURN rc.lastReadAt",
             {"meId": me_id, "threadId": thread_id, "cursorId": cursor_id, "now": now},
         )
-        return res.result_set[0][0]
+        return res.result_set[0][0] if res.result_set else None
 
     def get_cursor(self, ws: str, *, cursor_id: str) -> int | None:
         """Read a cursor's lastReadAt, or None if it doesn't exist yet. §9.4."""

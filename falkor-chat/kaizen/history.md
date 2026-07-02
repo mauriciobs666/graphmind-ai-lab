@@ -2,6 +2,44 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-02 — K-004: M1 hardening — five live-verified defects + QA DEF-1 fixed
+
+- **What:** a full-project review probed the M1 server live (isolated `ws:probe` graph) and
+  confirmed five defects the 57-test suite missed — every failing scenario involved state the
+  fixtures always seeded (the actor) or parameter combinations never tested (`limit` + cursor).
+  All fixed TDD (11 red tests → green):
+  1. **Silent no-op writes (worst).** The §4 write queries anchor on `MATCH (author {userId:…})`;
+     with the author node absent the whole write no-ops and REST still returned **201 with a fresh
+     `msgId`** — on a fresh tenant (nothing ensures `u1`) every send "succeeded" and every thread
+     stayed empty. Fix at three layers: `repository._assert_written` raises on zero-row writes;
+     `services.post_message` validates the actor resolves to a member (`UnknownActorError`, one
+     shared membership lookup with mentions); `create_app`'s lifespan runs `services.ensure_actor()`
+     (startup, not import — building the app still needs no live FalkorDB).
+  2. **Cursor-vs-limit message loss.** `read_messages` advanced the cursor to the *server clock*,
+     permanently skipping rows a `limit` truncated (probe: 5 posted, `limit=2` read → next read 0).
+     Fix: since-reads (§9.1/§9.2) are now **chronological** — the truncated page is a contiguous
+     prefix — with reader-mentions carried by the `isMention` flag instead of the old
+     mention-first sort (which + `LIMIT` is what made pagination lossy); the cursor advances to the
+     newest **delivered** `createdAt` (empty page → no write). Ordering change synced in
+     `QUERIES.md` §9 (+ rationale note), `test_queries.sh` (1:1 assertion swap), DESIGN §15.2.
+  3. **`advance_cursor` IndexError** when the member node didn't exist (empty result indexed) —
+     now a no-op returning `None`; noted in QUERIES.md §9.3.
+  4. **QA DEF-1 (from the 2026-07-01 report) closed.** `POST /mcp` 405'd (Starlette Mount serves
+     only `/mcp/`) — `create_app` adds an ASGI path-alias middleware rewriting `/mcp` → `/mcp/`;
+     regression pinned by tightening the existing app test (it had tolerated 405 via `< 500`).
+  5. **Search syntax-error 500.** RediSearch parse errors (`q='hello"x'`) surfaced as unhandled
+     500s — `services.search_messages` maps `ResponseError` → `InvalidSearchQueryError` → 400.
+  - Also: removed a duplicated gotcha comment in `repository.thread_has_head`; fixed the stale
+    `exists((t)-[:HEAD]->())` advice in QUERIES.md §4 (contradicted the AGENTS.md live gotcha).
+- **Verified:** server suite **68 passed** (was 57; +11); query suite **92/92** (assertion count
+  unchanged — ordering assertions swapped 1:1); live probe script re-run: all five defects gone.
+- **Docs (same change):** `QUERIES.md` §4 zero-rows + HEAD-check notes, §9 ordering rationale,
+  §9.3 no-member note; `AGENTS.md` write-path invariants (+ zero-rows, chronological-cursor
+  bullets) and test count; `README.md` counts + `/mcp` slash note; `DESIGN.md` §12/§15.
+- **Plan items:** K-004 ✅. Review findings **not** fixed here parked in `plan.md` (agent
+  authorship, `threadId` in §9.2 rows, retry idempotency + first-post race, web-UI mention
+  polish, nested-route validation, ms-tie ordering, dependency pins, lint/CI).
+
 ## 2026-07-01 — QA: functional test pass on M1 (REST + MCP)
 
 - **What:** first black-box/acceptance QA pass on the M1 server, driving the *running* process

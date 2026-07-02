@@ -11,11 +11,15 @@ import itertools
 
 import pytest
 
+from redis.exceptions import ResponseError
+
 from falkorchat.config import CallContext
 from falkorchat.services import (
     ChannelNotFoundError,
+    InvalidSearchQueryError,
     Services,
     ThreadNotFoundError,
+    UnknownActorError,
     UnknownMemberError,
 )
 
@@ -81,7 +85,13 @@ class FakeRepo:
 
     def search_messages(self, ws, *, query, limit=50):
         self.calls.append(("search_messages", query, limit))
+        if isinstance(self.since_rows, Exception):
+            raise self.since_rows
         return self.since_rows
+
+    def ensure_user(self, ws, *, user_id, display_name=None, email=None):
+        self.members.add(user_id)
+        self.calls.append(("ensure_user", ws, user_id))
 
 
 def make_service(repo, *, now=1000):
@@ -135,9 +145,30 @@ def test_post_message_missing_thread_errors():
         svc.post_message(CTX, thread_id="nope", text="hi")
 
 
+def test_post_message_unknown_actor_errors_instead_of_silent_noop():
+    repo = FakeRepo()
+    repo.threads.add("t1")  # thread exists but the actor u1 is not a member
+    svc = make_service(repo)
+
+    with pytest.raises(UnknownActorError):
+        svc.post_message(CTX, thread_id="t1", text="hi")
+
+    assert not any(c[0].startswith("post_") for c in repo.calls)
+
+
+def test_ensure_actor_projects_context_actor_as_user():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    svc.ensure_actor(CTX)
+
+    assert ("ensure_user", "test", "u1") in repo.calls
+
+
 def test_post_message_first_uses_first_write_path():
     repo = FakeRepo()
     repo.threads.add("t1")  # exists, no head yet
+    repo.members.add("u1")
     svc = make_service(repo, now=1000)
 
     msg = svc.post_message(CTX, thread_id="t1", text="hello")
@@ -153,6 +184,7 @@ def test_post_message_subsequent_uses_append_path():
     repo = FakeRepo()
     repo.threads.add("t1")
     repo.heads.add("t1")  # already has a head
+    repo.members.add("u1")
     svc = make_service(repo)
 
     svc.post_message(CTX, thread_id="t1", text="second")
@@ -163,7 +195,7 @@ def test_post_message_subsequent_uses_append_path():
 def test_post_message_rejects_unknown_mention():
     repo = FakeRepo()
     repo.threads.add("t1")
-    repo.members.add("u2")
+    repo.members.update({"u1", "u2"})
     svc = make_service(repo)
 
     with pytest.raises(UnknownMemberError):
@@ -176,7 +208,7 @@ def test_post_message_rejects_unknown_mention():
 def test_post_message_dedups_mentions_before_write():
     repo = FakeRepo()
     repo.threads.add("t1")
-    repo.members.update({"u2"})
+    repo.members.update({"u1", "u2"})
     svc = make_service(repo)
 
     msg = svc.post_message(CTX, thread_id="t1", text="hi", mentions=["u2", "u2"])
@@ -199,15 +231,31 @@ def test_read_messages_explicit_since_is_pure_read_no_advance():
     assert not any(c[0] == "advance_cursor" for c in repo.calls)
 
 
-def test_read_messages_thread_uses_cursor_and_advances():
+def test_read_messages_thread_uses_cursor_and_advances_to_last_returned():
     repo = FakeRepo()
     repo.cursors["u1:t1"] = 200
+    repo.since_rows = [
+        {"msgId": "m1", "createdAt": 300},
+        {"msgId": "m2", "createdAt": 450},
+    ]
     svc = make_service(repo, now=1000)
 
     svc.read_messages(CTX, thread_id="t1", advance=True)
 
     assert ("read_thread_since", "t1", "u1", 200, 50) in repo.calls
-    assert ("advance_cursor", "u1:t1", 1000) in repo.calls
+    # cursor moves to the newest row actually delivered — NOT the server clock,
+    # which would skip rows a `limit` truncated (and race concurrent posts)
+    assert ("advance_cursor", "u1:t1", 450) in repo.calls
+
+
+def test_read_messages_empty_page_does_not_advance():
+    repo = FakeRepo()
+    repo.cursors["u1:t1"] = 200
+    svc = make_service(repo, now=1000)
+
+    svc.read_messages(CTX, thread_id="t1", advance=True)  # since_rows is []
+
+    assert not any(c[0] == "advance_cursor" for c in repo.calls)
 
 
 def test_read_messages_no_cursor_defaults_since_zero():
@@ -242,3 +290,12 @@ def test_search_messages_passes_query_and_limit_through():
 
     assert ("search_messages", "hello", 10) in repo.calls
     assert hits == repo.since_rows
+
+
+def test_search_messages_maps_syntax_error_to_service_error():
+    repo = FakeRepo()
+    repo.since_rows = ResponseError("RediSearch: Syntax error at offset 6")
+    svc = make_service(repo)
+
+    with pytest.raises(InvalidSearchQueryError):
+        svc.search_messages(CTX, query='hello"unbalanced')

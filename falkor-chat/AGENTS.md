@@ -97,6 +97,15 @@ duplication is what lets the copies drift. The invariants that govern those quer
   **distinct from** `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) — do not conflate them.
   `$mentions = []` is a verified no-op.
 - **Every `MERGE` is backed by a uniqueness constraint** (`Message.msgId`; `ReadCursor.cursorId`).
+- **A write that returns zero rows wrote nothing.** The §4 queries anchor on `MATCH` (thread,
+  author, TAIL); a missing anchor no-ops the whole query with no error. The repository raises on
+  an empty result, the service validates the author is a known member before writing, and
+  `create_app`'s lifespan runs `services.ensure_actor()` so the configured actor node exists
+  before the first write.
+- **Since-reads (§9.1/§9.2) are chronological; cursors advance to what was delivered.** Reader
+  mentions are carried by the `isMention` flag, never a mention-first sort — a resorted page +
+  `LIMIT` breaks the contiguous-prefix invariant and the cursor (advanced to the newest *returned*
+  `createdAt`, never the server clock) would skip messages permanently.
 
 ---
 
@@ -119,7 +128,7 @@ The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) l
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # 57 passed (needs FalkorDB up)
+.venv/bin/python -m pytest -q                                # 68 passed (needs FalkorDB up)
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 

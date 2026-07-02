@@ -5,6 +5,8 @@ Each test wraps one repository method 1:1 with a verified `QUERIES.md` query.
 
 from __future__ import annotations
 
+import pytest
+
 
 # ── §3 Channels ────────────────────────────────────────────────────────────────
 
@@ -99,6 +101,34 @@ def test_first_message_sets_head_and_updates_thread(repo):
     assert repo.thread_has_head("test", thread_id="t1") is True
 
 
+def test_post_first_message_unknown_author_raises_not_silent_noop(repo):
+    _seed_thread(repo, with_author=None)  # thread exists, author does not
+
+    with pytest.raises(RuntimeError):
+        repo.post_first_message(
+            "test", thread_id="t1", msg_id="m1", author_id="ghost",
+            text="hello", role="user", created_at=120,
+        )
+
+    assert repo.read_thread("test", thread_id="t1") == []
+
+
+def test_post_subsequent_message_unknown_author_raises_not_silent_noop(repo):
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="one", role="user", created_at=120,
+    )
+
+    with pytest.raises(RuntimeError):
+        repo.post_subsequent_message(
+            "test", thread_id="t1", msg_id="m2", author_id="ghost",
+            text="two", role="user", created_at=130,
+        )
+
+    assert [m["msgId"] for m in repo.read_thread("test", thread_id="t1")] == ["m1"]
+
+
 def test_subsequent_message_appends_in_order(repo):
     _seed_thread(repo)
     repo.post_first_message(
@@ -146,7 +176,7 @@ def test_read_thread_since_no_mention_is_false(repo):
     assert rows[0]["isMention"] is False
 
 
-def test_read_thread_since_orders_mentions_first(repo):
+def test_read_thread_since_is_chronological_with_mention_flag(repo):
     _seed_thread(repo)
     repo.ensure_user("test", user_id="u2", display_name="Bob")
     repo.post_first_message(
@@ -160,8 +190,33 @@ def test_read_thread_since_orders_mentions_first(repo):
 
     rows = repo.read_thread_since("test", thread_id="t1", me_id="u2", since=0)
 
-    # mention sorts first despite being chronologically later
-    assert [r["msgId"] for r in rows] == ["m2", "m1"]
+    # chronological order — the cursor-pagination invariant; the mention is
+    # flagged, not resorted (a mention-first sort + LIMIT loses messages)
+    assert [r["msgId"] for r in rows] == ["m1", "m2"]
+    assert [r["isMention"] for r in rows] == [False, True]
+
+
+def test_read_thread_since_limit_returns_earliest_page(repo):
+    _seed_thread(repo)
+    repo.ensure_user("test", user_id="u2", display_name="Bob")
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="one", role="user", created_at=120,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m2", author_id="u1",
+        text="two", role="user", created_at=130,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="m3", author_id="u1",
+        text="mentions bob", role="user", created_at=140, mentions=["u2"],
+    )
+
+    rows = repo.read_thread_since("test", thread_id="t1", me_id="u2", since=0, limit=2)
+
+    # a truncated page must be the earliest messages so the caller can resume
+    # from the last returned createdAt without skipping anything
+    assert [r["msgId"] for r in rows] == ["m1", "m2"]
 
 
 def test_read_thread_since_filters_by_since(repo):
@@ -231,6 +286,16 @@ def test_advance_cursor_then_get(repo):
     repo.advance_cursor("test", me_id="u1", thread_id="t1", cursor_id="u1:t1", now=300)
 
     assert repo.get_cursor("test", cursor_id="u1:t1") == 300
+
+
+def test_advance_cursor_unknown_member_is_noop_returning_none(repo):
+    # nothing seeded — the member does not exist; must not raise (was IndexError)
+    assert (
+        repo.advance_cursor("test", me_id="ghost", thread_id="t1",
+                            cursor_id="ghost:t1", now=300)
+        is None
+    )
+    assert repo.get_cursor("test", cursor_id="ghost:t1") is None
 
 
 def test_advance_cursor_is_monotonic(repo):

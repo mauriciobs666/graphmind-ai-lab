@@ -134,9 +134,16 @@ RETURN m
 ```
 
 > **Note for developer:** call this only when creating the first message.
-> Check `exists((t)-[:HEAD]->())` beforehand, or use separate code paths for
-> thread creation vs. reply. Two separate write paths are cleaner than a
-> conditional MERGE for HEAD/TAIL.
+> Check for a HEAD beforehand with `OPTIONAL MATCH (t)-[:HEAD]->(h) RETURN h IS
+> NOT NULL` — **not** `exists((t)-[:HEAD]->())`, which returns `true` even when
+> the edge is absent on this build (see AGENTS.md live-verified facts). Two
+> separate write paths are cleaner than a conditional MERGE for HEAD/TAIL.
+>
+> **Zero rows back = nothing written.** Both write paths anchor on `MATCH`
+> (thread, author, TAIL); if any anchor misses, the whole query no-ops and
+> returns no rows while the transport still reports success. Callers must treat
+> an empty result as an error (the repository raises), and the service layer
+> validates the author exists before writing.
 
 ### Post a subsequent message in a thread
 *Use for every message after the first.*
@@ -335,7 +342,15 @@ GRAPH.SLOWLOG ws:acme
 Per-agent read state for the MCP `read_messages` tool. A `ReadCursor` node holds a per-*(member,
 thread)* `lastReadAt` timestamp; `read_messages` returns messages with `createdAt > since`, where
 `since` is either supplied explicitly (pure read) or taken from the member's cursor. Mentions of
-the reader are flagged and sorted first.
+the reader are **flagged** (`isMention`), and results are **chronological**.
+
+> **Ordering is the pagination invariant.** Since-reads must return the *earliest* messages first
+> so that a `LIMIT`-truncated page is a contiguous prefix and the cursor can advance to the last
+> delivered `createdAt` without skipping anything. The original mention-first sort
+> (`ORDER BY isMention DESC, …`) broke this: with more unread rows than `limit`, a late mention
+> crowded out earlier messages that the cursor then jumped past — silent message loss. Clients
+> that want mentions surfaced first should sort by the `isMention` flag locally. Likewise the
+> service advances the cursor to the newest **returned** `createdAt`, never the server clock.
 
 Schema (bootstrap): `ReadCursor.cursorId` **range index + uniqueness constraint** (index before
 constraint). `cursorId = "{memberId}:{threadId}"` — deterministic, so `MERGE` is safe and unique.
@@ -359,11 +374,11 @@ WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
        labels(author) AS authorType, isMention
-ORDER BY isMention DESC, m.createdAt
+ORDER BY m.createdAt
 LIMIT $limit
 ```
-*Anchored on the `Thread.threadId` index; walks the thread's `NEXT` chain. Mentions of the reader
-sort first (`isMention DESC`), then chronological.*
+*Anchored on the `Thread.threadId` index; walks the thread's `NEXT` chain. Chronological (see the
+§9 ordering note); mentions of the reader carry `isMention = true`.*
 
 ### 9.2 Read workspace-wide since a timestamp (room-wide, no thread)
 ```cypher
@@ -376,7 +391,7 @@ WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
        labels(author) AS authorType, isMention
-ORDER BY isMention DESC, m.createdAt
+ORDER BY m.createdAt
 LIMIT $limit
 ```
 *`GRAPH.PROFILE`-confirmed `Node By Index Scan | (m:Message)` on `Message.createdAt` (not a label
@@ -395,8 +410,11 @@ RETURN rc.lastReadAt
 ```
 *`cursorId = "{meId}:{threadId}"`; `MERGE` backed by the `ReadCursor.cursorId` uniqueness
 constraint. The `CASE`/`coalesce` monotonic guard is **live-verified** on this build (advance 300 →
-stale 200 stays 300 → 400). The service owns `$now` (server clock, never client-supplied) and may
-short-circuit before writing. This is a write — cannot route to a replica; use only when
+stale 200 stays 300 → 400). The service owns `$now` — the newest `createdAt` it actually delivered,
+never the server clock and never client-supplied — and may short-circuit before writing (an empty
+page advances nothing). When the member node doesn't exist the anchor `MATCH` yields no rows and
+the query is a **no-op returning no row** — callers must not index into an empty result (the
+repository returns `None`). This is a write — cannot route to a replica; use only when
 `advance=true`.*
 
 > **Member-match caveat here.** §9.3's opening `MATCH (mem) WHERE mem.userId=$meId OR mem.agentId

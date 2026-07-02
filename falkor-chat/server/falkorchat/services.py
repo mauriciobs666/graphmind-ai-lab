@@ -17,6 +17,8 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from redis.exceptions import ResponseError
+
 from .config import CallContext
 from .repository import Repository
 
@@ -38,6 +40,19 @@ class ThreadNotFoundError(ServiceError):
 
 class UnknownMemberError(ServiceError):
     """Raised when a mention does not resolve to a known member."""
+
+
+class UnknownActorError(ServiceError):
+    """Raised when the context actor does not resolve to a known member.
+
+    Guards the silent-no-op failure mode: the §4 write queries anchor on
+    `MATCH (author …)`, and a missing author makes the whole write a no-op
+    while the transport would still report success.
+    """
+
+
+class InvalidSearchQueryError(ServiceError):
+    """Raised when the full-text query is rejected by RediSearch syntax."""
 
 
 def _default_id() -> str:
@@ -65,6 +80,17 @@ class Services:
         self._repo = repo
         self._clock = clock
         self._id = id_gen
+
+    # ── members ─────────────────────────────────────────────────────────────────
+
+    def ensure_actor(self, ctx: CallContext) -> None:
+        """Project the context actor into the workspace as a `User` (idempotent).
+
+        Called at app startup so the M1 hardcoded actor exists before the first
+        write — the §4 write paths anchor on the author node. The actor is a
+        `User` in M1; agent actors arrive with real per-client auth.
+        """
+        self._repo.ensure_user(ctx.ws, user_id=ctx.actor)
 
     # ── channels ────────────────────────────────────────────────────────────────
 
@@ -118,11 +144,15 @@ class Services:
             raise ThreadNotFoundError(thread_id)
 
         wanted = _dedup(list(mentions or []))
-        if wanted:
-            known = self._repo.existing_members(ctx.ws, ids=wanted)
-            unknown = [m for m in wanted if m not in known]
-            if unknown:
-                raise UnknownMemberError(unknown)
+        # One membership lookup covers the author and every mention. The author
+        # check is load-bearing: the §4 write anchors on the author node, and a
+        # missing author would silently no-op the entire write.
+        known = self._repo.existing_members(ctx.ws, ids=[ctx.actor, *wanted])
+        if ctx.actor not in known:
+            raise UnknownActorError(ctx.actor)
+        unknown = [m for m in wanted if m not in known]
+        if unknown:
+            raise UnknownMemberError(unknown)
 
         msg_id = self._id()
         now = self._clock()
@@ -150,7 +180,9 @@ class Services:
           * explicit ``since`` → pure read; the cursor is never touched.
           * no ``since`` + ``thread_id`` → read from the member's per-thread
             cursor (or epoch 0 if none), then, when ``advance`` is set, move the
-            cursor forward to the server clock (a write).
+            cursor forward to the newest ``createdAt`` actually delivered (a
+            write). Never the server clock — that would permanently skip rows a
+            ``limit`` truncated. An empty page advances nothing.
           * no ``since`` + no ``thread_id`` → room-wide read from epoch 0. There
             is no room-wide cursor in M1, so nothing is advanced.
         """
@@ -165,10 +197,11 @@ class Services:
                 ctx.ws, thread_id=thread_id, me_id=ctx.actor,
                 since=eff_since, limit=limit,
             )
-            if advance and not explicit_since:
+            if advance and not explicit_since and rows:
                 self._repo.advance_cursor(
                     ctx.ws, me_id=ctx.actor, thread_id=thread_id,
-                    cursor_id=cursor_id, now=self._clock(),
+                    cursor_id=cursor_id,
+                    now=max(r["createdAt"] for r in rows),
                 )
             return rows
 
@@ -181,8 +214,15 @@ class Services:
     def search_messages(
         self, ctx: CallContext, *, query: str, limit: int = 50
     ) -> list[dict[str, Any]]:
-        """Workspace-wide full-text keyword search. QUERIES.md §5."""
-        return self._repo.search_messages(ctx.ws, query=query, limit=limit)
+        """Workspace-wide full-text keyword search. QUERIES.md §5.
+
+        RediSearch parses the query string; its syntax errors (unbalanced
+        quotes, stray operators) are a caller problem, not a server fault.
+        """
+        try:
+            return self._repo.search_messages(ctx.ws, query=query, limit=limit)
+        except ResponseError as exc:
+            raise InvalidSearchQueryError(str(exc)) from exc
 
     # ── reads (thin passthroughs) ───────────────────────────────────────────────
 
