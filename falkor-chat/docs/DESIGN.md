@@ -417,7 +417,7 @@ fulltext     ≈ RediSearch index over Message.text
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (68 tests). M1 chat core is code-complete.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (70 tests). M1 chat core is code-complete.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -506,7 +506,7 @@ changes** — everything below is untouched.
 | `GET /channels/{cid}/threads` | `list_threads` | §3 list recent threads in a channel |
 | `POST /threads/{tid}/messages` | `post_message` | §4 first message / subsequent message |
 | `GET /threads/{tid}/messages[?after=]` | `read_thread` | §4 read full thread / read thread window |
-| `GET /threads/{tid}/messages/{mid}` | `get_message` | §4 get a single message |
+| `GET /messages/{mid}` | `get_message` | §4 get a single message |
 | `GET /search?q=` | `search_messages` | §5 full-text keyword search |
 
 The **two append variants** (§5.3) stay hidden inside `post_message`: the service checks whether
@@ -595,6 +595,8 @@ app.mount("/mcp", mcp_app)                                # agents connect at /m
 | `send_message(body, re, mentions=[], frm=None)` | `post_message` | §4 first/subsequent (+ mentions) |
 | `read_messages(re?, since?, limit, advance=True)` | `read_messages` | §9.1 (thread) / §9.2 (room-wide) |
 | `create_thread(channel_id, title)` | `create_thread` | §3 create a thread |
+| `create_channel(name)` | `create_channel` | §3 create a channel |
+| `search_messages(query, limit=50)` | `search_messages` | §5 full-text keyword search |
 
 - **Actor identity (Q#1):** MCP ignores any client-supplied `frm`; every call is attributed to the
   `get_context()` actor (§14.3). M1's actor is the single configured `User` (role `user`).

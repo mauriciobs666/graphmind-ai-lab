@@ -85,3 +85,21 @@ def create_thread(channel_id: str, title: str) -> dict[str, Any]:
     """Create a thread in an existing channel so an agent is self-sufficient."""
     ctx = _get_context()
     return _svc().create_thread(ctx, channel_id=channel_id, title=title)
+
+
+@mcp.tool()
+def search_messages(query: str, limit: int = 50) -> list[dict[str, Any]]:
+    """Full-text keyword search over this workspace's messages (QUERIES.md §5).
+
+    Returns matches newest-relevance first (RediSearch score). Invalid query
+    syntax (unbalanced quotes, stray operators) surfaces as a tool error.
+    """
+    ctx = _get_context()
+    return _svc().search_messages(ctx, query=query, limit=limit)
+
+
+@mcp.tool()
+def create_channel(name: str) -> dict[str, Any]:
+    """Create a channel so an agent is self-sufficient (can set up its own space)."""
+    ctx = _get_context()
+    return _svc().create_channel(ctx, name=name)

@@ -67,7 +67,8 @@ def test_post_and_read_messages(client):
     msgs = client.get(f"/threads/{tid}/messages").json()
     assert [m["text"] for m in msgs] == ["hello"]
 
-    one = client.get(f"/threads/{tid}/messages/{mid}")
+    # msgId is workspace-global; the flat lookup resolves it without a thread scope.
+    one = client.get(f"/messages/{mid}")
     assert one.status_code == 200
     assert one.json()["text"] == "hello"
 
@@ -98,9 +99,7 @@ def test_post_to_missing_thread_404(client):
 
 
 def test_get_missing_message_404(client):
-    cid = _new_channel(client)
-    tid = _new_thread(client, cid)
-    r = client.get(f"/threads/{tid}/messages/nope")
+    r = client.get("/messages/nope")
     assert r.status_code == 404
 
 

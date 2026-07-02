@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-02 — K-005: M1-final cleanup
+
+- **What:** four small parking-lot items from the 2026-07-02 review, resolved test-first. All
+  server changes are **adapter-only** (`mcp.py`, `api.py`) — no `repository.py`, `services.py`,
+  `QUERIES.md`, or `test_queries.sh` touched, so the 92-assertion suite stays a pure regression
+  guard.
+  1. **`search_messages` MCP tool** — the existing `services.search_messages` (REST `GET /search`,
+     `QUERIES.md` §5) is now exposed as a 4th MCP tool so agents can keyword-search too. Thin
+     adapter; roundtrip test added.
+  2. **`create_channel` MCP tool** (Q#4) — 5th tool; agents can now set up their own space
+     (channel → thread → post → read) without any REST seeding. Discovery test asserts all 5
+     names; full-flow roundtrip added.
+  4. **Flat `GET /messages/{msg_id}` route** — replaced the nested
+     `GET /threads/{tid}/messages/{mid}`, which ignored `tid` and let a message resolve under any
+     thread's URL (a false contract). `Message.msgId` is workspace-unique and `Message` has no
+     `threadId`, so resolution is workspace-global by design; the flat route states that truth.
+- **Two fork decisions (spec §0):**
+  - **Fork 3(a) — dead `isMention` highlight:** *remove it from the JS* rather than make §4 return
+    a per-reader `isMention`. `isMention` is a since-read (§9) concept computed only by
+    `read_thread_since`/`read_ws_since` (which take `me_id`); the reader-agnostic §4 thread read
+    the web UI uses never sends it, so the highlight was dead-falsy. Making §4 reader-aware would
+    mutate the locked §4 query, add a per-reader traversal to the hot thread-read path (RAM rule
+    6), and force a 92-suite assertion change — not worth restoring a cosmetic highlight on a
+    request/response M1 UI. Revisit in M2 with real-time since-reads.
+  - **Fork 4 — nested single-message route:** *drop the thread-scoped spelling* for a flat
+    `GET /messages/{mid}`. Validating thread membership would need an O(thread-length) HEAD/NEXT
+    traversal on a route the web UI does not use, purely to keep a URL shape; the O(1) fix
+    (denormalised `Message.threadId`) is a parked schema change (RAM rule 6). Leaving it as-is
+    ships a wrong-thread-resolution trap.
+- **Verified:** server suite **70 passed** (was 68; +1 search roundtrip, +1 create_channel flow;
+  discovery + 2 api tests edited net 0); query suite **92/92** (untouched — regression guard).
+- **Docs (same change):** `DESIGN.md` §15.2 tools table (+2 rows), §14.4 REST surface
+  (`/messages/{mid}`), §14 test-count 68→70; `README.md` MCP tools list (+`create_channel`,
+  +`search_messages`) and counts 68→70; `plan.md` pruned (4 completed items removed, Last
+  reviewed bumped); this entry.
+- **Batch B (delivered separately by another implementer):** the two `web/app.js` items —
+  removing the dead `isMention` class toggle in `renderMessages`, and making the composer submit
+  handler retry a mention-rejected send (`400 UnknownMemberError`) as plain text with a
+  non-blocking notice so a typo'd `@handle` no longer drops the whole message. No test harness for
+  the web JS; verified manually.
+
 ## 2026-07-02 — K-004: M1 hardening — five live-verified defects + QA DEF-1 fixed
 
 - **What:** a full-project review probed the M1 server live (isolated `ws:probe` graph) and

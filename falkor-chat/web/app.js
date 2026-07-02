@@ -14,11 +14,17 @@ async function api(path, opts) {
   });
   if (!res.ok) {
     let detail = res.statusText;
+    let code = null;
     try {
       const body = await res.json();
       detail = body.detail || body.error || JSON.stringify(body);
+      // ServiceError bodies carry a machine-readable class name in `error`
+      // (e.g. "UnknownMemberError"); `detail` is human text and varies.
+      code = body.error || null;
     } catch (_) { /* non-JSON error body */ }
-    throw new Error(`${res.status}: ${detail}`);
+    const err = new Error(`${res.status}: ${detail}`);
+    err.code = code;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -104,7 +110,9 @@ function renderMessages(msgs) {
   }
   for (const m of msgs) {
     const el = document.createElement("div");
-    el.className = "msg" + (m.isMention ? " mention" : "");
+    // Reader @-mention highlighting is a since-read (§9 isMention flag) concern,
+    // not exposed by the §4 thread read this view uses. Wire it in M2 with real-time reads.
+    el.className = "msg";
     const who = m.displayName || m.authorId || "unknown";
     el.innerHTML = `<span class="who">${escapeHtml(who)}</span>
       <span class="meta">${fmtTime(m.createdAt)}</span>
@@ -175,14 +183,32 @@ $("composer").addEventListener("submit", (e) => {
   if (!text || !state.threadId) return;
   guard(async () => {
     const mentions = parseMentions(text);
-    await api(`/threads/${state.threadId}/messages`, {
-      method: "POST",
-      body: JSON.stringify(mentions.length ? { text, mentions } : { text }),
-    });
+    try {
+      await postMessage(text, mentions);
+    } catch (err) {
+      // The server rejects unknown members (M1 has no roster endpoint to pre-check).
+      // Don't lose the message: resend as plain text and tell the user which
+      // @-handles didn't resolve. Match on the machine-readable error code, not
+      // the message text: the 400 `detail` is the member list, not the class name.
+      if (mentions.length && err.code === "UnknownMemberError") {
+        await postMessage(text, []);
+        alert("Message sent, but these @-handles weren't recognised and were not " +
+              "linked as mentions: " + mentions.join(", "));
+      } else {
+        throw err;
+      }
+    }
     $("message-text").value = "";
     await loadMessages();
   });
 });
+
+async function postMessage(text, mentions) {
+  return api(`/threads/${state.threadId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(mentions.length ? { text, mentions } : { text }),
+  });
+}
 
 $("search-form").addEventListener("submit", (e) => {
   e.preventDefault();

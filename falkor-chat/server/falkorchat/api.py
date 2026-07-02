@@ -62,10 +62,10 @@ def build_router(services: Services) -> APIRouter:
     def read_thread(thread_id: str, ctx: CallContext = Depends(get_context)):
         return services.read_thread(ctx, thread_id=thread_id)
 
-    @router.get("/threads/{thread_id}/messages/{msg_id}")
-    def get_message(
-        thread_id: str, msg_id: str, ctx: CallContext = Depends(get_context)
-    ):
+    @router.get("/messages/{msg_id}")
+    def get_message(msg_id: str, ctx: CallContext = Depends(get_context)):
+        # msgId is workspace-unique and Message has no threadId; resolution is
+        # workspace-global by design, so the route is flat (spec §5 / fork 4).
         msg = services.get_message(ctx, msg_id=msg_id)
         if msg is None:
             raise HTTPException(status_code=404, detail="message not found")

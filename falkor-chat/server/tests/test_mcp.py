@@ -47,10 +47,51 @@ def _unwrap(result):
     return json.loads(result[0].text)
 
 
-def test_tool_discovery_lists_three_tools(repo):
+def test_tool_discovery_lists_all_tools(repo):
     _configure(repo)
     tools = asyncio.run(mcp_mod.mcp.list_tools())
-    assert {t.name for t in tools} == {"send_message", "read_messages", "create_thread"}
+    assert {t.name for t in tools} == {
+        "send_message", "read_messages", "create_thread",
+        "search_messages", "create_channel",
+    }
+
+
+def test_search_messages_tool_finds_posted_text(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo)
+    ch = svc.create_channel(TEST_CTX, name="general")
+
+    async def scenario():
+        th = _unwrap(await mcp_mod.mcp.call_tool(
+            "create_thread", {"channel_id": ch["channelId"], "title": "hi"}
+        ))
+        tid = th["threadId"]
+        await mcp_mod.mcp.call_tool("send_message", {"body": "hello world", "re": tid})
+        await mcp_mod.mcp.call_tool("send_message", {"body": "goodbye moon", "re": tid})
+        return _unwrap(await mcp_mod.mcp.call_tool(
+            "search_messages", {"query": "hello"}
+        ))
+
+    hits = asyncio.run(scenario())
+    assert [h["text"] for h in hits] == ["hello world"]
+
+
+def test_create_channel_tool_enables_full_agent_flow(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        ch = _unwrap(await mcp_mod.mcp.call_tool("create_channel", {"name": "general"}))
+        th = _unwrap(await mcp_mod.mcp.call_tool(
+            "create_thread", {"channel_id": ch["channelId"], "title": "hi"}
+        ))
+        await mcp_mod.mcp.call_tool("send_message", {"body": "hi", "re": th["threadId"]})
+        return _unwrap(await mcp_mod.mcp.call_tool(
+            "read_messages", {"re": th["threadId"], "since": 0, "advance": False}
+        ))
+
+    rows = asyncio.run(scenario())
+    assert [r["text"] for r in rows] == ["hi"]
 
 
 def test_create_thread_send_and_read_roundtrip(repo):

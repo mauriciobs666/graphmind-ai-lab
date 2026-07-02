@@ -2,18 +2,14 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-02 (K-004 done — M1 hardening: five live-verified defects fixed + DEF-1;
-> 68 server tests + query suite 92/92)
+> Last reviewed: 2026-07-02 (K-005 done — M1-final cleanup: search + create_channel MCP tools,
+> flat `GET /messages/{mid}` route, web mention polish; 70 server tests + query suite 92/92)
 
 ## Active
 
-_(none in flight — K-002, K-003, K-004 completed and logged in `kaizen/history.md`)_
+_(none in flight — K-002, K-003, K-004, K-005 completed and logged in `kaizen/history.md`)_
 
 ## Parking lot / ideas
-
-- **`search` over MCP** — expose the new `search_messages` service as a fourth MCP tool so agents
-  can keyword-search too (REST has it; MCP still lists 3 tools). Small, additive.
-- **`create_channel` over MCP** (Q#4) — deferred from K-002; agents create threads but not channels.
 
 From the 2026-07-02 full-project review (defects fixed under K-004; these remain):
 
@@ -30,11 +26,6 @@ From the 2026-07-02 full-project review (defects fixed under K-004; these remain
   live-verified), and first-vs-subsequent dispatch is a two-query check-then-write (two
   concurrent first posts → two HEADs). Needs an idempotency guard and/or single-query dispatch
   that respects the locked "two write paths" decision.
-- **Web UI mention polish** — (a) `renderMessages` checks `m.isMention` but `GET
-  /threads/{id}/messages` (`read_thread` §4) never returns it — highlight is dead code; (b)
-  `parseMentions` treats every `@token` as a mention, so an unknown one 400s the whole send.
-- **`GET /threads/{tid}/messages/{msg_id}` ignores `tid`** — any message resolves under any
-  thread path; validate membership or drop the nested route.
 - **Millisecond `createdAt` ties** — same-ms messages have unstable read order and a cursor
   advanced to a tied `createdAt` can skip a same-ms sibling at a page boundary; the `NEXT` chain
   knows the true order. Low risk single-process; revisit before concurrent writers (M2 agents).
