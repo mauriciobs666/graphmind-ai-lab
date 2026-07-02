@@ -7,31 +7,7 @@
 
 ## Active
 
-- ✅ **K-004 — M1 hardening: five live-verified defects + DEF-1 — COMPLETE 2026-07-02.** TDD
-  (11 red tests → green). (1) Silent no-op writes: unknown author made §4 writes no-op while REST
-  returned 201 — repository now raises on zero-row writes, service validates the actor
-  (`UnknownActorError`), and `create_app`'s lifespan runs `services.ensure_actor()` (out-of-box
-  fix). (2) Cursor-vs-limit message loss: cursor advanced to server clock past `LIMIT`-truncated
-  rows — since-reads are now chronological (mention carried by `isMention` flag, not resorted;
-  QUERIES.md §9 ordering note) and the cursor advances to the newest **delivered** `createdAt`
-  (empty page advances nothing). (3) `advance_cursor` IndexError on missing member → returns
-  `None`. (4) QA DEF-1: `POST /mcp` 405 → ASGI path-alias middleware serves both spellings.
-  (5) RediSearch syntax errors 500 → `InvalidSearchQueryError` → 400. Full detail in
-  `kaizen/history.md`. **68 server tests green; query suite 92/92.**
-- ✅ **K-003 — M1 chat core finish: full-text search + web UI — COMPLETE 2026-07-01.** TDD,
-  search-first. (a) `GET /search?q=` end-to-end (`repository.search_messages` → `services` → REST,
-  `QUERIES.md` §5 workspace-wide) — 5 new tests. (b) minimal `web/{index.html,app.js}` (channels ·
-  threads · messages · @mention-parse · search), served as static files by `app.py` at `/`
-  (mounted last; catch-all behind REST + `/mcp`; same-origin ⇒ no CORS) — mount seam unit-tested,
-  UI verified manually. Docs (`DESIGN.md` §12/§14.5–14.6, `README.md`, `AGENTS.md`) in the same
-  change. **57 server tests green; query suite 92/92.** M1 chat core is code-complete.
-- ✅ **K-002 — M1 Chat MCP transport (mentions + read-cursors) — COMPLETE 2026-07-01.** Both steps
-  landed; full detail in `kaizen/history.md` (Step 1 gate + Step 2 server). Step 2 built the
-  greenfield `server/` tree (repository → services → `mcp.py` + `api.py` mounted by `app.py`), with
-  REST `mentions[]` parity and docs (`DESIGN.md` §14–§15, `README.md`, `AGENTS.md`) in the same
-  change. **51 server tests green; query suite 92/92.** Locked: MCP actor = `get_context()` (Q#1),
-  per-thread cursors only (Q#3), member-match strategy (Q#2). **Deferred:** `create_channel` over MCP
-  (Q#4).
+_(none in flight — K-002, K-003, K-004 completed and logged in `kaizen/history.md`)_
 
 ## Parking lot / ideas
 
