@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-04 — K-006: post-M1 review follow-ups (navigation, bounds, health)
+
+- **What:** small, high-value fixes from a 2026-07-04 full-project review; the review's larger
+  findings went to the parking lot. Adapter/boundary changes only — no `QUERIES.md` query bodies
+  or schema touched, so the 92-suite stays a pure regression guard.
+  1. **MCP navigation dead-end closed** — `list_channels(limit)` + `list_threads(channel_id,
+     limit)` MCP tools (7 total). Before, an agent could not discover an existing channel or
+     thread id (workspace-wide `read_messages` rows omit `threadId` — still parked); it could
+     only create its own space. Thin wrappers over the existing `Services` methods; discovery
+     test updated, list→post→read navigation roundtrip added.
+  2. **Input size bounds (RAM rule 6)** — `schemas.py` Pydantic constraints (text ≤ 8000,
+     name/title 1–200, mentions ≤ 50) and `Query` bounds on list `limit`s (1–200). Message text
+     lands in graph RAM *and* the full-text index; nothing capped it.
+  3. **REST thread-read pagination** — `GET /threads/{tid}/messages?since=&limit=` maps to the
+     existing §9.1 `read_thread_since` as a **pure read** (`since` defaults to 0 explicitly, so
+     a browser poll never consults/advances the member's cursor — cursors stay agent-owned).
+     No params keeps the full §4 read contract. Mitigates the unbounded `NEXT*0..` walk vs the
+     1000 ms default `TIMEOUT` cliff on long threads (full fix = web client adoption, parked).
+  4. **`GET /health`** — `services.ping` → `repository.ping` (`RO_QUERY RETURN 1`); 503 when
+     FalkorDB is unreachable. Probe target for compose/CI (both parked).
+- **Doc drift fixed (root `AGENTS.md`):** query-suite baseline claims corrected 67/67 → **92/92**
+  (×2) — the stale numbers were loaded into every agent session.
+- **Verified:** server suite **75 passed** (was 70; +5: MCP navigation roundtrip, health, body
+  bounds, limit bounds, pagination — the pagination test injects a counting clock to sidestep the
+  known same-ms `createdAt` tie caveat); query suite **92/92**.
+- **Docs (same change):** `DESIGN.md` §14.4 REST table (+`/health`, real `?since=&limit=` shape,
+  bounds note) and §15.2 tools table (+2 rows); `README.md` tools list + counts 70→75;
+  `falkor-chat/AGENTS.md` count 68→75 (was already stale); `plan.md` parking lot extended,
+  Last-reviewed bumped; this entry.
+
 ## 2026-07-02 — K-005: M1-final cleanup
 
 - **What:** four small parking-lot items from the 2026-07-02 review, resolved test-first. All

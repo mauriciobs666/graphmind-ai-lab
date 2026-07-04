@@ -106,7 +106,7 @@ python visualize_agent_graph.py
 ```bash
 ./scripts/start_falkordb.sh                  # FalkorDB in Docker (foreground; -d for headless); web console :3000
 ./scripts/bootstrap_schema.sh <workspaceId>  # create indexes + constraints (idempotent)
-./scripts/test_queries.sh                    # end-to-end query suite — baseline 67/67 passed
+./scripts/test_queries.sh                    # end-to-end query suite — baseline 92/92 passed
 ```
 
 **severino** (run from `opencode/agents/severino/`):
@@ -120,7 +120,7 @@ opencode --agent severino      # requires LM Studio server running at :1234
 - **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/AGENTS.md` (`falkor-chat/CLAUDE.md`
   imports it). This is FalkorDB
   OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
-  query suite green (`./scripts/test_queries.sh`, 67/67).
+  query suite green (`./scripts/test_queries.sh`, 92/92).
 - **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
 - **Skill tasks** (any tool) → `skills/`, follow each `skills/<name>/SKILL.md` and `skills/README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow

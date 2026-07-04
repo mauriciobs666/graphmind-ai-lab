@@ -52,8 +52,34 @@ def test_tool_discovery_lists_all_tools(repo):
     tools = asyncio.run(mcp_mod.mcp.list_tools())
     assert {t.name for t in tools} == {
         "send_message", "read_messages", "create_thread",
-        "search_messages", "create_channel",
+        "search_messages", "create_channel", "list_channels", "list_threads",
     }
+
+
+def test_list_tools_let_agent_navigate_to_existing_thread(repo):
+    """An agent must be able to discover an existing conversation, not just
+    create its own: list_channels → list_threads → send_message."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo)
+    ch = svc.create_channel(TEST_CTX, name="general")
+    th = svc.create_thread(TEST_CTX, channel_id=ch["channelId"], title="standup")
+
+    async def scenario():
+        channels = _unwrap(await mcp_mod.mcp.call_tool("list_channels", {}))
+        cid = channels[0]["channelId"]
+        threads = _unwrap(await mcp_mod.mcp.call_tool(
+            "list_threads", {"channel_id": cid}
+        ))
+        tid = threads[0]["threadId"]
+        await mcp_mod.mcp.call_tool("send_message", {"body": "found you", "re": tid})
+        return channels, threads, _unwrap(await mcp_mod.mcp.call_tool(
+            "read_messages", {"re": tid, "since": 0, "advance": False}
+        ))
+
+    channels, threads, rows = asyncio.run(scenario())
+    assert [c["channelId"] for c in channels] == [ch["channelId"]]
+    assert [t["threadId"] for t in threads] == [th["threadId"]]
+    assert [r["text"] for r in rows] == ["found you"]
 
 
 def test_search_messages_tool_finds_posted_text(repo):

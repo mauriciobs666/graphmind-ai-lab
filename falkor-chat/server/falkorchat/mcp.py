@@ -103,3 +103,25 @@ def create_channel(name: str) -> dict[str, Any]:
     """Create a channel so an agent is self-sufficient (can set up its own space)."""
     ctx = _get_context()
     return _svc().create_channel(ctx, name=name)
+
+
+@mcp.tool()
+def list_channels(limit: int = 50) -> list[dict[str, Any]]:
+    """List this workspace's channels, newest first.
+
+    The navigation entry point: without it an agent cannot discover an existing
+    channel to join — only create its own.
+    """
+    ctx = _get_context()
+    return _svc().list_channels(ctx, limit=limit)
+
+
+@mcp.tool()
+def list_threads(channel_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    """List a channel's threads, most recently active first.
+
+    Pairs with `list_channels` so an agent can find the thread id `send_message`
+    and `read_messages` need.
+    """
+    ctx = _get_context()
+    return _svc().list_threads(ctx, channel_id=channel_id, limit=limit)

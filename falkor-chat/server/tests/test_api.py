@@ -7,6 +7,8 @@ context override pinning the tenant to `ws:test`.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -125,3 +127,66 @@ def test_search_syntax_error_is_400_not_500(client):
     r = client.get("/search", params={"q": 'hello"unbalanced'})
     assert r.status_code == 400
     assert r.json()["error"] == "InvalidSearchQueryError"
+
+
+def test_health_ok(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_input_size_bounds_are_422(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    assert client.post("/channels", json={"name": ""}).status_code == 422
+    assert client.post("/channels", json={"name": "x" * 201}).status_code == 422
+    assert client.post(
+        f"/channels/{cid}/threads", json={"title": "x" * 201}
+    ).status_code == 422
+    assert client.post(
+        f"/threads/{tid}/messages", json={"text": "x" * 8001}
+    ).status_code == 422
+    assert client.post(f"/threads/{tid}/messages", json={"text": ""}).status_code == 422
+
+
+def test_list_limit_bounds_are_422(client):
+    cid = _new_channel(client)
+    assert client.get("/channels", params={"limit": 0}).status_code == 422
+    assert client.get("/channels", params={"limit": 201}).status_code == 422
+    assert client.get(
+        f"/channels/{cid}/threads", params={"limit": 0}
+    ).status_code == 422
+
+
+def test_read_thread_since_limit_paginates(conn):
+    # deterministic clock: same-ms createdAt ties would make `since >` pagination
+    # ambiguous (the known ms-tie caveat) — not what this test is about
+    clock = itertools.count(1000)
+    services = Services(Repository(conn), clock=lambda: next(clock))
+    Repository(conn).ensure_user("test", user_id="u1", display_name="Alice")
+    client = TestClient(create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+    ))
+
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    for text in ("one", "two", "three"):
+        client.post(f"/threads/{tid}/messages", json={"text": text})
+
+    # first page: earliest rows (chronological — the cursor-safe order)
+    page = client.get(f"/threads/{tid}/messages", params={"limit": 2}).json()
+    assert [m["text"] for m in page] == ["one", "two"]
+
+    # next page: strictly after the last delivered createdAt
+    rest = client.get(
+        f"/threads/{tid}/messages",
+        params={"since": page[-1]["createdAt"], "limit": 2},
+    ).json()
+    assert [m["text"] for m in rest] == ["three"]
+
+    # no params keeps the full-read contract the web client relies on
+    full = client.get(f"/threads/{tid}/messages").json()
+    assert [m["text"] for m in full] == ["one", "two", "three"]

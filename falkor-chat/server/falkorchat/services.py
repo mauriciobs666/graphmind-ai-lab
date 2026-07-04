@@ -81,6 +81,12 @@ class Services:
         self._clock = clock
         self._id = id_gen
 
+    # ── health ──────────────────────────────────────────────────────────────────
+
+    def ping(self, ctx: CallContext) -> bool:
+        """True when the workspace graph answers a trivial read."""
+        return self._repo.ping(ctx.ws)
+
     # ── members ─────────────────────────────────────────────────────────────────
 
     def ensure_actor(self, ctx: CallContext) -> None:

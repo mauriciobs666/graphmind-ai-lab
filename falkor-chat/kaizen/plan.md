@@ -2,14 +2,31 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-02 (K-005 done — M1-final cleanup: search + create_channel MCP tools,
-> flat `GET /messages/{mid}` route, web mention polish; 70 server tests + query suite 92/92)
+> Last reviewed: 2026-07-04 (K-006 done — post-M1 review follow-ups: MCP list tools, input
+> bounds, REST thread pagination, `/health`, root-AGENTS baseline drift; 75 server tests +
+> query suite 92/92)
 
 ## Active
 
-_(none in flight — K-002, K-003, K-004, K-005 completed and logged in `kaizen/history.md`)_
+_(none in flight — K-002 … K-006 completed and logged in `kaizen/history.md`)_
 
 ## Parking lot / ideas
+
+From the 2026-07-04 full-project review (small fixes landed as K-006; these remain):
+
+- **Server containerization** — no Dockerfile/compose for the app itself (only the FalkorDB
+  container); a compose file wiring server + FalkorDB (+ the new `/health` as healthcheck)
+  would make the dev env one command and unblock the CI item below.
+- **Web client staleness** — no polling/refresh (an agent's MCP reply is invisible until the
+  human acts), search results aren't clickable (needs `threadId` on rows — see the §9.2
+  denormalisation item), full-thread re-read after every post (the REST `?since=&limit=`
+  window from K-006 is available but unadopted), errors via `alert()`. Largely the M2
+  real-time story.
+- **`db.connect()` binds `config.FALKORDB_*` at import time** — default args are evaluated at
+  `def`, so env/monkeypatch changes after import are silently ignored (test-seam nit).
+- **`MERGE` on freshly-generated uuids** — `create_channel`/`create_thread` MERGE on an id
+  minted per call, so the implied idempotency can never trigger from the service layer;
+  misleading idiom (becomes real if client-supplied idempotency keys ever arrive).
 
 From the 2026-07-02 full-project review (defects fixed under K-004; these remain):
 

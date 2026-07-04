@@ -28,6 +28,11 @@ class Repository:
     def _graph(self, ws: str):
         return db.workspace_graph(self._conn, ws)
 
+    def ping(self, ws: str) -> bool:
+        """Liveness probe — a trivial read against the workspace graph."""
+        res = self._graph(ws).ro_query("RETURN 1")
+        return bool(res.result_set and res.result_set[0][0] == 1)
+
     # ── §3 Channels ────────────────────────────────────────────────────────────
 
     def create_channel(

@@ -128,7 +128,7 @@ The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) l
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # 68 passed (needs FalkorDB up)
+.venv/bin/python -m pytest -q                                # 75 passed (needs FalkorDB up)
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 

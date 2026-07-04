@@ -500,14 +500,20 @@ changes** — everything below is untouched.
 
 | Endpoint | Service method | `QUERIES.md` |
 |---|---|---|
+| `GET /health` | `ping` | liveness probe (trivial `RO_QUERY RETURN 1`; 503 when FalkorDB is down) |
 | `POST /channels` | `create_channel` | §3 create a channel |
-| `GET /channels` | `list_channels` | §3 list channels in a workspace |
+| `GET /channels[?limit=]` | `list_channels` | §3 list channels in a workspace |
 | `POST /channels/{cid}/threads` | `create_thread` | §3 create a thread |
-| `GET /channels/{cid}/threads` | `list_threads` | §3 list recent threads in a channel |
+| `GET /channels/{cid}/threads[?limit=]` | `list_threads` | §3 list recent threads in a channel |
 | `POST /threads/{tid}/messages` | `post_message` | §4 first message / subsequent message |
-| `GET /threads/{tid}/messages[?after=]` | `read_thread` | §4 read full thread / read thread window |
+| `GET /threads/{tid}/messages[?since=&limit=]` | `read_thread` / `read_messages` | §4 full thread; with `since`/`limit` → §9.1 window as a pure read (`since` defaults to 0 — the browser never touches cursors) |
 | `GET /messages/{mid}` | `get_message` | §4 get a single message |
 | `GET /search?q=` | `search_messages` | §5 full-text keyword search |
+
+Request bodies are size-bounded at the Pydantic boundary (`schemas.py`: text ≤ 8000 chars,
+name/title ≤ 200, mentions ≤ 50) — message text lands in graph RAM *and* the full-text index,
+so the transport caps it (RAM rule 6). List `limit`s are `Query`-bounded (1–200; thread window
+1–1000).
 
 The **two append variants** (§5.3) stay hidden inside `post_message`: the service checks whether
 the thread already has a `HEAD`/`TAIL` and dispatches the correct single-`GRAPH.QUERY` write. The
@@ -596,6 +602,8 @@ app.mount("/mcp", mcp_app)                                # agents connect at /m
 | `read_messages(re?, since?, limit, advance=True)` | `read_messages` | §9.1 (thread) / §9.2 (room-wide) |
 | `create_thread(channel_id, title)` | `create_thread` | §3 create a thread |
 | `create_channel(name)` | `create_channel` | §3 create a channel |
+| `list_channels(limit=50)` | `list_channels` | §3 list channels in a workspace |
+| `list_threads(channel_id, limit=50)` | `list_threads` | §3 list recent threads in a channel |
 | `search_messages(query, limit=50)` | `search_messages` | §5 full-text keyword search |
 
 - **Actor identity (Q#1):** MCP ignores any client-supplied `frm`; every call is attributed to the

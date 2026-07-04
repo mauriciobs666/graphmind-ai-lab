@@ -22,13 +22,27 @@ def get_context() -> CallContext:
 def build_router(services: Services) -> APIRouter:
     router = APIRouter()
 
+    @router.get("/health")
+    def health(ctx: CallContext = Depends(get_context)):
+        # Liveness for probes/CI: proves the process is up AND FalkorDB answers.
+        try:
+            ok = services.ping(ctx)
+        except Exception:
+            ok = False
+        if not ok:
+            raise HTTPException(status_code=503, detail="FalkorDB unreachable")
+        return {"status": "ok"}
+
     @router.post("/channels", status_code=201)
     def create_channel(body: CreateChannelIn, ctx: CallContext = Depends(get_context)):
         return services.create_channel(ctx, name=body.name)
 
     @router.get("/channels")
-    def list_channels(ctx: CallContext = Depends(get_context)):
-        return services.list_channels(ctx)
+    def list_channels(
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_channels(ctx, limit=limit)
 
     @router.post("/channels/{channel_id}/threads", status_code=201)
     def create_thread(
@@ -38,8 +52,12 @@ def build_router(services: Services) -> APIRouter:
         return services.create_thread(ctx, channel_id=channel_id, title=body.title)
 
     @router.get("/channels/{channel_id}/threads")
-    def list_threads(channel_id: str, ctx: CallContext = Depends(get_context)):
-        return services.list_threads(ctx, channel_id=channel_id)
+    def list_threads(
+        channel_id: str,
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_threads(ctx, channel_id=channel_id, limit=limit)
 
     @router.post("/threads/{thread_id}/messages", status_code=201)
     def post_message(
@@ -59,8 +77,21 @@ def build_router(services: Services) -> APIRouter:
         return services.search_messages(ctx, query=q, limit=limit)
 
     @router.get("/threads/{thread_id}/messages")
-    def read_thread(thread_id: str, ctx: CallContext = Depends(get_context)):
-        return services.read_thread(ctx, thread_id=thread_id)
+    def read_thread(
+        thread_id: str,
+        since: int | None = Query(None, ge=0),
+        limit: int | None = Query(None, ge=1, le=1000),
+        ctx: CallContext = Depends(get_context),
+    ):
+        # No params → the full §4 thread read (M1 web client contract). Either
+        # param → the paginated §9.1 since-read as a pure read: `since`
+        # defaults to epoch 0 explicitly so the member's cursor is never
+        # consulted or advanced by a browser poll (cursors stay agent-owned).
+        if since is None and limit is None:
+            return services.read_thread(ctx, thread_id=thread_id)
+        return services.read_messages(
+            ctx, thread_id=thread_id, since=since or 0, limit=limit or 50
+        )
 
     @router.get("/messages/{msg_id}")
     def get_message(msg_id: str, ctx: CallContext = Depends(get_context)):
