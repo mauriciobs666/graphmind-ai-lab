@@ -1,0 +1,49 @@
+# falkor-chat dev stack: FalkorDB + the M1 server (REST + MCP + web UI).
+#
+#   docker compose up --build        # both services; UI at http://localhost:8000
+#   docker compose down              # stop (NEVER `down -v` — the volume is shared live data)
+#
+# The falkordb service is the same image/ports/volume as scripts/start_falkordb.sh —
+# stop the `falkordb-dev` container first if it is running (both bind :6379 and
+# open the same data volume; running two engines on one volume corrupts it).
+
+name: falkor-chat
+
+services:
+  falkordb:
+    image: falkordb/falkordb:edge
+    ports:
+      - "${FALKORDB_PORT:-6379}:6379"
+      - "${FALKORDB_WEB_PORT:-3000}:3000"
+    volumes:
+      # The image's Redis `dir` is /var/lib/falkordb/data (FALKORDB_DATA_PATH),
+      # NOT /data — mounting at /data silently persists nothing (live-verified
+      # 2026-07-04 on falkordb:edge).
+      - falkordb-data:/var/lib/falkordb/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  server:
+    build: .
+    ports:
+      - "${FALKORCHAT_SERVER_PORT:-8000}:8000"
+    environment:
+      FALKORDB_HOST: falkordb          # compose service name, not localhost
+      FALKORDB_PORT: "6379"
+      FALKORCHAT_WS_ID: ${FALKORCHAT_WS_ID:-acme}
+      FALKORCHAT_USER_ID: ${FALKORCHAT_USER_ID:-u1}
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  falkordb-data:
+    # Pre-existing shared dev volume (created by scripts/start_falkordb.sh).
+    # external: compose must never create, re-create, or remove it.
+    external: true

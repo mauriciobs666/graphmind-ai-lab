@@ -22,7 +22,6 @@ from redis.exceptions import ResponseError
 from .config import CallContext
 from .repository import Repository
 
-
 # ── errors ─────────────────────────────────────────────────────────────────────
 
 

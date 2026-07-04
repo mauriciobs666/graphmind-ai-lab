@@ -2,6 +2,53 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-04 — K-009: containerization (Dockerfile/compose) + CI + `falkordb-data` persistence fix
+
+- **What:** first delivery-lifecycle pass for the component — container images, a compose stack,
+  path-filtered CI, dependency pinning, and a critical data-persistence bug fix.
+  1. **`falkordb-data` persistence fix (critical)** — `scripts/start_falkordb.sh` mounted the
+     named volume at `/data` (the image's legacy `VOLUME`), but `falkordb/falkordb:edge` actually
+     writes its Redis `dir` to **`/var/lib/falkordb/data`** (`FALKORDB_DATA_PATH`) — so **no graph
+     data ever survived a container stop**; the volume persisted nothing. Live-verified 2026-07-04:
+     data written under the `/data` mount vanished on restart; remounted at `/var/lib/falkordb/data`
+     it survives. Fixed in the script (with an inline warning comment) and used in `compose.yaml`.
+     `ws:acme` schema was re-bootstrapped after the fix (12 indexes).
+  2. **`Dockerfile`** — M1 server image (`python:3.12-slim`): build context is the component root
+     so the `server/` + `web/` sibling layout survives (app.py resolves `parents[2]/web`), editable
+     install, non-root `appuser` runtime (install stays root-owned/read-only), `EXPOSE 8000`, and a
+     `HEALTHCHECK` against the K-006 `GET /health` (200 only when FalkorDB answers).
+  3. **`compose.yaml`** — two services: `falkordb` (same image/ports/volume as the script; redis-cli
+     ping healthcheck) and `server` (built image, `FALKORDB_HOST=falkordb`, `depends_on:
+     service_healthy`). The `falkordb-data` volume is declared **`external: true`** — compose must
+     never create/re-create/remove the shared dev volume, and `down -v` is explicitly warned
+     against. Header warns the script-started `falkordb-dev` container and compose share :6379 and
+     the volume — never run both.
+  4. **`.dockerignore`** — only `server/` (minus tests/venv/egg-info) + `web/` enter the build
+     context; docs, kaizen, scripts, markdown excluded.
+  5. **CI (`.github/workflows/falkor-chat.yml`)** — path-filtered to `falkor-chat/**` + the
+     workflow itself; single job on ubuntu-latest with a **FalkorDB service container**
+     (`falkordb/falkordb:edge`, health-gated) mirroring the local commands: `ruff check server` →
+     server pytest (75-baseline) → `./scripts/test_queries.sh` (92/92-baseline). Deliberately
+     tracks the floating `:edge` tag — the project's live-verified facts are pinned to it.
+     **Never run yet** — first push to GitHub will tell (parking-lot item).
+  6. **Dependency pins + ruff adoption** (`server/pyproject.toml`) — compatible-range pins for
+     reproducible installs: `fastapi>=0.139,<0.140`, `uvicorn>=0.49,<0.50`, `falkordb>=1.6,<1.7`,
+     `mcp>=1.28,<1.29`, `pytest>=9.1,<10`, `httpx>=0.28,<0.29`, `ruff>=0.14,<0.15`; ruff config
+     (E,F,W,I / target py312 / line 100). Behavior-neutral import-order (I) fixes across
+     `falkorchat/{api,app,services}.py` and `tests/{conftest,test_app,test_repository,test_services}.py`.
+  7. **README** — compose run section added alongside the script path.
+- **Why:** the component had no image, no one-command stack, and no CI; and the persistence bug
+  meant the "durable" dev volume was silently empty — any container stop lost every graph.
+- **Verified (2026-07-04 resume session):** fixed script started FalkorDB from a cold stop and
+  `GRAPH.LIST` returned **`ws:acme`** — live proof graphs now survive downtime (`ws:k007scratch`
+  residue also present, left untouched for the K-007 relaunch). Pins install-verified in a clean
+  reinstall (fastapi 0.139.0, uvicorn 0.49.0, falkordb 1.6.1, mcp 1.28.1, pytest 9.1.1,
+  httpx 0.28.1, ruff 0.14.14); `ruff check .` clean; server suite **75 passed**; query suite
+  **92/92**. Compose stack itself not booted locally (shares :6379 + the volume with the running
+  `falkordb-dev`); its build is exercised by CI on first push.
+- **Plan items:** K-009 ✅ done; parking lot gains "verify the CI workflow goes green on first
+  push". K-007 (graph-dba relaunch) is the next action.
+
 ## 2026-07-04 — K-006: post-M1 review follow-ups (navigation, bounds, health)
 
 - **What:** small, high-value fixes from a 2026-07-04 full-project review; the review's larger

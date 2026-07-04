@@ -24,8 +24,8 @@ from .config import CallContext
 from .repository import Repository
 from .services import (
     ChannelNotFoundError,
-    Services,
     ServiceError,
+    Services,
     ThreadNotFoundError,
 )
 

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from falkorchat import config, db
+from falkorchat import db
 from falkorchat.repository import Repository
 
 TEST_WS = "test"

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .config import CallContext, get_context as _resolve_context
+from .config import CallContext
+from .config import get_context as _resolve_context
 from .schemas import CreateChannelIn, CreateThreadIn, PostMessageIn
 from .services import Services
 

@@ -8,9 +8,8 @@ response instead, and REST keeps working alongside it.
 
 from __future__ import annotations
 
-from starlette.routing import Mount
-
 from fastapi.testclient import TestClient
+from starlette.routing import Mount
 
 from falkorchat.app import create_app
 from falkorchat.config import CallContext

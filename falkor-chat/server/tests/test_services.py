@@ -10,7 +10,6 @@ from __future__ import annotations
 import itertools
 
 import pytest
-
 from redis.exceptions import ResponseError
 
 from falkorchat.config import CallContext

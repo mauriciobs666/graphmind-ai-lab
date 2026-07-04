@@ -1,0 +1,13 @@
+# Build context is falkor-chat/ — only server/ + web/ enter the image.
+**/__pycache__/
+**/*.pyc
+server/.venv/
+server/*.egg-info/
+server/tests/
+docs/
+kaizen/
+scripts/
+*.md
+.dockerignore
+Dockerfile
+compose.yaml

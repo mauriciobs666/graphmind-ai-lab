@@ -6,7 +6,10 @@ set -euo pipefail
 # Override defaults with env vars:
 #   FALKORDB_IMAGE, FALKORDB_PORT, FALKORDB_WEB_PORT, FALKORDB_CONTAINER_NAME
 #
-# Data persistence: graphs are stored in a named Docker volume (falkordb-data).
+# Data persistence: graphs are stored in a named Docker volume (falkordb-data)
+# mounted at /var/lib/falkordb/data — the image's actual Redis `dir`
+# (FALKORDB_DATA_PATH). NOTE: mounting at /data (the image's legacy VOLUME)
+# persists NOTHING — live-verified 2026-07-04 on falkordb/falkordb:edge.
 # The volume survives container restarts; remove it explicitly with:
 #   docker volume rm falkordb-data
 
@@ -47,7 +50,7 @@ if [ "$DETACH" -eq 1 ]; then
     --name "${FALKORDB_CONTAINER_NAME}" \
     -p "${FALKORDB_PORT}:6379" \
     -p "${FALKORDB_WEB_PORT}:3000" \
-    -v falkordb-data:/data \
+    -v falkordb-data:/var/lib/falkordb/data \
     --rm -d "${FALKORDB_IMAGE}"
   echo "Started in the background. Stop with: docker stop ${FALKORDB_CONTAINER_NAME}"
 else
@@ -55,6 +58,6 @@ else
     --name "${FALKORDB_CONTAINER_NAME}" \
     -p "${FALKORDB_PORT}:6379" \
     -p "${FALKORDB_WEB_PORT}:3000" \
-    -v falkordb-data:/data \
+    -v falkordb-data:/var/lib/falkordb/data \
     --rm -it "${FALKORDB_IMAGE}"
 fi

@@ -1,0 +1,64 @@
+# falkor-chat CI — lint + both test suites against a live FalkorDB service
+# container. Mirrors the local commands (AGENTS.md / README):
+#   ruff check server            (lint)
+#   pytest -q                    (server suite, baseline 75 passed)
+#   ./scripts/test_queries.sh    (canonical query suite, baseline 92/92)
+#
+# Note: falkordb/falkordb:edge is a floating tag — the project's locked choice
+# (AGENTS.md live-verified facts are pinned to it), so CI deliberately tracks it.
+
+name: falkor-chat
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "falkor-chat/**"
+      - ".github/workflows/falkor-chat.yml"
+  pull_request:
+    paths:
+      - "falkor-chat/**"
+      - ".github/workflows/falkor-chat.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: falkor-chat
+
+    services:
+      falkordb:
+        image: falkordb/falkordb:edge
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli -p 6379 ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: falkor-chat/server/pyproject.toml
+
+      - name: Install redis-cli (bootstrap + query suite need it)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq redis-tools
+
+      - name: Install server package
+        run: python -m pip install -e './server[dev]'
+
+      - name: Lint (ruff)
+        run: ruff check server
+
+      - name: Server test suite (baseline 75 passed)
+        working-directory: falkor-chat/server
+        run: python -m pytest -q
+
+      - name: Canonical query suite (baseline 92/92)
+        run: ./scripts/test_queries.sh

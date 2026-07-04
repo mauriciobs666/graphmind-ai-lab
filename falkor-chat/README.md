@@ -66,6 +66,19 @@ Override default ports:
 FALKORDB_PORT=6380 FALKORDB_WEB_PORT=3001 ./scripts/start_falkordb.sh
 ```
 
+**One-command alternative — Docker Compose.** `compose.yaml` runs FalkorDB **and** the
+M1 server (REST + MCP + web UI) together:
+
+```bash
+docker compose up --build     # FalkorDB :6379/:3000 + server at http://localhost:8000
+docker compose down           # stop — data persists in falkordb-data; never `down -v`
+```
+
+The FalkorDB service uses the same image, ports, and `falkordb-data` volume as the script,
+so pick one at a time: stop `falkordb-dev` before `compose up` (they share the ports *and*
+the volume). The server container connects via `FALKORDB_HOST=falkordb` and healthchecks
+on `GET /health`.
+
 ### 2 — Verify the instance
 
 In a second terminal, confirm everything is up:
@@ -179,6 +192,8 @@ falkor-chat/
 │   ├── tests/               # pytest — repository/services (live), MCP, REST, app-mount
 │   └── pyproject.toml       # fastapi, uvicorn, falkordb, mcp, pytest, httpx
 ├── web/                     # minimal browser client (index.html + app.js) served by app.py
+├── Dockerfile               # server image (uvicorn, non-root, /health healthcheck)
+├── compose.yaml             # FalkorDB + server dev stack (falkordb-data volume, external)
 └── README.md
 ```
 
