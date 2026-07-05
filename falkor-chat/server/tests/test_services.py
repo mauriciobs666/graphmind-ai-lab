@@ -17,6 +17,7 @@ from falkorchat.repository import MessageWriteStatus
 from falkorchat.services import (
     ChannelNotFoundError,
     InvalidSearchQueryError,
+    MemberIdCollisionError,
     Services,
     ThreadNotFoundError,
     UnknownActorError,
@@ -115,6 +116,9 @@ class FakeRepo:
         return self.since_rows
 
     def ensure_user(self, ws, *, user_id, display_name=None, email=None):
+        # mirrors the §2 v2 guarded ensure: an id held by an Agent is refused
+        if user_id in self.agents:
+            raise MemberIdCollisionError(user_id)
         self.members.add(user_id)
         self.calls.append(("ensure_user", ws, user_id))
 
@@ -188,6 +192,16 @@ def test_ensure_actor_projects_context_actor_as_user():
     svc.ensure_actor(CTX)
 
     assert ("ensure_user", "test", "u1") in repo.calls
+
+
+def test_ensure_actor_propagates_member_id_collision():
+    """DEF-1: an actor id held by an Agent must surface, never silently shadow."""
+    repo = FakeRepo()
+    repo.agents.add("u1")
+    svc = make_service(repo)
+
+    with pytest.raises(MemberIdCollisionError):
+        svc.ensure_actor(CTX)
 
 
 def test_post_message_first_uses_first_write_path():

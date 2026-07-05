@@ -16,6 +16,19 @@ from falkordb import FalkorDB
 from . import db
 
 
+class MemberIdCollisionError(Exception):
+    """Member id already held by the other label (QUERIES.md §2/§7 v2, DEF-1).
+
+    Member ids are namespace-unique across `User`/`Agent` (locked rule): every
+    `coalesce(u, a)` lookup assumes one id resolves to one member, so a guarded
+    ensure refuses to create a node whose id the other label already holds.
+    Raised by `ensure_user`/`ensure_agent` on the `collided` status states —
+    both the refusal (other label holds the id) and the pre-guard corruption
+    alarm (both labels hold it). Re-exported by `services` as part of the
+    service error surface (defined here to avoid a repository→services cycle).
+    """
+
+
 @dataclass(frozen=True)
 class MessageWriteStatus:
     """Status row returned by the §4 v2 write paths (QUERIES.md §4 contract).
@@ -38,7 +51,7 @@ class Repository:
     single-tenant seam stays in `config`/`api`, never hardcoded here.
     """
 
-    def __init__(self, conn: FalkorDB) -> None:
+    def __init__(self, conn: FalkorDB | db.LazyFalkorDB) -> None:
         self._conn = conn
 
     def _graph(self, ws: str):
@@ -144,29 +157,80 @@ class Repository:
 
     # ── §2/§7 Members (author + mention targets) ────────────────────────────────
 
+    # Both ensures are v2 guarded CREATEs (QUERIES.md §2/§7, DEF-1): member ids
+    # are namespace-unique across User/Agent (locked rule). Status-row contract
+    # (exactly one row, always — no anchor MATCH, so zero-row is impossible):
+    #   created          → fresh node written (success)
+    #   existed          → id already on the same label, nothing written
+    #                      (idempotent success — re-ensure never updates props)
+    #   collided         → id held by the OTHER label, nothing written → raise
+    #   existed+collided → both labels hold the id (pre-guard corruption) → alarm
+    # Idempotency comes from the status logic (MERGE-in-FOREACH is non-standard);
+    # the same-label uniqueness constraints stay as the concurrency backstop.
+    # The residual cross-label race is one-query wide and documented — not closed.
+
+    @staticmethod
+    def _check_ensure_status(res, *, member_id: str, wanted: str, other: str) -> None:
+        created, existed, collided = (bool(v) for v in res.result_set[0])
+        if not collided:
+            return  # created or existed — both are quiet successes
+        if existed:
+            raise MemberIdCollisionError(
+                f"member-id namespace corrupted: {member_id!r} exists as both a "
+                f"User and an Agent — nothing written, manual repair required"
+            )
+        article = {"User": "a", "Agent": "an"}
+        raise MemberIdCollisionError(
+            f"member id {member_id!r} is already held by {article[other]} {other} — "
+            f"refusing to create {article[wanted]} {wanted} "
+            f"(member ids are namespace-unique across User/Agent)"
+        )
+
     def ensure_user(
         self, ws: str, *, user_id: str, display_name: str | None = None,
         email: str | None = None,
     ) -> None:
-        """Project a User into the workspace graph (idempotent). QUERIES.md §2."""
-        self._graph(ws).query(
-            "MERGE (u:User {userId: $userId}) "
-            "ON CREATE SET u.displayName = $displayName, u.email = $email "
-            "RETURN u",
+        """Project a User into the workspace graph (guarded ensure). QUERIES.md §2.
+
+        Idempotent on the same label; raises `MemberIdCollisionError` when the
+        id is held by an Agent (or by both labels — corruption alarm).
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (u:User  {userId:  $userId}) "
+            "OPTIONAL MATCH (a:Agent {agentId: $userId}) "
+            "WITH u, a, (u IS NULL AND a IS NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (:User {userId: $userId, displayName: $displayName, email: $email}) "
+            ") "
+            "RETURN ok            AS created, "
+            "       u IS NOT NULL AS existed, "
+            "       a IS NOT NULL AS collided",
             {"userId": user_id, "displayName": display_name, "email": email},
         )
+        self._check_ensure_status(res, member_id=user_id, wanted="User", other="Agent")
 
     def ensure_agent(
         self, ws: str, *, agent_id: str, name: str | None = None,
         model: str | None = None, created_at: int | None = None,
     ) -> None:
-        """Register an Agent in the workspace graph (idempotent). QUERIES.md §7."""
-        self._graph(ws).query(
-            "MERGE (a:Agent {agentId: $agentId}) "
-            "ON CREATE SET a.name = $name, a.model = $model, a.createdAt = $createdAt "
-            "RETURN a",
+        """Register an Agent in the workspace graph (guarded ensure). QUERIES.md §7.
+
+        Mirror of `ensure_user` — same contract with the labels swapped.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (a:Agent {agentId: $agentId}) "
+            "OPTIONAL MATCH (u:User  {userId:  $agentId}) "
+            "WITH a, u, (a IS NULL AND u IS NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (:Agent {agentId: $agentId, name: $name, model: $model, "
+            "createdAt: $createdAt}) "
+            ") "
+            "RETURN ok            AS created, "
+            "       a IS NOT NULL AS existed, "
+            "       u IS NOT NULL AS collided",
             {"agentId": agent_id, "name": name, "model": model, "createdAt": created_at},
         )
+        self._check_ensure_status(res, member_id=agent_id, wanted="Agent", other="User")
 
     # ── §4 Messages (v2 self-guarding write paths) ──────────────────────────────
     #

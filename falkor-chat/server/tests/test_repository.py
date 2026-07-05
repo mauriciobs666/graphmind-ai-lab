@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from falkorchat import db
+from falkorchat.repository import MemberIdCollisionError
 
 
 def _probe(conn, cypher: str):
@@ -85,6 +86,68 @@ def test_thread_has_head_false_before_first_message(repo):
     repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
 
     assert repo.thread_has_head("test", thread_id="t1") is False
+
+
+# ── §2/§7 guarded member ensures (DEF-1: cross-label id namespace) ─────────────
+
+
+def test_ensure_user_fresh_creates_then_reensure_is_quiet_noop(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice", email="a@x.io")
+    repo.ensure_user("test", user_id="u1", display_name="Changed", email="c@x.io")
+
+    # exactly one node; re-ensure never updates properties (old ON CREATE-only behavior)
+    rows = _probe(
+        conn, "MATCH (u:User {userId:'u1'}) RETURN count(u), collect(u.displayName)"
+    )
+    assert rows == [[1, ["Alice"]]]
+
+
+def test_ensure_agent_fresh_creates_then_reensure_is_quiet_noop(repo, conn):
+    repo.ensure_agent("test", agent_id="a1", name="Bot", model="m-1", created_at=100)
+    repo.ensure_agent("test", agent_id="a1", name="Renamed", model="m-2", created_at=200)
+
+    rows = _probe(conn, "MATCH (a:Agent {agentId:'a1'}) RETURN count(a), collect(a.name)")
+    assert rows == [[1, ["Bot"]]]
+
+
+def test_ensure_user_refuses_id_held_by_agent_nothing_written(repo, conn):
+    """DEF-1 repro direction: a User ensure with an Agent's id must refuse —
+    the old MERGE silently created a shadow User that eclipsed the Agent in
+    every coalesce(u, a) lookup."""
+    repo.ensure_agent("test", agent_id="qabot", name="Bot")
+
+    with pytest.raises(MemberIdCollisionError, match="held by an Agent"):
+        repo.ensure_user("test", user_id="qabot", display_name="Shadow")
+
+    # nothing written — and the Agent is still what the id resolves to
+    [[shadow]] = _probe(conn, "OPTIONAL MATCH (u:User {userId:'qabot'}) RETURN u IS NOT NULL")
+    assert shadow is False
+    assert repo.resolve_member_kinds("test", ids=["qabot"]) == {"qabot": "Agent"}
+
+
+def test_ensure_agent_refuses_id_held_by_user_nothing_written(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    with pytest.raises(MemberIdCollisionError, match="held by a User"):
+        repo.ensure_agent("test", agent_id="u1", name="Impostor")
+
+    [[shadow]] = _probe(conn, "OPTIONAL MATCH (a:Agent {agentId:'u1'}) RETURN a IS NOT NULL")
+    assert shadow is False
+    assert repo.resolve_member_kinds("test", ids=["u1"]) == {"u1": "User"}
+
+
+def test_ensure_refuses_pre_guard_corruption_with_alarm(repo, conn):
+    """existed AND collided — both labels hold the id (pre-guard shadow state).
+    Both ensures must raise the distinguishable corruption alarm."""
+    # seed the corruption directly: the guarded ensures refuse to create it
+    db.workspace_graph(conn, "test").query(
+        "CREATE (:User {userId:'x1'}), (:Agent {agentId:'x1'})"
+    )
+
+    with pytest.raises(MemberIdCollisionError, match="corrupted"):
+        repo.ensure_user("test", user_id="x1")
+    with pytest.raises(MemberIdCollisionError, match="corrupted"):
+        repo.ensure_agent("test", agent_id="x1")
 
 
 # ── §4 Messages ────────────────────────────────────────────────────────────────

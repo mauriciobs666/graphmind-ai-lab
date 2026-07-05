@@ -30,13 +30,50 @@ RETURN u
 ```
 *Graph: `identity`*
 
-### Add user to workspace (project into workspace graph)
+### Add user to workspace — guarded ensure (v2, DEF-1 fix)
+
+> **Locked rule: member ids are namespace-unique across `User`/`Agent`.** Every
+> `coalesce(u, a)` lookup (role derivation, `POSTED_BY` author resolution, mentions,
+> cursors) assumes one id resolves to one member. A `User` created with an id already
+> held by an `Agent` (or vice versa) silently eclipses the other node everywhere —
+> so both ensures refuse a cross-label collision instead of writing.
+
 ```cypher
-MERGE (u:User {userId: $userId})
-ON CREATE SET u.displayName = $displayName, u.email = $email
-RETURN u
+OPTIONAL MATCH (u:User  {userId:  $userId})
+OPTIONAL MATCH (a:Agent {agentId: $userId})
+WITH u, a, (u IS NULL AND a IS NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (:User {userId: $userId, displayName: $displayName, email: $email})
+)
+RETURN ok            AS created,
+       u IS NOT NULL AS existed,
+       a IS NOT NULL AS collided
 ```
 *Graph: `ws:{id}` — keeps a workspace-local copy; only the fields needed for chat.*
+
+**Status-row contract** (exactly one row, always — there is no anchor `MATCH`, so the
+query can never zero-row):
+
+| `created` | `existed` | `collided` | Meaning | Caller action |
+|---|---|---|---|---|
+| `true` | `false` | `false` | fresh node written | success |
+| `false` | `true` | `false` | id already a `User` — nothing written | idempotent success (matches the old `MERGE … ON CREATE`-only behavior: re-ensure never updates properties) |
+| `false` | `false` | `true` | id held by an `Agent` — **nothing written** | refuse (member-id collision error) |
+| `false` | `true` | `true` | pre-guard shadow state: both labels hold the id | alarm — corrupted namespace, manual repair |
+
+Notes (live-verified on this build):
+- The write is a **guarded `CREATE` inside `FOREACH`** — `MERGE` inside `FOREACH` is not
+  standard OpenCypher, so idempotency comes from the status logic (the `existed` path is
+  a structural no-op), not from `MERGE`. The `User.userId` uniqueness constraint stays as
+  the same-label concurrency backstop: two racing fresh ensures → one wins, the loser gets
+  a constraint violation and retries into `existed=true`.
+- **Residual cross-label race window (documented, not closed):** the engine has no
+  cross-label constraint, so two *concurrent* `ensure_user`/`ensure_agent` calls with the
+  same id can each pass their check and both write — landing in the
+  `existed AND collided` alarm state on the next ensure. The window is one
+  query-execution wide.
+- Both existence checks profile as `Node By Index Scan` (`User.userId` + `Agent.agentId`);
+  no label scans.
 
 ### Add user to channel
 ```cypher
@@ -379,14 +416,28 @@ write path — the message is readable before the embedding lands.*
 
 ## 7. Agents
 
-### Register an AI agent in a workspace
+### Register an AI agent in a workspace — guarded ensure (v2, DEF-1 fix)
+
+Mirror of the §2 guarded user ensure — same locked rule (**member ids are
+namespace-unique across `User`/`Agent`**), same status-row contract with the labels
+swapped: `existed` = id already an `Agent` (idempotent success), `collided` = id held
+by a `User` (**nothing written** — refuse). Exactly one row, always. See §2 for the
+full contract table, the FOREACH/CREATE idempotency note, and the residual
+cross-label race window.
+
 ```cypher
-MERGE (a:Agent {agentId: $agentId})
-ON CREATE SET a.name      = $name,
-              a.model     = $model,
-              a.createdAt = $createdAt
-RETURN a
+OPTIONAL MATCH (a:Agent {agentId: $agentId})
+OPTIONAL MATCH (u:User  {userId:  $agentId})
+WITH a, u, (a IS NULL AND u IS NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (:Agent {agentId: $agentId, name: $name, model: $model, createdAt: $createdAt})
+)
+RETURN ok            AS created,
+       a IS NOT NULL AS existed,
+       u IS NOT NULL AS collided
 ```
+*Both existence checks are `Node By Index Scan`s; the `Agent.agentId` uniqueness
+constraint remains the same-label concurrency backstop.*
 
 ### Add agent to a channel
 ```cypher

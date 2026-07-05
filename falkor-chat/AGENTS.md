@@ -28,6 +28,7 @@ chat history, workspace data, reference data, workflow definitions and execution
 | Guarded-CREATE write paths (`FOREACH`+`CASE` guard per path) with an always-returned status row | retry replay is a structural no-op (`dupMsg`), first-post race refused (`hadHead`); no MERGE on Message — constraint stays as backstop (K-007) |
 | `Message.role` values `user`/`assistant`, derived server-side from the author label | `User → user`, `Agent → assistant`; never trusted from the caller — agents author first-class (K-007) |
 | Composite `(createdAt, msgId)` keyset for cursor reads (`ReadCursor.lastReadMsgId`) | timestamp alone is not a total order — same-ms ties skipped rows at page boundaries; cursor-driven reads are now lossless (K-007) |
+| Member ids are **namespace-unique across `User`/`Agent`**; `ensure_user`/`ensure_agent` are guarded-CREATE v2 queries returning a `(created, existed, collided)` status row (QUERIES.md §2/§7) | a shadow node with the other label's id eclipses it in every `coalesce(u, a)` lookup — cross-label collision refuses loudly (`MemberIdCollisionError`; `existed AND collided` = corruption alarm); same-label uniqueness constraints stay as the concurrency backstop; residual cross-label race is one query wide, documented (QA DEF-1) |
 
 ---
 
@@ -149,7 +150,7 @@ duplication is what lets the copies drift. The invariants that govern those quer
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
-| `./scripts/test_queries.sh` | 115-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/test_queries.sh` | 126-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
@@ -163,7 +164,7 @@ The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) l
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # 98 passed (needs FalkorDB up)
+.venv/bin/python -m pytest -q                                # 110 passed (needs FalkorDB up)
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
@@ -197,7 +198,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 2. **Verify dialect before assuming.** This is FalkorDB OpenCypher, not Neo4j. No APOC, no GDS, no `PROFILE` keyword prefix. Check `CALL dbms.procedures()` when unsure.
 3. **Profile before tuning.** Use `GRAPH.PROFILE` to confirm an index is actually hit before declaring a query fast. Look for `Node By Index Scan`, not `NodeByLabelScan`.
 4. **All writes that touch HEAD/TAIL must be a single `GRAPH.QUERY`** — atomicity is per-query.
-5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 115/115 is the baseline.
+5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 126/126 is the baseline.
 6. **RAM is the binding constraint.** Any new node type, index, or vector dimension affects per-workspace RAM. Call it out.
 7. **One graph per workspace.** Never add a `workspaceId` property to filter inside a shared graph.
 8. **`ctx`, `input`, `output` on workflow nodes are serialised strings.** Do not design queries that filter inside them.

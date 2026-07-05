@@ -2,10 +2,9 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-05 (K-007 delivered ✅ — M2 groundwork landed, baselines now
-> pytest 98 / query suite 115/115; K-008 unblocked and is the next action. QA acceptance
-> pass on K-007: PASS with two low-severity defects — QA DEF-1 parked as a K-008
-> prerequisite below, QA DEF-2 in the parking lot)
+> Last reviewed: 2026-07-05 (K-010 delivered ✅ — QA DEF-1 and DEF-2 closed; baselines now
+> pytest 110 / query suite 126/126. K-008's prerequisite is cleared — it is fully unblocked
+> and is the next action)
 
 ## Locked M2 stack decisions (2026-07-04, user-approved)
 
@@ -23,7 +22,7 @@
 
 ## Active
 
-### K-008 — GraphRAG proper (🔵 proposed — **unblocked**, K-007 delivered 2026-07-05)
+### K-008 — GraphRAG proper (🔵 proposed — **fully unblocked**: K-007 delivered 2026-07-05, DEF-1 prerequisite cleared by K-010 same day)
 
 DESIGN §12 M2 core, on the locked stack above:
 
@@ -31,37 +30,29 @@ DESIGN §12 M2 core, on the locked stack above:
   `Message.embedding` inline `vecf32`.
 - Vector index at 1024 dims; hybrid retrieval query (DESIGN §8 / QUERIES.md §6).
 - AI `Agent` participant (Qwen3-4B-Instruct-2507 via `/v1/chat/completions`) posting answers
-  with `EMITTED` provenance — K-007 agent authorship is in (role derived from the author label).
+  with `EMITTED` provenance — K-007 agent authorship is in (role derived from the author
+  label), and K-010's namespace-unique member-id guard means real agent identities can be
+  wired without silent-shadowing risk.
 - Web-client staleness story: polling/since-reads (adopt the K-006 `?since=&limit=` window),
   `isMention` rendering, clickable search results (K-007 `threadId` denorm is in), replace
   `alert()` errors.
 - GraphRAG reads pass a per-query client `timeout=` override (service-layer constant, not
   per-call ad-hockery) — the K-007 TIMEOUT posture (DESIGN §10).
-- **Prerequisite — QA DEF-1 (2026-07-05, low now / hazard once agents get identities):**
-  add a cross-label member-id uniqueness guard before wiring real agent identities —
-  `ensure_user`/`ensure_agent` should refuse an id already held by the other label (or lock a
-  "member ids are namespace-unique across `User`/`Agent`" rule + validation). Today a
-  configured actor colliding with an existing `agentId` silently MERGEs a shadow `User` that
-  eclipses the Agent in **every** `coalesce(u, a)` lookup (role derivation, `POSTED_BY`,
-  mentions) — silent misattribution, reproduced live. See
-  `docs/test-reports/k007-m2-groundwork-report.md` §3.
+- QA carry-over (K-007 report §4): test the transport-level agent path when K-008 auth
+  arrives — REST/MCP could not express an agent actor in M1, so agent authorship was only
+  driven at the service seam.
 
 ## Parking lot / ideas
 
-- **QA DEF-2 (2026-07-05, low — ops/diagnosability):** with FalkorDB unreachable,
-  `uvicorn falkorchat.app:app` hangs silently at import (no log line, port never binds; ≥90s
-  observed) — `db.connect()`'s `FalkorDB()` issues an eager command with no socket/connect
-  timeout, and the module-level `app = create_app()` triggers it at import. Fix: pass
-  `socket_connect_timeout`/`socket_timeout` in `db.connect()` and/or defer the first
-  connection to lifespan with a clear startup error. Compose is shielded by
-  `depends_on: service_healthy`; the README bare-`uvicorn` dev path is not. See
-  `docs/test-reports/k007-m2-groundwork-report.md` §3.
 - Verify the K-009 GitHub Action goes green on first push (path-filtered
   `.github/workflows/falkor-chat.yml`; FalkorDB service container). Note the CI baseline
-  echoes in its comments (75/92) predate K-007's 98/115 — the suites themselves are the
-  source of truth.
+  echoes in its comments (75/92) predate K-007/K-010's 110/126 — the suites themselves are
+  the source of truth.
 - File upstream FalkorDB issues (K-007 OQ6, recommended to the user): `GRAPH.MEMORY USAGE`
   under-reports vector-index memory; one-shot instant-timeout anomaly after a long override run.
+- Per-endpoint response schemas (QA, recommended three times now): full-thread /
+  since-reads / search each carry a different field subset (all documented/intentional) —
+  a declared schema per endpoint would make the contract testable and stop accretion.
 - DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard
   expression language (M3), `identity` source of truth + real auth (replaces the M1
   hardcoded-tenant seam, §14.3), message/embedding retention, cross-workspace analytics,

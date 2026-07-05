@@ -18,6 +18,14 @@ USER_ID: str = os.environ.get("FALKORCHAT_USER_ID", "u1")
 # ── FalkorDB connection ────────────────────────────────────────────────────────
 FALKORDB_HOST: str = os.environ.get("FALKORDB_HOST", "127.0.0.1")
 FALKORDB_PORT: int = int(os.environ.get("FALKORDB_PORT", "6379"))
+# Client socket timeouts in seconds (DEF-2). An unreachable instance must fail
+# fast and loud — on WSL2 a dead port can blackhole (no RST) instead of
+# refusing, so without a connect timeout startup hangs for minutes with zero
+# output. `SOCKET_TIMEOUT` bounds each command round-trip client-side; long
+# GraphRAG reads that need more pass a per-query `timeout=` override instead
+# (DESIGN §10 posture).
+FALKORDB_CONNECT_TIMEOUT: float = float(os.environ.get("FALKORDB_CONNECT_TIMEOUT", "5"))
+FALKORDB_SOCKET_TIMEOUT: float = float(os.environ.get("FALKORDB_SOCKET_TIMEOUT", "10"))
 
 
 @dataclass(frozen=True)

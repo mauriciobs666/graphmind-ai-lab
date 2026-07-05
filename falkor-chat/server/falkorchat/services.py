@@ -21,6 +21,11 @@ from typing import Any
 from redis.exceptions import ResponseError
 
 from .config import CallContext
+
+# `MemberIdCollisionError` is re-exported (redundant-alias idiom) as part of
+# the service error surface: the repository raises it (it owns the §2/§7
+# status-row contract); it lives there only to avoid an import cycle.
+from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
 
 # ── errors ─────────────────────────────────────────────────────────────────────

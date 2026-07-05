@@ -2,6 +2,43 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-05 — K-010: QA DEF-1 + DEF-2 closed (K-008 prerequisites)
+
+- **What:** closed both defects from the K-007 QA pass, clearing K-008's gate. Coordinated
+  delivery: **graph-dba** authored + live-verified the query layer, **tdd-engineer** wired the
+  Python (strict red→green), verification re-run independently.
+  1. **DEF-1 — member-id namespace guard (K-008 prerequisite).** Locked rule: member ids are
+     **namespace-unique across `User`/`Agent`**. `ensure_user`/`ensure_agent` are now v2
+     guarded-CREATE single-query bodies (QUERIES.md §2/§7, verified `Node By Index Scan` on
+     both legs) returning an always-present `(created, existed, collided)` status row —
+     idempotent re-ensure is a structural no-op; a cross-label collision writes nothing and
+     raises `MemberIdCollisionError` (repository-level, re-exported by services);
+     `existed AND collided` is a distinct corruption alarm. App startup with a configured
+     actor colliding with an existing Agent id now **fails loudly** instead of silently
+     minting a shadow `User` that eclipsed the Agent in every `coalesce(u, a)` lookup (the
+     exact QA S3 repro). Same-label uniqueness constraints remain the concurrency backstop;
+     the one-query-wide cross-label race window is documented, not closed (no engine
+     cross-label constraint exists).
+  2. **DEF-2 — fail-fast on unreachable FalkorDB.** `db.connect()` now passes
+     `socket_connect_timeout`/`socket_timeout` (config-resolved `FALKORDB_CONNECT_TIMEOUT=5`
+     / `FALKORDB_SOCKET_TIMEOUT=10`, env-overridable) and wraps failures in
+     `FalkorDBUnreachableError` naming host:port + timeout + a start-script hint; a new
+     `db.LazyFalkorDB` defers the first connection out of import — **importing
+     `falkorchat.app` never touches the network** (the module-level `create_app()` used to
+     hang ≥90s with zero output on WSL2's closed-port blackhole). Smoke re-verified: dead
+     port → clean exit in ~6s with the actionable error. `app.py` docstring now matches
+     reality.
+- **Files:** `server/falkorchat/{repository,services,config,db,app}.py`;
+  `server/tests/{test_repository,test_services,test_app}.py` + new `test_db.py`;
+  `docs/QUERIES.md` §2/§7 (v2 ensures + contract table + locked rule);
+  `scripts/test_queries.sh` (11 new DEF-1 assertions incl. PROFILE index checks);
+  `AGENTS.md` (new locked-decision row; baselines) + root `AGENTS.md` (baselines).
+- **Baselines (independently re-verified):** pytest **98 → 110**, query suite
+  **115/115 → 126/126**; `reference` schema restored post-suite; `ws:acme` untouched.
+- **Why:** DEF-1's silent misattribution was exactly the failure class K-007 closed, and it
+  gated wiring real agent identities in K-008; DEF-2 bought dev/ops diagnosability on the
+  README bare-`uvicorn` path (Compose was already shielded by `service_healthy`).
+
 ## 2026-07-05 — QA: acceptance pass on K-007 M2 groundwork
 
 - **What:** black-box/acceptance QA pass at `94ab746`, scoped to what the K-007 dev suites

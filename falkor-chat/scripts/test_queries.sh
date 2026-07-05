@@ -80,16 +80,23 @@ EMBEDDING_DIM=4 ./scripts/bootstrap_schema.sh test 2>&1 | grep -E "done:|ERROR" 
 echo ""
 echo "▶ §2 users & membership"
 
-out=$(gq "$WS" "MERGE (u:User {userId:'u1'}) ON CREATE SET u.displayName='Alice', u.email='alice@example.com', u.createdAt=1000 RETURN u.userId")
-assert_contains "create user Alice" "u1" "$out"
+# v2 guarded ensures (DEF-1): canonical bodies in QUERIES.md §2/§7; as with §4, the
+# test copies keep every clause verbatim except the final RETURN, which composes the
+# three status booleans into one grep-able string ("c=… e=… col=…").
 
-out=$(gq "$WS" "MERGE (u:User {userId:'u2'}) ON CREATE SET u.displayName='Bob', u.email='bob@example.com', u.createdAt=1001 RETURN u.userId")
-assert_contains "create user Bob" "u2" "$out"
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u1'}) OPTIONAL MATCH (a:Agent {agentId:'u1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u1', displayName:'Alice', email:'alice@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure user Alice (v2 fresh create)" "c=true e=false col=false" "$out"
 
-# idempotency: merge same user again — no new node
-out=$(gq "$WS" "MERGE (u:User {userId:'u1'}) ON CREATE SET u.displayName='Alice', u.email='alice@example.com', u.createdAt=1000 ON MATCH SET u.displayName='Alice' RETURN u.displayName")
-assert_contains "merge user idempotent" "Alice" "$out"
-assert_not_contains "merge user no duplicate node" "Nodes created: 2" "$out"
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u2'}) OPTIONAL MATCH (a:Agent {agentId:'u2'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u2', displayName:'Bob', email:'bob@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure user Bob (v2 fresh create)" "c=true e=false col=false" "$out"
+
+# idempotency: re-ensure same user — status row says existed, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'u1'}) OPTIONAL MATCH (a:Agent {agentId:'u1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'u1', displayName:'Alice', email:'alice@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "re-ensure user idempotent (existed, no write)" "c=false e=true col=false" "$out"
+assert_not_contains "re-ensure user creates no node" "Nodes created" "$out"
+
+out=$(gq "$WS" "MATCH (u:User {userId:'u1'}) RETURN count(u) AS n")
+assert_contains "re-ensure left exactly one Alice node" "1" "$out"
 
 # uniqueness constraint: duplicate userId must fail
 out=$(gq "$WS" "CREATE (:User {userId:'u1', displayName:'Imposter'})" 2>&1)
@@ -341,8 +348,46 @@ assert_not_contains "hybrid retrieval: no error" "ERR" "$out"
 echo ""
 echo "▶ §7 agents"
 
-out=$(gq "$WS" "MERGE (a:Agent {agentId:'bot1'}) ON CREATE SET a.name='FalkorBot', a.model='gpt-4o', a.createdAt=1000 RETURN a.agentId")
-assert_contains "create agent bot1" "bot1" "$out"
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'bot1'}) OPTIONAL MATCH (u:User {userId:'bot1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'bot1', name:'FalkorBot', model:'gpt-4o', createdAt:1000})) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "ensure agent bot1 (v2 fresh create)" "c=true e=false col=false" "$out"
+
+out=$(gq "$WS" "MATCH (a:Agent {agentId:'bot1'}) RETURN a.agentId")
+assert_contains "agent bot1 node exists" "bot1" "$out"
+
+# ── §2/§7 guarded-ensure cross-label guards (DEF-1) ──────────────────────────
+
+echo ""
+echo "▶ §2/§7 member-id namespace guards (DEF-1)"
+
+# idempotent re-ensure of the agent — existed, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'bot1'}) OPTIONAL MATCH (u:User {userId:'bot1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'bot1', name:'FalkorBot', model:'gpt-4o', createdAt:1000})) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "re-ensure agent idempotent (existed, no write)" "c=false e=true col=false" "$out"
+assert_not_contains "re-ensure agent creates no node" "Nodes created" "$out"
+
+# DEF-1 repro direction 1: ensure_user on an id held by an Agent → refused, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'bot1'}) OPTIONAL MATCH (a:Agent {agentId:'bot1'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'bot1', displayName:'Shadow', email:'shadow@example.com'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "ensure_user blocked by existing Agent (collided)" "c=false e=false col=true" "$out"
+
+out=$(gq "$WS" "MATCH (u:User {userId:'bot1'}) RETURN count(u) AS n")
+assert_contains "no shadow User written for bot1" "0" "$out"
+
+# DEF-1 repro direction 2: ensure_agent on an id held by a User → refused, nothing written
+out=$(gq "$WS" "OPTIONAL MATCH (a:Agent {agentId:'u1'}) OPTIONAL MATCH (u:User {userId:'u1'}) WITH a, u, (a IS NULL AND u IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:Agent {agentId:'u1', name:'EvilTwin', model:'x', createdAt:1}) ) RETURN 'c='+toString(ok)+' e='+toString(a IS NOT NULL)+' col='+toString(u IS NOT NULL) AS status")
+assert_contains "ensure_agent blocked by existing User (collided)" "c=false e=false col=true" "$out"
+
+out=$(gq "$WS" "MATCH (a:Agent {agentId:'u1'}) RETURN count(a) AS n")
+assert_contains "no shadow Agent written for u1" "0" "$out"
+
+# status-row shape on pre-guard corrupted state: both labels hold the id → existed AND collided
+gq "$WS" "CREATE (:User {userId:'shdw'}), (:Agent {agentId:'shdw'})" > /dev/null
+out=$(gq "$WS" "OPTIONAL MATCH (u:User {userId:'shdw'}) OPTIONAL MATCH (a:Agent {agentId:'shdw'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'shdw', displayName:'x', email:'x'})) RETURN 'c='+toString(ok)+' e='+toString(u IS NOT NULL)+' col='+toString(a IS NOT NULL) AS status")
+assert_contains "corrupted both-exist state flagged (existed AND collided)" "c=false e=true col=true" "$out"
+gq "$WS" "MATCH (n) WHERE n.userId = 'shdw' OR n.agentId = 'shdw' DELETE n" > /dev/null
+
+# PROFILE: both cross-label existence checks must be index scans
+prof=$(gp "$WS" "OPTIONAL MATCH (u:User {userId:'probe'}) OPTIONAL MATCH (a:Agent {agentId:'probe'}) WITH u, a, (u IS NULL AND a IS NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (:User {userId:'probe', displayName:'p', email:'p'})) RETURN ok, u IS NOT NULL, a IS NOT NULL")
+assert_index_scan "guarded ensure existence checks" "$prof"
+gq "$WS" "MATCH (u:User {userId:'probe'}) DELETE u" > /dev/null
 
 out=$(gq "$WS" "MATCH (a:Agent {agentId:'bot1'}) MATCH (c:Channel {channelId:'ch1'}) MERGE (a)-[r:MEMBER_OF]->(c) ON CREATE SET r.role='assistant', r.joinedAt=1000 RETURN r.role")
 assert_contains "add agent to channel" "assistant" "$out"

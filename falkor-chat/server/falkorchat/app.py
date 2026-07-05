@@ -5,6 +5,11 @@
 process. The MCP app's lifespan MUST be forwarded to FastAPI or the MCP session
 manager never initialises (python-sdk #1367).
 
+Importing this module (and calling `create_app` without injected services)
+never touches the network — the default services hold a deferred connection
+handle, and the first FalkorDB round-trip happens at lifespan startup, where
+an unreachable instance fails fast (DEF-2).
+
 Run:  uvicorn falkorchat.app:app   (agents connect at /mcp; REST under /)
 """
 
@@ -78,7 +83,12 @@ def create_app(
     defaults to the repo-root `web/` and is skipped if that directory is absent.
     """
     if services is None:
-        services = Services(Repository(db.connect()))
+        # DEF-2: a deferred connection handle — building the app must never
+        # touch the network (this function runs at import time via the
+        # module-level `app = create_app()` below). The first real connection
+        # happens at lifespan startup and fails fast with a clear
+        # `db.FalkorDBUnreachableError` (host:port) when FalkorDB is down.
+        services = Services(Repository(db.LazyFalkorDB()))
 
     provider = context_provider or config.get_context
 
@@ -95,8 +105,12 @@ def create_app(
     @asynccontextmanager
     async def _lifespan(app_: FastAPI):
         # The §4 write paths anchor on the author node — ensure the configured
-        # actor exists before the first write (deferred to startup, not import,
-        # so building the app never requires a reachable FalkorDB).
+        # actor exists before the first write. This is also the first real
+        # FalkorDB round-trip (the default services hold a deferred handle):
+        # an unreachable instance aborts startup within the connect-timeout
+        # budget (db.FalkorDBUnreachableError, names host:port), and an actor
+        # id colliding with an existing Agent aborts loudly
+        # (MemberIdCollisionError) instead of silently shadowing it (DEF-1).
         services.ensure_actor(provider())
         if mcp_lifespan is not None:
             async with mcp_lifespan(app_):
