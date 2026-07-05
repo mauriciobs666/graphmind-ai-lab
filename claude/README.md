@@ -31,6 +31,7 @@ Each agent carries a living improvement plan and change log:
 - `devops/kaizen/` — [plan](./devops/kaizen/plan.md) · [history](./devops/kaizen/history.md)
 
 `cobb` additionally maintains [`cobb/TESTING.md`](./cobb/TESTING.md) (agent testing standards).
+`graph-dba` additionally maintains [`graph-dba/falkordb-quirks.md`](./graph-dba/falkordb-quirks.md) — a dated, live-verified FalkorDB quirks knowledge base for this lab's edge build, kept out of the always-on prompt and loaded on demand.
 
 ## Skills
 

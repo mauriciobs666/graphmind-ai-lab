@@ -34,41 +34,30 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ## Live-verified FalkorDB facts (falkordb/falkordb:edge, Redis 8.2.2, module 999999)
 
-These diverge from general docs or Neo4j assumptions — treat them as ground truth:
+General engine/dialect quirks verified against this build (vector index DDL, index-before-constraint
+ordering, the `exists()` pattern bug, empty-`UNWIND` row collapse, `TIMEOUT` behavior, `OR`-as-scan-anchor,
+etc.) now live in the `graph-dba` agent's knowledge base, **`claude/graph-dba/falkordb-quirks.md`** —
+check there first. What's below is specific to this project's schema/queries:
 
-- **Vector index creation** is DDL:
-  ```sql
-  CREATE VECTOR INDEX FOR (n:Label) ON (n.prop)
-  OPTIONS {dimension: N, similarityFunction: 'cosine'}
-  ```
-- **`db.idx.vector.createNodeIndex` is not a registered procedure** on this build.
-- **Constraint ordering:** `CREATE INDEX FOR …` must run before `GRAPH.CONSTRAINT CREATE` on the same property, or you get `"missing supporting exact-match index"`.
-- **Composite constraints** (`PROPERTIES 2 key version`) are supported and operational — verified.
-- **Cross-graph edges** silently no-op — no error, MATCH returns 0 rows. There is no error to catch.
-- **`(:User | :Agent)` union label syntax** in Cypher patterns — not verified on this build; use `coalesce()` or label-agnostic traversal instead.
-- **`length(path)` in ORDER BY** — not supported. Use a property (e.g. `m.createdAt`) instead.
-- **Fulltext index** via `CALL db.idx.fulltext.createNodeIndex('Label', 'prop')` — confirmed.
-- **`algo.*` procedures confirmed:** `BFS`, `WCC`, `pageRank`, `SPpaths`, `SSpaths`, `MSF`, `betweenness`, `labelPropagation`.
-- **`GRAPH.RO_QUERY`** routes to replicas — use for all read-only queries (RAG retrieval, thread reads).
-- **Bolt port** is `65535` per `GRAPH.CONFIG`.
-- **Default `TIMEOUT` is 1000ms** — reviewed for M2 (K-007): keep it as the deployment default; GraphRAG reads pass a per-query client `timeout=` override instead (DESIGN §10 posture).
-- **Empty `UNWIND` collapses the row stream.** `WITH m UNWIND [] AS x …` drops `m` and a trailing `RETURN m` comes back empty even though earlier writes committed. The mention write-block guards this with `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid` + a `FOREACH` that never filters — verified regression-safe (see `QUERIES.md` §4 mentions note).
-- **`FOREACH (x IN CASE … | CREATE …)`** is the idiom for conditional writes without dropping rows — confirmed on this build.
-- **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is absent** (broken on this build), and `count{ … }` subquery syntax is unsupported. For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL` instead (used by `repository.thread_has_head`/`thread_exists`).
-- **Member resolution must be label-specific.** `WHERE n.userId = $x OR n.agentId = $x` as a *scan anchor* profiles as an `All Node Scan`; two `OPTIONAL MATCH (u:User {userId:mid}) / (a:Agent {agentId:mid})` + `coalesce(u,a)` gives two `Node By Index Scan`s. The `OR` form is fine only when `n` is already bound by a traversal/indexed anchor (mention-flag and cursor reads).
-- **Writes ignore `TIMEOUT` on this build** — a write runs to completion regardless of clause or
-  default. Reads enforce it batch-granularly (slightly-over queries can slip through); the
-  client `timeout=` pass-through (`g.ro_query(q, params=…, timeout=…)`) works and is **uncapped
-  while `TIMEOUT_MAX=0`**. Bounded batches + input caps are the only write-path protection.
-- **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (`indices_sz_mb: 0` with a live
-  HNSW index holding 4k vectors) — size workspaces from `INFO memory` deltas until fixed upstream.
-- **`labels(coalesce(u, a))[0]` subscripting works** — the §2 member-kind lookup relies on it.
-- **`DELETE` inside `FOREACH`** (the v2 TAIL relink) **and nested `FOREACH`** (mentions inside
-  the write guard) both work.
+- **`repository.thread_has_head`/`thread_exists`** exist specifically to route around graph-dba's
+  `exists()`-pattern-bug finding — they use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`,
+  never a pattern-`exists()` check.
+- **The mention write-block's empty-`UNWIND` guard is load-bearing for the write itself**, not just
+  the mentions (see `QUERIES.md` §4 mentions note): `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE
+  $mentions END) AS mid` + a `FOREACH` that never filters. A bare `UNWIND []` would collapse the whole
+  row stream before that `FOREACH`, silently dropping the message write, not just the
+  `MENTIONS_MEMBER` edges.
+- **Member resolution (`userId`/`agentId`) is the concrete case of graph-dba's `OR`-scan-anchor
+  quirk** — two `OPTIONAL MATCH (u:User {userId:mid})` / `(a:Agent {agentId:mid})` + `coalesce(u,a)`
+  for anchored lookups (`labels(coalesce(u,a))[0]` gives the member kind). The `OR` form is fine only
+  in mention-flag and cursor reads, where `n` is already bound by a traversal/indexed anchor.
 - **Formulation-A composite keyset predicate** (`m.createdAt > $since OR (m.createdAt = $since
   AND m.msgId > $sinceMsgId)`) still plans as a bare `Node By Index Scan` on `Message.createdAt`
   with no residual Filter — **re-profile on engine upgrades** (edge build; formulation B in
   QUERIES.md §9.1 is the documented fallback).
+- **`TIMEOUT` default (1000ms) was reviewed for M2 (K-007) and kept as the deployment default** —
+  writes ignore it entirely regardless (graph-dba finding); GraphRAG reads pass a per-query client
+  `timeout=` override instead (DESIGN §10 posture).
 
 ---
 

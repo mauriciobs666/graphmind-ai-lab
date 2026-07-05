@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-05 — Absorbed generic FalkorDB engine quirks from falkor-chat/AGENTS.md
+- **What:** `falkor-chat/AGENTS.md` had a "Live-verified FalkorDB facts" section mixing generic
+  engine/dialect quirks (vector index DDL, index-before-constraint ordering, composite
+  constraints, cross-graph edge no-op, union-label syntax, `length(path)` in ORDER BY, fulltext +
+  `algo.*` confirmation, `GRAPH.RO_QUERY`/Bolt port, `TIMEOUT` default + write-path behavior,
+  empty-`UNWIND` row collapse, the `FOREACH(CASE...)` idiom, the `exists()` pattern bug,
+  `OR`-as-scan-anchor tuning, `GRAPH.MEMORY USAGE` under-reporting, `labels(coalesce())[0]`
+  subscripting) with falkor-chat-specific corollaries (repository function names, mention
+  write-block internals, keyset predicate profiling), generalized away from falkor-chat's specific
+  property/label names. `falkor-chat/AGENTS.md` was trimmed to keep only the project-specific
+  corollaries, each pointing back here for the general fact.
+- **Mechanism (revised same day):** first draft inlined the ~20 quirks as a "Verified engine
+  quirks" subsection in `graph-dba.md`; on review that bloats the always-on prompt with a
+  *perishable, growing* fact list. Split instead into a **resource file** —
+  `claude/graph-dba/falkordb-quirks.md` — modeled on the `agent-standards` skill's discipline
+  (dated verification stamp, "cache not source of truth," re-verify on tagged-release upgrade,
+  build sentinel `999999`). `graph-dba.md` keeps only a short stable-framing pointer that tells the
+  agent to read the KB before writing/debugging Cypher/DDL/ops against this build. The whole agent
+  folder is symlinked into `~/.claude/agents/graph-dba`, so the sibling file is reachable at both
+  the repo path and `~/.claude/agents/graph-dba/falkordb-quirks.md`. `falkor-chat/AGENTS.md`'s
+  back-reference was repointed from the prompt section to the resource file.
+- **Why:** User: "the section ## Live-verified FalkorDB facts should be part of
+  ../claude/graph-dba" — these are reusable DBA knowledge for *any* project on this FalkorDB
+  build, not just falkor-chat, and belong on the agent so other projects benefit too. Resource-file
+  form (not inline, not a shared skill) was the user's explicit call: keeps the prompt lean and the
+  KB in the agent's own folder as a growing, curated store.
+- **Plan items:** —
+
 ## 2026-06-05 — Deferred K-001 & K-002 (documentation-only for now)
 - **What:** No agent/prompt change. User said "just document for now," so recorded the decision: **K-001** (tool permissions) → keep tools unconstrained, no `tools` key; **K-002** (live-FalkorDB profiling skill) → not building it yet, agent stays advice-only. Both marked ⚪ deferred with revisit triggers; active backlog is now empty.
 - **Why:** User chose the documentation-only path rather than building tooling or restricting permissions. Logged so the items aren't re-proposed.
