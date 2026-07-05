@@ -2,6 +2,65 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-05 — K-007: M2 groundwork — agent authorship, v2 write-path guards, threadId denorm, composite cursors
+
+- **What:** the six pre-agent-writer correctness/completeness items, landed per the approved
+  plan (`docs/plans/m2-groundwork.md`) over the graph-dba's live-verified query deliverable
+  (`docs/plans/m2-groundwork-queries.md`); plus the two server fold-ins.
+  1. **Agent authorship** — §4 write paths resolve the author label-specifically (two indexed
+     `OPTIONAL MATCH`es + `coalesce`), closing the `All Node Scan` *and* the silent no-op that
+     made `Agent` authors unwritable; `services.post_message` derives `role` from the author's
+     label via the new `repository.resolve_member_kinds` (`User → user`, `Agent → assistant`;
+     replaces `existing_members` — one round trip for author + mention validation + role).
+  2. **v2 self-guarding write paths (two reproduced defects fixed)** — each path wraps its write
+     in a `FOREACH`+`CASE` guard inside the single `GRAPH.QUERY` and always returns a
+     `(written, hadHead, dupMsg, authorFound)` status row (`repository.MessageWriteStatus`).
+     Defect A: a same-`msgId` retry replay re-ran the relink clauses (NEXT self-loop, doubled
+     `POSTED_BY`) — now a structural no-op reported as `dupMsg` = idempotent success. Defect B:
+     two racing first-posts created two HEADs — the loser now refuses with `hadHead` and the
+     service re-dispatches as subsequent (bounded 4-attempt loop; `Message` writes carry **no
+     MERGE** — the uniqueness constraint stays as the verified all-or-nothing backstop).
+     `REPLY_TO`-inside-the-guard live-verified in `test_queries.sh` (OQ4); repository fold-in
+     waits for a reply surface.
+  3. **`Message.threadId` denorm** — stamped inline by both write paths, deliberately unindexed;
+     surfaced in §9.1/§9.2 since-reads, `/search`, and `GET /messages/{id}`. One-off
+     `scripts/backfill_thread_ids.sh` (QUERIES.md §4.x; idempotent, HEAD-anchored, orphan
+     caveat) — run against `ws:acme`: 0 backfilled (expected no-op, 0 messages).
+  4. **Millisecond-tie correctness (reproduced page-boundary skip fixed)** — deterministic total
+     order `(createdAt, msgId)` on both since-reads; formulation-A composite keyset predicate
+     (still a bare `Node By Index Scan`); composite monotonic `ReadCursor`
+     (`lastReadAt`, `lastReadMsgId`) — five scenarios verified, pre-K-007 cursors covered by
+     `coalesce(…, '')`, no schema change; plus a lock-guarded monotonic per-process message
+     clock in `Services` (same-ms ties impossible at the source). Explicit REST `?since=` keeps
+     plain-`>` semantics (documented, OQ3).
+  5. **TIMEOUT posture (docs-only, live-probed)** — keep legacy `TIMEOUT=1000`; per-query client
+     override for future GraphRAG reads; **writes ignore TIMEOUT on this build** — bounded
+     batches + input caps are the only write-path protection (DESIGN §10).
+  6. **RAM line re-costed at 1024 dims (empirical)** — 12,387 B/message observed ≈ 12.4 KB ⇒
+     ~1.25 GB per 100k-message workspace; `GRAPH.MEMORY USAGE` under-reports vector-index memory
+     (size from `INFO memory` deltas) — DESIGN §11 rewritten; bootstrap default stays 1536 with
+     an explicit choose-before-creation comment.
+  - Fold-ins: `db.connect()` late-binds `config.FALKORDB_*`; `create_channel`/`create_thread`
+    are plain `CREATE` (server-minted ids — creates documented **non-idempotent**;
+    `create_thread` raises on a missing channel anchor).
+  - Docs: QUERIES.md §2/§3/§4(+§4.x)/§5/§9 rewritten as the canonical v2 bodies; DESIGN
+    §5.1/§5.3/§9/§10/§11/§12 (role values fixed to `user`/`assistant`, the falsified
+    "idempotent via MERGE" claim replaced by the status-row contract); AGENTS.md decisions/
+    facts/write-path rewrite; README + root AGENTS.md baselines.
+- **Why:** prerequisites for AI agents writing concurrently (K-008): agents couldn't author at
+  all, a client retry corrupted the thread chain, a first-post race forked it, and same-ms
+  `createdAt` ties silently lost messages at cursor page boundaries.
+- **Verified:** server suite **98 passed** (was 75; +23 — the plan's ≈95 estimate, exceeded by
+  finer-grained regression tests); query suite **115/115** (was 92; +23 exactly as enumerated);
+  `ruff check .` clean; defect regressions were watched fail red against the old code (replay →
+  `(2 NEXT, 1 self-loop, 2 POSTED_BY)`; race → 2 HEADs) before the v2 queries landed; live
+  8-worker concurrency hammer green (1 HEAD, 1 TAIL, contiguous chain of 8); backfill no-op
+  proven on `ws:acme`.
+- **Plan items:** K-007 ✅ done; K-008 (GraphRAG proper) unblocked; parking-lot fold-ins
+  (`db.connect` bind, uuid `MERGE`) delivered. OQ6 (upstream FalkorDB filings: `GRAPH.MEMORY
+  USAGE` vector under-report; one-shot instant-timeout anomaly) recommended to the user, not
+  filed.
+
 ## 2026-07-04 — K-009: containerization (Dockerfile/compose) + CI + `falkordb-data` persistence fix
 
 - **What:** first delivery-lifecycle pass for the component — container images, a compose stack,

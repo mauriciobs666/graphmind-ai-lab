@@ -24,6 +24,10 @@ chat history, workspace data, reference data, workflow definitions and execution
 | Vector score is cosine **distance** (0 = identical) | sort `ORDER BY score ASC` for most-similar first |
 | `status` as property, not label | avoids re-labeling churn on state changes; index it |
 | `ctx`, `input`, `output` must be flat/serialised | FalkorDB stores scalars and scalar lists only — no nested maps |
+| `Message.threadId` denormalized inline, **unindexed** | navigation metadata for §9.2/§5 rows; §9.1's HEAD/NEXT walk stays canonical; skipping the index saves RAM/write cost (K-007) |
+| Guarded-CREATE write paths (`FOREACH`+`CASE` guard per path) with an always-returned status row | retry replay is a structural no-op (`dupMsg`), first-post race refused (`hadHead`); no MERGE on Message — constraint stays as backstop (K-007) |
+| `Message.role` values `user`/`assistant`, derived server-side from the author label | `User → user`, `Agent → assistant`; never trusted from the caller — agents author first-class (K-007) |
+| Composite `(createdAt, msgId)` keyset for cursor reads (`ReadCursor.lastReadMsgId`) | timestamp alone is not a total order — same-ms ties skipped rows at page boundaries; cursor-driven reads are now lossless (K-007) |
 
 ---
 
@@ -46,11 +50,24 @@ These diverge from general docs or Neo4j assumptions — treat them as ground tr
 - **`algo.*` procedures confirmed:** `BFS`, `WCC`, `pageRank`, `SPpaths`, `SSpaths`, `MSF`, `betweenness`, `labelPropagation`.
 - **`GRAPH.RO_QUERY`** routes to replicas — use for all read-only queries (RAG retrieval, thread reads).
 - **Bolt port** is `65535` per `GRAPH.CONFIG`.
-- **Default `TIMEOUT` is 1000ms** — may fire on GraphRAG queries over large workspaces; review before M2.
+- **Default `TIMEOUT` is 1000ms** — reviewed for M2 (K-007): keep it as the deployment default; GraphRAG reads pass a per-query client `timeout=` override instead (DESIGN §10 posture).
 - **Empty `UNWIND` collapses the row stream.** `WITH m UNWIND [] AS x …` drops `m` and a trailing `RETURN m` comes back empty even though earlier writes committed. The mention write-block guards this with `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid` + a `FOREACH` that never filters — verified regression-safe (see `QUERIES.md` §4 mentions note).
 - **`FOREACH (x IN CASE … | CREATE …)`** is the idiom for conditional writes without dropping rows — confirmed on this build.
 - **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is absent** (broken on this build), and `count{ … }` subquery syntax is unsupported. For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL` instead (used by `repository.thread_has_head`/`thread_exists`).
 - **Member resolution must be label-specific.** `WHERE n.userId = $x OR n.agentId = $x` as a *scan anchor* profiles as an `All Node Scan`; two `OPTIONAL MATCH (u:User {userId:mid}) / (a:Agent {agentId:mid})` + `coalesce(u,a)` gives two `Node By Index Scan`s. The `OR` form is fine only when `n` is already bound by a traversal/indexed anchor (mention-flag and cursor reads).
+- **Writes ignore `TIMEOUT` on this build** — a write runs to completion regardless of clause or
+  default. Reads enforce it batch-granularly (slightly-over queries can slip through); the
+  client `timeout=` pass-through (`g.ro_query(q, params=…, timeout=…)`) works and is **uncapped
+  while `TIMEOUT_MAX=0`**. Bounded batches + input caps are the only write-path protection.
+- **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (`indices_sz_mb: 0` with a live
+  HNSW index holding 4k vectors) — size workspaces from `INFO memory` deltas until fixed upstream.
+- **`labels(coalesce(u, a))[0]` subscripting works** — the §2 member-kind lookup relies on it.
+- **`DELETE` inside `FOREACH`** (the v2 TAIL relink) **and nested `FOREACH`** (mentions inside
+  the write guard) both work.
+- **Formulation-A composite keyset predicate** (`m.createdAt > $since OR (m.createdAt = $since
+  AND m.msgId > $sinceMsgId)`) still plans as a bare `Node By Index Scan` on `Message.createdAt`
+  with no residual Filter — **re-profile on engine upgrades** (edge build; formulation B in
+  QUERIES.md §9.1 is the documented fallback).
 
 ---
 
@@ -81,31 +98,48 @@ Edges cannot cross graphs. Cross-graph references use property keys or materiali
 
 The exact, verified Cypher lives in **one place — `docs/QUERIES.md` §4** (single source of
 truth). Do not copy query bodies here or into `DESIGN.md`; link to QUERIES.md instead — the
-duplication is what lets the copies drift. The invariants that govern those queries:
+duplication is what lets the copies drift. The invariants that govern those queries (v2, K-007):
 
 - **Two separate write paths, never a conditional MERGE:** *first message in a thread*
-  (creates `HEAD` + `TAIL`) vs. *subsequent message* (moves `TAIL` forward via `NEXT`). The
-  service picks the variant by checking whether the thread already has a `HEAD`.
+  (creates `HEAD` + `TAIL`) vs. *subsequent message* (moves `TAIL` forward via `NEXT`). Each is
+  **self-guarding**: the write happens inside a `FOREACH (… IN CASE WHEN ok THEN [1] ELSE []
+  END | …)` guard *per path* — a guarded `CREATE`, **no MERGE on Message** (the constraint
+  stays as the concurrency backstop). The service picks the initial variant by checking for a
+  `HEAD`, then dispatches on the returned status row.
+- **Status-row contract:** both paths always return `(written, hadHead, dupMsg, authorFound)`
+  when their anchor matches. **Zero rows = the anchor missed only** (first: thread missing →
+  404; subsequent: no TAIL → retry as first). `dupMsg=true` = **idempotent success** (a retry
+  replay of our own server-minted msgId — trusted without a payload check; add a checksum if
+  msgIds ever become client-supplied). `hadHead=true` = lost the first-post race → re-dispatch
+  as subsequent. `authorFound=false` = unknown member, nothing written. The dispatch loop is
+  bounded at 4 attempts (tripwire — ping-pong is impossible by contract).
 - **Each write is a single `GRAPH.QUERY`** — atomicity is per-query; the HEAD/TAIL relink must
   not be split across queries.
+- **`role` is derived, never trusted:** the service resolves the author's label
+  (`User → user`, `Agent → assistant`) via the §2 member-kind lookup — Agents author
+  first-class. Author resolution in the write is label-specific (two indexed `OPTIONAL
+  MATCH`es + `coalesce`), closing the old `All Node Scan`/silent-Agent-no-op defect.
 - **Every message records its author** with `(m)-[:POSTED_BY]->(author)`. The canonical
   thread-read path (`QUERIES.md` §4) *requires* that edge — a message written without it is
   invisible to thread reads.
-- **Participant mentions ride inside the same write query.** Both write paths carry a `$mentions`
-  list and append the mention block (`QUERIES.md` §4) that writes `(m)-[:MENTIONS_MEMBER]->(member)`
-  edges atomically — never a follow-up query (atomicity rule). `MENTIONS_MEMBER` (participants) is
-  **distinct from** `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) — do not conflate them.
-  `$mentions = []` is a verified no-op.
-- **Every `MERGE` is backed by a uniqueness constraint** (`Message.msgId`; `ReadCursor.cursorId`).
-- **A write that returns zero rows wrote nothing.** The §4 queries anchor on `MATCH` (thread,
-  author, TAIL); a missing anchor no-ops the whole query with no error. The repository raises on
-  an empty result, the service validates the author is a known member before writing, and
-  `create_app`'s lifespan runs `services.ensure_actor()` so the configured actor node exists
-  before the first write.
-- **Since-reads (§9.1/§9.2) are chronological; cursors advance to what was delivered.** Reader
-  mentions are carried by the `isMention` flag, never a mention-first sort — a resorted page +
-  `LIMIT` breaks the contiguous-prefix invariant and the cursor (advanced to the newest *returned*
-  `createdAt`, never the server clock) would skip messages permanently.
+- **Participant mentions ride inside the same write query.** Mention resolution runs before the
+  guard; the nested `FOREACH` creates `(m)-[:MENTIONS_MEMBER]->(member)` edges *inside* it —
+  never a follow-up query (atomicity rule). The empty-`UNWIND` `CASE` guard is now
+  **load-bearing for the write itself** (a bare `UNWIND []` collapses the stream before the
+  FOREACH). `MENTIONS_MEMBER` (participants) is **distinct from** `MENTIONS`→`Entity` (GraphRAG
+  co-occurrence, §6) — do not conflate them. `$mentions = []` is a verified no-op.
+- **Every `MERGE` is backed by a uniqueness constraint** (`ReadCursor.cursorId`; `ensure_user`/
+  `ensure_agent`). Channel/thread creates are plain `CREATE` (server-minted ids —
+  **non-idempotent**, a retried create mints a new id).
+- **The service owns the timestamps:** message `createdAt` comes from a lock-guarded monotonic
+  per-process clock (`max(clock, last+1)`) — same-ms ties are impossible at the source.
+- **Since-reads (§9.1/§9.2) are chronological in the `(createdAt, msgId)` total order; cursors
+  advance to what was delivered.** Reader mentions are carried by the `isMention` flag, never a
+  mention-first sort — a resorted page + `LIMIT` breaks the contiguous-prefix invariant.
+  Cursor-driven reads use the composite keyset + the composite `ReadCursor` pair (advanced to
+  the newest *returned* `(createdAt, msgId)`, never the server clock) and never skip or
+  re-deliver, even across millisecond ties. Explicit-`since` reads keep plain `>` semantics
+  (may re-deliver/skip within that exact millisecond — documented, OQ3).
 
 ---
 
@@ -115,7 +149,8 @@ duplication is what lets the copies drift. The invariants that govern those quer
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
-| `./scripts/test_queries.sh` | 92-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/test_queries.sh` | 115-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
@@ -128,7 +163,7 @@ The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) l
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # 75 passed (needs FalkorDB up)
+.venv/bin/python -m pytest -q                                # 98 passed (needs FalkorDB up)
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
@@ -152,6 +187,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 | `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP |
 | `docs/QUERIES.md` | Canonical query library — all verified against the live instance |
 | `docs/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
+| `docs/plans/m2-groundwork.md` · `docs/plans/m2-groundwork-queries.md` | K-007 plan + graph-dba verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings |
 
 ---
 
@@ -161,7 +197,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 2. **Verify dialect before assuming.** This is FalkorDB OpenCypher, not Neo4j. No APOC, no GDS, no `PROFILE` keyword prefix. Check `CALL dbms.procedures()` when unsure.
 3. **Profile before tuning.** Use `GRAPH.PROFILE` to confirm an index is actually hit before declaring a query fast. Look for `Node By Index Scan`, not `NodeByLabelScan`.
 4. **All writes that touch HEAD/TAIL must be a single `GRAPH.QUERY`** — atomicity is per-query.
-5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 92/92 is the baseline.
+5. **Test suite must stay green.** Run `./scripts/test_queries.sh` after any schema or query change. 115/115 is the baseline.
 6. **RAM is the binding constraint.** Any new node type, index, or vector dimension affects per-workspace RAM. Call it out.
 7. **One graph per workspace.** Never add a `workspaceId` property to filter inside a shared graph.
 8. **`ctx`, `input`, `output` on workflow nodes are serialised strings.** Do not design queries that filter inside them.

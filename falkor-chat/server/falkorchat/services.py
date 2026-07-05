@@ -12,6 +12,7 @@ these methods; they carry no business logic.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -79,6 +80,18 @@ class Services:
         self._repo = repo
         self._clock = clock
         self._id = id_gen
+        self._ts_lock = threading.Lock()
+        self._last_ts = 0
+
+    def _next_ts(self) -> int:
+        """Monotonic per-process ms clock — makes same-ms message ties impossible
+        (K-007 item 4a). Used only for message `createdAt`; channel/thread stamps
+        keep the plain clock (ties there are harmless). Lock-guarded because
+        FastAPI runs sync endpoints on a threadpool."""
+        with self._ts_lock:
+            ts = max(self._clock(), self._last_ts + 1)
+            self._last_ts = ts
+            return ts
 
     # ── health ──────────────────────────────────────────────────────────────────
 
@@ -91,9 +104,11 @@ class Services:
     def ensure_actor(self, ctx: CallContext) -> None:
         """Project the context actor into the workspace as a `User` (idempotent).
 
-        Called at app startup so the M1 hardcoded actor exists before the first
-        write — the §4 write paths anchor on the author node. The actor is a
-        `User` in M1; agent actors arrive with real per-client auth.
+        Called at app startup so the configured actor exists before the first
+        write — the §4 write paths refuse an unknown author. The configured
+        actor is projected as a `User`; Agent actors (seeded via
+        `repo.ensure_agent`) post with role `assistant` — real per-client agent
+        auth is still to come.
         """
         self._repo.ensure_user(ctx.ws, user_id=ctx.actor)
 
@@ -141,38 +156,63 @@ class Services:
     ) -> dict[str, Any]:
         """Post a message into an existing thread.
 
-        Picks the first-vs-subsequent §4 write variant, validates mentions, and
-        attributes the message to the context actor. The actor is a `User` in M1
-        (role ``user``); agent authorship arrives with real per-client auth.
+        Validates the actor and mentions, derives `role` from the actor's node
+        label (`User → user`, `Agent → assistant` — agents can author), then
+        dispatches on the §4 v2 status row (QUERIES.md §4 contract):
+        `dupMsg` = idempotent retry success; `hadHead` = lost the first-post
+        race → re-dispatch as subsequent; subsequent with no TAIL → `None` →
+        re-dispatch as first. The loop bound is a tripwire — ping-pong is
+        impossible by contract (a headed thread always has a TAIL).
         """
         if not self._repo.thread_exists(ctx.ws, thread_id=thread_id):
             raise ThreadNotFoundError(thread_id)
 
         wanted = _dedup(list(mentions or []))
-        # One membership lookup covers the author and every mention. The author
-        # check is load-bearing: the §4 write anchors on the author node, and a
-        # missing author would silently no-op the entire write.
-        known = self._repo.existing_members(ctx.ws, ids=[ctx.actor, *wanted])
-        if ctx.actor not in known:
+        # One member-kind lookup covers the author and every mention. The author
+        # check is load-bearing: an unknown author makes the v2 write refuse
+        # (authorFound=false) — validate before writing.
+        kinds = self._repo.resolve_member_kinds(ctx.ws, ids=[ctx.actor, *wanted])
+        actor_kind = kinds.get(ctx.actor)
+        if actor_kind is None:
             raise UnknownActorError(ctx.actor)
-        unknown = [m for m in wanted if m not in known]
+        role = "user" if actor_kind == "User" else "assistant"
+        unknown = [m for m in wanted if kinds.get(m) is None]
         if unknown:
             raise UnknownMemberError(unknown)
 
-        msg_id = self._id()
-        now = self._clock()
-        write = (
-            self._repo.post_subsequent_message
-            if self._repo.thread_has_head(ctx.ws, thread_id=thread_id)
-            else self._repo.post_first_message
-        )
-        write(
-            ctx.ws, thread_id=thread_id, msg_id=msg_id, author_id=ctx.actor,
-            text=text, role="user", created_at=now, mentions=wanted,
-        )
+        msg_id, now = self._id(), self._next_ts()
+        use_first = not self._repo.thread_has_head(ctx.ws, thread_id=thread_id)
+        for _attempt in range(4):
+            write = (
+                self._repo.post_first_message
+                if use_first
+                else self._repo.post_subsequent_message
+            )
+            st = write(
+                ctx.ws, thread_id=thread_id, msg_id=msg_id, author_id=ctx.actor,
+                text=text, role=role, created_at=now, mentions=wanted,
+            )
+            if st is None:
+                if use_first:                    # thread anchor vanished (TOCTOU)
+                    raise ThreadNotFoundError(thread_id)
+                use_first = True                 # no TAIL yet — retry as first-post
+                continue
+            if st.written or st.dup_msg:         # dup_msg = idempotent success (OQ2)
+                break
+            if not st.author_found:              # belt-and-suspenders vs the pre-check
+                raise UnknownActorError(ctx.actor)
+            if st.had_head:                      # lost the first-post race
+                use_first = False
+                continue
+            raise RuntimeError(f"unexpected write status {st!r} (thread={thread_id!r})")
+        else:
+            raise RuntimeError(
+                "message write dispatch did not converge "
+                f"(thread={thread_id!r}, msg={msg_id!r})"
+            )
         return {
             "msgId": msg_id, "threadId": thread_id, "authorId": ctx.actor,
-            "text": text, "role": "user", "createdAt": now, "mentions": wanted,
+            "text": text, "role": role, "createdAt": now, "mentions": wanted,
         }
 
     def read_messages(
@@ -182,12 +222,17 @@ class Services:
         """Read messages since a cursor/timestamp.
 
         Modes:
-          * explicit ``since`` → pure read; the cursor is never touched.
+          * explicit ``since`` → pure read with plain ``>`` timestamp semantics;
+            the cursor is never touched. May re-deliver or skip messages within
+            that exact millisecond (OQ3 contract) — agents that need lossless
+            catch-up use cursor mode.
           * no ``since`` + ``thread_id`` → read from the member's per-thread
-            cursor (or epoch 0 if none), then, when ``advance`` is set, move the
-            cursor forward to the newest ``createdAt`` actually delivered (a
+            composite cursor ``(lastReadAt, lastReadMsgId)`` (or the epoch base
+            ``(0, '')``), then, when ``advance`` is set, move the cursor forward
+            to the newest ``(createdAt, msgId)`` pair actually delivered (a
             write). Never the server clock — that would permanently skip rows a
-            ``limit`` truncated. An empty page advances nothing.
+            ``limit`` truncated. An empty page advances nothing. Cursor-driven
+            reads never skip or re-deliver, even across millisecond ties.
           * no ``since`` + no ``thread_id`` → room-wide read from epoch 0. There
             is no room-wide cursor in M1, so nothing is advanced.
         """
@@ -195,25 +240,30 @@ class Services:
 
         if thread_id is not None:
             cursor_id = f"{ctx.actor}:{thread_id}"
-            eff_since = since if explicit_since else (
-                self._repo.get_cursor(ctx.ws, cursor_id=cursor_id) or 0
-            )
+            if explicit_since:
+                return self._repo.read_thread_since(
+                    ctx.ws, thread_id=thread_id, me_id=ctx.actor,
+                    since=since, since_msg_id=None, limit=limit,  # plain `>`
+                )
+            pair = self._repo.get_cursor(ctx.ws, cursor_id=cursor_id)
+            eff_since, eff_msg = pair if pair is not None else (0, None)
             rows = self._repo.read_thread_since(
                 ctx.ws, thread_id=thread_id, me_id=ctx.actor,
-                since=eff_since, limit=limit,
+                since=eff_since or 0, since_msg_id=eff_msg or "", limit=limit,
             )
-            if advance and not explicit_since and rows:
+            if advance and rows:
+                last = rows[-1]  # rows are ORDER BY (createdAt, msgId) — the max pair
                 self._repo.advance_cursor(
                     ctx.ws, me_id=ctx.actor, thread_id=thread_id,
                     cursor_id=cursor_id,
-                    now=max(r["createdAt"] for r in rows),
+                    now=last["createdAt"], now_msg_id=last["msgId"],
                 )
             return rows
 
-        # room-wide: no cursor, defaults to epoch 0, never advances
+        # room-wide: no cursor, defaults to epoch 0, never advances (plain `>`)
         eff_since = since if explicit_since else 0
         return self._repo.read_ws_since(
-            ctx.ws, me_id=ctx.actor, since=eff_since, limit=limit
+            ctx.ws, me_id=ctx.actor, since=eff_since, since_msg_id=None, limit=limit
         )
 
     def search_messages(

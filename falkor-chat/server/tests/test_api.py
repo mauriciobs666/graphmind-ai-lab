@@ -118,6 +118,23 @@ def test_search_returns_matching_messages(client):
     assert [h["text"] for h in hits] == ["hello world"]
 
 
+def test_thread_id_present_in_since_search_and_get_message(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    mid = client.post(
+        f"/threads/{tid}/messages", json={"text": "hello navigation"}
+    ).json()["msgId"]
+
+    since_rows = client.get(f"/threads/{tid}/messages", params={"since": 0}).json()
+    assert [m["threadId"] for m in since_rows] == [tid]
+
+    hits = client.get("/search", params={"q": "navigation"}).json()
+    assert [h["threadId"] for h in hits] == [tid]
+
+    one = client.get(f"/messages/{mid}").json()
+    assert one["threadId"] == tid  # route stays flat; the body carries the thread
+
+
 def test_search_requires_q(client):
     r = client.get("/search")
     assert r.status_code == 422

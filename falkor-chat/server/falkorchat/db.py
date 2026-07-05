@@ -12,12 +12,16 @@ from falkordb import FalkorDB, Graph
 from . import config
 
 
-def connect(
-    host: str = config.FALKORDB_HOST,
-    port: int = config.FALKORDB_PORT,
-) -> FalkorDB:
-    """Open a FalkorDB connection."""
-    return FalkorDB(host=host, port=port)
+def connect(host: str | None = None, port: int | None = None) -> FalkorDB:
+    """Open a FalkorDB connection.
+
+    Config is resolved at call time (not import time) so tests/deploys can
+    repoint `config.FALKORDB_*` without re-importing this module.
+    """
+    return FalkorDB(
+        host=host if host is not None else config.FALKORDB_HOST,
+        port=port if port is not None else config.FALKORDB_PORT,
+    )
 
 
 def workspace_graph(db: FalkorDB, ws: str) -> Graph:

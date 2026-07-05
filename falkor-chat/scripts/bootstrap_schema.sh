@@ -162,8 +162,12 @@ bootstrap_workspace() {
   gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Message', 'text')"
 
   # ── vector indexes ───────────────────────────────────────────
-  # Dimension must match the embedding model. Default: 1536 (text-embedding-ada-002).
-  # Override with: EMBEDDING_DIM=3072 ./bootstrap_schema.sh <workspace>
+  # Dimension must match the embedding model and is FIXED at index creation —
+  # it cannot be altered in place, so choose it per model BEFORE creating the
+  # workspace. Default: 1536 (text-embedding-ada-002; still the DESIGN §13 open
+  # question). The K-007/M2 RAM costing baseline is 1024 dims (~12.4 KB/msg,
+  # DESIGN §11) — set EMBEDDING_DIM=1024 when creating workspaces for that
+  # model class. Override with: EMBEDDING_DIM=1024 ./bootstrap_schema.sh <ws>
   local dim="${EMBEDDING_DIM:-1536}"
 
   echo "[vector] Message.embedding (dim=${dim}, cosine)"

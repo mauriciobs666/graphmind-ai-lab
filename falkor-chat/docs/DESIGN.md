@@ -14,7 +14,7 @@
 
 | Axis | Decision | Consequence |
 |---|---|---|
-| **Chat type** | **Hybrid** — humans chat in channels *and* an AI participant answers from the graph (GraphRAG) | Messages have a `role` (human/assistant/system); AI is a first-class `Agent` author; retrieval = vector + traversal |
+| **Chat type** | **Hybrid** — humans chat in channels *and* an AI participant answers from the graph (GraphRAG) | Messages have a `role` (`user`/`assistant`, derived from the author's label); AI is a first-class `Agent` author; retrieval = vector + traversal |
 | **Tenancy** | **Per-workspace/team graph** — the graph boundary is a workspace, many users share it | One named graph per workspace; each workspace must fit one shard's RAM; workspaces distribute across a Redis Cluster |
 | **Workflows** | **General workflow engine** — one definition model serves both conversational/agent flows and business processes | Definitions (templates) are reusable + versioned; runs are per-workspace execution traces |
 
@@ -119,7 +119,7 @@ traversal needs to walk (e.g. an ontology fragment).
 (:Channel)-[:HAS_THREAD]->(:Thread {threadId, title, createdAt, updatedAt})
 (:Thread)-[:HEAD]->(:Message)                          // first message in thread (set once)
 (:Thread)-[:TAIL]->(:Message)                          // last message (updated on each append)
-(:Message {msgId, text, role, createdAt})-[:NEXT]->(:Message)  // thread-scoped linked list
+(:Message {msgId, text, role, createdAt, threadId})-[:NEXT]->(:Message)  // thread-scoped linked list
 
 // Authorship & replies
 (:Message)-[:POSTED_BY]->(:User)                       // human author
@@ -138,7 +138,13 @@ traversal needs to walk (e.g. an ontology fragment).
 ```
 
 **Key properties:**
-- `Message.role` — `'human'` | `'assistant'` | `'system'` (fast filter without traversing `POSTED_BY`)
+- `Message.role` — `'user'` | `'assistant'` (fast filter without traversing `POSTED_BY`).
+  **Derived server-side from the author's node label** (`User → user`, `Agent → assistant`),
+  never trusted from the caller (K-007).
+- `Message.threadId` — **denormalized, deliberately unindexed** navigation metadata (K-007):
+  lets §9.2/§5 result rows point back to their thread without a traversal; §9.1's HEAD/NEXT
+  walk stays the canonical thread read. `null` on pre-K-007 rows until the one-off backfill
+  (`scripts/backfill_thread_ids.sh`, QUERIES.md §4.x) runs.
 - `Thread.updatedAt` — bumped on every new message; drives "recent threads" listing
 - `Message.embedding` — inline `vecf32`; no separate node needed
 
@@ -169,7 +175,10 @@ Two cases — both must be a single `GRAPH.QUERY` (atomic):
   `m` (delete the old `TAIL` edge, create the new one), and attach `(m)-[:POSTED_BY]->(author)`.
 
 Both bump `Thread.updatedAt`. The service picks the variant by checking whether the thread
-already has a `HEAD` (§14 keeps this dispatch inside `post_message`).
+already has a `HEAD` (§14 keeps this dispatch inside `post_message`), then re-dispatches on the
+v2 **status row** each write returns (K-007): a lost first-post race (`hadHead`) retries as
+subsequent, a TAIL-less subsequent retries as first, and a replayed `msgId` (`dupMsg`) is
+idempotent success — see the §9 table and QUERIES.md §4.
 
 > **Canonical Cypher: `docs/QUERIES.md` §4.** The exact, live-verified queries live there and
 > nowhere else — this section describes their *shape* only, so the two never drift. Every message
@@ -348,14 +357,16 @@ ORDER BY score ASC
 
 | Operation | Pattern | Notes |
 |---|---|---|
-| Post message | `MERGE (m:Message {msgId:$id})` + relink `Thread TAIL → NEXT` | Idempotent via unique constraint; O(1) append; two Cypher variants (first vs subsequent message — see §5.3) |
-| Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches |
+| Post message | Guarded `CREATE` inside `FOREACH`+`CASE` per path + relink `Thread TAIL → NEXT` (QUERIES.md §4 v2) | Two separate self-guarding variants (first vs subsequent — see §5.3), never a conditional MERGE of the two paths. Always returns a **status row**; **retry-idempotent via the `dupMsg` status** (the old "idempotent via unique constraint" claim was falsified — a replayed MERGE re-ran the relink clauses and corrupted the chain, K-007 evidence). The `Message.msgId` uniqueness constraint stays as the concurrency backstop (rollback verified all-or-nothing). O(1) append. |
+| Create channel / thread | plain `CREATE` (server-minted uuid ids) | **Non-idempotent** — a retried create mints a new id; the uniqueness constraints backstop. A MERGE on a fresh uuid could never match (K-007 fold-in). |
+| Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches (writes ignore TIMEOUT — §10) |
 | Embed messages | async worker: compute embedding → `SET m.embedding = vecf32($v)` | Decouple embedding latency from the post path |
 | Advance workflow | create `StepRun`, append `NEXT`, move `AT_STEP` | All local to `ws:{id}`; fully transactional within the graph |
 | Publish workflow def | write to `reference`; materialize snapshot into consuming `ws:{id}` graphs | Immutable per version; bump version, never mutate in place |
 
 **Rule:** every `MERGE` is backed by a uniqueness constraint, or it's a duplicate-node bug
-waiting for concurrency.
+waiting for concurrency. (The §4 v2 message writes contain no MERGE at all — guarded CREATE
+with the constraint as backstop.)
 
 ---
 
@@ -391,25 +402,53 @@ waiting for concurrency.
   dedicated shards if needed.
 - **Tuning:** `GRAPH.CONFIG` — `THREAD_COUNT` (size to cores), `QUERY_MEM_CAPACITY`,
   `MAX_QUEUED_QUERIES`, `TIMEOUT_DEFAULT`/`TIMEOUT_MAX`, `CACHE_SIZE`.
+- **TIMEOUT posture (K-007, live-probed).** Keep the legacy single-knob `TIMEOUT=1000` as the
+  deployment default — right for chat CRUD and verified to fire (enforcement is
+  batch-granular; slightly-over reads can slip through). Future GraphRAG/§6/§8 hybrid reads
+  and long thread walks pass a **per-query client override**
+  (`g.ro_query(q, params=…, timeout=…)`, e.g. 5000–10000 ms; pass-through verified, uncapped
+  while `TIMEOUT_MAX=0`) — expose it as a service-layer constant, not per-call ad-hockery.
+  **Writes ignore TIMEOUT entirely on this build** — a write runs to completion regardless of
+  clause or default; bounded batches (≤ a few hundred `UNWIND` rows) and the existing API
+  input caps are the only write-path protection. If ops later wants a hard ceiling on client
+  overrides, switch to `TIMEOUT_DEFAULT`/`TIMEOUT_MAX` (>0) — mutually exclusive with the
+  legacy `TIMEOUT` knob; change deliberately, in one step. Caveat noted once (not
+  reproduced): an instant-timeout anomaly right after a long override run — edge-build timer
+  bookkeeping noise; re-check on upgrades (upstream filing recommended, OQ6).
 - **Observability:** `GRAPH.SLOWLOG` for slow queries, `GRAPH.PROFILE` for plans, Redis metrics.
 - **Security:** Redis ACLs scoping `GRAPH.*` per principal (ideally per workspace key pattern),
   TLS in transit, network isolation; secrets outside the data.
 
 ---
 
-## 11. Capacity sketch (fill in with real numbers)
+## 11. Capacity — empirical line at 1024 dims (K-007)
 
-Per workspace, rough RAM order-of-magnitude:
+Measured live (`falkordb/falkordb:edge`, 4096 realistic messages bulk-loaded into a
+1024-dim-indexed scratch workspace: `msgId/text/role/createdAt/threadId` + inline `vecf32`
+embedding + `POSTED_BY` + full `NEXT` chain + HEAD/TAIL; `INFO memory` delta):
 
-```
-nodes        ≈ (#messages + #chunks + #entities + #runs + #stepruns) × ~payload bytes
-rel matrices ≈ Σ per-type sparse-matrix overhead (sparse → small unless dense nodes)
-vector index ≈ embeddingDim × 4 bytes × (#messages + #chunks)        ← usually dominant
-fulltext     ≈ RediSearch index over Message.text
-+ Redis overhead + ~30% headroom
-```
+| Component | Bytes/message |
+|---|---|
+| raw `vecf32` embedding (1024 × 4 B) | 4,096 |
+| node + attrs (text ~50 chars, ids, role, `createdAt`, `threadId`) + edges (`NEXT`, `POSTED_BY`) | ~1,900 |
+| HNSW vector index + range-index entries + allocator overhead | ~6,400 |
+| **Total observed** | **12,387 ≈ 12.4 KB** |
 
-> Action: instrument a pilot workspace, measure `GRAPH.MEMORY USAGE`, and back into a
+- Rule of thumb: **~12.5 KB/message at 1024 dims ≈ 1.25 GB per 100k-message workspace**
+  (vs ~17–18 KB extrapolated at 1536 — the dim cut saves roughly a third). The bootstrap
+  default stays 1536 (embedding model still open, §13); set `EMBEDDING_DIM=1024` per model
+  class **before** workspace creation — vector index dimension is fixed at creation.
+- `threadId` cost: one short string, ~50–60 B/message, no index — noise (<0.5%) against the
+  12.4 KB line. `ReadCursor.lastReadMsgId`: one string per (member, thread) cursor — negligible.
+- Ingestion datapoint: ~1,178 msg/s with 256-row `UNWIND` batches incl. embeddings, single
+  client — bulk batches of 100–500 rows sit comfortably inside the write-path safety envelope
+  (writes are unkillable by TIMEOUT, §10 — keep batches bounded).
+- **Measurement caveat (K-007, upstream filing recommended):** `GRAPH.MEMORY USAGE` reported
+  `indices_sz_mb: 0` while the HNSW index demonstrably held 4096 vectors — on this edge build
+  it **under-reports vector-index memory**. Size workspaces from **`INFO memory` deltas**, not
+  `GRAPH.MEMORY USAGE`, until fixed upstream.
+
+> Action: re-measure on a pilot workspace with the real embedding model, and back into a
 > per-workspace RAM budget + a shard:workspace packing ratio before scaling out.
 
 ---
@@ -418,7 +457,7 @@ fulltext     ≈ RediSearch index over Message.text
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
 2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (70 tests). M1 chat core is code-complete.
-3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance.
+3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance. **Groundwork (K-007) landed:** agent authorship (role derived from the author label), self-guarding v2 write paths (status-row contract, retry-idempotent via `dupMsg`, first-post race refused), `Message.threadId` denorm + backfill script, composite `(createdAt, msgId)` keyset cursors (tie-safe reads), TIMEOUT posture (§10), empirical 1024-dim RAM line (§11).
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
 

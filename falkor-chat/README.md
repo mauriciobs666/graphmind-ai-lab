@@ -119,7 +119,7 @@ wiped before and after:
 ./scripts/test_queries.sh
 ```
 
-Expected output: `92/92 passed`.
+Expected output: `115/115 passed`.
 
 ### 5 — Browse the graph (optional)
 
@@ -167,7 +167,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92) |
 | **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (75 tests). Code-complete; hardening/real-time deferred to M2. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
-| **M2** — GraphRAG | — | Embeddings, vector index, AI agent participant, hybrid retrieval |
+| **M2** — GraphRAG | 🟡 | Embeddings, vector index, AI agent participant, hybrid retrieval. **Groundwork landed (K-007):** agent authorship, self-guarding write paths, `threadId` denorm, tie-safe composite cursors |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
 
@@ -186,7 +186,7 @@ falkor-chat/
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
-│   └── test_queries.sh      # end-to-end query test suite (92 assertions)
+│   └── test_queries.sh      # end-to-end query test suite (115 assertions)
 ├── server/                  # M1 app: FastAPI REST + MCP on one process
 │   ├── falkorchat/{config,db,repository,services,schemas,api,mcp,app}.py
 │   ├── tests/               # pytest — repository/services (live), MCP, REST, app-mount
@@ -217,7 +217,7 @@ share one `services.py`.
 Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph):
 
 ```bash
-cd server && .venv/bin/python -m pytest -q      # 75 passed
+cd server && .venv/bin/python -m pytest -q      # 98 passed
 ```
 
 Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`; the trailing-slash

@@ -167,6 +167,25 @@ def test_send_message_mention_flagged_in_chronological_read(repo):
     assert [r["isMention"] for r in rows] == [False, True]
 
 
+def test_read_messages_rows_carry_thread_id(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo)
+    ch = svc.create_channel(TEST_CTX, name="general")
+
+    async def scenario():
+        th = _unwrap(await mcp_mod.mcp.call_tool(
+            "create_thread", {"channel_id": ch["channelId"], "title": "hi"}
+        ))
+        await mcp_mod.mcp.call_tool("send_message", {"body": "hi", "re": th["threadId"]})
+        rows = _unwrap(await mcp_mod.mcp.call_tool(
+            "read_messages", {"re": th["threadId"], "since": 0, "advance": False}
+        ))
+        return th["threadId"], rows
+
+    tid, rows = asyncio.run(scenario())
+    assert [r["threadId"] for r in rows] == [tid]
+
+
 def test_send_message_unknown_mention_errors(repo):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     svc = _configure(repo)

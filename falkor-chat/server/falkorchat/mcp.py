@@ -71,8 +71,12 @@ def read_messages(
     """Catch up on messages.
 
     With `re` (thread id): read that thread since your cursor (or explicit
-    `since`), advancing the cursor unless `since` is given. Without `re`:
-    workspace-wide read since `since` (default epoch 0); no cursor is advanced.
+    `since`), advancing the cursor unless `since` is given. Cursor-driven reads
+    are tie-safe — the composite `(lastReadAt, lastReadMsgId)` cursor never
+    skips or re-delivers, even across same-millisecond messages. An explicit
+    `since` is a plain `>` timestamp read and may re-deliver or skip within
+    that exact millisecond. Without `re`: workspace-wide read since `since`
+    (default epoch 0); no cursor is advanced. Rows carry `threadId`.
     """
     ctx = _get_context()
     return _svc().read_messages(

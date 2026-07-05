@@ -88,6 +88,9 @@ def build_router(services: Services) -> APIRouter:
         # param → the paginated §9.1 since-read as a pure read: `since`
         # defaults to epoch 0 explicitly so the member's cursor is never
         # consulted or advanced by a browser poll (cursors stay agent-owned).
+        # Explicit `since` is plain `>` (OQ3): it may re-deliver or skip rows
+        # within that exact millisecond — lossless catch-up is the cursor
+        # path's job (MCP `read_messages` without `since`).
         if since is None and limit is None:
             return services.read_thread(ctx, thread_id=thread_id)
         return services.read_messages(
@@ -96,8 +99,9 @@ def build_router(services: Services) -> APIRouter:
 
     @router.get("/messages/{msg_id}")
     def get_message(msg_id: str, ctx: CallContext = Depends(get_context)):
-        # msgId is workspace-unique and Message has no threadId; resolution is
-        # workspace-global by design, so the route is flat (spec §5 / fork 4).
+        # msgId is workspace-unique; resolution is workspace-global by design,
+        # so the route stays flat (spec §5 / fork 4) — the body carries
+        # `threadId` (denormalized, K-007) for navigation.
         msg = services.get_message(ctx, msg_id=msg_id)
         if msg is None:
             raise HTTPException(status_code=404, detail="message not found")

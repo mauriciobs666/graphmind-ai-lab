@@ -100,11 +100,16 @@ assert_contains "constraint blocks duplicate userId" "unique constraint violatio
 echo ""
 echo "▶ §3 channels & threads"
 
-out=$(gq "$WS" "MERGE (c:Channel {channelId:'ch1'}) ON CREATE SET c.name='general', c.createdAt=1000 RETURN c.name")
+# plain CREATE (K-007): ids are server-minted, MERGE could never match; the
+# uniqueness constraint is the backstop — creates are non-idempotent.
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch1', name:'general', createdAt:1000}) RETURN c.name")
 assert_contains "create channel general" "general" "$out"
 
-out=$(gq "$WS" "MERGE (c:Channel {channelId:'ch2'}) ON CREATE SET c.name='random', c.createdAt=1001 RETURN c.name")
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch2', name:'random', createdAt:1001}) RETURN c.name")
 assert_contains "create channel random" "random" "$out"
+
+out=$(gq "$WS" "CREATE (:Channel {channelId:'ch1', name:'imposter'})" 2>&1)
+assert_contains "constraint blocks duplicate channelId" "unique constraint violation" "$out"
 
 # list channels in the workspace (newest-first by createdAt, index-anchored on channelId)
 out=$(gq "$WS" "MATCH (c:Channel) WHERE c.channelId > '' RETURN c.channelId AS channelId, c.name AS name, c.createdAt AS createdAt ORDER BY c.createdAt DESC LIMIT 100")
@@ -130,37 +135,51 @@ assert_contains "add Bob to general" "member" "$out"
 out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN count(t) AS n")
 assert_contains "no threads yet" "0" "$out"
 
-# create two threads
-out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) MERGE (t:Thread {threadId:'th1'}) ON CREATE SET t.title='First thread', t.createdAt=1000, t.updatedAt=1000 MERGE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+# create two threads (plain CREATE anchored on the channel; zero rows = nothing written)
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (t:Thread {threadId:'th1', title:'First thread', createdAt:1000, updatedAt:1000}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
 assert_contains "create thread th1" "th1" "$out"
 
-out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) MERGE (t:Thread {threadId:'th2'}) ON CREATE SET t.title='Second thread', t.createdAt=1001, t.updatedAt=1001 MERGE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (t:Thread {threadId:'th2', title:'Second thread', createdAt:1001, updatedAt:1001}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
 assert_contains "create thread th2" "th2" "$out"
+
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) CREATE (:Thread {threadId:'th1', title:'dupe'})" 2>&1)
+assert_contains "constraint blocks duplicate threadId" "unique constraint violation" "$out"
 
 out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN t.threadId ORDER BY t.updatedAt DESC LIMIT 10")
 assert_contains "list threads returns th1" "th1" "$out"
 assert_contains "list threads returns th2" "th2" "$out"
 
-# ── §4: messages ─────────────────────────────────────────────────────────────
+# ── §4: messages (v2 self-guarding write paths) ──────────────────────────────
+#
+# The canonical v2 bodies live in docs/QUERIES.md §4. The test copies keep every
+# clause verbatim except the final RETURN, which composes the four status
+# booleans into one grep-able string ("w=… hh=… dup=… auth=…") — same values,
+# assert-friendly shape.
 
 echo ""
-echo "▶ §4 messages — write path"
+echo "▶ §4 messages — write path (v2)"
 
-# first message in th1
-out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'}) MATCH (author:User {userId:'u1'}) MERGE (m:Message {msgId:'m1'}) ON CREATE SET m.text='Hello thread', m.role='human', m.createdAt=2000 CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2000 RETURN m.msgId")
-assert_contains "post first message m1" "m1" "$out"
+# first message in th1 (v2 first-path; status row + guarded CREATE)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'m1'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m1', text:'Hello thread', role:'user', createdAt:2000, threadId:'th1'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh='+toString(h IS NOT NULL)+' dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post first message m1: status row written" "w=true hh=false dup=false auth=true" "$out"
 
-# second message
-out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (author:User {userId:'u2'}) MERGE (m:Message {msgId:'m2'}) ON CREATE SET m.text='Hi Alice!', m.role='human', m.createdAt=2001 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 RETURN m.msgId")
-assert_contains "post second message m2" "m2" "$out"
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) RETURN m.msgId")
+assert_contains "post first message m1: node exists" "m1" "$out"
+
+# second message (v2 subsequent-path)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post second message m2 (v2 subsequent)" "w=true hh=false dup=false auth=true" "$out"
 
 # third message
-out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (author:User {userId:'u1'}) MERGE (m:Message {msgId:'m3'}) ON CREATE SET m.text='Welcome Bob, great to have you here', m.role='human', m.createdAt=2002 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2002 RETURN m.msgId")
-assert_contains "post third message m3" "m3" "$out"
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m3'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m3', text:'Welcome Bob, great to have you here', role:'user', createdAt:2002, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2002 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post third message m3 (v2 subsequent)" "w=true hh=false dup=false auth=true" "$out"
 
-# reply edge
-out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (author:User {userId:'u2'}) MATCH (quoted:Message {msgId:'m3'}) MERGE (m:Message {msgId:'m4'}) ON CREATE SET m.text='Thanks Alice!', m.role='human', m.createdAt=2003 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) CREATE (m)-[:REPLY_TO]->(quoted) SET t.updatedAt=2003 RETURN m.msgId")
-assert_contains "post reply m4 with REPLY_TO" "m4" "$out"
+# reply m4 — REPLY_TO created INSIDE the guarded FOREACH (OQ4 live verification)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (quoted:Message {msgId:'m3'}) OPTIONAL MATCH (dup:Message {msgId:'m4'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, quoted, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, quoted, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, quoted, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m4', text:'Thanks Alice!', role:'user', createdAt:2003, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) CREATE (m)-[:REPLY_TO]->(quoted) SET t.updatedAt=2003 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "post reply m4 (v2 subsequent + REPLY_TO in guard)" "w=true hh=false dup=false auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (:Message {msgId:'m4'})-[r:REPLY_TO]->(q:Message) RETURN count(r) AS n, q.msgId")
+assert_contains "m4 REPLY_TO edge exists (created inside guarded FOREACH)" "m3" "$out"
 
 # verify TAIL points to m4
 out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[:TAIL]->(tail:Message) RETURN tail.msgId")
@@ -170,9 +189,44 @@ assert_contains "TAIL points to last message" "m4" "$out"
 out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[:HEAD]->(head:Message) RETURN head.msgId")
 assert_contains "HEAD still points to first message" "m1" "$out"
 
-# uniqueness: duplicate msgId must fail
+# uniqueness: duplicate msgId must fail (constraint = concurrency backstop)
 out=$(gq "$WS" "CREATE (:Message {msgId:'m1', text:'duplicate'})" 2>&1)
 assert_contains "constraint blocks duplicate msgId" "unique constraint violation" "$out"
+
+echo ""
+echo "▶ §4 write-path v2 guards (retry replay / first-post race / unknown author)"
+
+# defect A regression: exact replay of the m2 subsequent write is a structural no-op
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "replay of subsequent write reports dupMsg=true (idempotent)" "w=false hh=false dup=true auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (a:Message)-[r:NEXT]->(b:Message) RETURN 'next='+toString(count(r))+' self='+toString(sum(CASE WHEN a.msgId = b.msgId THEN 1 ELSE 0 END)) AS s")
+assert_contains "replay left NEXT chain intact (3 edges, no self-loop)" "next=3 self=0" "$out"
+
+out=$(gq "$WS" "MATCH (m:Message) RETURN count(m) AS n")
+assert_contains "replay created no message node (still 4)" "4" "$out"
+
+# defect B regression: late first-post on a headed thread refuses (hadHead=true)
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'mX'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mX', text:'late first', role:'user', createdAt:2004, threadId:'th1'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2004 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh='+toString(h IS NOT NULL)+' dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "late first-post refused with hadHead=true" "w=false hh=true dup=false auth=true" "$out"
+
+out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[r:HEAD]->() RETURN count(r) AS n")
+assert_contains "thread still has exactly one HEAD" "1" "$out"
+
+# unknown author refuses with authorFound=false, nothing written
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mY'}) OPTIONAL MATCH (ua:User {userId:'ghost'}) OPTIONAL MATCH (aa:Agent {agentId:'ghost'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mY', text:'ghost post', role:'user', createdAt:2005, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2005 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' hh=false dup='+toString(dup IS NOT NULL)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "unknown author refused with authorFound=false" "w=false hh=false dup=false auth=false" "$out"
+
+out=$(gq "$WS" "OPTIONAL MATCH (m:Message {msgId:'mY'}) RETURN 'exists='+toString(m IS NOT NULL) AS s")
+assert_contains "unknown-author message was not written" "exists=false" "$out"
+
+# threadId denorm: v2 write stamped it inline
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) RETURN m.threadId")
+assert_contains "v2 write stamped threadId on m1" "th1" "$out"
+
+# v2 subsequent write plans with indexed anchors only (dup msgId → guarded no-op)
+prof=$(gp "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m2'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m2', text:'Hi Alice!', role:'user', createdAt:2001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=2001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN ok")
+assert_not_contains "v2 subsequent write has no All Node Scan" "All Node Scan" "$prof"
 
 echo ""
 echo "▶ §4 messages — read path"
@@ -215,6 +269,18 @@ out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'}) RETURN t.updatedAt")
 assert_contains "thread updatedAt bumped to last msg createdAt" "2003" "$out"
 
 echo ""
+echo "▶ §4.x threadId backfill (one-off ops query)"
+
+# simulate pre-K-007 rows: strip threadId from m2 and m3
+gq "$WS" "MATCH (m:Message) WHERE m.msgId IN ['m2','m3'] SET m.threadId = null" > /dev/null
+
+out=$(gq "$WS" "MATCH (t:Thread)-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.threadId IS NULL SET m.threadId = t.threadId RETURN 'backfilled='+toString(count(m)) AS s")
+assert_contains "backfill run 1 stamps the 2 stripped messages" "backfilled=2" "$out"
+
+out=$(gq "$WS" "MATCH (t:Thread)-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.threadId IS NULL SET m.threadId = t.threadId RETURN 'backfilled='+toString(count(m)) AS s")
+assert_contains "backfill run 2 is idempotent (0)" "backfilled=0" "$out"
+
+echo ""
 echo "▶ §3 list recent threads (after messages posted)"
 out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t:Thread) RETURN t.threadId, t.updatedAt ORDER BY t.updatedAt DESC LIMIT 10")
 assert_contains "recent threads: th1 most recent" "th1" "$out"
@@ -233,6 +299,10 @@ assert_not_contains "fulltext: 'welcome' no error" "ERR" "$out"
 
 out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'Hello') YIELD node AS m, score RETURN m.msgId ORDER BY score DESC LIMIT 5" 2>&1)
 assert_contains "fulltext: 'Hello' finds m1" "m1" "$out"
+
+# §5 RETURN carries threadId (denormalized navigation metadata)
+out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'welcome') YIELD node AS m, score RETURN m.msgId, m.threadId AS threadId, m.text, m.createdAt, score ORDER BY score DESC LIMIT 5" 2>&1)
+assert_contains "fulltext rows carry threadId" "th1" "$out"
 
 # ── §6: GraphRAG vector retrieval ────────────────────────────────────────────
 
@@ -283,25 +353,26 @@ assert_contains "channel members: Bob" "u2" "$out"
 assert_contains "channel members: bot1" "bot1" "$out"
 assert_contains "channel members: Agent label visible" "Agent" "$out"
 
-# agent posts a message (assistant role)
-out=$(gq "$WS" "MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) MATCH (author:Agent {agentId:'bot1'}) MERGE (m:Message {msgId:'m5'}) ON CREATE SET m.text='I am the AI assistant', m.role='assistant', m.createdAt=3000 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=3000 RETURN m.role")
-assert_contains "agent posts assistant message" "assistant" "$out"
+# agent posts a message (assistant role) — v2 path resolves Agent authors via agentId index
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m5'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m5', text:'I am the AI assistant', role:'assistant', createdAt:3000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=3000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "agent posts assistant message (v2 write commits)" "w=true auth=true" "$out"
 
 # ── §9: mentions & read-cursors (MCP transport) ──────────────────────────────
 
 echo ""
 echo "▶ §9 mentions — write path (MENTIONS_MEMBER)"
 
-# first message in th2 with EMPTY mentions — regression: identical effect to a plain post.
-out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th2'}) MATCH (author:User {userId:'u1'}) MERGE (m:Message {msgId:'mn1'}) ON CREATE SET m.text='mentions probe first', m.role='human', m.createdAt=4000 CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4000 WITH m UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (u:User {userId: mid}) OPTIONAL MATCH (a:Agent {agentId: mid}) WITH m, collect(DISTINCT coalesce(u, a)) AS mems FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) RETURN m.msgId")
-assert_contains "mentions=[] post still RETURNs the message (no row collapse)" "mn1" "$out"
+# first message in th2 with EMPTY mentions — the CASE guard is load-bearing for the
+# write itself in v2: a bare UNWIND [] would collapse the stream before the FOREACH.
+out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th2'}) OPTIONAL MATCH (t)-[:HEAD]->(h) OPTIONAL MATCH (dup:Message {msgId:'mn1'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, h, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, h, dup, author, mems, (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn1', text:'mentions probe first', role:'user', createdAt:4000, threadId:'th2'}) CREATE (t)-[:HEAD]->(m) CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "mentions=[] v2 first-post commits (guard keeps the write alive)" "w=true" "$out"
 
 out=$(gq "$WS" "MATCH (:Message {msgId:'mn1'})-[r:MENTIONS_MEMBER]->() RETURN count(r) AS n")
 assert_contains "mentions=[] creates zero MENTIONS_MEMBER edges" "0" "$out"
 
 # subsequent message mentioning u2 AND agent bot1 (mixed User/Agent resolution)
-out=$(gq "$WS" "CYPHER mentions=['u2','bot1'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) MATCH (author:User {userId:'u1'}) MERGE (m:Message {msgId:'mn2'}) ON CREATE SET m.text='ping u2 and bot1', m.role='human', m.createdAt=4001 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4001 WITH m UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (u:User {userId: mid}) OPTIONAL MATCH (a:Agent {agentId: mid}) WITH m, collect(DISTINCT coalesce(u, a)) AS mems FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) RETURN m.msgId")
-assert_contains "mention post mn2 returns one row" "mn2" "$out"
+out=$(gq "$WS" "CYPHER mentions=['u2','bot1'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mn2'}) OPTIONAL MATCH (ua:User {userId:'u1'}) OPTIONAL MATCH (aa:Agent {agentId:'u1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn2', text:'ping u2 and bot1', role:'user', createdAt:4001, threadId:'th2'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "mention post mn2 commits (v2)" "w=true" "$out"
 
 out=$(gq "$WS" "MATCH (:Message {msgId:'mn2'})-[:MENTIONS_MEMBER]->(x) RETURN count(x) AS n, collect(coalesce(x.userId,x.agentId)) AS who")
 assert_contains "mn2 has exactly 2 MENTIONS_MEMBER edges" "2" "$out"
@@ -309,18 +380,18 @@ assert_contains "mn2 mentions User u2 (resolved via User index)" "u2" "$out"
 assert_contains "mn2 mentions Agent bot1 (resolved via Agent index)" "bot1" "$out"
 
 # dedup + unknown-skip: ['u1','u1','nope'] → one edge to u1, 'nope' dropped
-out=$(gq "$WS" "CYPHER mentions=['u1','u1','nope'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) MATCH (author:User {userId:'u2'}) MERGE (m:Message {msgId:'mn3'}) ON CREATE SET m.text='dup and unknown mentions', m.role='human', m.createdAt=4002 CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4002 WITH m UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (u:User {userId: mid}) OPTIONAL MATCH (a:Agent {agentId: mid}) WITH m, collect(DISTINCT coalesce(u, a)) AS mems FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) RETURN m.msgId")
-assert_contains "dedup post mn3 returns one row" "mn3" "$out"
+out=$(gq "$WS" "CYPHER mentions=['u1','u1','nope'] MATCH (t:Thread {threadId:'th2'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'mn3'}) OPTIONAL MATCH (ua:User {userId:'u2'}) OPTIONAL MATCH (aa:Agent {agentId:'u2'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'mn3', text:'dup and unknown mentions', role:'user', createdAt:4002, threadId:'th2'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=4002 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok) AS status")
+assert_contains "dedup post mn3 commits (v2)" "w=true" "$out"
 
 out=$(gq "$WS" "MATCH (:Message {msgId:'mn3'})-[:MENTIONS_MEMBER]->(x) RETURN count(x) AS n, collect(coalesce(x.userId,x.agentId)) AS who")
 assert_contains "mn3 dedups duplicate mention to a single edge" "1" "$out"
 assert_not_contains "mn3 drops unknown mention 'nope'" "nope" "$out"
 
 echo ""
-echo "▶ §9.1/§9.2 since-reads with mention flag (chronological)"
+echo "▶ §9.1/§9.2 since-reads with mention flag (chronological, (createdAt,msgId) order)"
 
 # §9.1 thread-scoped, reader = bot1, since 3999 → mn1,mn2,mn3 chronological; mn2 (mentions bot1) flagged
-out=$(rq "$WS" "CYPHER threadId='th2' since=3999 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, coalesce(author.userId,author.agentId) AS authorId, isMention ORDER BY m.createdAt LIMIT \$limit")
+out=$(rq "$WS" "CYPHER threadId='th2' since=3999 sinceMsgId='' meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, coalesce(author.userId,author.agentId) AS authorId, isMention ORDER BY m.createdAt, m.msgId LIMIT \$limit")
 assert_contains "§9.1 returns mn1 (after since)" "mn1" "$out"
 assert_contains "§9.1 returns mn2" "mn2" "$out"
 # chronological order — the cursor-pagination invariant: a LIMIT-truncated page
@@ -337,29 +408,70 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# §9.1 with a higher since excludes earlier messages
-out=$(rq "$WS" "CYPHER threadId='th2' since=4001 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt LIMIT \$limit")
+# §9.1 explicit since keeps plain-`>` semantics — excludes earlier messages
+out=$(rq "$WS" "CYPHER threadId='th2' since=4001 meId='bot1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
 assert_contains     "§9.1 since=4001 includes mn3" "mn3" "$out"
 assert_not_contains "§9.1 since=4001 excludes mn1" "mn1" "$out"
 assert_not_contains "§9.1 since=4001 excludes mn2" "mn2" "$out"
 
-# §9.2 workspace-wide since read must be an index scan on Message.createdAt
-prof=$(gp "$WS" "CYPHER since=3999 meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, isMention ORDER BY m.createdAt LIMIT \$limit")
-assert_index_scan "§9.2 workspace-wide since-read uses Message.createdAt index" "$prof"
+# §9.2 workspace-wide since read (composite keyset) must stay an index scan on Message.createdAt
+prof=$(gp "$WS" "CYPHER since=3999 sinceMsgId='' meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) WHERE me.userId=\$meId OR me.agentId=\$meId WITH m, author, count(me) > 0 AS isMention RETURN m.msgId, isMention ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_index_scan "§9.2 composite keyset since-read uses Message.createdAt index" "$prof"
 
 echo ""
-echo "▶ §9.3/§9.4 read-cursors"
+echo "▶ §9 keyset paging across a millisecond tie (K-007 tie-skip regression)"
 
-# §9.3 advance cursor for bot1 on th2 to 4001
-out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId SET rc.lastReadAt = CASE WHEN \$now > coalesce(rc.lastReadAt,0) THEN \$now ELSE rc.lastReadAt END RETURN rc.lastReadAt")
-assert_contains "§9.3 cursor advances to 4001" "4001" "$out"
+# seed th3: k1@5000, k2@5001, k3@5001 (tie), k4@5002 — structural seed of a v2-shaped chain
+gq "$WS" "MATCH (c:Channel {channelId:'ch1'}) MATCH (u:User {userId:'u1'}) CREATE (t:Thread {threadId:'th3', title:'tie probe', createdAt:5000, updatedAt:5002}) CREATE (c)-[:HAS_THREAD]->(t) CREATE (k1:Message {msgId:'k1', text:'tie one', role:'user', createdAt:5000, threadId:'th3'}) CREATE (k2:Message {msgId:'k2', text:'tie two', role:'user', createdAt:5001, threadId:'th3'}) CREATE (k3:Message {msgId:'k3', text:'tie three', role:'user', createdAt:5001, threadId:'th3'}) CREATE (k4:Message {msgId:'k4', text:'tie four', role:'user', createdAt:5002, threadId:'th3'}) CREATE (t)-[:HEAD]->(k1) CREATE (t)-[:TAIL]->(k4) CREATE (k1)-[:NEXT]->(k2) CREATE (k2)-[:NEXT]->(k3) CREATE (k3)-[:NEXT]->(k4) CREATE (k1)-[:POSTED_BY]->(u) CREATE (k2)-[:POSTED_BY]->(u) CREATE (k3)-[:POSTED_BY]->(u) CREATE (k4)-[:POSTED_BY]->(u)" > /dev/null
 
-# re-advance with a STALE ts (4000) must NOT move the cursor backward (monotonic)
-out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4000 MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId SET rc.lastReadAt = CASE WHEN \$now > coalesce(rc.lastReadAt,0) THEN \$now ELSE rc.lastReadAt END RETURN rc.lastReadAt")
-assert_contains "§9.3 stale advance is a no-op (monotonic, stays 4001)" "4001" "$out"
+# page 1 (limit 2) ends exactly on the tie boundary: k1,k2
+out=$(rq "$WS" "CYPHER threadId='th3' since=0 sinceMsgId='' meId='u1' limit=2 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+if echo "$out" | grep -qF "k2" && ! echo "$out" | grep -qF "k3"; then
+  echo "  ✓ §9 keyset page 1 (limit 2) ends at the tie boundary (k1,k2)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §9 keyset page 1 wrong"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
 
-# advancing forward (4002) does move it
-out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4002 MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId SET rc.lastReadAt = CASE WHEN \$now > coalesce(rc.lastReadAt,0) THEN \$now ELSE rc.lastReadAt END RETURN rc.lastReadAt")
+# page 2 resumes from the composite pair (5001,'k2') → the tied sibling k3 is delivered
+out=$(rq "$WS" "CYPHER threadId='th3' since=5001 sinceMsgId='k2' meId='u1' limit=50 MATCH (t:Thread {threadId:\$threadId})-[:HEAD]->(first:Message) MATCH (first)-[:NEXT*0..]->(m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains "§9 keyset page 2 delivers the tied sibling k3 (tie-skip regression)" "k3" "$out"
+if echo "$out" | grep -qF "k4" && ! echo "$out" | grep -qF "k2"; then
+  echo "  ✓ §9 keyset page 2 completes the set (k4 in, boundary k2 excluded — nothing skipped)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §9 keyset page 2 wrong (expected k3,k4 only)"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# §9.2 RETURN carries threadId (denormalized navigation metadata)
+out=$(rq "$WS" "CYPHER since=4999 sinceMsgId='' meId='bot1' limit=50 MATCH (m:Message) WHERE m.createdAt > \$since OR (m.createdAt = \$since AND m.msgId > \$sinceMsgId) MATCH (m)-[:POSTED_BY]->(author) RETURN m.msgId, m.threadId AS threadId ORDER BY m.createdAt, m.msgId LIMIT \$limit")
+assert_contains "§9.2 rows carry threadId" "th3" "$out"
+
+echo ""
+echo "▶ §9.3/§9.4 read-cursors (composite monotonic)"
+
+# §9.3 v2 create: advance bot1:th2 to (4001,'mn2')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn2' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 cursor advances to (4001,'mn2')" "mn2" "$out"
+
+# tie, larger msgId → advances to (4001,'mn3')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn3' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 tie with larger msgId advances to 'mn3'" "mn3" "$out"
+
+# tie, smaller msgId (stale replay) → refused, stays 'mn3'
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4001 nowMsgId='mn2' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 tie with smaller msgId refused (stays 'mn3')" "mn3" "$out"
+
+# backward timestamp → refused (stays 4001)
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4000 nowMsgId='zz9' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
+assert_contains "§9.3 backward advance is a no-op (stays 4001)" "4001" "$out"
+
+# forward → advances to (4002,'mn9')
+out=$(gq "$WS" "CYPHER meId='bot1' threadId='th2' cursorId='bot1:th2' now=4002 nowMsgId='mn9' MATCH (mem) WHERE mem.userId=\$meId OR mem.agentId=\$meId MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId:\$cursorId}) ON CREATE SET rc.memberId=\$meId, rc.threadId=\$threadId WITH rc, (\$now > coalesce(rc.lastReadAt,0) OR (\$now = coalesce(rc.lastReadAt,0) AND \$nowMsgId > coalesce(rc.lastReadMsgId,''))) AS adv SET rc.lastReadAt = CASE WHEN adv THEN \$now ELSE rc.lastReadAt END, rc.lastReadMsgId = CASE WHEN adv THEN \$nowMsgId ELSE rc.lastReadMsgId END RETURN rc.lastReadAt, rc.lastReadMsgId")
 assert_contains "§9.3 forward advance moves cursor to 4002" "4002" "$out"
 
 # MERGE is idempotent — exactly one ReadCursor for this (member, thread)
@@ -370,11 +482,12 @@ assert_contains "§9.3 exactly one ReadCursor node (MERGE idempotent)" "1" "$out
 out=$(gq "$WS" "CREATE (:ReadCursor {cursorId:'bot1:th2'})" 2>&1)
 assert_contains "ReadCursor constraint blocks duplicate cursorId" "unique constraint violation" "$out"
 
-# §9.4 read the cursor back (point lookup on cursorId)
-out=$(rq "$WS" "CYPHER cursorId='bot1:th2' MATCH (rc:ReadCursor {cursorId:\$cursorId}) RETURN rc.lastReadAt")
+# §9.4 read the cursor back (point lookup on cursorId) — returns the composite pair
+out=$(rq "$WS" "CYPHER cursorId='bot1:th2' MATCH (rc:ReadCursor {cursorId:\$cursorId}) RETURN rc.lastReadAt, rc.lastReadMsgId")
 assert_contains "§9.4 reads back cursor lastReadAt" "4002" "$out"
+assert_contains "§9.4 reads back cursor lastReadMsgId (composite pair)" "mn9" "$out"
 
-prof=$(gp "$WS" "MATCH (rc:ReadCursor {cursorId:'bot1:th2'}) RETURN rc.lastReadAt")
+prof=$(gp "$WS" "MATCH (rc:ReadCursor {cursorId:'bot1:th2'}) RETURN rc.lastReadAt, rc.lastReadMsgId")
 assert_index_scan "§9.4 cursor read uses ReadCursor.cursorId index" "$prof"
 
 # ── §8: diagnostics / index usage ────────────────────────────────────────────

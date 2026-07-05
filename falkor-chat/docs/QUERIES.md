@@ -58,16 +58,32 @@ ORDER BY u.displayName
 *Returns both `User` and `Agent` members. `coalesce(u.userId, u.agentId)` gives a single
 stable identifier regardless of node type; `labels(u)` lets the caller distinguish.*
 
+### Member-kind lookup (author/mention validation + role derivation)
+```cypher
+UNWIND $ids AS id
+OPTIONAL MATCH (u:User  {userId:  id})
+OPTIONAL MATCH (a:Agent {agentId: id})
+RETURN id, CASE WHEN coalesce(u, a) IS NULL THEN null
+                ELSE labels(coalesce(u, a))[0] END AS kind
+```
+*One round trip resolves a batch of ids to `'User'`, `'Agent'`, or `null` (unknown). Both legs
+are `Node By Index Scan`s; `labels(…)[0]` subscripting is live-verified on this build. The
+service maps the kind to a message role — `User → 'user'`, `Agent → 'assistant'`,
+`null → reject before writing` (the mapping itself is service-side, not stored here).*
+
 ---
 
 ## 3. Channels & threads
 
 ### Create a channel
 ```cypher
-MERGE (c:Channel {channelId: $channelId})
-ON CREATE SET c.name = $name, c.createdAt = $createdAt
+CREATE (c:Channel {channelId: $channelId, name: $name, createdAt: $createdAt})
 RETURN c
 ```
+*Plain `CREATE` (K-007 fold-in): `channelId` is a server-minted uuid, so a `MERGE` could never
+match — it was a CREATE wearing a MERGE costume. The `Channel.channelId` uniqueness constraint
+stays as the backstop. Consequence: **creates are non-idempotent** — a retried create mints a
+new id (unlike message posts, which are retry-idempotent via `dupMsg`).*
 
 ### List channels in a workspace
 ```cypher
@@ -90,13 +106,14 @@ deliberately avoids — so it is intentionally **not** used here. Route via `GRA
 ### Create a thread
 ```cypher
 MATCH (c:Channel {channelId: $channelId})
-MERGE (t:Thread {threadId: $threadId})
-ON CREATE SET t.title     = $title,
-              t.createdAt = $createdAt,
-              t.updatedAt = $createdAt
-MERGE (c)-[:HAS_THREAD]->(t)
+CREATE (t:Thread {threadId: $threadId, title: $title,
+                  createdAt: $createdAt, updatedAt: $createdAt})
+CREATE (c)-[:HAS_THREAD]->(t)
 RETURN t
 ```
+*Plain `CREATE` like the channel create (server-minted id, constraint backstop,
+non-idempotent). Zero rows back = the channel anchor missed and **nothing was written** — the
+repository raises (tripwire; the service pre-validates the channel).*
 
 ### List recent threads in a channel
 ```cypher
@@ -111,90 +128,146 @@ LIMIT $limit
 
 ## 4. Messages
 
-### Post the first message in a thread
+### Post the first message in a thread (v2 — self-guarding)
 *Use when the thread has no HEAD yet (first message ever).*
 ```cypher
 MATCH (t:Thread {threadId: $threadId})
-MATCH (author {userId: $authorId})            // works for User or Agent node
-MERGE (m:Message {msgId: $msgId})
-ON CREATE SET m.text      = $text,
-              m.role      = $role,
-              m.createdAt = $createdAt
-CREATE (t)-[:HEAD]->(m)
-CREATE (t)-[:TAIL]->(m)
-CREATE (m)-[:POSTED_BY]->(author)
-SET t.updatedAt = $createdAt
-WITH m
+OPTIONAL MATCH (t)-[:HEAD]->(h)
+OPTIONAL MATCH (dup:Message {msgId: $msgId})
+OPTIONAL MATCH (ua:User  {userId:  $authorId})
+OPTIONAL MATCH (aa:Agent {agentId: $authorId})
+WITH t, h, dup, coalesce(ua, aa) AS author
 UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid
-OPTIONAL MATCH (u:User  {userId:  mid})
-OPTIONAL MATCH (a:Agent {agentId: mid})
-WITH m, collect(DISTINCT coalesce(u, a)) AS mems
-FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
-RETURN m
+OPTIONAL MATCH (mu:User  {userId:  mid})
+OPTIONAL MATCH (ma:Agent {agentId: mid})
+WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
+WITH t, h, dup, author, mems,
+     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (m:Message {msgId: $msgId, text: $text, role: $role,
+                     createdAt: $createdAt, threadId: $threadId})
+  CREATE (t)-[:HEAD]->(m)
+  CREATE (t)-[:TAIL]->(m)
+  CREATE (m)-[:POSTED_BY]->(author)
+  SET t.updatedAt = $createdAt
+  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
+)
+RETURN ok                 AS written,
+       h    IS NOT NULL   AS hadHead,
+       dup  IS NOT NULL   AS dupMsg,
+       author IS NOT NULL AS authorFound
 ```
 
-> **Note for developer:** call this only when creating the first message.
-> Check for a HEAD beforehand with `OPTIONAL MATCH (t)-[:HEAD]->(h) RETURN h IS
-> NOT NULL` — **not** `exists((t)-[:HEAD]->())`, which returns `true` even when
-> the edge is absent on this build (see AGENTS.md live-verified facts). Two
-> separate write paths are cleaner than a conditional MERGE for HEAD/TAIL.
->
-> **Zero rows back = nothing written.** Both write paths anchor on `MATCH`
-> (thread, author, TAIL); if any anchor misses, the whole query no-ops and
-> returns no rows while the transport still reports success. Callers must treat
-> an empty result as an error (the repository raises), and the service layer
-> validates the author exists before writing.
-
-### Post a subsequent message in a thread
+### Post a subsequent message in a thread (v2 — self-guarding)
 *Use for every message after the first.*
 ```cypher
 MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
-MATCH (author {userId: $authorId})
-MERGE (m:Message {msgId: $msgId})
-ON CREATE SET m.text      = $text,
-              m.role      = $role,
-              m.createdAt = $createdAt
-CREATE (prev)-[:NEXT]->(m)
-DELETE tailRel
-CREATE (t)-[:TAIL]->(m)
-CREATE (m)-[:POSTED_BY]->(author)
-SET t.updatedAt = $createdAt
-WITH m
+OPTIONAL MATCH (dup:Message {msgId: $msgId})
+OPTIONAL MATCH (ua:User  {userId:  $authorId})
+OPTIONAL MATCH (aa:Agent {agentId: $authorId})
+WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author
 UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid
-OPTIONAL MATCH (u:User  {userId:  mid})
-OPTIONAL MATCH (a:Agent {agentId: mid})
-WITH m, collect(DISTINCT coalesce(u, a)) AS mems
-FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
-RETURN m
+OPTIONAL MATCH (mu:User  {userId:  mid})
+OPTIONAL MATCH (ma:Agent {agentId: mid})
+WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
+WITH t, tailRel, prev, dup, author, mems,
+     (dup IS NULL AND author IS NOT NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (m:Message {msgId: $msgId, text: $text, role: $role,
+                     createdAt: $createdAt, threadId: $threadId})
+  CREATE (prev)-[:NEXT]->(m)
+  DELETE tailRel
+  CREATE (t)-[:TAIL]->(m)
+  CREATE (m)-[:POSTED_BY]->(author)
+  SET t.updatedAt = $createdAt
+  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
+)
+RETURN ok                 AS written,
+       false              AS hadHead,
+       dup  IS NOT NULL   AS dupMsg,
+       author IS NOT NULL AS authorFound
 ```
 
-### Participant mentions — how the block above works (live-verified)
+### Status-row contract (service dispatch)
+
+Both v2 paths **always return a status row** when their anchor matches, so zero rows now
+unambiguously means "anchor missing":
+
+| Result | Meaning | Service action |
+|---|---|---|
+| zero rows | thread missing (first) / no TAIL yet (subsequent) | first-path: 404; subsequent: retry as first-path |
+| `written=true` | committed | success |
+| `dupMsg=true` | msgId already exists | **idempotent success** (retry replay) |
+| `hadHead=true` (first path) | lost the first-post race | re-dispatch as subsequent |
+| `authorFound=false` | unknown member | 4xx, nothing written |
+
+### v2 notes (live-verified — must survive future edits)
+
+- **Why v2 exists.** The old §4 paths `MERGE`d the message: a retry replay matched the existing
+  node and re-ran the unconditional `CREATE`/`DELETE` clauses — NEXT self-loops, duplicated
+  `POSTED_BY`, corrupted TAIL. And two racing first-posts both saw "no HEAD" and produced two
+  chains. v2 guards each path *inside its single `GRAPH.QUERY`* via
+  `FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | …)` — a guard on each path, never a
+  conditional merge of the two paths (locked decision). `MERGE` on the message is replaced by a
+  guarded `CREATE`; the `Message.msgId` uniqueness constraint stays as the concurrency backstop
+  (constraint-violation rollback is verified all-or-nothing).
+- **Author resolution is label-specific** (two indexed `OPTIONAL MATCH`es + `coalesce`) — the old
+  label-less `MATCH (author {userId: $authorId})` profiled as an `All Node Scan` **and** silently
+  no-opped Agent authors (Agents carry `agentId`). Agents can now author messages.
+- **The `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END)` guard is
+  load-bearing for the write itself** — a bare empty `UNWIND` collapses the row stream *before*
+  the `FOREACH` and the whole write silently no-ops. `$mentions = []` is a verified no-op.
+- **`DELETE` inside `FOREACH`** (the TAIL relink) and **nested `FOREACH`** (mentions) are
+  live-verified on this build.
+- **`dupMsg` trusts the msgId.** msgIds are server-minted (`uuid4().hex`, never client-supplied),
+  so a duplicate can only be a replay of our own write — payload equality is not re-checked. If
+  msgIds ever become client-supplied, add a payload checksum before honoring `dupMsg` as
+  idempotent success.
+- **`threadId` is written inline and is deliberately unindexed** — navigation/display metadata
+  for §9.2/§5 results; §9.1 remains the canonical thread walk. Skipping the index saves
+  per-workspace RAM and write cost.
+
+### Participant mentions — how the mention block works (live-verified)
 
 Both write paths carry a `$mentions` parameter: a flat list of member ids, each a `userId`
-**or** an `agentId`. The trailing block turns each id into a `(:Message)-[:MENTIONS_MEMBER]->(member)`
-edge, atomically, inside the **same** `GRAPH.QUERY` as the HEAD/TAIL write (the atomicity rule).
+**or** an `agentId`. The mention resolution runs *before* the guard; the nested `FOREACH`
+creates `(:Message)-[:MENTIONS_MEMBER]->(member)` edges *inside* it — atomically, in the
+**same** `GRAPH.QUERY` as the HEAD/TAIL write (the atomicity rule).
 
 - **`MENTIONS_MEMBER` is distinct from `MENTIONS`.** `MENTIONS`→`Entity` is GraphRAG co-occurrence
   (§6). Participant mentions use `MENTIONS_MEMBER`. Do not conflate them.
 - **Empty list is a true no-op.** `$mentions = []` → the `CASE` yields `[null]`, both `OPTIONAL
-  MATCH`es miss, `collect(DISTINCT …)` drops the null → `[]`, `FOREACH` creates nothing. Verified
-  byte-identical in effect to a plain post (no `MENTIONS_MEMBER` edge). The `CASE` guard is
-  **required**: a bare `UNWIND []` collapses the row stream and `RETURN m` comes back empty.
+  MATCH`es miss, `collect(DISTINCT …)` drops the null → `[]`, the nested `FOREACH` creates
+  nothing — and the guard above keeps the write itself alive.
 - **Index-anchored member resolution.** Each id is resolved by two `Node By Index Scan`s
   (`User.userId`, `Agent.agentId`) — *not* `WHERE u.userId = mid OR u.agentId = mid`, which
   `GRAPH.PROFILE` shows degrading to an `All Node Scan`.
 - **Dedup + unknown-skip are free.** `collect(DISTINCT …)` collapses duplicate ids to one edge and
   drops ids that resolve to no member (`collect` ignores nulls). `['u3','u3','a7','nope']` → 2
   edges `[u3, a7]`, one result row. Validating that unknown mentions are an error vs. silently
-  dropped is a **service-layer** decision (§6 of the plan); the query itself skips them.
+  dropped is a **service-layer** decision; the query itself skips them.
 
-### Post a reply (with explicit REPLY_TO)
-*Add to either write-path above:*
+### Post a reply (REPLY_TO inside the guarded FOREACH — live-verified)
+
+Anchor the quoted message alongside the other anchors and create the edge **inside** the guard
+(shown for the subsequent path; the first path is analogous):
+
 ```cypher
-// after creating (m), also link to the quoted message:
+MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
 MATCH (quoted:Message {msgId: $quotedMsgId})
-CREATE (m)-[:REPLY_TO]->(quoted)
+OPTIONAL MATCH (dup:Message {msgId: $msgId})
+…same WITH chain, carrying quoted…
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (m:Message { … })
+  …
+  CREATE (m)-[:REPLY_TO]->(quoted)
+  …
+)
+RETURN …same status row…
 ```
+
+*Verified by `test_queries.sh` (§4 m4). Not yet exposed by the server API — fold into
+`repository.py` when reply support lands.*
 
 ### Read a full thread (in order)
 ```cypher
@@ -225,8 +298,31 @@ LIMIT $limit
 MATCH (m:Message {msgId: $msgId})
 OPTIONAL MATCH (m)-[:POSTED_BY]->(author)
 OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message)
-RETURN m, author, quoted.msgId AS quotedId
+RETURN m, author, m.threadId AS threadId, quoted.msgId AS quotedId
 ```
+
+### 4.x Backfill `threadId` (one-off, verified idempotent)
+
+The v2 write paths stamp `threadId` inline; messages written before K-007 lack it. Run once per
+existing workspace after deploying v2 (`scripts/backfill_thread_ids.sh`). Per-thread variant
+(batchable — run per threadId to bound query time; **writes cannot be killed by TIMEOUT** on
+this build, so bound the work yourself):
+
+```cypher
+MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message)
+MATCH (first)-[:NEXT*0..]->(m:Message)
+WHERE m.threadId IS NULL
+SET m.threadId = t.threadId
+RETURN count(m) AS backfilled
+```
+
+Workspace-wide variant: drop the `{threadId: $threadId}` filter
+(`MATCH (t:Thread)-[:HEAD]->(first:Message) …`).
+
+*Idempotent — a second run returns `0`. **Orphan caveat:** the walk anchors on `HEAD`, so a
+message unreachable from a HEAD (residue of the pre-v2 defects) is not backfilled — acceptable,
+since such messages are already invisible to thread reads. Until backfilled, old rows return
+`threadId: null` in §9.2/§5 — clients must tolerate null.*
 
 ---
 
@@ -238,11 +334,13 @@ CALL db.idx.fulltext.queryNodes('Message', $query)
 YIELD node AS m, score
 MATCH (t:Thread)-[:HEAD|NEXT*0..]->(m)
 MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)
-RETURN m.msgId, m.text, m.createdAt, score
+RETURN m.msgId, m.threadId AS threadId, m.text, m.createdAt, score
 ORDER BY score DESC
 LIMIT $limit
 ```
-*Scoped to a channel via traversal. Omit the channel MATCH to search workspace-wide.*
+*Scoped to a channel via traversal. Omit the channel MATCH to search workspace-wide.
+`m.threadId` (denormalized, K-007) lets clients jump from a hit to its thread without a
+traversal — `null` on pre-K-007 rows until the §4.x backfill runs.*
 
 ---
 
@@ -340,20 +438,30 @@ GRAPH.SLOWLOG ws:acme
 ## 9. Read-cursors & since-reads (MCP `read_messages`)
 
 Per-agent read state for the MCP `read_messages` tool. A `ReadCursor` node holds a per-*(member,
-thread)* `lastReadAt` timestamp; `read_messages` returns messages with `createdAt > since`, where
-`since` is either supplied explicitly (pure read) or taken from the member's cursor. Mentions of
-the reader are **flagged** (`isMention`), and results are **chronological**.
+thread)* `(lastReadAt, lastReadMsgId)` composite pair; `read_messages` returns messages after
+that point, where the base is either an explicit `since` timestamp (pure read, plain `>`) or the
+member's cursor pair (composite keyset). Mentions of the reader are **flagged** (`isMention`),
+and results are **chronological**.
 
 > **Ordering is the pagination invariant.** Since-reads must return the *earliest* messages first
 > so that a `LIMIT`-truncated page is a contiguous prefix and the cursor can advance to the last
-> delivered `createdAt` without skipping anything. The original mention-first sort
+> delivered row without skipping anything. The original mention-first sort
 > (`ORDER BY isMention DESC, …`) broke this: with more unread rows than `limit`, a late mention
 > crowded out earlier messages that the cursor then jumped past — silent message loss. Clients
-> that want mentions surfaced first should sort by the `isMention` flag locally. Likewise the
-> service advances the cursor to the newest **returned** `createdAt`, never the server clock.
+> that want mentions surfaced first should sort by the `isMention` flag locally.
+>
+> **The deterministic total order is `(createdAt, msgId)` (K-007).** A timestamp alone is not a
+> total order: two messages in the same millisecond made the old plain-`>` paging skip the tied
+> sibling at a page boundary — permanently (live-reproduced). Both since-reads now
+> `ORDER BY m.createdAt, m.msgId`, and the cursor advances to the newest **returned**
+> `(createdAt, msgId)` pair — never the server clock. Tie-break is *lexical* msgId: within one
+> millisecond, delivery order is id order, not arrival order — acceptable across writers (the
+> service's monotonic clock removes same-process ties). If human-facing tie order ever matters,
+> mint k-sortable ids (UUIDv7/ULID) — never re-sort pages.
 
 Schema (bootstrap): `ReadCursor.cursorId` **range index + uniqueness constraint** (index before
 constraint). `cursorId = "{memberId}:{threadId}"` — deterministic, so `MERGE` is safe and unique.
+`lastReadMsgId` is a plain property — **no schema/bootstrap change** was needed for K-007.
 
 **Reader-match convention.** The reader may be a `User` (`userId`) or an `Agent` (`agentId`), so the
 mention-flag and cursor queries match `me.userId = $meId OR me.agentId = $meId`. This `OR` is
@@ -362,60 +470,83 @@ acceptable **only** because `me`/`mem` is already bound by a traversal or the in
 above, where the same `OR` would force an `All Node Scan`). Author id is returned with
 `coalesce(author.userId, author.agentId)` for the same User-or-Agent reason.
 
-### 9.1 Read a thread since a cursor/timestamp (thread-scoped)
+### 9.1 Read a thread since a cursor/timestamp (thread-scoped) — v2
+
+Two predicate forms over one body. **Cursor-driven reads** use the composite keyset
+(formulation A — never skips or re-delivers, even across millisecond ties); **explicit-`since`
+reads** keep the plain `>` and may re-deliver or skip *within that exact millisecond* (OQ3
+contract — agents that need lossless catch-up use cursor mode).
+
 ```cypher
 MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message)
 MATCH (first)-[:NEXT*0..]->(m:Message)
-WHERE m.createdAt > $since                       // $since = cursor.lastReadAt, or 0 for "all"
+WHERE m.createdAt > $since
+   OR (m.createdAt = $since AND m.msgId > $sinceMsgId)
+-- plain-`>` form (explicit since): WHERE m.createdAt > $since
 MATCH (m)-[:POSTED_BY]->(author)
 OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me)
        WHERE me.userId = $meId OR me.agentId = $meId
 WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
-       labels(author) AS authorType, isMention
-ORDER BY m.createdAt
+       labels(author) AS authorType, isMention, m.threadId AS threadId
+ORDER BY m.createdAt, m.msgId
 LIMIT $limit
 ```
-*Anchored on the `Thread.threadId` index; walks the thread's `NEXT` chain. Chronological (see the
-§9 ordering note); mentions of the reader carry `isMention = true`.*
+*Anchored on the `Thread.threadId` index; walks the thread's `NEXT` chain. Chronological in the
+`(createdAt, msgId)` total order (see the §9 ordering note) — **both** forms use the same ORDER
+BY. `$sinceMsgId` defaults to `''` when only a timestamp is known (empty string sorts before
+every id). Formulation A mirrors the ORDER BY 1:1; the fallback **formulation B**
+(`WHERE m.createdAt >= $since AND (m.createdAt > $since OR m.msgId > $sinceMsgId)`) plans
+identically today — re-profile on engine upgrades (edge build, moving target).*
 
-### 9.2 Read workspace-wide since a timestamp (room-wide, no thread)
+### 9.2 Read workspace-wide since a timestamp (room-wide, no thread) — v2
 ```cypher
 MATCH (m:Message)
 WHERE m.createdAt > $since                        // Node By Index Scan on Message.createdAt
+   OR (m.createdAt = $since AND m.msgId > $sinceMsgId)
+-- plain-`>` form (explicit since): WHERE m.createdAt > $since
 MATCH (m)-[:POSTED_BY]->(author)
 OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me)
        WHERE me.userId = $meId OR me.agentId = $meId
 WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
-       labels(author) AS authorType, isMention
-ORDER BY m.createdAt
+       labels(author) AS authorType, isMention, m.threadId AS threadId
+ORDER BY m.createdAt, m.msgId
 LIMIT $limit
 ```
-*`GRAPH.PROFILE`-confirmed `Node By Index Scan | (m:Message)` on `Message.createdAt` (not a label
-scan). **TIMEOUT risk:** the live default is 1000 ms; on a large workspace keep `$limit` modest and
-consider a bounded `$since` window. No room-wide cursor in M1 — this variant requires an explicit
-`$since` (service defaults it to `0`/epoch).*
+*`GRAPH.PROFILE`-confirmed: **both** predicate forms plan as a bare
+`Node By Index Scan | (m:Message)` on `Message.createdAt` with no residual `Filter` op (the OR
+folds into the scan). `m.threadId` rides along as navigation metadata — `null` on pre-K-007 rows
+until the §4.x backfill runs; clients must tolerate null. **TIMEOUT risk:** the live default is
+1000 ms; on a large workspace keep `$limit` modest and consider a bounded `$since` window. No
+room-wide cursor in M1 — this variant requires an explicit `$since` (service defaults it to
+`0`/epoch, plain `>`).*
 
-### 9.3 Advance a read-cursor (RW — only in `advance` mode)
+### 9.3 Advance a read-cursor (RW — only in `advance` mode) — v2 composite
 ```cypher
 MATCH (mem) WHERE mem.userId = $meId OR mem.agentId = $meId
 MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId: $cursorId})
 ON CREATE SET rc.memberId = $meId, rc.threadId = $threadId
-SET rc.lastReadAt = CASE WHEN $now > coalesce(rc.lastReadAt, 0) THEN $now
-                        ELSE rc.lastReadAt END    // monotonic — never moves backward
-RETURN rc.lastReadAt
+WITH rc, ($now > coalesce(rc.lastReadAt, 0)
+      OR ($now = coalesce(rc.lastReadAt, 0)
+          AND $nowMsgId > coalesce(rc.lastReadMsgId, ''))) AS adv
+SET rc.lastReadAt    = CASE WHEN adv THEN $now      ELSE rc.lastReadAt    END,
+    rc.lastReadMsgId = CASE WHEN adv THEN $nowMsgId ELSE rc.lastReadMsgId END
+RETURN rc.lastReadAt, rc.lastReadMsgId
 ```
 *`cursorId = "{meId}:{threadId}"`; `MERGE` backed by the `ReadCursor.cursorId` uniqueness
-constraint. The `CASE`/`coalesce` monotonic guard is **live-verified** on this build (advance 300 →
-stale 200 stays 300 → 400). The service owns `$now` — the newest `createdAt` it actually delivered,
-never the server clock and never client-supplied — and may short-circuit before writing (an empty
-page advances nothing). When the member node doesn't exist the anchor `MATCH` yields no rows and
-the query is a **no-op returning no row** — callers must not index into an empty result (the
-repository returns `None`). This is a write — cannot route to a replica; use only when
-`advance=true`.*
+constraint. The composite monotonic guard is computed **once** in the `WITH` so both `SET`s see
+the pre-write state. All five scenarios live-verified: create `(2000,'k2')` → tie-larger
+`(2000,'k3')` advances → tie-smaller `(2000,'k2')` refused (stale replay) → backward
+`(1500,'k9')` refused → forward `(3000,'k4')` advances. `coalesce(rc.lastReadMsgId, '')` covers
+pre-K-007 cursors — **no cursor backfill needed**. The service owns `($now, $nowMsgId)` — the
+newest `(createdAt, msgId)` pair it actually delivered, never the server clock and never
+client-supplied — and may short-circuit before writing (an empty page advances nothing). When
+the member node doesn't exist the anchor `MATCH` yields no rows and the query is a **no-op
+returning no row** — callers must not index into an empty result (the repository returns
+`None`). This is a write — cannot route to a replica; use only when `advance=true`.*
 
 > **Member-match caveat here.** §9.3's opening `MATCH (mem) WHERE mem.userId=$meId OR mem.agentId
 > =$meId` *is* an anchor, so on paper it risks an `All Node Scan`. It is acceptable in practice
@@ -424,10 +555,12 @@ repository returns `None`). This is a write — cannot route to a replica; use o
 > shows this hurting, split into two label-specific `OPTIONAL MATCH`es + `coalesce` (the write-path
 > pattern) before the `MERGE`.
 
-### 9.4 Read a cursor (to compute `since` when not supplied)
+### 9.4 Read a cursor (to compute the composite `since` when not supplied)
 ```cypher
 MATCH (rc:ReadCursor {cursorId: $cursorId})
-RETURN rc.lastReadAt
+RETURN rc.lastReadAt, rc.lastReadMsgId
 ```
-*Single `Node By Index Scan` point-lookup on `ReadCursor.cursorId`. When no cursor exists, this
-returns no row and the service treats `since` as `0`/epoch.*
+*Single `Node By Index Scan` point-lookup on `ReadCursor.cursorId`, returning the
+`(lastReadAt, lastReadMsgId)` pair. When no cursor exists, this returns no row and the service
+uses the epoch base `(0, '')`. A pre-K-007 cursor has no `lastReadMsgId` — the pair reads back
+`(ts, null)` and the service maps it to `''`.*

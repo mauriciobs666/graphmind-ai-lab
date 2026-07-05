@@ -8,11 +8,27 @@ that is `services.py`'s job.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from falkordb import FalkorDB
 
 from . import db
+
+
+@dataclass(frozen=True)
+class MessageWriteStatus:
+    """Status row returned by the §4 v2 write paths (QUERIES.md §4 contract).
+
+    ``None`` from the write methods means the *anchor* missed (first path:
+    thread missing; subsequent path: no TAIL yet) — everything else comes back
+    as a status row the service dispatches on.
+    """
+
+    written: bool        # committed this call
+    had_head: bool       # first path only: lost the first-post race
+    dup_msg: bool        # msgId already exists (retry replay → idempotent success)
+    author_found: bool   # authorId resolved to a User or Agent
 
 
 class Repository:
@@ -38,10 +54,15 @@ class Repository:
     def create_channel(
         self, ws: str, *, channel_id: str, name: str, created_at: int
     ) -> None:
-        """Create a channel (idempotent MERGE). QUERIES.md §3."""
+        """Create a channel (plain CREATE). QUERIES.md §3.
+
+        Ids are server-minted uuids, so a MERGE could never match — this is a
+        CREATE with the uniqueness constraint as backstop. Consequence: creates
+        are non-idempotent (a retried create mints a new id).
+        """
         self._graph(ws).query(
-            "MERGE (c:Channel {channelId: $channelId}) "
-            "ON CREATE SET c.name = $name, c.createdAt = $createdAt "
+            "CREATE (c:Channel {channelId: $channelId, name: $name, "
+            "createdAt: $createdAt}) "
             "RETURN c",
             {"channelId": channel_id, "name": name, "createdAt": created_at},
         )
@@ -64,13 +85,18 @@ class Repository:
     def create_thread(
         self, ws: str, *, channel_id: str, thread_id: str, title: str, created_at: int
     ) -> None:
-        """Create a thread under a channel (idempotent). QUERIES.md §3."""
-        self._graph(ws).query(
+        """Create a thread under a channel (plain CREATE). QUERIES.md §3.
+
+        Non-idempotent like `create_channel` (server-minted ids; constraint as
+        backstop). Raises when the channel anchor is missing — the whole query
+        no-ops then, and a silent no-op would lose the thread. The service
+        pre-validates, so the raise is a tripwire.
+        """
+        res = self._graph(ws).query(
             "MATCH (c:Channel {channelId: $channelId}) "
-            "MERGE (t:Thread {threadId: $threadId}) "
-            "ON CREATE SET t.title = $title, t.createdAt = $createdAt, "
-            "t.updatedAt = $createdAt "
-            "MERGE (c)-[:HAS_THREAD]->(t) "
+            "CREATE (t:Thread {threadId: $threadId, title: $title, "
+            "createdAt: $createdAt, updatedAt: $createdAt}) "
+            "CREATE (c)-[:HAS_THREAD]->(t) "
             "RETURN t",
             {
                 "channelId": channel_id,
@@ -79,6 +105,11 @@ class Repository:
                 "createdAt": created_at,
             },
         )
+        if not res.result_set:
+            raise RuntimeError(
+                f"thread create was a no-op — channel not found "
+                f"(channel={channel_id!r}, thread={thread_id!r})"
+            )
 
     def list_threads(
         self, ws: str, *, channel_id: str, limit: int = 50
@@ -137,86 +168,112 @@ class Repository:
             {"agentId": agent_id, "name": name, "model": model, "createdAt": created_at},
         )
 
-    # ── §4 Messages ─────────────────────────────────────────────────────────────
-
-    # The atomic participant-mention block appended to BOTH write paths. The CASE
-    # guard is required — a bare `UNWIND []` collapses the row stream and `RETURN m`
-    # comes back empty (live-verified, AGENTS.md). `$mentions = []` is a true no-op.
-    _MENTIONS_BLOCK = (
-        "WITH m "
-        "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
-        "OPTIONAL MATCH (u:User  {userId:  mid}) "
-        "OPTIONAL MATCH (a:Agent {agentId: mid}) "
-        "WITH m, collect(DISTINCT coalesce(u, a)) AS mems "
-        "FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
-        "RETURN m"
-    )
+    # ── §4 Messages (v2 self-guarding write paths) ──────────────────────────────
+    #
+    # Both paths guard the write inside their single GRAPH.QUERY via
+    # `FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | …)` — a guard per path,
+    # never a conditional merge of the two paths (locked decision). The message
+    # is a guarded CREATE (no MERGE); the `Message.msgId` uniqueness constraint
+    # stays as the concurrency backstop. Notes that must survive edits:
+    #   * The `UNWIND (CASE WHEN $mentions = [] …)` guard is LOAD-BEARING for the
+    #     write itself — a bare empty UNWIND collapses the row stream before the
+    #     FOREACH and the whole write silently no-ops (live-verified).
+    #   * `DELETE` inside FOREACH (TAIL relink) and nested FOREACH (mentions) are
+    #     live-verified on this build.
+    #   * Zero rows back = the *anchor* missed (thread / TAIL) → return None; the
+    #     service owns the dispatch (QUERIES.md §4 status-row contract).
 
     @staticmethod
-    def _assert_written(res, *, thread_id: str, author_id: str) -> None:
-        """Fail loudly when a §4 write query matched nothing.
-
-        The write anchors on MATCH (thread / author / TAIL); if any anchor is
-        missing the whole query no-ops with zero rows — silent message loss.
-        The service validates first, so reaching this means a broken invariant
-        (or a lost race on the thread pointers).
-        """
+    def _write_status(res) -> MessageWriteStatus | None:
         if not res.result_set:
-            raise RuntimeError(
-                "message write was a no-op — thread, author, or TAIL not found "
-                f"(thread={thread_id!r}, author={author_id!r})"
-            )
+            return None
+        return MessageWriteStatus(*(bool(v) for v in res.result_set[0]))
 
     def post_first_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
         text: str, role: str, created_at: int, mentions: list[str] | None = None,
-    ) -> None:
-        """First message in a thread — creates HEAD + TAIL. QUERIES.md §4.
+    ) -> MessageWriteStatus | None:
+        """First message in a thread — creates HEAD + TAIL. QUERIES.md §4 v2.
 
         Mentions ride inside this single GRAPH.QUERY (atomicity rule).
+        Returns the status row, or None when the thread anchor is missing.
         """
         res = self._graph(ws).query(
             "MATCH (t:Thread {threadId: $threadId}) "
-            "MATCH (author {userId: $authorId}) "
-            "MERGE (m:Message {msgId: $msgId}) "
-            "ON CREATE SET m.text = $text, m.role = $role, m.createdAt = $createdAt "
-            "CREATE (t)-[:HEAD]->(m) "
-            "CREATE (t)-[:TAIL]->(m) "
-            "CREATE (m)-[:POSTED_BY]->(author) "
-            "SET t.updatedAt = $createdAt " + self._MENTIONS_BLOCK,
+            "OPTIONAL MATCH (t)-[:HEAD]->(h) "
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "WITH t, h, dup, coalesce(ua, aa) AS author "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, h, dup, author, mems, "
+            "     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (t)-[:HEAD]->(m) "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       h    IS NOT NULL   AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound",
             {
                 "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
                 "text": text, "role": role, "createdAt": created_at,
                 "mentions": list(mentions or []),
             },
         )
-        self._assert_written(res, thread_id=thread_id, author_id=author_id)
+        return self._write_status(res)
 
     def post_subsequent_message(
         self, ws: str, *, thread_id: str, msg_id: str, author_id: str,
         text: str, role: str, created_at: int, mentions: list[str] | None = None,
-    ) -> None:
-        """Append a message — moves TAIL forward via NEXT. QUERIES.md §4.
+    ) -> MessageWriteStatus | None:
+        """Append a message — moves TAIL forward via NEXT. QUERIES.md §4 v2.
 
         Mentions ride inside this single GRAPH.QUERY (atomicity rule).
+        Returns the status row, or None when the thread has no TAIL yet.
         """
         res = self._graph(ws).query(
             "MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message) "
-            "MATCH (author {userId: $authorId}) "
-            "MERGE (m:Message {msgId: $msgId}) "
-            "ON CREATE SET m.text = $text, m.role = $role, m.createdAt = $createdAt "
-            "CREATE (prev)-[:NEXT]->(m) "
-            "DELETE tailRel "
-            "CREATE (t)-[:TAIL]->(m) "
-            "CREATE (m)-[:POSTED_BY]->(author) "
-            "SET t.updatedAt = $createdAt " + self._MENTIONS_BLOCK,
+            "OPTIONAL MATCH (dup:Message {msgId: $msgId}) "
+            "OPTIONAL MATCH (ua:User  {userId:  $authorId}) "
+            "OPTIONAL MATCH (aa:Agent {agentId: $authorId}) "
+            "WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author "
+            "UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid "
+            "OPTIONAL MATCH (mu:User  {userId:  mid}) "
+            "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
+            "WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
+            "WITH t, tailRel, prev, dup, author, mems, "
+            "     (dup IS NULL AND author IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (m:Message {msgId: $msgId, text: $text, role: $role, "
+            "                     createdAt: $createdAt, threadId: $threadId}) "
+            "  CREATE (prev)-[:NEXT]->(m) "
+            "  DELETE tailRel "
+            "  CREATE (t)-[:TAIL]->(m) "
+            "  CREATE (m)-[:POSTED_BY]->(author) "
+            "  SET t.updatedAt = $createdAt "
+            "  FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
+            ") "
+            "RETURN ok                 AS written, "
+            "       false              AS hadHead, "
+            "       dup  IS NOT NULL   AS dupMsg, "
+            "       author IS NOT NULL AS authorFound",
             {
                 "threadId": thread_id, "msgId": msg_id, "authorId": author_id,
                 "text": text, "role": role, "createdAt": created_at,
                 "mentions": list(mentions or []),
             },
         )
-        self._assert_written(res, thread_id=thread_id, author_id=author_id)
+        return self._write_status(res)
 
     def read_thread(self, ws: str, *, thread_id: str) -> list[dict[str, Any]]:
         """Read a full thread in order. QUERIES.md §4."""
@@ -252,13 +309,16 @@ class Repository:
         res = self._graph(ws).ro_query(
             "CALL db.idx.fulltext.queryNodes('Message', $query) "
             "YIELD node AS m, score "
-            "RETURN m.msgId AS msgId, m.text AS text, "
+            "RETURN m.msgId AS msgId, m.threadId AS threadId, m.text AS text, "
             "m.createdAt AS createdAt, score "
             "ORDER BY score DESC LIMIT $limit",
             {"query": query, "limit": limit},
         )
         return [
-            {"msgId": row[0], "text": row[1], "createdAt": row[2], "score": row[3]}
+            {
+                "msgId": row[0], "threadId": row[1], "text": row[2],
+                "createdAt": row[3], "score": row[4],
+            }
             for row in res.result_set
         ]
 
@@ -269,86 +329,131 @@ class Repository:
         return {
             "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
             "authorId": row[4], "authorType": row[5], "isMention": bool(row[6]),
+            "threadId": row[7],
         }
 
+    # Two predicate forms, one method (QUERIES.md §9.1/§9.2 v2):
+    #   * `since_msg_id is None` → plain `m.createdAt > $since` — explicit-since
+    #     semantics (may re-deliver or skip within that exact millisecond).
+    #   * a string (possibly "") → formulation-A composite keyset, which mirrors
+    #     the ORDER BY 1:1 and never skips a millisecond-tied sibling.
+    # Both forms share the deterministic total order (createdAt, msgId).
+    _SINCE_PLAIN = "m.createdAt > $since "
+    _SINCE_KEYSET = (
+        "m.createdAt > $since "
+        "OR (m.createdAt = $since AND m.msgId > $sinceMsgId) "
+    )
+
     def read_thread_since(
-        self, ws: str, *, thread_id: str, me_id: str, since: int, limit: int = 50
+        self, ws: str, *, thread_id: str, me_id: str, since: int,
+        since_msg_id: str | None = None, limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Thread-scoped since-read; chronological, reader-mentions flagged. §9.1.
 
-        Chronological order is the cursor-pagination invariant: a truncated
-        page must be the earliest rows so advancing the cursor to the last
-        delivered `createdAt` never skips anything (mention-first sorting +
-        LIMIT loses messages). `isMention` stays a flag for the client.
+        Chronological `(createdAt, msgId)` order is the cursor-pagination
+        invariant: a truncated page must be the earliest rows so advancing the
+        cursor to the last delivered pair never skips anything (mention-first
+        sorting + LIMIT loses messages). `isMention` stays a flag for the client.
         """
+        where = self._SINCE_PLAIN if since_msg_id is None else self._SINCE_KEYSET
         res = self._graph(ws).ro_query(
             "MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message) "
             "MATCH (first)-[:NEXT*0..]->(m:Message) "
-            "WHERE m.createdAt > $since "
+            "WHERE " + where +
             "MATCH (m)-[:POSTED_BY]->(author) "
             "OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) "
             "       WHERE me.userId = $meId OR me.agentId = $meId "
             "WITH m, author, count(me) > 0 AS isMention "
             "RETURN m.msgId, m.text, m.role, m.createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
-            "labels(author) AS authorType, isMention "
-            "ORDER BY m.createdAt "
+            "labels(author) AS authorType, isMention, m.threadId AS threadId "
+            "ORDER BY m.createdAt, m.msgId "
             "LIMIT $limit",
-            {"threadId": thread_id, "meId": me_id, "since": since, "limit": limit},
+            {
+                "threadId": thread_id, "meId": me_id, "since": since,
+                "sinceMsgId": since_msg_id or "", "limit": limit,
+            },
         )
         return [self._since_row(row) for row in res.result_set]
 
     def read_ws_since(
-        self, ws: str, *, me_id: str, since: int, limit: int = 50
+        self, ws: str, *, me_id: str, since: int,
+        since_msg_id: str | None = None, limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Workspace-wide since-read across all threads. §9.2.
 
-        Anchors on the `Message.createdAt` index. Chronological (see
-        `read_thread_since`); reader-mentions flagged via `isMention`.
+        Anchors on the `Message.createdAt` index (formulation A folds the
+        composite OR into the same index scan — re-profile on engine upgrades).
+        Chronological (see `read_thread_since`); reader-mentions flagged.
         """
+        where = self._SINCE_PLAIN if since_msg_id is None else self._SINCE_KEYSET
         res = self._graph(ws).ro_query(
-            "MATCH (m:Message) WHERE m.createdAt > $since "
+            "MATCH (m:Message) "
+            "WHERE " + where +
             "MATCH (m)-[:POSTED_BY]->(author) "
             "OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me) "
             "       WHERE me.userId = $meId OR me.agentId = $meId "
             "WITH m, author, count(me) > 0 AS isMention "
             "RETURN m.msgId, m.text, m.role, m.createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
-            "labels(author) AS authorType, isMention "
-            "ORDER BY m.createdAt "
+            "labels(author) AS authorType, isMention, m.threadId AS threadId "
+            "ORDER BY m.createdAt, m.msgId "
             "LIMIT $limit",
-            {"meId": me_id, "since": since, "limit": limit},
+            {
+                "meId": me_id, "since": since,
+                "sinceMsgId": since_msg_id or "", "limit": limit,
+            },
         )
         return [self._since_row(row) for row in res.result_set]
 
     def advance_cursor(
-        self, ws: str, *, me_id: str, thread_id: str, cursor_id: str, now: int
-    ) -> int | None:
-        """MERGE/advance a read-cursor monotonically; returns lastReadAt. §9.3.
+        self, ws: str, *, me_id: str, thread_id: str, cursor_id: str,
+        now: int, now_msg_id: str,
+    ) -> tuple[int, str | None] | None:
+        """MERGE/advance a read-cursor with the composite monotonic guard. §9.3 v2.
 
-        The CASE guard makes advancing never move the cursor backward
-        (live-verified on this build). When the member node doesn't exist the
-        anchor MATCH yields no rows — the advance is a no-op returning None
-        (never an IndexError).
+        The guard is computed once in a `WITH` so both `SET`s see the pre-write
+        state; `(now, nowMsgId)` advances only when strictly ahead of the stored
+        pair — a stale or tie-smaller replay never moves the cursor backward.
+        `coalesce(rc.lastReadMsgId, '')` covers pre-K-007 cursors (no backfill
+        needed). When the member node doesn't exist the anchor MATCH yields no
+        rows — the advance is a no-op returning None (never an IndexError).
         """
         res = self._graph(ws).query(
             "MATCH (mem) WHERE mem.userId = $meId OR mem.agentId = $meId "
             "MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId: $cursorId}) "
             "ON CREATE SET rc.memberId = $meId, rc.threadId = $threadId "
-            "SET rc.lastReadAt = CASE WHEN $now > coalesce(rc.lastReadAt, 0) "
-            "THEN $now ELSE rc.lastReadAt END "
-            "RETURN rc.lastReadAt",
-            {"meId": me_id, "threadId": thread_id, "cursorId": cursor_id, "now": now},
+            "WITH rc, ($now > coalesce(rc.lastReadAt, 0) "
+            "      OR ($now = coalesce(rc.lastReadAt, 0) "
+            "          AND $nowMsgId > coalesce(rc.lastReadMsgId, ''))) AS adv "
+            "SET rc.lastReadAt    = CASE WHEN adv THEN $now      ELSE rc.lastReadAt    END, "
+            "    rc.lastReadMsgId = CASE WHEN adv THEN $nowMsgId ELSE rc.lastReadMsgId END "
+            "RETURN rc.lastReadAt, rc.lastReadMsgId",
+            {
+                "meId": me_id, "threadId": thread_id, "cursorId": cursor_id,
+                "now": now, "nowMsgId": now_msg_id,
+            },
         )
-        return res.result_set[0][0] if res.result_set else None
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return (row[0], row[1])
 
-    def get_cursor(self, ws: str, *, cursor_id: str) -> int | None:
-        """Read a cursor's lastReadAt, or None if it doesn't exist yet. §9.4."""
+    def get_cursor(self, ws: str, *, cursor_id: str) -> tuple[int, str | None] | None:
+        """Read a cursor's `(lastReadAt, lastReadMsgId)` pair, or None. §9.4.
+
+        Pre-K-007 cursors have no `lastReadMsgId` — the pair comes back as
+        `(ts, None)` and the service maps it to the `''` base convention.
+        """
         res = self._graph(ws).ro_query(
-            "MATCH (rc:ReadCursor {cursorId: $cursorId}) RETURN rc.lastReadAt",
+            "MATCH (rc:ReadCursor {cursorId: $cursorId}) "
+            "RETURN rc.lastReadAt, rc.lastReadMsgId",
             {"cursorId": cursor_id},
         )
-        return res.result_set[0][0] if res.result_set else None
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return (row[0], row[1])
 
     def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
         """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""
@@ -358,7 +463,8 @@ class Repository:
             "OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message) "
             "RETURN m.msgId, m.text, m.role, m.createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
-            "labels(author) AS authorType, quoted.msgId AS quotedId",
+            "labels(author) AS authorType, m.threadId AS threadId, "
+            "quoted.msgId AS quotedId",
             {"msgId": msg_id},
         )
         if not res.result_set:
@@ -366,7 +472,8 @@ class Repository:
         row = res.result_set[0]
         return {
             "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
-            "authorId": row[4], "authorType": row[5], "quotedId": row[6],
+            "authorId": row[4], "authorType": row[5], "threadId": row[6],
+            "quotedId": row[7],
         }
 
     # ── validation reads (used by services) ─────────────────────────────────────
@@ -388,19 +495,20 @@ class Repository:
         )
         return bool(res.result_set and res.result_set[0][0])
 
-    def existing_members(self, ws: str, *, ids: list[str]) -> set[str]:
-        """Subset of `ids` that resolve to a User or Agent in the workspace.
+    def resolve_member_kinds(self, ws: str, *, ids: list[str]) -> dict[str, str | None]:
+        """id -> 'User' | 'Agent' | None. QUERIES.md §2 (member-kind lookup).
 
-        Used by the service to reject mentions of non-members before writing.
+        One round trip covers author validation, mention validation, and role
+        derivation (`User → user`, `Agent → assistant` — mapping is service-side).
         """
         if not ids:
-            return set()
+            return {}
         res = self._graph(ws).ro_query(
-            "UNWIND $ids AS mid "
-            "OPTIONAL MATCH (u:User  {userId:  mid}) "
-            "OPTIONAL MATCH (a:Agent {agentId: mid}) "
-            "WITH mid, coalesce(u, a) AS m WHERE m IS NOT NULL "
-            "RETURN collect(DISTINCT mid) AS ids",
+            "UNWIND $ids AS id "
+            "OPTIONAL MATCH (u:User  {userId:  id}) "
+            "OPTIONAL MATCH (a:Agent {agentId: id}) "
+            "RETURN id, CASE WHEN coalesce(u, a) IS NULL THEN null "
+            "                ELSE labels(coalesce(u, a))[0] END AS kind",
             {"ids": list(ids)},
         )
-        return set(res.result_set[0][0]) if res.result_set else set()
+        return {row[0]: row[1] for row in res.result_set}

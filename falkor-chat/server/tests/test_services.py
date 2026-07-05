@@ -13,6 +13,7 @@ import pytest
 from redis.exceptions import ResponseError
 
 from falkorchat.config import CallContext
+from falkorchat.repository import MessageWriteStatus
 from falkorchat.services import (
     ChannelNotFoundError,
     InvalidSearchQueryError,
@@ -24,6 +25,10 @@ from falkorchat.services import (
 
 CTX = CallContext(ws="test", actor="u1")
 
+OK = MessageWriteStatus(written=True, had_head=False, dup_msg=False, author_found=True)
+DUP = MessageWriteStatus(written=False, had_head=False, dup_msg=True, author_found=True)
+HAD_HEAD = MessageWriteStatus(written=False, had_head=True, dup_msg=False, author_found=True)
+
 
 class FakeRepo:
     """Records calls and simulates the small amount of state services depend on."""
@@ -32,10 +37,15 @@ class FakeRepo:
         self.channels: set[str] = set()
         self.threads: set[str] = set()
         self.heads: set[str] = set()          # threads that already have a HEAD
-        self.members: set[str] = set()        # known member ids
-        self.cursors: dict[str, int] = {}     # cursorId -> lastReadAt
+        self.members: set[str] = set()        # known User ids
+        self.agents: set[str] = set()         # known Agent ids
+        # cursorId -> (lastReadAt, lastReadMsgId) composite pair
+        self.cursors: dict[str, tuple[int, str | None]] = {}
         self.calls: list[tuple] = []
         self.since_rows: list[dict] = []
+        # scripted §4 v2 status rows (popped first); default behavior otherwise
+        self.first_status: list[MessageWriteStatus | None] = []
+        self.subseq_status: list[MessageWriteStatus | None] = []
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -55,31 +65,47 @@ class FakeRepo:
     def thread_has_head(self, ws, *, thread_id):
         return thread_id in self.heads
 
-    def existing_members(self, ws, *, ids):
-        return {i for i in ids if i in self.members}
+    def resolve_member_kinds(self, ws, *, ids):
+        def kind(i):
+            if i in self.agents:
+                return "Agent"
+            if i in self.members:
+                return "User"
+            return None
+
+        return {i: kind(i) for i in ids}
 
     def post_first_message(self, ws, **kw):
-        self.heads.add(kw["thread_id"])
         self.calls.append(("post_first_message", kw))
+        if self.first_status:
+            return self.first_status.pop(0)
+        self.heads.add(kw["thread_id"])
+        return OK
 
     def post_subsequent_message(self, ws, **kw):
         self.calls.append(("post_subsequent_message", kw))
+        if self.subseq_status:
+            return self.subseq_status.pop(0)
+        return OK
 
     def get_cursor(self, ws, *, cursor_id):
         return self.cursors.get(cursor_id)
 
-    def advance_cursor(self, ws, *, me_id, thread_id, cursor_id, now):
-        prev = self.cursors.get(cursor_id, 0)
-        self.cursors[cursor_id] = max(prev, now)
-        self.calls.append(("advance_cursor", cursor_id, now))
+    def advance_cursor(self, ws, *, me_id, thread_id, cursor_id, now, now_msg_id):
+        prev = self.cursors.get(cursor_id, (0, ""))
+        self.cursors[cursor_id] = max(prev, (now, now_msg_id))
+        self.calls.append(("advance_cursor", cursor_id, now, now_msg_id))
         return self.cursors[cursor_id]
 
-    def read_thread_since(self, ws, *, thread_id, me_id, since, limit=50):
-        self.calls.append(("read_thread_since", thread_id, me_id, since, limit))
+    def read_thread_since(self, ws, *, thread_id, me_id, since, since_msg_id=None,
+                          limit=50):
+        self.calls.append(
+            ("read_thread_since", thread_id, me_id, since, since_msg_id, limit)
+        )
         return self.since_rows
 
-    def read_ws_since(self, ws, *, me_id, since, limit=50):
-        self.calls.append(("read_ws_since", me_id, since, limit))
+    def read_ws_since(self, ws, *, me_id, since, since_msg_id=None, limit=50):
+        self.calls.append(("read_ws_since", me_id, since, since_msg_id, limit))
         return self.since_rows
 
     def search_messages(self, ws, *, query, limit=50):
@@ -217,6 +243,90 @@ def test_post_message_dedups_mentions_before_write():
     assert msg["mentions"] == ["u2"]
 
 
+# ── post_message: v2 status dispatch + role derivation (K-007) ──────────────────
+
+
+def test_post_message_agent_actor_gets_assistant_role():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.agents.add("a1")
+    svc = make_service(repo)
+
+    msg = svc.post_message(CallContext(ws="test", actor="a1"), thread_id="t1", text="hi")
+
+    assert msg["role"] == "assistant"
+    assert repo.calls[-1][1]["role"] == "assistant"  # derived, never trusted
+
+
+def test_post_message_dup_msg_is_idempotent_success():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")
+    repo.members.add("u1")
+    repo.subseq_status = [DUP]  # retry replay of our own write
+    svc = make_service(repo, now=1000)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="hi")
+
+    assert msg["msgId"] == "id1"  # returned as success, no error
+    assert msg["role"] == "user"
+
+
+def test_post_message_had_head_redispatches_as_subsequent():
+    repo = FakeRepo()
+    repo.threads.add("t1")  # no HEAD seen at dispatch time…
+    repo.members.add("u1")
+    repo.first_status = [HAD_HEAD]  # …but another writer won the first-post race
+    svc = make_service(repo)
+
+    svc.post_message(CTX, thread_id="t1", text="hi")
+
+    kinds = [c[0] for c in repo.calls if c[0].startswith("post_")]
+    assert kinds == ["post_first_message", "post_subsequent_message"]
+
+
+def test_post_message_tailless_subsequent_redispatches_as_first():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")  # HEAD seen at dispatch time…
+    repo.members.add("u1")
+    repo.subseq_status = [None]  # …but the anchor missed (no TAIL yet)
+    svc = make_service(repo)
+
+    svc.post_message(CTX, thread_id="t1", text="hi")
+
+    kinds = [c[0] for c in repo.calls if c[0].startswith("post_")]
+    assert kinds == ["post_subsequent_message", "post_first_message"]
+
+
+def test_post_message_dispatch_loop_is_bounded():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.members.add("u1")
+    # impossible-by-contract ping-pong: first says "had head", subsequent says "no TAIL"
+    repo.first_status = [HAD_HEAD] * 10
+    repo.subseq_status = [None] * 10
+    svc = make_service(repo)
+
+    with pytest.raises(RuntimeError):
+        svc.post_message(CTX, thread_id="t1", text="hi")
+
+
+def test_post_message_created_at_is_strictly_increasing_under_fixed_clock():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.members.add("u1")
+    svc = make_service(repo, now=1000)  # frozen wall clock
+
+    m1 = svc.post_message(CTX, thread_id="t1", text="one")
+    m2 = svc.post_message(CTX, thread_id="t1", text="two")
+
+    # monotonic per-process clock: same-ms ties are impossible at the source
+    assert m1["createdAt"] == 1000
+    assert m2["createdAt"] == 1001
+    assert m2["createdAt"] > m1["createdAt"]
+
+
 # ── read_messages: RO/RW dispatch ───────────────────────────────────────────────
 
 
@@ -226,13 +336,14 @@ def test_read_messages_explicit_since_is_pure_read_no_advance():
 
     svc.read_messages(CTX, thread_id="t1", since=50, advance=True)
 
-    assert ("read_thread_since", "t1", "u1", 50, 50) in repo.calls
+    # explicit since → plain `>` semantics (since_msg_id=None), cursor untouched
+    assert ("read_thread_since", "t1", "u1", 50, None, 50) in repo.calls
     assert not any(c[0] == "advance_cursor" for c in repo.calls)
 
 
 def test_read_messages_thread_uses_cursor_and_advances_to_last_returned():
     repo = FakeRepo()
-    repo.cursors["u1:t1"] = 200
+    repo.cursors["u1:t1"] = (200, "m0")
     repo.since_rows = [
         {"msgId": "m1", "createdAt": 300},
         {"msgId": "m2", "createdAt": 450},
@@ -241,15 +352,15 @@ def test_read_messages_thread_uses_cursor_and_advances_to_last_returned():
 
     svc.read_messages(CTX, thread_id="t1", advance=True)
 
-    assert ("read_thread_since", "t1", "u1", 200, 50) in repo.calls
+    assert ("read_thread_since", "t1", "u1", 200, "m0", 50) in repo.calls
     # cursor moves to the newest row actually delivered — NOT the server clock,
     # which would skip rows a `limit` truncated (and race concurrent posts)
-    assert ("advance_cursor", "u1:t1", 450) in repo.calls
+    assert ("advance_cursor", "u1:t1", 450, "m2") in repo.calls
 
 
 def test_read_messages_empty_page_does_not_advance():
     repo = FakeRepo()
-    repo.cursors["u1:t1"] = 200
+    repo.cursors["u1:t1"] = (200, "m0")
     svc = make_service(repo, now=1000)
 
     svc.read_messages(CTX, thread_id="t1", advance=True)  # since_rows is []
@@ -263,7 +374,8 @@ def test_read_messages_no_cursor_defaults_since_zero():
 
     svc.read_messages(CTX, thread_id="t1", advance=False)
 
-    assert ("read_thread_since", "t1", "u1", 0, 50) in repo.calls
+    # no cursor yet → epoch base with the composite '' msgId convention
+    assert ("read_thread_since", "t1", "u1", 0, "", 50) in repo.calls
     assert not any(c[0] == "advance_cursor" for c in repo.calls)
 
 
@@ -273,8 +385,29 @@ def test_read_messages_room_wide_requires_no_thread_and_no_advance():
 
     svc.read_messages(CTX, since=None, advance=True)  # no thread_id → room-wide, since 0
 
-    assert ("read_ws_since", "u1", 0, 50) in repo.calls
+    assert ("read_ws_since", "u1", 0, None, 50) in repo.calls
     assert not any(c[0] == "advance_cursor" for c in repo.calls)
+
+
+def test_read_messages_cursor_pair_round_trips_as_composite_since():
+    repo = FakeRepo()
+    repo.since_rows = [
+        {"msgId": "m2", "createdAt": 300},
+        {"msgId": "m3", "createdAt": 300},  # millisecond tie — last row is max pair
+    ]
+    svc = make_service(repo)
+
+    svc.read_messages(CTX, thread_id="t1", advance=True)
+
+    # advanced to the last returned (createdAt, msgId) pair
+    assert repo.cursors["u1:t1"] == (300, "m3")
+
+    repo.since_rows = []
+    svc.read_messages(CTX, thread_id="t1", advance=True)
+
+    # the stored pair is fed back as the composite since — tied siblings with a
+    # larger msgId would still be delivered, nothing re-delivered
+    assert ("read_thread_since", "t1", "u1", 300, "m3", 50) in repo.calls
 
 
 # ── search: thin passthrough ────────────────────────────────────────────────────
