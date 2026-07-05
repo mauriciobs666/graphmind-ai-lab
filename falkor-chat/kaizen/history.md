@@ -2,6 +2,35 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-05 — QA: acceptance pass on K-007 M2 groundwork
+
+- **What:** black-box/acceptance QA pass at `94ab746`, scoped to what the K-007 dev suites
+  structurally can't reach: concurrency through the real HTTP stack (single- and
+  **two-process** writers), MCP-driven cursor paging over millisecond ties, agent `role` on
+  every read surface, `backfill_thread_ids.sh` against real legacy-shaped data, and the
+  actor-seam edges. Added `docs/test-plans/k007-m2-groundwork.md` and
+  `docs/test-reports/k007-m2-groundwork-report.md`. Isolated `ws:qa` (created + deleted);
+  `ws:acme`/`reference` untouched.
+- **Result: PASS with two low-severity defects** — 18/18 items executed, 16 clean passes, on
+  green baselines (server **98/98**, query suite **115/115**). Highlights: 12-way REST
+  first-post hammer and a 20-write race across **two server processes** both yielded exactly
+  one HEAD/TAIL and a contiguous chain; the cross-process run produced a **natural same-ms
+  `createdAt` tie** and MCP cursor paging (`limit=3`) still delivered all 20 exactly once;
+  agent-authored messages read `role: "assistant"` consistently on all five read surfaces;
+  backfill script: 2 backfilled, then 0 (idempotent), `threadId: null` tolerated pre-backfill.
+- **Defects (parked in `kaizen/plan.md`, not fixed here):**
+  - **DEF-1 (low now, K-008 hazard):** no cross-label member-id uniqueness — a configured
+    actor colliding with an existing `agentId` silently MERGEs a shadow `User` that eclipses
+    the Agent in every `coalesce(u, a)` lookup (role derivation, `POSTED_BY`, mentions).
+  - **DEF-2 (low, ops):** with FalkorDB unreachable, `uvicorn falkorchat.app:app` hangs
+    indefinitely with zero output — `FalkorDB()` connects eagerly (no socket timeout) inside
+    the module-level `create_app()`, falsifying the "building the app never requires a
+    reachable FalkorDB" intent (hang-vs-refuse is WSL2-flavored; the eager import-time
+    connect is real everywhere).
+- **Why:** the prior QA report's top residual risks (concurrency/idempotency, agent
+  authorship, ms-ties) were exactly K-007's targets — this pass closes that loop before K-008
+  puts real agent writers on the system. No code under test changed.
+
 ## 2026-07-05 — K-007: M2 groundwork — agent authorship, v2 write-path guards, threadId denorm, composite cursors
 
 - **What:** the six pre-agent-writer correctness/completeness items, landed per the approved

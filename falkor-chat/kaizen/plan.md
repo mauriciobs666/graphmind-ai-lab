@@ -3,7 +3,9 @@
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
 > Last reviewed: 2026-07-05 (K-007 delivered ✅ — M2 groundwork landed, baselines now
-> pytest 98 / query suite 115/115; K-008 unblocked and is the next action)
+> pytest 98 / query suite 115/115; K-008 unblocked and is the next action. QA acceptance
+> pass on K-007: PASS with two low-severity defects — QA DEF-1 parked as a K-008
+> prerequisite below, QA DEF-2 in the parking lot)
 
 ## Locked M2 stack decisions (2026-07-04, user-approved)
 
@@ -35,9 +37,25 @@ DESIGN §12 M2 core, on the locked stack above:
   `alert()` errors.
 - GraphRAG reads pass a per-query client `timeout=` override (service-layer constant, not
   per-call ad-hockery) — the K-007 TIMEOUT posture (DESIGN §10).
+- **Prerequisite — QA DEF-1 (2026-07-05, low now / hazard once agents get identities):**
+  add a cross-label member-id uniqueness guard before wiring real agent identities —
+  `ensure_user`/`ensure_agent` should refuse an id already held by the other label (or lock a
+  "member ids are namespace-unique across `User`/`Agent`" rule + validation). Today a
+  configured actor colliding with an existing `agentId` silently MERGEs a shadow `User` that
+  eclipses the Agent in **every** `coalesce(u, a)` lookup (role derivation, `POSTED_BY`,
+  mentions) — silent misattribution, reproduced live. See
+  `docs/test-reports/k007-m2-groundwork-report.md` §3.
 
 ## Parking lot / ideas
 
+- **QA DEF-2 (2026-07-05, low — ops/diagnosability):** with FalkorDB unreachable,
+  `uvicorn falkorchat.app:app` hangs silently at import (no log line, port never binds; ≥90s
+  observed) — `db.connect()`'s `FalkorDB()` issues an eager command with no socket/connect
+  timeout, and the module-level `app = create_app()` triggers it at import. Fix: pass
+  `socket_connect_timeout`/`socket_timeout` in `db.connect()` and/or defer the first
+  connection to lifespan with a clear startup error. Compose is shielded by
+  `depends_on: service_healthy`; the README bare-`uvicorn` dev path is not. See
+  `docs/test-reports/k007-m2-groundwork-report.md` §3.
 - Verify the K-009 GitHub Action goes green on first push (path-filtered
   `.github/workflows/falkor-chat.yml`; FalkorDB service container). Note the CI baseline
   echoes in its comments (75/92) predate K-007's 98/115 — the suites themselves are the
