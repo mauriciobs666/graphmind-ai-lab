@@ -81,7 +81,8 @@ These are not style choices — they are engine facts that the topology must res
 > `vectorset` module also loaded. The findings below in §7 reflect confirmed behavior — not docs
 > assumptions. Details: cross-graph edges confirmed silent (no error, MATCH returns 0); constraint
 > requires an existing range index first; vector indexes use DDL syntax, not a procedure call;
-> `db.idx.vector.createNodeIndex` is **not registered** in this build. See §7 for corrected commands.
+> `db.idx.vector.createNodeIndex` is **not registered** in this build. See §7 for what's indexed and
+> why; the executable DDL is `scripts/bootstrap_schema.sh`.
 
 ---
 
@@ -299,76 +300,73 @@ presence field. This avoids a parallel model that would later need migrating int
 
 ### 7.1 Per workspace graph `ws:{id}`
 
+> **Executable DDL is `scripts/bootstrap_schema.sh` — the single source of truth**, asserted by
+> `test_queries.sh` (126/126). This section describes *what* is indexed/constrained and *why*, not
+> the runnable statements, so the two can't drift (the same discipline §5.3/§8 apply to queries).
+> `bootstrap_schema.sh <wsId>` is idempotent; `EMBEDDING_DIM` (default `1536`) sets the vector
+> dimension per workspace.
+
 **Critical ordering rules (live-verified):**
-1. `GRAPH.CONSTRAINT CREATE` requires an existing range index on the same property — always index first.
-2. Composite constraints (`PROPERTIES 2 …`) are supported and **live-verified** on this build — `bootstrap_schema.sh` creates them and `test_queries.sh` asserts they block duplicate `key+version`.
+1. `GRAPH.CONSTRAINT CREATE` requires an existing range index on the same property — always index
+   first. The script emits every index before its constraint for this reason.
+2. Composite constraints (`PROPERTIES 2 …`) are supported and **live-verified** on this build —
+   the script creates them and `test_queries.sh` asserts they block duplicate `key+version`.
+3. Constraint creation returns `PENDING` → becomes `OPERATIONAL` asynchronously. Verify with
+   `CALL db.constraints()`.
 
-```
--- ── Step 1: Range indexes (must exist BEFORE constraints) ──────────────────
+**Range indexes backing a uniqueness constraint** — one per entity anchor (`{label}Id`), plus the
+composite-keyed `WorkflowDefSnapshot`:
 
--- Identity anchors (back the uniqueness constraints below)
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:User)                ON (n.userId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Channel)             ON (n.channelId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Thread)              ON (n.threadId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)             ON (n.msgId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Agent)               ON (n.agentId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Document)            ON (n.documentId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Chunk)               ON (n.chunkId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Entity)              ON (n.entityId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowDefSnapshot) ON (n.key)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowDefSnapshot) ON (n.version)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun)         ON (n.runId)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)             ON (n.stepRunId)"
+| Label | Indexed property(ies) | Constraint |
+|---|---|---|
+| `User` | `userId` | UNIQUE 1 |
+| `Agent` | `agentId` | UNIQUE 1 |
+| `Channel` | `channelId` | UNIQUE 1 |
+| `Thread` | `threadId` | UNIQUE 1 |
+| `Message` | `msgId` | UNIQUE 1 |
+| `Document` | `documentId` | UNIQUE 1 |
+| `Chunk` | `chunkId` | UNIQUE 1 |
+| `Entity` | `entityId` | UNIQUE 1 |
+| `WorkflowRun` | `runId` | UNIQUE 1 |
+| `StepRun` | `stepRunId` | UNIQUE 1 |
+| `ReadCursor` | `cursorId` | UNIQUE 1 |
+| `WorkflowDefSnapshot` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
 
--- Hot filter indexes (no constraint needed)
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Thread)      ON (n.updatedAt)"   -- recent threads
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:Message)     ON (n.createdAt)"   -- time-range reads
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:WorkflowRun) ON (n.status)"
-GRAPH.QUERY ws:acme "CREATE INDEX FOR (n:StepRun)     ON (n.status)"
+**Hot-filter indexes (no constraint)** — support scans/ordering, not identity:
 
--- ── Step 2: Uniqueness constraints ─────────────────────────────────────────
--- Response is "PENDING" → becomes OPERATIONAL asynchronously.
--- Verify with: GRAPH.QUERY ws:acme "CALL db.constraints()"
+| Label | Property | Serves |
+|---|---|---|
+| `Thread` | `updatedAt` | recent-threads listing |
+| `Message` | `createdAt` | time-range / keyset reads (§9) |
+| `WorkflowRun` | `status` | "all running workflows" |
+| `StepRun` | `status` | step-state filters |
 
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE User                PROPERTIES 1 userId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Channel             PROPERTIES 1 channelId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Thread              PROPERTIES 1 threadId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Message             PROPERTIES 1 msgId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Agent               PROPERTIES 1 agentId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Document            PROPERTIES 1 documentId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Chunk               PROPERTIES 1 chunkId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE Entity              PROPERTIES 1 entityId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowRun         PROPERTIES 1 runId
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE StepRun             PROPERTIES 1 stepRunId
--- composite constraint — PROPERTIES 2 syntax live-verified on this build:
-GRAPH.CONSTRAINT CREATE ws:acme UNIQUE NODE WorkflowDefSnapshot PROPERTIES 2 key version
+> `Message.threadId` is **deliberately unindexed** (§5.1) — nav metadata, not an anchor.
 
--- ── Step 3: Full-text index (RediSearch) ───────────────────────────────────
-GRAPH.QUERY ws:acme "CALL db.idx.fulltext.createNodeIndex('Message', 'text')"
+**Full-text index (RediSearch):** `Message.text`, via `db.idx.fulltext.createNodeIndex('Message',
+'text')` — backs §5's keyword search.
 
--- ── Step 4: Vector indexes ─────────────────────────────────────────────────
--- ⚠️  db.idx.vector.createNodeIndex is NOT a registered procedure (live-verified).
--- Use DDL. Dimension must match the embedding model exactly (e.g. 1536 for text-embedding-ada-002).
-GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Message) ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
-GRAPH.QUERY ws:acme "CREATE VECTOR INDEX FOR (n:Chunk)   ON (n.embedding) OPTIONS {dimension:1536, similarityFunction:'cosine'}"
-
--- Vectors stored as vecf32; score is cosine distance (0 = identical, lower = more similar):
---   WRITE: SET n.embedding = vecf32([0.1, 0.2, ...])
---   READ:  CALL db.idx.vector.queryNodes('Message','embedding', $k, vecf32($vec))
---          YIELD node, score  →  ORDER BY score ASC
-```
+**Vector indexes:** `Message.embedding` and `Chunk.embedding`, created via **DDL**
+(`CREATE VECTOR INDEX … OPTIONS {dimension, similarityFunction:'cosine'}`).
+- ⚠️ `db.idx.vector.createNodeIndex` is **not** a registered procedure on this build (live-verified)
+  — the DDL form is mandatory (§1.2).
+- Dimension **must** match the embedding model exactly (`EMBEDDING_DIM`; e.g. `1536` for
+  `text-embedding-ada-002`) and is fixed per workspace at bootstrap.
+- Vectors stored as `vecf32`; **score is cosine distance** (`0` = identical, lower = more similar).
+  Write `SET n.embedding = vecf32([...])`; read `CALL db.idx.vector.queryNodes('Message','embedding',
+  $k, vecf32($vec)) YIELD node, score` → `ORDER BY score ASC`. Canonical read: `QUERIES.md` §6/§8.
+- Vector indexes are usually the biggest per-workspace RAM line (`dim × 4 bytes × #vectors`, §10/§11).
 
 ### 7.2 `reference` graph
 
-```
--- Same ordering rule: index first, constraint second
-GRAPH.QUERY reference "CREATE INDEX FOR (n:WorkflowDef) ON (n.key)"
-GRAPH.QUERY reference "CREATE INDEX FOR (n:WorkflowDef) ON (n.version)"
-GRAPH.QUERY reference "CREATE INDEX FOR (n:Entity)      ON (n.entityId)"
+Same ordering rule (index first, constraint second); executable DDL lives in
+`bootstrap_schema.sh` alongside §7.1.
 
-GRAPH.CONSTRAINT CREATE reference UNIQUE NODE WorkflowDef PROPERTIES 2 key version
-GRAPH.CONSTRAINT CREATE reference UNIQUE NODE Entity      PROPERTIES 1 entityId
-```
+| Label | Indexed property(ies) | Constraint |
+|---|---|---|
+| `WorkflowDef` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
+| `Entity` | `entityId` | UNIQUE 1 |
+| `Step` | `key` | — (traversal anchor for materialization) |
 
 **Rule:** index the *anchor* of a traversal (the start node you look up), not every hop. Always
 confirm the index is actually used with `GRAPH.PROFILE` — an index that isn't hit is just RAM.

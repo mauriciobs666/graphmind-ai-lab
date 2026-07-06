@@ -177,8 +177,9 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 
 | File | Contents |
 |---|---|
-| `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP |
-| `docs/QUERIES.md` | Canonical query library — all verified against the live instance |
+| `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP. The *why*; not a query/DDL copy — §5.3/§8 point to QUERIES.md, §7 points to `bootstrap_schema.sh`. |
+| `docs/QUERIES.md` | Canonical query library — all verified against the live instance (source of truth for **queries**) |
+| `scripts/bootstrap_schema.sh` | Source of truth for **executable DDL** (indexes + constraints + full-text/vector); DESIGN §7 describes it, doesn't duplicate it |
 | `docs/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
 | `docs/plans/m2-groundwork.md` · `docs/plans/m2-groundwork-queries.md` | K-007 plan + graph-dba verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings |
 
