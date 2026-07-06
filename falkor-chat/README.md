@@ -166,7 +166,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92 at M0 baseline) |
-| **M1** — Chat core | 🟡 | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (110 tests). Code-complete; hardening/real-time deferred to M2.5. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M1** — Chat core | ✅ | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (110 tests). DoD closed: append path load-tested + hot reads `GRAPH.PROFILE`d (§11.1), web request/response de-staled (K-012). Hardening/real-time (auth, push) deferred to M2.5. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
 | **M2** — GraphRAG | 🟡 | Embeddings, vector index, AI agent participant, hybrid retrieval. **Groundwork landed (K-007):** agent authorship, self-guarding write paths, `threadId` denorm, tie-safe composite cursors |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |

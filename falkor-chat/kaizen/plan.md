@@ -2,18 +2,19 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-05 (K-010 delivered ✅ — QA DEF-1 and DEF-2 closed; baselines now
-> pytest 110 / query suite 126/126. **Road-to-green planning pass added (architect): K-011..K-018
-> sequence both M1 and M2 to ✅. Scope confirmed by user 2026-07-05 — "M2 green = functional
-> GraphRAG"; auth + real-time deferred to the M2.5 hardening track. K-019 doc-inconsistency sweep
-> delivered ✅ (stale test counts, §13 embedding "open"→resolved, §12/§14.1 M2/M2.5 scope — see
-> history.md 2026-07-05).** See the milestone map below.)
+> Last reviewed: 2026-07-06 (K-011 + K-012 delivered ✅ → **milestone M1 — Chat core complete**;
+> baselines hold pytest 110 / query suite 126/126; append-path load-test + hot-read `GRAPH.PROFILE`
+> closeout folded into DESIGN §11.1/§11.2. Prior: K-010 ✅ (QA DEF-1/DEF-2 closed). **Road-to-green
+> planning pass (architect): K-011..K-018 sequence M1 and M2 to ✅. Scope confirmed by user
+> 2026-07-05 — "M2 green = functional GraphRAG"; auth + real-time deferred to the M2.5 hardening
+> track. K-019 doc-inconsistency sweep delivered ✅ — see history.md 2026-07-05.** See the milestone
+> map below.)
 
 ## Milestone-to-green map (architect plan, 2026-07-05)
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M1 — Chat core** | Its own un-finished DoD is closed: append-path load-tested, hot reads PROFILEd, request/response web UI de-staled | **K-011 + K-012** |
+| **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** | Functional GraphRAG loop: embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted | **K-008 (re-scoped) + K-013 + K-014 + K-015** |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
@@ -43,7 +44,7 @@ Parallel wave 1 (start now):
                                             ▼
                                        K-015 (QA M2 pass) ◀─ needs K-008+K-013+K-014  ⇒ M2 ✅
 
-M1 ✅ = K-011 + K-012.
+M1 ✅ = K-011 + K-012 — ACHIEVED (both delivered 2026-07-06).
 Deferred M2.5 (after M2-green): K-016 (auth) ─▶ K-017 (transport agent QA);  K-018 (real-time)
 K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touches), or standalone anytime.
 ```
@@ -64,39 +65,11 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 ## Active
 
-### — Milestone M1 (closeout) —
-
-### K-011 — M1 DoD closeout: load-test the append path + `GRAPH.PROFILE` the hot reads (🔵 proposed — M1)
-
-- **Owner:** `devops` (build the load harness + capture RAM/throughput) with a **`graph-dba`** sub-pass
-  (author/interpret `GRAPH.PROFILE`). Not `tdd-engineer` — this is a measurement/harness task, not a feature.
-- **Inputs/prereqs:** running FalkorDB + M1 server; K-007 empirical RAM line (DESIGN §11) as baseline. Independent of K-008/K-012.
-- **Scope:** (a) repeatable load harness driving the **service-layer append path** through REST (concurrent
-  posters; p50/p99 append latency + sustained msg/s) — not the K-007 bulk-`UNWIND` datapoint; (b) `GRAPH.PROFILE`
-  the hot reads — §4 thread read, §9.1/§9.2 since-reads, §5 search — confirm each hits `Node By Index Scan`, not
-  `NodeByLabelScan`; (c) fold findings into DESIGN §10/§11 (per-workspace RAM budget + shard:workspace packing ratio).
-- **Done-condition:** committed harness (`scripts/` or `docs/`) + a results section in DESIGN §11; PROFILE output for
-  all four hot reads showing index scans; a documented per-workspace RAM budget line. Suite stays 126/126, pytest 110.
-- **Risks/RAM (rule 6):** read-only measurement — **zero new RAM cost**. Writes ignore `TIMEOUT` (§10) → harness must
-  bound its own batch sizes. Surfaces the DESIGN §13 retention question as a data-backed follow-up.
-- **Test strategy:** the harness *is* the test; assert throughput/latency thresholds + no PROFILE degrades to a label
-  scan. Idempotent against an isolated `ws:load` graph (create + delete), never `ws:acme`.
-
-### K-012 — Web request/response UX polish (pulled out of K-008) (🔵 proposed — M1)
-
-- **Owner:** `coder` (justified: `web/app.js` is vanilla JS with **no test harness** — K-005 established web JS is
-  verified manually; strict TDD is a poor fit, so `coder` over `tdd-engineer`).
-- **Inputs/prereqs:** `GET /threads/{tid}/messages?since=&limit=` (K-006) + `threadId` denorm (K-007) — both shipped.
-  No server change required.
-- **Scope:** (a) adopt `?since=&limit=` polling for the open thread (replace the full re-fetch-after-post with an
-  incremental window); (b) replace `alert()` errors (`app.js:153,195`) with inline, non-blocking rendering; (c)
-  clickable search results → open the message's thread (uses the `threadId` now on search rows). **Excludes** agent-reply
-  rendering / `isMention` highlighting — those need the AI participant → K-014.
-- **Done-condition:** manual verification checklist in the PR (poll updates a thread without full reload; failed post
-  shows inline error; search-result click opens its thread). pytest/query suite untouched — 110 / 126/126 hold.
-- **Risks/RAM:** none (client-side). Keep the poll windowed (`limit`) + `since`-anchored so it never walks the full
-  `NEXT*` chain past the 1000ms `TIMEOUT`.
-- **Test strategy:** manual smoke against a running server (documented steps); no automated web harness (accepted, K-005 precedent).
+> **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (moved to
+> history.md). K-011: append-path load harness (~614 msg/s; p50/p90/p99 24.4/30.6/40.7 ms) +
+> hot-read `GRAPH.PROFILE` (all four index-backed) + per-workspace RAM budget → DESIGN §11.1/§11.2.
+> K-012: web request/response UX polish (incremental `?since=` polling, inline toast errors,
+> clickable search→thread). Baselines held pytest 110 / query suite 126/126.
 
 ### — Milestone M2 (GraphRAG) —
 
@@ -161,7 +134,9 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   already server-side).
 - **Scope:** render agent-authored (`role:assistant`) messages distinctly; restore reader `isMention` highlighting via
   the since-read flag (the K-005 "dead highlight" is alive once polling drives the UI); surface agent answers as they
-  arrive via the K-012 poll loop.
+  arrive via the K-012 poll loop. **Fold-in from K-012:** polled (`?since=`) message rows currently carry `authorId`
+  but no `displayName` (a `coder` left a code comment in `web/app.js`) — resolving it needs a small server change to
+  include `displayName` on since-read rows; it belongs to this K-014 web-M2 pass.
 - **Done-condition:** manual checklist — an agent answer appears in the polling web UI styled as assistant; a message
   mentioning the reader is highlighted. Suites untouched (110 / 126/126).
 - **Risks/RAM:** none (client-side).

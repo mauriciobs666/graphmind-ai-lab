@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-06 — K-012: web request/response UX polish → M1 complete
+
+- **What (client-side only, `web/` — no server/schema/query change):** de-staled the M1
+  request/response web path. Three changes in `web/app.js` + `web/index.html`:
+  1. **Incremental polling** — the open thread refreshes via `GET …?since=&limit=50` (bounded,
+     `since`-anchored, no `NEXT*` walk, no cursor), replacing the full re-fetch-after-post.
+  2. **Inline non-blocking toast errors** — replaced **both** `alert()` sites with inline toast
+     rendering so a failed post/action no longer blocks the UI.
+  3. **Clickable search results** — a search row now opens the message's thread via the `threadId`
+     carried on search rows (K-007 denorm).
+- **Scope guard:** `web/app.js` + `web/index.html` only — no `.py`, `QUERIES.md`, `test_queries.sh`,
+  `bootstrap_schema.sh`, schema, or `scripts/` touched; suites unaffected. Manual-smoke-only per the
+  K-005 precedent (no web test harness; `node` not on the box).
+- **Parked follow-up → K-014:** polled (`?since=`) message rows carry `authorId` but no
+  `displayName` (a `coder` left a code comment in `app.js`); resolving it needs a small server
+  change to include `displayName` on since-read rows — folded into the K-014 web-M2 pass.
+- **Suites:** pytest **110** / query suite **126/126** (unchanged — no code under test touched).
+- **Milestone:** with K-011, closes **milestone M1 — Chat core → ✅**.
+
+## 2026-07-06 — K-011: M1 DoD closeout — append-path load harness + hot-read PROFILE + RAM budget
+
+- **What (devops, with a `graph-dba` PROFILE sub-pass):** closed the M1 append-path load-test +
+  hot-read `GRAPH.PROFILE` DoD and folded a per-workspace RAM budget into DESIGN.
+  1. **Load harness** — new `scripts/load_test.sh` + `scripts/load_append.py` drive the
+     **service-layer append path through REST** (16 concurrent posters, 3000 msgs, 0 errors)
+     against an isolated `ws:load` graph. Measured **~614 msg/s; p50/p90/p99 = 24.4/30.6/40.7 ms**.
+  2. **Hot-read PROFILE** — `GRAPH.PROFILE` on the four hot reads (§4 thread read, §9.1 & §9.2
+     since-reads, §5 search) — **all index-backed (`Node By Index Scan`), none degraded to a
+     `NodeByLabelScan`**; raw plans archived by the harness.
+  3. **RAM budget** — chat-core floor **~1.06 KB/msg** (measured `INFO memory` `used_memory`
+     delta) ⇒ **~101 MB per 100k-msg workspace**; packing table folded into DESIGN §11.1/§11.2.
+- **Files:** new `scripts/load_test.sh`, `scripts/load_append.py`; `docs/DESIGN.md` §11.1/§11.2;
+  `AGENTS.md` Key-scripts row; `.gitignore` (`.load-out/`).
+- **Scope guard:** read-only measurement + docs/harness — **zero new per-workspace RAM cost**;
+  no `QUERIES.md`/`test_queries.sh`/`bootstrap_schema.sh`/schema change. Ran against `ws:load`
+  (create + delete), never `ws:acme`.
+- **Suites:** query suite **126/126** · pytest **110** (green).
+- **Milestone:** with K-012, closes **milestone M1 — Chat core → ✅**.
+
 ## 2026-07-05 — K-021: §13 open-questions reconciliation + identity-authoritative decision
 
 - **What (doc-only, no code/schema/query/script change):** recorded a newly-made design decision and
