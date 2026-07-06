@@ -5,9 +5,9 @@
 > Last reviewed: 2026-07-05 (K-010 delivered ✅ — QA DEF-1 and DEF-2 closed; baselines now
 > pytest 110 / query suite 126/126. **Road-to-green planning pass added (architect): K-011..K-018
 > sequence both M1 and M2 to ✅. Scope confirmed by user 2026-07-05 — "M2 green = functional
-> GraphRAG"; auth + real-time deferred to the M2.5 hardening track. Doc-inconsistency sweep added
-> K-019 (stale test counts in README/DESIGN; embedding model still listed §13-open though locked;
-> §12/§14.1 scope wording).** See the milestone map below.)
+> GraphRAG"; auth + real-time deferred to the M2.5 hardening track. K-019 doc-inconsistency sweep
+> delivered ✅ (stale test counts, §13 embedding "open"→resolved, §12/§14.1 M2/M2.5 scope — see
+> history.md 2026-07-05).** See the milestone map below.)
 
 ## Milestone-to-green map (architect plan, 2026-07-05)
 
@@ -24,9 +24,9 @@
 > participant is a **server-side responder** that posts as a configured Agent and needs no
 > per-request auth to function, so auth never blocks M2 green.
 >
-> One decision still **open, but it only gates K-016** (in the deferred track — not on any M2 path):
-> DESIGN §13 identity source of truth — is the `identity` graph authoritative, or a projection of
-> an external IdP? Resolve when K-016 is picked up.
+> The identity source-of-truth axis that used to gate K-016 is now **decided** (2026-07-05, user):
+> the `identity` graph is **authoritative (standalone)**, not an external-IdP projection — DESIGN §1.2.
+> K-016 (deferred track — not on any M2 path) implements auth *per* that decision; no user input pending.
 
 ## Sequencing (critical path + parallelism)
 
@@ -53,16 +53,10 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Suite discipline:** only the graph-dba gates in K-008 and K-013 touch `QUERIES.md` / `test_queries.sh`
   (raising the 126 baseline with enumerated assertions); K-011/K-012/K-014 are suite-neutral; K-015 is a QA overlay.
 
-## Locked M2 stack decisions (2026-07-04, user-approved)
+## Locked M2 stack decisions
 
-| Axis | Decision | Rationale |
-|---|---|---|
-| Embedding model | **Qwen3-Embedding-0.6B** (GGUF, Q8_0) | Best small-model MTEB quality; 100+ languages (PT-BR + EN chat); ~0.6 GB resident |
-| **`EMBEDDING_DIM=1024`** | Native dim; MRL allows 512/256 truncation later | ~4 KB/message vector (`vecf32`), ~8 KB with HNSW overhead — RAM rule 6 line |
-| Agent LLM | **Qwen3-4B-Instruct-2507** Q4_K_M (non-thinking) | RAG answering, not CoT; low latency; KV-cache headroom; `-Thinking-2507` is a drop-in swap if M3 needs it |
-| Runtime | **LM Studio** on Windows host, OpenAI-compatible `/v1/embeddings` + `/v1/chat/completions`, reached from WSL2 (mirrored networking → localhost) | Existing severino path; zero new moving parts. Ollama is the fallback if headless/always-on friction bites |
-| VRAM budget | 6 GB dedicated (RTX 4050); embedder + 4B LLM co-resident | Do not plan around shared-RAM spill |
-| Upgrade path | `qwen3-embedding:4b` — same family, same 1024-dim MRL | Re-embed only; no schema change |
+> **M2 stack (embedding model/dim, agent LLM, runtime, VRAM, upgrade path) is locked in
+> `docs/DESIGN.md` §1.3** (decided 2026-07-04). Implemented in K-008/K-013.
 
 > `bootstrap_schema.sh` default is `EMBEDDING_DIM=1536` — **must** be run with `EMBEDDING_DIM=1024`
 > for any new workspace from K-008 on. (`start_server.sh` guidance defaults to 1536 too — fold the
@@ -186,43 +180,22 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Risks/RAM:** none (no code under test changed); budget the transient `ws:qa` @1024 vector index.
 - **Test strategy:** the pass itself; drives REST + MCP + the running responder.
 
-### — Doc hygiene (cross-cutting) —
-
-### K-019 — Documentation-inconsistency sweep (🔵 proposed — doc-only)
-
-- **Owner:** `coder` (doc-only; no test discipline needed). Preferably **folded into the K-008 graph-dba gate**, which
-  already edits `bootstrap_schema.sh` / `start_server.sh` / DESIGN §11 — one coherent doc-sync instead of a drive-by.
-- **Inputs/prereqs:** none. Source of truth for counts = `AGENTS.md` (pytest 110 / query suite 126/126) and the live
-  suites (`./scripts/test_queries.sh`, `pytest -q`) — re-run to confirm the current numbers before editing.
-- **Scope (verified 2026-07-05, file:line):**
-  1. **Stale test counts** — reconcile to current 110 / 126/126: `README.md:122` (`115/115`→`126/126`),
-     `README.md:189` (`115 assertions`→126), `README.md:169` (`75 tests`→110), `README.md:220` (`98 passed`→110),
-     `DESIGN.md:459` (`70 tests`→110). Leave `README.md:168` M0 `92/92` only if re-labelled as the historical M0
-     figure; otherwise update.
-  2. **Locked-decision drift** — the embedding model + dim is decided (Qwen3-Embedding-0.6B, `EMBEDDING_DIM=1024`,
-     user-approved 2026-07-04) but DESIGN still lists it open: remove/rewrite `DESIGN.md:468` (§13 "Embedding model &
-     dimension" open question) and `DESIGN.md:439` ("embedding model still open, §13") to point at the locked decision.
-     Keep the `EMBEDDING_DIM` *default* at 1536 in scripts (intentional — chosen per workspace; the 1024 fold-in is
-     K-008's job) but make the docs say the model is chosen.
-  3. **Scope wording** — reconcile DESIGN §14.1 ("real-time + auth deferred *to M2*") with the §12 M2 DoD and the now
-     confirmed "M2 green = functional GraphRAG; auth/real-time → M2.5" decision, so the two sections agree.
-- **Done-condition:** every count in README/DESIGN matches the live suites; no doc still lists the embedding model as
-  an open question; §12/§14.1 scope wording is internally consistent. Grep sweep clean; no code/query change → suites
-  untouched (110 / 126/126).
-- **Risks/RAM:** none (doc-only).
-- **Test strategy:** re-run both suites to source the true counts before editing; final grep for the old numbers
-  (`115`, `98`, `75`, `70`) and the "still open" embedding phrasing returns nothing stale.
+> **K-019 — Documentation-inconsistency sweep — delivered ✅ 2026-07-05** (doc-only; moved to
+> history.md). Reconciled stale test counts (110 / 126/126) in README/DESIGN, closed the §13
+> embedding "still open" drift (now points to the §1.3 decision), and aligned §14.1/README
+> real-time wording to M2.5. Counts sourced from a live suite run.
 
 ### — Deferred M2.5 hardening track (auth + real-time; not on any M2-green path) —
 
 ### K-016 — Real auth/tenancy replacing the hardcoded `get_context` seam (🔵 proposed — M2.5, deferred)
 
-- **Owner:** **`architect`** (design pass — resolves DESIGN §13 "identity source of truth": is the `identity` graph
-  authoritative, or a projection of an external IdP?) → **`tdd-engineer`** (implement the resolved `get_context`).
-- **Inputs/prereqs:** the DESIGN §13 identity decision (**needs the user** when picked up). Localized by design — only
+- **Owner:** **`architect`** (design pass — designs the auth mechanism *per* the authoritative-identity decision, now
+  resolved: the `identity` graph is authoritative/standalone, DESIGN §1.2) → **`tdd-engineer`** (implement the resolved `get_context`).
+- **Inputs/prereqs:** the identity source-of-truth is **decided** (identity graph authoritative/standalone; DESIGN §1.2) —
+  K-016 no longer needs the user for that axis; it implements per that decision. Localized by design — only
   `config.get_context` changes (`config.py:43`); everything below already parameterized on `ws`/`actor`.
 - **Scope:** token → (user, workspace claim) resolution replacing hardcoded `ws=acme/user=u1`; wire the `identity`
-  graph per the §13 decision; keep or replace MCP's `frm`-ignoring rule with authenticated agent identity.
+  graph per the §1.2 authoritative-identity decision; keep or replace MCP's `frm`-ignoring rule with authenticated agent identity.
 - **Done-condition:** `get_context` resolves a real principal from a credential; multi-tenant isolation test; pytest green.
 - **Risks/RAM:** `identity` graph nodes (small). First real trust boundary — MCP endpoint is currently unauthenticated (§15.3).
 - **Test strategy:** service/api tests with injected auth contexts; a cross-tenant isolation test.
@@ -254,7 +227,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 | `docs/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
 | `docs/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
 | `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |
-| `docs/plans/m2-auth-tenancy.md` | K-016 (deferred): real auth replacing `get_context`, resolving §13 identity source of truth. |
+| `docs/plans/m2-auth-tenancy.md` | K-016 (deferred): real auth replacing `get_context`, per the §1.2 identity-authoritative decision. |
 | `docs/plans/m2-realtime.md` | K-018 (deferred): Pub/Sub → WebSocket/SSE, resolving §13 Bolt-vs-RESP. |
 
 ## Parking lot / ideas
@@ -271,5 +244,5 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   different field subset (all documented/intentional) — a declared schema per endpoint would make the contract testable
   and stop accretion.
 - DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard expression language (M3),
-  `identity` source of truth + real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
+  real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
   for the gateway (K-018).

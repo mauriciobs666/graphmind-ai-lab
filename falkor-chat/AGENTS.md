@@ -9,26 +9,29 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ## Decisions locked in — do not reopen without strong cause
 
-| Decision | Rationale |
+> Rationale lives once, in `docs/DESIGN.md` §1 (the authoritative register). This is the quick
+> do-not-reopen index — follow the link for the *why*.
+
+| Decision | Home |
 |---|---|
-| FalkorDB for all domain data, no secondary store | philosophy of the project |
-| One graph per workspace (`ws:{id}`) | blast-radius isolation, natural cluster sharding |
-| Thread-scoped `NEXT` linked list | users read threads, not channel feeds |
-| No DayBucket | was designed for channel-wide ordering; dropped when thread-scoped was chosen |
-| `Thread` owns `HEAD` and `TAIL` pointers | Thread stays sparse (2 edges) regardless of message count |
-| `Message.role` as inline property | filter by role without traversing `POSTED_BY` |
-| `coalesce(u.userId, u.agentId)` for member identity | `User` has `userId`, `Agent` has `agentId` — both are channel members |
-| Vector indexes via DDL, not a procedure | `db.idx.vector.createNodeIndex` is not registered in this build |
-| Index before constraint, always | `GRAPH.CONSTRAINT CREATE` requires a pre-existing range index |
-| `Message.embedding` stored inline as `vecf32` | enables single-query vector + traversal hybrid retrieval |
-| Vector score is cosine **distance** (0 = identical) | sort `ORDER BY score ASC` for most-similar first |
-| `status` as property, not label | avoids re-labeling churn on state changes; index it |
-| `ctx`, `input`, `output` must be flat/serialised | FalkorDB stores scalars and scalar lists only — no nested maps |
-| `Message.threadId` denormalized inline, **unindexed** | navigation metadata for §9.2/§5 rows; §9.1's HEAD/NEXT walk stays canonical; skipping the index saves RAM/write cost (K-007) |
-| Guarded-CREATE write paths (`FOREACH`+`CASE` guard per path) with an always-returned status row | retry replay is a structural no-op (`dupMsg`), first-post race refused (`hadHead`); no MERGE on Message — constraint stays as backstop (K-007) |
-| `Message.role` values `user`/`assistant`, derived server-side from the author label | `User → user`, `Agent → assistant`; never trusted from the caller — agents author first-class (K-007) |
-| Composite `(createdAt, msgId)` keyset for cursor reads (`ReadCursor.lastReadMsgId`) | timestamp alone is not a total order — same-ms ties skipped rows at page boundaries; cursor-driven reads are now lossless (K-007) |
-| Member ids are **namespace-unique across `User`/`Agent`**; `ensure_user`/`ensure_agent` are guarded-CREATE v2 queries returning a `(created, existed, collided)` status row (QUERIES.md §2/§7) | a shadow node with the other label's id eclipses it in every `coalesce(u, a)` lookup — cross-label collision refuses loudly (`MemberIdCollisionError`; `existed AND collided` = corruption alarm); same-label uniqueness constraints stay as the concurrency backstop; residual cross-label race is one query wide, documented (QA DEF-1) |
+| FalkorDB is the single store (no secondary store) | DESIGN §1.2 → §2 |
+| One graph per workspace (`ws:{id}`) | DESIGN §1.1 (Tenancy) / §3 |
+| Thread-scoped `NEXT` linked list | DESIGN §1.2 → §5.2 |
+| No DayBucket | DESIGN §1.2 |
+| `Thread` owns `HEAD`+`TAIL` pointers | DESIGN §1.2 → §5.2 |
+| `Message.role` inline + derived server-side | DESIGN §1.2 → §5.1 |
+| `coalesce` member identity | DESIGN §1.2 → QUERIES §2 |
+| Vector indexes via DDL, not a procedure | DESIGN §1.2 → §7.1 |
+| Index before constraint, always | DESIGN §1.2 → §7.1 |
+| `Message.embedding` inline `vecf32` | DESIGN §1.2 → §5.2 |
+| Vector score is cosine distance (ASC) | DESIGN §1.2 → §8 |
+| `status` as property, not label | DESIGN §1.2 → §6.2 |
+| Flat `ctx`/`input`/`output` | DESIGN §1.2 → §6.2 |
+| `Message.threadId` denorm, unindexed | DESIGN §1.2 → §5.1 |
+| Guarded-CREATE write paths + status row | DESIGN §1.2 → §5.3/§9 |
+| Composite `(createdAt, msgId)` keyset cursor | DESIGN §1.2 → QUERIES §9 |
+| Member ids namespace-unique across `User`/`Agent` | DESIGN §1.2 → QUERIES §2/§7 |
+| Identity graph is authoritative (standalone) | DESIGN §1.2 → §3 |
 
 ---
 

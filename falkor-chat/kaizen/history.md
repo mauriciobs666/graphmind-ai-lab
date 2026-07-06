@@ -2,6 +2,84 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-05 — K-021: §13 open-questions reconciliation + identity-authoritative decision
+
+- **What (doc-only, no code/schema/query/script change):** recorded a newly-made design decision and
+  brought `docs/DESIGN.md` §13 "Open questions" back in line with reality.
+- **New locked decision — identity source of truth:** the **`identity` graph is authoritative
+  (standalone)**, not a projection of an external IdP. The system is self-contained: the `identity`
+  graph owns global user identity + auth principals; per-workspace `User` nodes remain membership
+  projections of it (consistent with §3 topology). User-approved 2026-07-05; steers K-016 (real auth).
+  - Added as a row in **DESIGN §1.2** (the authoritative detailed register; "Detailed in" → §3, §14.3).
+  - Added a matching one-line pointer in **`AGENTS.md`**'s decisions index (`… → §3`, no rationale).
+- **§13 pruned to genuinely-open questions only:** removed **Embedding model & dimension** (resolved;
+  home §1.3) and **Identity source of truth** (now decided; home §1.2) — no resolved-pointers left in
+  the "Open questions" list.
+- **§13 reworded:** **Bolt vs. RESP** → **Real-time gateway transport** (M1 app driver settled = RESP
+  via `falkordb-py`; only the M2.5 push-gateway transport is open, → K-018). **Live config defaults**
+  → prefixed **Pre-production config review** and dropped TIMEOUT from the still-to-review set (TIMEOUT
+  1000ms already reviewed & kept — K-007, §10; other knobs retained). The three genuinely-open bullets
+  tagged with owners: workflow guard expr language (→ M3), retention (→ K-011 data), cross-workspace
+  analytics (mechanism open, no milestone).
+- **`kaizen/plan.md` reconciled:** K-016 "Inputs/prereqs"/Owner/scope now read as **decided** (identity
+  graph authoritative; K-016 no longer needs the user for that axis — implements per §1.2); the
+  `m2-auth-tenancy.md` recommended-doc row and the milestone-map note updated likewise; removed
+  "identity source of truth" from the parking-lot "remaining open questions" line (real auth / K-016 stays).
+
+## 2026-07-05 — K-019: documentation-inconsistency sweep (test counts, embedding decided, M2/M2.5 scope)
+
+- **What (doc-only, no code/schema/query/script change):** reconciled stale numbers and
+  contradictory milestone wording in `README.md` and `docs/DESIGN.md`. Counts sourced from a
+  **live suite run** (`./scripts/test_queries.sh` → 126/126; `server && pytest -q` → 110 passed)
+  with FalkorDB up.
+  - **Test counts → true 110 pytest / 126 query suite.** `README.md`: `115/115 passed`→`126/126`
+    (step 4 expected output); `(115 assertions)`→`(126)` (repo-layout comment); `(75 tests)`→
+    `(110 tests)` and `# 98 passed`→`# 110 passed` (M1 row + pytest example). `DESIGN.md` §12 M1
+    roadmap bullet `built and green (70 tests)`→`(110 tests)`. The README M0 roadmap figure
+    `(92/92)` was **re-labelled historical** (`92/92 at M0 baseline`), not bumped — it records M0.
+  - **Embedding model no longer "open."** `DESIGN.md` §11 RAM line: `default stays 1536
+    (embedding model still open, §13)`→`(chosen per workspace); set EMBEDDING_DIM=1024 for the
+    decided model (§1.3)`. `DESIGN.md` §13 open-questions "Embedding model & dimension" bullet
+    replaced with a resolved pointer to §1.3 (Qwen3-Embedding-0.6B, `EMBEDDING_DIM=1024`). The
+    `EMBEDDING_DIM=1536` *default* in scripts was intentionally **left untouched**.
+  - **M2-vs-M2.5 scope aligned.** `DESIGN.md` §14.1 Transport/Real-time rows + §14.1 rationale
+    note: real-time "deferred to M2"/"M2 real-time" → **M2.5** (agrees with §12 M2 = GraphRAG only
+    and the kaizen deferred M2.5 track K-016/K-018). `README.md` M1 roadmap row
+    "deferred to M2"→"deferred to M2.5". Auth references (§14.3 "when auth lands", §15.3
+    "unauthenticated in M1") were already milestone-agnostic — no contradiction, left as-is.
+- **Scope guard:** only `README.md` + `docs/DESIGN.md` (+ these kaizen files) touched — no `.py`,
+  `QUERIES.md`, `test_queries.sh`, `bootstrap_schema.sh`, schema, or script changed; pytest 110
+  and query suite 126/126 hold by construction (and were re-run green as the count source). The
+  K-020 decision register (§1.1/§1.2/§1.3, AGENTS.md pointer index) was only *referenced*, not
+  altered.
+
+## 2026-07-05 — K-020: doc-architecture consolidation — DESIGN §1 single decision register
+
+- **What (doc-only, no code/schema/query change):** applied the single-authoritative-home
+  discipline (long applied to query bodies) to *design decisions*. `docs/DESIGN.md` §1 is now the
+  one authoritative decision register; every other doc points to it.
+  - **AGENTS.md decisions → DESIGN §1.2.** The 18-row "Decisions locked in" rationale table
+    migrated into a new DESIGN **§1.2** detailed register (16 rows; `Message.role` inline + derived
+    merged; "one graph per workspace" already lived in the §1.1 axes table). Each row is a
+    statement + rationale + link to the body section (or QUERIES.md) that details the mechanics —
+    no re-copied prose. AGENTS.md's section is now a terse two-column `Decision | Home` pointer
+    index (rationale removed), kept — not deleted — as the quick do-not-reopen list.
+  - **plan.md M2 stack → DESIGN §1.3.** The user-approved "Locked M2 stack decisions"
+    (2026-07-04) graduated into a new DESIGN **§1.3** (embedding model/dim, agent LLM, runtime,
+    VRAM, upgrade path); plan.md keeps a one-line pointer + the `EMBEDDING_DIM=1024` bootstrap
+    reminder. K-0xx work items, sequencing, and parking lot untouched.
+  - **A1 — GraphRAG dedup.** Deleted the drifted `cypher` block in DESIGN §8 (had lost its
+    `LIMIT` and RETURN columns vs. the canonical QUERIES §6); §8 now points to QUERIES §6 in the
+    §5.3 "shape-only, link the body" style. §8's design prose kept; QUERIES §6 untouched.
+  - **A2 — coordination ADR promotion.** Added DESIGN **§6.3** (coordination is an M3 `WorkflowDef`
+    of `kind:'process'`, not a flat `Task` node) with a back-link to `docs/plans/m1-chat-mcp.md`
+    Appendix B (which stays the ADR of record).
+  - Added one new DESIGN §6.2 body line stating `ctx`/`input`/`output` are flat/serialised (D13).
+- **Scope guard:** markdown docs only — no `repository.py`/`services.py`/`QUERIES.md` bodies/
+  `test_queries.sh`/schema/scripts touched; pytest 110 and query suite 126/126 hold by
+  construction. K-019 boundary respected (stale test counts, §13 "open"→"decided" wording, and
+  §12/§14.1 scope left for K-019).
+
 ## 2026-07-05 — K-010: QA DEF-1 + DEF-2 closed (K-008 prerequisites)
 
 - **What:** closed both defects from the K-007 QA pass, clearing K-008's gate. Coordinated

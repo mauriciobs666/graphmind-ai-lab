@@ -12,11 +12,58 @@
 
 ## 1. Decisions locked in
 
+This section is the **single authoritative decision register**. §1.1 holds the top-level axes;
+§1.2 the detailed locked design decisions; §1.3 the decided-but-pending M2 stack. Each row is the
+authoritative *statement* of a decision; where the body already explains the mechanics, the row
+links there and does not re-explain. `AGENTS.md` carries only a terse pointer index back here.
+
+### 1.1 Top-level axes
+
 | Axis | Decision | Consequence |
 |---|---|---|
 | **Chat type** | **Hybrid** — humans chat in channels *and* an AI participant answers from the graph (GraphRAG) | Messages have a `role` (`user`/`assistant`, derived from the author's label); AI is a first-class `Agent` author; retrieval = vector + traversal |
 | **Tenancy** | **Per-workspace/team graph** — the graph boundary is a workspace, many users share it | One named graph per workspace; each workspace must fit one shard's RAM; workspaces distribute across a Redis Cluster |
 | **Workflows** | **General workflow engine** — one definition model serves both conversational/agent flows and business processes | Definitions (templates) are reusable + versioned; runs are per-workspace execution traces |
+
+### 1.2 Locked design decisions (detailed register)
+
+> Each row is the authoritative statement of the decision; the "Detailed in" column links to the
+> body section that explains the mechanics (or to QUERIES.md where the mechanics are canonical).
+> Do not re-explain the mechanics here.
+
+| Decision | Rationale / consequence | Detailed in |
+|---|---|---|
+| **Single store** — FalkorDB holds all domain data; no secondary store | Project philosophy: one engine, one query language, one ops model | Philosophy header, §2 |
+| **Thread-scoped `NEXT` linked list** | Users read threads, not channel feeds; O(1) append; Thread stays sparse | §5.2 |
+| **No DayBucket** *(rejected alternative)* | Designed for channel-wide ordering; dropped when the thread-scoped model was chosen | §5.2 |
+| **`Thread` owns `HEAD` + `TAIL` pointers** | Thread stays sparse — exactly 2 edges regardless of message count | §5.2 |
+| **`Message.role` inline property; values `user`/`assistant` derived server-side** from the author label (`User→user`, `Agent→assistant`), never trusted from the caller | Filter by role without traversing `POSTED_BY`; agents author first-class (K-007) | §5.1, §5.2 |
+| **`coalesce(u.userId, a.agentId)` for member identity** (two indexed `OPTIONAL MATCH` + `coalesce`) | `User` has `userId`, `Agent` has `agentId` — both are members; anchored lookup avoids the `OR`-scan | QUERIES §2 |
+| **Vector indexes via DDL**, not a procedure | `db.idx.vector.createNodeIndex` is not registered on this build | §2, §7.1 |
+| **Index before constraint, always** | `GRAPH.CONSTRAINT CREATE` requires a pre-existing range index | §2, §7.1 |
+| **`Message.embedding` inline as `vecf32`** | Single-query vector + traversal hybrid retrieval | §5.2, §7.3 |
+| **Vector score is cosine *distance*** (0 = identical) → `ORDER BY score ASC` | Most-similar-first ranking | §7.1, §8 |
+| **`status` as a property, not a label** | Avoids re-labeling churn on state changes; index it for "all running" reads | §6.2 |
+| **`ctx` / `input` / `output` are flat/serialised strings** | FalkorDB stores scalars + scalar lists only — no nested maps; never query inside them | §6.2 |
+| **`Message.threadId` denormalized inline, unindexed** | Nav metadata for §9.2/§5 rows; HEAD/NEXT walk stays canonical; unindexed saves RAM/write cost (K-007) | §5.1 |
+| **Guarded-CREATE write paths** (`FOREACH`+`CASE` per path) with an always-returned status row; **no MERGE on `Message`** | Retry replay is a no-op (`dupMsg`); first-post race refused (`hadHead`); uniqueness constraint is the backstop (K-007) | §5.3, §9 |
+| **Composite `(createdAt, msgId)` keyset cursor** (`ReadCursor.lastReadAt`/`lastReadMsgId`) | Timestamp alone is not a total order — same-ms ties skipped rows; cursor reads are lossless (K-007) | QUERIES §9.1/§9.3 |
+| **Member ids are namespace-unique across `User`/`Agent`**; `ensure_user`/`ensure_agent` are v2 guarded-CREATE queries returning `(created, existed, collided)`; cross-label collision refuses (`MemberIdCollisionError`) | A shadow node with the other label's id eclipses it in every `coalesce` lookup (K-010) | QUERIES §2/§7 |
+| **Identity source of truth — the `identity` graph is authoritative (standalone)**, not an external-IdP projection | Self-contained system; the `identity` graph owns user identity + auth principals; per-workspace `User` nodes are membership projections of it; steers K-016 auth | §3, §14.3 |
+
+### 1.3 M2 stack (decided 2026-07-04, pending implementation)
+
+> User-approved M2 stack. Locked here; implemented in K-008/K-013 (see kaizen/plan.md). Numbers
+> detailed in §11 (RAM) and §12 (M2 roadmap).
+
+| Component | Decision | Rationale | Detailed in |
+|---|---|---|---|
+| Embedding model | **Qwen3-Embedding-0.6B** (GGUF, Q8_0) | Best small-model MTEB quality; 100+ languages (PT-BR + EN); ~0.6 GB resident | §11, §12 |
+| Vector dimension | **`EMBEDDING_DIM=1024`** (MRL 512/256 later) | Native dim; ~12.5 KB/message with HNSW — the §11 RAM line | §11 |
+| Agent LLM | **Qwen3-4B-Instruct-2507** Q4_K_M (non-thinking) | RAG answering, not CoT; low latency; `-Thinking-2507` a drop-in for M3 | §12 |
+| Runtime | **LM Studio** on the Windows host (OpenAI-compatible), reached from WSL2 (mirrored networking → localhost) | Reuses the severino path; zero new moving parts; Ollama fallback | §10, §12 |
+| VRAM budget | **6 GB dedicated** (RTX 4050) — embedder + 4B LLM co-resident | Do not plan around shared-RAM spill | §11 |
+| Upgrade path | **`qwen3-embedding:4b`** — same family, same 1024-dim MRL | Re-embed only; no schema change | §12 |
 
 ---
 
@@ -228,12 +275,23 @@ that fires it. One model, both worlds.
 (:StepRun)-[:EMITTED]->(:Message)
 ```
 
+> `ctx` (on `WorkflowRun`) and `input`/`output` (on `StepRun`) are **flat, serialised strings**,
+> not nested maps — FalkorDB stores only scalars and scalar lists. Queries never filter *inside*
+> them (see §1.2).
+
 The engine loop: read `AT_STEP` → evaluate outgoing `TRANSITION` guards against `ctx` →
 create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` trace → move
 `AT_STEP`. The whole walk is local to the workspace graph (fast, isolated, fully auditable).
 
 > **`status` as a property, not a label**, so a run's state changes in place without
 > re-labeling churn; index it for "all running workflows" queries.
+
+### 6.3 Coordination is workflow, not a separate primitive
+
+Agent/team coordination (task lifecycle, "room state") is modelled as an M3 `WorkflowDef` of
+`kind:'process'` over `Step` + `TRANSITION` + `StepRun` — **not** a flat `Task` node or a
+presence field. This avoids a parallel model that would later need migrating into the engine
+(single-store philosophy). Full rationale/ADR: `docs/plans/m1-chat-mcp.md` Appendix B.
 
 ---
 
@@ -327,22 +385,10 @@ reserve it only for an out-of-graph, high-throughput ANN index if one is ever ne
 ## 8. Hybrid retrieval (the GraphRAG read path)
 
 The AI participant answers a question in a channel by combining semantic recall with structured
-traversal — one read-only query, routable to a replica:
+traversal — one read-only query, routable to a replica.
 
-```cypher
-// $qVec = vecf32 of query embedding, $k = neighbors to retrieve, $chId = channel scope
-// score = cosine distance (0 = identical, lower = more similar) → ORDER BY score ASC
-CALL db.idx.vector.queryNodes('Message', 'embedding', $k, $qVec)
-YIELD node AS seed, score
-// scope to the target channel via Thread
-MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed)
-MATCH (c:Channel {channelId:$chId})-[:HAS_THREAD]->(t)
-// expand to related messages that mention the same entities
-OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
-WITH seed, score, collect(DISTINCT related)[..5] AS expanded
-RETURN seed.text AS hit, score, [m IN expanded | m.text] AS context
-ORDER BY score ASC
-```
+> **Canonical Cypher: `docs/QUERIES.md` §6.** This section describes the read path's *shape*
+> only, so the two never drift.
 
 - **Vector** finds *what's semantically relevant*; **traversal** pulls *precise, explainable
   neighbors* (same thread, shared entities, prior workflow steps). Either alone is weaker.
@@ -436,8 +482,8 @@ embedding + `POSTED_BY` + full `NEXT` chain + HEAD/TAIL; `INFO memory` delta):
 
 - Rule of thumb: **~12.5 KB/message at 1024 dims ≈ 1.25 GB per 100k-message workspace**
   (vs ~17–18 KB extrapolated at 1536 — the dim cut saves roughly a third). The bootstrap
-  default stays 1536 (embedding model still open, §13); set `EMBEDDING_DIM=1024` per model
-  class **before** workspace creation — vector index dimension is fixed at creation.
+  default stays 1536 (chosen per workspace); set `EMBEDDING_DIM=1024` for the decided model
+  (§1.3) **before** workspace creation — vector index dimension is fixed at creation.
 - `threadId` cost: one short string, ~50–60 B/message, no index — noise (<0.5%) against the
   12.4 KB line. `ReadCursor.lastReadMsgId`: one string per (member, thread) cursor — negligible.
 - Ingestion datapoint: ~1,178 msg/s with 256-row `UNWIND` batches incl. embeddings, single
@@ -456,7 +502,7 @@ embedding + `POSTED_BY` + full `NEXT` chain + HEAD/TAIL; `INFO memory` delta):
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (70 tests). M1 chat core is code-complete.
+2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (110 tests). M1 chat core is code-complete.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance. **Groundwork (K-007) landed:** agent authorship (role derived from the author label), self-guarding v2 write paths (status-row contract, retry-idempotent via `dupMsg`, first-post race refused), `Message.threadId` denorm + backfill script, composite `(createdAt, msgId)` keyset cursors (tie-safe reads), TIMEOUT posture (§10), empirical 1024-dim RAM line (§11).
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.
@@ -465,13 +511,11 @@ embedding + `POSTED_BY` + full `NEXT` chain + HEAD/TAIL; `INFO memory` delta):
 
 ## 13. Open questions
 
-- **Embedding model & dimension** (fixes vector index size and RAM line).
-- **Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`?
-- **Identity source of truth** — is `identity` graph authoritative, or a projection of an external IdP?
-- **Retention** — do old messages/embeddings age out (and how does that interact with the always-in-RAM constraint)?
-- **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph.
-- **Bolt vs. RESP** for the app gateway — Bolt port is `65535` (confirmed in `GRAPH.CONFIG`); decide whether to use it or RESP with `falkordb-py`.
-- **Live config defaults noted:** `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `TIMEOUT 1000ms`, `CACHE_SIZE 25`, `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited), `ASYNC_DELETE 1`. Review before production.
+- **Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`? (→ M3, decided with the engine.)
+- **Retention** — do old messages/embeddings age out (and how does that interact with the always-in-RAM constraint)? (→ decide on K-011 load-test data; evicting cold embeddings is the cheapest lever — ~10 KB of the 12.5 KB/msg is vector + index.)
+- **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph. (Cost accepted §4; mechanism open, no milestone yet.)
+- **Real-time gateway transport** — for the M2.5 push path, Bolt (port `65535`, confirmed in `GRAPH.CONFIG`) vs. RESP/WebSocket. The M1 app *driver* is settled (RESP via `falkordb-py`); this is only the push-gateway choice. (→ K-018.)
+- **Pre-production config review:** live config defaults noted — `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `CACHE_SIZE 25`, `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited), `ASYNC_DELETE 1`. Review before production (TIMEOUT 1000ms already reviewed & kept — K-007, §10).
 
 ---
 
@@ -485,14 +529,14 @@ them, and the internal layering.
 
 | Axis | Decision | Rationale |
 |---|---|---|
-| **Transport** | **REST/JSON over FastAPI** | The only M1 client is a browser, which speaks HTTP natively — no gRPC-Web bridge tax. Free OpenAPI console to exercise the API. M2 real-time adds native WebSocket/SSE on the same server. |
+| **Transport** | **REST/JSON over FastAPI** | The only M1 client is a browser, which speaks HTTP natively — no gRPC-Web bridge tax. Free OpenAPI console to exercise the API. M2.5 real-time adds native WebSocket/SSE on the same server. |
 | **Client** | **Minimal web UI** (channels list + thread view) | Smallest end-to-end path that exercises the full stack visually. |
-| **Real-time** | **Deferred to M2** | M1 is request/response; the UI re-fetches a thread window after posting. The push path (Redis Pub/Sub → WebSocket) slots onto the same service layer in M2 with no schema change. |
+| **Real-time** | **Deferred to M2.5** | M1 is request/response; the UI re-fetches a thread window after posting. The push path (Redis Pub/Sub → WebSocket) slots onto the same service layer in M2.5 with no schema change. |
 | **Auth / tenancy** | **Single hardcoded tenant** — `ws=acme`, `user=u1` | Keeps M1 focused on the chat data path. Injected at one seam (see §14.3) so real auth replaces it without touching services/repo. |
 
 > Transport was deliberately re-evaluated away from gRPC: gRPC's wins (polyglot typed contracts,
 > native streaming, service-to-service perf) are all unused when the sole client is a browser, and
-> gRPC-Web can't do client/bidi streaming in browsers anyway — WebSocket/SSE is the stronger M2
+> gRPC-Web can't do client/bidi streaming in browsers anyway — WebSocket/SSE is the stronger M2.5
 > real-time path. REST keeps the layers below the router transport-agnostic, so a gRPC servicer or
 > a service-to-service hop can still be bolted onto the same `Service` later if a non-browser
 > consumer ever appears.
