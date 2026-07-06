@@ -493,14 +493,84 @@ embedding + `POSTED_BY` + full `NEXT` chain + HEAD/TAIL; `INFO memory` delta):
   `GRAPH.MEMORY USAGE`, until fixed upstream.
 
 > Action: re-measure on a pilot workspace with the real embedding model, and back into a
-> per-workspace RAM budget + a shard:workspace packing ratio before scaling out.
+> per-workspace RAM budget + a shard:workspace packing ratio before scaling out. *(Chat-core
+> floor + the budget/packing table are now measured — §11.1–§11.2, K-011; still re-measure with
+> the real embedding model at M2 before scaling out.)*
+
+### 11.1 M1 append-path load test + hot-read PROFILE closeout (K-011)
+
+Measured live on `falkordb/falkordb:edge` through the **M1 REST service path** — 16 concurrent
+posters, 3,000 messages, one channel / 16 threads, each `POST /threads/{id}/messages` a full
+`services.post_message` round trip (actor + mention validation, role derivation, §4 v2 guarded
+write). This is the **live request path**, not the K-007 bulk-`UNWIND` ingestion datapoint
+(§11, ~1,178 msg/s single-client batched). Harness: `scripts/load_test.sh` →
+`scripts/load_append.py`.
+
+| Metric | Value |
+|---|---|
+| Sustained append throughput | **~614 msg/s** (16 clients, single graph) |
+| Append latency p50 / p90 / p99 | **24.4 / 30.6 / 40.7 ms** (max 146 ms) |
+| Errors | 0 / 3,000 |
+
+Throughput is **graph-write-bound** (FalkorDB serialises writes per graph key), so the
+per-thread fan-out only removes first-post/TAIL race dispatch from the latency sample — a single
+busy channel lands the same ceiling. Each post is ~4 round trips (`thread_exists` +
+`resolve_member_kinds` + `thread_has_head` + the write), so this is a conservative service-layer
+figure, not raw Cypher throughput.
+
+**Hot-read plans — all four hit an index-backed anchor; none degraded to a `NodeByLabelScan`**
+(`GRAPH.PROFILE` on the loaded `ws:load` graph, raw plans archived by the harness). Re-profile on
+engine upgrades:
+
+| Hot read | Anchor op | Verdict |
+|---|---|---|
+| §4 thread read | `Node By Index Scan \| (t:Thread)` → HEAD/NEXT walk | index ✓ |
+| §9.1 since-read (thread) | `Node By Index Scan \| (t:Thread)`; keyset predicate folds into a `Filter` on the walk | index ✓ |
+| §9.2 since-read (ws-wide) | `Node By Index Scan \| (m:Message)` on `createdAt`; composite `OR` folds into the scan, **no residual Filter** | index ✓ |
+| §5 full-text search | `ProcedureCall` (`db.idx.fulltext.queryNodes`, RediSearch full-text index) | index ✓ |
+
+Confirms the AGENTS.md standing note (Formulation-A composite keyset still plans as a bare
+`Node By Index Scan` with no residual Filter on this build) and the §9.2 plan claim — no
+graph-dba escalation.
+
+### 11.2 Per-workspace RAM budget & shard packing (K-011, `INFO memory` deltas)
+
+**Chat-core floor (M1, no embeddings) — measured `INFO memory` `used_memory` delta:** 3,000
+messages added **3,173,056 B → ~1.06 KB/message** (node + `text`/ids/`role`/`createdAt`/`threadId`
+attrs + `NEXT`/`POSTED_BY` edges + `createdAt` range index + `msgId` constraint index + full-text
+index entry) → **~101 MB per 100k-message workspace**. That sits *below* the ~1.9 KB K-007
+node-line estimate, confirming that at 1024 dims the embedding (4 KB) + HNSW/range overhead
+(~6.4 KB) dominate — **~85% of the 12.4 KB/message total is vector, not chat.**
+
+**Per-workspace RAM budget line (per 100k messages):**
+
+| Profile | Per message | Per 100k-msg workspace |
+|---|---|---|
+| M1 chat-core (no embeddings) — *measured (K-011)* | ~1.06 KB | **~101 MB** |
+| M2 with 1024-dim embeddings (§11 K-007) | ~12.4 KB | **~1.25 GB** |
+| M2 with 1536-dim embeddings (§11 K-007) | ~17–18 KB | **~1.7 GB** |
+
+**Shard:workspace packing ratio** = (shard `maxmemory`) ÷ (per-workspace RAM × 1.3 headroom for
+writes / RDB fork / index build; no eviction of graph keys, §10). Worked example on a 32 GB shard
+with `maxmemory` ≈ 22 GB:
+
+| Workspace profile (100k msgs) | Fits per 22 GB shard |
+|---|---|
+| chat-core only (~101 MB) | **~170 workspaces** |
+| 1024-dim embedded (~1.25 GB) | **~13 workspaces** |
+| 1536-dim embedded (~1.7 GB) | **~10 workspaces** |
+
+Size real deployments from the **embedded** row (M2 is the target); the chat-core floor is the
+M1 reality and the lower bound. `GRAPH.MEMORY USAGE` still reported all-zero
+`indices_sz_mb`/`total_graph_sz_mb` for the loaded `ws:load` graph (the K-007 caveat holds even
+with **no** vectors present) — budget from `INFO memory` deltas, never `GRAPH.MEMORY USAGE`.
 
 ---
 
 ## 12. Roadmap
 
 1. **M0 — Stand up the engine.** ✅ FalkorDB running (`falkordb/falkordb:edge`, Redis 8.2.2, module `999999`) via Docker. Live probes confirmed: cross-graph edge behavior, vector DDL syntax, index-before-constraint ordering, `algo.*` procedure set, `vecf32` storage and `db.idx.vector.queryNodes` query surface.
-2. **M1 — Chat core.** Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. Load test the append path; `GRAPH.PROFILE` the hot reads. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (110 tests). M1 chat core is code-complete.
+2. **M1 — Chat core.** ✅ Users/Channels/Threads/Messages, thread-scoped `NEXT` + `HEAD`/`TAIL` append path, full-text index, basic read windows. **Application layer:** FastAPI REST server over a service/repository split, single hardcoded tenant, minimal web UI — full design in §14. **Plus an MCP (Streamable-HTTP) agent front door on the same service layer — §15 (K-002).** Full stack (repository → services → MCP + REST + full-text `search`, plus the static `web/` UI, all mounted in `app.py`) is built and green (110 tests). The append-path load-test + hot-read `GRAPH.PROFILE` DoD is now **closed — see §11.1/§11.2** (~614 msg/s, all four hot reads index-backed, per-workspace RAM budget). The web request/response path was also de-staled — incremental `?since=` polling, inline non-blocking errors, clickable search results (K-012). M1 chat core is complete.
 3. **M2 — GraphRAG.** Embedding workers, in-graph vector index, hybrid retrieval query (§8), AI `Agent` participant posting answers with `EMITTED` provenance. **Groundwork (K-007) landed:** agent authorship (role derived from the author label), self-guarding v2 write paths (status-row contract, retry-idempotent via `dupMsg`, first-post race refused), `Message.threadId` denorm + backfill script, composite `(createdAt, msgId)` keyset cursors (tie-safe reads), TIMEOUT posture (§10), empirical 1024-dim RAM line (§11).
 4. **M3 — Workflow engine.** Definition model in `reference`, snapshot materialization, run/step-run executor, chat linkage; both a conversational flow and a business-process flow as proof.
 5. **M4 — Scale & ops.** Redis Cluster, replicas for RO reads, Sentinel, ACL/TLS, backup/restore drill, per-workspace memory budgeting + shard packing.

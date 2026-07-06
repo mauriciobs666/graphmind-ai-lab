@@ -21,6 +21,9 @@ htmlcov/
 # Docker / local data
 *.log
 
+# K-011 load-harness output (raw PROFILE dumps, summary.json, server.log)
+scripts/.load-out/
+
 # IDE
 .idea/
 .vscode/

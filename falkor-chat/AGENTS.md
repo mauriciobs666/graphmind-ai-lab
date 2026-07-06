@@ -144,6 +144,7 @@ duplication is what lets the copies drift. The invariants that govern those quer
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
 | `./scripts/test_queries.sh` | 126-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
+| `./scripts/load_test.sh` | K-011 M1 DoD closeout harness: load-tests the REST append path (`scripts/load_append.py`), `GRAPH.PROFILE`s the four hot reads, and captures a per-workspace RAM delta — all against an isolated throwaway `ws:load` (torn down at the end unless `KEEP_WS=1`). Results folded into DESIGN §11.1–§11.2. Env: `LOAD_MESSAGES`/`LOAD_WORKERS`/`SERVER_PORT`. Needs FalkorDB up + the `server/.venv`. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
