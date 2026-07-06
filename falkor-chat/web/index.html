@@ -52,6 +52,14 @@
       border-radius: 8px; box-shadow: 0 8px 30px #0008; z-index: 10; display: none; }
     #results header { position: sticky; top: 0; }
     #results .item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #toast {
+      position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
+      max-width: 520px; padding: 10px 14px; border-radius: 8px; z-index: 50;
+      box-shadow: 0 8px 30px #0008; font-size: 13px; line-height: 1.4;
+    }
+    #toast[hidden] { display: none; }
+    #toast.error { background: #3a1418; border: 1px solid #7a2530; color: #ffd7d7; }
+    #toast.notice { background: #14263a; border: 1px solid #2b5a7a; color: #d7ecff; }
   </style>
 </head>
 <body>
@@ -99,6 +107,8 @@
     <header><h1>Search results</h1><button type="button" id="results-close" style="margin-left:auto">✕</button></header>
     <div class="list" id="results-list"></div>
   </div>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="app.js"></script>
 </body>

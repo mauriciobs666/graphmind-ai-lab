@@ -3,7 +3,19 @@
 // Same-origin: the FastAPI process serves this file and the API, so no CORS.
 // Flow: channels -> threads -> messages, plus workspace-wide full-text search.
 
-const state = { channelId: null, threadId: null };
+// `lastCreatedAt`/`seen` drive the incremental `?since=&limit=` poll of the open
+// thread: `lastCreatedAt` is the high-water timestamp, `seen` de-dupes by msgId
+// (the plain `>` since-read may re-deliver a millisecond tie — OQ3). `pollTimer`
+// is the background interval handle for the currently open thread.
+const state = {
+  channelId: null, threadId: null,
+  lastCreatedAt: 0, seen: new Set(), pollTimer: null,
+};
+
+// Background poll cadence for the open thread. Bounded by `POLL_LIMIT` per fetch
+// so a poll never walks the full NEXT* chain past the server's 1000ms TIMEOUT.
+const POLL_MS = 3000;
+const POLL_LIMIT = 50;
 
 const $ = (id) => document.getElementById(id);
 
@@ -56,6 +68,7 @@ async function loadChannels() {
 async function selectChannel(channelId) {
   state.channelId = channelId;
   state.threadId = null;
+  stopPolling();
   await loadChannels();
   await loadThreads();
   renderMessages([]);
@@ -92,10 +105,13 @@ async function selectThread(threadId, title) {
   $("thread-heading").textContent = title;
   $("composer").hidden = false;
   await loadMessages();
+  startPolling();
 }
 
 // ── messages ──────────────────────────────────────────────────────────────────
 
+// Initial full read (§4) — establishes the rendered set and the poll high-water
+// mark. Subsequent updates arrive through the incremental poll, never a re-read.
 async function loadMessages() {
   const msgs = await api(`/threads/${state.threadId}/messages`);
   renderMessages(msgs);
@@ -104,22 +120,69 @@ async function loadMessages() {
 function renderMessages(msgs) {
   const box = $("messages");
   box.innerHTML = "";
+  state.seen = new Set();
+  state.lastCreatedAt = 0;
   if (!msgs || msgs.length === 0) {
     box.innerHTML = '<div class="empty">No messages yet.</div>';
     return;
   }
-  for (const m of msgs) {
-    const el = document.createElement("div");
-    // Reader @-mention highlighting is a since-read (§9 isMention flag) concern,
-    // not exposed by the §4 thread read this view uses. Wire it in M2 with real-time reads.
-    el.className = "msg";
-    const who = m.displayName || m.authorId || "unknown";
-    el.innerHTML = `<span class="who">${escapeHtml(who)}</span>
-      <span class="meta">${fmtTime(m.createdAt)}</span>
-      <div>${escapeHtml(m.text)}</div>`;
-    box.appendChild(el);
-  }
+  for (const m of msgs) appendMessage(m);
   box.scrollTop = box.scrollHeight;
+}
+
+// Append one message, tracking it for de-dupe and advancing the high-water mark.
+// Returns false if the message was already rendered (poll re-delivery). Note the
+// `?since=` poll rows carry `authorId` but no `displayName`, so newly polled
+// messages show the id while the initial full read shows the display name — a
+// cosmetic gap left for the M2 web pass (K-014), not a server change here.
+function appendMessage(m) {
+  if (m.msgId && state.seen.has(m.msgId)) return false;
+  const box = $("messages");
+  const placeholder = box.querySelector(".empty");
+  if (placeholder) placeholder.remove();
+  const el = document.createElement("div");
+  // Reader @-mention highlighting is a since-read (§9 isMention flag) concern,
+  // deferred to the M2 web pass (K-014) — not wired here.
+  el.className = "msg";
+  const who = m.displayName || m.authorId || "unknown";
+  el.innerHTML = `<span class="who">${escapeHtml(who)}</span>
+    <span class="meta">${fmtTime(m.createdAt)}</span>
+    <div>${escapeHtml(m.text)}</div>`;
+  box.appendChild(el);
+  if (m.msgId) state.seen.add(m.msgId);
+  if (typeof m.createdAt === "number" && m.createdAt > state.lastCreatedAt) {
+    state.lastCreatedAt = m.createdAt;
+  }
+  return true;
+}
+
+// Incremental, bounded catch-up of the open thread. `since` is the high-water
+// timestamp (plain `>`); `limit` caps the window. Never touches a cursor (the
+// server's explicit-`since` path is a pure read), so browser polls are free.
+async function pollMessages() {
+  const tid = state.threadId;
+  if (!tid) return;
+  const rows = await api(
+    `/threads/${tid}/messages?since=${state.lastCreatedAt || 0}&limit=${POLL_LIMIT}`,
+  );
+  if (tid !== state.threadId) return; // thread switched while the fetch was in flight
+  const box = $("messages");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  let added = 0;
+  for (const m of rows) if (appendMessage(m)) added++;
+  if (added && atBottom) box.scrollTop = box.scrollHeight;
+}
+
+function stopPolling() {
+  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+}
+
+// Background poll for the open thread. Errors are swallowed here (a transient
+// fetch failure shouldn't spam the toast every tick); user-triggered polls
+// surface errors through `guard`.
+function startPolling() {
+  stopPolling();
+  state.pollTimer = setInterval(() => { pollMessages().catch(() => {}); }, POLL_MS);
 }
 
 // ── search ────────────────────────────────────────────────────────────────────
@@ -136,9 +199,21 @@ async function runSearch(q) {
     el.className = "item";
     el.innerHTML = `<div>${escapeHtml(h.text)}</div>
       <div class="sub">${fmtTime(h.createdAt)} · score ${Number(h.score).toFixed(3)}</div>`;
+    // Search rows carry `threadId` (denormalized, K-007) — open the thread on click.
+    if (h.threadId) el.onclick = () => openThreadFromSearch(h.threadId);
     list.appendChild(el);
   }
   $("results").style.display = "block";
+}
+
+// Jump to the thread a search hit belongs to. Only `threadId` is on the row (no
+// title/channel), so the heading falls back to the id; the thread read then
+// populates the messages. A title lookup would need a new server endpoint (out
+// of scope for this client-only change).
+function openThreadFromSearch(threadId) {
+  if (!threadId) return;
+  $("results").style.display = "none";
+  guard(() => selectThread(threadId, threadId));
 }
 
 // ── helpers & wiring ────────────────────────────────────────────────────────────
@@ -149,8 +224,23 @@ function escapeHtml(s) {
   ));
 }
 
+// Inline, non-blocking notices. One shared toast element; `kind` picks the
+// styling ("error" | "notice") and the auto-dismiss delay. Replaces the old
+// blocking `alert()` calls.
+let toastTimer = null;
+function showToast(msg, kind) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.className = kind;
+  el.hidden = false;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, kind === "error" ? 6000 : 5000);
+}
+const showError = (msg) => showToast(msg, "error");
+const showNotice = (msg) => showToast(msg, "notice");
+
 async function guard(fn) {
-  try { await fn(); } catch (e) { alert(e.message); }
+  try { await fn(); } catch (e) { showError(e.message); }
 }
 
 $("new-channel").addEventListener("submit", (e) => {
@@ -192,14 +282,14 @@ $("composer").addEventListener("submit", (e) => {
       // the message text: the 400 `detail` is the member list, not the class name.
       if (mentions.length && err.code === "UnknownMemberError") {
         await postMessage(text, []);
-        alert("Message sent, but these @-handles weren't recognised and were not " +
-              "linked as mentions: " + mentions.join(", "));
+        showNotice("Message sent, but these @-handles weren't recognised and were " +
+                   "not linked as mentions: " + mentions.join(", "));
       } else {
         throw err;
       }
     }
     $("message-text").value = "";
-    await loadMessages();
+    await pollMessages();
   });
 });
 
