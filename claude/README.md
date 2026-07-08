@@ -5,7 +5,7 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 | Agent | What it does | When to use it | Model |
 |-------|--------------|----------------|-------|
 | [`teco`](./teco/teco.md) | Technical coordinator; decomposes a multi-step goal into a sequenced work breakdown and **delegates each piece to the right specialist** (architect, coder, tdd-engineer, graph-dba, cobb), then integrates results. Hybrid: drives execution but pauses to the user at decision points. Coordinates — doesn't design or code itself. | A task that spans several steps/specialties, needs orchestration, or is an end-to-end feature delivery. | opus |
-| [`architect`](./architect/architect.md) | Software architect; investigates the codebase, weighs trade-offs, and produces a step-by-step implementation plan/spec — **without editing code**. The planning half of an architect→coder handoff. | Wanting a design, an approach, an impact analysis, or a plan before any code is written. | opus |
+| [`architect`](./architect/architect.md) | Software architect; investigates the codebase, weighs trade-offs, and produces a step-by-step implementation plan/spec — **without editing code**. Writes the plan to `<component>/docs/plans/<slug>.md` by default and returns the path + a ready-to-implement summary (lossless handoff). **Read-only on code is harness-enforced:** a subagent-scoped `PreToolUse` hook (`architect/hooks/guard-plan-doc-writes.sh`) gates any `Write`/`Edit` outside `docs/plans/` to human approval. The planning half of an architect→coder handoff. | Wanting a design, an approach, an impact analysis, or a plan before any code is written. | opus |
 | [`coder`](./coder/coder.md) | Software engineer who implements an approved plan/spec end-to-end — clean, idiomatic, well-tested code following the repo's conventions; keeps the suite green. The implementation half of an architect→coder handoff. | Building from a ready plan/spec or clear task. (For strict test-first discipline, use `tdd-engineer`.) | opus |
 | [`cobb`](./cobb/cobb.md) | Practitioner of agentic development; deep, current knowledge of Claude Code, Kiro, and OpenCode agent formats and the cross-tool standards (`AGENTS.md`, Agent Skills). | Designing, authoring, reviewing, porting, or debugging agents, subagents, skills, steering docs, slash commands, hooks, or system prompts. | opus |
 | [`dra-claudia`](./dra-claudia/dra-claudia.md) | Dra. Cláudia — médica homeopatia e medicina alternativa; mantém prontuário em markdown de cada paciente. | Perguntas sobre saúde, sintomas, tratamentos, remédios homeopáticos/fitoterápicos, abordagens integrativas, ou registrar/consultar histórico clínico. | opus |
@@ -45,10 +45,11 @@ Skills were unified into the repo-root [`skills/`](../skills/) home — see [`sk
 These agents live in this repo but run from Claude Code's config dir via symlinks:
 
 - **Agents:** `~/.claude/agents/<name>` → `claude/<name>` (one symlink per agent folder).
-  - **`devops` gotcha:** its `PreToolUse` guard hook is referenced by an **absolute path** in the
-    agent's frontmatter (`claude/devops/hooks/guard-destructive-ops.sh`). On a new machine or a
-    different clone path, re-point that path (and re-create the symlink). The script prefers `jq`,
-    falls back to `python3`, then to a raw grep — install `jq`/`python3` for clean extraction. (Kaizen K-004.)
+  - **Hook gotcha (`devops`, `architect`):** their `PreToolUse` guard hooks are referenced by
+    **absolute paths** in each agent's frontmatter (`claude/devops/hooks/guard-destructive-ops.sh`,
+    `claude/architect/hooks/guard-plan-doc-writes.sh`). On a new machine or a different clone path,
+    re-point those paths (and re-create the symlinks). The scripts prefer `jq`, fall back to
+    `python3` — install one for clean extraction. (devops kaizen K-004.)
 - **Skills:** now in the repo-root [`skills/`](../skills/) home, deployed via `~/.claude/skills` →
   `skills/` (whole-dir symlink; all 7 skills visible to Claude Code). Also symlinked into OpenCode
   and Kiro — see [`skills/README.md`](../skills/README.md#deployment).
