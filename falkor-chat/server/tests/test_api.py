@@ -320,3 +320,95 @@ def test_default_app_has_no_wiring_and_posts_normally(client):
     tid = _new_thread(client, cid)
     r = client.post(f"/threads/{tid}/messages", json={"text": "hi"})
     assert r.status_code == 201
+
+
+# ── §11 Workflow definitions & snapshots REST surface (M3 Slice 1) ──────────────
+
+
+@pytest.fixture()
+def wf_client(wf_repo):
+    """TestClient whose repo has BOTH ws:test and `reference` wiped (plan F8)."""
+    wf_repo.ensure_user("test", user_id="u1", display_name="Alice")
+    app = create_app(
+        Services(wf_repo),
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+    )
+    return TestClient(app)
+
+
+DEF_BODY = {
+    "key": "onboarding",
+    "version": "1",
+    "name": "Onboarding",
+    "kind": "process",
+    "steps": [
+        {"key": "start", "type": "human", "config": "{}", "start": True},
+        {"key": "done", "type": "message"},
+    ],
+    "transitions": [
+        {"from": "start", "to": "done", "on": "submitted", "order": 0},
+    ],
+}
+
+
+def test_publish_workflow_def_returns_201_and_counts(wf_client):
+    r = wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["key"] == "onboarding"
+    assert body["stepCount"] == 2
+    assert body["transitionCount"] == 1
+
+
+def test_publish_workflow_def_invalid_kind_is_400(wf_client):
+    bad = {**DEF_BODY, "kind": "chatbot"}
+
+    r = wf_client.post("/workflow-defs", json=bad)
+
+    assert r.status_code == 400
+    assert r.json()["error"] == "WorkflowDefSpecError"
+
+
+def test_list_and_get_workflow_def(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    listed = wf_client.get("/workflow-defs").json()
+    assert any(d["key"] == "onboarding" for d in listed)
+
+    got = wf_client.get("/workflow-defs/onboarding").json()
+    assert got["version"] == "1"
+    assert got["name"] == "Onboarding"
+
+
+def test_get_workflow_def_specific_version(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    got = wf_client.get("/workflow-defs/onboarding", params={"version": "1"}).json()
+
+    assert got["version"] == "1"
+
+
+def test_get_workflow_def_missing_is_404(wf_client):
+    r = wf_client.get("/workflow-defs/ghost")
+
+    assert r.status_code == 404
+
+
+def test_materialize_def_creates_snapshot_and_lists_it(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    r = wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+    assert r.status_code == 201
+    assert r.json()["stepCount"] == 2
+
+    snaps = wf_client.get("/workspaces/test/snapshots").json()
+    assert any(s["key"] == "onboarding" and s["version"] == "1" for s in snaps)
+
+
+def test_materialize_missing_def_is_404(wf_client):
+    r = wf_client.post("/workflow-defs/ghost/versions/1/materialize")
+
+    assert r.status_code == 404
+    assert r.json()["error"] == "WorkflowDefNotFoundError"

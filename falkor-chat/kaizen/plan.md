@@ -2,12 +2,14 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-08 (**milestone M2 — GraphRAG complete ✅** — K-008 + K-013 + K-014 + K-015
-> delivered and QA-accepted, see history.md 2026-07-08; baselines pytest 156 / query suite 149/149.
-> Served tenant `ws:acme` rebuilt at `EMBEDDING_DIM=1024`. Deferred to the M2.5 hardening track:
-> K-016 (auth) / K-017 (transport agent actor) / K-018 (real-time) + a channel-scoped retrieval read.
-> **Next milestone: M3 — Workflow engine.** Prior: K-011 + K-012 ✅ → M1 complete (2026-07-06);
-> K-010 ✅; K-019 doc sweep ✅ 2026-07-05.) See the milestone map below.
+> Last reviewed: 2026-07-09 (**M3 — Workflow engine started: slice 1 delivered ✅** — K-020 (def
+> model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
+> see history.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
+> decomposition (K-020…K-025) in `docs/plans/m3-workflow-engine.md` Part A — canonical item text
+> lives there; compact copies below. Next on the critical path: **K-022 — executor** (opens with
+> the §13 guard-language decision → user). Prior: M2 GraphRAG complete ✅ 2026-07-08 (K-008 +
+> K-013 + K-014 + K-015, QA-accepted); M2.5 hardening still deferred: K-016/K-017/K-018 + a
+> channel-scoped retrieval read.) See the milestone map below.
 
 ## Milestone-to-green map (architect plan, 2026-07-05)
 
@@ -15,6 +17,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → history.md) |
+| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1, 2026-07-09) → **K-022 → K-023 → K-024 → K-025** |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -64,9 +67,70 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 ## Active
 
-> **No active items on the M1/M2 path — milestone M2 is complete.** Next up is **M3 — Workflow
-> engine** (DESIGN §12.4; no kaizen items drafted yet) and, when prioritised, the deferred **M2.5
-> hardening track** (K-016/K-017/K-018 below).
+> **Milestone M3 — Workflow engine, in progress.** Slice 1 (**K-020 + K-021**) delivered
+> 2026-07-09 → history.md. The remaining M3 chain is essentially linear:
+> **K-022 (executor) → K-023 (chat linkage) → K-024 (proof flows) → K-025 (QA) ⇒ M3 ✅.**
+> Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
+> (Part A = decomposition, Part B = slice 1). Compact copies below.
+
+### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022…K-025 queued —
+
+> **K-020 — Workflow definition model in `reference`** and **K-021 — Snapshot materialization
+> into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → history.md.** Suites raised to
+> query 193/193, pytest 196. Slice-1 residuals to carry into K-022: lock the def-spec
+> `start_key` contract (implemented as "exactly one step declares `start: True`"); the
+> `-[:HAS_STEP]->` containment edge added at the gate (index-anchored def-scoped reads).
+
+### K-022 — Run + StepRun executor core (Slice 2) (🔵 proposed — next on the critical path)
+
+- **Owner:** **`architect`** design pass first — engine-loop semantics **+ resolve DESIGN §13
+  guard expression language (expr lib vs minimal DSL in `Step.config`/`TRANSITION.guard`) — a
+  genuine user decision point, surface before implementing** → **`graph-dba`** gate (run/step-run
+  write/read queries; `WorkflowRun`/`StepRun` DDL already exists) → **`tdd-engineer`**.
+- **Inputs/prereqs:** K-021 ✅ (materialized snapshots to walk); the §13 decision. Plan doc:
+  `docs/plans/m3-executor.md`. Also lock the `start_key` contract here (slice-1 residual).
+- **Scope (DESIGN §6.2):** `WorkflowRun {runId,defKey,defVersion,status,startedAt,ctx}` with
+  `OF_DEF`/`AT_STEP`/`HAS_STEP_RUN`; `StepRun {stepRunId,stepKey,status,…,input,output}` with
+  `RAN` + `NEXT` audit trail. Engine loop: read `AT_STEP` → evaluate `TRANSITION` guards against
+  `ctx` → create next `StepRun` → execute → append `NEXT` → move `AT_STEP`.
+- **Done-condition:** both suites green at the new enumerated gate baseline; a run walks a
+  materialized def deterministically; guards evaluated per the §13 decision; audit trail complete.
+- **Risks/RAM (rule 6):** run/step-run nodes are the M3 per-workspace hot growth line (execution
+  traces); `status` index already provisioned. Guard evaluation must be sandboxed/bounded
+  (injection/DoS if an expr lib is chosen).
+- **Test strategy:** gate contract assertions for run write/advance; pytest executor units with a
+  stub step-executor; guard-evaluation tests.
+
+### K-023 — Workflow ↔ chat linkage (Slice 3) (🔵 proposed — needs K-022)
+
+- **Owner:** **`graph-dba`** gate (`TRIGGERED_BY` / StepRun-`EMITTED` writes/reads) →
+  **`tdd-engineer`**/`coder`.
+- **Scope (DESIGN §5.1/§6.2):** `(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)` (incl.
+  materialize-on-first-use) and `(:StepRun)-[:EMITTED]->(:Message)` (step posts into a thread via
+  the §4 write path). **Gate must disambiguate the `EMITTED` overload** — K-013's
+  Message→Message provenance (QUERIES.md §10) vs this StepRun→Message sense — or confirm reuse.
+- **Done-condition:** suites green; message triggers a run, step emits a message; linkage
+  queryable both directions. **Risks:** edges negligible; the `EMITTED` overload is the
+  modeling-clarity risk. **Test strategy:** gate assertions; pytest linkage + triggered-run tests.
+
+### K-024 — Proof flows: one conversational + one business-process (Slice 4) (🔵 proposed — needs K-023)
+
+- **Owner:** **`coder`**/`tdd-engineer` + `scripts/seed_workflows.sh` (mirrors `seed_demo.sh`).
+- **Scope:** the M3 DoD proof — publish two canonical defs, materialize into `ws:acme`
+  (additive-only), run both to completion: **`kind:'conversation'`** (agent Q&A over
+  `prompt`/`tool`/`message` steps, reuses the M2 responder, needs LM Studio behind
+  `FALKORCHAT_ENABLE_AGENT`) and **`kind:'process'`** (onboarding/approval over
+  `human`/`decision`/`wait` steps, LLM-free — the §6.3 coordination-is-workflow proof).
+- **Done-condition:** both runs reach a terminal step; seed idempotent; documented run-through.
+- **Test strategy:** one e2e run test per flow (conversational behind a live marker; process
+  deterministic/offline).
+
+### K-025 — QA acceptance pass on M3 (Slice 5) (🔵 proposed — needs K-020…K-024)
+
+- **Owner:** **`qa-engineer`**. Black-box publish → materialize → run → trace → chat linkage for
+  both proof flows; versioned plan/report per repo convention (`docs/test-plans/`,
+  `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
+- **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (history.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
@@ -200,6 +264,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 | Path | Scope |
 |---|---|
+| `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
+| `docs/plans/m3-executor.md` | K-022: run/step-run executor + the §13 guard-language decision (author at pickup). |
 | `docs/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
 | `docs/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
 | `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |

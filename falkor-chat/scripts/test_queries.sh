@@ -667,6 +667,140 @@ assert_contains "§EMITTED provenance written exactly once (still 2 after replay
 prof=$(gp "$WS" "MATCH (a:Message {msgId:'ag1'})-[e:EMITTED]->(s:Message) RETURN s.msgId, e.score, e.rank ORDER BY e.rank")
 assert_index_scan "§EMITTED provenance read uses Message.msgId index" "$prof"
 
+# ── §11: workflow definitions & snapshots (M3 Slice 1) ───────────────────────
+#
+# Canonical bodies: QUERIES.md §11. Defs live in `reference`; publishing then
+# materializing into ws:{id} are the two write paths. Step identity is the
+# synthetic stepUid = "{defKey}:{version}:{stepKey}" (index + UNIQUE, both graphs);
+# HAS_STEP gives the def/snapshot an index-anchored handle on all its steps (the
+# §B8 STARTS-WITH-degrades-to-label-scan resolution). config/guard are opaque.
+# Distinct def keys (wf_review / wf_triage) keep these independent of the §ref
+# WorkflowDef composite-constraint block above.
+
+# publish query (reference) — the K-020 write path, verbatim from QUERIES.md §11.1
+PUBLISH='CYPHER key="wf_review" version="1" name="Review" kind="process" startKey="start" steps=[{key:"start",type:"message",config:"{}"},{key:"gather",type:"human",config:"{\"form\":\"x\"}"},{key:"decide",type:"decision",config:"{}"},{key:"done",type:"message",config:"{}"}] transitions=[{from:"start",to:"gather",on:"submit",guard:"",order:0},{from:"gather",to:"decide",on:"submit",guard:"",order:0},{from:"decide",to:"done",on:"approve",guard:"ctx.ok",order:0},{from:"decide",to:"gather",on:"reject",guard:"",order:1}]
+MERGE (d:WorkflowDef {key: $key, version: $version}) ON CREATE SET d.name = $name, d.kind = $kind
+WITH d UNWIND $steps AS s MERGE (st:Step {stepUid: $key + ":" + $version + ":" + s.key}) ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config MERGE (d)-[:HAS_STEP]->(st)
+WITH d, count(st) AS stepCount MATCH (start:Step {stepUid: $key + ":" + $version + ":" + $startKey}) MERGE (d)-[:START]->(start)
+WITH d, stepCount UNWIND $transitions AS tr MATCH (from:Step {stepUid: $key + ":" + $version + ":" + tr.from}) MATCH (to:Step {stepUid: $key + ":" + $version + ":" + tr.to}) MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to) ON CREATE SET rel.guard = tr.guard
+WITH d, stepCount, count(rel) AS transitionCount RETURN d.key AS key, d.version AS version, stepCount, transitionCount'
+
+echo ""
+echo "▶ §11 workflow definitions (reference — K-020)"
+
+# publish authors the full subgraph: 5 nodes (def + 4 steps), 9 rels (4 HAS_STEP + START + 4 TRANSITION)
+out=$(gq "$REF" "$PUBLISH")
+assert_contains "§11.1 publish wf_review v1 authors 5 nodes"       "Nodes created: 5"          "$out"
+assert_contains "§11.1 publish wf_review v1 authors 9 rels"        "Relationships created: 9"  "$out"
+
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.1 publish creates 4 steps (HAS_STEP)" "4" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:START]->(s:Step) RETURN count(s) AS n, collect(s.key) AS startKey")
+assert_contains "§11.1 publish creates exactly one START edge" "1" "$out"
+assert_contains "§11.1 START points at 'start' step" "start" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(:Step)-[r:TRANSITION]->(:Step) RETURN count(r) AS n")
+assert_contains "§11.1 publish creates 4 TRANSITION edges" "4" "$out"
+
+# stepUid UNIQUE constraint (reference) blocks a duplicate step identity
+out=$(gq "$REF" "CREATE (:Step {stepUid:'wf_review:1:start', key:'start', type:'message', config:'{}'})" 2>&1)
+assert_contains "§11 Step.stepUid constraint blocks duplicate (reference)" "unique constraint violation" "$out"
+
+# idempotent re-publish is a structural no-op (0 nodes/rels created)
+out=$(gq "$REF" "$PUBLISH")
+assert_not_contains "§11.1 idempotent re-publish creates no nodes" "Nodes created" "$out"
+assert_not_contains "§11.1 idempotent re-publish creates no rels"  "Relationships created" "$out"
+out=$(gq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.1 re-publish left exactly 4 steps" "4" "$out"
+
+# read-def subgraph (§11.2): meta + steps, then transitions
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'}) OPTIONAL MATCH (d)-[:START]->(start:Step) OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step) RETURN d.name AS name, d.kind AS kind, start.key AS startKey, collect(DISTINCT {key:s.key, type:s.type, config:s.config}) AS steps")
+assert_contains "§11.2a read-def returns startKey 'start'" "start" "$out"
+assert_contains "§11.2a read-def returns kind 'process'"   "process" "$out"
+assert_contains "§11.2a read-def carries a step (gather)"   "gather" "$out"
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN collect({from:from.key, to:to.key, on:tr.on, guard:tr.guard, order:tr.order}) AS transitions")
+assert_contains "§11.2b read-def transitions include 'approve'" "approve" "$out"
+assert_contains "§11.2b read-def transitions carry guard verbatim (ctx.ok)" "ctx.ok" "$out"
+
+# publish a v2 (meta-only MERGE) so get-latest has something to rank
+gq "$REF" 'CYPHER key="wf_review" version="2" name="Review v2" kind="process" MERGE (d:WorkflowDef {key:$key,version:$version}) ON CREATE SET d.name=$name, d.kind=$kind RETURN d.version' > /dev/null
+# publish a second def key for the list test
+gq "$REF" 'CYPHER key="wf_triage" version="1" name="Triage" kind="conversation" MERGE (d:WorkflowDef {key:$key,version:$version}) ON CREATE SET d.name=$name, d.kind=$kind RETURN d.version' > /dev/null
+
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review'}) RETURN d.key, d.version, d.name ORDER BY d.version DESC LIMIT 1")
+assert_contains "§11.3 get-def latest returns version 2" "2" "$out"
+assert_contains "§11.3 get-def latest returns 'Review v2'" "Review v2" "$out"
+out=$(rq "$REF" "MATCH (d:WorkflowDef {key:'wf_review', version:'1'}) RETURN d.name, d.kind")
+assert_contains "§11.3 get-def specific version 1 returns 'Review'" "Review" "$out"
+out=$(rq "$REF" "CYPHER limit=50 MATCH (d:WorkflowDef) WHERE d.key > '' RETURN d.key, d.version, d.name, d.kind ORDER BY d.key, d.version DESC LIMIT \$limit")
+assert_contains "§11.3 list-defs includes wf_review" "wf_review" "$out"
+assert_contains "§11.3 list-defs includes wf_triage" "wf_triage" "$out"
+
+# PROFILE: reads anchor on WorkflowDef.key index, no label scan
+prof=$(gp "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN s.key, s.type")
+assert_index_scan "§11.2a read-def steps anchors on WorkflowDef index" "$prof"
+prof=$(gp "$REF" "MATCH (d:WorkflowDef {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN from.key, to.key, tr.on")
+assert_index_scan "§11.2b read-def transitions anchors on WorkflowDef index" "$prof"
+prof=$(gp "$REF" "CYPHER limit=50 MATCH (d:WorkflowDef) WHERE d.key > '' RETURN d.key, d.version ORDER BY d.key, d.version DESC LIMIT \$limit")
+assert_index_scan "§11.3 list-defs uses WorkflowDef.key index" "$prof"
+
+# ── §11 materialization (workspace — K-021) ──────────────────────────────────
+#
+# Same shape scoped to ws:{id} with the WorkflowDefSnapshot root label. In the app
+# this is two-phase (read reference §11.2 → write workspace §11.4); the test drives
+# the write directly with the def structure as params.
+
+MATERIALIZE='CYPHER key="wf_review" version="1" name="Review" kind="process" startKey="start" steps=[{key:"start",type:"message",config:"{}"},{key:"gather",type:"human",config:"{\"form\":\"x\"}"},{key:"decide",type:"decision",config:"{}"},{key:"done",type:"message",config:"{}"}] transitions=[{from:"start",to:"gather",on:"submit",guard:"",order:0},{from:"gather",to:"decide",on:"submit",guard:"",order:0},{from:"decide",to:"done",on:"approve",guard:"ctx.ok",order:0},{from:"decide",to:"gather",on:"reject",guard:"",order:1}]
+MERGE (snap:WorkflowDefSnapshot {key: $key, version: $version}) ON CREATE SET snap.name = $name, snap.kind = $kind
+WITH snap UNWIND $steps AS s MERGE (st:Step {stepUid: $key + ":" + $version + ":" + s.key}) ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config MERGE (snap)-[:HAS_STEP]->(st)
+WITH snap, count(st) AS stepCount MATCH (start:Step {stepUid: $key + ":" + $version + ":" + $startKey}) MERGE (snap)-[:START]->(start)
+WITH snap, stepCount UNWIND $transitions AS tr MATCH (from:Step {stepUid: $key + ":" + $version + ":" + tr.from}) MATCH (to:Step {stepUid: $key + ":" + $version + ":" + tr.to}) MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to) ON CREATE SET rel.guard = tr.guard
+WITH snap, stepCount, count(rel) AS transitionCount RETURN snap.key AS key, snap.version AS version, stepCount, transitionCount'
+
+echo ""
+echo "▶ §11 snapshot materialization (workspace — K-021)"
+
+out=$(gq "$WS" "$MATERIALIZE")
+assert_contains "§11.4 materialize wf_review v1 authors 5 local nodes" "Nodes created: 5"         "$out"
+assert_contains "§11.4 materialize wf_review v1 authors 9 local rels"  "Relationships created: 9" "$out"
+
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.4 materialize creates 4 local steps" "4" "$out"
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:START]->(s:Step) RETURN count(s) AS n")
+assert_contains "§11.4 materialize creates one local START" "1" "$out"
+out=$(gq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(:Step)-[r:TRANSITION]->(:Step) RETURN count(r) AS n")
+assert_contains "§11.4 materialize creates 4 local TRANSITION edges" "4" "$out"
+
+# workspace composite {key,version} constraint (not asserted before this slice)
+out=$(gq "$WS" "CREATE (:WorkflowDefSnapshot {key:'wf_review', version:'1', name:'dupe'})" 2>&1)
+assert_contains "§11 WorkflowDefSnapshot composite constraint blocks dup {key,version}" "unique constraint violation" "$out"
+# workspace Step.stepUid constraint
+out=$(gq "$WS" "CREATE (:Step {stepUid:'wf_review:1:start', key:'start', type:'message', config:'{}'})" 2>&1)
+assert_contains "§11 Step.stepUid constraint blocks duplicate (workspace)" "unique constraint violation" "$out"
+
+# read-snapshot subgraph (§11.5)
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'}) OPTIONAL MATCH (snap)-[:START]->(start:Step) OPTIONAL MATCH (snap)-[:HAS_STEP]->(s:Step) RETURN snap.name AS name, snap.kind AS kind, start.key AS startKey, collect(DISTINCT {key:s.key, type:s.type, config:s.config}) AS steps")
+assert_contains "§11.5 read-snapshot returns startKey 'start'" "start" "$out"
+assert_contains "§11.5 read-snapshot carries a step (decide)"  "decide" "$out"
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN collect({from:from.key, to:to.key, on:tr.on, guard:tr.guard, order:tr.order}) AS transitions")
+assert_contains "§11.5 read-snapshot transitions include 'approve'" "approve" "$out"
+
+# list / get snapshot (§11.6)
+out=$(rq "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review', version:'1'}) RETURN snap.name, snap.kind")
+assert_contains "§11.6 get-snapshot specific version returns 'Review'" "Review" "$out"
+out=$(rq "$WS" "CYPHER limit=50 MATCH (snap:WorkflowDefSnapshot) WHERE snap.key > '' RETURN snap.key, snap.version, snap.name ORDER BY snap.key, snap.version DESC LIMIT \$limit")
+assert_contains "§11.6 list-snapshots includes wf_review" "wf_review" "$out"
+
+# idempotent re-materialize is a structural no-op
+out=$(gq "$WS" "$MATERIALIZE")
+assert_not_contains "§11.4 idempotent re-materialize creates no nodes" "Nodes created" "$out"
+assert_not_contains "§11.4 idempotent re-materialize creates no rels"  "Relationships created" "$out"
+
+# PROFILE: snapshot reads anchor on WorkflowDefSnapshot.key index, no label scan
+prof=$(gp "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(s:Step) RETURN s.key, s.type")
+assert_index_scan "§11.5 read-snapshot steps anchors on WorkflowDefSnapshot index" "$prof"
+prof=$(gp "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN from.key, to.key, tr.on")
+assert_index_scan "§11.5 read-snapshot transitions anchors on WorkflowDefSnapshot index" "$prof"
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

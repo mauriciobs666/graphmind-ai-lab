@@ -14,7 +14,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from .config import CallContext
 from .config import get_context as _resolve_context
-from .schemas import CreateChannelIn, CreateThreadIn, PostMessageIn
+from .schemas import (
+    CreateChannelIn,
+    CreateThreadIn,
+    PostMessageIn,
+    PublishWorkflowDefIn,
+)
 from .services import Services
 
 _log = logging.getLogger(__name__)
@@ -163,5 +168,56 @@ def build_router(
         if msg is None:
             raise HTTPException(status_code=404, detail="message not found")
         return msg
+
+    # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────
+    # Def authoring/reading is GLOBAL (the `reference` graph); only materialize +
+    # snapshot list consume the tenant workspace via `get_context`. Spec/​not-found
+    # errors map to 400/404 through the app-level exception handlers.
+
+    @router.post("/workflow-defs", status_code=201)
+    def publish_workflow_def(
+        body: PublishWorkflowDefIn, ctx: CallContext = Depends(get_context)
+    ):
+        return services.publish_workflow_def(
+            ctx,
+            key=body.key, version=body.version, name=body.name, kind=body.kind,
+            steps=[s.model_dump() for s in body.steps],
+            transitions=[t.model_dump(by_alias=True) for t in body.transitions],
+        )
+
+    @router.get("/workflow-defs")
+    def list_workflow_defs(
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_workflow_defs(ctx, limit=limit)
+
+    @router.get("/workflow-defs/{key}")
+    def get_workflow_def(
+        key: str,
+        version: str | None = Query(None),
+        ctx: CallContext = Depends(get_context),
+    ):
+        got = services.get_workflow_def(ctx, key=key, version=version)
+        if got is None:
+            raise HTTPException(status_code=404, detail="workflow def not found")
+        return got
+
+    @router.post("/workflow-defs/{key}/versions/{version}/materialize", status_code=201)
+    def materialize_def(
+        key: str, version: str, ctx: CallContext = Depends(get_context)
+    ):
+        return services.materialize_def(ctx, key=key, version=version)
+
+    @router.get("/workspaces/{ws}/snapshots")
+    def list_snapshots(
+        ws: str,
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        # The path `ws` is descriptive; tenancy is resolved by `get_context`
+        # (the M1 single-tenant seam), mirroring how MCP ignores a client-supplied
+        # `from`. When real multi-tenant auth lands, the seam authorizes the path.
+        return services.list_snapshots(ctx, limit=limit)
 
     return router

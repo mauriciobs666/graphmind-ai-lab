@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-09 — K-020 + K-021: M3 slice 1 (workflow defs + snapshot materialization) delivered
+
+First slice of **M3 — Workflow engine**, delivered end-to-end by the **teco-coordinated
+architect → graph-dba → tdd-engineer chain** (the teco K-001 nested-delegation validation run —
+see `claude/teco/kaizen/history.md` 2026-07-09). Architect decomposed all of M3 into
+**K-020…K-025** and wrote the slice-1 plan (`docs/plans/m3-workflow-engine.md`, Part A + Part B);
+coordination log at `docs/plans/m3-workflow-engine-coordination.md`. Suites verified
+independently after integration: **query suite 149 → 193/193, pytest 156 → 196.**
+
+- **K-020 — def model in `reference`.** *graph-dba gate:* `Step.stepUid = "{defKey}:{version}:{stepKey}"`
+  (architect's synthetic key — `Step.key` is unique only within a def) with index + UNIQUE in
+  `reference`; one justified model addition — a `-[:HAS_STEP]->` containment edge, because the
+  plan's `STARTS WITH stepUid` scoping PROFILEd as a label scan (HAS_STEP gives index-anchored
+  O(steps-in-def) reads); canonical `QUERIES.md §11` (publish, read-def, list/get def), live-verified
+  + PROFILEd; DESIGN §6.1/§7.1/§7.2 updated. *tdd impl:* `db.reference_graph` seam, reference-graph
+  repository methods (1:1 with §11) + typed errors, `services.publish_workflow_def` with spec
+  validation **before any write** — `start_key` resolved as "exactly one step declares `start: True`"
+  (implementer's call, plan had no param; lock the contract at K-022).
+- **K-021 — snapshot materialization.** *graph-dba gate:* workspace `Step.stepUid`/`Step.key` DDL
+  in `bootstrap_schema.sh` (additive); materialize / read-snapshot / list-snapshot queries in §11.
+  *tdd impl:* two-phase `services.materialize_def` (read `reference` → idempotent MERGE into
+  `ws:{id}`; not atomic across the graph boundary, retry completes), size-bounded schemas, thin
+  REST surface. **Structural parity proven** (publish → materialize → snapshot `==` reference def)
+  + idempotency; reference-wiping test fixture added.
+- **Scope discipline:** executor (K-022), chat linkage (K-023), proof flows (K-024) explicitly not
+  built; `ws:acme`/`reference` additive-only; §13 guard-language decision confirmed **not forced**
+  by slice 1 — returns to the user at K-022's architect pass.
+
 ## 2026-07-08 — K-008 + K-013 + K-014 + K-015: M2 GraphRAG delivered → milestone M2 done
 
 End-to-end GraphRAG loop, delivered as the full graph-dba→tdd→coder→qa sequence and

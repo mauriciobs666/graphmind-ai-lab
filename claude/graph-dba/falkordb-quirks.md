@@ -57,6 +57,16 @@ to the general fact here.
 - **`(:A | :B)` union-label syntax** in a pattern is unverified on this build —
   use `coalesce()` over two label-specific `OPTIONAL MATCH`es instead.
 - **`length(path)` in `ORDER BY`** is not supported — order by a property instead.
+- **`STARTS WITH` on an indexed string property does NOT plan as an index range scan**
+  (verified 2026-07-09, module 999999). A prefix predicate like `WHERE n.key STARTS WITH
+  $prefix` on an indexed `n.key` profiles as `Node By Label Scan` + `Filter`, not an index
+  scan. Consequence: don't use a synthetic-composite-key prefix (`"{a}:{b}:"`) as an
+  index-anchored scoping predicate — model an explicit edge (e.g. a `HAS_STEP` containment
+  edge) and traverse from an indexed anchor instead.
+- **`STARTS WITH` with a concatenated prefix needs explicit parentheses on the RHS**
+  (verified 2026-07-09). `x STARTS WITH $a + ':' + $b` errors *"Type mismatch: expected
+  Boolean but was String"* — `STARTS WITH` binds tighter than `+`. Write
+  `x STARTS WITH ($a + ':' + $b)`.
 - **`algo.*` procedures confirmed:** `BFS`, `WCC`, `pageRank`, `SPpaths`,
   `SSpaths`, `MSF`, `betweenness`, `labelPropagation`.
 - **Empty `UNWIND` collapses the row stream.** `WITH x UNWIND [] AS y …` drops
@@ -86,6 +96,12 @@ to the general fact here.
   collapses before the second `UNWIND` expands. Pattern: `UNWIND (CASE …) AS a …
   collect(…) AS as  UNWIND (CASE …) AS b … collect(…) AS bs`. Verified for two
   distinct edge blocks (e.g. `MENTIONS_MEMBER` + `EMITTED`) inside one guarded write.
+- **Sequential `UNWIND` blocks *without* an intervening collapse row-multiply the
+  final `RETURN`** (verified 2026-07-09). `WITH d UNWIND $steps … WITH d UNWIND
+  $transitions … RETURN d.key` emits `steps × transitions` duplicate rows. Collapse
+  each block back to one row with an aggregation (`WITH d, count(st) AS stepCount`)
+  so the query returns a single clean status row. The write itself is unaffected —
+  this is a result-cardinality issue, not a correctness one.
 
 ## Query tuning
 

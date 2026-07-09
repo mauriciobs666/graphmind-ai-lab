@@ -32,6 +32,8 @@ from .services import (
     ServiceError,
     Services,
     ThreadNotFoundError,
+    WorkflowDefNotFoundError,
+    WorkflowDefSpecError,
 )
 
 
@@ -63,6 +65,23 @@ def _register_error_handlers(app: FastAPI) -> None:
         not_found = isinstance(exc, (ChannelNotFoundError, ThreadNotFoundError))
         return JSONResponse(
             status_code=404 if not_found else 400,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    # §11 workflow errors live in `repository` (no import cycle) so they are not
+    # `ServiceError` subclasses — map them explicitly: bad spec → 400, absent
+    # def → 404, same envelope shape as the service-error handler.
+    @app.exception_handler(WorkflowDefSpecError)
+    async def _handle_wf_spec_error(_request, exc: WorkflowDefSpecError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=400,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    @app.exception_handler(WorkflowDefNotFoundError)
+    async def _handle_wf_not_found(_request, exc: WorkflowDefNotFoundError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=404,
             content={"error": type(exc).__name__, "detail": str(exc)},
         )
 

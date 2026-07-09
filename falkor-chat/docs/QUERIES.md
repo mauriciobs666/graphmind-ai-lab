@@ -734,3 +734,224 @@ ORDER BY a.createdAt DESC
 ```
 *Anchored on the seed's `msgId` index; traverses `EMITTED` inbound. Answers what a given message
 grounded — useful for "impact"/attribution views. Route via `GRAPH.RO_QUERY`.*
+
+---
+
+## 11. Workflow definitions & snapshots (M3 Slice 1 — K-020 / K-021)
+
+The workflow **definition model** lives canonically in the global **`reference`** graph as versioned,
+immutable `WorkflowDef` templates; publishing a def version and **materializing** it into a workspace
+graph (`ws:{id}`) as a local `WorkflowDefSnapshot` subgraph are the two write paths here. DESIGN §6.1;
+the executor (`WorkflowRun`/`StepRun`, K-022) and chat linkage (K-023) are **out of scope** for this
+slice — these queries only build and read the definition/snapshot structure.
+
+**Model (both graphs — structurally identical, only the root label differs):**
+
+```
+// reference graph                        // ws:{id} graph
+(:WorkflowDef {key,version,name,kind})    (:WorkflowDefSnapshot {key,version,name,kind})
+     -[:HAS_STEP]->(:Step)                     -[:HAS_STEP]->(:Step)
+     -[:START]->(:Step)                        -[:START]->(:Step)
+(:Step {stepUid,key,type,config})         (:Step {stepUid,key,type,config})
+(:Step)-[:TRANSITION {on,guard,order}]->(:Step)
+```
+
+**The `Step.stepUid` identity (locked, K-020).** A step's `key` is unique only *within a def*, so it
+can never back a `MERGE` (AGENTS.md: "every `MERGE` must be backed by a uniqueness constraint"). Every
+Step therefore carries a synthetic **`stepUid = "{defKey}:{version}:{stepKey}"`** — globally unique
+within each graph — with a range index + `UNIQUE` constraint in **both** graphs (`bootstrap_schema.sh`).
+`stepUid` is the MERGE key; `key`/`type`/`config` are set on create. `Step.key` keeps its own index
+(display/traversal anchor) but **no** constraint.
+
+**`HAS_STEP` — the containment edge (locked, K-020; the §B8 resolution).** `(:WorkflowDef|
+:WorkflowDefSnapshot)-[:HAS_STEP]->(:Step)` gives every def/snapshot an **index-anchored** handle on
+*all* its steps. It exists because the plan's original scoping candidate — filtering transitions by
+`from.stepUid STARTS WITH ($key + ':' + $version + ':')` — **live-profiles as a `Node By Label Scan`
++ `Filter` on this build, not an index range scan** (verified: a `STARTS WITH` on the indexed prefix
+does not plan as an index scan; and the `(:WorkflowDef)-[:START]->()-[:TRANSITION*]` walk alternative
+is worse — a `Cartesian Product` + `Semi Apply` that *still* label-scans `Step` and silently misses
+steps unreachable from `START`). Without `HAS_STEP` there is **no** def→step edge except `START`, so
+reading "all steps of a def" would scan every `Step` of every def in the graph. With `HAS_STEP`, both
+the step read and the transition read anchor on `Node By Index Scan | (d:WorkflowDef)` /
+`(snap:WorkflowDefSnapshot)` and traverse outward — O(steps-in-this-def), verified below.
+
+**`config` and `guard` are opaque serialized strings (rule 8 / DESIGN §1.2).** They are stored and
+returned **verbatim** and **never** filtered inside. Guard *evaluation* is run-time (K-022); Slice 1
+does not force the §13 guard-language decision.
+
+**Idempotency & the collapse idiom (live-verified).** Publish and materialize are single-graph `MERGE`
+queries — re-running the same `key@version` is a structural no-op (0 nodes/rels created). Immutability
+per version comes for free from `MERGE`. Because the query has two sequential `UNWIND` blocks (steps,
+then transitions), the naive shape **row-multiplies** the final `RETURN` (steps × transitions rows);
+each block is collapsed back to one row with an aggregation (`WITH d, count(st) AS stepCount` …) so the
+contract returns **exactly one status row**. `MATCH (start …)`/`MATCH (from …)`/`MATCH (to …)` inside
+the write resolve MERGE-created steps by their indexed `stepUid` — the spec validation in `services`
+(start step exists; every transition endpoint is a declared step key) runs *before* the write, so
+these matches always resolve for a valid spec.
+
+> **Two-phase materialization is inherently non-atomic across the graph boundary (DESIGN §3/§4).**
+> `materialize_def` reads the def subgraph from `reference` (§11.2) then writes the snapshot into
+> `ws:{id}` (§11.4) — two separate `GRAPH.QUERY` calls (edges can't cross graphs). A failure between
+> them leaves `reference` untouched and the workspace `MERGE` idempotent, so a retry completes cleanly
+> — no torn state. Accepted, documented.
+
+### 11.1 Publish a def version (reference — idempotent)
+
+```cypher
+// $key,$version,$name,$kind,$startKey
+// $steps       = [ {key, type, config}, … ]                       config = opaque string
+// $transitions = [ {from, to, on, guard, order}, … ]              guard  = opaque string
+MERGE (d:WorkflowDef {key: $key, version: $version})
+  ON CREATE SET d.name = $name, d.kind = $kind
+WITH d
+UNWIND $steps AS s
+  MERGE (st:Step {stepUid: $key + ':' + $version + ':' + s.key})
+    ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config
+  MERGE (d)-[:HAS_STEP]->(st)
+WITH d, count(st) AS stepCount
+MATCH (start:Step {stepUid: $key + ':' + $version + ':' + $startKey})
+MERGE (d)-[:START]->(start)
+WITH d, stepCount
+UNWIND $transitions AS tr
+  MATCH (from:Step {stepUid: $key + ':' + $version + ':' + tr.from})
+  MATCH (to:Step   {stepUid: $key + ':' + $version + ':' + tr.to})
+  MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to)
+    ON CREATE SET rel.guard = tr.guard
+WITH d, stepCount, count(rel) AS transitionCount
+RETURN d.key AS key, d.version AS version, stepCount, transitionCount
+```
+
+*Every node `MERGE` is backed by a `UNIQUE` constraint (`WorkflowDef {key,version}`, `Step {stepUid}`).
+The `TRANSITION` MERGE-key is `(from, on, order, to)` so distinct outcomes/orders between the same two
+steps are distinct edges; `guard` is set-on-create only (may be empty, never a match key). Live-verified
+on `_probe`: run 1 → 5 nodes / 9 rels (4 `HAS_STEP` + 1 `START` + 4 `TRANSITION`) / 32 props, returns
+one row `{key, version, stepCount:4, transitionCount:4}`; run 2 → 0 created (idempotent), same row.*
+
+### 11.2 Read a def subgraph (reference — the materialize input, F6-safe)
+
+Two focused, index-anchored reads (no `length(path)` ordering — unsupported on this build, F6; the app
+reconstructs step order from `TRANSITION.order`/topology).
+
+**11.2a Meta + steps:**
+```cypher
+MATCH (d:WorkflowDef {key: $key, version: $version})
+OPTIONAL MATCH (d)-[:START]->(start:Step)
+OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step)
+RETURN d.name AS name, d.kind AS kind, start.key AS startKey,
+       collect(DISTINCT {key: s.key, type: s.type, config: s.config}) AS steps
+```
+**11.2b Transitions:**
+```cypher
+MATCH (d:WorkflowDef {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step)
+RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: tr.order}) AS transitions
+```
+*Both anchor on `Node By Index Scan | (d:WorkflowDef)` and traverse `HAS_STEP` outward — verified no
+`Node By Label Scan`. `collect(DISTINCT …)` after the `OPTIONAL MATCH` fan-out collapses to one row;
+`start.key` is constant across the fan-out so the grouping is well-defined. A def with no transitions
+returns `transitions: []` (11.2b yields zero rows → the app treats absence as empty). Route via
+`GRAPH.RO_QUERY`.*
+
+### 11.3 List defs / get a def (reference)
+
+```cypher
+// list all defs (every version), newest version first within each key
+// $limit
+MATCH (d:WorkflowDef) WHERE d.key > ''
+RETURN d.key AS key, d.version AS version, d.name AS name, d.kind AS kind
+ORDER BY d.key, d.version DESC
+LIMIT $limit
+```
+```cypher
+// get the latest version for a key
+MATCH (d:WorkflowDef {key: $key})
+RETURN d.key AS key, d.version AS version, d.name AS name, d.kind AS kind
+ORDER BY d.version DESC
+LIMIT 1
+```
+```cypher
+// get a specific version (point lookup on the composite key)
+MATCH (d:WorkflowDef {key: $key, version: $version})
+RETURN d.key AS key, d.version AS version, d.name AS name, d.kind AS kind
+```
+*All three anchor on `Node By Index Scan | (d:WorkflowDef)` (the `key` index; `WHERE d.key > ''` makes
+the list an index scan rather than a label scan). `version` is a string — order is lexicographic; the
+caller uses zero-padded or monotonic version strings if numeric ordering matters. Route via
+`GRAPH.RO_QUERY`.*
+
+### 11.4 Materialize a snapshot (workspace — idempotent)
+
+Same shape as §11.1 with the `WorkflowDefSnapshot` root label, run against `ws:{id}`. The
+`$name/$kind/$startKey/$steps/$transitions` parameters come from the §11.2 read of `reference`
+(two-phase, see the note above).
+
+```cypher
+MERGE (snap:WorkflowDefSnapshot {key: $key, version: $version})
+  ON CREATE SET snap.name = $name, snap.kind = $kind
+WITH snap
+UNWIND $steps AS s
+  MERGE (st:Step {stepUid: $key + ':' + $version + ':' + s.key})
+    ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config
+  MERGE (snap)-[:HAS_STEP]->(st)
+WITH snap, count(st) AS stepCount
+MATCH (start:Step {stepUid: $key + ':' + $version + ':' + $startKey})
+MERGE (snap)-[:START]->(start)
+WITH snap, stepCount
+UNWIND $transitions AS tr
+  MATCH (from:Step {stepUid: $key + ':' + $version + ':' + tr.from})
+  MATCH (to:Step   {stepUid: $key + ':' + $version + ':' + tr.to})
+  MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to)
+    ON CREATE SET rel.guard = tr.guard
+WITH snap, stepCount, count(rel) AS transitionCount
+RETURN snap.key AS key, snap.version AS version, stepCount, transitionCount
+```
+
+*Node MERGEs backed by `WorkflowDefSnapshot {key,version}` + `Step {stepUid}` constraints (both
+workspace-local). Produces a snapshot subgraph **structurally identical** to the reference def.
+Live-verified idempotent (run 2 → 0 created). Snapshots are immutable per `(workspace, key, version)`;
+re-materialize is a no-op.*
+
+### 11.5 Read a snapshot subgraph (workspace)
+
+Mirror of §11.2 with the `WorkflowDefSnapshot` root; anchors on `Node By Index Scan |
+(snap:WorkflowDefSnapshot)`.
+
+```cypher
+// meta + steps
+MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})
+OPTIONAL MATCH (snap)-[:START]->(start:Step)
+OPTIONAL MATCH (snap)-[:HAS_STEP]->(s:Step)
+RETURN snap.name AS name, snap.kind AS kind, start.key AS startKey,
+       collect(DISTINCT {key: s.key, type: s.type, config: s.config}) AS steps
+```
+```cypher
+// transitions
+MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step)
+RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: tr.order}) AS transitions
+```
+
+### 11.6 List / get snapshots (workspace)
+
+```cypher
+// list snapshots in a workspace
+// $limit
+MATCH (snap:WorkflowDefSnapshot) WHERE snap.key > ''
+RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS kind
+ORDER BY snap.key, snap.version DESC
+LIMIT $limit
+```
+```cypher
+// get a specific snapshot (point lookup on the composite key)
+MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})
+RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS kind
+```
+*Index-anchored on `WorkflowDefSnapshot.key`. Route via `GRAPH.RO_QUERY`.*
+
+**Live-verified build quirks that shape §11:**
+- **`STARTS WITH` on an indexed string prefix does NOT plan as an index scan** on this build — it
+  profiles as `Node By Label Scan` + `Filter`. Scope def/snapshot subgraph reads via the `HAS_STEP`
+  containment edge (index-anchored), never a `stepUid` prefix filter. (New — folds into the KB.)
+- **`STARTS WITH` with a concatenated prefix needs explicit parentheses:** `x STARTS WITH ($a + ':' +
+  $b)` — without them the parser mis-associates (`STARTS WITH` binds tighter than `+`) and errors
+  *"Type mismatch: expected Boolean but was String"*. Moot here (we use `HAS_STEP`) but noted.
+- **Sequential `UNWIND` blocks row-multiply the final `RETURN`** unless each is collapsed with an
+  aggregation (`WITH d, count(st) AS stepCount`). Verified: the collapsed form returns one clean row.

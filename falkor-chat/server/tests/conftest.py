@@ -79,3 +79,16 @@ def conn(_schema):
 def repo(conn) -> Repository:
     """A Repository over a freshly-wiped `ws:test` graph."""
     return Repository(conn)
+
+
+@pytest.fixture()
+def wf_repo(conn) -> Repository:
+    """A Repository over `ws:test` **and** the global `reference` graph, both wiped.
+
+    `conn` wipes only `ws:test` node data; the `reference` graph is global and
+    additive (workflow-def authoring writes there, plan F3), so workflow tests
+    also wipe its node data here to stay isolated across tests (plan F8 — no
+    cross-test collisions). Schema (indexes + constraints) survives DETACH DELETE.
+    """
+    db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
+    return Repository(conn)

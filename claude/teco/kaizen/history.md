@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-09 — K-001 ✅: live nested-delegation validation run (falkor-chat M3 slice 1)
+- **What:** Ran teco end-to-end on a real assignment — kick off falkor-chat **M3 — Workflow
+  engine**, decompose the milestone, deliver slice 1 (K-020 def model + K-021 snapshot
+  materialization). Launch brief + observation checklist: `k001-run-brief.md` (executed verbatim).
+  Scored against the checklist from the run transcript + independent re-verification:
+  1. **Depth — PASS.** teco (opus) spawned architect → graph-dba → tdd-engineer (one `Agent` call
+     each, sequenced on their upstream artifacts); all three nested runs completed with no
+     depth-related degradation observed.
+  2. **Path-based handoff — PASS.** All three delegate briefs carried the plan-doc path
+     (`docs/plans/m3-workflow-engine.md`); the plan was never paraphrased wholesale into a brief
+     (briefs ~6.7–7.7 KB, self-contained context + path).
+  3. **Brief fidelity — PASS.** Every brief included the "this brief is your entire context"
+     framing and the blockers-back-as-deliverable reminder. No observed information loss; the
+     one plan gap (no `start_key` param on `publish_workflow_def`) was an *architect plan*
+     omission, resolved sensibly by the implementer and surfaced by teco as a follow-up —
+     exactly the intended behavior.
+  4. **Hook enforcement — PASS (unexercised).** teco's own Write/Edit calls (1 Write + 5 Edits)
+     all targeted its coordination doc (`m3-workflow-engine-coordination.md`); the
+     guard-coordination-doc-writes hook never needed to fire.
+  5. **Decision points — PASS.** The §13 guard-expression-language question was correctly
+     assessed as *not forced* by slice 1 (opaque strings, evaluated at run time) and deferred to
+     K-022's architect pass with an explicit return-to-user; `ws:acme`/`reference` kept
+     additive-only; zero scope creep (executor/linkage/proof flows untouched).
+  6. **Integration & honesty — PASS.** teco re-ran both suites itself and reported truthfully;
+     independently re-verified afterwards: `test_queries.sh` **193/193**, pytest **196** — both
+     matching teco's claims. Nothing committed (correct; review left to the user).
+- **Why:** K-001 was the open proof that an orchestrator subagent works in practice — depth,
+  context-passing fidelity, and result quality were validated on a real deliverable, not a toy.
+- **Prompt changes:** **none needed** — the run surfaced no prompt weakness. Deliverables landed
+  in falkor-chat (see `falkor-chat/kaizen/history.md` 2026-07-09). Run cost datapoint: ~100k
+  subagent tokens / 23 tool uses / ~45 min for a 2-item slice with 3 nested specialists.
+- **Plan items:** K-001 ✅ done (moved here). Same-run evidence closed **architect K-002**
+  (plan executed cold by an isolated implementer) and updated **coder K-002** (contract proven
+  via tdd-engineer; coder-specific run still open). K-002 (agent teams) remains the sole active item.
+
 ## 2026-07-09 — Interface review: roster completed (qa-engineer, devops) + guard hook + brief/verify upgrades
 - **What:** Thorough review of teco and its interfaces produced five prompt changes and one new artifact:
   1. **Roster completed** — `qa-engineer` (with its `docs/test-plans/` / `docs/test-reports/` artifact conventions) and `devops` (environment blockers routed there instead of bounced to the user) added to the roster, the frontmatter `description`, and the typical-feature pipeline (now `architect → implementer → qa-engineer`, `devops` unblocking env issues). Both agents postdate teco's creation (qa-engineer 2026-07-01, devops ~2026-07) and had never been folded in.

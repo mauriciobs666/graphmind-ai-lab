@@ -82,3 +82,13 @@ def workspace_graph(db: FalkorDB | LazyFalkorDB, ws: str) -> Graph:
     `workspaceId` property inside a shared graph.
     """
     return db.select_graph(f"ws:{ws}")
+
+
+def reference_graph(db: FalkorDB | LazyFalkorDB) -> Graph:
+    """Select the global `reference` graph (canonical `WorkflowDef` templates).
+
+    A peer of the per-workspace graphs (plan F3): workflow *definitions* are
+    global and versioned, so def authoring/reading is scoped here — never to a
+    `ws:{id}` graph. Only snapshot *materialization* writes into a workspace.
+    """
+    return db.select_graph("reference")

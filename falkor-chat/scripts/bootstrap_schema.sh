@@ -48,14 +48,25 @@ bootstrap_reference() {
   echo "[index] Entity.entityId"
   gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.entityId)"
 
+  # Step.key: display/traversal anchor only — never a global identity (a step key
+  # is unique only *within* a def), so it carries NO uniqueness constraint (§7.2).
   echo "[index] Step.key"
   gquery "$g" "CREATE INDEX FOR (n:Step) ON (n.key)"
+
+  # Step.stepUid: synthetic MERGE-backing identity "{defKey}:{version}:{stepKey}"
+  # (globally unique within the graph) — index first so its UNIQUE constraint can
+  # attach (K-020). This is what lets publish/materialize MERGE steps idempotently.
+  echo "[index] Step.stepUid"
+  gquery "$g" "CREATE INDEX FOR (n:Step) ON (n.stepUid)"
 
   echo "[constraint] WorkflowDef unique {key, version}"
   gconstraint "$g" UNIQUE NODE WorkflowDef PROPERTIES 2 key version
 
   echo "[constraint] Entity unique {entityId}"
   gconstraint "$g" UNIQUE NODE Entity PROPERTIES 1 entityId
+
+  echo "[constraint] Step unique {stepUid}"
+  gconstraint "$g" UNIQUE NODE Step PROPERTIES 1 stepUid
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -91,6 +102,16 @@ bootstrap_workspace() {
 
   echo "[index] Entity.entityId"
   gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.entityId)"
+
+  # Materialized snapshot steps land in the workspace graph too (K-021), so the
+  # same Step identity DDL as the reference graph applies here.
+  # Step.key: display/traversal anchor only, no constraint (§7.1).
+  echo "[index] Step.key"
+  gquery "$g" "CREATE INDEX FOR (n:Step) ON (n.key)"
+
+  # Step.stepUid: synthetic MERGE-backing identity — index first, constraint below.
+  echo "[index] Step.stepUid"
+  gquery "$g" "CREATE INDEX FOR (n:Step) ON (n.stepUid)"
 
   echo "[index] WorkflowDefSnapshot.key"
   gquery "$g" "CREATE INDEX FOR (n:WorkflowDefSnapshot) ON (n.key)"
@@ -144,6 +165,9 @@ bootstrap_workspace() {
 
   echo "[constraint] Entity unique {entityId}"
   gconstraint "$g" UNIQUE NODE Entity PROPERTIES 1 entityId
+
+  echo "[constraint] Step unique {stepUid}"
+  gconstraint "$g" UNIQUE NODE Step PROPERTIES 1 stepUid
 
   echo "[constraint] WorkflowRun unique {runId}"
   gconstraint "$g" UNIQUE NODE WorkflowRun PROPERTIES 1 runId

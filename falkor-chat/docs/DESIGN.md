@@ -250,10 +250,21 @@ A definition is a directed graph of steps; a run is an execution trace that walk
 
 ```
 (:WorkflowDef {key, version, name, kind})         // kind: 'conversation' | 'process'
-(:WorkflowDef)-[:START]->(:Step)
-(:Step {key, type, config})                        // type: prompt|tool|decision|human|message|wait
+(:WorkflowDef)-[:HAS_STEP]->(:Step)                // index-anchored containment (all steps of a def)
+(:WorkflowDef)-[:START]->(:Step)                   // the entry step
+(:Step {stepUid, key, type, config})               // type: prompt|tool|decision|human|message|wait
 (:Step)-[:TRANSITION {on, guard, order}]->(:Step)  // edge-labeled state machine
 ```
+
+> **`Step.stepUid` is the MERGE-backing identity** (M3 Slice 1 / K-020). A step `key` is unique only
+> *within a def*, so it can't back a `MERGE`; every Step carries a synthetic
+> `stepUid = "{defKey}:{version}:{stepKey}"` (globally unique within each graph) with an index +
+> `UNIQUE` constraint in both `reference` and `ws:{id}` (§7.1/§7.2). `key`/`type`/`config` are the
+> display/behaviour props. **`HAS_STEP`** is the def→step containment edge: without it the only
+> def→step link is `START`, so reading "all steps of a def" would label-scan every `Step` in the graph
+> — and the `stepUid`-prefix `STARTS WITH` alternative live-profiles as a label scan on this build.
+> `HAS_STEP` keeps step/transition reads anchored on the def's index (`Node By Index Scan`, verified).
+> Canonical publish/materialize/read Cypher: **`QUERIES.md` §11**.
 
 `type` unifies conversational and business flows:
 - `prompt` / `message` / `tool` → agent flows (LLM call, post a message, invoke a tool)
@@ -331,6 +342,7 @@ composite-keyed `WorkflowDefSnapshot`:
 | `StepRun` | `stepRunId` | UNIQUE 1 |
 | `ReadCursor` | `cursorId` | UNIQUE 1 |
 | `WorkflowDefSnapshot` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
+| `Step` | `key`, `stepUid` (two indexes) | UNIQUE 1 (`stepUid`); `key` index-only (§6.1) |
 
 **Hot-filter indexes (no constraint)** — support scans/ordering, not identity:
 
@@ -366,7 +378,7 @@ Same ordering rule (index first, constraint second); executable DDL lives in
 |---|---|---|
 | `WorkflowDef` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
 | `Entity` | `entityId` | UNIQUE 1 |
-| `Step` | `key` | — (traversal anchor for materialization) |
+| `Step` | `key`, `stepUid` (two indexes) | UNIQUE 1 (`stepUid`) — the MERGE identity (§6.1); `key` index-only (display/traversal anchor) |
 
 **Rule:** index the *anchor* of a traversal (the start node you look up), not every hop. Always
 confirm the index is actually used with `GRAPH.PROFILE` — an index that isn't hit is just RAM.

@@ -49,6 +49,11 @@ class FakeRepo:
         self.subseq_status: list[MessageWriteStatus | None] = []
         self.agent_first_status: list[MessageWriteStatus | None] = []
         self.agent_subseq_status: list[MessageWriteStatus | None] = []
+        # §11 workflow state
+        self.published: list[dict] = []       # publish_def kwargs, in order
+        self.materialized: list[dict] = []     # materialize_snapshot kwargs, in order
+        self.defs: dict[tuple, dict] = {}      # (key, version) -> def subgraph/meta
+        self.snapshots: dict[tuple, dict] = {}  # (key, version) -> snapshot subgraph/meta
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -140,6 +145,49 @@ class FakeRepo:
             raise MemberIdCollisionError(user_id)
         self.members.add(user_id)
         self.calls.append(("ensure_user", ws, user_id))
+
+    # ── §11 workflow defs (reference) + snapshots (workspace) ────────────────────
+
+    def publish_def(self, *, key, version, name, kind, start_key, steps, transitions):
+        self.published.append({
+            "key": key, "version": version, "name": name, "kind": kind,
+            "start_key": start_key, "steps": steps, "transitions": transitions,
+        })
+        return {
+            "key": key, "version": version,
+            "stepCount": len(steps), "transitionCount": len(transitions),
+        }
+
+    def read_def_subgraph(self, *, key, version):
+        self.calls.append(("read_def_subgraph", key, version))
+        return self.defs.get((key, version))
+
+    def get_def(self, *, key, version=None):
+        self.calls.append(("get_def", key, version))
+        return self.defs.get((key, version))
+
+    def list_defs(self, *, limit=50):
+        self.calls.append(("list_defs", limit))
+        return list(self.defs.values())
+
+    def materialize_snapshot(self, ws, *, key, version, name, kind, start_key,
+                             steps, transitions):
+        self.materialized.append({
+            "ws": ws, "key": key, "version": version, "name": name, "kind": kind,
+            "start_key": start_key, "steps": steps, "transitions": transitions,
+        })
+        return {
+            "key": key, "version": version,
+            "stepCount": len(steps), "transitionCount": len(transitions),
+        }
+
+    def get_snapshot(self, ws, *, key, version):
+        self.calls.append(("get_snapshot", ws, key, version))
+        return self.snapshots.get((key, version))
+
+    def list_snapshots(self, ws, *, limit=50):
+        self.calls.append(("list_snapshots", ws, limit))
+        return list(self.snapshots.values())
 
 
 def make_service(repo, *, now=1000):
@@ -580,3 +628,254 @@ def test_post_agent_answer_dup_msg_is_idempotent_success():
 
     out = svc.post_agent_answer(CTX_AGENT, thread_id="t1", text="hi", seeds=[])
     assert out["msgId"]  # returned cleanly, no raise
+
+
+# ── §11 Workflow definitions & snapshots (M3 Slice 1) ───────────────────────────
+#
+# publish_workflow_def validates the spec BEFORE any write (plan §B5): unknown
+# kind/step-type, duplicate step keys, a start marker that isn't exactly one
+# declared step, and dangling transition endpoints all raise WorkflowDefSpecError
+# and write nothing. A step marks itself the start with `start: True` (exactly one
+# required — that step's key becomes the repo `start_key`). config/guard are
+# serialized to opaque strings. materialize_def is two-phase: read the def from
+# `reference`, write the snapshot into ctx.ws. Def authoring/reading is global
+# (repo omits ws); only materialization + snapshot reads consume ctx.ws.
+
+from falkorchat.services import (  # noqa: E402
+    WorkflowDefNotFoundError,
+    WorkflowDefSpecError,
+)
+
+VALID_STEPS = [
+    {"key": "start", "type": "human", "config": {"a": 1}, "start": True},
+    {"key": "review", "type": "decision", "config": "raw-string"},
+    {"key": "done", "type": "message"},  # no config → serializes to ""
+]
+VALID_TRANSITIONS = [
+    {"from": "start", "to": "review", "on": "submitted", "order": 0},  # no guard → ""
+    {"from": "review", "to": "done", "on": "approved",
+     "guard": {"expr": "x>0"}, "order": 0},
+]
+
+
+def _publish(svc, repo, *, kind="process", steps=None, transitions=None):
+    return svc.publish_workflow_def(
+        CTX, key="onboarding", version="1", name="Onboarding", kind=kind,
+        steps=steps if steps is not None else VALID_STEPS,
+        transitions=transitions if transitions is not None else VALID_TRANSITIONS,
+    )
+
+
+def test_publish_workflow_def_derives_start_and_serializes_config_and_guard():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    _publish(svc, repo)
+
+    assert len(repo.published) == 1
+    pub = repo.published[0]
+    assert pub["start_key"] == "start"                 # derived from start:True
+    # steps handed to the repo carry only {key,type,config}; config is a string
+    by_key = {s["key"]: s for s in pub["steps"]}
+    assert by_key["start"]["config"] == '{"a":1}'      # dict → compact JSON
+    assert by_key["review"]["config"] == "raw-string"  # str passthrough
+    assert by_key["done"]["config"] == ""              # missing → ""
+    assert "start" not in by_key["start"]              # start flag stripped
+    # transition guards serialized to strings
+    trs = {(t["from"], t["to"]): t for t in pub["transitions"]}
+    assert trs[("start", "review")]["guard"] == ""         # missing → ""
+    assert trs[("review", "done")]["guard"] == '{"expr":"x>0"}'
+
+
+def test_publish_workflow_def_returns_repo_result():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    out = _publish(svc, repo)
+
+    assert out["key"] == "onboarding"
+    assert out["version"] == "1"
+    assert out["stepCount"] == 3
+    assert out["transitionCount"] == 2
+
+
+def test_publish_workflow_def_invalid_kind_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, kind="chatbot")  # not conversation|process
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_conversation_kind_allowed():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    _publish(svc, repo, kind="conversation")
+
+    assert repo.published[0]["kind"] == "conversation"
+
+
+def test_publish_workflow_def_invalid_step_type_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    bad = [
+        {"key": "start", "type": "bogus", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=bad, transitions=[])
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_duplicate_step_key_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    dup = [
+        {"key": "start", "type": "human", "start": True},
+        {"key": "start", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=dup, transitions=[])
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_no_start_step_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    no_start = [
+        {"key": "a", "type": "human"},
+        {"key": "b", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=no_start, transitions=[])
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_multiple_start_steps_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    two_starts = [
+        {"key": "a", "type": "human", "start": True},
+        {"key": "b", "type": "message", "start": True},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=two_starts, transitions=[])
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_dangling_transition_from_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    bad_tr = [{"from": "ghost", "to": "done", "on": "x", "order": 0}]
+    steps = [
+        {"key": "start", "type": "human", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=steps, transitions=bad_tr)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_dangling_transition_to_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    bad_tr = [{"from": "start", "to": "ghost", "on": "x", "order": 0}]
+    steps = [
+        {"key": "start", "type": "human", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError):
+        _publish(svc, repo, steps=steps, transitions=bad_tr)
+
+    assert repo.published == []
+
+
+def test_materialize_def_two_phase_reads_reference_then_writes_workspace():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": "start",
+        "steps": [{"key": "start", "type": "human", "config": ""}],
+        "transitions": [],
+    }
+
+    out = svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert len(repo.materialized) == 1
+    mat = repo.materialized[0]
+    assert mat["ws"] == "test"                 # writes into ctx.ws
+    assert mat["key"] == "onboarding"
+    assert mat["name"] == "Onboarding"
+    assert mat["start_key"] == "start"
+    assert out["key"] == "onboarding"
+
+
+def test_materialize_def_not_found_raises_nothing_materialized():
+    repo = FakeRepo()
+    svc = make_service(repo)  # repo.defs is empty
+
+    with pytest.raises(WorkflowDefNotFoundError):
+        svc.materialize_def(CTX, key="ghost", version="1")
+
+    assert repo.materialized == []
+
+
+def test_get_workflow_def_passthrough_is_global_no_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.defs[("onboarding", "1")] = {
+        "key": "onboarding", "version": "1", "name": "Onboarding", "kind": "process",
+    }
+
+    got = svc.get_workflow_def(CTX, key="onboarding", version="1")
+
+    assert got["name"] == "Onboarding"
+    assert ("get_def", "onboarding", "1") in repo.calls
+
+
+def test_list_workflow_defs_passthrough():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.defs[("a", "1")] = {"key": "a", "version": "1", "name": "A", "kind": "process"}
+
+    out = svc.list_workflow_defs(CTX)
+
+    assert out and out[0]["key"] == "a"
+
+
+def test_get_snapshot_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.snapshots[("a", "1")] = {
+        "name": "A", "kind": "process", "start_key": "s", "steps": [], "transitions": [],
+    }
+
+    got = svc.get_snapshot(CTX, key="a", version="1")
+
+    assert got["name"] == "A"
+    assert ("get_snapshot", "test", "a", "1") in repo.calls
+
+
+def test_list_snapshots_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.snapshots[("a", "1")] = {"key": "a", "version": "1", "name": "A", "kind": "process"}
+
+    out = svc.list_snapshots(CTX)
+
+    assert out and out[0]["key"] == "a"
+    assert ("list_snapshots", "test", 50) in repo.calls

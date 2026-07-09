@@ -12,6 +12,7 @@ these methods; they carry no business logic.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
@@ -22,13 +23,22 @@ from redis.exceptions import ResponseError
 
 from .config import CallContext
 
-# `MemberIdCollisionError`/`EmbeddingDimensionError` are re-exported
-# (redundant-alias idiom) as part of the service error surface: the repository
-# raises them (it owns the §2/§7 status-row contract and the §6 embedding-write
-# validation); they live there only to avoid an import cycle.
+# `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
+# re-exported (redundant-alias idiom) as part of the service error surface: the
+# repository owns them (the §2/§7 status-row contract, the §6 embedding-write
+# validation, the §11 workflow error types); they live there only to avoid an
+# import cycle.
 from .repository import EmbeddingDimensionError as EmbeddingDimensionError
 from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
+from .repository import WorkflowDefNotFoundError as WorkflowDefNotFoundError
+from .repository import WorkflowDefSpecError as WorkflowDefSpecError
+
+# ── §11 workflow spec whitelists (plan §B5 / DESIGN §6.1) ───────────────────────
+WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
+STEP_TYPES: frozenset[str] = frozenset(
+    {"prompt", "tool", "decision", "human", "message", "wait"}
+)
 
 # ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
 # The FalkorDB global TIMEOUT default is 1000 ms and writes ignore it; GraphRAG
@@ -81,6 +91,21 @@ def _default_clock() -> int:
 def _dedup(items: list[str]) -> list[str]:
     """Order-preserving de-duplication."""
     return list(dict.fromkeys(items))
+
+
+def _serialize_opaque(value: Any) -> str:
+    """Serialize a `config`/`guard` value to the opaque string stored in-graph.
+
+    §11 rule 8: `Step.config` and `TRANSITION.guard` are flat serialized strings
+    stored verbatim and never queried inside. `None`/missing → `""`; an existing
+    string passes through unchanged (already-serialized); anything else is
+    compact JSON (stable key order) so re-publishing the same spec is a no-op.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
 class Services:
@@ -377,3 +402,143 @@ class Services:
 
     def get_message(self, ctx: CallContext, *, msg_id: str) -> dict[str, Any] | None:
         return self._repo.get_message(ctx.ws, msg_id=msg_id)
+
+    # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
+    #
+    # Def authoring/reading is GLOBAL (the `reference` graph; repo methods omit
+    # `ws`, plan F3); only materialization + snapshot reads consume `ctx.ws`.
+    # `CallContext`/`config.get_context` are unchanged.
+
+    @staticmethod
+    def _validate_def_spec(
+        *, kind: str, steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+    ) -> str:
+        """Validate a def spec BEFORE any write; return the derived `start_key`.
+
+        Raises `WorkflowDefSpecError` (nothing written) when: `kind` is not in
+        `WORKFLOW_KINDS`; a step `type` is not in `STEP_TYPES`; step keys are not
+        unique; not exactly one step is marked `start: True`; or a transition
+        `from`/`to` references a key that is not a declared step. This is the
+        service invariant that lets the repository's inner `MATCH (start/from/to
+        …)` always resolve for a valid spec (QUERIES.md §11 note).
+        """
+        if kind not in WORKFLOW_KINDS:
+            raise WorkflowDefSpecError(
+                f"invalid workflow kind {kind!r} — must be one of "
+                f"{sorted(WORKFLOW_KINDS)}"
+            )
+
+        keys: list[str] = []
+        start_keys: list[str] = []
+        for step in steps:
+            skey = step["key"]
+            keys.append(skey)
+            stype = step.get("type")
+            if stype not in STEP_TYPES:
+                raise WorkflowDefSpecError(
+                    f"invalid step type {stype!r} for step {skey!r} — must be one "
+                    f"of {sorted(STEP_TYPES)}"
+                )
+            if step.get("start"):
+                start_keys.append(skey)
+
+        declared = set(keys)
+        if len(declared) != len(keys):
+            dupes = sorted({k for k in keys if keys.count(k) > 1})
+            raise WorkflowDefSpecError(
+                f"duplicate step key(s) {dupes} — step keys must be unique within a def"
+            )
+        if len(start_keys) != 1:
+            raise WorkflowDefSpecError(
+                f"a def must declare exactly one start step (start: true); "
+                f"found {len(start_keys)} ({start_keys})"
+            )
+
+        for tr in transitions:
+            for endpoint in ("from", "to"):
+                if tr[endpoint] not in declared:
+                    raise WorkflowDefSpecError(
+                        f"transition {endpoint} {tr[endpoint]!r} is not a declared "
+                        f"step key {sorted(declared)}"
+                    )
+        return start_keys[0]
+
+    def publish_workflow_def(
+        self, ctx: CallContext, *, key: str, version: str, name: str, kind: str,
+        steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Validate + publish a def version into the global `reference` graph. §11.1.
+
+        The spec is validated first (`_validate_def_spec`) — on any violation
+        nothing is written. `config`/`guard` are serialized to opaque strings.
+        A step declares itself the start via `start: True` (exactly one required);
+        that step's key becomes the repository `start_key`. Global write: no `ws`.
+        """
+        start_key = self._validate_def_spec(
+            kind=kind, steps=steps, transitions=transitions
+        )
+        repo_steps = [
+            {
+                "key": s["key"], "type": s["type"],
+                "config": _serialize_opaque(s.get("config")),
+            }
+            for s in steps
+        ]
+        repo_transitions = [
+            {
+                "from": tr["from"], "to": tr["to"], "on": tr["on"],
+                "order": tr["order"], "guard": _serialize_opaque(tr.get("guard")),
+            }
+            for tr in transitions
+        ]
+        return self._repo.publish_def(
+            key=key, version=version, name=name, kind=kind, start_key=start_key,
+            steps=repo_steps, transitions=repo_transitions,
+        )
+
+    def materialize_def(
+        self, ctx: CallContext, *, key: str, version: str
+    ) -> dict[str, Any]:
+        """Materialize a def@version from `reference` into `ctx.ws`. §11.4.
+
+        Two-phase (plan F4, non-atomic across the graph boundary but retry-safe):
+        read the def subgraph from the global `reference` graph, then write the
+        snapshot into the workspace. Raises `WorkflowDefNotFoundError` when the
+        def version was never published — nothing is written. Idempotent (the
+        workspace MERGE no-ops on re-materialize).
+        """
+        sub = self._repo.read_def_subgraph(key=key, version=version)
+        if sub is None:
+            raise WorkflowDefNotFoundError(
+                f"workflow def {key!r} version {version!r} not found in `reference` "
+                f"— publish it before materializing"
+            )
+        return self._repo.materialize_snapshot(
+            ctx.ws, key=key, version=version,
+            name=sub["name"], kind=sub["kind"], start_key=sub["start_key"],
+            steps=sub["steps"], transitions=sub["transitions"],
+        )
+
+    def get_workflow_def(
+        self, ctx: CallContext, *, key: str, version: str | None = None
+    ) -> dict[str, Any] | None:
+        """Get a def's metadata (latest if `version` None). Global read. §11.3."""
+        return self._repo.get_def(key=key, version=version)
+
+    def list_workflow_defs(
+        self, ctx: CallContext, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List published defs (global read). §11.3."""
+        return self._repo.list_defs(limit=limit)
+
+    def get_snapshot(
+        self, ctx: CallContext, *, key: str, version: str
+    ) -> dict[str, Any] | None:
+        """Read a materialized snapshot subgraph from `ctx.ws`. §11.5."""
+        return self._repo.get_snapshot(ctx.ws, key=key, version=version)
+
+    def list_snapshots(
+        self, ctx: CallContext, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List the workspace's materialized snapshots. §11.6."""
+        return self._repo.list_snapshots(ctx.ws, limit=limit)

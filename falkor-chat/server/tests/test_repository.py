@@ -720,3 +720,188 @@ def test_thread_exists(repo):
     assert repo.thread_exists("test", thread_id="t1") is False
     repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
     assert repo.thread_exists("test", thread_id="t1") is True
+
+
+# ── §11 Workflow definitions & snapshots (M3 Slice 1) ───────────────────────────
+#
+# Reference-scoped methods take NO `ws` (defs are global, plan F3); workspace-
+# scoped methods take `ws`. The `wf_repo` fixture wipes BOTH ws:test and the
+# global `reference` graph so reference-def tests stay isolated (plan F8).
+
+# A small canonical def: 3 steps, 2 transitions. `config`/`guard` are opaque
+# strings stored verbatim (rule 8) — one non-empty, one empty, to pin round-trip.
+DEF_STEPS = [
+    {"key": "start", "type": "human", "config": "{}"},
+    {"key": "review", "type": "decision", "config": "cfg-review"},
+    {"key": "done", "type": "message", "config": ""},
+]
+DEF_TRANSITIONS = [
+    {"from": "start", "to": "review", "on": "submitted", "guard": "", "order": 0},
+    {"from": "review", "to": "done", "on": "approved", "guard": "score>0", "order": 0},
+]
+
+
+def _publish_sample(repo, *, key="onboarding", version="1"):
+    return repo.publish_def(
+        key=key, version=version, name="Onboarding", kind="process",
+        start_key="start", steps=DEF_STEPS, transitions=DEF_TRANSITIONS,
+    )
+
+
+def _sorted_steps(steps):
+    return sorted(steps, key=lambda s: s["key"])
+
+
+def _sorted_transitions(trs):
+    return sorted(trs, key=lambda t: (t["from"], t["to"], t["on"], t["order"]))
+
+
+def test_publish_def_reports_step_and_transition_counts(wf_repo):
+    res = _publish_sample(wf_repo)
+
+    assert res["key"] == "onboarding"
+    assert res["version"] == "1"
+    assert res["stepCount"] == 3
+    assert res["transitionCount"] == 2
+
+
+def test_publish_def_then_read_subgraph_returns_full_def(wf_repo):
+    _publish_sample(wf_repo)
+
+    sub = wf_repo.read_def_subgraph(key="onboarding", version="1")
+
+    assert sub["name"] == "Onboarding"
+    assert sub["kind"] == "process"
+    assert sub["start_key"] == "start"
+    assert _sorted_steps(sub["steps"]) == _sorted_steps(DEF_STEPS)
+    assert _sorted_transitions(sub["transitions"]) == _sorted_transitions(DEF_TRANSITIONS)
+
+
+def test_read_def_subgraph_none_when_absent(wf_repo):
+    assert wf_repo.read_def_subgraph(key="ghost", version="1") is None
+
+
+def test_publish_def_is_idempotent_no_new_nodes_on_republish(wf_repo):
+    _publish_sample(wf_repo)
+    before = wf_repo.read_def_subgraph(key="onboarding", version="1")
+
+    res2 = _publish_sample(wf_repo)  # re-publish same key@version
+
+    # MERGE-backed: structural no-op. Counts still reflect the def's shape,
+    # but the subgraph is unchanged (immutability per version).
+    after = wf_repo.read_def_subgraph(key="onboarding", version="1")
+    assert res2["stepCount"] == 3
+    assert _sorted_steps(after["steps"]) == _sorted_steps(before["steps"])
+    assert _sorted_transitions(after["transitions"]) == _sorted_transitions(
+        before["transitions"]
+    )
+
+
+def test_get_def_specific_version(wf_repo):
+    _publish_sample(wf_repo, version="1")
+
+    got = wf_repo.get_def(key="onboarding", version="1")
+
+    assert got == {
+        "key": "onboarding", "version": "1", "name": "Onboarding", "kind": "process",
+    }
+
+
+def test_get_def_latest_version_when_version_none(wf_repo):
+    _publish_sample(wf_repo, version="1")
+    _publish_sample(wf_repo, version="2")
+
+    got = wf_repo.get_def(key="onboarding")  # latest
+
+    assert got["version"] == "2"
+
+
+def test_get_def_none_when_absent(wf_repo):
+    assert wf_repo.get_def(key="ghost") is None
+
+
+def test_list_defs_returns_published(wf_repo):
+    _publish_sample(wf_repo, key="a", version="1")
+    _publish_sample(wf_repo, key="b", version="1")
+
+    keys = {(d["key"], d["version"]) for d in wf_repo.list_defs()}
+
+    assert ("a", "1") in keys and ("b", "1") in keys
+
+
+def test_list_defs_empty_when_none(wf_repo):
+    assert wf_repo.list_defs() == []
+
+
+def _materialize_sample(repo, *, key="onboarding", version="1"):
+    return repo.materialize_snapshot(
+        "test", key=key, version=version, name="Onboarding", kind="process",
+        start_key="start", steps=DEF_STEPS, transitions=DEF_TRANSITIONS,
+    )
+
+
+def test_materialize_snapshot_reports_counts(wf_repo):
+    res = _materialize_sample(wf_repo)
+
+    assert res["key"] == "onboarding"
+    assert res["version"] == "1"
+    assert res["stepCount"] == 3
+    assert res["transitionCount"] == 2
+
+
+def test_materialize_then_get_snapshot_returns_full_subgraph(wf_repo):
+    _materialize_sample(wf_repo)
+
+    snap = wf_repo.get_snapshot("test", key="onboarding", version="1")
+
+    assert snap["name"] == "Onboarding"
+    assert snap["kind"] == "process"
+    assert snap["start_key"] == "start"
+    assert _sorted_steps(snap["steps"]) == _sorted_steps(DEF_STEPS)
+    assert _sorted_transitions(snap["transitions"]) == _sorted_transitions(
+        DEF_TRANSITIONS
+    )
+
+
+def test_get_snapshot_none_when_absent(wf_repo):
+    assert wf_repo.get_snapshot("test", key="ghost", version="1") is None
+
+
+def test_materialize_snapshot_is_idempotent_on_rematerialize(wf_repo):
+    _materialize_sample(wf_repo)
+    before = wf_repo.get_snapshot("test", key="onboarding", version="1")
+
+    _materialize_sample(wf_repo)  # re-materialize same key@version
+
+    after = wf_repo.get_snapshot("test", key="onboarding", version="1")
+    assert _sorted_steps(after["steps"]) == _sorted_steps(before["steps"])
+    assert _sorted_transitions(after["transitions"]) == _sorted_transitions(
+        before["transitions"]
+    )
+
+
+def test_snapshot_structurally_matches_reference_def(wf_repo):
+    # publish → read def subgraph → materialize with that subgraph → parity
+    _publish_sample(wf_repo)
+    ref = wf_repo.read_def_subgraph(key="onboarding", version="1")
+    wf_repo.materialize_snapshot(
+        "test", key="onboarding", version="1", name=ref["name"], kind=ref["kind"],
+        start_key=ref["start_key"], steps=ref["steps"], transitions=ref["transitions"],
+    )
+
+    snap = wf_repo.get_snapshot("test", key="onboarding", version="1")
+
+    assert snap == ref  # structurally identical (both label-agnostic subgraphs)
+
+
+def test_list_snapshots_returns_materialized(wf_repo):
+    _materialize_sample(wf_repo, key="a", version="1")
+    _materialize_sample(wf_repo, key="b", version="1")
+
+    keys = {(s["key"], s["version"]) for s in wf_repo.list_snapshots("test")}
+
+    assert ("a", "1") in keys and ("b", "1") in keys
+
+
+def test_list_snapshots_empty_when_none(wf_repo):
+    assert wf_repo.list_snapshots("test") == []

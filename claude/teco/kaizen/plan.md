@@ -8,15 +8,12 @@
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-001 | 2026-06-20 | high | 🔵 | Validate nested delegation end-to-end (teco → architect → tdd-engineer) and confirm depth/quality holds in practice. |
 | K-002 | 2026-06-20 | medium | 🔵 | Evaluate Claude Code *agent teams* / *background agents* as a better substrate for teco than nested subagent calls. |
 
-### K-001 — Validate nested delegation end-to-end
-- **Status:** 🔵 proposed
-- **Priority:** high
-- **Rationale:** The docs say subagents can use the `Agent` tool, but real nested orchestration (teco spawning architect, then handing its plan to tdd-engineer) is unproven here — depth limits, context-passing fidelity, and result quality need a live test.
-- **Proposed change:** Run a real multi-step feature through teco; capture where briefs lost information or delegation failed; tighten the prompt.
-- **Notes:** Pairs with architect K-002 and coder K-002 (handoff validation). **Update 2026-07-08:** the architect handoff is now path-based (plan doc at `docs/plans/<slug>.md`, path passed to the implementer — no more verbatim copy-through), which removes the main brief-fidelity risk this item was meant to catch; the live run should now focus on delegation depth and result quality.
+> **K-001 — validate nested delegation end-to-end — ✅ done 2026-07-09** (moved to history.md).
+> Live run: falkor-chat M3 slice 1 through teco → architect → graph-dba → tdd-engineer, all
+> checklist items passed. Launch brief + observation checklist preserved at
+> [`k001-run-brief.md`](./k001-run-brief.md).
 
 ### K-002 — Consider agent teams / background agents
 - **Status:** 🔵 proposed

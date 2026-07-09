@@ -41,6 +41,26 @@ class MemberIdCollisionError(Exception):
     """
 
 
+class WorkflowDefNotFoundError(Exception):
+    """A workflow def version was not found in the `reference` graph (M3 §11).
+
+    Raised by the service `materialize_def` when the `(key, version)` to
+    materialize has never been published — nothing is written to the workspace.
+    Re-exported by `services` (defined here to avoid a repository→services cycle).
+    """
+
+
+class WorkflowDefSpecError(Exception):
+    """A workflow-def spec failed validation before any write (M3 §11 / plan §B5).
+
+    Raised by the service `publish_workflow_def` when the spec is malformed —
+    unknown `kind`/step `type`, duplicate step keys, a `start_key` that resolves
+    to no declared step, or a transition endpoint that is not a declared step.
+    Validation runs *before* the repository write, so an invalid spec writes
+    nothing. Re-exported by `services`.
+    """
+
+
 @dataclass(frozen=True)
 class MessageWriteStatus:
     """Status row returned by the §4 v2 write paths (QUERIES.md §4 contract).
@@ -68,6 +88,10 @@ class Repository:
 
     def _graph(self, ws: str):
         return db.workspace_graph(self._conn, ws)
+
+    def _reference(self):
+        """Select the global `reference` graph (workflow def templates, §11)."""
+        return db.reference_graph(self._conn)
 
     def ping(self, ws: str) -> bool:
         """Liveness probe — a trivial read against the workspace graph."""
@@ -854,3 +878,214 @@ class Repository:
             {"ids": list(ids)},
         )
         return {row[0]: row[1] for row in res.result_set}
+
+    # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
+    #
+    # Definitions live canonically in the GLOBAL `reference` graph as versioned,
+    # immutable WorkflowDef templates; materializing copies a def@version into a
+    # workspace as a local WorkflowDefSnapshot subgraph. Reference-scoped methods
+    # take NO `ws` (plan F3); only materialization consumes a workspace. Every
+    # node MERGE is backed by a UNIQUE constraint (`WorkflowDef {key,version}` /
+    # `WorkflowDefSnapshot {key,version}` / `Step {stepUid}`). `config`/`guard`
+    # are opaque strings, stored and returned verbatim (rule 8). Each method maps
+    # 1:1 to a verified QUERIES.md §11 query.
+
+    # Publish/materialize share the same idempotent MERGE shape (§11.1 / §11.4),
+    # differing only in the root label and the target graph. The two sequential
+    # UNWIND blocks each collapse via `count(...)` so the RETURN is one status row
+    # (a naive shape row-multiplies steps × transitions).
+    _PUBLISH_CYPHER = (
+        "MERGE (d:{label} {{key: $key, version: $version}}) "
+        "  ON CREATE SET d.name = $name, d.kind = $kind "
+        "WITH d "
+        "UNWIND $steps AS s "
+        "  MERGE (st:Step {{stepUid: $key + ':' + $version + ':' + s.key}}) "
+        "    ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config "
+        "  MERGE (d)-[:HAS_STEP]->(st) "
+        "WITH d, count(st) AS stepCount "
+        "MATCH (start:Step {{stepUid: $key + ':' + $version + ':' + $startKey}}) "
+        "MERGE (d)-[:START]->(start) "
+        "WITH d, stepCount "
+        "UNWIND $transitions AS tr "
+        "  MATCH (from:Step {{stepUid: $key + ':' + $version + ':' + tr.from}}) "
+        "  MATCH (to:Step   {{stepUid: $key + ':' + $version + ':' + tr.to}}) "
+        "  MERGE (from)-[rel:TRANSITION {{on: tr.on, order: tr.order}}]->(to) "
+        "    ON CREATE SET rel.guard = tr.guard "
+        "WITH d, stepCount, count(rel) AS transitionCount "
+        "RETURN d.key AS key, d.version AS version, stepCount, transitionCount"
+    )
+
+    # Subgraph read = two focused, index-anchored queries (§11.2 / §11.5): meta +
+    # steps (via HAS_STEP), then transitions. No `length(path)` ordering (F6) —
+    # the app reconstructs order from `TRANSITION.order`/topology.
+    _READ_META_CYPHER = (
+        "MATCH (d:{label} {{key: $key, version: $version}}) "
+        "OPTIONAL MATCH (d)-[:START]->(start:Step) "
+        "OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step) "
+        "RETURN d.name AS name, d.kind AS kind, start.key AS startKey, "
+        "       collect(DISTINCT {{key: s.key, type: s.type, config: s.config}}) AS steps"
+    )
+    _READ_TRANSITIONS_CYPHER = (
+        "MATCH (d:{label} {{key: $key, version: $version}})"
+        "-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) "
+        "RETURN collect({{from: from.key, to: to.key, on: tr.on, "
+        "                 guard: tr.guard, order: tr.order}}) AS transitions"
+    )
+
+    @staticmethod
+    def _read_subgraph(graph, *, label: str, key: str, version: str):
+        """Read a def/snapshot subgraph (shared by def-read and snapshot-read).
+
+        `None` when the root node is absent (the meta `MATCH` yields no rows).
+        Otherwise `{name, kind, start_key, steps, transitions}`.
+        """
+        meta = graph.ro_query(
+            Repository._READ_META_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        if not meta.result_set:
+            return None
+        name, kind, start_key, steps = meta.result_set[0]
+        trs = graph.ro_query(
+            Repository._READ_TRANSITIONS_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        transitions = trs.result_set[0][0] if trs.result_set else []
+        return {
+            "name": name, "kind": kind, "start_key": start_key,
+            "steps": list(steps), "transitions": list(transitions),
+        }
+
+    def publish_def(
+        self, *, key: str, version: str, name: str, kind: str, start_key: str,
+        steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Publish a def version into the `reference` graph (idempotent). §11.1.
+
+        Write path. Every node MERGE is constraint-backed; re-publishing the same
+        `key@version` is a structural no-op (immutability per version). The spec
+        is validated by `services.publish_workflow_def` *before* this call, so the
+        inner `MATCH (start …)`/`MATCH (from/to …)` always resolve for a valid spec.
+        Returns `{key, version, stepCount, transitionCount}`.
+        """
+        res = self._reference().query(
+            self._PUBLISH_CYPHER.format(label="WorkflowDef"),
+            {
+                "key": key, "version": version, "name": name, "kind": kind,
+                "startKey": start_key, "steps": list(steps),
+                "transitions": list(transitions),
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "key": row[0], "version": row[1],
+            "stepCount": row[2], "transitionCount": row[3],
+        }
+
+    def read_def_subgraph(self, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a def's full subgraph from `reference` — the materialize input. §11.2.
+
+        `None` when the def version is absent. `{name, kind, start_key, steps,
+        transitions}`; `steps`/`transitions` are unordered (F6). Read path.
+        """
+        return self._read_subgraph(
+            self._reference(), label="WorkflowDef", key=key, version=version
+        )
+
+    def get_def(self, *, key: str, version: str | None = None) -> dict[str, Any] | None:
+        """Get a def's metadata (latest version if `version` is None). §11.3.
+
+        `{key, version, name, kind}` or `None` if absent. Read path.
+        """
+        graph = self._reference()
+        if version is None:
+            res = graph.ro_query(
+                "MATCH (d:WorkflowDef {key: $key}) "
+                "RETURN d.key AS key, d.version AS version, d.name AS name, "
+                "       d.kind AS kind "
+                "ORDER BY d.version DESC LIMIT 1",
+                {"key": key},
+            )
+        else:
+            res = graph.ro_query(
+                "MATCH (d:WorkflowDef {key: $key, version: $version}) "
+                "RETURN d.key AS key, d.version AS version, d.name AS name, "
+                "       d.kind AS kind",
+                {"key": key, "version": version},
+            )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+
+    def list_defs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List defs (every version), newest version first within each key. §11.3.
+
+        Read path; anchored on the `WorkflowDef.key` index.
+        """
+        res = self._reference().ro_query(
+            "MATCH (d:WorkflowDef) WHERE d.key > '' "
+            "RETURN d.key AS key, d.version AS version, d.name AS name, "
+            "       d.kind AS kind "
+            "ORDER BY d.key, d.version DESC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+            for row in res.result_set
+        ]
+
+    def materialize_snapshot(
+        self, ws: str, *, key: str, version: str, name: str, kind: str,
+        start_key: str, steps: list[dict[str, Any]],
+        transitions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Materialize a def@version into `ws:{id}` as a local snapshot. §11.4.
+
+        Write path — the workspace half of the two-phase materialize (the
+        `name/kind/start_key/steps/transitions` come from `read_def_subgraph`).
+        Same idempotent MERGE shape as `publish_def` with the
+        `WorkflowDefSnapshot` root label, scoped to the workspace graph; produces
+        a subgraph structurally identical to the reference def. Re-materialize is
+        a no-op. Returns `{key, version, stepCount, transitionCount}`.
+        """
+        res = self._graph(ws).query(
+            self._PUBLISH_CYPHER.format(label="WorkflowDefSnapshot"),
+            {
+                "key": key, "version": version, "name": name, "kind": kind,
+                "startKey": start_key, "steps": list(steps),
+                "transitions": list(transitions),
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "key": row[0], "version": row[1],
+            "stepCount": row[2], "transitionCount": row[3],
+        }
+
+    def get_snapshot(self, ws: str, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a snapshot's full subgraph from `ws:{id}`. §11.5.
+
+        Mirror of `read_def_subgraph` with the `WorkflowDefSnapshot` root; `None`
+        when absent. `{name, kind, start_key, steps, transitions}`. Read path.
+        """
+        return self._read_subgraph(
+            self._graph(ws), label="WorkflowDefSnapshot", key=key, version=version
+        )
+
+    def list_snapshots(self, ws: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List a workspace's snapshots, newest version first per key. §11.6.
+
+        Read path; anchored on the `WorkflowDefSnapshot.key` index.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (snap:WorkflowDefSnapshot) WHERE snap.key > '' "
+            "RETURN snap.key AS key, snap.version AS version, snap.name AS name, "
+            "       snap.kind AS kind "
+            "ORDER BY snap.key, snap.version DESC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+            for row in res.result_set
+        ]

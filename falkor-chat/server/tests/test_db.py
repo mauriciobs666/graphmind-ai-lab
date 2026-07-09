@@ -37,6 +37,16 @@ def test_connect_passes_config_socket_timeouts(_schema, monkeypatch):
     assert kw["socket_timeout"] == 2.5
 
 
+def test_reference_graph_selects_global_reference_graph(_schema):
+    # Def authoring/reading is global — the `reference` graph is a peer of the
+    # per-workspace `ws:{id}` graphs, never namespaced by workspace (plan F3).
+    conn = db.connect()
+
+    graph = db.reference_graph(conn)
+
+    assert graph.name == "reference"
+
+
 def test_connect_unreachable_fails_within_timeout_budget_with_clear_error(monkeypatch):
     monkeypatch.setattr(config, "FALKORDB_HOST", BLACKHOLE)
     monkeypatch.setattr(config, "FALKORDB_PORT", 6399)

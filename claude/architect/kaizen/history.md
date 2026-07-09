@@ -2,6 +2,27 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-09 — K-002 ✅: live handoff validation (teco K-001 run, falkor-chat M3 slice 1)
+- **What:** The architect ran as the planning half of a real orchestrated delivery — teco
+  delegated it the M3 decomposition + slice-1 plan for falkor-chat. It produced
+  `falkor-chat/docs/plans/m3-workflow-engine.md` (Part A: six kaizen items K-020…K-025 in the
+  component's exact item format; Part B: full slice-1 plan with data model, DDL reconciliation,
+  query shapes, service surface, build order, enumerated suite-count expectations) and returned
+  the path. Two isolated-context implementers executed it cold: graph-dba (gate) and
+  tdd-engineer (impl) — no re-investigation loops, suites landed green (query 193/193,
+  pytest 196), structural parity + idempotency proven.
+- **Friction observed (the K-002 payload):** one plan gap — `publish_workflow_def` was specced
+  without a `start_key` parameter; the implementer resolved it (exactly one step declares
+  `start: True`) and it was surfaced as a contract to lock at K-022. One gate-level design
+  amendment — the plan's `STARTS WITH stepUid` scoping PROFILEd as a label scan, so graph-dba
+  added a `HAS_STEP` containment edge; a reasonable division of labor (live PROFILE data is the
+  gate's job), not a plan defect. Verdict: the six-section template held; no template change
+  needed from a single datapoint — recheck if the parameter-contract gap recurs.
+- **Prompt changes:** none.
+- **Plan items:** K-002 ✅ done (moved here — the live validation this item waited on; evidence
+  shared with teco K-001, see `claude/teco/kaizen/history.md` 2026-07-09). Plan is now empty of
+  active items.
+
 ## 2026-07-08 — Plan-doc handoff by default, subagent-context awareness, hook-enforced Write/Edit (K-001 ✅, K-003 ✅)
 - **What:** Four changes from a team-level design review (architect as a member of teco's roster):
   1. **Plan document is now the default deliverable** (K-001 ✅): step 5 rewritten — write the plan to `<component>/docs/plans/<slug>.md` (kebab-case; repo-root `docs/plans/` for cross-component work) and return the *path* + the "ready to implement" summary; inline delivery only for quick assessments. Handoff section updated to match ("implement the plan at `<path>`"). Convention matches what falkor-chat already used de facto (`falkor-chat/docs/plans/m2-graphrag.md`).
