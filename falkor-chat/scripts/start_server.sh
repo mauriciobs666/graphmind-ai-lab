@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-shot script: ensure FalkorDB is up, bootstrap schema, start the M1 server.
+# One-shot script: ensure FalkorDB is up, bootstrap schema, seed the demo agent,
+# and start the server (REST + MCP + AI responder).
 #
 # Override defaults with env vars:
 #   FALKORCHAT_WS_ID       (default: acme)
@@ -68,9 +69,9 @@ VENV_DIR="$SERVER_DIR/.venv"
 
 # ── 1. FalkorDB ───────────────────────────────────────────────────────────────
 if docker inspect falkordb-dev --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
-  echo "[1/4] FalkorDB already running — ok"
+  echo "[1/5] FalkorDB already running — ok"
 else
-  echo "[1/4] Starting FalkorDB (detached)..."
+  echo "[1/5] Starting FalkorDB (detached)..."
   "$REPO_DIR/scripts/start_falkordb.sh" -d
   echo "      Waiting for FalkorDB to be ready..."
   for i in $(seq 1 30); do
@@ -87,7 +88,7 @@ else
 fi
 
 # ── 2. venv + deps ────────────────────────────────────────────────────────────
-echo "[2/4] Setting up Python venv..."
+echo "[2/5] Setting up Python venv..."
 if [ ! -d "$VENV_DIR" ]; then
   python3 -m venv "$VENV_DIR"
 fi

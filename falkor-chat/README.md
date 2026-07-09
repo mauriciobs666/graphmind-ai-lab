@@ -28,7 +28,37 @@ executed inside the same graph.
 
 - [Docker](https://docs.docker.com/get-docker/)
 - `redis-cli` — for local inspection (`sudo apt install redis-tools` / `brew install redis`)
-- Python 3.12+ for the M1 server (`server/` — FastAPI + `falkordb-py` 1.6.x + `mcp`)
+- Python 3.12+ for the server (`server/` — FastAPI + `falkordb-py` 1.6.x + `mcp`)
+- **For the AI agent (M2 GraphRAG) only:** an OpenAI-compatible LLM endpoint — e.g.
+  [LM Studio](https://lmstudio.ai/) on `:1234` — serving an **embedding** model
+  (`text-embedding-qwen3-embedding-0.6b`, 1024-dim) **and** a **chat** model
+  (`qwen/qwen3-4b-2507`). Not needed if you run with `FALKORCHAT_ENABLE_AGENT=0` (chat core only).
+
+---
+
+## Quick start
+
+**A — Full GraphRAG, with the AI agent.** Start LM Studio (both models above, server on `:1234`),
+then from `falkor-chat/`:
+
+```bash
+./scripts/start_server.sh
+```
+
+One command does it all: starts FalkorDB (detached) → creates the `server/.venv` → bootstraps
+`ws:acme` **at `EMBEDDING_DIM=1024`** → seeds the `assistant` agent + a `#general` channel /
+`Welcome` thread → launches uvicorn with the AI responder enabled. Then open
+**http://localhost:8000/**, go to `#general` → `Welcome`, and post `@assistant <your question>` —
+a graph-grounded reply (with `EMITTED` provenance) appears within a few seconds.
+
+**B — Chat core only, no LM Studio / GPU.** Same UI/REST/MCP on `:8000`, minus the AI responder:
+
+```bash
+FALKORCHAT_ENABLE_AGENT=0 ./scripts/start_server.sh
+```
+
+Stop with **Ctrl+C** (FalkorDB keeps running; `docker stop falkordb-dev` to stop it too).
+Prefer to wire things up step by step, or run just FalkorDB? See **Dev environment** below.
 
 ---
 
@@ -100,8 +130,13 @@ and one or more workspace graphs. Safe to re-run (idempotent):
 # examples:
 ./scripts/bootstrap_schema.sh myworkspace
 ./scripts/bootstrap_schema.sh acme globex          # multiple workspaces at once
-EMBEDDING_DIM=3072 ./scripts/bootstrap_schema.sh acme   # override embedding dimension
+EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh acme   # M2 GraphRAG dim (Qwen3-Embedding)
 ```
+
+> **For the AI agent (M2), bootstrap at `EMBEDDING_DIM=1024`** to match the embedding model. The
+> dimension is fixed at index-creation time and the running app must use the same value
+> (`FALKORCHAT_EMBEDDING_DIM`) — a wrong-dim vector is silently accepted then dropped from the ANN
+> index. `start_server.sh` handles this for you (defaults to 1024).
 
 Verify the result:
 ```bash
@@ -119,7 +154,7 @@ wiped before and after:
 ./scripts/test_queries.sh
 ```
 
-Expected output: `126/126 passed`.
+Expected output: `149/149 passed`.
 
 ### 5 — Browse the graph (optional)
 
@@ -186,10 +221,15 @@ falkor-chat/
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
-│   └── test_queries.sh      # end-to-end query test suite (126 assertions)
-├── server/                  # M1 app: FastAPI REST + MCP on one process
+│   ├── start_server.sh      # one-shot: FalkorDB + venv + bootstrap@1024 + seed + uvicorn
+│   ├── seed_demo.sh         # register the AI agent + a demo channel/thread (idempotent)
+│   ├── test_queries.sh      # end-to-end query test suite (149 assertions)
+│   ├── load_test.sh         # append-path load harness + hot-read PROFILE (M1 DoD)
+│   └── backfill_thread_ids.sh # one-off: stamp Message.threadId on pre-K-007 messages
+├── server/                  # app: FastAPI REST + MCP + AI responder on one process
 │   ├── falkorchat/{config,db,repository,services,schemas,api,mcp,app}.py
-│   ├── tests/               # pytest — repository/services (live), MCP, REST, app-mount
+│   ├── falkorchat/{embedding,llm,responder}.py   # M2: embed worker, LLM client, agent responder
+│   ├── tests/               # pytest — repository/services (live), MCP, REST, responder, app-mount
 │   └── pyproject.toml       # fastapi, uvicorn, falkordb, mcp, pytest, httpx
 ├── web/                     # minimal browser client (index.html + app.js) served by app.py
 ├── Dockerfile               # server image (uvicorn, non-root, /health healthcheck)
@@ -199,25 +239,32 @@ falkor-chat/
 
 ---
 
-## Run the M1 server (REST + MCP)
+## Run the server (REST + MCP + AI agent)
 
-The server hosts the browser REST API and the MCP agent front door on one process.
+The server hosts the browser REST API, the MCP agent front door, and the M2 AI responder on one
+process. For the fast path use `./scripts/start_server.sh` (see **Quick start** above). The manual
+steps, for when you want to run pieces yourself:
 
 ```bash
 cd server
-python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-./../scripts/bootstrap_schema.sh acme                        # schema for the default tenant (ws:acme)
-.venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'          # first time
+EMBEDDING_DIM=1024 ./../scripts/bootstrap_schema.sh acme            # schema for the default tenant (ws:acme), M2 dim
+FALKORCHAT_EMBEDDING_DIM=1024 .venv/bin/uvicorn falkorchat.app:app  # web UI + REST under /, MCP at /mcp
 ```
 
 Then open **http://localhost:8000/** for the minimal web client (channels · threads · messages ·
 search). It talks to the REST API on the same origin (no CORS). The browser and MCP front doors
 share one `services.py`.
 
-Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph):
+The AI responder is **off by default** so imports stay network-free; set `FALKORCHAT_ENABLE_AGENT=1`
+(and have LM Studio up) to wire the live embedder + LLM + `@mention` responder — or just use
+`start_server.sh`, which enables it and seeds the demo agent. `FALKORCHAT_EMBEDDING_DIM` **must**
+match the workspace's vector index (1024 for `ws:acme`).
+
+Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph; offline — no LM Studio):
 
 ```bash
-cd server && .venv/bin/python -m pytest -q      # 110 passed
+cd server && .venv/bin/python -m pytest -q      # 156 passed
 ```
 
 Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`; the trailing-slash
