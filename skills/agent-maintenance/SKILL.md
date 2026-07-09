@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, and the audit/reconcile method for already-drifted context docs. Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, and the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -19,7 +19,8 @@ touched.
 - **Editing** an agent/skill → advance kaizen, update its catalog entry.
 - **Renaming / removing** → update or delete entries everywhere.
 - **Reviewing** (no source change) → still record new improvement ideas in `plan.md`.
-- **Reconciling** an already-drifted context doc → run the audit pass below.
+- **Reconciling** an already-drifted context doc → run the audit pass (§3).
+- **Certifying team coherence** (rosters, handoff contracts, enforcement parity across the collection) → run the certification pass (§4).
 
 ---
 
@@ -116,9 +117,11 @@ A human-facing catalog `README.md` at the **root of the agents collection** (the
 directory holding the agent folders/files), or the repo root if there is one.
 One entry per agent/skill, kept in sync.
 
-Each entry: the **name**, a one-line **what it does**, **when to use it**, the
-**model**, and links to its **source file** and its **`kaizen/` folder**. On
-edits update the entry; on removal delete it.
+Each entry: the **name**, a one-line **what it does**, **when to use it**, and
+links to its **source file** and its **`kaizen/` folder**. On edits update the
+entry; on removal delete it. Don't advertise per-agent deployment choices
+(model, tool lists) in the catalog — frontmatter is their single source of
+truth and the catalog copy just drifts.
 
 ### Audience 2 — Agents → the project's context convention(s)
 
@@ -160,8 +163,16 @@ Two different obligations with two different correct mechanisms:
 
 1. Write/edit the agent or skill source.
 2. Update its `kaizen/{plan,history}.md` (§1).
-3. Update `README.md` (humans) and the relevant context file(s) (agents).
-4. Mention at the end which docs you touched.
+3. **If you added, renamed, or removed an agent:** update every prompt that
+   **enumerates the team** in the same change — an orchestrator's roster (e.g.
+   teco's "The team you coordinate"). Other agents' prompts are consumers of
+   the roster too; catalogs alone won't catch this drift class (origin:
+   2026-07-09, teco's roster silently missed two specialists created after
+   it). Better still: don't create enumerated summary facts ("all N agents use
+   model X") in always-loaded context docs at all — they duplicate frontmatter
+   ground truth, cost tokens every session, and rot; delete them when found.
+4. Update `README.md` (humans) and the relevant context file(s) (agents).
+5. Mention at the end which docs you touched.
 
 ---
 
@@ -188,7 +199,52 @@ components or agents that exist on disk).
 
 ---
 
-## 4. Testing standards (reference)
+## 4. Team coherence certification (inter-agent audit)
+
+The doc audit (§3) checks *catalogs vs. disk*. This pass checks the
+**interfaces between agents** — the drift class catalogs can't see. Run it
+when a specialist is added/renamed/removed, when an orchestrator or a handoff
+contract changes, or on demand ("certify the team").
+
+> Origin: the 2026-07-09 teco review — `qa-engineer` and `devops` had existed
+> for days with perfect catalog entries while teco's roster still enumerated a
+> five-agent team, and several delegates carried "ask one sharp question"
+> phrasing that assumes an interactive session subagents never get.
+
+**Deterministic half — run the script first:**
+`claude/scripts/audit-team.sh` (read-only, exit 1 on any FAIL) verifies the
+greppable invariants: every agent folder has its `<name>.md` + kaizen pair, is
+symlinked into `~/.claude/agents/`, its frontmatter hook commands exist and
+are executable, and every agent is named in the orchestrator's prompt and in
+all three catalogs. Fix any FAIL before judging the rest.
+
+**Judgment half — checklist (what the script can't see):**
+
+1. **Roster accuracy** — the orchestrator's roster describes each specialist's
+   *current* contract (deliverable paths, conventions, guardrails), not just
+   its name.
+2. **Handoff symmetry** — every producer/consumer convention is stated on
+   *both* sides (e.g. the architect's plan-doc path on architect **and** every
+   implementer that consumes it; the qa-engineer's plan/report paths on
+   qa-engineer **and** the orchestrator).
+3. **Subagent-awareness** — every delegate-able agent handles the
+   can't-ask-mid-run constraint: questions, blockers, and approval requests
+   return as the deliverable; no "ask" phrasing that assumes an interactive
+   session.
+4. **Enforcement parity** — every prompt guardrail that claims harness
+   enforcement has a live hook, and every wired hook is described in the
+   prompt it guards (no silent machinery, no hopeful prose posing as
+   enforcement).
+5. **Boundary reciprocity** — when agent A says "defer X to B", B actually
+   claims X (and vice versa for "B routes X to me").
+
+**Certificate:** log a dated entry in the maintainer's kaizen history (cobb's,
+in graphmind-ai-lab) recording scope, script result, findings, and fixes — so
+"when was the team last certified?" is answerable from the log.
+
+---
+
+## 5. Testing standards (reference)
 
 For *how* to test the agents/skills you maintain — the two-altitude standard
 (pytest for deterministic code; the eval/bless harness for agent behavior) and

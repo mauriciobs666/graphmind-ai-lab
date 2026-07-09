@@ -40,13 +40,12 @@ and OpenCode artifacts).
 ## Claude Code subagents (`claude/`)
 
 Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`.
-All currently use `model: opus`. The skills cobb loads on demand (`agent-maintenance`,
-`agent-standards`) now live in the repo-root `skills/` home (see the `skills/` section below),
-not under `claude/`.
+The skills cobb loads on demand (`agent-maintenance`, `agent-standards`) now live in the
+repo-root `skills/` home (see the `skills/` section below), not under `claude/`.
 
 | Agent | What it does | When to use |
 |---|---|---|
-| `teco` | Technical coordinator; decomposes a goal into a sequenced work breakdown and delegates each piece to the right specialist (architect, coder, tdd-engineer, graph-dba, cobb), then integrates. Hybrid: drives execution but returns to the user at decision points. Coordinates — doesn't design/code. | A multi-step / multi-specialty task, orchestration, or end-to-end feature delivery. |
+| `teco` | Technical coordinator; decomposes a goal into a sequenced work breakdown and delegates each piece to the right specialist (architect, coder, tdd-engineer, qa-engineer, graph-dba, devops, cobb), then integrates. Hybrid: drives execution but returns to the user at decision points. Coordinates — doesn't design/code (Write/Edit = coordination doc only, enforced by a `PreToolUse` hook). | A multi-step / multi-specialty task, orchestration, or end-to-end feature delivery. |
 | `architect` | Software architect; investigates code, weighs trade-offs, produces a step-by-step implementation plan/spec written to `<component>/docs/plans/<slug>.md` (returns the path + a ready-to-implement summary for lossless handoff). **Read-only on code** (Write/Edit = plan doc only, enforced by a `PreToolUse` hook). Planning half of an architect→coder handoff. | Wanting a design, approach, impact analysis, or plan before any code is written. |
 | `coder` | Software engineer who implements an approved plan/spec end-to-end — clean, tested, repo-idiomatic code, suite kept green. Implementation half of the handoff. | Building from a ready plan/spec or clear task. (Strict test-first → `tdd-engineer`.) |
 | `cobb` | Agentic-development expert across Claude Code, Kiro, OpenCode, and cross-tool standards (`AGENTS.md`, Agent Skills). | Designing/authoring/reviewing/porting/debugging agents, subagents, skills, steering docs, hooks, slash commands, system prompts. |
@@ -73,8 +72,8 @@ standard. Shared across the repo's tools; the **format** ports (Claude Code, Ope
 read `SKILL.md`), but **tool-gating and activation behavior do not** — verify per tool. See
 `skills/README.md` for the catalog.
 
-- `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift procedures;
-  perishable per-tool reference specifics). Loaded on demand so cobb's prompt stays lean.
+- `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
+  procedures; perishable per-tool reference specifics). Loaded on demand so cobb's prompt stays lean.
 - `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
   OpenCode-authored skills.
 

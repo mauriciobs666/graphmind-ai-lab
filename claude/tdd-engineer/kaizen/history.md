@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-07-09 — Plan-doc-path handoff + subagent-awareness (teco interface review)
+- **What:** Two workflow additions, made during the teco interface review: (1) step 1 now states that an `architect` plan arrives as a **document path** (`<component>/docs/plans/<slug>.md`) — read the file itself as the source of truth; its test-strategy section is the red→green sequence. Mirrors the line `coder` has carried since the 2026-07-08 path-based-handoff change. (2) Step 2 and the red-suite + environment-blocker branches of step 3 gained subagent-awareness: when running delegated (e.g. by teco), "ask one sharp question" / "ask whether to fix first" / "ask before installing" becomes "return the question/blocker as your result" — subagents can't ask mid-run. Catalog entry (`claude/AGENTS.md`) updated.
+- **Why:** teco routes implementation to this agent *preferentially* (user's TDD preference), yet the handoff contract was documented only on `coder`; and the "ask" phrasing silently assumed an interactive session the agent doesn't get under delegation.
+- **Plan items:** none (out-of-band, driven by teco's 2026-07-09 review).
+
 ## 2026-06-20 — Dropped "Senior" from description (collection harmonization)
 - **What:** Frontmatter `description` "Senior software engineer who implements…" → "Software engineer who implements…". Catalog row in `claude/README.md` "Senior engineer who implements…" → "Software engineer who implements…".
 - **Why:** Collection-wide harmonization. The new `architect`/`coder` agents dropped "senior" entirely over the overconfidence concern; this brings tdd-engineer in line. **Supersedes the 2026-06-05 decision** that deliberately *kept* "Senior" as a role/altitude signal — the collection now omits it everywhere, relying on concrete process + guardrails for altitude/calibration instead.

@@ -30,7 +30,7 @@
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** QA is most valuable in a loop with implementation. A light protocol (report format that `coder`/`tdd-engineer` consume, plus a re-run pass) closes it.
-- **Notes:** `teco` could orchestrate; verify subagent-to-subagent handoff patterns before hardwiring.
+- **Notes:** `teco` could orchestrate; verify subagent-to-subagent handoff patterns before hardwiring. **Update 2026-07-09:** the teco side is now in teco's prompt (roster entry with path-handoff conventions + defect→re-brief→re-run in its integrate-&-verify step); remains open pending a live orchestrated cycle.
 
 ### K-004 — First-run smoke-eval + document the registry-reload gotcha
 - **Status:** 🔵 proposed

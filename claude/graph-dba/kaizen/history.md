@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-09 — Subagent-awareness on "ask one sharp question" (teco interface review follow-up)
+- **What:** "How you work" step 1's "ask one sharp question" now carries the delegated-run fallback: when running as a subagent (e.g. delegated by `teco`), return the sharp question as the result instead of trying to ask mid-run — subagents can't ask. Catalog entry (`claude/AGENTS.md`) updated.
+- **Why:** Sweep after the 2026-07-09 teco interface review found the "ask" phrasing assumed an interactive session across several delegates (same fix applied to coder, tdd-engineer, qa-engineer the same day).
+- **Plan items:** none (out-of-band, driven by teco's 2026-07-09 review).
+
 ## 2026-07-05 — Absorbed generic FalkorDB engine quirks from falkor-chat/AGENTS.md
 - **What:** `falkor-chat/AGENTS.md` had a "Live-verified FalkorDB facts" section mixing generic
   engine/dialect quirks (vector index DDL, index-before-constraint ordering, composite

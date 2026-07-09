@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-08
+> Last reviewed: 2026-07-09
 
 ## Active
 
@@ -26,5 +26,5 @@
 - **Notes:** Surfaced during creation-time verification (2026-06-20). New primitives not yet in cobb's resident notes.
 
 ## Parking lot / ideas
-- A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`.
+- A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`. *(Partially addressed 2026-07-09: roster is now complete — qa-engineer + devops added — with routing signals per entry; a coder-vs-tdd decision tree is still open.)*
 - Guard against over-orchestration: a heuristic for "this is a single-specialist job, skip the breakdown."
