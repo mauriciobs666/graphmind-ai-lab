@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-08 — K-008 + K-013 + K-014 + K-015: M2 GraphRAG delivered → milestone M2 done
+
+End-to-end GraphRAG loop, delivered as the full graph-dba→tdd→coder→qa sequence and
+**QA-accepted (K-015, PASS, zero defects)**. Prerequisite: a devops LM-Studio reachability spike
+confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**, both models live
+(`text-embedding-qwen3-embedding-0.6b`, `qwen/qwen3-4b-2507`).
+
+- **K-008 — retrieval core.** *graph-dba gate:* verified the §6 hybrid ANN query + `SET m.embedding`
+  live against a 1024-dim workspace, `GRAPH.PROFILE` confirmed the vector index is hit, Entity
+  expansion no-ops cleanly; raised `test_queries.sh` **126 → 135**; deliverable `docs/plans/m2-graphrag.md`.
+  New quirk logged: a wrong-dimension `vecf32` write is *silently accepted* then drops the node out of
+  the ANN index → validate length client-side. *tdd impl:* `repository.set_embedding` (client-side dim
+  validation, `EmbeddingDimensionError`) + `repository.hybrid_search` (§6, channel/workspace variants)
+  + `services.hybrid_search` (`RAG_QUERY_TIMEOUT_MS`) + `embedding.py` (`Embedder`/`LMStudioEmbedder`/
+  `EmbeddingWorker`, injected transport). pytest **110 → 123**.
+- **K-013 — AI Agent participant + `EMITTED` provenance.** *graph-dba gate:* defined
+  `(answer:Message)-[:EMITTED]->(seed:Message)` with `score`+`rank` props, riding **inside the guarded
+  §4 write** (exactly-once under `dupMsg` replay, no relationship constraint needed); canonical
+  `QUERIES.md §10`; raised `test_queries.sh` **135 → 149**; deliverable `docs/plans/m2-agent-participant.md`.
+  *tdd impl:* `repository.post_agent_answer`/`read_provenance`/`read_citing_answers`, `llm.py`
+  (`LMStudioLLM`), `responder.py` (`AgentResponder` — `@mention` trigger, loop guard on
+  `role:"assistant"`, LLM/embedder before the guarded write ⇒ failure posts nothing). **Decisions
+  (user):** trigger = agent `@mention` only; **every** posted message is embedded out-of-band (corpus
+  grows) — both wired via FastAPI `BackgroundTasks`. pytest **123 → 154**.
+- **K-014 — live wiring + web.** Served app builds the real embedder/worker/LLM/responder gated on
+  `FALKORCHAT_ENABLE_AGENT` (default off → imports/tests stay network-free); `config` gained
+  `AGENT_ID`/`AGENT_NAME`/`ENABLE_AGENT` + `LLM_*`; new `scripts/seed_demo.sh` registers the
+  `assistant` agent + demo channel/thread; `start_server.sh` now exports `FALKORCHAT_EMBEDDING_DIM=1024`
+  + enables the agent + seeds; `server/.env.example` documents runtime env. Web renders assistant
+  replies (AI badge) + reader `isMention`; `displayName` added to since-reads (`QUERIES.md §9.1/§9.2`
+  in lockstep, suite unaffected). pytest **154 → 156**.
+- **Provisioning (ops):** served tenant `ws:acme` dropped and re-bootstrapped at `EMBEDDING_DIM=1024`
+  (user-confirmed clean build); vector index verified at 1024.
+- **K-015 — QA acceptance (the gate).** Black-box pass across REST + MCP + web + the running
+  responder: out-of-band embedding, cosine-ASC ranking, agent answer with `EMITTED` provenance on all
+  read surfaces, loop guard, failure isolation, dormant-Entity path — **PASS, no defects.** Plan/report:
+  `docs/test-plans/m2-graphrag.md`, `docs/test-reports/m2-graphrag-report.md`.
+- **Parked → M2.5 (deferred, not on the M2-green path):** real auth/tenancy (K-016), transport-level
+  externally-authenticated agent actor (K-017, K-007 QA carry-over), real-time push (K-018);
+  channel-scoped retrieval read (responder currently workspace-wide — trigger self-cites as rank-0);
+  `ensure_agent` doesn't persist `displayName`; reverse-provenance not on a public route.
+- **Suites:** pytest **156** / query suite **149/149**.
+- **Milestone:** closes **milestone M2 — GraphRAG → ✅.** Next milestone: **M3 — Workflow engine.**
+
 ## 2026-07-06 — K-012: web request/response UX polish → M1 complete
 
 - **What (client-side only, `web/` — no server/schema/query change):** de-staled the M1

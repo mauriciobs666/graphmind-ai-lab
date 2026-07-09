@@ -35,6 +35,20 @@ to the general fact here.
   `"missing supporting exact-match index"`.
 - **Composite constraints** (`PROPERTIES 2 key version`) are supported and operational.
 - **Fulltext** (`db.idx.fulltext.createNodeIndex` / `queryNodes`) confirmed working.
+- **Vector dimension is enforced at query time and index-membership time, but NOT at write
+  time** (verified 2026-07-08, module 999999). A wrong-dimension `SET n.embedding =
+  vecf32([...])` is **silently accepted** (`Properties set: 1`, no error) — but the node then
+  **drops out of the ANN index** and never appears in `db.idx.vector.queryNodes` results.
+  Querying the index with a mismatched query vector *does* error
+  (`Vector dimension mismatch, expected N but got M`), which is the reliable way to prove an
+  index's dimension (`db.indexes()` does not expose it). There is **no `vec.dimension()`
+  function** on this build to check a stored vector's length. Consequence: validate embedding
+  length client-side before writing — a buggy worker sending wrong-size vectors produces
+  permanently unretrievable nodes with no error surfaced.
+- **ANN kNN returns *up to* `k`, not exactly `k`** — on a small/near-empty HNSW index,
+  `db.idx.vector.queryNodes(…, k, …)` may return fewer than `k` (approximate recall of distant/
+  orthogonal candidates). Near neighbors are returned and correctly ordered; don't treat
+  "returns exactly k" as an invariant.
 
 ## Cypher dialect & query behavior
 
@@ -58,6 +72,20 @@ to the general fact here.
   instead.
 - **`labels(coalesce(a, b))[0]`** subscripting works, for reading the resolved
   label off a `coalesce()` of two optionally-matched nodes.
+- **A map-projection cannot be a `CREATE` relationship endpoint** (verified
+  2026-07-08, module 999999). `FOREACH (rec IN recs | CREATE (m)-[:R]->(rec.node))`
+  where `rec` is a map with a `node` field **errors** (`Invalid input '.': expected
+  a label, '{', a parameter or ')'`). The endpoint must be a **bound node
+  variable**. To attach per-edge properties while iterating: collect the endpoints
+  as **nodes** (`collect(DISTINCT s)`) and pull props from **map parameters keyed by
+  the node's own property** — `CREATE (m)-[:R {score: $scoreBy[s.id], rank:
+  $rankBy[s.id]}]->(s)`. Dynamic map-parameter indexing by a node property
+  (`$scoreBy[s.id]`) works, including inside a `FOREACH`.
+- **Two sequential guarded `UNWIND`s** in one query (each followed by its own
+  `collect(...)` back to one row) do **not** row-multiply — the first `collect`
+  collapses before the second `UNWIND` expands. Pattern: `UNWIND (CASE …) AS a …
+  collect(…) AS as  UNWIND (CASE …) AS b … collect(…) AS bs`. Verified for two
+  distinct edge blocks (e.g. `MENTIONS_MEMBER` + `EMITTED`) inside one guarded write.
 
 ## Query tuning
 

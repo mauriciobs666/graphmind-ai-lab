@@ -7,12 +7,17 @@ A thin router over the shared `Services`. `get_context` is a FastAPI dependency
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import logging
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from .config import CallContext
 from .config import get_context as _resolve_context
 from .schemas import CreateChannelIn, CreateThreadIn, PostMessageIn
 from .services import Services
+
+_log = logging.getLogger(__name__)
 
 
 def get_context() -> CallContext:
@@ -20,7 +25,47 @@ def get_context() -> CallContext:
     return _resolve_context()
 
 
-def build_router(services: Services) -> APIRouter:
+def _safe_embed(embed_worker: Any, ws: str, msg_id: str, text: str) -> None:
+    """Embed a posted message out-of-band, swallowing+logging any failure.
+
+    Runs on `BackgroundTasks` (DECISION 3, K-008 posture): EVERY posted message
+    is embedded so the retrievable corpus grows, but a message is readable before
+    its embedding lands and an embedder hiccup must never surface to the poster.
+    Embedding is a pure write — it never triggers a response.
+    """
+    try:
+        embed_worker.embed_message(ws, msg_id=msg_id, text=text)
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background embed failed (msgId=%s)", msg_id)
+
+
+def _safe_respond(responder: Any, ctx: CallContext, posted: dict[str, Any]) -> None:
+    """Fire the AI responder out-of-band, swallowing+logging any failure.
+
+    Runs on `BackgroundTasks`, off the guarded write path. The responder owns the
+    trigger policy (@mention + non-agent-authored) and self-no-ops otherwise, so
+    the API stays a thin adapter and never re-implements the trigger check.
+    `channel_id` is not carried by the message-post route; channel-scoped
+    retrieval in the wired path is a K-014 follow-up (needs a thread→channel read).
+    """
+    try:
+        responder.maybe_respond(
+            ctx,
+            thread_id=posted["threadId"],
+            msg_id=posted["msgId"],
+            text=posted["text"],
+            role=posted["role"],
+            channel_id=None,
+            mentions=posted.get("mentions", []),
+        )
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background responder failed (msgId=%s)", posted.get("msgId"))
+
+
+def build_router(
+    services: Services, *, responder: Any | None = None,
+    embed_worker: Any | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health")
@@ -62,12 +107,24 @@ def build_router(services: Services) -> APIRouter:
 
     @router.post("/threads/{thread_id}/messages", status_code=201)
     def post_message(
-        thread_id: str, body: PostMessageIn,
+        thread_id: str, body: PostMessageIn, background: BackgroundTasks,
         ctx: CallContext = Depends(get_context),
     ):
-        return services.post_message(
+        posted = services.post_message(
             ctx, thread_id=thread_id, text=body.text, mentions=body.mentions
         )
+        # Out-of-band, off the guarded write path (failure-isolated):
+        #  * embed EVERY posted message (DECISION 3) so it joins the corpus;
+        #  * fire the responder, which self-decides whether to answer.
+        # Both are scheduled AFTER the write returns — the message is readable
+        # first (DESIGN §9). Embedding and triggering are separate paths.
+        if embed_worker is not None:
+            background.add_task(
+                _safe_embed, embed_worker, ctx.ws, posted["msgId"], posted["text"]
+            )
+        if responder is not None:
+            background.add_task(_safe_respond, responder, ctx, posted)
+        return posted
 
     @router.get("/search")
     def search_messages(

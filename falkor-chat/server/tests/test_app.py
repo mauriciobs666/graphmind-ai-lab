@@ -132,6 +132,38 @@ def test_startup_fails_loudly_when_actor_id_collides_with_agent(conn):
     assert repo.resolve_member_kinds("test", ids=["qabot"]) == {"qabot": "Agent"}
 
 
+def test_default_app_wiring_is_gated_on_enable_agent(monkeypatch):
+    """The module-level `app` stays network-free by default: no responder/embedder
+    is wired unless FALKORCHAT_ENABLE_AGENT is on. Constructing the LM Studio
+    clients is itself offline (no request until a message posts), so the enabled
+    path is exercisable here with no live model — we only inspect what gets wired.
+    """
+    from falkorchat import app as app_mod
+
+    captured: dict = {}
+
+    def fake_create_app(services=None, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return object()  # sentinel: we only inspect the wiring, not the app
+
+    monkeypatch.setattr(app_mod, "create_app", fake_create_app)
+
+    # Disabled (default): the plain app, no responder / embed_worker passed.
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", False)
+    app_mod._build_default_app()
+    assert captured.get("responder") is None
+    assert captured.get("embed_worker") is None
+
+    # Enabled: both are wired and the responder targets the configured agent id.
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", True)
+    monkeypatch.setattr(app_mod.config, "AGENT_ID", "assistant")
+    app_mod._build_default_app()
+    assert captured["responder"] is not None
+    assert captured["embed_worker"] is not None
+    assert captured["responder"]._agent_id == "assistant"
+
+
 def test_web_ui_served_at_root_without_shadowing_rest(tmp_path, conn):
     web = tmp_path / "web"
     web.mkdir()

@@ -207,3 +207,116 @@ def test_read_thread_since_limit_paginates(conn):
     # no params keeps the full-read contract the web client relies on
     full = client.get(f"/threads/{tid}/messages").json()
     assert [m["text"] for m in full] == ["one", "two", "three"]
+
+
+# ── K-013 out-of-band wiring: every-message embedding + responder trigger ──────
+
+
+class RecordingWorker:
+    """Records embed_message calls scheduled on BackgroundTasks."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def embed_message(self, ws, *, msg_id, text):
+        self.calls.append((ws, msg_id, text))
+        return [0.0]
+
+
+class RecordingResponder:
+    """Records maybe_respond calls scheduled on BackgroundTasks."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def maybe_respond(self, ctx, *, thread_id, msg_id, text, role, channel_id, mentions):
+        self.calls.append(
+            {
+                "thread_id": thread_id, "msg_id": msg_id, "text": text,
+                "role": role, "channel_id": channel_id, "mentions": mentions,
+            }
+        )
+        return None
+
+
+@pytest.fixture()
+def wired(conn):
+    """App wired with a recording embed-worker + responder (BackgroundTasks paths)."""
+    services = Services(Repository(conn))
+    Repository(conn).ensure_user("test", user_id="u1", display_name="Alice")
+    Repository(conn).ensure_agent("test", agent_id="bot1", name="Bot")
+    worker = RecordingWorker()
+    responder = RecordingResponder()
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+        embed_worker=worker,
+        responder=responder,
+    )
+    return TestClient(app), worker, responder
+
+
+def test_every_posted_message_is_scheduled_for_embedding(wired):
+    client, worker, _ = wired
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.post(f"/threads/{tid}/messages", json={"text": "plain user message"})
+    assert r.status_code == 201
+    mid = r.json()["msgId"]
+
+    # BackgroundTasks run before the TestClient response returns
+    assert (("test", mid, "plain user message")) in worker.calls
+
+
+def test_posting_schedules_responder_with_posted_message(wired):
+    client, _, responder = wired
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.post(
+        f"/threads/{tid}/messages", json={"text": "hey @bot", "mentions": ["bot1"]}
+    )
+    assert r.status_code == 201
+    mid = r.json()["msgId"]
+
+    assert len(responder.calls) == 1
+    call = responder.calls[0]
+    assert call["msg_id"] == mid
+    assert call["thread_id"] == tid
+    assert call["text"] == "hey @bot"
+    assert call["role"] == "user"
+    assert call["mentions"] == ["bot1"]
+
+
+def test_plain_message_still_scheduled_but_responder_decides(wired):
+    # The API delegates the trigger decision to the responder (it owns agent_id):
+    # a non-mention post still schedules maybe_respond, which self-no-ops.
+    client, _, responder = wired
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    client.post(f"/threads/{tid}/messages", json={"text": "just chatting"})
+
+    assert len(responder.calls) == 1
+    assert responder.calls[0]["mentions"] == []
+
+
+def test_embedding_a_message_never_posts_a_response(wired):
+    # Embedding path and trigger path are separate: the worker is not the responder.
+    client, worker, responder = wired
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    client.post(f"/threads/{tid}/messages", json={"text": "hi"})
+    # one embed schedule, one responder schedule — neither crosses into the other
+    assert len(worker.calls) == 1
+    assert len(responder.calls) == 1
+
+
+def test_default_app_has_no_wiring_and_posts_normally(client):
+    # No embed_worker/responder configured → posting works, nothing scheduled.
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    r = client.post(f"/threads/{tid}/messages", json={"text": "hi"})
+    assert r.status_code == 201

@@ -2,20 +2,19 @@
 
 > Forward-looking backlog for the `falkor-chat` component.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-06 (K-011 + K-012 delivered ✅ → **milestone M1 — Chat core complete**;
-> baselines hold pytest 110 / query suite 126/126; append-path load-test + hot-read `GRAPH.PROFILE`
-> closeout folded into DESIGN §11.1/§11.2. Prior: K-010 ✅ (QA DEF-1/DEF-2 closed). **Road-to-green
-> planning pass (architect): K-011..K-018 sequence M1 and M2 to ✅. Scope confirmed by user
-> 2026-07-05 — "M2 green = functional GraphRAG"; auth + real-time deferred to the M2.5 hardening
-> track. K-019 doc-inconsistency sweep delivered ✅ — see history.md 2026-07-05.** See the milestone
-> map below.)
+> Last reviewed: 2026-07-08 (**milestone M2 — GraphRAG complete ✅** — K-008 + K-013 + K-014 + K-015
+> delivered and QA-accepted, see history.md 2026-07-08; baselines pytest 156 / query suite 149/149.
+> Served tenant `ws:acme` rebuilt at `EMBEDDING_DIM=1024`. Deferred to the M2.5 hardening track:
+> K-016 (auth) / K-017 (transport agent actor) / K-018 (real-time) + a channel-scoped retrieval read.
+> **Next milestone: M3 — Workflow engine.** Prior: K-011 + K-012 ✅ → M1 complete (2026-07-06);
+> K-010 ✅; K-019 doc sweep ✅ 2026-07-05.) See the milestone map below.
 
 ## Milestone-to-green map (architect plan, 2026-07-05)
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
-| **M2 — GraphRAG** | Functional GraphRAG loop: embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted | **K-008 (re-scoped) + K-013 + K-014 + K-015** |
+| **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → history.md) |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -65,15 +64,17 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 ## Active
 
-> **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (moved to
-> history.md). K-011: append-path load harness (~614 msg/s; p50/p90/p99 24.4/30.6/40.7 ms) +
-> hot-read `GRAPH.PROFILE` (all four index-backed) + per-workspace RAM budget → DESIGN §11.1/§11.2.
-> K-012: web request/response UX polish (incremental `?since=` polling, inline toast errors,
-> clickable search→thread). Baselines held pytest 110 / query suite 126/126.
+> **No active items on the M1/M2 path — milestone M2 is complete.** Next up is **M3 — Workflow
+> engine** (DESIGN §12.4; no kaizen items drafted yet) and, when prioritised, the deferred **M2.5
+> hardening track** (K-016/K-017/K-018 below).
 
-### — Milestone M2 (GraphRAG) —
+> **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (history.md).
+> **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
+> QA-accepted** (history.md). Baselines: pytest 156 / query suite 149/149.
 
-### K-008 — GraphRAG retrieval core (🔵 proposed — **fully unblocked** — M2 · RE-SCOPED 2026-07-05)
+### — Milestone M2 (GraphRAG) — ✅ DELIVERED (K-008/K-013/K-014/K-015 → history.md 2026-07-08) —
+
+### K-008 — GraphRAG retrieval core (✅ delivered 2026-07-08 → history.md — M2)
 
 > **Re-scope:** the old K-008 bundled the web client and the AI participant. Those are split out —
 > web request/response polish → **K-012** (M1), web agent-reply/`isMention` → **K-014** (M2), AI participant +
@@ -107,7 +108,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `MENTIONS→Entity` expansion is an `OPTIONAL MATCH` that no-ops cleanly, so M2 GraphRAG = vector-ANN + thread-scope
   without it. Entity extraction is parked (M3-adjacent, see Parking lot).
 
-### K-013 — AI `Agent` participant with `EMITTED` provenance (🔵 proposed — M2)
+### K-013 — AI `Agent` participant with `EMITTED` provenance (✅ delivered 2026-07-08 → history.md — M2)
 
 - **Owner:** **`graph-dba`** gate (author + verify the `EMITTED` provenance write + any read surfacing it; add
   `test_queries.sh` assertions) → **`tdd-engineer`** (the responder service). `cobb` consult only if later exposed as an MCP tool.
@@ -127,7 +128,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** unit — responder with mocked retrieval + mocked LLM (deterministic answer); contract — the
   `EMITTED` write in `test_queries.sh`; one live smoke behind a marker.
 
-### K-014 — Web M2: render agent replies + reader `isMention` highlighting (🔵 proposed — M2)
+### K-014 — Web M2: render agent replies + reader `isMention` highlighting (✅ delivered 2026-07-08 → history.md — M2)
 
 - **Owner:** `coder` (same web-JS-no-harness justification as K-012).
 - **Inputs/prereqs:** K-012 (polling base) + K-013 (agents actually posting). Uses the since-read `isMention` flag (§9,
@@ -142,7 +143,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Risks/RAM:** none (client-side).
 - **Test strategy:** manual smoke against a running server with the K-013 responder live.
 
-### K-015 — QA acceptance pass on M2 GraphRAG (🔵 proposed — M2 · the gate that flips M2 → ✅)
+### K-015 — QA acceptance pass on M2 GraphRAG (✅ delivered 2026-07-08 → history.md — M2 · PASS, zero defects)
 
 - **Owner:** `qa-engineer`.
 - **Inputs/prereqs:** K-008 + K-013 + K-014 landed.

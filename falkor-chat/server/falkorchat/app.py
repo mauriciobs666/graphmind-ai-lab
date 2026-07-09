@@ -73,6 +73,8 @@ def create_app(
     context_provider: Callable[[], CallContext] | None = None,
     mount_mcp: bool = True,
     web_dir: Path | None = None,
+    responder: object | None = None,
+    embed_worker: object | None = None,
 ) -> FastAPI:
     """Build the FastAPI app.
 
@@ -81,6 +83,22 @@ def create_app(
     session manager (run-once per instance) isn't started repeatedly.
     `web_dir` overrides where the static browser client is served from; it
     defaults to the repo-root `web/` and is skipped if that directory is absent.
+
+    `responder`/`embed_worker` (K-013) are **opt-in** out-of-band handlers wired
+    onto `BackgroundTasks` in the message-post path; both default to `None` so
+    building the default app stays network-free and existing tests are untouched.
+    A production wiring constructs them explicitly and passes them in, e.g.::
+
+        from falkorchat.embedding import EmbeddingWorker, LMStudioEmbedder
+        from falkorchat.llm import LMStudioLLM
+        from falkorchat.responder import AgentResponder
+
+        embedder = LMStudioEmbedder()
+        worker = EmbeddingWorker(repo, embedder)
+        responder = AgentResponder(
+            services, embedder, LMStudioLLM(), worker, agent_id="bot1"
+        )
+        app = create_app(services, responder=responder, embed_worker=worker)
     """
     if services is None:
         # DEF-2: a deferred connection handle — building the app must never
@@ -123,7 +141,9 @@ def create_app(
     if context_provider is not None:
         app.dependency_overrides[api.get_context] = context_provider
 
-    app.include_router(api.build_router(services))
+    app.include_router(
+        api.build_router(services, responder=responder, embed_worker=embed_worker)
+    )
     _register_error_handlers(app)
 
     if mount_mcp:
@@ -140,5 +160,39 @@ def create_app(
     return app
 
 
+def _build_default_app() -> FastAPI:
+    """Construct the module-level ASGI app for `uvicorn falkorchat.app:app`.
+
+    Gated on `config.ENABLE_AGENT` (env `FALKORCHAT_ENABLE_AGENT`): when off (the
+    default), returns the plain network-free app so importing this module and the
+    pytest baseline never touch LM Studio. When on, wires the live K-013 loop —
+    `LMStudioEmbedder` embeds EVERY posted message, and `AgentResponder` replies to
+    an `@mention` of `config.AGENT_ID` — sharing one `Repository`/`Services` with
+    the app. Constructing the LM Studio clients is itself offline; the first
+    network call happens when a posted message runs its background tasks.
+
+    The served app MUST run at the workspace's embedding dimension
+    (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`) or embeddings silently drop out
+    of the ANN index — `scripts/start_server.sh` sets it.
+    """
+    repo = Repository(db.LazyFalkorDB())
+    services = Services(repo)
+    if not config.ENABLE_AGENT:
+        return create_app(services)
+
+    # Imported lazily so the disabled path carries no import-time weight and the
+    # dependency surface for offline imports stays minimal.
+    from .embedding import EmbeddingWorker, LMStudioEmbedder
+    from .llm import LMStudioLLM
+    from .responder import AgentResponder
+
+    embedder = LMStudioEmbedder()
+    worker = EmbeddingWorker(repo, embedder)
+    responder = AgentResponder(
+        services, embedder, LMStudioLLM(), worker, agent_id=config.AGENT_ID
+    )
+    return create_app(services, responder=responder, embed_worker=worker)
+
+
 # Default ASGI app for `uvicorn falkorchat.app:app`.
-app = create_app()
+app = _build_default_app()

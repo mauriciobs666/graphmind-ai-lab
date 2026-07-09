@@ -47,6 +47,8 @@ class FakeRepo:
         # scripted §4 v2 status rows (popped first); default behavior otherwise
         self.first_status: list[MessageWriteStatus | None] = []
         self.subseq_status: list[MessageWriteStatus | None] = []
+        self.agent_first_status: list[MessageWriteStatus | None] = []
+        self.agent_subseq_status: list[MessageWriteStatus | None] = []
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -89,6 +91,19 @@ class FakeRepo:
             return self.subseq_status.pop(0)
         return OK
 
+    def post_agent_answer(self, ws, **kw):
+        self.calls.append(("post_agent_answer", kw))
+        if self.agent_subseq_status:
+            return self.agent_subseq_status.pop(0)
+        return OK
+
+    def post_agent_answer_first(self, ws, **kw):
+        self.calls.append(("post_agent_answer_first", kw))
+        if self.agent_first_status:
+            return self.agent_first_status.pop(0)
+        self.heads.add(kw["thread_id"])
+        return OK
+
     def get_cursor(self, ws, *, cursor_id):
         return self.cursors.get(cursor_id)
 
@@ -113,6 +128,10 @@ class FakeRepo:
         self.calls.append(("search_messages", query, limit))
         if isinstance(self.since_rows, Exception):
             raise self.since_rows
+        return self.since_rows
+
+    def hybrid_search(self, ws, *, q_vec, k, limit, channel_id=None, timeout=None):
+        self.calls.append(("hybrid_search", ws, tuple(q_vec), k, limit, channel_id, timeout))
         return self.since_rows
 
     def ensure_user(self, ws, *, user_id, display_name=None, email=None):
@@ -445,3 +464,119 @@ def test_search_messages_maps_syntax_error_to_service_error():
 
     with pytest.raises(InvalidSearchQueryError):
         svc.search_messages(CTX, query='hello"unbalanced')
+
+
+# ── hybrid_search (GraphRAG) ────────────────────────────────────────────────────
+
+
+def test_hybrid_search_applies_rag_timeout_constant():
+    from falkorchat.services import RAG_QUERY_TIMEOUT_MS
+
+    repo = FakeRepo()
+    repo.since_rows = [
+        {"msgId": "m1", "text": "cats", "role": "user", "score": 0.0, "relatedContext": []}
+    ]
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0, 0.0], k=10, limit=5)
+
+    assert hits == repo.since_rows
+    call = next(c for c in repo.calls if c[0] == "hybrid_search")
+    # (name, ws, q_vec, k, limit, channel_id, timeout)
+    assert call[1] == "test"
+    assert call[3] == 10 and call[4] == 5
+    assert call[5] is None
+    assert call[6] == RAG_QUERY_TIMEOUT_MS
+
+
+def test_hybrid_search_forwards_channel_scope():
+    repo = FakeRepo()
+    repo.since_rows = []
+    svc = make_service(repo)
+
+    svc.hybrid_search(CTX, q_vec=[1.0], k=3, limit=3, channel_id="c1")
+
+    call = next(c for c in repo.calls if c[0] == "hybrid_search")
+    assert call[5] == "c1"
+
+
+# ── post_agent_answer: agent-authored answer + EMITTED provenance (K-013) ───────
+
+CTX_AGENT = CallContext(ws="test", actor="bot1")
+
+
+def _agent_svc(repo, *, now=1000):
+    repo.threads.add("t1")
+    repo.heads.add("t1")  # realistic path: trigger message is the HEAD → subsequent
+    repo.agents.add("bot1")
+    return make_service(repo, now=now)
+
+
+def test_post_agent_answer_posts_as_agent_with_role_assistant_and_seeds():
+    repo = FakeRepo()
+    svc = _agent_svc(repo)
+
+    out = svc.post_agent_answer(
+        CTX_AGENT, thread_id="t1", text="the answer",
+        seeds=[("s1", 0.1), ("s2", 0.2)],
+    )
+
+    assert out["role"] == "assistant"       # derived from the Agent actor label
+    assert out["authorId"] == "bot1"
+    assert out["text"] == "the answer"
+    assert out["seeds"] == [("s1", 0.1), ("s2", 0.2)]
+    call = next(c for c in repo.calls if c[0] == "post_agent_answer")
+    assert call[1]["role"] == "assistant"
+    assert call[1]["author_id"] == "bot1"
+    assert call[1]["seeds"] == [("s1", 0.1), ("s2", 0.2)]
+
+
+def test_post_agent_answer_missing_thread_errors():
+    repo = FakeRepo()
+    repo.agents.add("bot1")
+    svc = make_service(repo)
+
+    with pytest.raises(ThreadNotFoundError):
+        svc.post_agent_answer(CTX_AGENT, thread_id="nope", text="hi", seeds=[])
+
+
+def test_post_agent_answer_unknown_actor_errors():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.heads.add("t1")
+    svc = make_service(repo)  # bot1 not registered
+
+    with pytest.raises(UnknownActorError):
+        svc.post_agent_answer(CTX_AGENT, thread_id="t1", text="hi", seeds=[])
+    assert not any(c[0].startswith("post_agent") for c in repo.calls)
+
+
+def test_post_agent_answer_validates_mentions():
+    repo = FakeRepo()
+    svc = _agent_svc(repo)
+
+    with pytest.raises(UnknownMemberError):
+        svc.post_agent_answer(
+            CTX_AGENT, thread_id="t1", text="hi", mentions=["ghost"], seeds=[]
+        )
+
+
+def test_post_agent_answer_retries_as_first_when_no_tail():
+    repo = FakeRepo()
+    svc = _agent_svc(repo)
+    repo.agent_subseq_status = [None]  # subsequent path: no TAIL → dispatch to first
+
+    out = svc.post_agent_answer(CTX_AGENT, thread_id="t1", text="hi", seeds=[])
+
+    assert out["role"] == "assistant"
+    names = [c[0] for c in repo.calls if c[0].startswith("post_agent")]
+    assert names == ["post_agent_answer", "post_agent_answer_first"]
+
+
+def test_post_agent_answer_dup_msg_is_idempotent_success():
+    repo = FakeRepo()
+    svc = _agent_svc(repo)
+    repo.agent_subseq_status = [DUP]
+
+    out = svc.post_agent_answer(CTX_AGENT, thread_id="t1", text="hi", seeds=[])
+    assert out["msgId"]  # returned cleanly, no raise

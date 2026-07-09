@@ -8,6 +8,7 @@
     :root {
       --bg: #0f1115; --panel: #171a21; --line: #262b36; --fg: #e6e9ef;
       --muted: #8b93a7; --accent: #6ea8fe; --mention: #3a2f14; --mention-line: #7a6320;
+      --agent: #46b98a;
     }
     * { box-sizing: border-box; }
     body {
@@ -40,9 +41,17 @@
     .new input { flex: 1; }
     .thread { display: flex; flex-direction: column; min-height: 0; }
     .messages { overflow-y: auto; flex: 1; padding: 12px 16px; }
-    .msg { padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; background: var(--panel); }
+    .msg { padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; background: var(--panel);
+      border-left: 2px solid transparent; }
     .msg.mention { background: var(--mention); border: 1px solid var(--mention-line); }
+    /* Agent-authored (role:"assistant") messages read distinctly (K-014). */
+    .msg.assistant { background: #12211b; border-left-color: var(--agent); }
+    .msg.assistant.mention { background: var(--mention); border: 1px solid var(--mention-line);
+      border-left: 2px solid var(--agent); }
     .msg .who { font-weight: 600; }
+    .msg .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      color: #0f1115; background: var(--agent); border-radius: 4px; padding: 1px 5px;
+      margin-left: 4px; vertical-align: middle; }
     .msg .meta { color: var(--muted); font-size: 12px; margin-left: 8px; }
     .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
     .composer input[type=text] { flex: 1; }

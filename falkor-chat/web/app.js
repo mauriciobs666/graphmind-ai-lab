@@ -131,21 +131,27 @@ function renderMessages(msgs) {
 }
 
 // Append one message, tracking it for de-dupe and advancing the high-water mark.
-// Returns false if the message was already rendered (poll re-delivery). Note the
-// `?since=` poll rows carry `authorId` but no `displayName`, so newly polled
-// messages show the id while the initial full read shows the display name — a
-// cosmetic gap left for the M2 web pass (K-014), not a server change here.
+// Returns false if the message was already rendered (poll re-delivery).
+//
+// K-014 rendering: agent-authored messages (`role:"assistant"`) are styled
+// distinctly with an "AI" badge; reader @-mentions light up via the since-read
+// `isMention` flag (only the poll path carries it — the initial §4 full read has
+// no flag, so highlighting comes alive on the next poll). Both the full read and
+// the since-read now carry `displayName` (QUERIES.md §4/§9), so polled rows show
+// the member name instead of the raw id.
 function appendMessage(m) {
   if (m.msgId && state.seen.has(m.msgId)) return false;
   const box = $("messages");
   const placeholder = box.querySelector(".empty");
   if (placeholder) placeholder.remove();
   const el = document.createElement("div");
-  // Reader @-mention highlighting is a since-read (§9 isMention flag) concern,
-  // deferred to the M2 web pass (K-014) — not wired here.
-  el.className = "msg";
+  const classes = ["msg"];
+  if (m.role === "assistant") classes.push("assistant");
+  if (m.isMention) classes.push("mention"); // reader @-mention (since-read flag)
+  el.className = classes.join(" ");
   const who = m.displayName || m.authorId || "unknown";
-  el.innerHTML = `<span class="who">${escapeHtml(who)}</span>
+  const badge = m.role === "assistant" ? ' <span class="badge">AI</span>' : "";
+  el.innerHTML = `<span class="who">${escapeHtml(who)}</span>${badge}
     <span class="meta">${fmtTime(m.createdAt)}</span>
     <div>${escapeHtml(m.text)}</div>`;
   box.appendChild(el);

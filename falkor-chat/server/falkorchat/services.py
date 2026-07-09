@@ -22,11 +22,20 @@ from redis.exceptions import ResponseError
 
 from .config import CallContext
 
-# `MemberIdCollisionError` is re-exported (redundant-alias idiom) as part of
-# the service error surface: the repository raises it (it owns the §2/§7
-# status-row contract); it lives there only to avoid an import cycle.
+# `MemberIdCollisionError`/`EmbeddingDimensionError` are re-exported
+# (redundant-alias idiom) as part of the service error surface: the repository
+# raises them (it owns the §2/§7 status-row contract and the §6 embedding-write
+# validation); they live there only to avoid an import cycle.
+from .repository import EmbeddingDimensionError as EmbeddingDimensionError
 from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
+
+# ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
+# The FalkorDB global TIMEOUT default is 1000 ms and writes ignore it; GraphRAG
+# reads (ANN seed + traversal) can legitimately run longer, so they pass a single
+# per-query client `timeout=` override here rather than ad-hoc per call. Uncapped
+# while the deployment keeps `TIMEOUT_MAX=0`.
+RAG_QUERY_TIMEOUT_MS = 5000
 
 # ── errors ─────────────────────────────────────────────────────────────────────
 
@@ -155,19 +164,14 @@ class Services:
 
     # ── messages ────────────────────────────────────────────────────────────────
 
-    def post_message(
-        self, ctx: CallContext, *, thread_id: str, text: str,
-        mentions: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Post a message into an existing thread.
+    def _validate_and_derive_role(
+        self, ctx: CallContext, *, thread_id: str, mentions: list[str] | None,
+    ) -> tuple[list[str], str]:
+        """Shared §4 pre-write validation: thread exists, actor + mentions known.
 
-        Validates the actor and mentions, derives `role` from the actor's node
-        label (`User → user`, `Agent → assistant` — agents can author), then
-        dispatches on the §4 v2 status row (QUERIES.md §4 contract):
-        `dupMsg` = idempotent retry success; `hadHead` = lost the first-post
-        race → re-dispatch as subsequent; subsequent with no TAIL → `None` →
-        re-dispatch as first. The loop bound is a tripwire — ping-pong is
-        impossible by contract (a headed thread always has a TAIL).
+        Returns `(wanted_mentions, role)` — `role` derived from the actor's node
+        label (`User → user`, `Agent → assistant`; agents author first-class).
+        Raises the same errors as the write paths would silently no-op on.
         """
         if not self._repo.thread_exists(ctx.ws, thread_id=thread_id):
             raise ThreadNotFoundError(thread_id)
@@ -184,40 +188,105 @@ class Services:
         unknown = [m for m in wanted if kinds.get(m) is None]
         if unknown:
             raise UnknownMemberError(unknown)
+        return wanted, role
 
-        msg_id, now = self._id(), self._next_ts()
+    def _dispatch_write(
+        self, ctx: CallContext, *, thread_id: str, msg_id: str,
+        first_write: Callable[..., Any], subsequent_write: Callable[..., Any],
+        write_kwargs: dict[str, Any],
+    ) -> None:
+        """Run the §4 v2 first/subsequent dispatch loop (QUERIES.md §4 contract).
+
+        Shared by `post_message` and `post_agent_answer` — the only difference is
+        which write-path pair is passed in (plain §4 vs the §10 EMITTED-carrying
+        variants) and the extra `write_kwargs` (e.g. `seeds`). Dispatch:
+        `dupMsg` = idempotent retry success; `hadHead` = lost the first-post race
+        → re-dispatch as subsequent; subsequent with no TAIL → `None` → re-dispatch
+        as first. The loop bound is a tripwire — ping-pong is impossible by
+        contract (a headed thread always has a TAIL).
+        """
         use_first = not self._repo.thread_has_head(ctx.ws, thread_id=thread_id)
         for _attempt in range(4):
-            write = (
-                self._repo.post_first_message
-                if use_first
-                else self._repo.post_subsequent_message
-            )
-            st = write(
-                ctx.ws, thread_id=thread_id, msg_id=msg_id, author_id=ctx.actor,
-                text=text, role=role, created_at=now, mentions=wanted,
-            )
+            write = first_write if use_first else subsequent_write
+            st = write(ctx.ws, thread_id=thread_id, msg_id=msg_id, **write_kwargs)
             if st is None:
                 if use_first:                    # thread anchor vanished (TOCTOU)
                     raise ThreadNotFoundError(thread_id)
                 use_first = True                 # no TAIL yet — retry as first-post
                 continue
             if st.written or st.dup_msg:         # dup_msg = idempotent success (OQ2)
-                break
+                return
             if not st.author_found:              # belt-and-suspenders vs the pre-check
                 raise UnknownActorError(ctx.actor)
             if st.had_head:                      # lost the first-post race
                 use_first = False
                 continue
             raise RuntimeError(f"unexpected write status {st!r} (thread={thread_id!r})")
-        else:
-            raise RuntimeError(
-                "message write dispatch did not converge "
-                f"(thread={thread_id!r}, msg={msg_id!r})"
-            )
+        raise RuntimeError(
+            "message write dispatch did not converge "
+            f"(thread={thread_id!r}, msg={msg_id!r})"
+        )
+
+    def post_message(
+        self, ctx: CallContext, *, thread_id: str, text: str,
+        mentions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Post a message into an existing thread.
+
+        Validates the actor and mentions, derives `role` from the actor's node
+        label (`User → user`, `Agent → assistant` — agents can author), then
+        dispatches on the §4 v2 status row via `_dispatch_write`.
+        """
+        wanted, role = self._validate_and_derive_role(
+            ctx, thread_id=thread_id, mentions=mentions
+        )
+        msg_id, now = self._id(), self._next_ts()
+        self._dispatch_write(
+            ctx, thread_id=thread_id, msg_id=msg_id,
+            first_write=self._repo.post_first_message,
+            subsequent_write=self._repo.post_subsequent_message,
+            write_kwargs={
+                "author_id": ctx.actor, "text": text, "role": role,
+                "created_at": now, "mentions": wanted,
+            },
+        )
         return {
             "msgId": msg_id, "threadId": thread_id, "authorId": ctx.actor,
             "text": text, "role": role, "createdAt": now, "mentions": wanted,
+        }
+
+    def post_agent_answer(
+        self, ctx: CallContext, *, thread_id: str, text: str,
+        mentions: list[str] | None = None,
+        seeds: list[tuple[str, float]] | None = None,
+    ) -> dict[str, Any]:
+        """Post an agent-authored answer with §10 `EMITTED` provenance (K-013).
+
+        `ctx.actor` is the answering Agent — the responder swaps the actor to the
+        agent id so `role` derives to `assistant` here exactly like `post_message`
+        (never trusted from the caller). Same §4 dispatch (`_dispatch_write`) over
+        the §10.1 EMITTED-carrying write paths; `seeds` (`[(msgId, score)]` in rank
+        order) ride inside the single GRAPH.QUERY (atomicity). `seeds=[]` is a
+        verified no-op — the message still commits.
+        """
+        wanted, role = self._validate_and_derive_role(
+            ctx, thread_id=thread_id, mentions=mentions
+        )
+        ordered_seeds = list(seeds or [])
+        msg_id, now = self._id(), self._next_ts()
+        self._dispatch_write(
+            ctx, thread_id=thread_id, msg_id=msg_id,
+            first_write=self._repo.post_agent_answer_first,
+            subsequent_write=self._repo.post_agent_answer,
+            write_kwargs={
+                "author_id": ctx.actor, "text": text, "role": role,
+                "created_at": now, "mentions": wanted, "seeds": ordered_seeds,
+            },
+        )
+        return {
+            "msgId": msg_id, "threadId": thread_id, "authorId": ctx.actor,
+            "text": text, "role": role, "createdAt": now, "mentions": wanted,
+            "seeds": ordered_seeds,
         }
 
     def read_messages(
@@ -283,6 +352,23 @@ class Services:
             return self._repo.search_messages(ctx.ws, query=query, limit=limit)
         except ResponseError as exc:
             raise InvalidSearchQueryError(str(exc)) from exc
+
+    def hybrid_search(
+        self, ctx: CallContext, *, q_vec: list[float], k: int = 10,
+        limit: int = 10, channel_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """GraphRAG hybrid retrieval (QUERIES.md §6): vector ANN + scope traversal.
+
+        Passes the single service-layer `RAG_QUERY_TIMEOUT_MS` override on the RO
+        query (DESIGN §10). Rows come back already ordered by cosine distance ASC
+        (most similar first) — not re-sorted here. `score` is a distance, not a
+        similarity; a caller that wants similarity derives `1 - score` client-side.
+        `relatedContext` is `[]` in M2 (Entity layer dormant) and passed through.
+        """
+        return self._repo.hybrid_search(
+            ctx.ws, q_vec=q_vec, k=k, limit=limit, channel_id=channel_id,
+            timeout=RAG_QUERY_TIMEOUT_MS,
+        )
 
     # ── reads (thin passthroughs) ───────────────────────────────────────────────
 

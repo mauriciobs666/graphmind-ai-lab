@@ -540,7 +540,8 @@ OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me)
 WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
-       labels(author) AS authorType, isMention, m.threadId AS threadId
+       labels(author) AS authorType, isMention, m.threadId AS threadId,
+       author.displayName AS displayName
 ORDER BY m.createdAt, m.msgId
 LIMIT $limit
 ```
@@ -563,14 +564,17 @@ OPTIONAL MATCH (m)-[:MENTIONS_MEMBER]->(me)
 WITH m, author, count(me) > 0 AS isMention
 RETURN m.msgId, m.text, m.role, m.createdAt,
        coalesce(author.userId, author.agentId) AS authorId,
-       labels(author) AS authorType, isMention, m.threadId AS threadId
+       labels(author) AS authorType, isMention, m.threadId AS threadId,
+       author.displayName AS displayName
 ORDER BY m.createdAt, m.msgId
 LIMIT $limit
 ```
 *`GRAPH.PROFILE`-confirmed: **both** predicate forms plan as a bare
 `Node By Index Scan | (m:Message)` on `Message.createdAt` with no residual `Filter` op (the OR
 folds into the scan). `m.threadId` rides along as navigation metadata — `null` on pre-K-007 rows
-until the §4.x backfill runs; clients must tolerate null. **TIMEOUT risk:** the live default is
+until the §4.x backfill runs; clients must tolerate null. `author.displayName` rides along too
+(K-014): the polling web client renders it in place of the raw `authorId` and tolerates `null`
+(members seeded without a display name). Both since-reads carry the same column set. **TIMEOUT risk:** the live default is
 1000 ms; on a large workspace keep `$limit` modest and consider a bounded `$since` window. No
 room-wide cursor in M1 — this variant requires an explicit `$since` (service defaults it to
 `0`/epoch, plain `>`).*
@@ -615,3 +619,118 @@ RETURN rc.lastReadAt, rc.lastReadMsgId
 `(lastReadAt, lastReadMsgId)` pair. When no cursor exists, this returns no row and the service
 uses the epoch base `(0, '')`. A pre-K-007 cursor has no `lastReadMsgId` — the pair reads back
 `(ts, null)` and the service maps it to `''`.*
+
+---
+
+## 10. Agent answer provenance — `EMITTED` (K-013)
+
+The server-side AI responder posts its answer **as the `Agent`** (role derived `assistant`, K-007)
+via the §4 write path, and records the retrieval seeds (§6 hybrid search) that grounded the answer
+as **`(answer:Message)-[:EMITTED {score, rank}]->(seed:Message)`** provenance edges.
+
+**Edge shape (locked, live-verified).**
+
+- **Direction / endpoints:** `(:Message)-[:EMITTED]->(:Message)`, answer → seed. The answer is the
+  subject; each cited seed is the object. Same convention as `REPLY_TO` (subject message points to
+  the referenced message). The hot query — "given an agent answer, what did it cite?" — anchors on
+  the answer's `msgId` (`Node By Index Scan`) and expands `EMITTED` outward to ≤k seeds; the reverse
+  ("which answers cited this seed?") is the same edge type traversed inbound.
+- **Properties:** `score` (the §6 cosine distance of that seed at answer time; 0 = identical) and
+  `rank` (0-based position in the ranked seed list). Both are point-in-time snapshots — retrieval is
+  non-deterministic as the graph grows, so the score/rank at answer time is the provenance value.
+- **No index / no constraint.** Endpoints are `Message` nodes already carrying the `msgId` range
+  index + uniqueness constraint; the provenance read anchors there. FalkorDB traverses the typed
+  `EMITTED` edge from the anchored answer via its adjacency matrix — no relationship-property index
+  is needed. Uniqueness is guaranteed structurally (see idempotency below), so no relationship
+  constraint (which would also need a supporting index) is created.
+- **`EMITTED` is a third, distinct edge type.** `MENTIONS_MEMBER`→`User`/`Agent` (participants, §4)
+  and `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) are unrelated — do not conflate any of them.
+
+**Atomicity (locked):** the `EMITTED` edges are written **inside the same `GRAPH.QUERY` as the
+answer's §4 write**, inside the guarded `FOREACH`, exactly like `MENTIONS_MEMBER`. This makes
+"message + provenance" one all-or-nothing unit gated by the same status guard: a `dupMsg` retry
+replay (`ok=false`) skips the whole `FOREACH`, so provenance is written **exactly once** — no torn
+"answer with no provenance" state, no separate idempotency mechanism. (Contrast: a follow-up
+`link_emitted` write would double-write on retry unless separately made idempotent, and could tear
+on a crash between the two queries.)
+
+### 10.1 Post an agent answer with provenance (subsequent path — self-guarding)
+
+*The realistic path: the agent answers into a thread that already has the triggering message, so a
+HEAD exists and the answer is always a subsequent-path write. The first-path variant is analogous —
+same seed block folded into the §4 first-message write; verified.*
+
+```cypher
+// $seedIds = ranked list of seed msgIds from §6 hybrid retrieval (order = rank)
+// $scoreBy = { <seedMsgId>: <cosine distance> }  — per-seed ANN score at answer time
+// $rankBy  = { <seedMsgId>: <0-based rank> }
+// $mentions, $authorId (= the agentId), $msgId, $text, $role='assistant', etc. as in §4
+MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
+OPTIONAL MATCH (dup:Message {msgId: $msgId})
+OPTIONAL MATCH (ua:User  {userId:  $authorId})
+OPTIONAL MATCH (aa:Agent {agentId: $authorId})
+WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author
+UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END) AS mid
+OPTIONAL MATCH (mu:User  {userId:  mid})
+OPTIONAL MATCH (ma:Agent {agentId: mid})
+WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
+UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid
+OPTIONAL MATCH (s:Message {msgId: sid})
+WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds
+WITH t, tailRel, prev, dup, author, mems, seeds,
+     (dup IS NULL AND author IS NOT NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (m:Message {msgId: $msgId, text: $text, role: $role,
+                     createdAt: $createdAt, threadId: $threadId})
+  CREATE (prev)-[:NEXT]->(m)
+  DELETE tailRel
+  CREATE (t)-[:TAIL]->(m)
+  CREATE (m)-[:POSTED_BY]->(author)
+  SET t.updatedAt = $createdAt
+  FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
+  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: $scoreBy[seed.msgId],
+                                                 rank:  $rankBy[seed.msgId]}]->(seed))
+)
+RETURN ok                 AS written,
+       false              AS hadHead,
+       dup  IS NOT NULL   AS dupMsg,
+       author IS NOT NULL AS authorFound
+```
+
+*This is the §4 subsequent write with **one added block**: a second guarded `UNWIND` resolves the
+seed msgIds to bound `Message` nodes (`collect(DISTINCT s)` — dedups, drops unknown seeds like the
+mention block), and a nested `FOREACH` creates the `EMITTED` edges inside the guard. Status-row
+contract is identical to §4 (zero rows = no TAIL → retry as first-path; `dupMsg=true` = idempotent
+replay). `$seedIds = []` is a **verified no-op** — the `CASE` guard keeps the write itself alive
+(a bare `UNWIND []` would collapse the row stream before the `FOREACH`), so this same query serves
+non-provenance writes too.*
+
+**Live-verified build quirks that shape this query:**
+- **A map-projection cannot be a `CREATE` endpoint** (`CREATE (m)-[:EMITTED]->(rec.node)` errors:
+  *"Invalid input '.'"*). The endpoint must be a **bound node variable**, so seeds are collected as
+  nodes (`collect(DISTINCT s)`) and per-edge props are pulled from **map parameters keyed by the
+  node's own `msgId`** (`$scoreBy[seed.msgId]`, `$rankBy[seed.msgId]`) — dynamic map-param
+  indexing by a node property is verified working on this build.
+- **Two sequential guarded `UNWIND`s** (mentions, then seeds) each collapse via `collect` before the
+  next expands — no row multiplication. Verified.
+
+### 10.2 Read an answer's provenance (forward — the hot path)
+
+```cypher
+MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s:Message)
+RETURN s.msgId, s.text, s.role, e.score, e.rank
+ORDER BY e.rank
+```
+*`GRAPH.PROFILE`: `Node By Index Scan | (a:Message)` → `Conditional Traverse (a)-[:EMITTED]->(s)` —
+index-anchored, no label scan. Ordered by `rank` (ascending = most influential seed first). Route
+via `GRAPH.RO_QUERY`.*
+
+### 10.3 Read which answers cited a seed (reverse)
+
+```cypher
+MATCH (a:Message)-[e:EMITTED]->(s:Message {msgId: $seedMsgId})
+RETURN a.msgId, a.role, a.createdAt, e.score, e.rank
+ORDER BY a.createdAt DESC
+```
+*Anchored on the seed's `msgId` index; traverses `EMITTED` inbound. Answers what a given message
+grounded — useful for "impact"/attribution views. Route via `GRAPH.RO_QUERY`.*

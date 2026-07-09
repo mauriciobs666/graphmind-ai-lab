@@ -312,18 +312,25 @@ out=$(gq "$WS" "CALL db.idx.fulltext.queryNodes('Message', 'welcome') YIELD node
 assert_contains "fulltext rows carry threadId" "th1" "$out"
 
 # ── §6: GraphRAG vector retrieval ────────────────────────────────────────────
+#
+# Exercised here at the isolated-suite dim (EMBEDDING_DIM=4). The dim-1024
+# verification (real embedding size, wrong-dim quirk, RAM line) lives in the
+# graph-dba deliverable docs/plans/m2-graphrag.md — do not re-encode 1024 here.
+# Score is cosine distance: 0 = identical, ASC = most similar first (DESIGN §1.3).
+# There is NO Entity pipeline in M2 — the §6 Entity expansion must no-op cleanly.
 
 echo ""
 echo "▶ §6 GraphRAG — set embeddings and query"
 
-# set dummy 4-dim embeddings on messages
-gq "$WS" "MATCH (m:Message {msgId:'m1'}) SET m.embedding = vecf32([1.0, 0.0, 0.0, 0.0])" > /dev/null
+# §6 set-embedding write path (SET m.embedding = vecf32($embedding)) — must commit
+out=$(gq "$WS" "MATCH (m:Message {msgId:'m1'}) SET m.embedding = vecf32([1.0, 0.0, 0.0, 0.0]) RETURN m.msgId")
+assert_contains "§6 set-embedding write commits (Properties set)" "Properties set" "$out"
 gq "$WS" "MATCH (m:Message {msgId:'m2'}) SET m.embedding = vecf32([0.9, 0.1, 0.0, 0.0])" > /dev/null
 gq "$WS" "MATCH (m:Message {msgId:'m3'}) SET m.embedding = vecf32([0.0, 0.0, 1.0, 0.0])" > /dev/null
 gq "$WS" "MATCH (m:Message {msgId:'m4'}) SET m.embedding = vecf32([0.0, 0.0, 0.9, 0.1])" > /dev/null
 
-# query nearest to [1.0, 0.0, 0.0, 0.0] → should rank m1 first (score 0), m2 close
-out=$(gq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score RETURN seed.msgId, score ORDER BY score ASC")
+# ANN retrieval (route via RO_QUERY): nearest to [1,0,0,0] → m1 first (score 0), m2 close
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score RETURN seed.msgId, score ORDER BY score ASC")
 assert_contains "vector query: m1 in top-2" "m1" "$out"
 assert_contains "vector query: m2 in top-2" "m2" "$out"
 assert_not_contains "vector query: m3 not in top-2 (different direction)" "m3" "$out"
@@ -338,10 +345,40 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# hybrid retrieval: vector seed + channel scope traversal
-out=$(gq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, seed.text, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
+# ranking is strictly ASC by distance: m1 (identical) sorts before m2 (near)
+m1_line=$(echo "$out" | grep -n "m1" | head -1 | cut -d: -f1)
+m2_line=$(echo "$out" | grep -n "m2" | head -1 | cut -d: -f1)
+if [ -n "$m1_line" ] && [ -n "$m2_line" ] && [ "$m1_line" -lt "$m2_line" ]; then
+  echo "  ✓ §6 ANN ranks by cosine distance ASC (m1 identical before m2 near)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §6 ANN ranking wrong (m1 line ${m1_line}, m2 line ${m2_line})"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# full §6 hybrid retrieval: vector seed + thread/channel scope + Entity expansion
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, seed.text, seed.role, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
 assert_contains "hybrid retrieval: returns results" "m1" "$out"
+assert_contains "§6 hybrid returns seed text" "Hello thread" "$out"
 assert_not_contains "hybrid retrieval: no error" "ERR" "$out"
+
+# Entity expansion no-ops cleanly: there is no Entity pipeline in M2, so
+# relatedContext must be the empty list [] (not an error, not missing).
+assert_contains "§6 Entity expansion no-ops (empty relatedContext [])" "[]" "$out"
+out=$(rq "$WS" "MATCH (e:Entity) RETURN count(e) AS entities")
+assert_contains "§6 Entity graph is empty (no entity pipeline in M2)" "0" "$out"
+
+# PROFILE: the ANN retrieval must anchor on the vector index (ProcedureCall),
+# never a whole-graph scan of Message.
+prof=$(gp "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed) MATCH (c:Channel {channelId:'ch1'})-[:HAS_THREAD]->(t) OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, score ORDER BY score ASC LIMIT 5")
+assert_contains     "§6 ANN retrieval uses the vector index (ProcedureCall)" "ProcedureCall" "$prof"
+assert_not_contains "§6 ANN retrieval has no All Node Scan"                  "All Node Scan" "$prof"
+
+# workspace-wide variant (channel MATCH omitted) still retrieves via the index
+out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
+assert_contains     "§6 workspace-wide variant returns m1" "m1" "$out"
+assert_not_contains "§6 workspace-wide variant no error"   "ERR" "$out"
 
 # ── §7: agents ───────────────────────────────────────────────────────────────
 
@@ -570,6 +607,65 @@ assert_contains "composite constraint blocks duplicate key+version" "unique cons
 # different version is allowed
 out=$(gq "$REF" "CREATE (:WorkflowDef {key:'onboard', version:'2', name:'Onboarding v2', kind:'process'})" 2>&1)
 assert_contains "different version allowed" "Nodes created: 1" "$out"
+
+# ── §EMITTED: agent answer provenance (K-013) ────────────────────────────────
+#
+# The AI responder posts its answer as the Agent (role derived = assistant) via the
+# §4 subsequent write path, and in the SAME GRAPH.QUERY creates
+# (answer)-[:EMITTED {score, rank}]->(seed) provenance edges to the retrieval seeds.
+# EMITTED rides inside the guarded FOREACH exactly like MENTIONS_MEMBER: same
+# empty-UNWIND CASE guard, so $seedIds=[] is a true no-op and a dupMsg replay writes
+# provenance exactly once. Per-edge score/rank come from map params keyed by the
+# seed's msgId — a map-projection cannot be a CREATE endpoint on this build, so the
+# seed must be a bound node var (collect(DISTINCT s)); the props are looked up via
+# $scoreBy[seed.msgId] / $rankBy[seed.msgId]. Canonical bodies: QUERIES.md §4/§10.
+
+echo ""
+echo "▶ §EMITTED agent answer provenance (K-013)"
+
+# agent bot1 answers into th1 (subsequent path; TAIL=m5), mentions u1,
+# cites m1,m2 as provenance (+ unknown 'nope' which must be skipped)
+out=$(gq "$WS" "CYPHER mentions=['u1'] seedIds=['m1','m2','nope'] scoreBy={m1:0.0,m2:0.006} rankBy={m1:0,m2:1} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag1'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag1', text:'grounded answer', role:'assistant', createdAt:6000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok)+' auth='+toString(author IS NOT NULL) AS status")
+assert_contains "§EMITTED agent answer ag1 commits (agent-authored)" "w=true auth=true" "$out"
+
+# K-007 invariant: agent answer reads role assistant, author resolves to an Agent
+out=$(rq "$WS" "MATCH (m:Message {msgId:'ag1'})-[:POSTED_BY]->(a) RETURN m.role, labels(a) AS authorType")
+assert_contains "§EMITTED ag1 role derived assistant (K-007 invariant)" "assistant" "$out"
+assert_contains "§EMITTED ag1 author resolves to Agent" "Agent" "$out"
+
+# provenance read: given the answer, what did it cite (ordered by rank)?
+out=$(rq "$WS" "MATCH (a:Message {msgId:'ag1'})-[e:EMITTED]->(s:Message) RETURN s.msgId, s.text, e.score, e.rank ORDER BY e.rank")
+assert_contains "§EMITTED provenance read cites m1" "m1" "$out"
+assert_contains "§EMITTED provenance read cites m2" "m2" "$out"
+
+# unknown seed 'nope' skipped → exactly 2 provenance edges (collect drops the null)
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED ag1 has exactly 2 provenance edges (unknown seed skipped)" "2" "$out"
+
+# each EMITTED edge carries score + rank; the top seed m1 is rank 0
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->(:Message {msgId:'m1'}) RETURN 'rank='+toString(e.rank)+' hasScore='+toString(e.score IS NOT NULL) AS p")
+assert_contains "§EMITTED edge carries rank + score props" "rank=0 hasScore=true" "$out"
+
+# reverse read: given a seed, which answers cited it?
+out=$(rq "$WS" "MATCH (a:Message)-[e:EMITTED]->(:Message {msgId:'m1'}) RETURN a.msgId, e.rank")
+assert_contains "§EMITTED reverse read: m1 cited by ag1" "ag1" "$out"
+
+# empty seedIds=[] is a true no-op — a non-answer message still commits with ZERO
+# EMITTED edges (the CASE guard keeps the write itself alive)
+out=$(gq "$WS" "CYPHER mentions=[] seedIds=[] scoreBy={} rankBy={} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag2'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag2', text:'no provenance msg', role:'assistant', createdAt:6001, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6001 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok) AS status")
+assert_contains "§EMITTED empty seedIds=[] still commits the write" "w=true" "$out"
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag2'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED empty seedIds=[] creates zero provenance edges" "0" "$out"
+
+# dupMsg replay of ag1 → whole write no-ops; provenance stays exactly 2 (exactly-once)
+out=$(gq "$WS" "CYPHER mentions=['u1'] seedIds=['m1','m2'] scoreBy={m1:0.0,m2:0.006} rankBy={m1:0,m2:1} MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'ag1'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems UNWIND (CASE WHEN \$seedIds = [] THEN [null] ELSE \$seedIds END) AS sid OPTIONAL MATCH (s:Message {msgId: sid}) WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds WITH t, tailRel, prev, dup, author, mems, seeds, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'ag1', text:'grounded answer', role:'assistant', createdAt:6000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=6000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: \$scoreBy[seed.msgId], rank: \$rankBy[seed.msgId]}]->(seed))) RETURN 'w='+toString(ok)+' dup='+toString(dup IS NOT NULL) AS status")
+assert_contains "§EMITTED dupMsg replay no-ops (idempotent)" "w=false dup=true" "$out"
+out=$(rq "$WS" "MATCH (:Message {msgId:'ag1'})-[e:EMITTED]->() RETURN count(e) AS n")
+assert_contains "§EMITTED provenance written exactly once (still 2 after replay)" "2" "$out"
+
+# provenance read anchors on the Message.msgId index (no label scan)
+prof=$(gp "$WS" "MATCH (a:Message {msgId:'ag1'})-[e:EMITTED]->(s:Message) RETURN s.msgId, e.score, e.rank ORDER BY e.rank")
+assert_index_scan "§EMITTED provenance read uses Message.msgId index" "$prof"
 
 # ── teardown ─────────────────────────────────────────────────────────────────
 

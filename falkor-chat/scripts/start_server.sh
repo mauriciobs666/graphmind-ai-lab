@@ -4,12 +4,20 @@ set -euo pipefail
 # One-shot script: ensure FalkorDB is up, bootstrap schema, start the M1 server.
 #
 # Override defaults with env vars:
-#   FALKORCHAT_WS_ID   (default: acme)
-#   FALKORCHAT_USER_ID (default: u1)
-#   FALKORDB_PORT      (default: 6379)
-#   FALKORDB_HOST      (default: 127.0.0.1)
-#   EMBEDDING_DIM      (default: 1536)
-#   UVICORN_ARGS       (default: --reload)
+#   FALKORCHAT_WS_ID       (default: acme)
+#   FALKORCHAT_USER_ID     (default: u1)
+#   FALKORDB_PORT          (default: 6379)
+#   FALKORDB_HOST          (default: 127.0.0.1)
+#   EMBEDDING_DIM          (default: 1024)   — MUST match the workspace's vector
+#                          index; ws:acme is bootstrapped at 1024 (Qwen3-Embedding).
+#                          Exported to the app as FALKORCHAT_EMBEDDING_DIM so a
+#                          wrong-dim embedding can't silently drop out of ANN.
+#   FALKORCHAT_ENABLE_AGENT(default: 1)      — wire the live LM-Studio embedder +
+#                          LLM + AI responder (@mention the agent to get a reply).
+#                          Set 0 to serve the UI/REST without the AI loop.
+#   FALKORCHAT_AGENT_ID    (default: assistant)
+#   FALKORCHAT_AGENT_NAME  (default: Assistant)
+#   UVICORN_ARGS           (default: --reload)
 #
 # Example (custom workspace + headless FalkorDB):
 #   FALKORCHAT_WS_ID=myws ./scripts/start_server.sh
@@ -21,14 +29,17 @@ Usage: start_server.sh [-h|--help]
 Starts everything in one terminal:
   1. Starts FalkorDB (detached) if not already running
   2. Creates/updates Python venv in server/.venv
-  3. Bootstraps schema for the configured workspace
-  4. Starts uvicorn (reload by default)
+  3. Bootstraps schema for the configured workspace (EMBEDDING_DIM)
+  4. Seeds the AI agent + a demo channel/thread (idempotent)
+  5. Starts uvicorn with the AI responder enabled (reload by default)
 
 Stop with Ctrl+C; FalkorDB keeps running in the background.
 Stop FalkorDB: docker stop falkordb-dev
 
-Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID,
-               FALKORDB_HOST, FALKORDB_PORT, EMBEDDING_DIM, UVICORN_ARGS
+Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID, FALKORDB_HOST,
+               FALKORDB_PORT, EMBEDDING_DIM (default 1024), UVICORN_ARGS,
+               FALKORCHAT_ENABLE_AGENT (default 1), FALKORCHAT_AGENT_ID,
+               FALKORCHAT_AGENT_NAME
 EOF
 }
 
@@ -45,7 +56,10 @@ FALKORCHAT_WS_ID="${FALKORCHAT_WS_ID:-acme}"
 FALKORCHAT_USER_ID="${FALKORCHAT_USER_ID:-u1}"
 FALKORDB_HOST="${FALKORDB_HOST:-127.0.0.1}"
 FALKORDB_PORT="${FALKORDB_PORT:-6379}"
-EMBEDDING_DIM="${EMBEDDING_DIM:-1536}"
+EMBEDDING_DIM="${EMBEDDING_DIM:-1024}"
+FALKORCHAT_ENABLE_AGENT="${FALKORCHAT_ENABLE_AGENT:-1}"
+FALKORCHAT_AGENT_ID="${FALKORCHAT_AGENT_ID:-assistant}"
+FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
 UVICORN_ARGS="${UVICORN_ARGS:---reload}"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -80,15 +94,27 @@ fi
 "$VENV_DIR/bin/pip" install -q -e "$SERVER_DIR[dev]"
 
 # ── 3. Bootstrap schema ───────────────────────────────────────────────────────
-echo "[3/4] Bootstrapping schema for workspace '$FALKORCHAT_WS_ID'..."
+echo "[3/5] Bootstrapping schema for workspace '$FALKORCHAT_WS_ID' (dim $EMBEDDING_DIM)..."
 EMBEDDING_DIM="$EMBEDDING_DIM" "$REPO_DIR/scripts/bootstrap_schema.sh" "$FALKORCHAT_WS_ID"
 
-# ── 4. Start uvicorn ──────────────────────────────────────────────────────────
-echo "[4/4] Starting uvicorn on http://localhost:8000..."
-echo "      Workspace: $FALKORCHAT_WS_ID  |  User: $FALKORCHAT_USER_ID"
+# ── 4. Seed the agent + demo channel/thread ──────────────────────────────────
+echo "[4/5] Seeding agent '$FALKORCHAT_AGENT_ID' + demo channel/thread..."
+FALKORCHAT_WS_ID="$FALKORCHAT_WS_ID" FALKORCHAT_USER_ID="$FALKORCHAT_USER_ID" \
+FALKORCHAT_AGENT_ID="$FALKORCHAT_AGENT_ID" FALKORCHAT_AGENT_NAME="$FALKORCHAT_AGENT_NAME" \
+FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
+  "$REPO_DIR/scripts/seed_demo.sh" "$FALKORCHAT_WS_ID"
+
+# ── 5. Start uvicorn ──────────────────────────────────────────────────────────
+echo "[5/5] Starting uvicorn on http://localhost:8000..."
+echo "      Workspace: $FALKORCHAT_WS_ID  |  User: $FALKORCHAT_USER_ID  |  Dim: $EMBEDDING_DIM"
+echo "      AI agent:  enabled=$FALKORCHAT_ENABLE_AGENT  id=$FALKORCHAT_AGENT_ID (@mention to trigger)"
 echo "      MCP endpoint: http://localhost:8000/mcp"
 echo "      Web UI:       http://localhost:8000/"
 echo "      Stop with Ctrl+C (FalkorDB keeps running in background)"
 echo ""
+# FALKORCHAT_EMBEDDING_DIM MUST match the workspace's vector index (a wrong-dim
+# vecf32 write is silently accepted then drops out of ANN — DEF in config.py).
 export FALKORCHAT_WS_ID FALKORCHAT_USER_ID FALKORDB_HOST FALKORDB_PORT
+export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
+export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
 exec "$VENV_DIR/bin/uvicorn" falkorchat.app:app $UVICORN_ARGS

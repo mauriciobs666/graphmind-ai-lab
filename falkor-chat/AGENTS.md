@@ -145,6 +145,7 @@ duplication is what lets the copies drift. The invariants that govern those quer
 | `./scripts/test_queries.sh` | 126-assertion end-to-end test suite against the live instance. Must pass before any schema change is committed. |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
 | `./scripts/load_test.sh` | K-011 M1 DoD closeout harness: load-tests the REST append path (`scripts/load_append.py`), `GRAPH.PROFILE`s the four hot reads, and captures a per-workspace RAM delta — all against an isolated throwaway `ws:load` (torn down at the end unless `KEEP_WS=1`). Results folded into DESIGN §11.1–§11.2. Env: `LOAD_MESSAGES`/`LOAD_WORKERS`/`SERVER_PORT`. Needs FalkorDB up + the `server/.venv`. |
+| `./scripts/seed_demo.sh [<wsId>]` | K-014 M2 demo seed: registers the AI **Agent** (`FALKORCHAT_AGENT_ID`, default `assistant`) + a demo `Channel`/`Thread` (fixed ids → MERGE, backed by the uniqueness constraints) + `MEMBER_OF` edges, so a human can open the web UI and `@mention` the agent. Idempotent. `start_server.sh` runs it automatically. Run `bootstrap_schema.sh` first. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
@@ -171,6 +172,19 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 - Repository/services tests run against the isolated `ws:test` graph (same approach as
   `test_queries.sh`); the `conftest` fixture bootstraps schema + wipes node data per test.
 - MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.
+- **Live AI agent loop (K-014, gated):** `app.py` builds the module-level `app` via
+  `_build_default_app()`, which wires the real `LMStudioEmbedder` + `EmbeddingWorker` +
+  `LMStudioLLM` + `AgentResponder` **only when `FALKORCHAT_ENABLE_AGENT` is truthy** — off by
+  default so imports and the pytest baseline stay network-free. The served app must also run at
+  the workspace's embedding dimension (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`) or embeddings
+  silently drop out of ANN. `scripts/start_server.sh` sets both, seeds the demo, and starts uvicorn;
+  `server/.env.example` documents every runtime env var. `@mention`-ing `FALKORCHAT_AGENT_ID` (default
+  `assistant`) triggers a retrieval-grounded reply posted as the Agent (role `assistant`) with an
+  `EMITTED` provenance edge. **Channel scoping is workspace-wide for M2-green** (`responder` passes
+  `channel_id=None`; a thread→channel read isn't in QUERIES.md yet) — K-015 follow-up.
+- **Since-read `displayName` (K-014):** `read_thread_since`/`read_ws_since` (QUERIES.md §9.1/§9.2)
+  carry `author.displayName` so the polling web client shows member names, not raw ids; clients
+  tolerate `null`.
 
 ---
 

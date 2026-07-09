@@ -164,10 +164,19 @@ bootstrap_workspace() {
   # ── vector indexes ───────────────────────────────────────────
   # Dimension must match the embedding model and is FIXED at index creation —
   # it cannot be altered in place, so choose it per model BEFORE creating the
-  # workspace. Default: 1536 (text-embedding-ada-002; still the DESIGN §13 open
-  # question). The K-007/M2 RAM costing baseline is 1024 dims (~12.4 KB/msg,
-  # DESIGN §11) — set EMBEDDING_DIM=1024 when creating workspaces for that
-  # model class. Override with: EMBEDDING_DIM=1024 ./bootstrap_schema.sh <ws>
+  # workspace. Default kept at 1536 (text-embedding-ada-002; still the DESIGN §13
+  # open question) so the default is model-neutral.
+  #
+  # M2 GraphRAG (K-008): the locked M2 stack is Qwen3-Embedding-0.6B, cosine,
+  # EMBEDDING_DIM=1024 (DESIGN §1.3). Any workspace that will run §6 hybrid
+  # retrieval MUST be bootstrapped at 1024 — the dimension is enforced at
+  # query time ("Vector dimension mismatch, expected N but got M") and cannot
+  # be changed afterward without dropping/recreating the index. Quirk to know:
+  # a wrong-dimension vecf32 write is silently accepted at SET (no error) but
+  # the node then falls out of ANN results — validate embedding length client-
+  # side. RAM at 1024: ~12.4 KB/message ≈ 1.25 GB per 100k-message workspace
+  # (DESIGN §11; GRAPH.MEMORY USAGE under-reports vector memory).
+  #   EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh <ws>
   local dim="${EMBEDDING_DIM:-1536}"
 
   echo "[vector] Message.embedding (dim=${dim}, cosine)"

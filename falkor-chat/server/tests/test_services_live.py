@@ -59,6 +59,20 @@ def test_mention_prioritised_and_validated_live(repo):
     assert [r["isMention"] for r in rows] == [False, True]
 
 
+def test_since_read_carries_display_name(repo):
+    """K-014: since-read rows carry `displayName` so the polling web client shows
+    the member name instead of the raw authorId (QUERIES.md §9.1/§9.2)."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _svc(repo, ids=["c1", "t1", "m1"])
+
+    svc.create_channel(CTX, name="general")
+    svc.create_thread(CTX, channel_id="c1", title="hi")
+    svc.post_message(CTX, thread_id="t1", text="hello")
+
+    rows = svc.read_messages(CTX, thread_id="t1", since=0, advance=False)
+    assert [r["displayName"] for r in rows] == ["Alice"]
+
+
 def test_cursor_pagination_is_lossless_under_limit(repo):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     svc = _svc(repo, ids=["c1", "t1", "m1", "m2", "m3"])
