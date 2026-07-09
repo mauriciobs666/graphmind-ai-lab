@@ -1,7 +1,8 @@
 # Claude Code / Claude Agent SDK — reference
 
 > **Verified:** subagents (frontmatter, tool inheritance, discovery, what-loads,
-> multi-agent primitives) **2026-06-20** against `code.claude.com/docs/en/sub-agents`.
+> multi-agent primitives) **2026-06-20** against `code.claude.com/docs/en/sub-agents`;
+> **main-session (`--agent`) mode added 2026-07-09** against the same page.
 > **Agent Teams + `SendMessage` re-verified 2026-06-21** against `code.claude.com/docs/en/agent-teams`
 > (experimental, env-var-gated; see the multi-agent-primitives section).
 > Skills / Memory / Hooks / MCP / SDK on the **2026-05-31** baseline (`code.claude.com/docs`,
@@ -62,6 +63,25 @@
   to the user with the decision rather than ask mid-run.
 - To stop delegation entirely, deny the `Agent` tool via `permissions.deny`;
   in headless/SDK, `CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1` removes built-ins.
+
+### Running a definition as the MAIN session agent (verified 2026-07-09 against `/en/sub-agents`)
+
+An agent definition is not only a delegation target — it can be the **first-order,
+conversational agent**:
+
+- **`claude --agent <name>`** (or the **`agent` setting**) starts a session where the
+  **main thread itself** takes on that definition's system prompt, tool restrictions,
+  and model. Plugin agents: `claude --agent my-plugin:name` (include any `agents/`
+  subfolder in the scoped name).
+- **`initialPrompt` frontmatter** is auto-submitted as the first *user* turn in this
+  mode (commands and skills are processed; it's prepended to any user-provided prompt).
+- **Frontmatter hooks fire in main-session mode too**, alongside `settings.json` hooks
+  (they also fire when the agent is spawned as a subagent or @-mentioned).
+- The **withheld-tools list applies to subagents only** — as the main session the agent
+  can use `AskUserQuestion` etc., so live multi-turn interaction works.
+- The main-thread agent can spawn subagents via `Agent`; the **`Agent(agent_type)`
+  allowlist syntax** in `tools` restricts which types — but **only** in main-thread
+  mode (inside a subagent definition the parenthesized type list is ignored).
 
 ### Built-in subagents & multi-agent primitives (agent-teams re-verified 2026-06-21 against `/en/agent-teams`)
 

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-09 — Consume tico's requirements doc by path (handoff symmetry)
+- **What:** "Understand the request" now states that a feature requirements document from `tico` may arrive as a path (`<component>/docs/requirements/<slug>.md`) — read it first as the stakeholder-confirmed WHAT/WHY the plan turns into a HOW; its acceptance criteria feed the test strategy.
+- **Why:** `tico` was created 2026-07-09 as the requirements half of a tico→architect handoff; the consumer side must state the convention too (agent-maintenance §4 handoff symmetry).
+- **Plan items:** none.
+
 ## 2026-07-09 — K-002 ✅: live handoff validation (teco K-001 run, falkor-chat M3 slice 1)
 - **What:** The architect ran as the planning half of a real orchestrated delivery — teco
   delegated it the M3 decomposition + slice-1 plan for falkor-chat. It produced

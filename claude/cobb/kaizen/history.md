@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-09 — agent-standards: main-session (`--agent`) mode added to the Claude Code cache
+- **What:** `skills/agent-standards/claude-code.md` gained a "Running a definition as the MAIN session agent" section (+ stamp bump): `claude --agent <name>` / the `agent` setting make the main thread take on a definition's prompt/tools/model; `initialPrompt` auto-submits as the first user turn; frontmatter hooks fire in main-session mode alongside `settings.json` hooks; the withheld-tools list (e.g. `AskUserQuestion`) applies to subagents only; `Agent(agent_type)` allowlist syntax works only in main-thread mode.
+- **Why:** Drift found while building `tico` as a first-order conversational agent — the cache (verified 2026-06-20) predated/omitted the whole main-session mode. Reconciled against the live `code.claude.com/docs/en/sub-agents` page per the skill's update procedure.
+- **Plan items:** none.
+
 ## 2026-07-09 — TESTING.md: dropped personal-preference rationale
 - **What:** In the two-altitude table, the pytest row's rationale "matches the user's TDD preference and the `tdd-engineer` agent" → "matches the `tdd-engineer` agent's discipline".
 - **Why:** User ruling (same-day coder/tdd-engineer routing fix): remove personal-preference framing from agent artifacts — standing preferences are quality and efficiency, encoded as objective rules. The pytest guidance stands on the discipline itself.

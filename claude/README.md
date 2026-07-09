@@ -5,6 +5,7 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 | Agent | What it does | When to use it |
 |-------|--------------|----------------|
 | [`teco`](./teco/teco.md) | Technical coordinator; decomposes a multi-step goal into a sequenced work breakdown and **delegates each piece to the right specialist** (architect, coder, tdd-engineer, qa-engineer, graph-dba, devops, cobb), then integrates results — routing QA passes to `qa-engineer` and environment blockers to `devops`. Hybrid: drives execution but pauses to the user at decision points. Coordinates — doesn't design or code itself; **`Write`/`Edit` scoped to its coordination doc is harness-enforced** by a subagent-scoped `PreToolUse` hook (`teco/hooks/guard-coordination-doc-writes.sh`). | A task that spans several steps/specialties, needs orchestration, or is an end-to-end feature delivery. |
+| [`tico`](./tico/tico.md) | Conversational **product owner** — a **first-order agent**: run it as the main-session agent (`claude --agent tico`) and it interviews you live about a feature request, editing the **feature requirements document** (`<component>/docs/requirements/<slug>.md`) as the conversation progresses — intent, problem, user stories, testable requirements, out-of-scope, acceptance criteria; "Ready for design" only on your explicit confirmation. Product altitude only: WHAT/WHY, never HOW. **Requirements-doc-only writes are harness-enforced** by a `PreToolUse` hook (`tico/hooks/guard-requirements-doc-writes.sh`) — frontmatter hooks fire in main-session mode too. The requirements half of a tico→architect handoff; not meant to be delegated (as a subagent it degrades to one interview round per invocation). | Capturing requirements, user stories, or acceptance criteria for a vague or unwritten feature request, before any design or code — launch with `claude --agent tico`. |
 | [`architect`](./architect/architect.md) | Software architect; investigates the codebase, weighs trade-offs, and produces a step-by-step implementation plan/spec — **without editing code**. Writes the plan to `<component>/docs/plans/<slug>.md` by default and returns the path + a ready-to-implement summary (lossless handoff). **Read-only on code is harness-enforced:** a subagent-scoped `PreToolUse` hook (`architect/hooks/guard-plan-doc-writes.sh`) gates any `Write`/`Edit` outside `docs/plans/` to human approval. The planning half of an architect→coder handoff. | Wanting a design, an approach, an impact analysis, or a plan before any code is written. |
 | [`coder`](./coder/coder.md) | Software engineer who implements an approved plan/spec end-to-end — clean, idiomatic, well-tested code following the repo's conventions; keeps the suite green. The implementation half of an architect→coder handoff. | Building from a ready plan/spec or clear task — the efficient route when a detailed plan exists. (Bug fixes / safety-net refactors / test work → `tdd-engineer`.) |
 | [`cobb`](./cobb/cobb.md) | Practitioner of agentic development; deep, current knowledge of Claude Code, Kiro, and OpenCode agent formats and the cross-tool standards (`AGENTS.md`, Agent Skills). | Designing, authoring, reviewing, porting, or debugging agents, subagents, skills, steering docs, slash commands, hooks, or system prompts. |
@@ -18,6 +19,7 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 Each agent carries a living improvement plan and change log:
 
 - `teco/kaizen/` — [plan](./teco/kaizen/plan.md) · [history](./teco/kaizen/history.md)
+- `tico/kaizen/` — [plan](./tico/kaizen/plan.md) · [history](./tico/kaizen/history.md)
 - `architect/kaizen/` — [plan](./architect/kaizen/plan.md) · [history](./architect/kaizen/history.md)
 - `coder/kaizen/` — [plan](./coder/kaizen/plan.md) · [history](./coder/kaizen/history.md)
 - `cobb/kaizen/` — [plan](./cobb/kaizen/plan.md) · [history](./cobb/kaizen/history.md)
@@ -41,12 +43,16 @@ Skills were unified into the repo-root [`skills/`](../skills/) home — see [`sk
 These agents live in this repo but run from Claude Code's config dir via symlinks:
 
 - **Agents:** `~/.claude/agents/<name>` → `claude/<name>` (one symlink per agent folder).
-  - **Hook gotcha (`devops`, `architect`, `teco`):** their `PreToolUse` guard hooks are referenced by
+  - **Hook gotcha (`devops`, `architect`, `teco`, `tico`):** their `PreToolUse` guard hooks are referenced by
     **absolute paths** in each agent's frontmatter (`claude/devops/hooks/guard-destructive-ops.sh`,
     `claude/architect/hooks/guard-plan-doc-writes.sh`,
-    `claude/teco/hooks/guard-coordination-doc-writes.sh`). On a new machine or a different clone path,
+    `claude/teco/hooks/guard-coordination-doc-writes.sh`,
+    `claude/tico/hooks/guard-requirements-doc-writes.sh`). On a new machine or a different clone path,
     re-point those paths (and re-create the symlinks). The scripts prefer `jq`, fall back to
     `python3` — install one for clean extraction. (devops kaizen K-004.)
+  - **tico runs first-order:** launch it as the main-session agent — `claude --agent tico` — so the
+    interview is a live conversation (frontmatter hooks fire in main-session mode too, so its guard
+    still applies; invoking it as a subagent degrades it to one interview round per invocation).
 - **Skills:** now in the repo-root [`skills/`](../skills/) home, deployed via `~/.claude/skills` →
   `skills/` (whole-dir symlink; all 7 skills visible to Claude Code). Also symlinked into OpenCode
   and Kiro — see [`skills/README.md`](../skills/README.md#deployment).
