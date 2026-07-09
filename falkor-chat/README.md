@@ -154,7 +154,7 @@ wiped before and after:
 ./scripts/test_queries.sh
 ```
 
-Expected output: `149/149 passed`.
+Expected output: all assertions pass.
 
 ### 5 — Browse the graph (optional)
 
@@ -200,9 +200,9 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 
 | Milestone | Status | Scope |
 |---|---|---|
-| **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified (92/92 at M0 baseline) |
-| **M1** — Chat core | ✅ | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process (110 tests). DoD closed: append path load-tested + hot reads `GRAPH.PROFILE`d (§11.1), web request/response de-staled (K-012). Hardening/real-time (auth, push) deferred to M2.5. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
-| **M2** — GraphRAG | ✅ | Every message embedded out-of-band (async worker → LM Studio, 1024-dim); in-graph vector index @1024 + hybrid retrieval (`hybrid_search`, cosine-ASC); AI `Agent` participant — `@mention` triggers a retrieval-grounded LLM answer posted as the agent (`role:"assistant"`) with an `EMITTED` provenance edge; web renders assistant replies + reader `isMention`. QA-accepted (K-015, PASS). 156 tests / query suite 149/149. Served via `start_server.sh` (gated on `FALKORCHAT_ENABLE_AGENT`, `EMBEDDING_DIM=1024`). Auth + real-time deferred to M2.5 |
+| **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified |
+| **M1** — Chat core | ✅ | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process. DoD closed: append path load-tested + hot reads `GRAPH.PROFILE`d (§11.1), web request/response de-staled (K-012). Hardening/real-time (auth, push) deferred to M2.5. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M2** — GraphRAG | ✅ | Every message embedded out-of-band (async worker → LM Studio, 1024-dim); in-graph vector index @1024 + hybrid retrieval (`hybrid_search`, cosine-ASC); AI `Agent` participant — `@mention` triggers a retrieval-grounded LLM answer posted as the agent (`role:"assistant"`) with an `EMITTED` provenance edge; web renders assistant replies + reader `isMention`. QA-accepted (K-015, PASS). Served via `start_server.sh` (gated on `FALKORCHAT_ENABLE_AGENT`, `EMBEDDING_DIM=1024`). Auth + real-time deferred to M2.5 |
 | **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
 | **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
 
@@ -223,7 +223,7 @@ falkor-chat/
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker
 │   ├── start_server.sh      # one-shot: FalkorDB + venv + bootstrap@1024 + seed + uvicorn
 │   ├── seed_demo.sh         # register the AI agent + a demo channel/thread (idempotent)
-│   ├── test_queries.sh      # end-to-end query test suite (149 assertions)
+│   ├── test_queries.sh      # end-to-end query test suite
 │   ├── load_test.sh         # append-path load harness + hot-read PROFILE (M1 DoD)
 │   └── backfill_thread_ids.sh # one-off: stamp Message.threadId on pre-K-007 messages
 ├── server/                  # app: FastAPI REST + MCP + AI responder on one process
@@ -264,7 +264,7 @@ match the workspace's vector index (1024 for `ws:acme`).
 Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph; offline — no LM Studio):
 
 ```bash
-cd server && .venv/bin/python -m pytest -q      # 156 passed
+cd server && .venv/bin/python -m pytest -q      # needs FalkorDB up
 ```
 
 Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`; the trailing-slash
