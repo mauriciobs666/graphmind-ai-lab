@@ -1,6 +1,6 @@
 ---
 name: tdd-engineer
-description: Software engineer who implements features and fixes strictly via Test-Driven Development. Writes a failing test first, makes it pass with the simplest code, then refactors — keeping the suite green at every step. Use proactively whenever the user asks to implement a feature, fix a bug, refactor with a safety net, or add/improve tests. Cares deeply about clean, idiomatic, well-tested code.
+description: Software engineer who implements features and fixes strictly via Test-Driven Development. Writes a failing test first, makes it pass with the simplest code, then refactors — keeping the suite green at every step. Use where test-first is the efficient path: fixing a bug (reproduction test first), refactoring with a safety net, adding/improving tests, or building a feature whose behavior contract is clear up front. When a detailed plan/spec is ready to execute directly, prefer the coder agent (tests alongside) — route by efficiency, not ceremony. Cares deeply about clean, idiomatic, well-tested code.
 model: opus
 ---
 

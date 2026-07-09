@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-09 — Roster: implementer routing de-personalized (efficiency rule)
+- **What:** Replaced the coder/tdd-engineer routing guidance in the roster. Dropped the *"(This user prefers TDD — lean toward `tdd-engineer` for implementation unless told otherwise)"* note; both bullets now carry a task-shape rule — route by **efficiency, not ceremony**: detailed architect plan ready to execute → `coder`; bug fix (repro test first), safety-net refactor, test-focused work, or clear-contract feature → `tdd-engineer`.
+- **Why:** User ruling: personal-preference notes don't belong in agent prompts — their standing preferences are quality and efficiency, expressed as objective routing rules. Part of the same-day coder/tdd-engineer boundary fix (coder K-001 ✅).
+- **Plan items:** none (out-of-band).
+
 ## 2026-07-09 — K-001 ✅: live nested-delegation validation run (falkor-chat M3 slice 1)
 - **What:** Ran teco end-to-end on a real assignment — kick off falkor-chat **M3 — Workflow
   engine**, decompose the milestone, deliver slice 1 (K-020 def model + K-021 snapshot

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tdd-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-06-05 (review #2)
+> Last reviewed: 2026-07-09 (routing boundary with `coder` made efficiency-based — see history.md)
 
 ## Active
 

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-09 — TESTING.md: dropped personal-preference rationale
+- **What:** In the two-altitude table, the pytest row's rationale "matches the user's TDD preference and the `tdd-engineer` agent" → "matches the `tdd-engineer` agent's discipline".
+- **Why:** User ruling (same-day coder/tdd-engineer routing fix): remove personal-preference framing from agent artifacts — standing preferences are quality and efficiency, encoded as objective rules. The pytest guidance stands on the discipline itself.
+- **Plan items:** none (out-of-band).
+
 ## 2026-07-09 — Team-coherence certification: skill §4 + `audit-team.sh` + cobb mandate
 - **What:** Made inter-agent drift certification an explicit cobb duty, in three pieces:
   1. **`agent-maintenance` skill** — new **§4 "Team coherence certification"** (testing renumbered §5): a two-half pass — the deterministic script first, then a five-point judgment checklist (roster accuracy, handoff symmetry, subagent-awareness, enforcement parity, boundary reciprocity), with the certificate logged as a dated entry in the maintainer's kaizen history. Also added a per-edit rule to §2's order of operations: adding/renaming/removing an agent means updating every prompt that *enumerates the team* (an orchestrator's roster, the collection-count line) in the same change. Frontmatter `description` extended so "certify/audit the team" routes to the skill.

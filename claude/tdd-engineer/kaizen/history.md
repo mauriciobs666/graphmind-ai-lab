@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-07-09 — Efficiency-based routing boundary with `coder` (description narrowed + made symmetric)
+- **What:** Rewrote the `description`'s trigger. Was "use proactively whenever the user asks to implement a feature, fix a bug, refactor…" — which shadowed `coder`'s trigger on any feature task; now scoped to where test-first is the **efficient path** (bug fix with reproduction test first, safety-net refactor, adding/improving tests, feature with a clear up-front behavior contract) and points back to `coder` for executing an already-detailed plan/spec (the pointer was previously one-directional, coder→tdd only). Catalogs synced: teco roster (personal-preference note removed), `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`.
+- **Why:** User ruling on the coder/tdd-engineer overlap review: route between the implementers by efficiency, not by an assumed blanket TDD preference; personal-preference framing removed from agent prompts (the user's standing preferences are quality and efficiency). Closes coder K-001 from this side.
+- **Plan items:** none active (out-of-band; counterpart of coder K-001 ✅).
+
 ## 2026-07-09 — Plan-doc-path handoff + subagent-awareness (teco interface review)
 - **What:** Two workflow additions, made during the teco interface review: (1) step 1 now states that an `architect` plan arrives as a **document path** (`<component>/docs/plans/<slug>.md`) — read the file itself as the source of truth; its test-strategy section is the red→green sequence. Mirrors the line `coder` has carried since the 2026-07-08 path-based-handoff change. (2) Step 2 and the red-suite + environment-blocker branches of step 3 gained subagent-awareness: when running delegated (e.g. by teco), "ask one sharp question" / "ask whether to fix first" / "ask before installing" becomes "return the question/blocker as your result" — subagents can't ask mid-run. Catalog entry (`claude/AGENTS.md`) updated.
 - **Why:** teco routes implementation to this agent *preferentially* (user's TDD preference), yet the handoff contract was documented only on `coder`; and the "ask" phrasing silently assumed an interactive session the agent doesn't get under delegation.

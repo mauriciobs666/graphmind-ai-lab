@@ -14,7 +14,7 @@ you're testing:**
 
 | You are testing… | Use | Why |
 |---|---|---|
-| **Deterministic code** (functions, converters, parsers) | **pytest** | Output is exact and assertable. Red/green/refactor; matches the user's TDD preference and the `tdd-engineer` agent. |
+| **Deterministic code** (functions, converters, parsers) | **pytest** | Output is exact and assertable. Red/green/refactor; matches the `tdd-engineer` agent's discipline. |
 | **Agent behavior** (a persona prompt, a model swap) | **eval / bless harness** | A local LLM is non-deterministic — you can't assert byte-for-byte. You review diffs against a blessed reference and judge better/worse. |
 
 ### Standard 1 — pytest (deterministic code)
