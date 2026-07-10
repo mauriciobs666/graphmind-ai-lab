@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-10 — Check 7 widened to the whole repo
+- **What:** `audit-team.sh` check 7 now greps **all tracked files** for the five runtime-derived personal identifiers, not just `claude/` and `skills/` (the `-- claude skills` pathspec dropped; FAIL messages relabeled `repo:`). `skills/agent-maintenance/SKILL.md` §2 rule and §4 invariant list updated to the repo-wide scope. Follows the same-day falkor-chat docs cleanup (three absolute home-path references and an Owner email genericized), which the narrower scope had left unpoliced.
+- **Why:** User asked for repo-wide coverage — the leak class isn't specific to agent artifacts.
+- **Plan items:** none.
+
 ## 2026-07-10 — Check 7 broadened: any personal identifier, not just the home path
 - **What:** `audit-team.sh` check 7 now greps tracked files under `claude/` and `skills/` for **five runtime-derived personal identifiers** — home path (`$HOME`), OS username (`id -un`), git `user.name`, git `user.email`, and hostname (`hostname`) — case-insensitively, word-bounded for the short bare tokens (username, hostname) to avoid substring noise. Patterns are never hardcoded in the script (that would itself be the leak), so the check guards whoever runs it. Both outcomes verified: clean run PASS; a planted email+hostname in a tracked kaizen file produced two labeled FAILs, exit 1, then reverted. `cobb.md`'s principle retitled **"No personal information in committed artifacts"** and `skills/agent-maintenance/SKILL.md` §2 rule + §4 invariant list broadened to match (prose genericization guidance included: `/home/<user>/…`, "the maintainer").
 - **Why:** User asked the guardrail to be inclusive — any personal information, not only the home dir.

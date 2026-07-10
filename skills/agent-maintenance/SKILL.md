@@ -178,8 +178,8 @@ expansion-safe location:
   but it does **not** fit user-scoped agents, which must guard in projects
   where the project dir isn't the agents' repo.
 
-The certification script (§4, check 7) greps tracked files under `claude/` and
-`skills/` for the runtime-derived identifiers (`$HOME`, `id -un`, git
+The certification script (§4, check 7) greps **every tracked file in the
+repo** for the runtime-derived identifiers (`$HOME`, `id -un`, git
 `user.name`/`user.email`, `hostname`) and fails on any hit — the patterns are
 never hardcoded in the script (that would itself be the leak), so the check
 protects whoever runs it.
@@ -249,7 +249,7 @@ agent is named in the orchestrator's prompt and in all three catalogs, each
 declared boundary pair (`BOUNDARY_PAIRS` in the script — coder↔tdd-engineer,
 analyst↔qa-engineer, graph-dba↔devops) names its partner in its frontmatter
 `description` (the routing contract every router sees), and no tracked file
-under `claude/` or `skills/` contains the maintainer's personal identifiers —
+anywhere in the repo contains the maintainer's personal identifiers —
 home path, username, git name/email, hostname, derived at runtime (the
 personal-info rule, §2). Fix any FAIL before judging the rest.
 

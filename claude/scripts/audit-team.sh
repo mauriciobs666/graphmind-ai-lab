@@ -16,7 +16,7 @@
 #   6. boundary-pair symmetry — adjacent specialists whose scopes border each
 #      other must each name the other in their frontmatter `description` (the
 #      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
-#   7. personal-info leak — no tracked file under claude/ or skills/ may
+#   7. personal-info leak — no tracked file anywhere in the repo may
 #      contain the maintainer's personal identifiers: home path, username,
 #      git user.name, git user.email, or hostname. Patterns are derived at
 #      runtime (never hardcoded here — that would itself be the leak), so the
@@ -128,12 +128,12 @@ leaked=0
 for label in "${!pii[@]}"; do
   wordflag=()                                      # short bare tokens get word bounds to avoid substring noise
   case "$label" in username|hostname) wordflag=(-w) ;; esac
-  hits="$(git -C "$ROOT" grep -I -n -i "${wordflag[@]}" -F "${pii[$label]}" -- claude skills 2>/dev/null)" || continue
+  hits="$(git -C "$ROOT" grep -I -n -i "${wordflag[@]}" -F "${pii[$label]}" 2>/dev/null)" || continue
   printf '%s\n' "$hits" | sed 's/^/      /'
-  failmsg "collection: $label leaked into tracked files under claude/ or skills/ — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
+  failmsg "repo: $label leaked into tracked files — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
   leaked=1
 done
-[ "$leaked" -eq 0 ] && pass "collection: no personal identifiers (home path, username, git name/email, hostname) in tracked files under claude/ or skills/"
+[ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked file"
 
 echo
 if [ "$fail" -eq 0 ]; then
