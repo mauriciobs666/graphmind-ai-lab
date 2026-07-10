@@ -260,6 +260,30 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Risks/RAM:** no graph RAM; Pub/Sub is transient. Publish *after* the guarded §4 write commits, never inside it (atomicity rule).
 - **Test strategy:** integration test of publish-on-write + a WebSocket client receiving it.
 
+### — M2.5-quality track (retrieval evaluation; parallel to M2.5 hardening, off the M3 critical path) —
+
+### K-026 — GraphRAG retrieval + generation evaluation harness (🔵 proposed — M2.5-quality)
+
+- **Owner:** **`data-scientist`** method note ✅ (`docs/plans/graphrag-eval-ml.md`) → **`coder`/`tdd-engineer`**
+  (harness + golden-set fixture) → **`graph-dba`** only if a retrieval query change is later measured through it.
+- **Inputs/prereqs:** M2 GraphRAG ✅ (K-008/K-013). A representative corpus — build a seeded **`ws:eval`**
+  (step 0; `seed_demo.sh` is too thin). Local LM Studio for the (optional) judged generation layer.
+- **Scope:** (1) 30–50 **paraphrased**, human-verified `query→relevant_msgId` golden pairs
+  (`server/tests/eval/golden_retrieval.jsonl`); (2) retrieval eval over `hybrid_search` — **recall@10** (primary),
+  recall@5, MRR — **establishing the vector-only @1024 baseline**; (3) thin **LLM-as-judge** faithfulness +
+  answer-relevance layer over ~15–20 Q&A, **calibrated against ~10 human labels before its numbers are trusted**;
+  (4) a metrics report the K-025-style QA pass can read. Behind a live marker; network-free baseline stays green.
+- **Done-condition:** baseline recall@10/recall@5/MRR recorded; harness re-runnable; judge–human agreement reported;
+  golden set asserts no verbatim self-retrieval; both suites green.
+- **Why now:** it's the **prerequisite baseline** for un-parking Entity extraction, hybrid fusion, a seed-relevance
+  threshold, or any embedding-model swap — today those would ship unmeasured. Also unblocks two cheap tracked
+  quality fixes: a **seed-distance cutoff** (drop distractor seeds) and resolving the **grounding-permissive system
+  prompt** — each measurable against this baseline.
+- **Risks/RAM:** transient `ws:eval` @1024 vector index (budget per K-008's ~12.5 KB/msg line); no production RAM.
+  Corpus representativeness + local-judge validity are the methodology risks (see the method note).
+- **Test strategy:** deterministic retrieval metrics (no judge) as the core; calibrated judged layer as an overlay;
+  golden-set fixture versioned and test-only (leakage guard).
+
 ## Recommended plan docs (author when each item is picked up — not yet created)
 
 | Path | Scope |
@@ -271,6 +295,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 | `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |
 | `docs/plans/m2-auth-tenancy.md` | K-016 (deferred): real auth replacing `get_context`, per the §1.2 identity-authoritative decision. |
 | `docs/plans/m2-realtime.md` | K-018 (deferred): Pub/Sub → WebSocket/SSE, resolving §13 Bolt-vs-RESP. |
+| `docs/plans/graphrag-eval-ml.md` | **Created ✅ 2026-07-10** — K-026 (M2.5-quality): retrieval + generation eval harness (golden set, recall@k/MRR, calibrated LLM-as-judge faithfulness). |
 
 ## Parking lot / ideas
 
