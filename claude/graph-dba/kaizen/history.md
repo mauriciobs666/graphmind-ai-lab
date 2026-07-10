@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-09 — Deployment pinned to v4.18.11 (edge retired)
+- **What:** The lab's FalkorDB moved from `falkordb/falkordb:edge` (module `999999`) to the tagged release **`v4.18.11`** (module `41811`, Redis 8.6.3, released 2026-06-24). Rewrote the "This deployment" bullet (pinned release, reason from v4.18.11's documented behavior instead of moving-target/latest-`main` caveats; `vectorset` still loaded) and updated the quirks-section pointer. Re-stamped `falkordb-quirks.md`'s header: pinned build identified, quirks re-verified via the falkor-chat query suite (193/193 green on the new build); entries not exercised by the suite keep their edge-build dates pending individual re-probes. Catalog current-state refs updated (root `AGENTS.md`, `claude/AGENTS.md`, falkor-chat docs).
+- **Why:** User decided to pin the latest release (cost/verification churn of tracking edge; the prompt's verify-live posture existed largely because the build was a moving target). The quirks file's own rule — re-verify on any tagged-release upgrade — was executed via the canonical suite.
+- **Plan items:** none.
+
 ## 2026-07-09 — devops boundary clause (description + ops bullet)
 - **What:** Frontmatter `description` and a new "Architecture & operations" bullet state the split with `devops`: graph-dba *designs* the deployment (RAM sizing, persistence choice, replication/cluster topology, ACLs) and owns everything inside the database; the container/Compose plumbing that runs it (service bring-up, volumes, networking, CI wiring) routes to `devops` — mirroring devops's existing deferral of data-model/query design here. The pair is mechanically enforced by `claude/scripts/audit-team.sh` check 6 (boundary-pair description symmetry). Catalogs synced (`claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`).
 - **Why:** Description-symmetry sweep after teco's roster→routing-table restructure (same day): "spin up FalkorDB" plausibly matched both agents, and only devops's description named the boundary.

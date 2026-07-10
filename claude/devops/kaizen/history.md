@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-09 — FalkorDB image fact updated: edge → v4.18.11
+- **What:** The grounding example in `devops.md` (and the devops rows in root `AGENTS.md` / `claude/AGENTS.md`) now cite the shared FalkorDB service as `falkordb/falkordb:v4.18.11` instead of `:edge`. The actual swap: both `start_falkordb.sh` scripts, `falkor-chat/compose.yaml`, and the CI service container pinned to `v4.18.11`; container recreated on the same `falkordb-data` volume (data intact), suites green (193/193 queries, 196 pytest).
+- **Why:** Deployment pinned to the latest tagged release (user decision, 2026-07-09); the prompt's example must cite the real image or orientation drifts.
+- **Plan items:** none.
+
 ## 2026-07-02 — K-001: harness-enforced destructive-op guard (PreToolUse hook)
 
 - **What:** Added a **subagent-scoped `PreToolUse` hook** so the "approval-gate destructive/

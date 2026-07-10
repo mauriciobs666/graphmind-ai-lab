@@ -11,7 +11,7 @@ name: falkor-chat
 
 services:
   falkordb:
-    image: falkordb/falkordb:edge
+    image: falkordb/falkordb:v4.18.11
     ports:
       - "${FALKORDB_PORT:-6379}:6379"
       - "${FALKORDB_WEB_PORT:-3000}:3000"

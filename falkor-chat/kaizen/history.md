@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
 
+## 2026-07-09 — FalkorDB pinned to v4.18.11 (edge retired)
+
+Moved the engine off the floating `falkordb/falkordb:edge` tag to the tagged release
+**`v4.18.11`** (module `41811`, Redis 8.6.3): `scripts/start_falkordb.sh`, `compose.yaml`,
+and the CI service container (`.github/workflows/falkor-chat.yml`) now pin it; the
+salesperson component's `start_falkordb.sh` moved with it. Container recreated on the same
+`falkordb-data` volume after an explicit `SAVE` — all graphs (`ws:acme`, `reference`,
+`ws:test`) survived. Re-verification per the quirks-file rule: **query suite 193/193,
+server pytest 196 passed** on the pinned build. Current-state docs re-stamped (`AGENTS.md`
+header, README, `docs/QUERIES.md`, `docs/DESIGN.md` §2 callout,
+`claude/graph-dba/falkordb-quirks.md`). Rationale: edge is a moving target that forced
+verify-everything churn; a pin makes the live-verified facts durable until a deliberate
+upgrade.
+
 ## 2026-07-09 — K-020 + K-021: M3 slice 1 (workflow defs + snapshot materialization) delivered
 
 First slice of **M3 — Workflow engine**, delivered end-to-end by the **teco-coordinated

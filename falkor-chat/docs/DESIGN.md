@@ -77,7 +77,8 @@ These are not style choices — they are engine facts that the topology must res
 4. **OpenCypher subset, not Neo4j.** No APOC, no GDS, no Fabric. Algorithms are built-in `algo.*` procedures; full-text/vector are `db.idx.*` procedures; profiling is the `GRAPH.PROFILE` *command*, not a `PROFILE` keyword prefix.
 5. **Supernodes are dense matrix rows.** Less catastrophic than pointer-chasing engines (traversal is matrix algebra), but a Channel with millions of `HAS_MESSAGE` edges is still a dense row that costs RAM and compute. We avoid it with a linked-list + time-bucket pattern (§5).
 
-> **Live-verified** on this deployment: Redis 8.2.2, FalkorDB module `999999` (edge/main),
+> **Live-verified** on this deployment (now pinned to `v4.18.11`, module `41811`, Redis 8.6.3;
+> originally probed on edge/main, re-verified 2026-07-09 via the full query suite):
 > `vectorset` module also loaded. The findings below in §7 reflect confirmed behavior — not docs
 > assumptions. Details: cross-graph edges confirmed silent (no error, MATCH returns 0); constraint
 > requires an existing range index first; vector indexes use DDL syntax, not a procedure call;

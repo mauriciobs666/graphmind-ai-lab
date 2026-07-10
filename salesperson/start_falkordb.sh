@@ -5,7 +5,7 @@ set -euo pipefail
 # Ports: Redis/FalkorDB on ${FALKORDB_PORT:-6379}, web console on ${FALKORDB_WEB_PORT:-3000}.
 # Override defaults with FALKORDB_IMAGE, FALKORDB_PORT, FALKORDB_WEB_PORT if needed.
 
-FALKORDB_IMAGE="${FALKORDB_IMAGE:-falkordb/falkordb:edge}"
+FALKORDB_IMAGE="${FALKORDB_IMAGE:-falkordb/falkordb:v4.18.11}"
 FALKORDB_PORT="${FALKORDB_PORT:-6379}"
 FALKORDB_WEB_PORT="${FALKORDB_WEB_PORT:-3000}"
 

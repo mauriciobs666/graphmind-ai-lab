@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-FALKORDB_IMAGE="${FALKORDB_IMAGE:-falkordb/falkordb:edge}"
+FALKORDB_IMAGE="${FALKORDB_IMAGE:-falkordb/falkordb:v4.18.11}"
 FALKORDB_PORT="${FALKORDB_PORT:-6379}"
 FALKORDB_WEB_PORT="${FALKORDB_WEB_PORT:-3000}"
 FALKORDB_CONTAINER_NAME="${FALKORDB_CONTAINER_NAME:-falkordb-dev}"

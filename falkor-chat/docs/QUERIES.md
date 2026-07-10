@@ -1,6 +1,6 @@
 # falkor-chat — Canonical Query Library
 
-Verified against `falkordb/falkordb:edge` (Redis 8.2.2, module `999999`).
+Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green 2026-07-09.
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
 In `falkordb-py`: `g.query(cypher, params={"key": value})`.

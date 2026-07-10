@@ -115,7 +115,7 @@ In a second terminal, confirm everything is up:
 
 ```bash
 redis-cli ping                 # → PONG
-redis-cli MODULE LIST          # → graph (ver 999999)  +  vectorset
+redis-cli MODULE LIST          # → graph (ver 41811 = v4.18.11)  +  vectorset
 redis-cli GRAPH.LIST           # → (empty on a fresh volume)
 ```
 
@@ -176,7 +176,7 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 
 ---
 
-## Key verified behaviours (live probes on `falkordb/falkordb:edge`, Redis 8.2.2)
+## Key verified behaviours (live probes on `falkordb/falkordb:edge`; re-verified 2026-07-09 on the pinned `v4.18.11` via the full query suite)
 
 - **Vector index** uses DDL, not a procedure call:
   ```sql

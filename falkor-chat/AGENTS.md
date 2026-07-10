@@ -35,7 +35,7 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ---
 
-## Live-verified FalkorDB facts (falkordb/falkordb:edge, Redis 8.2.2, module 999999)
+## Live-verified FalkorDB facts (falkordb/falkordb:v4.18.11, Redis 8.6.3, module 41811)
 
 General engine/dialect quirks verified against this build (vector index DDL, index-before-constraint
 ordering, the `exists()` pattern bug, empty-`UNWIND` row collapse, `TIMEOUT` behavior, `OR`-as-scan-anchor,

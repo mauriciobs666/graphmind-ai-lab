@@ -1,4 +1,4 @@
-# FalkorDB verified engine quirks — this lab's edge build
+# FalkorDB verified engine quirks — this lab's pinned build
 
 > **Live-verified knowledge base for `graph-dba`.** Facts confirmed by hands-on
 > testing against this lab's running FalkorDB instance, not just docs — they
@@ -6,12 +6,16 @@
 > **ground truth for this build**.
 >
 > **This is a cache, not the source of truth.** It is pinned to a specific build:
-> `falkordb/falkordb:edge`, Redis 8.2.2, graph module reporting version
-> **`999999`** (FalkorDB's edge/untagged sentinel — tracks latest `main`, a moving
-> target). **Re-verify every entry against the live instance on any tagged-release
-> upgrade** (e.g. a move to a `v4.x` build), and re-stamp the date below.
+> `falkordb/falkordb:v4.18.11` (tagged release, 2026-06-24), Redis 8.6.3, graph
+> module reporting version **`41811`**. **Re-verify every entry against the live
+> instance on any release upgrade**, and re-stamp the date below.
 >
-> **Verified: 2026-07-05 against the live `falkordb:edge` instance (module 999999).**
+> **Verified: 2026-07-05 against the live `falkordb:edge` instance (module 999999,
+> tracking `main` past the v4.18.11 tag).** Deployment pinned to `v4.18.11` on
+> 2026-07-09; the falkor-chat query suite (193/193, which encodes the DDL/ordering/
+> anchor quirks below) re-ran green on the pinned build. Entries not exercised by
+> that suite still carry their edge-build verification dates — re-probe individually
+> if one becomes load-bearing.
 
 `graph-dba.md` (the always-on prompt) points here and stays lean; this file holds
 the perishable, growing fact list. When another lab project accumulates its own

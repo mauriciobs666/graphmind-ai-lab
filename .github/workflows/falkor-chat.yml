@@ -1,11 +1,11 @@
 # falkor-chat CI — lint + both test suites against a live FalkorDB service
 # container. Mirrors the local commands (AGENTS.md / README):
 #   ruff check server            (lint)
-#   pytest -q                    (server suite, baseline 75 passed)
-#   ./scripts/test_queries.sh    (canonical query suite, baseline 92/92)
+#   pytest -q                    (server suite, baseline 196 passed)
+#   ./scripts/test_queries.sh    (canonical query suite, baseline 193/193)
 #
-# Note: falkordb/falkordb:edge is a floating tag — the project's locked choice
-# (AGENTS.md live-verified facts are pinned to it), so CI deliberately tracks it.
+# Note: pinned to falkordb/falkordb:v4.18.11 — the project's locked choice
+# (AGENTS.md live-verified facts are pinned to it), matching the dev containers.
 
 name: falkor-chat
 
@@ -29,7 +29,7 @@ jobs:
 
     services:
       falkordb:
-        image: falkordb/falkordb:edge
+        image: falkordb/falkordb:v4.18.11
         ports:
           - 6379:6379
         options: >-
