@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-09 — analyst boundary clause (description + intro)
+- **What:** Frontmatter `description` and the intro's deferral paragraph now route *static* judgment — reviewing a plan, diff, or module by reading and reasoning, without executing the system — to `analyst`, mirroring analyst's new clause routing new black-box/acceptance execution here. The pair is mechanically enforced by `claude/scripts/audit-team.sh` check 6 (boundary-pair description symmetry). Catalogs synced (`claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`).
+- **Why:** Description-symmetry sweep after teco's roster→routing-table restructure (same day): qa-engineer named tdd-engineer but not analyst, leaving the static-review vs. executed-verification boundary invisible to routers.
+- **Plan items:** none.
+
 ## 2026-07-09 — Subagent-awareness lines (teco interface review)
 - **What:** Three clauses added during the teco interface review: workflow step 1's "ask one sharp question", the EXECUTE-phase "ask before installing or mutating the environment" bullet, and the never-mutate-the-environment guardrail now all say what to do when running as a subagent (e.g. delegated by teco) — return the sharp question / approval request as the result (marking affected items blocked) instead of trying to ask mid-run, which subagents can't do. Catalog entry (`claude/AGENTS.md`) updated. In the same change, **teco itself gained the K-003 loop**: its roster now includes qa-engineer (with the `docs/test-plans/` / `docs/test-reports/` path-handoff conventions), its pipeline ends in a QA pass when warranted, and its integrate-&-verify step encodes defect → re-brief implementer with the report path → re-run failed items.
 - **Why:** The agent's "ask" phrasing assumed an interactive session; under teco delegation that would stall or misfire. The teco-side change closes the orchestration half K-003 anticipated.

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-09 — agent-maintenance: audit-team.sh check 6 — boundary-pair description symmetry
+- **What:** `claude/scripts/audit-team.sh` gained a collection-wide check 6: for each declared boundary pair (`BOUNDARY_PAIRS`: coder↔tdd-engineer, analyst↔qa-engineer, graph-dba↔devops), each agent's frontmatter `description` must name the other — mechanizing the name-level half of the certification's "boundary reciprocity" judgment item. `skills/agent-maintenance/SKILL.md` §4 updated on both halves: the deterministic-half paragraph lists the new check, and judgment item 5 notes what stays judgment (whether the claimed scopes actually complement) plus the rule to grow `BOUNDARY_PAIRS` when a new adjacent specialist joins. Driven by the same-day description-symmetry fixes (analyst↔qa-engineer, graph-dba↔devops; coder↔tdd-engineer was already symmetric). Post-change audit run: PASS, all six directions.
+- **Why:** Frontmatter descriptions are the routing contract every router sees (the main session and teco's `Agent` listing); the asymmetry class — A defers X to B, B never names A — drifts silently, the same failure family as the teco roster drift that spawned the script.
+- **Plan items:** none.
+
 ## 2026-07-09 — agent-standards: main-session (`--agent`) mode added to the Claude Code cache
 - **What:** `skills/agent-standards/claude-code.md` gained a "Running a definition as the MAIN session agent" section (+ stamp bump): `claude --agent <name>` / the `agent` setting make the main thread take on a definition's prompt/tools/model; `initialPrompt` auto-submits as the first user turn; frontmatter hooks fire in main-session mode alongside `settings.json` hooks; the withheld-tools list (e.g. `AskUserQuestion`) applies to subagents only; `Agent(agent_type)` allowlist syntax works only in main-thread mode.
 - **Why:** Drift found while building `tico` as a first-order conversational agent — the cache (verified 2026-06-20) predated/omitted the whole main-session mode. Reconciled against the live `code.claude.com/docs/en/sub-agents` page per the skill's update procedure.

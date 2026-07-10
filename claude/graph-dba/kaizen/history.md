@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-09 — devops boundary clause (description + ops bullet)
+- **What:** Frontmatter `description` and a new "Architecture & operations" bullet state the split with `devops`: graph-dba *designs* the deployment (RAM sizing, persistence choice, replication/cluster topology, ACLs) and owns everything inside the database; the container/Compose plumbing that runs it (service bring-up, volumes, networking, CI wiring) routes to `devops` — mirroring devops's existing deferral of data-model/query design here. The pair is mechanically enforced by `claude/scripts/audit-team.sh` check 6 (boundary-pair description symmetry). Catalogs synced (`claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`).
+- **Why:** Description-symmetry sweep after teco's roster→routing-table restructure (same day): "spin up FalkorDB" plausibly matched both agents, and only devops's description named the boundary.
+- **Plan items:** none.
+
 ## 2026-07-09 — Subagent-awareness on "ask one sharp question" (teco interface review follow-up)
 - **What:** "How you work" step 1's "ask one sharp question" now carries the delegated-run fallback: when running as a subagent (e.g. delegated by `teco`), return the sharp question as the result instead of trying to ask mid-run — subagents can't ask. Catalog entry (`claude/AGENTS.md`) updated.
 - **Why:** Sweep after the 2026-07-09 teco interface review found the "ask" phrasing assumed an interactive session across several delegates (same fix applied to coder, tdd-engineer, qa-engineer the same day).

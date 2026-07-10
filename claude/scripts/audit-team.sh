@@ -12,6 +12,11 @@
 #   4. the agent is named in the orchestrator's (teco) prompt — roster drift
 #   5. the agent is cataloged in claude/AGENTS.md, claude/README.md, root AGENTS.md
 #
+# Collection-wide:
+#   6. boundary-pair symmetry — adjacent specialists whose scopes border each
+#      other must each name the other in their frontmatter `description` (the
+#      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
+#
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
 # qa-engineer + devops for days; catalogs can't see inter-agent drift.
@@ -77,6 +82,21 @@ for a in "${agents[@]}"; do
       pass "$a: cataloged in ${doc#"$ROOT"/}"
     else
       failmsg "$a: missing from ${doc#"$ROOT"/}"
+    fi
+  done
+done
+
+# 6. boundary-pair symmetry in frontmatter descriptions
+BOUNDARY_PAIRS=("coder:tdd-engineer" "analyst:qa-engineer" "graph-dba:devops")
+desc_of() { awk '/^---$/{f++} f==1 && /^description:/{sub(/^description:[ \t]*/,""); print; exit}' "$CL/$1/$1.md"; }
+echo
+for p in "${BOUNDARY_PAIRS[@]}"; do
+  for x in "${p%%:*}:${p##*:}" "${p##*:}:${p%%:*}"; do
+    s="${x%%:*}"; t="${x##*:}"
+    if desc_of "$s" | grep -qE "\b$t\b"; then
+      pass "$s: description routes its boundary to $t"
+    else
+      failmsg "$s: description never names $t — boundary asymmetry (route-away clause missing)"
     fi
   done
 done

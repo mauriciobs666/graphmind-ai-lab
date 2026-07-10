@@ -215,8 +215,11 @@ contract changes, or on demand ("certify the team").
 `claude/scripts/audit-team.sh` (read-only, exit 1 on any FAIL) verifies the
 greppable invariants: every agent folder has its `<name>.md` + kaizen pair, is
 symlinked into `~/.claude/agents/`, its frontmatter hook commands exist and
-are executable, and every agent is named in the orchestrator's prompt and in
-all three catalogs. Fix any FAIL before judging the rest.
+are executable, every agent is named in the orchestrator's prompt and in
+all three catalogs, and each declared boundary pair (`BOUNDARY_PAIRS` in the
+script — coder↔tdd-engineer, analyst↔qa-engineer, graph-dba↔devops) names its
+partner in its frontmatter `description`, the routing contract every router
+sees. Fix any FAIL before judging the rest.
 
 **Judgment half — checklist (what the script can't see):**
 
@@ -236,7 +239,11 @@ all three catalogs. Fix any FAIL before judging the rest.
    prompt it guards (no silent machinery, no hopeful prose posing as
    enforcement).
 5. **Boundary reciprocity** — when agent A says "defer X to B", B actually
-   claims X (and vice versa for "B routes X to me").
+   claims X (and vice versa for "B routes X to me"). The name-level half is
+   scripted (check 6 greps each declared pair's `description` for the
+   partner); whether the claimed scopes actually complement each other stays
+   judgment — and when a new specialist borders an existing one, add the pair
+   to `BOUNDARY_PAIRS` in the script.
 
 **Certificate:** log a dated entry in the maintainer's kaizen history (cobb's,
 in graphmind-ai-lab) recording scope, script result, findings, and fixes — so
