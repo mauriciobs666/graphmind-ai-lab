@@ -548,7 +548,7 @@ TestClient). No live LLM needed (Slice 1 is definition + materialization only).
 
 ## Ready to implement — summary
 
-**Plan:** `/home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/plans/m3-workflow-engine.md`
+**Plan:** `falkor-chat/docs/plans/m3-workflow-engine.md` (repo-relative)
 
 **Part A (M3 decomposition):** K-020 def model in `reference` → K-021 snapshot materialization into
 `ws:{id}` (**Slice 1**) → K-022 run/step-run executor + guard eval (§13 decision here) → K-023 chat

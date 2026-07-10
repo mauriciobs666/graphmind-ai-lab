@@ -387,7 +387,7 @@ Every behavior change updates docs in the **same change**:
 
 **Server (Batches A):**
 ```bash
-cd /home/mauricio/prg/graphmind-ai-lab/falkor-chat/server
+cd falkor-chat/server                  # from the repo root
 .venv/bin/python -m pytest -q          # expect green; 68 → ~71
 ```
 Expected count movement (honest estimate — implementer confirms):
@@ -399,7 +399,7 @@ Expected count movement (honest estimate — implementer confirms):
 
 **Query suite (must stay green, unchanged by this batch — a regression guard):**
 ```bash
-cd /home/mauricio/prg/graphmind-ai-lab/falkor-chat
+cd falkor-chat                         # from the repo root
 ./scripts/test_queries.sh              # expect 92/92 (untouched)
 ```
 

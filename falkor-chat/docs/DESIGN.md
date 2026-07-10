@@ -6,7 +6,7 @@
 
 **Status:** Draft v0.3 — thread-scoped model, DayBucket removed
 **Date:** 2026-06-06
-**Owner:** mauriciobs@gmail.com
+**Owner:** the repo maintainer
 
 ---
 
