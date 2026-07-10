@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-07-10 — Hook command made machine-independent (`$HOME` symlink path)
+- **What:** the frontmatter `PreToolUse` hook command was rewired from the absolute repo path (`/home/<user>/prg/graphmind-ai-lab/claude/tico/hooks/guard-requirements-doc-writes.sh`) to `$HOME/.claude/agents/tico/hooks/guard-requirements-doc-writes.sh`, which resolves through the user-scope deployment symlink (`~/.claude/agents/tico` → the repo folder). Shell-form hook commands (no `args`) run via `sh -c`, so `$HOME` expands — verified 2026-07-10 against `code.claude.com/docs/en/hooks`. Resolution through the symlink confirmed (`test -x` passes).
+- **Why:** the committed agent source leaked the user's personal home path into the repo; the symlink path is identical on any machine that follows the deployment convention (`~/.claude/agents/<name>` → `claude/<name>`), keeping the hook enforceable without machine-specific paths. (`${CLAUDE_PROJECT_DIR}` was rejected: the agents are user-scoped and must guard in any project, where the project dir isn't this repo.)
+- **Plan items:** none.
+
 ## 2026-07-09 — Redesigned as a first-order conversational agent
 - **What:** tico now runs as the **main-session agent** (`claude --agent tico`) — verified 2026-07-09 against `code.claude.com/docs/en/sub-agents`: the main thread takes on the definition's prompt/tools/model, frontmatter hooks still fire in main-session mode, and `initialPrompt` auto-submits as the first user turn. Prompt rewritten around a **live interview**: one thread at a time, reflect-back confirmations, `AskUserQuestion` (added to `tools`) for option picks, the doc updated as the conversation progresses, and a readback + explicit stakeholder confirmation gating the "Ready for design" flip. The round-based protocol shrank to a degraded subagent fallback ("If you are invoked as a subagent anyway"). teco no longer delegates to tico — it consumes the doc by path and pauses to the user when requirements need capturing.
 - **Why:** User ruling on the initial design: tico is not a subagent but a first-order agent meant to be conversational — the rounds protocol optimized for the wrong constraint.

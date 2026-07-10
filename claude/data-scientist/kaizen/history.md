@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-07-10 — Hook command made machine-independent (`$HOME` symlink path)
+- **What:** the frontmatter `PreToolUse` hook command was rewired from the absolute repo path (`/home/<user>/prg/graphmind-ai-lab/claude/data-scientist/hooks/guard-ds-doc-writes.sh`) to `$HOME/.claude/agents/data-scientist/hooks/guard-ds-doc-writes.sh`, which resolves through the user-scope deployment symlink (`~/.claude/agents/data-scientist` → the repo folder). Shell-form hook commands (no `args`) run via `sh -c`, so `$HOME` expands — verified 2026-07-10 against `code.claude.com/docs/en/hooks`. Resolution through the symlink confirmed (`test -x` passes).
+- **Why:** the committed agent source leaked the user's personal home path into the repo; the symlink path is identical on any machine that follows the deployment convention (`~/.claude/agents/<name>` → `claude/<name>`), keeping the hook enforceable without machine-specific paths. (`${CLAUDE_PROJECT_DIR}` was rejected: the agents are user-scoped and must guard in any project, where the project dir isn't this repo.)
+- **Plan items:** none.
+
 ## 2026-07-09 — Created
 - **What:** Initial version of the `data-scientist` agent — the team's AI/ML/data-science specialist, created to work alongside `architect` (supplies the ML/DS method inside a design) and `analyst` (methodology review of plans/code). Advisory-only shape chosen by the user over a hands-on (graph-dba-style) shape: read-only on code, `Write`/`Edit` scoped to method notes (`docs/plans/<slug>-ml.md`) and methodology reviews (`docs/reviews/<slug>-ml.md`), harness-enforced by `hooks/guard-ds-doc-writes.sh` (PreToolUse, matcher `Write|Edit`, same contract as the analyst's guard but allowing both doc homes). Tools match architect/analyst (`Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent`); model opus; subagent-aware (questions return as the deliverable).
 - **Why:** The team had no ML/DS-methodology depth — model/embedding selection, RAG/GraphRAG evaluation design, metric choice, experiment design, statistical validity all landed on generalists. This lab's two themes (graph-backed AI apps, agent engineering) make the gap recurring.

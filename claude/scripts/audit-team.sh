@@ -16,6 +16,14 @@
 #   6. boundary-pair symmetry — adjacent specialists whose scopes border each
 #      other must each name the other in their frontmatter `description` (the
 #      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
+#   7. personal-info leak — no tracked file under claude/ or skills/ may
+#      contain the maintainer's personal identifiers: home path, username,
+#      git user.name, git user.email, or hostname. Patterns are derived at
+#      runtime (never hardcoded here — that would itself be the leak), so the
+#      check protects whoever runs it. Committed artifacts must be machine-
+#      and identity-portable ($HOME/.claude/agents/<name>/… resolves via the
+#      deployment symlink on any machine). Origin: 2026-07-10, six agents'
+#      hook commands were committed with the absolute /home/<user>/… path.
 #
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
@@ -60,6 +68,9 @@ for a in "${agents[@]}"; do
   # 3. frontmatter hook commands exist + are executable
   while IFS= read -r hook; do
     [ -n "$hook" ] || continue
+    # frontmatter hooks run shell-form (sh -c), so mirror its $HOME/~ expansion
+    hook="${hook//\$HOME/$HOME}"
+    hook="${hook/#\~/$HOME}"
     if [ -x "$hook" ]; then
       pass "$a: hook exists + executable ($hook)"
     else
@@ -100,6 +111,29 @@ for p in "${BOUNDARY_PAIRS[@]}"; do
     fi
   done
 done
+
+# 7. personal-info leak — committed artifacts must be machine- and identity-portable
+echo
+declare -A pii=()                                  # label → pattern (runtime-derived, never hardcoded)
+[ -n "${HOME:-}" ]  && pii["home path"]="$HOME"
+u="$(id -un 2>/dev/null || true)"
+[ -n "$u" ]         && pii["username"]="$u"
+gn="$(git -C "$ROOT" config user.name 2>/dev/null || true)"
+[ -n "$gn" ]        && pii["git user.name"]="$gn"
+ge="$(git -C "$ROOT" config user.email 2>/dev/null || true)"
+[ -n "$ge" ]        && pii["git user.email"]="$ge"
+hn="$(hostname 2>/dev/null || true)"
+[ -n "$hn" ]        && pii["hostname"]="$hn"
+leaked=0
+for label in "${!pii[@]}"; do
+  wordflag=()                                      # short bare tokens get word bounds to avoid substring noise
+  case "$label" in username|hostname) wordflag=(-w) ;; esac
+  hits="$(git -C "$ROOT" grep -I -n -i "${wordflag[@]}" -F "${pii[$label]}" -- claude skills 2>/dev/null)" || continue
+  printf '%s\n' "$hits" | sed 's/^/      /'
+  failmsg "collection: $label leaked into tracked files under claude/ or skills/ — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
+  leaked=1
+done
+[ "$leaked" -eq 0 ] && pass "collection: no personal identifiers (home path, username, git name/email, hostname) in tracked files under claude/ or skills/"
 
 echo
 if [ "$fail" -eq 0 ]; then

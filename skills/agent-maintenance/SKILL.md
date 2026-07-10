@@ -159,6 +159,35 @@ Two different obligations with two different correct mechanisms:
   **reconcile pass** (§3), run when asked to "sync the docs" or when you notice
   drift, not bolted onto every edit.
 
+### No personal information in committed artifacts (rule)
+
+Committed artifacts — frontmatter hook commands, scripts, configs, docs, kaizen
+logs, anything git tracks — must never contain the maintainer's **personal
+identifiers**: home path (`/home/<user>/…`), OS username, real name, email, or
+hostname. A home path additionally breaks on every other machine. In prose
+(kaizen entries, origin notes), genericize: `/home/<user>/…`, "the maintainer".
+When a tracked file must reference a deployed script, anchor it to an
+expansion-safe location:
+
+- **User-scope agents** (symlinked into `~/.claude/agents/`):
+  `$HOME/.claude/agents/<name>/hooks/<script>.sh` — resolves through the
+  deployment symlink on any machine. Shell-form hook commands (no `args`) run
+  via `sh -c`, so `$HOME` expands (verified 2026-07-10 against
+  `code.claude.com/docs/en/hooks`).
+- **Project-scoped hooks** (settings.json in a repo): `${CLAUDE_PROJECT_DIR}` —
+  but it does **not** fit user-scoped agents, which must guard in projects
+  where the project dir isn't the agents' repo.
+
+The certification script (§4, check 7) greps tracked files under `claude/` and
+`skills/` for the runtime-derived identifiers (`$HOME`, `id -un`, git
+`user.name`/`user.email`, `hostname`) and fails on any hit — the patterns are
+never hardcoded in the script (that would itself be the leak), so the check
+protects whoever runs it.
+
+> Origin: 2026-07-10 — six agents' frontmatter hook commands had been committed
+> with the maintainer's absolute `/home/<user>/prg/…` path; the user then asked
+> for the guardrail to cover all personal information, not just the home dir.
+
 ### Order of operations when you create or edit an artifact
 
 1. Write/edit the agent or skill source.
@@ -215,11 +244,14 @@ contract changes, or on demand ("certify the team").
 `claude/scripts/audit-team.sh` (read-only, exit 1 on any FAIL) verifies the
 greppable invariants: every agent folder has its `<name>.md` + kaizen pair, is
 symlinked into `~/.claude/agents/`, its frontmatter hook commands exist and
-are executable, every agent is named in the orchestrator's prompt and in
-all three catalogs, and each declared boundary pair (`BOUNDARY_PAIRS` in the
-script — coder↔tdd-engineer, analyst↔qa-engineer, graph-dba↔devops) names its
-partner in its frontmatter `description`, the routing contract every router
-sees. Fix any FAIL before judging the rest.
+are executable (after mirroring the shell-form `$HOME`/`~` expansion), every
+agent is named in the orchestrator's prompt and in all three catalogs, each
+declared boundary pair (`BOUNDARY_PAIRS` in the script — coder↔tdd-engineer,
+analyst↔qa-engineer, graph-dba↔devops) names its partner in its frontmatter
+`description` (the routing contract every router sees), and no tracked file
+under `claude/` or `skills/` contains the maintainer's personal identifiers —
+home path, username, git name/email, hostname, derived at runtime (the
+personal-info rule, §2). Fix any FAIL before judging the rest.
 
 **Judgment half — checklist (what the script can't see):**
 

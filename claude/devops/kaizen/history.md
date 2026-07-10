@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-10 — Hook command made machine-independent (`$HOME` symlink path)
+- **What:** the frontmatter `PreToolUse` hook command was rewired from the absolute repo path (`/home/<user>/prg/graphmind-ai-lab/claude/devops/hooks/guard-destructive-ops.sh`) to `$HOME/.claude/agents/devops/hooks/guard-destructive-ops.sh`, which resolves through the user-scope deployment symlink (`~/.claude/agents/devops` → the repo folder). Shell-form hook commands (no `args`) run via `sh -c`, so `$HOME` expands — verified 2026-07-10 against `code.claude.com/docs/en/hooks`. Resolution through the symlink confirmed (`test -x` passes).
+- **Why:** the committed agent source leaked the user's personal home path into the repo; the symlink path is identical on any machine that follows the deployment convention (`~/.claude/agents/<name>` → `claude/<name>`), keeping the hook enforceable without machine-specific paths. (`${CLAUDE_PROJECT_DIR}` was rejected: the agents are user-scoped and must guard in any project, where the project dir isn't this repo.)
+- **Plan items:** none.
+
 ## 2026-07-09 — FalkorDB image fact updated: edge → v4.18.11
 - **What:** The grounding example in `devops.md` (and the devops rows in root `AGENTS.md` / `claude/AGENTS.md`) now cite the shared FalkorDB service as `falkordb/falkordb:v4.18.11` instead of `:edge`. The actual swap: both `start_falkordb.sh` scripts, `falkor-chat/compose.yaml`, and the CI service container pinned to `v4.18.11`; container recreated on the same `falkordb-data` volume (data intact), suites green (193/193 queries, 196 pytest).
 - **Why:** Deployment pinned to the latest tagged release (user decision, 2026-07-09); the prompt's example must cite the real image or orientation drifts.

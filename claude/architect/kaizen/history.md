@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-10 — Hook command made machine-independent (`$HOME` symlink path)
+- **What:** the frontmatter `PreToolUse` hook command was rewired from the absolute repo path (`/home/<user>/prg/graphmind-ai-lab/claude/architect/hooks/guard-plan-doc-writes.sh`) to `$HOME/.claude/agents/architect/hooks/guard-plan-doc-writes.sh`, which resolves through the user-scope deployment symlink (`~/.claude/agents/architect` → the repo folder). Shell-form hook commands (no `args`) run via `sh -c`, so `$HOME` expands — verified 2026-07-10 against `code.claude.com/docs/en/hooks`. Resolution through the symlink confirmed (`test -x` passes).
+- **Why:** the committed agent source leaked the user's personal home path into the repo; the symlink path is identical on any machine that follows the deployment convention (`~/.claude/agents/<name>` → `claude/<name>`), keeping the hook enforceable without machine-specific paths. (`${CLAUDE_PROJECT_DIR}` was rejected: the agents are user-scoped and must guard in any project, where the project dir isn't this repo.)
+- **Plan items:** none.
+
 ## 2026-07-09 — data-scientist boundary clause (description + delegate-the-method step)
 - **What:** Frontmatter `description` now names the `data-scientist` as the supplier of a design's AI/ML/DS method (model/embedding selection, retrieval strategy, evaluation methodology, experiment design), and "How you work" step 4 (Decide) instructs delegating such method calls to it via the `Agent` tool — it returns a method note at `<component>/docs/plans/<slug>-ml.md` (or inline) that the plan folds in, rather than the architect guessing the method. Pair `architect:data-scientist` added to `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS` (check 6, description symmetry).
 - **Why:** The `data-scientist` agent was created 2026-07-09 explicitly to work alongside the architect; the consumer side must state the convention too (agent-maintenance §4 handoff symmetry).
