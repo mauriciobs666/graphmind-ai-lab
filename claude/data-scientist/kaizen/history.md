@@ -1,0 +1,8 @@
+# Kaizen — Change History: data-scientist
+
+> Dated log of actual changes to the `data-scientist` agent. Most recent first.
+
+## 2026-07-09 — Created
+- **What:** Initial version of the `data-scientist` agent — the team's AI/ML/data-science specialist, created to work alongside `architect` (supplies the ML/DS method inside a design) and `analyst` (methodology review of plans/code). Advisory-only shape chosen by the user over a hands-on (graph-dba-style) shape: read-only on code, `Write`/`Edit` scoped to method notes (`docs/plans/<slug>-ml.md`) and methodology reviews (`docs/reviews/<slug>-ml.md`), harness-enforced by `hooks/guard-ds-doc-writes.sh` (PreToolUse, matcher `Write|Edit`, same contract as the analyst's guard but allowing both doc homes). Tools match architect/analyst (`Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent`); model opus; subagent-aware (questions return as the deliverable).
+- **Why:** The team had no ML/DS-methodology depth — model/embedding selection, RAG/GraphRAG evaluation design, metric choice, experiment design, statistical validity all landed on generalists. This lab's two themes (graph-backed AI apps, agent engineering) make the gap recurring.
+- **Boundary pairs declared** (added to `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS`, reciprocal clauses added to partners' descriptions): `architect:data-scientist` (software plan vs. ML method inside it), `analyst:data-scientist` (general static review vs. methodology review), `graph-dba:data-scientist` (in-graph vector mechanics vs. embedding/eval method). teco's routing table + handoff contracts gained a data-scientist row/entry.

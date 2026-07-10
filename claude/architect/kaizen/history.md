@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-09 — data-scientist boundary clause (description + delegate-the-method step)
+- **What:** Frontmatter `description` now names the `data-scientist` as the supplier of a design's AI/ML/DS method (model/embedding selection, retrieval strategy, evaluation methodology, experiment design), and "How you work" step 4 (Decide) instructs delegating such method calls to it via the `Agent` tool — it returns a method note at `<component>/docs/plans/<slug>-ml.md` (or inline) that the plan folds in, rather than the architect guessing the method. Pair `architect:data-scientist` added to `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS` (check 6, description symmetry).
+- **Why:** The `data-scientist` agent was created 2026-07-09 explicitly to work alongside the architect; the consumer side must state the convention too (agent-maintenance §4 handoff symmetry).
+- **Plan items:** none.
+
 ## 2026-07-09 — Consume tico's requirements doc by path (handoff symmetry)
 - **What:** "Understand the request" now states that a feature requirements document from `tico` may arrive as a path (`<component>/docs/requirements/<slug>.md`) — read it first as the stakeholder-confirmed WHAT/WHY the plan turns into a HOW; its acceptance criteria feed the test strategy.
 - **Why:** `tico` was created 2026-07-09 as the requirements half of a tico→architect handoff; the consumer side must state the convention too (agent-maintenance §4 handoff symmetry).

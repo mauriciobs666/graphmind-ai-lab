@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-09 — data-scientist boundary clause (description + GraphRAG bullet)
+- **What:** Frontmatter `description` and a new GraphRAG-section bullet state the split with the new `data-scientist` agent: graph-dba owns the in-graph mechanics (vector-index DDL, `db.idx.vector` queries, fusing similarity with traversal, their performance); the ML method above them — which embedding model, chunking strategy, how to evaluate retrieval quality — is the data-scientist's to design; GraphRAG layers get designed together. Pair `graph-dba:data-scientist` added to `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS` (check 6, description symmetry).
+- **Why:** The `data-scientist` agent was created 2026-07-09; "build/improve the GraphRAG layer" plausibly matched both agents, so the boundary must live in both descriptions (mirrors the devops split done the same day).
+- **Plan items:** none.
+
 ## 2026-07-09 — Deployment pinned to v4.18.11 (edge retired)
 - **What:** The lab's FalkorDB moved from `falkordb/falkordb:edge` (module `999999`) to the tagged release **`v4.18.11`** (module `41811`, Redis 8.6.3, released 2026-06-24). Rewrote the "This deployment" bullet (pinned release, reason from v4.18.11's documented behavior instead of moving-target/latest-`main` caveats; `vectorset` still loaded) and updated the quirks-section pointer. Re-stamped `falkordb-quirks.md`'s header: pinned build identified, quirks re-verified via the falkor-chat query suite (193/193 green on the new build); entries not exercised by the suite keep their edge-build dates pending individual re-probes. Catalog current-state refs updated (root `AGENTS.md`, `claude/AGENTS.md`, falkor-chat docs).
 - **Why:** User decided to pin the latest release (cost/verification churn of tracking edge; the prompt's verify-live posture existed largely because the build was a moving target). The quirks file's own rule — re-verify on any tagged-release upgrade — was executed via the canonical suite.
