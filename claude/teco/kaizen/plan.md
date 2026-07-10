@@ -23,5 +23,5 @@
 - **Notes:** Surfaced during creation-time verification (2026-06-20). New primitives not yet in cobb's resident notes.
 
 ## Parking lot / ideas
-- A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`. *(Partially addressed 2026-07-09: roster is now complete — qa-engineer + devops added — with routing signals per entry; a coder-vs-tdd decision tree is still open.)*
+- ~~A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`.~~ *(✅ Resolved 2026-07-09: the roster is now an explicit routing table — task shape → owner → tie-breaker — with the coder-vs-tdd efficiency rule on both implementer rows, plus a separate handoff-contracts list. See history.md.)*
 - Guard against over-orchestration: a heuristic for "this is a single-specialist job, skip the breakdown."
