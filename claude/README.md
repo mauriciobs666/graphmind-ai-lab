@@ -49,15 +49,14 @@ Skills were unified into the repo-root [`skills/`](../skills/) home — see [`sk
 These agents live in this repo but run from Claude Code's config dir via symlinks:
 
 - **Agents:** `~/.claude/agents/<name>` → `claude/<name>` (one symlink per agent folder).
-  - **Hook gotcha (`devops`, `architect`, `teco`, `tico`, `analyst`, `data-scientist`):** their `PreToolUse` guard hooks are referenced by
-    **absolute paths** in each agent's frontmatter (`claude/devops/hooks/guard-destructive-ops.sh`,
-    `claude/architect/hooks/guard-plan-doc-writes.sh`,
-    `claude/teco/hooks/guard-coordination-doc-writes.sh`,
-    `claude/tico/hooks/guard-requirements-doc-writes.sh`,
-    `claude/analyst/hooks/guard-review-doc-writes.sh`,
-    `claude/data-scientist/hooks/guard-ds-doc-writes.sh`). On a new machine or a different clone path,
-    re-point those paths (and re-create the symlinks). The scripts prefer `jq`, fall back to
-    `python3` — install one for clean extraction. (devops kaizen K-004.)
+  - **Hooks (`devops`, `architect`, `teco`, `tico`, `analyst`, `data-scientist`):** each agent's
+    frontmatter wires its `PreToolUse` guard as
+    `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
+    symlink on any machine — just re-create the symlinks on a new clone. The five doc-scoped
+    guards are thin wrappers over a shared core,
+    [`scripts/guard-doc-writes.sh`](./scripts/guard-doc-writes.sh) (each passes its allowed-path
+    globs + escalation message); `devops`'s destructive-ops guard is standalone. The scripts
+    prefer `jq`, fall back to `python3` — install one for clean extraction.
   - **tico runs first-order:** launch it as the main-session agent — `claude --agent tico` — so the
     interview is a live conversation (frontmatter hooks fire in main-session mode too, so its guard
     still applies; invoking it as a subagent degrades it to one interview round per invocation).
@@ -103,4 +102,4 @@ Notes:
 
 - **Folder per agent:** `<name>/<name>.md` is the source; `<name>/kaizen/{plan,history}.md` track improvements.
 - **Frontmatter** drives routing: the `description` says *what the agent does and precisely when to use it* so Claude Code can auto-delegate.
-- When you add, edit, rename, or remove an agent, keep this catalog and `AGENTS.md` (the agent-context file; `CLAUDE.md` is a `@AGENTS.md` import stub) in sync, and update the agent's `kaizen/` files.
+- **This catalog is the single full roster.** When you add, edit, rename, or remove an agent, update this catalog, the one-line indexes in `AGENTS.md` (the agent-context file; `CLAUDE.md` is a `@AGENTS.md` import stub) and the repo-root `AGENTS.md`, and the agent's `kaizen/` files — in the same change.
