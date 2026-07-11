@@ -315,7 +315,7 @@ assert_contains "fulltext rows carry threadId" "th1" "$out"
 #
 # Exercised here at the isolated-suite dim (EMBEDDING_DIM=4). The dim-1024
 # verification (real embedding size, wrong-dim quirk, RAM line) lives in the
-# graph-dba deliverable docs/plans/m2-graphrag.md — do not re-encode 1024 here.
+# graph-dba deliverable docs/archive/plans/m2-graphrag.md — do not re-encode 1024 here.
 # Score is cosine distance: 0 = identical, ASC = most similar first (DESIGN §1.3).
 # There is NO Entity pipeline in M2 — the §6 Entity expansion must no-op cleanly.
 

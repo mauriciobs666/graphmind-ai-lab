@@ -52,7 +52,7 @@ The delivered proof is the **conversational triage flow** (intake → research �
 **Reconciliation with the M3 slice map.** This feature, as reframed, spans what the Part-A
 decomposition split across **K-022** (executor), **K-023** (chat linkage: `TRIGGERED_BY` +
 StepRun→Message), and the **conversational half of K-024** (the triage proof). K-024's
-business-process proof and K-025 QA remain separate downstream items. The kaizen entries should be
+business-process proof and K-025 QA remain separate downstream items. The backlog entries should be
 re-annotated to reflect that the LLM-native reframe pulls the trigger + conversational proof into
 this executor deliverable (a doc task, flagged in §11).
 

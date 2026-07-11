@@ -1,10 +1,12 @@
-# Kaizen — Improvement Plan: falkor-chat
+# Backlog — falkor-chat
 
-> Forward-looking backlog for the `falkor-chat` component.
-> Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
+> Forward-looking backlog for the `falkor-chat` component (formerly `kaizen/plan.md`; item IDs
+> keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
+> plan documents move to [`archive/`](./archive/).
+> Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
 > Last reviewed: 2026-07-09 (**M3 — Workflow engine started: slice 1 delivered ✅** — K-020 (def
 > model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
-> see history.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
+> see HISTORY.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
 > decomposition (K-020…K-025) in `docs/plans/m3-workflow-engine.md` Part A — canonical item text
 > lives there; compact copies below. Next on the critical path: **K-022 — executor** (opens with
 > the §13 guard-language decision → user). Prior: M2 GraphRAG complete ✅ 2026-07-08 (K-008 +
@@ -16,7 +18,7 @@
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
-| **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → history.md) |
+| **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
 | **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1, 2026-07-09) → **K-022 → K-023 → K-024 → K-025** |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
@@ -68,7 +70,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 ## Active
 
 > **Milestone M3 — Workflow engine, in progress.** Slice 1 (**K-020 + K-021**) delivered
-> 2026-07-09 → history.md. The remaining M3 chain is essentially linear:
+> 2026-07-09 → HISTORY.md. The remaining M3 chain is essentially linear:
 > **K-022 (executor) → K-023 (chat linkage) → K-024 (proof flows) → K-025 (QA) ⇒ M3 ✅.**
 > Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
@@ -76,7 +78,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 ### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022…K-025 queued —
 
 > **K-020 — Workflow definition model in `reference`** and **K-021 — Snapshot materialization
-> into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → history.md.** Suites raised to
+> into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → HISTORY.md.** Suites raised to
 > query 193/193, pytest 196. Slice-1 residuals to carry into K-022: lock the def-spec
 > `start_key` contract (implemented as "exactly one step declares `start: True`"); the
 > `-[:HAS_STEP]->` containment edge added at the gate (index-anchored def-scoped reads).
@@ -132,13 +134,13 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 
-> **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (history.md).
+> **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
-> QA-accepted** (history.md). Baselines: pytest 156 / query suite 149/149.
+> QA-accepted** (HISTORY.md). Baselines: pytest 156 / query suite 149/149.
 
-### — Milestone M2 (GraphRAG) — ✅ DELIVERED (K-008/K-013/K-014/K-015 → history.md 2026-07-08) —
+### — Milestone M2 (GraphRAG) — ✅ DELIVERED (K-008/K-013/K-014/K-015 → HISTORY.md 2026-07-08) —
 
-### K-008 — GraphRAG retrieval core (✅ delivered 2026-07-08 → history.md — M2)
+### K-008 — GraphRAG retrieval core (✅ delivered 2026-07-08 → HISTORY.md — M2)
 
 > **Re-scope:** the old K-008 bundled the web client and the AI participant. Those are split out —
 > web request/response polish → **K-012** (M1), web agent-reply/`isMention` → **K-014** (M2), AI participant +
@@ -172,7 +174,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `MENTIONS→Entity` expansion is an `OPTIONAL MATCH` that no-ops cleanly, so M2 GraphRAG = vector-ANN + thread-scope
   without it. Entity extraction is parked (M3-adjacent, see Parking lot).
 
-### K-013 — AI `Agent` participant with `EMITTED` provenance (✅ delivered 2026-07-08 → history.md — M2)
+### K-013 — AI `Agent` participant with `EMITTED` provenance (✅ delivered 2026-07-08 → HISTORY.md — M2)
 
 - **Owner:** **`graph-dba`** gate (author + verify the `EMITTED` provenance write + any read surfacing it; add
   `test_queries.sh` assertions) → **`tdd-engineer`** (the responder service). `cobb` consult only if later exposed as an MCP tool.
@@ -192,7 +194,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** unit — responder with mocked retrieval + mocked LLM (deterministic answer); contract — the
   `EMITTED` write in `test_queries.sh`; one live smoke behind a marker.
 
-### K-014 — Web M2: render agent replies + reader `isMention` highlighting (✅ delivered 2026-07-08 → history.md — M2)
+### K-014 — Web M2: render agent replies + reader `isMention` highlighting (✅ delivered 2026-07-08 → HISTORY.md — M2)
 
 - **Owner:** `coder` (same web-JS-no-harness justification as K-012).
 - **Inputs/prereqs:** K-012 (polling base) + K-013 (agents actually posting). Uses the since-read `isMention` flag (§9,
@@ -207,7 +209,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Risks/RAM:** none (client-side).
 - **Test strategy:** manual smoke against a running server with the K-013 responder live.
 
-### K-015 — QA acceptance pass on M2 GraphRAG (✅ delivered 2026-07-08 → history.md — M2 · PASS, zero defects)
+### K-015 — QA acceptance pass on M2 GraphRAG (✅ delivered 2026-07-08 → HISTORY.md — M2 · PASS, zero defects)
 
 - **Owner:** `qa-engineer`.
 - **Inputs/prereqs:** K-008 + K-013 + K-014 landed.
@@ -215,13 +217,13 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   correctly, the agent participant answers with provenance, the web UI renders it. Versioned test plan + report per repo
   convention (`docs/test-plans/`, `docs/test-reports/`). **Explicitly notes** the still-deferred transport-level
   agent-actor path (carries the K-007 QA carry-over forward to K-017) since auth isn't in yet.
-- **Done-condition:** `docs/test-plans/m2-graphrag.md` + `docs/test-reports/m2-graphrag-report.md`; PASS (or
+- **Done-condition:** `docs/archive/test-plans/m2-graphrag.md` + `docs/archive/test-reports/m2-graphrag-report.md`; PASS (or
   PASS-with-parked-defects) on green baselines; isolated `ws:qa` (create + delete), `ws:acme`/`reference` untouched.
 - **Risks/RAM:** none (no code under test changed); budget the transient `ws:qa` @1024 vector index.
 - **Test strategy:** the pass itself; drives REST + MCP + the running responder.
 
 > **K-019 — Documentation-inconsistency sweep — delivered ✅ 2026-07-05** (doc-only; moved to
-> history.md). Reconciled stale test counts (110 / 126/126) in README/DESIGN, closed the §13
+> HISTORY.md). Reconciled stale test counts (110 / 126/126) in README/DESIGN, closed the §13
 > embedding "still open" drift (now points to the §1.3 decision), and aligned §14.1/README
 > real-time wording to M2.5. Counts sourced from a live suite run.
 
@@ -290,8 +292,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 |---|---|
 | `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
 | `docs/plans/m3-executor.md` | K-022: run/step-run executor + the §13 guard-language decision (author at pickup). |
-| `docs/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
-| `docs/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
+| `docs/archive/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
+| `docs/archive/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
 | `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |
 | `docs/plans/m2-auth-tenancy.md` | K-016 (deferred): real auth replacing `get_context`, per the §1.2 identity-authoritative decision. |
 | `docs/plans/m2-realtime.md` | K-018 (deferred): Pub/Sub → WebSocket/SSE, resolving §13 Bolt-vs-RESP. |

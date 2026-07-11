@@ -101,7 +101,7 @@
 - **Why:** K-001 was the open proof that an orchestrator subagent works in practice — depth,
   context-passing fidelity, and result quality were validated on a real deliverable, not a toy.
 - **Prompt changes:** **none needed** — the run surfaced no prompt weakness. Deliverables landed
-  in falkor-chat (see `falkor-chat/kaizen/history.md` 2026-07-09). Run cost datapoint: ~100k
+  in falkor-chat (see `falkor-chat/docs/HISTORY.md` 2026-07-09). Run cost datapoint: ~100k
   subagent tokens / 23 tool uses / ~45 min for a 2-item slice with 3 nested specialists.
 - **Plan items:** K-001 ✅ done (moved here). Same-run evidence closed **architect K-002**
   (plan executed cold by an isolated implementer) and updated **coder K-002** (contract proven

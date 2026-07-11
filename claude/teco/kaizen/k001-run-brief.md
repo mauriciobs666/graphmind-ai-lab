@@ -10,7 +10,7 @@
 - `claude/teco/kaizen/plan.md` **K-001** (high): validate nested delegation end-to-end
   (teco → architect → implementer → QA) — depth, context-passing fidelity, result quality.
   Pairs with architect K-002 and coder K-002 (handoff validation).
-- `falkor-chat/kaizen/plan.md`: M2 complete; **next milestone M3 — Workflow engine**, no
+- `falkor-chat/docs/BACKLOG.md`: M2 complete; **next milestone M3 — Workflow engine**, no
   kaizen items drafted yet → decomposition is genuinely needed, which is teco's job.
 
 ## Assignment scope (recommended: slice 1, not all of M3)
@@ -42,7 +42,7 @@ referenced docs yourself.
   §6.3 (coordination is workflow, not a separate primitive), §13 (open question: workflow
   guard expression language — expr lib vs minimal DSL in `Step.config` — "decided with the
   engine")
-- `falkor-chat/docs/QUERIES.md` (canonical query library) and `falkor-chat/kaizen/plan.md`
+- `falkor-chat/docs/QUERIES.md` (canonical query library) and `falkor-chat/docs/BACKLOG.md`
   (conventions: kaizen item format, graph-dba-gate → tdd-engineer pattern used by K-002/
   K-007/K-008/K-013, plan docs at `falkor-chat/docs/plans/`)
 

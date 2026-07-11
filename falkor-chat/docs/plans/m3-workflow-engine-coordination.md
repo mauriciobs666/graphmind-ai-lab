@@ -9,7 +9,7 @@
 
 Start M3 per DESIGN §12.4. Two deliverables in order:
 
-1. **Decompose all of M3** into sequenced falkor-chat kaizen items (K-020 onward), matching the
+1. **Decompose all of M3** into sequenced falkor-chat backlog items (K-020 onward), matching the
    existing item format (owner, inputs/prereqs, scope, done-condition, risks/RAM, test strategy),
    **plus** an implementation plan for **slice 1 only**. Architect deliverable, plan doc at
    `docs/plans/m3-workflow-engine.md`, handed onward by path.
@@ -60,7 +60,7 @@ Start M3 per DESIGN §12.4. Two deliverables in order:
 
 | # | Unit | Owner | Depends on | Status |
 |---|------|-------|-----------|--------|
-| 1 | Decompose all M3 → kaizen items K-020+ · plan slice 1 | architect | — | ✅ done |
+| 1 | Decompose all M3 → backlog items K-020+ · plan slice 1 | architect | — | ✅ done |
 | 2a | Slice 1 graph-dba gate (model + verified Cypher + suite assertions) | graph-dba | plan (1) | ✅ done — 193/193 |
 | 2b | Slice 1 impl (repository/service layer + REST) | tdd-engineer | 2a | ✅ done — pytest 196 |
 | 3 | Acceptance verification | teco (suites) / qa deferred to K-025 | 2b | ✅ suites green; QA parked at K-025 |
@@ -129,8 +129,8 @@ def. `Step.key` stays index-only. Expected suite target **149 → ~160 (K-020) �
   immutable-per-version so safe now; ties to deferred K-016 auth.
 - **QA acceptance pass:** parked at **K-025** per the architect plan (after the executor lands),
   covering publish → materialize → run → step-run → chat linkage for both proof flows.
-- **Kaizen transcription:** the K-020…K-025 items drafted in `docs/plans/m3-workflow-engine.md`
-  Part A still need transcribing into `kaizen/plan.md` (with K-020+K-021 marked delivered) — a doc
+- **Backlog transcription:** the K-020…K-025 items drafted in `docs/plans/m3-workflow-engine.md`
+  Part A still need transcribing into `docs/BACKLOG.md` (with K-020+K-021 marked delivered) — a doc
   task not performed in this engagement.
 </content>
 </invoke>

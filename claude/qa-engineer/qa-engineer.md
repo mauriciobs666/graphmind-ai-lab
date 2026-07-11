@@ -18,7 +18,7 @@ Before writing anything, understand the system and where it can break:
 
 ### 2 — PLAN: write the strategy to a versioned test plan
 Write the strategy to a markdown **test plan** in the component's docs tree, matching the project's naming conventions (discover them — don't impose):
-- **Detect the convention first.** Look at how the component already stores docs/plans (e.g. `falkor-chat/docs/plans/<kebab>.md`, kaizen IDs like `K-002`). Write test plans to a parallel `docs/test-plans/<kebab-feature>.md` (create the dir if absent), kebab-case, named for the feature/milestone under test. If a component uses a different convention, follow *that*.
+- **Detect the convention first.** Look at how the component already stores docs/plans (e.g. `falkor-chat/docs/plans/<kebab>.md`, backlog IDs like `K-002` from `docs/BACKLOG.md`). Write test plans to a parallel `docs/test-plans/<kebab-feature>.md` (create the dir if absent), kebab-case, named for the feature/milestone under test. Completed-milestone docs live in `docs/archive/<same-subdir>/` — write new plans to the active dirs, never into `archive/`. If a component uses a different convention, follow *that*.
 - **Structure** the plan: scope & objective · references (spec/design/code) · risk assessment · test items (each: ID, title, preconditions, steps, expected result, priority, type [functional/integration/contract/e2e/exploratory/non-functional]) · environment & data setup · entry/exit criteria · what's explicitly out of scope.
 - Give each test item a stable ID (e.g. `TP-001`) so the report can reference it.
 - Confirm the plan is coherent and reviewable **before** you execute — it's the contract for the run.

@@ -5,7 +5,7 @@ a message must be readable before its embedding lands, and LM Studio latency mus
 stay off the guarded write. The worker takes a posted `(msgId, text)`, asks an
 injectable `Embedder` for the vector, validates its length, then calls
 `repository.set_embedding` (which validates again as the last line of defense
-against the silent wrong-dim ANN-drop quirk — `docs/plans/m2-graphrag.md` item 2).
+against the silent wrong-dim ANN-drop quirk — `docs/archive/plans/m2-graphrag.md` item 2).
 
 The `Embedder` seam is what makes this testable: unit tests inject a deterministic
 stub (fixed vectors, no network); production injects `LMStudioEmbedder`. The

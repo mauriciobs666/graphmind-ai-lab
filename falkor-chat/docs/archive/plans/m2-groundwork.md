@@ -1,7 +1,7 @@
 # K-007 — M2 groundwork: implementation plan
 
 **Date:** 2026-07-04 · **Author:** architect
-**Input:** `docs/plans/m2-groundwork-queries.md` (graph-dba deliverable — all query bodies in
+**Input:** `docs/archive/plans/m2-groundwork-queries.md` (graph-dba deliverable — all query bodies in
 this plan are **verbatim from that document**; they are live-verified ground truth and must be
 copied, not re-derived). Referenced below as **[DBA §item-N]**.
 
@@ -489,7 +489,7 @@ fail, then land the v2 queries/service logic.
 ## 10. Ready to implement
 
 Execute steps 1–11 in order; every query body comes verbatim from
-`docs/plans/m2-groundwork-queries.md` (via the updated `QUERIES.md`, which this plan makes
+`docs/archive/plans/m2-groundwork-queries.md` (via the updated `QUERIES.md`, which this plan makes
 canonical). All design decisions are made (§1) — including all six graph-dba open questions
 (OQ1 doc fixes in step 10; OQ2 trust-msgId; OQ3 plain-`>` REST, no API extension; OQ4 verified
 live in step 3, repository fold-in deferred; OQ5 docs-only TIMEOUT posture; OQ6 punted to the

@@ -194,9 +194,12 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 |---|---|
 | `docs/DESIGN.md` | Full blueprint: graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP. The *why*; not a query/DDL copy — §5.3/§8 point to QUERIES.md, §7 points to `bootstrap_schema.sh`. |
 | `docs/QUERIES.md` | Canonical query library — all verified against the live instance (source of truth for **queries**) |
+| `docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing (formerly `kaizen/plan.md`) |
+| `docs/HISTORY.md` | Dated change log, most recent first — every delivered change gets an entry (formerly `kaizen/history.md`) |
+| `docs/archive/` | Frozen plans/test-plans/test-reports of closed milestones (same subdir names as the active dirs); a doc moves here when its milestone closes, inbound links fixed in the same change |
 | `scripts/bootstrap_schema.sh` | Source of truth for **executable DDL** (indexes + constraints + full-text/vector); DESIGN §7 describes it, doesn't duplicate it |
-| `docs/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
-| `docs/plans/m2-groundwork.md` · `docs/plans/m2-groundwork-queries.md` | K-007 plan + graph-dba verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings |
+| `docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
+| `docs/archive/plans/m2-groundwork.md` · `docs/archive/plans/m2-groundwork-queries.md` | K-007 plan + graph-dba verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings |
 
 ---
 

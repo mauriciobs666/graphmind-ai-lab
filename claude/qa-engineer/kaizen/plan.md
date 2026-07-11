@@ -9,7 +9,7 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-01 | med | 🔵 | Ship a reusable test-plan + test-report markdown template pair (as skill or in-repo doc) so structure is consistent across runs |
-| K-002 | 2026-07-01 | med | 🔵 | Define the `docs/test-plans/` + `docs/test-reports/` convention explicitly in `falkor-chat/AGENTS.md` (currently inferred by the agent) |
+| K-002 | 2026-07-01 | med | ✅ | Define the `docs/test-plans/` + `docs/test-reports/` convention explicitly in `falkor-chat/AGENTS.md` (currently inferred by the agent) — done 2026-07-11 via the docs-unification pass (see history) |
 | K-003 | 2026-07-01 | low | 🔵 | Consider a handoff protocol: qa-engineer files defects → coder/tdd-engineer fix → qa-engineer re-runs (regression loop) |
 | K-004 | 2026-07-01 | low | 🔵 | Capture a first-run smoke-eval as a repeatable check; document the "new subagent isn't routable until a new session" registry-reload gotcha where users will see it |
 
@@ -21,7 +21,7 @@
 - **Notes:** keep it lean; progressive-disclosure skill is the natural home if it grows.
 
 ### K-002 — Pin the artifact-location convention in component docs
-- **Status:** 🔵 proposed
+- **Status:** ✅ done 2026-07-11 — the repo-wide docs unification defined the module documentation convention (active `docs/test-plans/`+`docs/test-reports/` vs. frozen `docs/archive/`) in the root `AGENTS.md` and the `falkor-chat/AGENTS.md` key-docs table; the agent's PLAN bullet was updated to match (see history 2026-07-11).
 - **Priority:** medium
 - **Rationale:** the agent currently *detects* where to write plans/reports. Writing the convention into `falkor-chat/AGENTS.md` (and other components as they gain QA needs) removes ambiguity and drift.
 - **Proposed change:** add a short "Test plans & reports live in `docs/test-plans/` and `docs/test-reports/`, kebab-case per feature" note to the relevant component `AGENTS.md`.

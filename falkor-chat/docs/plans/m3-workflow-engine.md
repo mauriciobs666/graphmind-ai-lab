@@ -1,8 +1,8 @@
 # M3 — Workflow engine: decomposition + Slice 1 implementation plan
 
 > **Status:** proposed (architect plan, 2026-07-09). Planning-only artifact — no code/DDL changed.
-> **Scope:** Part A decomposes **all of M3** into sequenced kaizen items K-020…K-025 (to be
-> transcribed into `kaizen/plan.md` later — this doc is the draft, not an edit of `plan.md`).
+> **Scope:** Part A decomposes **all of M3** into sequenced backlog items K-020…K-025 (to be
+> transcribed into `docs/BACKLOG.md` later — this doc is the draft, not an edit of `plan.md`).
 > Part B is the **full implementation plan for Slice 1 only** (K-020 + K-021: the definition model
 > in `reference` + snapshot materialization into `ws:{id}`). Later slices are Part-A items only.
 > **Baselines before this work:** query suite **149/149**, pytest **156**, both green. FalkorDB up.
@@ -82,10 +82,10 @@ accumulate/collide — Slice 1 needs a `reference`-wiping fixture (or per-test u
 
 ---
 
-## PART A — M3 kaizen decomposition (K-020 … K-025)
+## PART A — M3 backlog decomposition (K-020 … K-025)
 
 Six items. Slice 1 = **K-020 + K-021** (planned in full in Part B). K-022…K-025 are scoped here
-as kaizen items only (no implementation detail), matching the existing K-002/K-007/K-008/K-013
+as backlog items only (no implementation detail), matching the existing K-002/K-007/K-008/K-013
 format: owner · inputs/prereqs · scope · done-condition · risks/RAM (rule 6) · test strategy.
 
 ### Sequencing (critical path + parallelism)

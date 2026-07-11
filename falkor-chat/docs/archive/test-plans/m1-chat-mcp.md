@@ -19,7 +19,7 @@ the *running* server (HTTP + a real MCP client session) to catch anything the in
 
 - `falkor-chat/README.md` — "Run the M1 server" + M1 milestone row.
 - `falkor-chat/docs/DESIGN.md` §14–§15 (client/server architecture).
-- `falkor-chat/docs/plans/m1-chat-mcp.md` — feature plan / acceptance criteria.
+- `falkor-chat/docs/archive/plans/m1-chat-mcp.md` — feature plan / acceptance criteria.
 - Code: `server/falkorchat/{api,mcp,services,app,config,schemas}.py`.
 - Existing tests: `server/tests/` (repository/services live, MCP, REST, app-mount).
 

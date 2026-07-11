@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-11 — Module docs convention updated (kaizen→BACKLOG, archive/ rule)
+- **What:** The PLAN phase's "detect the convention first" bullet now cites backlog IDs from `docs/BACKLOG.md` (modules no longer have `kaizen/plan.md`) and adds the `docs/archive/<same-subdir>/` rule: completed-milestone docs are frozen there — new test plans/reports go to the active `docs/test-plans/`/`docs/test-reports/` dirs, never into `archive/`. This closes K-002's intent from the other side: the convention is now defined once in the root `AGENTS.md` (module documentation convention) rather than only inferred.
+- **Why:** Repo-wide docs unification (2026-07-11, see `falkor-chat/docs/HISTORY.md`): module-level `kaizen/{plan,history}.md` retired into `docs/{BACKLOG,HISTORY}.md` + `docs/archive/`. Agent-folder kaizen pairs (this file) are unchanged.
+- **Plan items:** K-002 effectively resolved by the root-`AGENTS.md` convention + `falkor-chat/AGENTS.md` key-docs rows.
+
 ## 2026-07-11 — Description slimmed (team-wide token-cost pass)
 - **What:** Frontmatter `description` compressed from 844 to 575 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
 - **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
@@ -24,11 +29,11 @@
 - **Docs touched:** falkor-chat test-plan + report (appended by the subagent).
 
 ## 2026-07-01 — first spin (proxy-run) against falkor-chat M1
-- **What:** exercised the agent's four-phase playbook end-to-end on the falkor-chat M1 server (REST + MCP). Produced `falkor-chat/docs/test-plans/m1-chat-mcp.md` and `.../test-reports/m1-chat-mcp-report.md`. Result: 22/22 functional+contract items passed on a 57/57 baseline; found DEF-1 (MCP endpoint 405s at `/mcp`, only `/mcp/` works — README/DESIGN mismatch).
+- **What:** exercised the agent's four-phase playbook end-to-end on the falkor-chat M1 server (REST + MCP). Produced `falkor-chat/docs/archive/test-plans/m1-chat-mcp.md` and `.../test-reports/m1-chat-mcp-report.md`. Result: 22/22 functional+contract items passed on a 57/57 baseline; found DEF-1 (MCP endpoint 405s at `/mcp`, only `/mcp/` works — README/DESIGN mismatch).
 - **Why:** validate the new agent's methodology yields a usable strategy → plan → execute → report cycle.
 - **Run mode:** **proxy** — run by cobb following the qa-engineer prompt, NOT via Task delegation. Reason: Claude Code loads the subagent registry at **session start**, so the freshly-symlinked `qa-engineer` was not yet routable in the session that created it (`Agent(subagent_type='qa-engineer')` → "agent type not found"). Expected behavior; a new session picks it up.
 - **Playbook validation (what worked):** the "verify before asserting" rule caught a wrong hypothesis (assumed `ServiceError`→500 because `api.py` lacks handlers; actually `app.py` maps them 404/400). Evidence-over-assertion produced a clean, reproducible defect. Doc-convention detection (`docs/test-plans/` + `docs/test-reports/`, kebab per feature) worked. Environment-approval guardrail behaved (needed cobb's explicit pre-authorization to touch the shared DB).
-- **Docs touched:** falkor-chat test-plan + report (new); `falkor-chat/kaizen/history.md` note.
+- **Docs touched:** falkor-chat test-plan + report (new); `falkor-chat/docs/HISTORY.md` note.
 - **Plan items:** validated K-001 need (templates would have sped the plan/report authoring); added K-004 (first-run smoke-eval + document the registry-reload gotcha in the agent README/testing notes).
 
 ## 2026-07-01 — created

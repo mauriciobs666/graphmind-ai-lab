@@ -4,7 +4,7 @@
 > **Feature under test:** M2 GraphRAG loop — out-of-band embeddings + 1024-dim vector index +
 > hybrid retrieval + AI agent participant + `EMITTED` provenance. Built across K-008 (retrieval
 > core), K-013 (agent participant + provenance), K-014 (web rendering).
-> **References:** `docs/plans/m2-graphrag.md` (K-008) · `docs/plans/m2-agent-participant.md` (K-013)
+> **References:** `docs/archive/plans/m2-graphrag.md` (K-008) · `docs/archive/plans/m2-agent-participant.md` (K-013)
 > · `docs/QUERIES.md` §6 (hybrid retrieval), §10 (EMITTED provenance) · `docs/DESIGN.md` §9/§10/§11
 > · `server/falkorchat/{embedding,responder,services,repository,api,mcp,app,config}.py`
 > **Prior passes:** `k007-m2-groundwork-report.md` (v2 write paths, agent authorship, cursors) —

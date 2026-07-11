@@ -1,7 +1,7 @@
 """Integration tests for the K-013 `EMITTED` agent-answer provenance (repo layer).
 
 `post_agent_answer` / `read_provenance` / `read_citing_answers` map 1:1 to
-`docs/QUERIES.md` §10 (verified in `docs/plans/m2-agent-participant.md`). Tests
+`docs/QUERIES.md` §10 (verified in `docs/archive/plans/m2-agent-participant.md`). Tests
 run against the live `ws:test` graph (conftest bootstraps schema + wipes per
 test), mirroring `test_graphrag.py`/`test_repository.py`.
 

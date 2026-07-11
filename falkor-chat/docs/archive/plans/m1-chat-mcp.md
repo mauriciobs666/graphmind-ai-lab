@@ -58,7 +58,7 @@ read-cursors** — into the M1 schema and query library.
   in a follow-up query.
 - **Query authoring is graph-dba's job.** K-001 (`list_channels`) set the precedent: new Cypher is
   authored + `GRAPH.PROFILE`-verified + asserted in `test_queries.sh` by graph-dba *before* the
-  repository method is built (`kaizen/history.md` 2026-06-11). This plan follows that order.
+  repository method is built (`docs/HISTORY.md` 2026-06-11). This plan follows that order.
 - **MCP-on-FastAPI is verified viable.** The official MCP Python SDK / FastMCP mounts a
   Streamable-HTTP server into an existing FastAPI app via `app.mount(...)`, **but** the MCP app's
   lifespan must be passed to FastAPI (`FastAPI(lifespan=mcp_app.lifespan)`) or the session manager
@@ -331,7 +331,7 @@ mention resolves to a known member. `mcp.py` and `api.py` stay dumb adapters.
 7. **Docs (same change, per repo rule).** Update `DESIGN.md` (§14.4 surface table + a new §15 "MCP
    transport" or §14.x), `QUERIES.md` (done in step 2), `AGENTS.md` (message write-path invariants
    now include `MENTIONS_MEMBER`; new key facts), `README.md` (roadmap/layout), and
-   `kaizen/{plan,history}.md`.
+   `docs/{BACKLOG,HISTORY}.md`.
 
 ---
 
@@ -413,7 +413,7 @@ Build order, gated on the schema/query work first (K-001 precedent):
 2. **coder/tdd-engineer** — repository methods → services (mention threading, RO/RW read dispatch,
    cursors, `create_thread`) → `mcp.py` + `app.py` mount (lifespan!) → REST mention parity.
 3. **Docs in the same change** — `DESIGN.md`, `AGENTS.md` (write-path invariant now includes
-   `MENTIONS_MEMBER`), `README.md`, `kaizen/{plan,history}.md`.
+   `MENTIONS_MEMBER`), `README.md`, `docs/{BACKLOG,HISTORY}.md`.
 
 Decisions are locked (Q#1 MCP actor = `get_context()`; Q#3 per-thread cursors only). The only call
 left is **Q#2 (member-match index strategy)** — graph-dba's, made against a real `GRAPH.PROFILE`

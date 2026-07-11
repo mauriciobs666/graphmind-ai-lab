@@ -19,7 +19,7 @@ now return 200. A **fresh tenant persists out-of-the-box** end-to-end (new works
 manually seeded → post 201 **and** read-back confirms storage). Cross-door parity holds after the
 §9 ordering change. All three write flows the web UI issues succeed through the real HTTP surface.
 
-Three **already-documented, deferred residuals** (parked in `kaizen/plan.md`) were re-confirmed as
+Three **already-documented, deferred residuals** (parked in `docs/BACKLOG.md`) were re-confirmed as
 still-open — recorded here as dated observations, **not** new defects.
 
 ## 2. Results
@@ -42,7 +42,7 @@ still-open — recorded here as dated observations, **not** new defects.
 | HR-012 | UI create thread | ✅ PASS | `POST /channels/{cid}/threads {title}` → **201**; appears in `GET …/threads` |
 | HR-013 | UI post message w/ mention | ✅ PASS | `POST …/messages {text,mentions:[u2]}` → **201**, `mentions:["u2"]` echoed; readable in thread |
 | HR-014 | UI search | ✅ PASS | `GET /search?q=welcome` → **200**; hit shape carries `text`, `createdAt`, `score` |
-| HR-015 | Residual: nested route ignores `tid` | ⚠️ CONFIRMED OPEN | `GET /threads/deadbeefwrongthread/messages/{realMsgId}` → **200** returns the message under a nonexistent thread path (documented in `kaizen/plan.md`) |
+| HR-015 | Residual: nested route ignores `tid` | ⚠️ CONFIRMED OPEN | `GET /threads/deadbeefwrongthread/messages/{realMsgId}` → **200** returns the message under a nonexistent thread path (documented in `docs/BACKLOG.md`) |
 | HR-016 | Residual: `parseMentions` 400s whole send | ⚠️ CONFIRMED OPEN | `POST …/messages {text:"hi @nobody…", mentions:["nobody"]}` → **400** `UnknownMemberError` — a casual `@handle` fails the whole send (documented) |
 | HR-017 | Residual: `read_thread` omits `isMention` | ⚠️ CONFIRMED OPEN | `GET /threads/{tid}/messages` rows keys `[authorId, authorType, createdAt, displayName, msgId, role, text]` — **no `isMention`**; the web UI `.mention` highlight is dead code (documented) |
 
@@ -52,7 +52,7 @@ still-open — recorded here as dated observations, **not** new defects.
 
 **No new defects.** All five hardened defects verified fixed live. The three ⚠️ items above are
 **previously-documented, intentionally-deferred residuals** (K-004 review, parked in
-`kaizen/plan.md`) — re-confirmed here with dated evidence so the backlog stays accurate. Ranked by
+`docs/BACKLOG.md`) — re-confirmed here with dated evidence so the backlog stays accurate. Ranked by
 user impact for when they're picked up:
 
 1. **HR-015 — `GET /threads/{tid}/messages/{msg_id}` ignores `{tid}`** — *Severity: Low.* Any

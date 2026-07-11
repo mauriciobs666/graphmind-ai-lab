@@ -45,12 +45,12 @@
   needed from a single datapoint — recheck if the parameter-contract gap recurs.
 - **Prompt changes:** none.
 - **Plan items:** K-002 ✅ done (moved here — the live validation this item waited on; evidence
-  shared with teco K-001, see `claude/teco/kaizen/history.md` 2026-07-09). Plan is now empty of
+  shared with teco K-001, see `claude/teco/docs/HISTORY.md` 2026-07-09). Plan is now empty of
   active items.
 
 ## 2026-07-08 — Plan-doc handoff by default, subagent-context awareness, hook-enforced Write/Edit (K-001 ✅, K-003 ✅)
 - **What:** Four changes from a team-level design review (architect as a member of teco's roster):
-  1. **Plan document is now the default deliverable** (K-001 ✅): step 5 rewritten — write the plan to `<component>/docs/plans/<slug>.md` (kebab-case; repo-root `docs/plans/` for cross-component work) and return the *path* + the "ready to implement" summary; inline delivery only for quick assessments. Handoff section updated to match ("implement the plan at `<path>`"). Convention matches what falkor-chat already used de facto (`falkor-chat/docs/plans/m2-graphrag.md`).
+  1. **Plan document is now the default deliverable** (K-001 ✅): step 5 rewritten — write the plan to `<component>/docs/plans/<slug>.md` (kebab-case; repo-root `docs/plans/` for cross-component work) and return the *path* + the "ready to implement" summary; inline delivery only for quick assessments. Handoff section updated to match ("implement the plan at `<path>`"). Convention matches what falkor-chat already used de facto (`falkor-chat/docs/archive/plans/m2-graphrag.md`).
   2. **Subagent-context awareness:** new opener paragraph — the brief is the architect's *entire* context (no user conversation, no other agents' work) and its final message is terminal (`AskUserQuestion` unavailable to subagents). Step 1 reframed: design-changing ambiguity → return findings + the one or two sharp open questions *as the deliverable* and stop, instead of "ask questions" (impossible mid-run).
   3. **TDD-destined plans:** test-strategy section now says to sequence as an ordered list of behaviors/test cases (red→green) when the repo mandates TDD or the implementer is `tdd-engineer` (this user's default preference).
   4. **Harness-enforced read-only-on-code** (K-003 ✅): new subagent-scoped `PreToolUse` hook `architect/hooks/guard-plan-doc-writes.sh`, wired in frontmatter (`matcher: Write|Edit`, absolute path — devops precedent). Escalates any `Write`/`Edit` targeting a path outside `docs/plans/` (or `/tmp` scratchpad) to the human (`permissionDecision: "ask"`); fail-open on unparseable input with the prompt guardrail as backstop. Smoke-tested: code path → ask; absolute + relative `docs/plans/` → pass; `/tmp/` → pass; garbage stdin → pass.

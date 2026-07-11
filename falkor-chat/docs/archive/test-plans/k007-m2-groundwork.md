@@ -14,7 +14,7 @@
 
 K-007 landed with heavy developer-level coverage (server pytest 98, query suite 115/115,
 including repo-level replay/race/tie regressions and an in-process 8-worker hammer — see
-`docs/plans/m2-groundwork.md` §7). **This pass does not re-run that layer.** It verifies, from
+`docs/archive/plans/m2-groundwork.md` §7). **This pass does not re-run that layer.** It verifies, from
 the outside in, what those tests structurally cannot:
 
 1. **Concurrency through the real HTTP stack** — parallel REST posts racing a first-post on a
@@ -38,9 +38,9 @@ the outside in, what those tests structurally cannot:
 
 ## 2. References (sources of truth)
 
-- `git show 94ab746` — the K-007 diff; `kaizen/history.md` 2026-07-05 entry.
-- `docs/plans/m2-groundwork.md` (§1 decisions, §7 dev-test enumeration = the do-not-duplicate
-  list) · `docs/plans/m2-groundwork-queries.md` (defect evidence + status-row contract table).
+- `git show 94ab746` — the K-007 diff; `docs/HISTORY.md` 2026-07-05 entry.
+- `docs/archive/plans/m2-groundwork.md` (§1 decisions, §7 dev-test enumeration = the do-not-duplicate
+  list) · `docs/archive/plans/m2-groundwork-queries.md` (defect evidence + status-row contract table).
 - `AGENTS.md` — "Message write paths" invariants (status-row contract, role derivation,
   since-read/cursor contract) + live-verified facts.
 - `docs/QUERIES.md` §2/§3/§4(+§4.x)/§5/§9 v2 · `docs/DESIGN.md` §5.1/§9/§10.

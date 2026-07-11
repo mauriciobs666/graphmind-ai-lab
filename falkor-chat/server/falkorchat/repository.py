@@ -19,7 +19,7 @@ from . import config, db
 class EmbeddingDimensionError(Exception):
     """Embedding length does not match the workspace's vector-index dimension.
 
-    Guards the silent-corruption quirk (K-008, `docs/plans/m2-graphrag.md` item 2):
+    Guards the silent-corruption quirk (K-008, `docs/archive/plans/m2-graphrag.md` item 2):
     a wrong-dimension `vecf32` write is **silently accepted** at `SET` (no engine
     error) but the node then **falls out of the ANN index** — permanently
     unretrievable by `hybrid_search`, with no way to detect it after the fact

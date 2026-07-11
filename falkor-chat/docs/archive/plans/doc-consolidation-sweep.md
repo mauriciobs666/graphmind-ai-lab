@@ -14,7 +14,7 @@
 
 **Goal.** Design decisions have accreted *outside* the canonical design doc. `DESIGN.md` §1
 "Decisions locked in" holds only **3** rows (the top-level axes); `AGENTS.md`'s "Decisions locked
-in" table holds **~18** detailed decisions *with rationale*; `kaizen/plan.md` holds a 6-row
+in" table holds **~18** detailed decisions *with rationale*; `docs/BACKLOG.md` holds a 6-row
 "Locked M2 stack decisions" block. So `AGENTS.md` has quietly become the de-facto authoritative
 home for ~15 design decisions the DESIGN register never absorbed. This violates the project's own
 stated discipline — already applied to queries ("the exact verified Cypher lives in ONE place —
@@ -26,8 +26,8 @@ decisions. This plan applies that single-authoritative-home rule to decisions, c
 | Doc | Role | Contains decisions? |
 |---|---|---|
 | `docs/DESIGN.md` | **Current state** — the blueprint | **Yes — §1 is the single authoritative decision register.** It absorbs the detailed decisions from AGENTS.md + plan.md, each with its rationale/consequence. Where the body already explains a decision (thread model §5, write paths §5.3/§9, indexes §7, engine facts §2, workflow §6), §1 carries the *statement* and points to that section — it does **not** re-explain. |
-| `kaizen/history.md` | **The diff** — dated changelog | No. Provenance only (when/why a thing was decided). Stays a log. Every durable decision it records must be reflected in DESIGN; history entries stay intact as dated records. |
-| `kaizen/plan.md` | **The future** — forward-looking backlog | No decision *store*. User-approved locked decisions **graduate** into DESIGN; plan.md keeps a pointer. |
+| `docs/HISTORY.md` | **The diff** — dated changelog | No. Provenance only (when/why a thing was decided). Stays a log. Every durable decision it records must be reflected in DESIGN; history entries stay intact as dated records. |
+| `docs/BACKLOG.md` | **The future** — forward-looking backlog | No decision *store*. User-approved locked decisions **graduate** into DESIGN; plan.md keeps a pointer. |
 | `AGENTS.md` | **Pointer map** for agents | A terse **do-not-reopen index** — one line per locked decision (name + link to its DESIGN home), **rationale removed** (rationale lives once, in DESIGN). Not deleted — agents get the quick locked-list without reading 667 lines of DESIGN. |
 
 **Mental model to preserve:** **DESIGN = state · history = the diff · plan = the future ·
@@ -78,7 +78,7 @@ carries the decision itself (or points to QUERIES where the mechanics already li
 `ctx`, needs one new §6.2 body line), and D7/D17/D18 (mechanics already canonical in QUERIES, so
 the §1.2 row points there rather than adding DESIGN body).
 
-### 2.2 From `kaizen/plan.md` "Locked M2 stack decisions" (6 rows, lines 56-69)
+### 2.2 From `docs/BACKLOG.md` "Locked M2 stack decisions" (6 rows, lines 56-69)
 
 All six are **user-approved (2026-07-04)** and durable → graduate into a new DESIGN **§1.3 "M2
 stack — decided, pending implementation"** block, cross-linked to the RAM/roadmap sections that
@@ -140,7 +140,7 @@ where-detailed*, never a re-copy of body prose.
 
 ### §1.3 — M2 stack (decided 2026-07-04, pending implementation)
 
-> User-approved M2 stack. Locked here; implemented in K-008/K-013 (see kaizen/plan.md). Numbers
+> User-approved M2 stack. Locked here; implemented in K-008/K-013 (see docs/BACKLOG.md). Numbers
 > detailed in §11 (RAM) and §12 (M2 roadmap).
 
 | Component | Decision | Rationale | Detailed in |
@@ -192,7 +192,7 @@ Rules for the rewrite:
 
 ## 5. plan.md + history.md handling
 
-### 5.1 `kaizen/plan.md` — graduate the locked stack, keep a pointer
+### 5.1 `docs/BACKLOG.md` — graduate the locked stack, keep a pointer
 - Replace the "## Locked M2 stack decisions (2026-07-04, user-approved)" table (lines 56-69) with
   a one-line pointer:
   > **M2 stack (embedding model/dim, agent LLM, runtime, VRAM, upgrade path) is locked in
@@ -203,7 +203,7 @@ Rules for the rewrite:
 - Everything else in plan.md (K-011…K-019 items, sequencing, parking lot) is forward-looking work
   → **stays**.
 
-### 5.2 `kaizen/history.md` — history-only decision scan
+### 5.2 `docs/HISTORY.md` — history-only decision scan
 Scanned all entries (2026-06-11 → 2026-07-05) for durable decisions that exist **only** in history
 and never reached DESIGN. **Result: none found — the discipline held.** Spot checks:
 - REST-over-gRPC transport decision (2026-06-11) → already DESIGN §14.1 (with rejected-gRPC
@@ -258,7 +258,7 @@ Coordination is workflow, not a separate primitive"**, in 2-4 lines:
 > Agent/team coordination (task lifecycle, "room state") is modelled as an M3 `WorkflowDef` of
 > `kind:'process'` over `Step` + `TRANSITION` + `StepRun` — **not** a flat `Task` node or a
 > presence field. This avoids a parallel model that would later need migrating into the engine
-> (single-store philosophy). Full rationale/ADR: `docs/plans/m1-chat-mcp.md` Appendix B.
+> (single-store philosophy). Full rationale/ADR: `docs/archive/plans/m1-chat-mcp.md` Appendix B.
 
 Optionally add a one-line §13 note that coordination is *deferred-to-M3*, not open. Appendix B
 **stays** as the ADR of record (full comparison table). **No source deletion.** This is a

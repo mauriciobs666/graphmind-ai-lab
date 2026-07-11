@@ -3,7 +3,7 @@
 > **Status:** proposed method note (M2.5-quality track). Advisory deliverable — implementation
 > routes to `coder`/`tdd-engineer`; any in-graph query change routes to `graph-dba`.
 > **Author:** data-scientist · **Date:** 2026-07-10
-> **Slots into:** kaizen plan as a tracked **M2.5-quality** item (draft at the bottom of this doc),
+> **Slots into:** `docs/BACKLOG.md` as a tracked **M2.5-quality** item (draft at the bottom of this doc),
 > parallel to the M2.5 hardening track (K-016/K-017/K-018), sequenced behind the M3 critical path.
 
 ## The question & the decision at stake
@@ -19,14 +19,14 @@ qa-engineer and implementers inherit something testable.
 
 **What is explicitly NOT in question:** the M2 scope cuts. "M2 green = functional GraphRAG"
 (embeddings + vector index + hybrid retrieval + agent + `EMITTED`) was a deliberate, user-signed-off
-DoD (kaizen 2026-07-05); the dormant `Entity` expansion and vector-only retrieval are *intentional
+DoD (backlog 2026-07-05); the dormant `Entity` expansion and vector-only retrieval are *intentional
 and tracked*, not defects. This note does not reopen them — it builds the instrument that will
 judge them **if/when** they're un-parked.
 
 ## Findings from the real system
 
 Read: `server/falkorchat/responder.py`, `embedding.py`, `llm.py`, `repository.hybrid_search`,
-`config.py`, `docs/plans/m2-graphrag.md`, `docs/test-reports/m2-graphrag-report.md`, `kaizen/plan.md`.
+`config.py`, `docs/archive/plans/m2-graphrag.md`, `docs/archive/test-reports/m2-graphrag-report.md`, `docs/BACKLOG.md`.
 
 1. **Retrieval today is pure single-vector kNN.** `repository.hybrid_search` seeds via
    `db.idx.vector.queryNodes('Message','embedding',$k,…)`, cosine distance **ASC**, then a
@@ -44,7 +44,7 @@ Read: `server/falkorchat/responder.py`, `embedding.py`, `llm.py`, `repository.hy
 4. **No evaluation exists, and none is in the backlog.** The M2 QA pass (K-015) verified the *loop
    works* — plumbing + ranking on a toy 3-topic corpus (cooking/space/biology, maximally separated).
    The report itself flags: *"retrieval quality is model-dependent… real-world overlap not
-   exercised."* No golden set, no recall@k/MRR/nDCG, no faithfulness/groundedness. The kaizen
+   exercised."* No golden set, no recall@k/MRR/nDCG, no faithfulness/groundedness. The backlog
    parking lot tracks the Entity pipeline; **nothing tracks measuring retrieval quality.** This is
    the genuine gap.
 5. **Self-retrieval inflation risk (methodological trap for the eval itself).** The responder
@@ -101,7 +101,7 @@ baseline against today's vector-only retrieval; every future change is a measure
   trustworthy. Start with deterministic retrieval metrics (no judge needed) + a thin calibrated
   faithfulness check; graduate to the fuller suite only if the cheap layer proves insufficient.
 - **Online A/B on real traffic.** Rejected as the *first* instrument: traffic is too thin
-  pre-production ("long road before production," kaizen) — underpowered, can't answer the question
+  pre-production ("long road before production," backlog) — underpowered, can't answer the question
   yet. Offline eval is the right rung now; revisit A/B at real volume.
 
 ## Evaluation design (metric · data · threshold)
@@ -141,9 +141,9 @@ app-layer `coder`/`tdd-engineer` work.
 
 ---
 
-## Ready-to-paste kaizen item (M2.5-quality track)
+## Ready-to-paste backlog item (M2.5-quality track)
 
-> Paste into `kaizen/plan.md`. Suggested placement: a new **"M2.5-quality track"** heading parallel
+> Paste into `docs/BACKLOG.md`. Suggested placement: a new **"M2.5-quality track"** heading parallel
 > to the deferred M2.5 hardening track, or under Active if picked up soon. Renumber `K-0xx` to the
 > next free id.
 

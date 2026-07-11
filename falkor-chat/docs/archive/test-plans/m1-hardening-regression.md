@@ -17,7 +17,7 @@ outside in (REST `curl` + a real MCP client session + the exact HTTP the web UI 
 2. **Genuinely untested integration/acceptance behaviour** the unit suite doesn't reach: cursor +
    `limit` pagination loss across real MCP reads, cross-door parity *after* the ordering change,
    the web UI's three write flows through the real HTTP surface, and search error-mapping.
-3. **Documented-but-unfixed residuals** (parked in `kaizen/plan.md`) still reproduce — recorded as
+3. **Documented-but-unfixed residuals** (parked in `docs/BACKLOG.md`) still reproduce — recorded as
    dated confirmations/observations, not new defects.
 
 ## 2. References (sources of truth)
@@ -28,7 +28,7 @@ outside in (REST `curl` + a real MCP client session + the exact HTTP the web UI 
   invariant / §9.3 no-member no-op), §5 (search).
 - `falkor-chat/docs/DESIGN.md` §15.1 (trailing-slash gotcha), §15.2 (cursor semantics).
 - Code: `server/falkorchat/{app,api,services,repository,mcp,config}.py`; `web/app.js`.
-- `falkor-chat/kaizen/{history,plan}.md` — K-004 record + parked residuals.
+- `falkor-chat/docs/{HISTORY,BACKLOG}.md` — K-004 record + parked residuals.
 
 ## 3. Risk assessment (drives prioritization)
 
@@ -98,7 +98,7 @@ outside in (REST `curl` + a real MCP client session + the exact HTTP the web UI 
 | HR-013 | UI post message w/ mention | `POST /threads/{tid}/messages {text,mentions:[u2]}` (as `composer`+`parseMentions` for `@u2`) | 201; `mentions:["u2"]` echoed; readable in thread | Med | e2e |
 | HR-014 | UI search | `GET /search?q=…` (as `search-form`) | 200; hits array shape (`text`,`createdAt`,`score`) | Low | e2e |
 
-### Documented residuals — dated confirmation (parked in `kaizen/plan.md`, not new defects)
+### Documented residuals — dated confirmation (parked in `docs/BACKLOG.md`, not new defects)
 | ID | Title | Steps | Expected (as documented) | Pri | Type |
 |---|---|---|---|---|---|
 | HR-015 | `GET /threads/{tid}/messages/{mid}` ignores `tid` | Fetch a real msgId under a **wrong/nonexistent** thread path | message still returned 200 (nested route unvalidated) — residual still open | Low | exploratory |

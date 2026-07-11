@@ -1,7 +1,7 @@
 """Integration tests for the K-008 GraphRAG retrieval core (repository layer).
 
 `set_embedding` and `hybrid_search` map 1:1 to `docs/QUERIES.md` §6 (verified in
-`docs/plans/m2-graphrag.md`). Tests run against the live `ws:test` graph, whose
+`docs/archive/plans/m2-graphrag.md`). Tests run against the live `ws:test` graph, whose
 vector index is bootstrapped at `TEST_EMBEDDING_DIM` (4) — stub vectors match.
 
 Ranking is by **cosine distance ASC** (0 = identical). ANN recall is approximate

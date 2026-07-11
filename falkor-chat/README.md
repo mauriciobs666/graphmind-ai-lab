@@ -214,10 +214,15 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 falkor-chat/
 ├── docs/
 │   ├── DESIGN.md          # full blueprint (data model, Cypher, ops, §14 M1 app architecture)
-│   └── QUERIES.md         # canonical query library — verified against live instance
-├── kaizen/
-│   ├── plan.md            # forward-looking backlog (active items + parking lot)
-│   └── history.md         # dated change log
+│   ├── QUERIES.md         # canonical query library — verified against live instance
+│   ├── BACKLOG.md         # forward-looking backlog (K-numbered items + parking lot)
+│   ├── HISTORY.md         # dated change log
+│   ├── requirements/      # product requirements (tico)
+│   ├── plans/             # ACTIVE plans, method notes, coordination logs (architect/ds/teco)
+│   ├── reviews/           # plan/methodology reviews (analyst/ds)
+│   ├── test-plans/        # ACTIVE test plans (qa-engineer)
+│   ├── test-reports/      # ACTIVE test reports (qa-engineer)
+│   └── archive/           # frozen docs of closed milestones (same subdir names)
 ├── scripts/
 │   ├── bootstrap_schema.sh  # create indexes + constraints for any workspace
 │   ├── start_falkordb.sh    # spin up FalkorDB in Docker

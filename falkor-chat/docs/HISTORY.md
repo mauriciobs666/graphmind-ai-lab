@@ -1,8 +1,30 @@
-# Kaizen — Change History: falkor-chat
+# Change History — falkor-chat
 
 > Dated log of actual changes to the `falkor-chat` component. Most recent first.
+> (Formerly `kaizen/history.md` — older entries may say "kaizen" for what is now
+> [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
+> updated so they still resolve.)
 
-## 2026-07-09 — FalkorDB pinned to v4.18.11 (edge retired)
+## 2026-07-11 — Docs unification: kaizen/ retired into docs/ (repo module convention)
+
+Unified the component's two documentation homes into one `docs/` tree — the repo-wide module
+convention now defined in the root `AGENTS.md` (agent-folder `claude/<agent>/kaizen/` pairs are
+a separate convention and unchanged):
+
+- `kaizen/plan.md` → **`docs/BACKLOG.md`** (living backlog; K-numbered items unchanged) and
+  `kaizen/history.md` → **`docs/HISTORY.md`** (this file); `kaizen/` removed.
+- New **`docs/archive/{plans,test-plans,test-reports}/`** for frozen documents of closed
+  milestones. Moved: plans `m1-chat-mcp`, `m2-groundwork`, `m2-groundwork-queries`,
+  `m2-graphrag`, `m2-agent-participant`, `doc-consolidation-sweep` (delivered 2026-07-05 —
+  header was stale); all four M1/M2 test-plans; all four test-reports. Active M3 plans,
+  `m1-cleanup`, `graphrag-eval-ml` (K-026 pending), `demo-environment-bringup` (living
+  runbook), and `reviews/` stay in place.
+- **Rule going forward:** a plan/test-plan/report moves to `archive/` (same subdir name) when
+  its milestone closes, with inbound links fixed in the same change.
+- Inbound references rewritten repo-wide (docs, `AGENTS.md` key-docs table, `README.md` tree,
+  server source comments, `test_queries.sh`, `.dockerignore`, `.claude/settings.local.json`,
+  agent kaizen logs citing concrete paths). Old dated entries below keep their period prose but
+  their paths were updated to resolve.
 
 Moved the engine off the floating `falkordb/falkordb:edge` tag to the tagged release
 **`v4.18.11`** (module `41811`, Redis 8.6.3): `scripts/start_falkordb.sh`, `compose.yaml`,
@@ -20,7 +42,7 @@ upgrade.
 
 First slice of **M3 — Workflow engine**, delivered end-to-end by the **teco-coordinated
 architect → graph-dba → tdd-engineer chain** (the teco K-001 nested-delegation validation run —
-see `claude/teco/kaizen/history.md` 2026-07-09). Architect decomposed all of M3 into
+see `claude/teco/docs/HISTORY.md` 2026-07-09). Architect decomposed all of M3 into
 **K-020…K-025** and wrote the slice-1 plan (`docs/plans/m3-workflow-engine.md`, Part A + Part B);
 coordination log at `docs/plans/m3-workflow-engine-coordination.md`. Suites verified
 independently after integration: **query suite 149 → 193/193, pytest 156 → 196.**
@@ -53,7 +75,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 
 - **K-008 — retrieval core.** *graph-dba gate:* verified the §6 hybrid ANN query + `SET m.embedding`
   live against a 1024-dim workspace, `GRAPH.PROFILE` confirmed the vector index is hit, Entity
-  expansion no-ops cleanly; raised `test_queries.sh` **126 → 135**; deliverable `docs/plans/m2-graphrag.md`.
+  expansion no-ops cleanly; raised `test_queries.sh` **126 → 135**; deliverable `docs/archive/plans/m2-graphrag.md`.
   New quirk logged: a wrong-dimension `vecf32` write is *silently accepted* then drops the node out of
   the ANN index → validate length client-side. *tdd impl:* `repository.set_embedding` (client-side dim
   validation, `EmbeddingDimensionError`) + `repository.hybrid_search` (§6, channel/workspace variants)
@@ -62,7 +84,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 - **K-013 — AI Agent participant + `EMITTED` provenance.** *graph-dba gate:* defined
   `(answer:Message)-[:EMITTED]->(seed:Message)` with `score`+`rank` props, riding **inside the guarded
   §4 write** (exactly-once under `dupMsg` replay, no relationship constraint needed); canonical
-  `QUERIES.md §10`; raised `test_queries.sh` **135 → 149**; deliverable `docs/plans/m2-agent-participant.md`.
+  `QUERIES.md §10`; raised `test_queries.sh` **135 → 149**; deliverable `docs/archive/plans/m2-agent-participant.md`.
   *tdd impl:* `repository.post_agent_answer`/`read_provenance`/`read_citing_answers`, `llm.py`
   (`LMStudioLLM`), `responder.py` (`AgentResponder` — `@mention` trigger, loop guard on
   `role:"assistant"`, LLM/embedder before the guarded write ⇒ failure posts nothing). **Decisions
@@ -80,7 +102,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 - **K-015 — QA acceptance (the gate).** Black-box pass across REST + MCP + web + the running
   responder: out-of-band embedding, cosine-ASC ranking, agent answer with `EMITTED` provenance on all
   read surfaces, loop guard, failure isolation, dormant-Entity path — **PASS, no defects.** Plan/report:
-  `docs/test-plans/m2-graphrag.md`, `docs/test-reports/m2-graphrag-report.md`.
+  `docs/archive/test-plans/m2-graphrag.md`, `docs/archive/test-reports/m2-graphrag-report.md`.
 - **Parked → M2.5 (deferred, not on the M2-green path):** real auth/tenancy (K-016), transport-level
   externally-authenticated agent actor (K-017, K-007 QA carry-over), real-time push (K-018);
   channel-scoped retrieval read (responder currently workspace-wide — trigger self-cites as rank-0);
@@ -146,7 +168,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
   1000ms already reviewed & kept — K-007, §10; other knobs retained). The three genuinely-open bullets
   tagged with owners: workflow guard expr language (→ M3), retention (→ K-011 data), cross-workspace
   analytics (mechanism open, no milestone).
-- **`kaizen/plan.md` reconciled:** K-016 "Inputs/prereqs"/Owner/scope now read as **decided** (identity
+- **`docs/BACKLOG.md` reconciled:** K-016 "Inputs/prereqs"/Owner/scope now read as **decided** (identity
   graph authoritative; K-016 no longer needs the user for that axis — implements per §1.2); the
   `m2-auth-tenancy.md` recommended-doc row and the milestone-map note updated likewise; removed
   "identity source of truth" from the parking-lot "remaining open questions" line (real auth / K-016 stays).
@@ -189,15 +211,15 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
     statement + rationale + link to the body section (or QUERIES.md) that details the mechanics —
     no re-copied prose. AGENTS.md's section is now a terse two-column `Decision | Home` pointer
     index (rationale removed), kept — not deleted — as the quick do-not-reopen list.
-  - **plan.md M2 stack → DESIGN §1.3.** The user-approved "Locked M2 stack decisions"
+  - **BACKLOG.md M2 stack → DESIGN §1.3.** The user-approved "Locked M2 stack decisions"
     (2026-07-04) graduated into a new DESIGN **§1.3** (embedding model/dim, agent LLM, runtime,
-    VRAM, upgrade path); plan.md keeps a one-line pointer + the `EMBEDDING_DIM=1024` bootstrap
+    VRAM, upgrade path); BACKLOG.md keeps a one-line pointer + the `EMBEDDING_DIM=1024` bootstrap
     reminder. K-0xx work items, sequencing, and parking lot untouched.
   - **A1 — GraphRAG dedup.** Deleted the drifted `cypher` block in DESIGN §8 (had lost its
     `LIMIT` and RETURN columns vs. the canonical QUERIES §6); §8 now points to QUERIES §6 in the
     §5.3 "shape-only, link the body" style. §8's design prose kept; QUERIES §6 untouched.
   - **A2 — coordination ADR promotion.** Added DESIGN **§6.3** (coordination is an M3 `WorkflowDef`
-    of `kind:'process'`, not a flat `Task` node) with a back-link to `docs/plans/m1-chat-mcp.md`
+    of `kind:'process'`, not a flat `Task` node) with a back-link to `docs/archive/plans/m1-chat-mcp.md`
     Appendix B (which stays the ADR of record).
   - Added one new DESIGN §6.2 body line stating `ctx`/`input`/`output` are flat/serialised (D13).
 - **Scope guard:** markdown docs only — no `repository.py`/`services.py`/`QUERIES.md` bodies/
@@ -248,8 +270,8 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
   structurally can't reach: concurrency through the real HTTP stack (single- and
   **two-process** writers), MCP-driven cursor paging over millisecond ties, agent `role` on
   every read surface, `backfill_thread_ids.sh` against real legacy-shaped data, and the
-  actor-seam edges. Added `docs/test-plans/k007-m2-groundwork.md` and
-  `docs/test-reports/k007-m2-groundwork-report.md`. Isolated `ws:qa` (created + deleted);
+  actor-seam edges. Added `docs/archive/test-plans/k007-m2-groundwork.md` and
+  `docs/archive/test-reports/k007-m2-groundwork-report.md`. Isolated `ws:qa` (created + deleted);
   `ws:acme`/`reference` untouched.
 - **Result: PASS with two low-severity defects** — 18/18 items executed, 16 clean passes, on
   green baselines (server **98/98**, query suite **115/115**). Highlights: 12-way REST
@@ -258,7 +280,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
   `createdAt` tie** and MCP cursor paging (`limit=3`) still delivered all 20 exactly once;
   agent-authored messages read `role: "assistant"` consistently on all five read surfaces;
   backfill script: 2 backfilled, then 0 (idempotent), `threadId: null` tolerated pre-backfill.
-- **Defects (parked in `kaizen/plan.md`, not fixed here):**
+- **Defects (parked in `docs/BACKLOG.md`, not fixed here):**
   - **DEF-1 (low now, K-008 hazard):** no cross-label member-id uniqueness — a configured
     actor colliding with an existing `agentId` silently MERGEs a shadow `User` that eclipses
     the Agent in every `coalesce(u, a)` lookup (role derivation, `POSTED_BY`, mentions).
@@ -274,8 +296,8 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 ## 2026-07-05 — K-007: M2 groundwork — agent authorship, v2 write-path guards, threadId denorm, composite cursors
 
 - **What:** the six pre-agent-writer correctness/completeness items, landed per the approved
-  plan (`docs/plans/m2-groundwork.md`) over the graph-dba's live-verified query deliverable
-  (`docs/plans/m2-groundwork-queries.md`); plus the two server fold-ins.
+  plan (`docs/archive/plans/m2-groundwork.md`) over the graph-dba's live-verified query deliverable
+  (`docs/archive/plans/m2-groundwork-queries.md`); plus the two server fold-ins.
   1. **Agent authorship** — §4 write paths resolve the author label-specifically (two indexed
      `OPTIONAL MATCH`es + `coalesce`), closing the `All Node Scan` *and* the silent no-op that
      made `Agent` authors unwritable; `services.post_message` derives `role` from the author's
@@ -404,7 +426,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
   known same-ms `createdAt` tie caveat); query suite **92/92**.
 - **Docs (same change):** `DESIGN.md` §14.4 REST table (+`/health`, real `?since=&limit=` shape,
   bounds note) and §15.2 tools table (+2 rows); `README.md` tools list + counts 70→75;
-  `falkor-chat/AGENTS.md` count 68→75 (was already stale); `plan.md` parking lot extended,
+  `falkor-chat/AGENTS.md` count 68→75 (was already stale); `BACKLOG.md` parking lot extended,
   Last-reviewed bumped; this entry.
 
 ## 2026-07-02 — K-005: M1-final cleanup
@@ -440,7 +462,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
   discovery + 2 api tests edited net 0); query suite **92/92** (untouched — regression guard).
 - **Docs (same change):** `DESIGN.md` §15.2 tools table (+2 rows), §14.4 REST surface
   (`/messages/{mid}`), §14 test-count 68→70; `README.md` MCP tools list (+`create_channel`,
-  +`search_messages`) and counts 68→70; `plan.md` pruned (4 completed items removed, Last
+  +`search_messages`) and counts 68→70; `BACKLOG.md` pruned (4 completed items removed, Last
   reviewed bumped); this entry.
 - **Batch B (delivered separately by another implementer):** the two `web/app.js` items —
   removing the dead `isMention` class toggle in `renderMessages`, and making the composer submit
@@ -482,7 +504,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 - **Docs (same change):** `QUERIES.md` §4 zero-rows + HEAD-check notes, §9 ordering rationale,
   §9.3 no-member note; `AGENTS.md` write-path invariants (+ zero-rows, chronological-cursor
   bullets) and test count; `README.md` counts + `/mcp` slash note; `DESIGN.md` §12/§15.
-- **Plan items:** K-004 ✅. Review findings **not** fixed here parked in `plan.md` (agent
+- **Plan items:** K-004 ✅. Review findings **not** fixed here parked in `BACKLOG.md` (agent
   authorship, `threadId` in §9.2 rows, retry idempotency + first-post race, web-UI mention
   polish, nested-route validation, ms-tie ordering, dependency pins, lint/CI).
 
@@ -490,7 +512,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 
 - **What:** first black-box/acceptance QA pass on the M1 server, driving the *running* process
   (curl over REST + a real `mcp` Streamable-HTTP client session) on top of the 57-test baseline.
-  Added `docs/test-plans/m1-chat-mcp.md` and `docs/test-reports/m1-chat-mcp-report.md`.
+  Added `docs/archive/test-plans/m1-chat-mcp.md` and `docs/archive/test-reports/m1-chat-mcp-report.md`.
 - **Result:** 22/22 functional+contract items PASS · baseline 57/57. Verified both front doors over
   one service layer, error→status mapping (404/404/400), input validation (422), full-text search,
   read-cursor advance vs. explicit-`since` read-only, and REST↔MCP cross-door parity.
@@ -529,7 +551,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 ## 2026-07-01 — K-002 Step 2: M1 server (repository → services → MCP + REST), one process
 
 - **What:** Built the first application code for the component (greenfield `server/` tree), bottom-up
-  and test-first, completing K-002 (`docs/plans/m1-chat-mcp.md`). All against live FalkorDB.
+  and test-first, completing K-002 (`docs/archive/plans/m1-chat-mcp.md`). All against live FalkorDB.
   - **`repository.py`** — every method 1:1 with a verified `QUERIES.md` query: channels/threads (§3),
     `ensure_user`/`ensure_agent` (§2/§7), both message write paths with the atomic `MENTIONS_MEMBER`
     block (§4), `read_thread` (§4), `read_thread_since` (§9.1), `read_ws_since` (§9.2),
@@ -560,7 +582,7 @@ confirmed `http://localhost:1234/v1` reachable from WSL2, embedding dim **1024**
 
 ## 2026-07-01 — K-002 Step 1 (gate): schema + queries for mentions & read-cursors
 
-- **What:** Landed the graph-dba gate for the M1 Chat MCP transport (`docs/plans/m1-chat-mcp.md`),
+- **What:** Landed the graph-dba gate for the M1 Chat MCP transport (`docs/archive/plans/m1-chat-mcp.md`),
   all live-verified against `falkordb/falkordb:edge`. (1) `bootstrap_schema.sh`: added
   `ReadCursor.cursorId` range index + uniqueness constraint (index-before-constraint). (2)
   `QUERIES.md` §4: both message write paths now carry a `$mentions` list and append a

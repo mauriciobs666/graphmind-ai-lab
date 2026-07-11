@@ -53,7 +53,7 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 
 ### 1.3 M2 stack (decided 2026-07-04, pending implementation)
 
-> User-approved M2 stack. Locked here; implemented in K-008/K-013 (see kaizen/plan.md). Numbers
+> User-approved M2 stack. Locked here; implemented in K-008/K-013 (see docs/BACKLOG.md). Numbers
 > detailed in §11 (RAM) and §12 (M2 roadmap).
 
 | Component | Decision | Rationale | Detailed in |
@@ -304,7 +304,7 @@ create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` 
 Agent/team coordination (task lifecycle, "room state") is modelled as an M3 `WorkflowDef` of
 `kind:'process'` over `Step` + `TRANSITION` + `StepRun` — **not** a flat `Task` node or a
 presence field. This avoids a parallel model that would later need migrating into the engine
-(single-store philosophy). Full rationale/ADR: `docs/plans/m1-chat-mcp.md` Appendix B.
+(single-store philosophy). Full rationale/ADR: `docs/archive/plans/m1-chat-mcp.md` Appendix B.
 
 ---
 
@@ -725,7 +725,7 @@ already uses:
 
 M1 exposes a second, additive transport for AI agents: **MCP over Streamable-HTTP**, mounted on
 the *same* FastAPI process and calling the *same* `services.py` as the REST router. Full spec and
-rationale: `docs/plans/m1-chat-mcp.md`. Two capabilities were folded into M1 to support it:
+rationale: `docs/archive/plans/m1-chat-mcp.md`. Two capabilities were folded into M1 to support it:
 participant **@mentions** (`MENTIONS_MEMBER` edge) and per-member **read-cursors** (`ReadCursor`).
 
 ### 15.1 Shape

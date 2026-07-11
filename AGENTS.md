@@ -117,6 +117,14 @@ opencode --agent severino      # requires LM Studio server running at :1234
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
   for skills), and `claude/AGENTS.md` in the same change.
+- **Module documentation convention** — all of a module's engineering docs live under
+  `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
+  change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
+  `reviews/`, `test-plans/`, `test-reports/` for **active** documents and
+  `archive/<same-subdir>/` for frozen ones — a doc moves to `archive/` when its milestone
+  closes, with inbound links fixed in the same change. `falkor-chat/` is the reference
+  implementation; other modules adopt the structure when they first need it. Modules do **not**
+  use `kaizen/` dirs — that convention exists only for agent folders (`claude/<agent>/kaizen/`).
 - The root `CLAUDE.md` contains only `@AGENTS.md` — this file is the single source of truth for
   root-level context; per-component context files carry the detail.
 </content>

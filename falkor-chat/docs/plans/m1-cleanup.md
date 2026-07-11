@@ -1,7 +1,7 @@
 # M1-final cleanup batch — implementation spec
 
 > Status: 🔵 proposed · scope: ~half-day, four small items. Planning doc only — no code changed here.
-> Source backlog: `kaizen/plan.md` parking lot (the four items map 1:1).
+> Source backlog: `docs/BACKLOG.md` parking lot (the four items map 1:1).
 >
 > **Bottom line up front:** every server change is **adapter-only** (`mcp.py`, `api.py`) plus tests.
 > **No change touches `repository.py`, `docs/QUERIES.md`, or the 92-assertion `test_queries.sh` suite.**
@@ -46,7 +46,7 @@ thread-scoped spelling entirely.
   reverse/forward `HEAD`/`NEXT` traversal that is **O(thread length)** — a hot-path cost on a route
   the **web UI does not use at all** (grep of `web/app.js`: no nested single-message fetch), purely
   to keep a URL shape. The denormalised `Message.threadId` that would make it O(1) is a schema
-  change already parked in `kaizen/plan.md` (RAM rule 6) and out of scope for this cleanup.
+  change already parked in `docs/BACKLOG.md` (RAM rule 6) and out of scope for this cleanup.
 - **Rejected: leave the route as-is.** It ships a false contract (wrong-thread resolution) — a latent
   correctness trap for any future consumer.
 - A flat `GET /messages/{msg_id}` states the truth: msgId is globally unique in the workspace.
@@ -180,7 +180,7 @@ over MCP alone.
 
 ## 3. Item 3(a) — remove the dead mention highlight (`web/app.js`)
 
-**Files:** `web/app.js` only. No server, no docs beyond kaizen.
+**Files:** `web/app.js` only. No server, no docs beyond BACKLOG/HISTORY.
 
 In `renderMessages` (line ~107), drop the `isMention` class toggle:
 
@@ -373,9 +373,9 @@ Every behavior change updates docs in the **same change**:
   message.
 
 **Both batches:**
-- `kaizen/history.md` — one dated entry (e.g. `2026-07-02 — K-005: M1-final cleanup`) summarising
+- `docs/HISTORY.md` — one dated entry (e.g. `2026-07-02 — K-005: M1-final cleanup`) summarising
   the four items, the two fork decisions, and the new test count.
-- `kaizen/plan.md` — remove the four completed parking-lot items (search-over-MCP, create_channel-
+- `docs/BACKLOG.md` — remove the four completed parking-lot items (search-over-MCP, create_channel-
   over-MCP, web mention polish, nested-message-route), and update "Last reviewed".
 
 **No changes to** `docs/QUERIES.md`, `AGENTS.md` (no new scripts/facts/rules), or
@@ -431,7 +431,7 @@ the same change.
 - **Batch B (coder, manual verify):** in `web/app.js`, remove the dead `isMention` class toggle in
   `renderMessages`, and make the composer submit handler retry a mention-rejected send as plain text
   with a user notice.
-- **Both:** log in `kaizen/history.md`, prune `kaizen/plan.md`. No `repository.py`/`QUERIES.md`/
+- **Both:** log in `docs/HISTORY.md`, prune `docs/BACKLOG.md`. No `repository.py`/`QUERIES.md`/
   `test_queries.sh` changes — 92/92 must stay green as a regression guard.
 </content>
 </invoke>
