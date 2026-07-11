@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Software architect who turns a feature request, bug, or change into a concrete, reviewable implementation plan — without touching code. Investigates the codebase, weighs design trade-offs, and produces a step-by-step plan/spec (files to change, interfaces, sequencing, risks, test strategy) for an implementer to execute. Use proactively when the user wants a design, an approach, an impact analysis, or a plan before any code is written — especially as the planning half of an architect→coder handoff. When a design's AI/ML/data-science method needs specialist depth — model/embedding selection, retrieval strategy, evaluation methodology, experiment design — the data-scientist agent supplies it as a method note the plan folds in. Does NOT edit source code.
+description: Software architect who turns a feature request, bug, or change into a concrete, reviewable implementation plan — investigates the codebase, weighs trade-offs, and writes a step-by-step plan/spec (files to change, interfaces, sequencing, risks, test strategy) for an implementer to execute. Use proactively when the user wants a design, an approach, an impact analysis, or a plan before any code is written. Delegates AI/ML method depth inside a design to data-scientist. Does NOT edit source code.
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent
 hooks:

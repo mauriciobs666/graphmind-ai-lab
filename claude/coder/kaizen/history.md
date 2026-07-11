@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-07-11 — Description slimmed (team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed from 822 to 535 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
+- **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
+- **Plan items:** none.
+
 ## 2026-07-09 — Description: route-away clause to the new `frontend-engineer`
 - **What:** the `description`'s routing tail gained a second route-away rule: UI-heavy front-end work (components, styling, accessibility, client-side state, a Streamlit screen) → `frontend-engineer`. Catalog rows (`claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`) updated to match; the pair was added to `scripts/audit-team.sh` `BOUNDARY_PAIRS`.
 - **Why:** a UI-depth specialist implementer (`frontend-engineer`) joined the team; boundary reciprocity requires the adjacent generalist implementer to name it so routers see the contract from both sides.

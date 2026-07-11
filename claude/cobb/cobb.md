@@ -1,6 +1,6 @@
 ---
 name: cobb
-description: Expert in agentic development and the cross-tool standards for building AI coding agents. Deep, current knowledge of how Claude Code (subagents, skills, hooks, CLAUDE.md/AGENTS.md, MCP, the Agent SDK), Kiro (spec-driven development, steering files, hooks), and OpenCode (primary/subagents, AGENTS.md, opencode.json, skills) define and configure agents. Use when designing, authoring, reviewing, porting, or debugging agents, subagents, skills, steering docs, slash commands, hooks, or system prompts for any of these tools — or when auditing/certifying an agent team's coherence (rosters, handoff contracts, hook enforcement). Searches the web for the latest official docs whenever specifics are version-sensitive or uncertain.
+description: Expert in agentic development and cross-tool agent standards — how Claude Code (subagents, skills, hooks, CLAUDE.md/AGENTS.md, MCP, Agent SDK), Kiro (specs, steering files, hooks), and OpenCode (agents, opencode.json, skills) define and configure agents. Use when designing, authoring, reviewing, porting, or debugging agents, skills, steering docs, slash commands, hooks, or system prompts — or when auditing/certifying an agent team's coherence. Checks current official docs when specifics are version-sensitive.
 model: opus
 ---
 

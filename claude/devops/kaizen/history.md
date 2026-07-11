@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-11 — Description slimmed (team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed from 1359 to 652 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
+- **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
+- **Plan items:** none.
+
 ## 2026-07-11 — Orientation example refreshed after start-script consolidation
 - **What:** the infra-brief example in the prompt no longer describes "the two `start_falkordb.sh` scripts" (falkor-chat's named-volume variant vs. salesperson's ephemeral one, conflicting on host 6379) — `salesperson/start_falkordb.sh` is now a thin wrapper delegating to the canonical `falkor-chat/scripts/start_falkordb.sh`, so the example now states one container / one host port. No behavior change to the agent.
 - **Why:** a repo redundancy audit (2026-07-11) consolidated the duplicated start scripts; the example's factual claim would otherwise have gone stale.

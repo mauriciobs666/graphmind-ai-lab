@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-11 — Deep reference moved to on-demand falkordb-reference.md (token-cost pass, part 2)
+- **What:** The "Core expertise" reference detail — LPG modeling patterns, the supported Cypher surface, index/constraint DDL, the `algo.*` catalog, config knobs, sizing/persistence/replication/cluster ops, ingestion, GraphRAG patterns — moved out of the prompt body into a new on-demand file `falkordb-reference.md` (7,459 chars), following the `falkordb-quirks.md` precedent; the body (18,656 → 9,440 chars, −49%) keeps what must always load: FalkorDB fundamentals (GraphBLAS/RAM-bound/no-APOC), the pinned deployment (v4.18.11, falkordb-py 1.6.x, vectorset caveat, version-line distinction), boundaries with devops/data-scientist, both knowledge-base pointers, how-you-work, and principles. Frontmatter unchanged; full audit pass.
+- **Why:** graph-dba.md was the team's heaviest prompt and loads on every spawn, but the deep reference is only needed for the task area at hand (~2,300 tokens saved per spawn; the reference costs its ~1,900 only when read). Quirks stay separate: quirks are live-verified divergences of the pinned build, the reference is general practice — quirks win on conflict.
+- **Plan items:** none.
+
+## 2026-07-11 — Description slimmed (team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed from 1324 to 694 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
+- **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
+- **Plan items:** none.
+
 ## 2026-07-09 — data-scientist boundary clause (description + GraphRAG bullet)
 - **What:** Frontmatter `description` and a new GraphRAG-section bullet state the split with the new `data-scientist` agent: graph-dba owns the in-graph mechanics (vector-index DDL, `db.idx.vector` queries, fusing similarity with traversal, their performance); the ML method above them — which embedding model, chunking strategy, how to evaluate retrieval quality — is the data-scientist's to design; GraphRAG layers get designed together. Pair `graph-dba:data-scientist` added to `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS` (check 6, description symmetry).
 - **Why:** The `data-scientist` agent was created 2026-07-09; "build/improve the GraphRAG layer" plausibly matched both agents, so the boundary must live in both descriptions (mirrors the devops split done the same day).

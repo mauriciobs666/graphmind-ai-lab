@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-07-11 — Description slimmed (team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed from 606 to 446 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
+- **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
+- **Plan items:** none.
+
 ## 2026-07-09 — Efficiency-based routing boundary with `coder` (description narrowed + made symmetric)
 - **What:** Rewrote the `description`'s trigger. Was "use proactively whenever the user asks to implement a feature, fix a bug, refactor…" — which shadowed `coder`'s trigger on any feature task; now scoped to where test-first is the **efficient path** (bug fix with reproduction test first, safety-net refactor, adding/improving tests, feature with a clear up-front behavior contract) and points back to `coder` for executing an already-detailed plan/spec (the pointer was previously one-directional, coder→tdd only). Catalogs synced: teco roster (personal-preference note removed), `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`.
 - **Why:** User ruling on the coder/tdd-engineer overlap review: route between the implementers by efficiency, not by an assumed blanket TDD preference; personal-preference framing removed from agent prompts (the user's standing preferences are quality and efficiency). Closes coder K-001 from this side.

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-11 — Description slimmed (team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed from 844 to 575 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
+- **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.
+- **Plan items:** none.
+
 ## 2026-07-09 — analyst boundary clause (description + intro)
 - **What:** Frontmatter `description` and the intro's deferral paragraph now route *static* judgment — reviewing a plan, diff, or module by reading and reasoning, without executing the system — to `analyst`, mirroring analyst's new clause routing new black-box/acceptance execution here. The pair is mechanically enforced by `claude/scripts/audit-team.sh` check 6 (boundary-pair description symmetry). Catalogs synced (`claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`).
 - **Why:** Description-symmetry sweep after teco's roster→routing-table restructure (same day): qa-engineer named tdd-engineer but not analyst, leaving the static-review vs. executed-verification boundary invisible to routers.

@@ -40,25 +40,12 @@ and OpenCode artifacts).
 ## Claude Code subagents (`claude/`)
 
 Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`.
-The skills cobb loads on demand (`agent-maintenance`, `agent-standards`) now live in the
-repo-root `skills/` home (see the `skills/` section below), not under `claude/`.
-
-**The full catalog — what each agent does, when to use it, hook enforcement — lives once, in
-[`claude/README.md`](claude/README.md).** (Each agent's frontmatter `description` is auto-injected
-into every session for routing, so this index stays deliberately one-line.)
-
-- `teco` — technical coordinator: decomposes multi-step goals, delegates each unit to the right specialist, integrates; documentation curator + independent review by default.
-- `tico` — conversational product owner, **first-order** (`claude --agent tico`): interviews the stakeholder into a requirements doc (`docs/requirements/<slug>.md`) before any design.
-- `architect` — investigates and writes implementation plans (`docs/plans/<slug>.md`); read-only on code.
-- `coder` — implements an approved plan/spec end-to-end. (Bug fixes / test-first work → `tdd-engineer`; UI-heavy work → `frontend-engineer`.)
-- `tdd-engineer` — implements strictly via TDD: bug fixes, safety-net refactors, test work, clear-contract features.
-- `frontend-engineer` — UI-depth implementer (web platform, React & peers, Streamlit); verifies in the running UI.
-- `qa-engineer` — behavior/acceptance QA: risk-based test plan → execution (incl. black-box) → test report.
-- `analyst` — static reviewer/diagnostician of plans and code + root cause analysis; review docs in `docs/reviews/`; never changes the artifact.
-- `data-scientist` — advisory AI/ML/DS scientist: method notes and methodology reviews; never implements.
-- `graph-dba` — FalkorDB graph modeling, Cypher authoring/tuning, indexes/constraints, deployment sizing, GraphRAG layers.
-- `devops` — environments, containers, delivery lifecycle in any project (user-scoped); destructive ops hook-gated.
-- `cobb` — agentic-development expert (agents, skills, hooks, steering docs across Claude Code/Kiro/OpenCode).
+Every agent's frontmatter `description` is auto-injected into each session — that injection is
+the live routing contract, and **the full catalog lives once, in
+[`claude/README.md`](claude/README.md)**; this is just the roster: `teco` (coordinator) ·
+`tico` (product owner, first-order) · `architect` · `coder` · `tdd-engineer` ·
+`frontend-engineer` · `qa-engineer` · `analyst` · `data-scientist` · `graph-dba` · `devops` ·
+`cobb`.
 
 ## OpenCode agents (`opencode/agents/`)
 

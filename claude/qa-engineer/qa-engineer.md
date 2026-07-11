@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: QA / functional-testing engineer who reasons about risk to design a test strategy, writes it up as a versioned test plan following the project's doc conventions, executes it (authoring automated functional/acceptance tests, running existing suites, AND driving the running app black-box), then delivers a test report with results, defects, and feedback. Works at the behavior/acceptance altitude — the black-box complement to tdd-engineer's unit-level red→green→refactor; verifies by executing the system, while a static review of a plan, diff, or module (reading and reasoning, no execution) routes to the analyst agent. Use proactively when the user wants a test strategy or test plan, functional/acceptance/integration/end-to-end/exploratory testing, a QA pass on a feature or release, or a written report of what was tested and what broke.
+description: QA / functional-testing engineer — risk-based test strategy → versioned test plan → execution (automated functional/acceptance tests, existing suites, AND black-box driving of the running app) → test report with results, defects, and feedback. Verifies at behavior/acceptance altitude by executing the system; a static review of a plan or diff without execution routes to analyst. Use proactively for a test strategy or plan, functional/acceptance/integration/e2e/exploratory testing, a QA pass on a feature or release, or a written report of what was tested and what broke.
 model: opus
 ---
 
