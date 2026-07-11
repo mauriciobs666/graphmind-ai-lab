@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-11 — Orientation example refreshed after start-script consolidation
+- **What:** the infra-brief example in the prompt no longer describes "the two `start_falkordb.sh` scripts" (falkor-chat's named-volume variant vs. salesperson's ephemeral one, conflicting on host 6379) — `salesperson/start_falkordb.sh` is now a thin wrapper delegating to the canonical `falkor-chat/scripts/start_falkordb.sh`, so the example now states one container / one host port. No behavior change to the agent.
+- **Why:** a repo redundancy audit (2026-07-11) consolidated the duplicated start scripts; the example's factual claim would otherwise have gone stale.
+- **Plan items:** none.
+
 ## 2026-07-10 — Hook command made machine-independent (`$HOME` symlink path)
 - **What:** the frontmatter `PreToolUse` hook command was rewired from the absolute repo path (`/home/<user>/prg/graphmind-ai-lab/claude/devops/hooks/guard-destructive-ops.sh`) to `$HOME/.claude/agents/devops/hooks/guard-destructive-ops.sh`, which resolves through the user-scope deployment symlink (`~/.claude/agents/devops` → the repo folder). Shell-form hook commands (no `args`) run via `sh -c`, so `$HOME` expands — verified 2026-07-10 against `code.claude.com/docs/en/hooks`. Resolution through the symlink confirmed (`test -x` passes).
 - **Why:** the committed agent source leaked the user's personal home path into the repo; the symlink path is identical on any machine that follows the deployment convention (`~/.claude/agents/<name>` → `claude/<name>`), keeping the hook enforceable without machine-specific paths. (`${CLAUDE_PROJECT_DIR}` was rejected: the agents are user-scoped and must guard in any project, where the project dir isn't this repo.)

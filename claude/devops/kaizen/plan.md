@@ -49,8 +49,9 @@
   alias could be layered on. Low stakes.
 
 ## Parking lot / ideas
-- **(this repo)** Author the unifying `docker-compose.yml` (single FalkorDB service replacing the two
-  `start_falkordb.sh` scripts) — the prompt's orientation example already frames it.
+- **(this repo)** Author the unifying `docker-compose.yml` (single FalkorDB service replacing the
+  `start_falkordb.sh` script — since 2026-07-11 salesperson's copy is already a thin wrapper over
+  falkor-chat's) — the prompt's orientation example already frames it.
 - **(this repo)** A first GitHub Actions CI workflow (lint + `pytest` + `./scripts/test_queries.sh`
   against a FalkorDB service container) — the obvious greenfield deliverable.
 - **(this repo)** App image builds (Dockerfiles for the falkor-chat server and the salesperson

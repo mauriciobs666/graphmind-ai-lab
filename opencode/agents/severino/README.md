@@ -9,28 +9,24 @@ A local OpenCode agent powered by [LM Studio](https://lmstudio.ai/). Currently c
 
 ## Setup
 
-### 1. Load a model in LM Studio with enough context
+### 1. Load a model and start the LM Studio server
 
-1. Open LM Studio.
-2. Pick a model (see [Choosing a model](#choosing-a-model) below). Default for this project is `nvidia/nemotron-3-nano-4b`.
-3. **Before clicking Load, set the Context Length to at least `16384`** (32K recommended). The default 4096 is too small — OpenCode's system prompt alone is several thousand tokens before any conversation, and you'll hit `n_keep >= n_ctx` errors.
-4. Push GPU Offload up as far as your VRAM allows.
-5. Click **Load Model** and wait for the green "loaded" indicator.
+Follow the general walkthrough in [`opencode/local-llm.md`](../../local-llm.md)
+(§ *Connecting to a local LM Studio*, steps 1–2): load a model **with Context
+Length ≥ 16384** (32K recommended), then start the local server at
+`http://localhost:1234/v1`. Severino-specific deltas:
 
-### 2. Start the LM Studio server
+- Default model for this project is **`nvidia/nemotron-3-nano-4b`** (see [Choosing a model](#choosing-a-model)).
+- Confirm the model is listed with `curl http://localhost:1234/v1/models`.
 
-1. Go to **Developer → Local Server**.
-2. Click **Start Server**. Default endpoint is `http://localhost:1234/v1`.
-3. Confirm the model is listed by hitting `curl http://localhost:1234/v1/models`.
-
-### 3. Match the model ID in `opencode.json`
+### 2. Match the model ID in `opencode.json`
 
 Edit [`opencode.json`](opencode.json):
 
 - Under `provider.lmstudio.models`, the key **must match the LM Studio model ID exactly** (slashes included).
 - The agent's `model` field is in the form `lmstudio/<model-id>`. OpenCode splits on the first `/`, so `lmstudio/nvidia/nemotron-3-nano-4b` resolves to provider `lmstudio` + model `nvidia/nemotron-3-nano-4b`.
 
-### 4. Run Severino
+### 3. Run Severino
 
 From this directory:
 
@@ -61,29 +57,16 @@ See [`opencode.json`](opencode.json). Key pieces:
 
 ## Choosing a model
 
-LM Studio runs any GGUF, but not every model is OpenCode-friendly:
-
-| Trait                    | Why it matters                                                                                                                                                                                                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Handles `system` role**| OpenCode sends a system prompt. Some Mistral GGUFs (e.g. vanilla `mistral-7b-instruct-v0.3`) reject it — Jinja errors with `Only user and assistant roles are supported`. Prefer `lmstudio-community` re-uploads, or models like Ministral, Gemma 3, Qwen 3, Llama 3 that handle it natively.       |
-| **Non-reasoning**        | Reasoning models (Qwen3 with `/think`, DeepSeek R1, etc.) spend most tokens on hidden reasoning before answering. Great for hard problems, painful for casual chat (10× slower). For an interactive agent, prefer plain instruct models or ones with reliable `/no_think` support.                  |
-| **Modest size**          | 3B–9B is usually plenty for a personal assistant. Bigger = slower and more VRAM.                                                                                                                                                                                                                    |
+What makes a GGUF OpenCode-friendly (handles the `system` role, non-reasoning, 3B–9B size) is covered in [`opencode/local-llm.md`](../../local-llm.md) § *Picking a model*.
 
 Default for this project: **`nvidia/nemotron-3-nano-4b`** — small, fast, handles `system` messages, and in practice noticeably better than Ministral 3B at following the persona prompt and reasoning about code coherently. Ministral 3B (`mistralai/ministral-3-3b`) is kept in `opencode.json` as an alternate; swap by changing the agent's `model` field.
 
 ## Troubleshooting
 
+The general LM-Studio-with-OpenCode symptoms (`Unrecognized key: agents`, `Agent not found`, `API key required`, `Connection refused`, `Model not found`, `n_keep >= n_ctx`, `Only user and assistant roles are supported`, slow reasoning models, slow JIT-loaded first response) are covered in [`opencode/local-llm.md`](../../local-llm.md) § *Troubleshooting*. Severino-specific:
+
 | Symptom                                                       | Cause / Fix                                                                                                                                                                                                |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Unrecognized key: agents`                                    | The top-level key must be **`agent`** (singular), not `agents`.                                                                                                                                            |
-| `Agent not found: "Severino"` despite being in the list       | A `name` field on the agent shadows the JSON key. Remove `name` from the agent definition; use the JSON key (`severino`) as the identifier.                                                                |
-| `API key required`                                            | Set `provider.lmstudio.options.apiKey` to any non-empty string (e.g. `"lm-studio"`), or export `OPENAI_API_KEY=lm-studio`.                                                                                  |
-| `Connection refused`                                          | LM Studio's local server isn't running. Start it from **Developer → Local Server**.                                                                                                                        |
-| `Model not found`                                             | The agent's `model` value must be `<provider-key>/<model-id>`, and `<model-id>` must match LM Studio's reported ID exactly (slashes included).                                                              |
-| `n_keep: X >= n_ctx: 4096`                                    | Model was loaded with too-small context. **Eject** the model in LM Studio, reload with **Context Length** set to 16K+ (32K recommended).                                                                    |
-| `Only user and assistant roles are supported`                 | The model's chat template rejects `system` messages. Switch to an `lmstudio-community` re-upload, pick a different model (Ministral, Gemma 3, Qwen 3), or override the prompt template in LM Studio.       |
-| Response takes 1+ minute on a short prompt                    | Reasoning model. Append `/no_think` to the system prompt (works on official Qwen3, unreliable on community fine-tunes) or switch to a non-reasoning model.                                                  |
-| First response very slow even after warmup                    | LM Studio is JIT-loading the model. Eject and explicitly reload beforehand to avoid the timeout.                                                                                                            |
 | TUI launches but agent picker doesn't show Severino           | You didn't `cd` into `severino/` before running `opencode`. Project-scoped config is only loaded from the current working directory.                                                                        |
 
 ## Customizing Severino
