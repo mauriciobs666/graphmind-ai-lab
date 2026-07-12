@@ -19,7 +19,19 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 
 ## Kaizen
 
-Each agent carries a living improvement plan and change log:
+Each agent carries a living improvement plan, a change log, **and an append-only
+learnings inbox** (`<name>/kaizen/inbox.md`) — the capture half of the team's
+self-improvement loop. During runs, each agent appends dated, evidence-backed
+observations of durable, non-obvious environment facts in its discipline (a
+"Learning capture" closing protocol in every prompt; the five doc-scoped write
+guards allowlist exactly that path). `cobb` periodically **distills** the inboxes
+(on request, and with every certification pass) per the
+[`agent-maintenance`](../skills/agent-maintenance/SKILL.md) skill §5: verify each
+entry → route it (agent prompt / on-demand knowledge base à la
+`graph-dba/falkordb-quirks.md` / project docs / discard) → log the promotion in
+`history.md` → clear the inbox. Agents never promote their own entries.
+
+Plans and histories:
 
 - `teco/kaizen/` — [plan](./teco/kaizen/plan.md) · [history](./teco/kaizen/history.md)
 - `tico/kaizen/` — [plan](./tico/kaizen/plan.md) · [history](./tico/kaizen/history.md)
@@ -103,6 +115,6 @@ Notes:
 
 ## Conventions
 
-- **Folder per agent:** `<name>/<name>.md` is the source; `<name>/kaizen/{plan,history}.md` track improvements.
+- **Folder per agent:** `<name>/<name>.md` is the source; `<name>/kaizen/{plan,history,inbox}.md` track improvements (plan/history curated by `cobb`; inbox appended by the agent itself — see [Kaizen](#kaizen)).
 - **Frontmatter** drives routing: the `description` says *what the agent does and precisely when to use it* so Claude Code can auto-delegate.
 - **This catalog is the single full roster.** When you add, edit, rename, or remove an agent, update this catalog, the one-line indexes in `AGENTS.md` (the agent-context file; `CLAUDE.md` is a `@AGENTS.md` import stub) and the repo-root `AGENTS.md`, and the agent's `kaizen/` files — in the same change.

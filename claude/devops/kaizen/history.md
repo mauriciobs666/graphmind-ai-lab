@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol
+- **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt: durable, non-obvious environment facts discovered during runs are appended as dated, evidence-backed inbox entries; the agent never promotes its own entries.
+- **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.
+- **Plan items:** none.
+
 ## 2026-07-11 — Destructive-ops guard refactored to a shared core (no behavior change)
 - **What:** `devops/hooks/guard-destructive-ops.sh` became a thin wrapper (mirroring the doc-guard wrappers) over the new shared core `claude/scripts/guard-destructive-ops.sh`, which takes the agent name for its escalation message; the matching logic is byte-identical. The core is now also wired into `graph-dba` and `qa-engineer` (cobb K-011 — they run against the same shared live FalkorDB). Wrapper + core verified: `docker volume rm` and `GRAPH.DELETE` escalate, read-only commands pass through.
 - **Why:** Team-coherence certification (2026-07-11) found the destructive-ops gate protected the shared datastore only when devops was the actor; sharing the core follows the guard-doc-writes consolidation precedent.

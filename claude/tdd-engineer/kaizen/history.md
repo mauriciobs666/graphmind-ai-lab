@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol
+- **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt: durable, non-obvious environment facts discovered during runs are appended as dated, evidence-backed inbox entries; the agent never promotes its own entries.
+- **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.
+- **Plan items:** none.
+
 ## 2026-07-11 — Inbound RCA handoff + qa-engineer boundary (certification fixes)
 - **What:** (1) Workflow step 1 now names the second doc-path input the team routes here: an `analyst` RCA at `<component>/docs/reviews/<slug>-rca.md` — its reproduction evidence is the first RED, its suggested fix the target. (2) The `description` now routes acceptance/black-box QA passes to `qa-engineer`, making the altitude boundary symmetric at the routing-contract level (qa's side already named tdd-engineer); `tdd-engineer:qa-engineer` added to `audit-team.sh` `BOUNDARY_PAIRS` so the symmetry is scripted.
 - **Why:** Team-coherence certification (2026-07-11, handoff symmetry): analyst and teco both route RCA docs to this agent, but its own prompt only named architect plans as doc-path input; and the qa↔tdd boundary was one-sided.

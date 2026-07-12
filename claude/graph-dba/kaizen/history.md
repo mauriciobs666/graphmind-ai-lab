@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol (quirks-file exception kept)
+- **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt. Live-verified quirks of the pinned FalkorDB build keep their established direct home (`falkordb-quirks.md`, dated); the inbox captures everything else (client-SDK gotchas, lab conventions, non-FalkorDB tool quirks).
+- **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day) — graph-dba's quirks file was the pattern the loop generalizes, so it stays first-class rather than being rerouted through the inbox. Requested by the user.
+- **Plan items:** none.
+
 ## 2026-07-11 — Design-note handoff contract + destructive-ops guard (certification fixes)
 - **What:** Two additions from the same-day team-coherence certification. (1) "How you work" gained step 7: implementer-bound design work (data model, schema/DDL, ingestion/migration) is written to `<component>/docs/plans/<slug>-graph.md` and handed off by path (mirroring data-scientist's `-ml.md`); quick consults stay inline. teco's "Handoff contracts" list gained the matching entry in the same change. (2) Frontmatter now wires a `PreToolUse` Bash guard — `graph-dba/hooks/guard-destructive-ops.sh`, a thin wrapper over the new shared core `scripts/guard-destructive-ops.sh` — escalating `GRAPH.DELETE`/`FLUSHALL`/`FLUSHDB`/volume wipes/container force-removal to human approval; step 8 describes it (enforcement parity). Catalog rows updated (`claude/README.md`, `claude/AGENTS.md` hook machinery).
 - **Why:** Certification found graph-dba was the only design-producing specialist without a written-deliverable path (its designs were the one paraphrased handoff in the teco pipeline), and the shared live FalkorDB was guard-protected only when `devops` acted. The guard also answers deferred K-001's revisit trigger ("starts mutating live FalkorDB data in ways that warrant a guardrail") with a narrower, destructive-shapes-only gate instead of a tool allowlist.

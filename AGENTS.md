@@ -18,7 +18,7 @@ and OpenCode artifacts).
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
+  history + learnings inbox the agent appends to during runs; `cobb` distills the inboxes). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
   `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
@@ -39,7 +39,7 @@ and OpenCode artifacts).
 
 ## Claude Code subagents (`claude/`)
 
-Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`.
+Folder-per-agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history,inbox}.md`.
 Every agent's frontmatter `description` is auto-injected into each session — that injection is
 the live routing contract, and **the full catalog lives once, in
 [`claude/README.md`](claude/README.md)**; this is just the roster: `teco` (coordinator) ·
@@ -115,7 +115,7 @@ opencode --agent severino      # requires LM Studio server running at :1234
 - **Skill tasks** (any tool) → `skills/`, follow each `skills/<name>/SKILL.md` and `skills/README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
-  `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
+  `kaizen/{plan,history,inbox}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
   for skills), and `claude/AGENTS.md` in the same change.
 - **Module documentation convention** — all of a module's engineering docs live under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated

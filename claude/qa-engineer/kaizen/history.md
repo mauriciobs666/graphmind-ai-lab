@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol
+- **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt: durable, non-obvious environment facts discovered during runs are appended as dated, evidence-backed inbox entries; the agent never promotes its own entries.
+- **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.
+- **Plan items:** none.
+
 ## 2026-07-11 — Destructive-ops guard + tdd-engineer boundary in description (certification fixes)
 - **What:** (1) Frontmatter now wires a `PreToolUse` Bash guard — `qa-engineer/hooks/guard-destructive-ops.sh`, a thin wrapper over the new shared core `scripts/guard-destructive-ops.sh` — escalating `GRAPH.DELETE`/`FLUSHALL`/`FLUSHDB`/volume wipes/container force-removal to human approval; the "never mutate the environment" guardrail now names it as the harness backstop (enforcement parity). (2) The `description` now routes unit-level test-first implementation to `tdd-engineer` (the boundary was previously stated only in the body and on qa's side of the pair); `tdd-engineer:qa-engineer` added to `audit-team.sh` `BOUNDARY_PAIRS`. Catalog row updated.
 - **Why:** Team-coherence certification (2026-07-11): the agent drives running apps against the shared live FalkorDB with unrestricted Bash, but its no-mutation rule was prompt-only hope while devops had the harness gate; and the qa↔tdd altitude boundary was asymmetric at the description (routing-contract) level.

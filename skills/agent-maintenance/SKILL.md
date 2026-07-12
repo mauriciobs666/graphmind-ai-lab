@@ -1,14 +1,15 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, and the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), and the learnings-inbox distillation procedure (verify → route → log → clear each agent's kaizen/inbox.md). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team or process its learnings inboxes.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Agent maintenance
 
 The bookkeeping that keeps an agent collection healthy: every agent/skill you
-touch carries a living **kaizen** plan + history, and stays **documented for two
-audiences** (humans and other agents). This skill holds the procedures and
+touch carries a living **kaizen** plan + history (agents additionally a
+learnings inbox, §5), and stays **documented for two audiences** (humans and
+other agents). This skill holds the procedures and
 templates so the resident agent prompt stays lean — load it when you do any
 maintenance work, follow it, and mention at the end which kaizen/doc files you
 touched.
@@ -21,6 +22,7 @@ touched.
 - **Reviewing** (no source change) → still record new improvement ideas in `plan.md`.
 - **Reconciling** an already-drifted context doc → run the audit pass (§3).
 - **Certifying team coherence** (rosters, handoff contracts, enforcement parity across the collection) → run the certification pass (§4).
+- **Distilling learnings inboxes** (on request, and folded into every certification pass) → run the distillation procedure (§5).
 
 ---
 
@@ -52,7 +54,9 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
 ### Procedure
 
 1. **Creating:** create both files. Seed `history.md` with a dated "created"
-   entry and `plan.md` with improvements you already foresee.
+   entry and `plan.md` with improvements you already foresee. In collections
+   that run the learning-capture loop (§5 — graphmind-ai-lab's `claude/` does),
+   also seed an empty `inbox.md` from the §5 template.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move completed ones out of
@@ -191,7 +195,7 @@ protects whoever runs it.
 ### Order of operations when you create or edit an artifact
 
 1. Write/edit the agent or skill source.
-2. Update its `kaizen/{plan,history}.md` (§1).
+2. Update its `kaizen/{plan,history}.md` (§1; agents also carry `inbox.md`, §5).
 3. **If you added, renamed, or removed an agent:** update every prompt that
    **enumerates the team** in the same change — an orchestrator's roster (e.g.
    teco's "The team you coordinate"). Other agents' prompts are consumers of
@@ -283,7 +287,69 @@ in graphmind-ai-lab) recording scope, script result, findings, and fixes — so
 
 ---
 
-## 5. Testing standards (reference)
+## 5. Learnings inboxes — capture & distillation
+
+The self-improvement loop for a stateless agent team: **capture is cheap and
+unreviewed; promotion is curated.** Each agent carries an append-only
+**learnings inbox** at `<agent>/kaizen/inbox.md` (sibling of plan/history — in
+graphmind-ai-lab, enforced by `audit-team.sh` check 1). During runs the agent
+appends dated, evidence-backed observations of **durable, non-obvious
+environment facts in its discipline** — tool quirks, undocumented behaviors,
+conventions that live only in the code. Agents never promote their own
+entries; the inbox is the only kaizen file an agent writes itself (the
+doc-scoped write guards allowlist exactly that path). The maintainer (cobb)
+distills — on request, and folded into every certification pass (§4):
+
+1. **Read every inbox** (`claude/*/kaizen/inbox.md`).
+2. **Verify each entry** — is it still true? Re-check cheaply against the live
+   system or docs; environment facts rot on upgrades. Unverifiable ≠ discard —
+   date-stamp the doubt and keep or drop by value.
+3. **Route each surviving entry to exactly one destination:**
+   - **The agent's always-loaded prompt** — only if it changes behavior or
+     routing in most sessions. Highest bar: every session pays tokens for it.
+   - **An on-demand knowledge base** — the `graph-dba/falkordb-quirks.md`
+     pattern: dated, live-verified entries in a `<agent>/<topic>.md` referenced
+     from the prompt but loaded on demand. Create one when an agent's domain
+     facts accumulate; don't inline them into the prompt.
+   - **Project docs** (`AGENTS.md`, the component's `docs/`) — facts about *the
+     project* belong where every agent sees them, never hoarded in one agent's
+     private files where they drift out of sync.
+   - **Discard** — stale, task-specific, or already documented.
+4. **Log & clear.** Every promotion gets a dated entry in the agent's
+   `history.md` (what, why, where it went); processed entries are then removed
+   from the inbox — the history entry is the durable record. Promotion into a
+   prompt or catalog is a normal agent edit: full §1/§2 bookkeeping applies.
+
+**Inbox template** (seed on creation; keep the header, entries append below):
+
+```markdown
+# Kaizen — Learnings Inbox: {name}
+
+> Append-only capture of durable, non-obvious environment facts the `{name}` agent
+> discovers during runs — raw observations, not conclusions. The maintainer (cobb)
+> periodically distills this inbox (agent-maintenance skill §5): verifies each entry,
+> routes it (prompt / knowledge base / project docs / discard), logs the promotion in
+> `history.md`, and clears it. The agent only appends here; it never promotes.
+>
+> Entry format (append at the end):
+>
+> ```markdown
+> ## YYYY-MM-DD — <the fact, one line>
+> - **Evidence:** what was run/read/observed (command, file:line, output)
+> - **Context:** the task where it surfaced, one line
+> - **Suggested home:** prompt | knowledge base | project docs | unsure
+> ```
+
+*(empty — no unprocessed learnings)*
+```
+
+> Origin: 2026-07-12 — the user asked how the agents could self-improve from
+> what they learn exploring their areas; the answer generalized graph-dba's
+> quirks-file pattern into a team-wide capture→distill loop.
+
+---
+
+## 6. Testing standards (reference)
 
 For *how* to test the agents/skills you maintain — the two-altitude standard
 (pytest for deterministic code; the eval/bless harness for agent behavior) and

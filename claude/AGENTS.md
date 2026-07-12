@@ -1,6 +1,6 @@
 # Claude agents — context for AI agents working here
 
-This directory (`claude/`) holds custom Claude Code subagents. Each agent is a folder: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`. **Skills no longer live here** — they were unified into the repo-root [`skills/`](../skills/) home (see [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards` skills are there.
+This directory (`claude/`) holds custom Claude Code subagents. Each agent is a folder: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history,inbox}.md` — `inbox.md` is the agent's own append-only learnings capture (durable environment facts discovered during runs); `cobb` distills inboxes periodically per the `agent-maintenance` skill §5 (verify → route to prompt/knowledge base/project docs → log in `history.md` → clear). **Skills no longer live here** — they were unified into the repo-root [`skills/`](../skills/) home (see [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards` skills are there.
 
 **The full agent catalog — what each does, when to use it, handoff contracts, hook enforcement — lives once, in [`README.md`](./README.md).** Each agent's frontmatter `description` is its routing contract and is auto-injected into sessions; each `<name>/<name>.md` is the source of truth for its behavior. This file keeps only the index plus directory-level conventions.
 
@@ -30,6 +30,6 @@ symlink.
 
 ## Maintenance rules
 
-- Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md`, the full catalog entry in [`README.md`](./README.md), and the name rosters here and in the repo-root `AGENTS.md`, in the same change.
+- Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md` (and seed `kaizen/inbox.md` on creation), the full catalog entry in [`README.md`](./README.md), and the name rosters here and in the repo-root `AGENTS.md`, in the same change.
 - Skills live in the repo-root [`skills/`](../skills/) home, not here. Their catalog is [`skills/README.md`](../skills/README.md); cobb's kaizen logs changes to `agent-maintenance`/`agent-standards`.
 - Don't paste full system prompts or duplicate the README catalog here — point to the source.
