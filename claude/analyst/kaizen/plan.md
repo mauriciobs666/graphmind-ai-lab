@@ -8,15 +8,18 @@
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-001 | 2026-07-09 | med | 🟡 | First-run shakedown: plan-review half evidenced (m3-executor review); code review + RCA still open — K-022 impl review is the designated vehicle |
+| K-001 | 2026-07-09 | med | 🟡 | Shakedown — RCA mode only remaining: plan-review ✅ (2026-07-11) + code-review ✅ (K-022 impl review, 2026-07-12); RCA run still open |
 | K-002 | 2026-07-09 | low | 🔵 | Reciprocal mentions in producer prompts (architect/coder) |
 
-### K-001 — First-run shakedown: review a real artifact end-to-end
-- **Status:** 🟡 in-progress (plan-review half evidenced 2026-07-11)
+### K-001 — First-run shakedown: RCA mode remaining
+- **Status:** 🟡 in-progress — plan-review ✅ + code-review ✅; **RCA mode only remaining**
 - **Priority:** medium
-- **Rationale:** The prompt is untested against a live run. The likely weak spots: verdict calibration (does it rubber-stamp or nitpick-flood?), whether it actually runs suites for evidence, and whether the review doc lands at `docs/reviews/<slug>.md` with the hook staying silent.
-- **Proposed change:** Delegate a plan review (e.g. an existing `falkor-chat/docs/plans/` doc), a code review of a recent diff, and an RCA of a real (or seeded) failing test; assess deliverable quality against the prompt's own structures; fold findings back into the prompt.
-- **Progress (2026-07-12):** the **plan-review** half ran for real — `falkor-chat/docs/reviews/m3-executor.md` (K-022 design review; majors M1–M4 raised and closed into the approved plan; doc landed at the right path, hook silent). Still open: a **code review of a real diff** — designated vehicle: the **K-022 executor implementation review** (`docs/reviews/m3-executor-impl.md`), now a baked-in done-condition of that item in `falkor-chat/docs/BACKLOG.md` (see teco K-003) — and an **RCA** run. Fold verdict-calibration findings back into the prompt afterwards.
+- **Rationale:** The prompt is untested against a live run. The likely weak spots: verdict calibration (does it rubber-stamp or nitpick-flood?), whether it actually runs suites for evidence, and whether the review doc lands at `docs/reviews/<slug>.md` with the hook staying silent. Two of the three review modes have now cleared these on real artifacts; the RCA mode has not run.
+- **Proposed change:** Run an **RCA of a real (or seeded) failing test** end-to-end — assess whether it delivers a clean causal chain + suggested fix at `docs/reviews/<slug>-rca.md`, hook silent; fold any verdict/structure findings back into the prompt. Then close K-001.
+- **Progress:**
+  - **Plan-review ✅ 2026-07-11** — `falkor-chat/docs/reviews/m3-executor.md` (K-022 design review; majors M1–M4 raised and closed into the approved plan; right path, hook silent).
+  - **Code-review ✅ 2026-07-12** — `falkor-chat/docs/reviews/m3-executor-impl.md` (K-022 impl review; approve-with-suggestions, 0 blockers / 1 major / 3 minor / 3 nit; calibration healthy). Counterpart to teco K-003 (now closed). See history.md.
+  - **RCA ⬜ open** — no RCA run yet; this is the sole remaining piece of the shakedown.
 
 ### K-002 — Reciprocal mentions in producer prompts (architect/coder)
 - **Status:** 🔵 proposed

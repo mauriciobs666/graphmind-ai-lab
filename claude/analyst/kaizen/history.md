@@ -2,6 +2,22 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-07-12 — K-001: code-review half of the shakedown proven (K-022 impl review) — RCA remains
+- **What:** The **code-review** half of the first-run shakedown ran for real. On falkor-chat
+  **K-022 Landing 1** (executor implementation, committed `3921f87`) the analyst reviewed the
+  delivered diff and produced `falkor-chat/docs/reviews/m3-executor-impl.md`: verdict
+  **approve-with-suggestions, 0 blockers / 1 major (M-1) / 3 minor / 3 nit**, doc landed at the
+  right path with the write-guard hook silent. This was the designated vehicle named in K-001 and
+  the counterpart to teco K-003 (the team's first fully-gated run). Verdict calibration read as
+  healthy — a real major surfaced, not a nitpick flood, and the two deferred seams were ruled
+  acceptable-for-Landing-1 rather than inflated to blockers.
+- **Why:** teco K-003 closed 2026-07-12 with the gated run committed; that same run is the
+  evidence for analyst K-001's code-review half. Recording it here so the shakedown's remaining
+  scope is honest.
+- **Plan items:** **K-001 narrowed** (not closed): plan-review ✅ (2026-07-11) + code-review ✅
+  (this entry); the **RCA** mode is still unexercised — K-001 now tracks that remainder only.
+  No prompt change: no verdict-calibration weakness surfaced across the two review runs.
+
 ## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol + guard allowlist
 - **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt; the doc-scoped write guard's allowlist gained exactly the agent's own inbox path (`<name>/kaizen/inbox.md`), with the escalation message updated to match.
 - **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.

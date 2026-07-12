@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-12 — K-003 ✅: review-gate invariant proven on the first fully-gated run — kept, no prompt change
+- **What:** Closed K-003 with disposition **(a) keep the invariant** — "work ships
+  independently reviewed; when you trim ceremony, the review gate is the last thing to go."
+  falkor-chat **K-022 Landing 1** (U1–U10, committed `3921f87`) ran as the team's first fully-gated
+  coordinated delegation with the analyst post-implementation review as a non-negotiable
+  done-condition, and the cost datapoint the plan asked for is now recorded in
+  `falkor-chat/docs/plans/m3-executor-coordination.md` ("Cost datapoint" table). **No prompt
+  change** — the datapoint vindicates the existing guardrail rather than forcing the (b) rewrite
+  to risk-signal-gated review.
+- **Evidence / reasoning from the datapoint:**
+  1. **The gate is cheap.** Analyst review = ~149k tokens / 25 tool uses / ~7 min — ~12% of the
+     ~1.20M-token, ~4h gated run, a thin slice on top of the six implementation delegations.
+  2. **The gate paid.** On a diff the implementers considered done it returned
+     approve-with-suggestions with **1 major (M-1, the drive try/except) + 3 minor + 3 nit** —
+     exactly the class of defect the K-020/21 "review left to the user" skip would have shipped
+     unseen.
+  3. **The headline ~12× vs. the K-001 baseline is a units artifact, not the gate's cost** — 10
+     units + independent gate vs. an ungated 2-unit slice (~100k / 23 / ~45 min). Per-unit the run
+     is comparable; the review is the cheap part.
+  4. Therefore the concern that opened K-003 — "an invariant that never fires is hopeful prose" —
+     is resolved: it fired, cheaply, and caught real signal. Keeping review-by-default is the
+     right risk posture; the low marginal cost means the default stands even at n=1.
+- **Honest caveat (recorded, not blocking):** this is **one** gated run. It proves the gate can pay
+  its way and is affordable, not that every gate will catch a major. The cost is low enough that
+  "keep the default, skip only with stated justification for genuinely trivial units" remains
+  correct pending more datapoints — re-examine if a run of gates comes back all-nits at real cost.
+- **Why:** User asked to close the K-003 thread now that K-022 is committed. The experiment ran end
+  to end (gate enforced + datapoint captured); the disposition is the last step the plan item
+  named ((a) keep / (b) rewrite).
+- **Plan items:** **K-003 ✅ done** (moved here). No change to `teco.md`, `README.md`, or the
+  context catalogs — behavior/routing unchanged; this is a decision to *keep* the current prompt.
+  Counterparts still open on their own agents: `analyst` K-001 (its code-review shakedown — the
+  same run validated it; closeable on analyst's side) and `qa-engineer` K-003 (defect→fix→re-run
+  loop — **unexercised**, the review returned 0 blockers so no needs-changes loop fired).
+
 ## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol + guard allowlist + integration check
 - **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt; the coordination-doc write guard's allowlist gained exactly teco's own inbox path. Step 4 (Integrate & verify) additionally gained the learnings-ride-the-handoff check: when a specialist's result reports a durable environment discovery, confirm it was filed in that agent's inbox (a one-line check, not a gate).
 - **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture during runs, curated promotion by cobb. Teco is the collection point on orchestrated work — the integration check catches learnings a delegate forgot to file. Requested by the user.
