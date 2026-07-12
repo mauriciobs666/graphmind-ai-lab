@@ -19,6 +19,7 @@
 - **Revisit if:** the agent's broad tool access causes surprise or unwanted actions in practice.
 
 ## Parking lot / ideas
+- ~~Handoff symmetry (2026-07-11 team certification): RCA-by-path consumption + reciprocal qa-engineer boundary.~~ *(✅ Resolved same-day: workflow step 1 names the RCA input, the description routes acceptance passes to qa-engineer, and the pair is in `audit-team.sh` `BOUNDARY_PAIRS`. See history.md.)*
 - State explicitly that the agent does **not** auto-commit (the harness rule is "commit only when asked") — avoids surprise commits given the "commit-sized increments" language.
 - Add a one-liner that coverage % is a guide, not a goal — pin behaviors, don't chase numbers.
 - Note on flaky tests: quarantine + diagnose root cause rather than re-run until green.

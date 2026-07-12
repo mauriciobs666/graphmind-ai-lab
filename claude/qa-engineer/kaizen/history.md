@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-11 — Destructive-ops guard + tdd-engineer boundary in description (certification fixes)
+- **What:** (1) Frontmatter now wires a `PreToolUse` Bash guard — `qa-engineer/hooks/guard-destructive-ops.sh`, a thin wrapper over the new shared core `scripts/guard-destructive-ops.sh` — escalating `GRAPH.DELETE`/`FLUSHALL`/`FLUSHDB`/volume wipes/container force-removal to human approval; the "never mutate the environment" guardrail now names it as the harness backstop (enforcement parity). (2) The `description` now routes unit-level test-first implementation to `tdd-engineer` (the boundary was previously stated only in the body and on qa's side of the pair); `tdd-engineer:qa-engineer` added to `audit-team.sh` `BOUNDARY_PAIRS`. Catalog row updated.
+- **Why:** Team-coherence certification (2026-07-11): the agent drives running apps against the shared live FalkorDB with unrestricted Bash, but its no-mutation rule was prompt-only hope while devops had the harness gate; and the qa↔tdd altitude boundary was asymmetric at the description (routing-contract) level.
+- **Plan items:** implements cobb K-011 on this agent's side.
+
 ## 2026-07-11 — Module docs convention updated (kaizen→BACKLOG, archive/ rule)
 - **What:** The PLAN phase's "detect the convention first" bullet now cites backlog IDs from `docs/BACKLOG.md` (modules no longer have `kaizen/plan.md`) and adds the `docs/archive/<same-subdir>/` rule: completed-milestone docs are frozen there — new test plans/reports go to the active `docs/test-plans/`/`docs/test-reports/` dirs, never into `archive/`. This closes K-002's intent from the other side: the convention is now defined once in the root `AGENTS.md` (module documentation convention) rather than only inferred.
 - **Why:** Repo-wide docs unification (2026-07-11, see `falkor-chat/docs/HISTORY.md`): module-level `kaizen/{plan,history}.md` retired into `docs/{BACKLOG,HISTORY}.md` + `docs/archive/`. Agent-folder kaizen pairs (this file) are unchanged.

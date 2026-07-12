@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-11 — Destructive-ops guard refactored to a shared core (no behavior change)
+- **What:** `devops/hooks/guard-destructive-ops.sh` became a thin wrapper (mirroring the doc-guard wrappers) over the new shared core `claude/scripts/guard-destructive-ops.sh`, which takes the agent name for its escalation message; the matching logic is byte-identical. The core is now also wired into `graph-dba` and `qa-engineer` (cobb K-011 — they run against the same shared live FalkorDB). Wrapper + core verified: `docker volume rm` and `GRAPH.DELETE` escalate, read-only commands pass through.
+- **Why:** Team-coherence certification (2026-07-11) found the destructive-ops gate protected the shared datastore only when devops was the actor; sharing the core follows the guard-doc-writes consolidation precedent.
+- **Plan items:** none (cobb K-011).
+
 ## 2026-07-11 — Description slimmed (team-wide token-cost pass)
 - **What:** Frontmatter `description` compressed from 1359 to 652 chars: capability lists tightened, reciprocal boundary prose reduced to short route-away clauses that still name the counterpart agents (audit check 6 boundary symmetry preserved — full pass green), and "how I work" detail dropped from the description since the prompt body already carries it. Routing semantics unchanged; no body/catalog changes needed.
 - **Why:** All 12 agents' descriptions are auto-injected into every session and into every subagent spawn that carries the `Agent` tool; team-wide they cost 12,609 chars (~3.1K tokens) per injection. The pass cut them to 7,036 chars (~44%), saving ≈1,400 tokens per session/spawn with the same routing contract.

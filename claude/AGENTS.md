@@ -21,9 +21,12 @@ runs in every project) · `cobb` (team maintainer: `agent-maintenance`/`agent-st
 The five doc-scoped write guards (architect, analyst, data-scientist, teco, tico) are thin
 wrappers over one shared core, **`scripts/guard-doc-writes.sh`** — each wrapper passes its
 allowed-path globs and escalation message; the core does jq→python3 path extraction, fail-open,
-and the `permissionDecision: "ask"` escalation. `devops/hooks/guard-destructive-ops.sh` is
-standalone (it matches Bash command patterns, not write paths). Frontmatter wires every hook via
-`$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment symlink.
+and the `permissionDecision: "ask"` escalation. The three destructive-ops guards (devops,
+graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destructive-ops.sh`**
+(each passes its agent name; the core matches Bash command patterns — `GRAPH.DELETE`,
+`FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f` — not write paths). Frontmatter wires every
+hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
+symlink.
 
 ## Maintenance rules
 

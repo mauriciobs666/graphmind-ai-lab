@@ -41,6 +41,7 @@ Every document deliverable is written into the component's docs tree and handed 
 - **architect**: plan at `<component>/docs/plans/<slug>.md`.
 - **analyst**: review at `<component>/docs/reviews/<slug>.md` — severity-ranked findings + verdict (approve / approve with suggestions / needs changes); RCA at `docs/reviews/<slug>-rca.md`.
 - **data-scientist**: method note at `<component>/docs/plans/<slug>-ml.md` (co-located with the architect's plan); methodology review at `docs/reviews/<slug>-ml.md` (same verdict scale).
+- **graph-dba**: design note at `<component>/docs/plans/<slug>-graph.md` for implementer-bound design work (data model, schema/DDL, ingestion/migration); quick consults and tuning diagnoses stay inline.
 - **qa-engineer**: test plan at `<component>/docs/test-plans/<kebab>.md`; test report at `docs/test-reports/<kebab>-report.md`.
 
 Typical feature: **tico (user-run) → architect → (coder | tdd-engineer | frontend-engineer) → qa-engineer**, with `analyst` as the **default review gate** (after the architect on a plan that drives significant implementation, and/or after the implementer before QA), `graph-dba` on graph-data work, and `devops` unblocking environments. Match ceremony to the task — but when you trim ceremony, the review gate is the **last** thing to go, not the first.

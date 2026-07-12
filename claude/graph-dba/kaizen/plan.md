@@ -2,13 +2,17 @@
 
 > Forward-looking backlog for the `graph-dba` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-05 (absorbed falkor-chat's verified-quirks section)
+> Last reviewed: 2026-07-11 (team-coherence certification pass)
 
 ## Active
 
 | ID | Added | Priority | Status | Summary |
 |-------|------------|----------|--------|---------|
-| _(none active)_ | | | | User chose "just document for now" — K-001 and K-002 deferred (below), K-003 done. |
+| _(none active)_ | | | | K-001/K-002 deferred (below), K-003 done, K-004 done 2026-07-11 (design-note handoff contract — see history.md). |
+
+> K-001 and K-002 deferred (below), K-003 done, K-004 done (2026-07-11, same-day — design-note
+> contract + destructive-ops guard; the guard also answers K-001's revisit trigger with a
+> destructive-shapes-only gate rather than a tool allowlist).
 
 > Done: K-003 (2026-06-05) — deployment identified (edge `graph` build on Redis 8 + `vectorset`); details below and in history.md.
 > Deferred: K-001, K-002 (2026-06-05) — documentation-only for now; keep tools unconstrained and the agent advice-only. Revisit triggers below.
