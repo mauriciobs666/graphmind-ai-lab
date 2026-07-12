@@ -4,7 +4,10 @@
 > keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
 > plan documents move to [`archive/`](./archive/).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09 (**M3 — Workflow engine started: slice 1 delivered ✅** — K-020 (def
+> Last reviewed: 2026-07-12 (**K-022 amended:** analyst post-implementation review added to its
+> owner chain and done-condition — the team's first fully-gated coordinated run; see the
+> review-gate note on the item. Prior review 2026-07-09: **M3 — Workflow engine started: slice 1
+> delivered ✅** — K-020 (def
 > model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
 > see HISTORY.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
 > decomposition (K-020…K-025) in `docs/plans/m3-workflow-engine.md` Part A — canonical item text
@@ -88,7 +91,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Owner:** **`architect`** design pass first — engine-loop semantics **+ resolve DESIGN §13
   guard expression language (expr lib vs minimal DSL in `Step.config`/`TRANSITION.guard`) — a
   genuine user decision point, surface before implementing** → **`graph-dba`** gate (run/step-run
-  write/read queries; `WorkflowRun`/`StepRun` DDL already exists) → **`tdd-engineer`**.
+  write/read queries; `WorkflowRun`/`StepRun` DDL already exists) → **`tdd-engineer`** →
+  **`analyst` post-implementation review** (added 2026-07-12; see review-gate note below).
 - **Inputs/prereqs:** K-021 ✅ (materialized snapshots to walk); the §13 decision. Plan doc:
   `docs/plans/m3-executor.md`. Also lock the `start_key` contract here (slice-1 residual).
 - **Scope (DESIGN §6.2):** `WorkflowRun {runId,defKey,defVersion,status,startedAt,ctx}` with
@@ -96,7 +100,17 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `RAN` + `NEXT` audit trail. Engine loop: read `AT_STEP` → evaluate `TRANSITION` guards against
   `ctx` → create next `StepRun` → execute → append `NEXT` → move `AT_STEP`.
 - **Done-condition:** both suites green at the new enumerated gate baseline; a run walks a
-  materialized def deterministically; guards evaluated per the §13 decision; audit trail complete.
+  materialized def deterministically; guards evaluated per the §13 decision; audit trail complete;
+  **analyst review of the delivered diff at `docs/reviews/m3-executor-impl.md` with verdict
+  approve / approve-with-suggestions** (a "needs changes" loops back to the implementer, then
+  re-review — the gate is part of done, not optional).
+- **Review-gate note (process addition 2026-07-12, not in the frozen plan text):** K-022 is
+  deliberately the team's **first fully-gated coordinated run** — the K-020/K-021 run skipped
+  independent code review ("left to the user") despite teco's review-by-default rule. The
+  coordinator must treat the analyst gate as a non-negotiable done-condition, not a judgment
+  call, and record the run's cost datapoint (tokens/time vs. the ~100k-token/45-min ungated
+  slice-1 baseline) in the coordination doc so the gate's cost/benefit is finally measurable.
+  Counterpart items: `claude/teco/kaizen/plan.md` K-003, `claude/analyst/kaizen/plan.md` K-001.
 - **Risks/RAM (rule 6):** run/step-run nodes are the M3 per-workspace hot growth line (execution
   traces); `status` index already provisioned. Guard evaluation must be sandboxed/bounded
   (injection/DoS if an expr lib is chosen).
