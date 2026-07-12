@@ -11,8 +11,10 @@
 > model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
 > see HISTORY.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
 > decomposition (K-020…K-025) in `docs/plans/m3-workflow-engine.md` Part A — canonical item text
-> lives there; compact copies below. Next on the critical path: **K-022 — executor** (opens with
-> the §13 guard-language decision → user). Prior: M2 GraphRAG complete ✅ 2026-07-08 (K-008 +
+> lives there; compact copies below. **K-022 Landing 1 (offline executor + capabilities, U1–U10)
+> delivered ✅ + analyst-approved 2026-07-12** (§13 guard-language decision resolved; suites
+> 241/283 green; see HISTORY.md). Next on the critical path: **Landing 2 — the trigger + triage
+> proof flow (K-023/K-024) → K-025 QA** ⇒ M3 ✅. Prior: M2 GraphRAG complete ✅ 2026-07-08 (K-008 +
 > K-013 + K-014 + K-015, QA-accepted); M2.5 hardening still deferred: K-016/K-017/K-018 + a
 > channel-scoped retrieval read.) See the milestone map below.
 
@@ -86,7 +88,19 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > `start_key` contract (implemented as "exactly one step declares `start: True`"); the
 > `-[:HAS_STEP]->` containment edge added at the gate (index-anchored def-scoped reads).
 
-### K-022 — Run + StepRun executor core (Slice 2) (🔵 proposed — next on the critical path)
+### K-022 — Run + StepRun executor core (Slice 2) (🟡 Landing 1 ✅ delivered + analyst-approved 2026-07-12 — Landing 2 (trigger+proof, U11–U15) remaining)
+
+- **Delivered (Landing 1, U1–U10) ✅ 2026-07-12:** the offline LLM-native executor + node
+  capabilities (Phases 0–3) — schema/DDL + DESIGN reconciliation + QUERIES §12, `executor.py`
+  (§2.1 A/B/C loop) / `guards.py` / `tools.py`, repository/services wiring. Suites raised to
+  **query 241/241, pytest 283**, both green. Analyst gate = **approve-with-suggestions, 0
+  blockers** (1 major M-1 + 3 minor + 3 nit; two seams deferred to Landing 2). Reframed as an
+  offline-first landing under `docs/plans/m3-executor.md`; teco-coordinated
+  graph-dba → tdd-engineer → coder with a mandatory analyst review gate — the team's first
+  fully-gated run. See `docs/HISTORY.md` (2026-07-12), the review at
+  `docs/reviews/m3-executor-impl.md`, and the coordination log
+  `docs/plans/m3-executor-coordination.md`. **Remaining: Landing 2 (trigger + triage proof,
+  U11–U15)** — carried into K-023 below.
 
 - **Owner:** **`architect`** design pass first — engine-loop semantics **+ resolve DESIGN §13
   guard expression language (expr lib vs minimal DSL in `Step.config`/`TRANSITION.guard`) — a
@@ -121,6 +135,19 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 - **Owner:** **`graph-dba`** gate (`TRIGGERED_BY` / StepRun-`EMITTED` writes/reads) →
   **`tdd-engineer`**/`coder`.
+- **Inputs/carried from K-022 Landing 1** (this slice = U11, the trigger wiring; see
+  `docs/reviews/m3-executor-impl.md` findings + the coordination doc's "Carried to Landing 2"
+  section):
+  1. **M-1 (analyst major)** — add a top-level `try/except` in `executor._drive` that `fail_run`s
+     on an unexpected exception (today a mid-drive fault leaves the run stuck at `status='running'`,
+     un-resumable). Analyst-recommended to fold into the U11 background-handler wiring.
+  2. **PRODUCED-link ordering** — the live `StepRun-[:PRODUCED]->Message` link needs the U11 wiring
+     decision: either pre-mint the `StepRun` before executing an agent node, or link emitted
+     messages after `_record`. The tool is correct + tested when a `stepRunId` is resolvable and
+     skips-with-`linked:false` otherwise; the coder correctly did not mutate the locked U8 loop.
+  3. **Agent-node thread context** — `_run_agent_node` assembles run `ctx` only today; folding in
+     full thread-message context lands **in** U11 (a hard prerequisite for AC-2, must not slip
+     further).
 - **Scope (DESIGN §5.1/§6.2):** `(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)` (incl.
   materialize-on-first-use) and `(:StepRun)-[:EMITTED]->(:Message)` (step posts into a thread via
   the §4 write path). **Gate must disambiguate the `EMITTED` overload** — K-013's

@@ -61,6 +61,25 @@ class WorkflowDefSpecError(Exception):
     """
 
 
+class WorkflowRunNotFoundError(Exception):
+    """A workflow run (or its current-position anchor) was not found (M3 §12).
+
+    Raised by the service/executor when a run state-move query returns zero rows
+    for a reason other than a guarded CAS miss — the run id does not exist, or it
+    has no `AT_STEP` (already terminal) when an advance was attempted. Re-exported
+    by `services` (defined here to avoid a repository→services cycle).
+    """
+
+
+class StepBudgetExceededError(Exception):
+    """A run exceeded its `maxSteps` budget (M3 §7 / §12.5).
+
+    The executor's runaway guard: `record_step_and_advance` bumps `stepCount`, and
+    when it passes the run's `maxSteps` the executor fails the run and surfaces this
+    (the run is stamped `failed` via `fail_run`). Re-exported by `services`.
+    """
+
+
 @dataclass(frozen=True)
 class MessageWriteStatus:
     """Status row returned by the §4 v2 write paths (QUERIES.md §4 contract).
@@ -1034,6 +1053,324 @@ class Repository:
             {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
             for row in res.result_set
         ]
+
+    # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
+    #
+    # The executor walks a materialized snapshot (§11) as a WorkflowRun that
+    # records each executed step as a StepRun. All live workspace-local in
+    # `ws:{id}`. Each method maps 1:1 to a verified QUERIES.md §12 query; every
+    # state-move is a single GRAPH.QUERY (atomicity, rule 4). Status-move contract:
+    # zero rows = the anchor missed (run gone / wrong current state / CAS did not
+    # apply) → `None`; a row = the move committed. `ctx`/`input`/`output`/`payload`
+    # are opaque flat strings, stored and returned verbatim (rule 8).
+
+    def start_run(
+        self, ws: str, *, run_id: str, def_key: str, def_version: str,
+        started_at: int, trigger_msg_id: str, ctx: str, trace: bool, max_steps: int,
+    ) -> dict[str, Any] | None:
+        """Begin a run at the snapshot's START step. QUERIES.md §12.1.
+
+        Creates the `WorkflowRun` (`running`, `stepCount:0`, `waitingThreadId:''`)
+        with `OF_DEF`/`AT_STEP`/`TRIGGERED_BY` edges. Returns
+        `{runId, startKey, status, stepCount}`, or `None` when the snapshot has no
+        START or the trigger message is missing (both anchors must match).
+        """
+        res = self._graph(ws).query(
+            "MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})"
+            "-[:START]->(start:Step) "
+            "MATCH (trigger:Message {msgId: $triggerMsgId}) "
+            "CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, "
+            "                       defVersion: $defVersion, status: 'running', "
+            "                       startedAt: $startedAt, ctx: $ctx, trace: $trace, "
+            "                       maxSteps: $maxSteps, stepCount: 0, "
+            "                       waitingThreadId: ''}) "
+            "CREATE (r)-[:OF_DEF]->(snap) "
+            "CREATE (r)-[:AT_STEP]->(start) "
+            "CREATE (r)-[:TRIGGERED_BY]->(trigger) "
+            "RETURN r.runId AS runId, start.key AS startKey, r.status AS status, "
+            "       r.stepCount AS stepCount",
+            {
+                "runId": run_id, "defKey": def_key, "defVersion": def_version,
+                "startedAt": started_at, "triggerMsgId": trigger_msg_id,
+                "ctx": ctx, "trace": trace, "maxSteps": max_steps,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "startKey": row[1], "status": row[2],
+            "stepCount": row[3],
+        }
+
+    def record_step_and_advance(
+        self, ws: str, *, run_id: str, step_run_id: str, step_status: str,
+        started_at: int, ended_at: int, input: str, output: str, to_step_uid: str,
+    ) -> dict[str, Any] | None:
+        """The M4 tail-anchored atomic advance. QUERIES.md §12.2.
+
+        One query: records the just-executed step (`cur`, at `AT_STEP`) as a
+        `StepRun`, appends it to the `NEXT` trail via the `LAST_STEP_RUN` tail
+        pointer, moves the tail, relinks `AT_STEP` to `$toStepUid`, and bumps
+        `stepCount` — all atomic. `to_step_uid` may equal the current step's uid
+        (advance-to-self: the executor's self-loop / suspend / terminal record).
+        Returns `{stepCount, stepRunId, ranStepKey}`, or `None` when the run is
+        missing, already terminal (no `AT_STEP`), or `$toStepUid` is not a step in
+        this workspace.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step) "
+            "MATCH (to:Step {stepUid: $toStepUid}) "
+            "OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) "
+            "CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key, "
+            "                    status: $stepStatus, startedAt: $startedAt, "
+            "                    endedAt: $endedAt, input: $input, output: $output}) "
+            "CREATE (r)-[:HAS_STEP_RUN]->(sr) "
+            "CREATE (sr)-[:RAN]->(cur) "
+            "FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END | "
+            "  CREATE (p)-[:NEXT]->(sr)) "
+            "FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | "
+            "  DELETE lr) "
+            "CREATE (r)-[:LAST_STEP_RUN]->(sr) "
+            "DELETE atRel "
+            "CREATE (r)-[:AT_STEP]->(to) "
+            "SET r.stepCount = r.stepCount + 1 "
+            "RETURN r.stepCount AS stepCount, sr.stepRunId AS stepRunId, "
+            "       cur.key AS ranStepKey",
+            {
+                "runId": run_id, "stepRunId": step_run_id, "stepStatus": step_status,
+                "startedAt": started_at, "endedAt": ended_at, "input": input,
+                "output": output, "toStepUid": to_step_uid,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"stepCount": row[0], "stepRunId": row[1], "ranStepKey": row[2]}
+
+    def suspend_run(
+        self, ws: str, *, run_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        """Guarded CAS `running → waiting`. QUERIES.md §12.3.
+
+        Denorms `waitingThreadId` (so §12.9 finds the parked run index-anchored).
+        The flip commits only if the run is currently `running`; a suspend of a
+        non-running run matches the node but fails the `WHERE` → `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'running' "
+            "SET r.status = 'waiting', r.waitingThreadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "threadId": thread_id},
+        )
+        return self._status_row(res)
+
+    def resume_run(self, ws: str, *, run_id: str) -> dict[str, Any] | None:
+        """Guarded CAS `waiting → running` (single-flight). QUERIES.md §12.4.
+
+        Two concurrent replies both try to resume; per-query atomicity means only
+        the one that observes `status = 'waiting'` flips it — the loser sees
+        `running`, the `WHERE` fails, and gets `None` (no re-entry). Clears
+        `waitingThreadId` so the run is no longer discoverable as parked.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'waiting' "
+            "SET r.status = 'running', r.waitingThreadId = '' "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id},
+        )
+        return self._status_row(res)
+
+    def complete_run(
+        self, ws: str, *, run_id: str, ended_at: int
+    ) -> dict[str, Any] | None:
+        """Terminal `done` — clears `AT_STEP`. QUERIES.md §12.5.
+
+        The audit trail survives via `HAS_STEP_RUN` + `NEXT` + `LAST_STEP_RUN`.
+        `DELETE` of a null `AT_STEP` is a verified no-op (re-completing an
+        already-terminal run does not error). `None` = run not found.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[atRel:AT_STEP]->() "
+            "DELETE atRel "
+            "SET r.status = 'done', r.endedAt = $endedAt "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "endedAt": ended_at},
+        )
+        return self._status_row(res)
+
+    def fail_run(
+        self, ws: str, *, run_id: str, ended_at: int, ctx: str
+    ) -> dict[str, Any] | None:
+        """Terminal `failed` — clears `AT_STEP`, stamps a `ctx` note. QUERIES.md §12.5.
+
+        The executor calls this on `stepCount > maxSteps` (step-budget exceeded,
+        §7), stamping a diagnostic note into `ctx`. `None` = run not found.
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[atRel:AT_STEP]->() "
+            "DELETE atRel "
+            "SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "endedAt": ended_at, "ctx": ctx},
+        )
+        return self._status_row(res)
+
+    def link_step_emission(
+        self, ws: str, *, step_run_id: str, msg_id: str
+    ) -> dict[str, Any] | None:
+        """`StepRun -[:PRODUCED]-> Message` (D2). QUERIES.md §12.6.
+
+        The second query of the deliberately two-step emission (post the message
+        via the guarded §4 write, then link). `MERGE` on the relationship makes the
+        link idempotent (a retry re-links exactly once). Distinct from K-013's
+        `EMITTED` (§10). `None` when an endpoint is missing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (sr:StepRun {stepRunId: $stepRunId}) "
+            "MATCH (m:Message  {msgId: $msgId}) "
+            "MERGE (sr)-[:PRODUCED]->(m) "
+            "RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId",
+            {"stepRunId": step_run_id, "msgId": msg_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"stepRunId": row[0], "msgId": row[1]}
+
+    def get_run(self, ws: str, *, run_id: str) -> dict[str, Any] | None:
+        """Read a run's state. QUERIES.md §12.7 (RO).
+
+        `atStepKey` is `None` for terminal runs (`AT_STEP` cleared). `None` when
+        the run does not exist.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step) "
+            "OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot) "
+            "RETURN r.runId AS runId, r.status AS status, r.stepCount AS stepCount, "
+            "       r.maxSteps AS maxSteps, r.trace AS trace, r.ctx AS ctx, "
+            "       r.startedAt AS startedAt, r.endedAt AS endedAt, "
+            "       r.waitingThreadId AS waitingThreadId, cur.key AS atStepKey, "
+            "       snap.key AS defKey, snap.version AS defVersion",
+            {"runId": run_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "status": row[1], "stepCount": row[2],
+            "maxSteps": row[3], "trace": row[4], "ctx": row[5],
+            "startedAt": row[6], "endedAt": row[7], "waitingThreadId": row[8],
+            "atStepKey": row[9], "defKey": row[10], "defVersion": row[11],
+        }
+
+    def read_step_runs(self, ws: str, *, run_id: str) -> list[dict[str, Any]]:
+        """The NEXT-ordered audit trail. QUERIES.md §12.8 (RO).
+
+        Finds the chain head via `OPTIONAL MATCH` + `IS NULL` (never the broken
+        `exists()`-in-pattern check), then walks `NEXT*0..`, ordered by the
+        executor's monotonic `startedAt` (coincides with NEXT order).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun) "
+            "OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) "
+            "WITH sr, pv WHERE pv IS NULL "
+            "MATCH (sr)-[:NEXT*0..]->(x:StepRun) "
+            "RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, "
+            "       x.status AS status, x.startedAt AS startedAt, "
+            "       x.endedAt AS endedAt, x.input AS input, x.output AS output "
+            "ORDER BY x.startedAt",
+            {"runId": run_id},
+        )
+        return [
+            {
+                "stepRunId": row[0], "stepKey": row[1], "status": row[2],
+                "startedAt": row[3], "endedAt": row[4], "input": row[5],
+                "output": row[6],
+            }
+            for row in res.result_set
+        ]
+
+    def find_waiting_run_for_thread(
+        self, ws: str, *, thread_id: str
+    ) -> dict[str, Any] | None:
+        """The resume lookup, index-anchored on `WorkflowRun.status`. QUERIES.md §12.9 (RO).
+
+        Anchors on the existing `status` index (point lookup on `'waiting'`) plus a
+        residual filter on the denormed `waitingThreadId` — no new index. A thread
+        holds at most one `waiting` run at a time. `None` when nothing is parked.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {status: 'waiting'}) "
+            "WHERE r.waitingThreadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status "
+            "LIMIT 1",
+            {"threadId": thread_id},
+        )
+        return self._status_row(res)
+
+    def append_trace_event(
+        self, ws: str, *, step_run_id: str, trace_id: str, seq: int, kind: str,
+        at: int, payload: str,
+    ) -> dict[str, Any] | None:
+        """Write one debug trace record (FR-4). QUERIES.md §12.10.
+
+        Called ONLY for a debug instance (`WorkflowRun.trace = true`) — the
+        `GraphTracer`; the `NullTracer` issues no query so a lean run writes zero
+        `TraceEvent` nodes. `payload` is a flat serialized string, length-capped by
+        the caller (rule 6). `None` when the step-run anchor is missing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (sr:StepRun {stepRunId: $stepRunId}) "
+            "CREATE (te:TraceEvent {traceId: $traceId, seq: $seq, kind: $kind, "
+            "                       at: $at, payload: $payload}) "
+            "CREATE (sr)-[:TRACED]->(te) "
+            "RETURN te.traceId AS traceId",
+            {
+                "stepRunId": step_run_id, "traceId": trace_id, "seq": seq,
+                "kind": kind, "at": at, "payload": payload,
+            },
+        )
+        if not res.result_set:
+            return None
+        return {"traceId": res.result_set[0][0]}
+
+    def read_trace(self, ws: str, *, run_id: str) -> list[dict[str, Any]]:
+        """Reconstruct a run's execution (debug). QUERIES.md §12.11 (RO).
+
+        Traverses run → step-runs → trace events, ordered by
+        `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction.
+        A non-debug run has zero `TRACED` edges → `[]` (AC-5's negative half).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)"
+            "-[:TRACED]->(te:TraceEvent) "
+            "RETURN sr.stepRunId AS stepRunId, sr.stepKey AS stepKey, "
+            "       te.traceId AS traceId, te.seq AS seq, te.kind AS kind, "
+            "       te.at AS at, te.payload AS payload "
+            "ORDER BY sr.startedAt, te.seq",
+            {"runId": run_id},
+        )
+        return [
+            {
+                "stepRunId": row[0], "stepKey": row[1], "traceId": row[2],
+                "seq": row[3], "kind": row[4], "at": row[5], "payload": row[6],
+            }
+            for row in res.result_set
+        ]
+
+    @staticmethod
+    def _status_row(res) -> dict[str, Any] | None:
+        """`{runId, status}` for the §12 state-move CAS queries, or `None` (zero rows)."""
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"runId": row[0], "status": row[1]}
 
     def materialize_snapshot(
         self, ws: str, *, key: str, version: str, name: str, kind: str,

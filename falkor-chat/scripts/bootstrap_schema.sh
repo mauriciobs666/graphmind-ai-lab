@@ -125,6 +125,13 @@ bootstrap_workspace() {
   echo "[index] StepRun.stepRunId"
   gquery "$g" "CREATE INDEX FOR (n:StepRun) ON (n.stepRunId)"
 
+  # TraceEvent: debug-only per-run trace records (M3 executor, K-022). Index first
+  # so the UNIQUE constraint can attach (index-before-constraint). Written ONLY for
+  # debug runs (WorkflowRun.trace = true); non-debug runs create zero TraceEvent
+  # nodes — this DDL is inert RAM until a debug run writes to it.
+  echo "[index] TraceEvent.traceId"
+  gquery "$g" "CREATE INDEX FOR (n:TraceEvent) ON (n.traceId)"
+
   echo "[index] ReadCursor.cursorId"
   gquery "$g" "CREATE INDEX FOR (n:ReadCursor) ON (n.cursorId)"
 
@@ -174,6 +181,9 @@ bootstrap_workspace() {
 
   echo "[constraint] StepRun unique {stepRunId}"
   gconstraint "$g" UNIQUE NODE StepRun PROPERTIES 1 stepRunId
+
+  echo "[constraint] TraceEvent unique {traceId}"
+  gconstraint "$g" UNIQUE NODE TraceEvent PROPERTIES 1 traceId
 
   echo "[constraint] WorkflowDefSnapshot unique {key, version}"
   gconstraint "$g" UNIQUE NODE WorkflowDefSnapshot PROPERTIES 2 key version

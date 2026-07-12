@@ -955,3 +955,278 @@ RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS
   *"Type mismatch: expected Boolean but was String"*. Moot here (we use `HAS_STEP`) but noted.
 - **Sequential `UNWIND` blocks row-multiply the final `RETURN`** unless each is collapsed with an
   aggregation (`WITH d, count(st) AS stepCount`). Verified: the collapsed form returns one clean row.
+
+---
+
+## 12. Workflow execution — runs, step-runs & traces (M3 executor — K-022)
+
+The **executor** walks a materialized `WorkflowDefSnapshot` (§11) as a `WorkflowRun` that records each
+executed step as a `StepRun`. All of these live **workspace-local** in `ws:{id}` (the snapshot, the run,
+the trace are one connected subgraph — no cross-graph edge). DESIGN §6.2. These queries are the 1:1
+contract for `repository.py` (U3) — **method name = query name** below. Every state-move is a **single
+`GRAPH.QUERY`** (atomicity, rule 4); every read anchors on an index (PROFILE-verified, no label scan).
+
+**Model (ws:{id}) — additive to §11's snapshot:**
+
+```
+(:WorkflowRun {runId, defKey, defVersion, status, startedAt, endedAt,
+               ctx, trace, maxSteps, stepCount, waitingThreadId})
+(:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot)        // which materialized def (§11)
+(:WorkflowRun)-[:AT_STEP]->(:Step)                      // current position (cleared on terminal)
+(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)              // the @mention that started it (FR-7/AC-1)
+(:WorkflowRun)-[:HAS_STEP_RUN]->(:StepRun)              // membership (all step-runs of a run)
+(:WorkflowRun)-[:LAST_STEP_RUN]->(:StepRun)             // TAIL pointer — the NEXT anchor (M4)
+(:StepRun {stepRunId, stepKey, status, startedAt, endedAt, input, output})
+(:StepRun)-[:RAN]->(:Step)                              // which def step this run-step executed
+(:StepRun)-[:NEXT]->(:StepRun)                          // execution order (audit trail)
+(:StepRun)-[:PRODUCED]->(:Message)                      // step-emitted chat message (D2 — NOT EMITTED)
+(:StepRun)-[:TRACED]->(:TraceEvent)                     // debug-only trace record (FR-4)
+(:TraceEvent {traceId, seq, kind, at, payload})         // debug runs only; payload = flat string
+```
+
+**Locked shape decisions (this gate):**
+
+- **`PRODUCED`, not `EMITTED` (D2, locked).** StepRun→Message emission is a **distinct** edge type.
+  `EMITTED` is already the K-013 **Message→Message** provenance edge (§10) — reusing it would conflate
+  "this answer cited that seed" with "this step produced that message." `PRODUCED` is
+  `(:StepRun)-[:PRODUCED]->(:Message)`; endpoints carry their own `stepRunId`/`msgId` unique index, so
+  no relationship index/constraint is needed (same reasoning as §10's `EMITTED`).
+- **`LAST_STEP_RUN` tail pointer anchors the atomic advance (M4).** Mirrors the `Thread` HEAD/TAIL
+  pattern (§4/§5.2): `record_step_and_advance` reads the tail to find the previous `StepRun`, hangs
+  `NEXT` from it, and moves the tail — all in the **same** query. **No chain-walk, no label scan** —
+  the previous step-run is reached by one `Optional Conditional Traverse` of the tail edge (O(1)).
+- **`ctx`/`input`/`output`/`payload` are opaque flat strings (rule 8)** — stored/returned verbatim,
+  never filtered inside. The executor (de)serializes app-side.
+- **`waitingThreadId` denorm rides the `WorkflowRun.status` index — no new index.** See §12.9.
+- **`runId`/`stepRunId`/`traceId` are server-minted** → plain guarded `CREATE`, with the `UNIQUE`
+  constraint as the concurrency backstop (the §3/§4 channel/thread pattern). `link_step_emission` and
+  `append_trace_event` use the endpoints' existing indexes.
+
+**Status-move contract (all state-move queries).** Each state-move `MATCH`es its anchor(s), so
+**zero rows = the anchor missed** (run gone / wrong current state): the service treats zero rows as
+"CAS did not apply" (suspend/resume) or "run not found" (advance/complete/fail → `WorkflowRunNotFound`).
+A returned row = the move committed.
+
+### 12.1 `start_run` — begin a run at the snapshot's START step
+
+```cypher
+// $runId,$defKey,$defVersion,$startedAt,$triggerMsgId server-minted / caller-supplied
+// $ctx = opaque serialized state ("{}" at start); $trace = bool (debug instance?);
+// $maxSteps = run-level step budget (DS default 12, §7)
+MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
+MATCH (trigger:Message {msgId: $triggerMsgId})
+CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
+                       status: 'running', startedAt: $startedAt, ctx: $ctx,
+                       trace: $trace, maxSteps: $maxSteps, stepCount: 0,
+                       waitingThreadId: ''})
+CREATE (r)-[:OF_DEF]->(snap)
+CREATE (r)-[:AT_STEP]->(start)
+CREATE (r)-[:TRIGGERED_BY]->(trigger)
+RETURN r.runId AS runId, start.key AS startKey, r.status AS status, r.stepCount AS stepCount
+```
+*Both anchors are `Node By Index Scan` (`WorkflowDefSnapshot.key`, `Message.msgId`) — PROFILE-verified.
+No `LAST_STEP_RUN` yet; the first `record_step_and_advance` seeds the tail. `waitingThreadId` starts
+`''` (set only while parked, §12.4). Backed by the `WorkflowRun.runId` UNIQUE constraint. Zero rows =
+snapshot has no START, or the trigger message is missing.*
+
+### 12.2 `record_step_and_advance` — the M4 tail-anchored atomic advance
+
+The engine's hot write: one query records the just-executed step as a `StepRun`, appends it to the
+`NEXT` audit trail via the tail pointer, moves the tail, relinks `AT_STEP` to the transition's `to`
+step, and bumps `stepCount`. **All atomic (rule 4).**
+
+```cypher
+// $runId; $stepRunId (server-minted); $stepStatus (e.g. 'done'); $startedAt,$endedAt;
+// $input,$output (opaque strings); $toStepUid = the destination Step's stepUid (executor
+// resolves it app-side from the firing transition = "{defKey}:{version}:{toKey}")
+MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step)
+MATCH (to:Step {stepUid: $toStepUid})
+OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun)
+CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key, status: $stepStatus,
+                    startedAt: $startedAt, endedAt: $endedAt,
+                    input: $input, output: $output})
+CREATE (r)-[:HAS_STEP_RUN]->(sr)
+CREATE (sr)-[:RAN]->(cur)
+FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END | CREATE (p)-[:NEXT]->(sr))
+FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | DELETE lr)
+CREATE (r)-[:LAST_STEP_RUN]->(sr)
+DELETE atRel
+CREATE (r)-[:AT_STEP]->(to)
+SET r.stepCount = r.stepCount + 1
+RETURN r.stepCount AS stepCount, sr.stepRunId AS stepRunId, cur.key AS ranStepKey
+```
+
+*Anchors: `Node By Index Scan | (r:WorkflowRun)` + `(to:Step)`; the previous step-run is found by a
+single `Optional Conditional Traverse` of `LAST_STEP_RUN` (**no chain-walk / no label scan** —
+PROFILE-verified). The **first** advance finds no `LAST_STEP_RUN` (both `FOREACH`s no-op) and just
+seeds the tail + `AT_STEP` relink. Every later advance: `NEXT` from the old tail, drop the old tail
+edge, create the new tail, drop the old `AT_STEP`, create the new. Verified: advance 1 → `stepCount=1`,
+exactly one `AT_STEP`, tail = the new SR, zero `NEXT`; advance 2 → `stepCount=2`, `NEXT` old→new, exactly
+one tail, two `HAS_STEP_RUN`, `RAN` edges to the correct def steps. Zero rows = run missing, no `AT_STEP`
+(already terminal), or `$toStepUid` not a step in this workspace.*
+
+> **The `FOREACH (x IN CASE WHEN n IS NULL THEN [] ELSE [n] END | …)` idiom** is the verified way to
+> act on an optionally-present node/edge without collapsing the row (quirks KB) — used here twice (NEXT
+> append; tail-edge delete). `DELETE` inside `FOREACH` and top-level `DELETE atRel` + re-`CREATE` of the
+> same edge type are both live-verified on this build.
+
+### 12.3 `suspend_run` — guarded CAS `running → waiting`
+
+```cypher
+// $runId, $threadId (the run's thread — denormed so §12.9 can find it index-anchored)
+MATCH (r:WorkflowRun {runId: $runId})
+WHERE r.status = 'running'
+SET r.status = 'waiting', r.waitingThreadId = $threadId
+RETURN r.runId AS runId, r.status AS status
+```
+*A **compare-and-set**: the flip commits only if the run is currently `running`. A second suspend (or a
+suspend of a non-running run) matches the node but fails the `WHERE` → **zero rows**, nothing written.*
+
+### 12.4 `resume_run` — guarded CAS `waiting → running` (single-flight)
+
+```cypher
+// $runId
+MATCH (r:WorkflowRun {runId: $runId})
+WHERE r.status = 'waiting'
+SET r.status = 'running', r.waitingThreadId = ''
+RETURN r.runId AS runId, r.status AS status
+```
+*The single-flight guard for concurrent human replies (§2.4/§6): two near-simultaneous replies both
+try to resume, but per-query atomicity means only the one that observes `status = 'waiting'` flips it;
+the loser sees `running` → `WHERE` fails → **zero rows** → does not re-enter the executor. **Verified:**
+first resume returns the row, an immediate second returns zero rows. Clears `waitingThreadId` so the run
+is no longer discoverable as parked.*
+
+### 12.5 `complete_run` / `fail_run` — terminal states (clear `AT_STEP`)
+
+```cypher
+// complete_run — $runId, $endedAt
+MATCH (r:WorkflowRun {runId: $runId})
+OPTIONAL MATCH (r)-[atRel:AT_STEP]->()
+DELETE atRel
+SET r.status = 'done', r.endedAt = $endedAt
+RETURN r.runId AS runId, r.status AS status
+```
+```cypher
+// fail_run — $runId, $endedAt, $ctx (executor stamps a note, e.g. "step budget exceeded", §7)
+MATCH (r:WorkflowRun {runId: $runId})
+OPTIONAL MATCH (r)-[atRel:AT_STEP]->()
+DELETE atRel
+SET r.status = 'failed', r.endedAt = $endedAt, r.ctx = $ctx
+RETURN r.runId AS runId, r.status AS status
+```
+*`AT_STEP` ("current position") is cleared on terminal states — the audit trail is preserved by the
+`HAS_STEP_RUN` set + `NEXT` chain + `LAST_STEP_RUN` (the *last executed* step is `LAST_STEP_RUN`-[:RAN]->).
+`DELETE` of a **null** `OPTIONAL MATCH`ed edge is a verified no-op (re-completing a run that already has
+no `AT_STEP` does not error). **Step-budget fail (§7):** the executor compares `stepCount` (returned by
+§12.2) to `maxSteps` app-side; on `stepCount > maxSteps` it calls `fail_run` — verified `failed` +
+`AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).*
+
+### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message` (D2)
+
+```cypher
+// $stepRunId, $msgId — run AFTER the §4 chat write that created the message (two-step, accepted)
+MATCH (sr:StepRun {stepRunId: $stepRunId})
+MATCH (m:Message  {msgId: $msgId})
+MERGE (sr)-[:PRODUCED]->(m)
+RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId
+```
+*Both endpoints anchor on their `UNIQUE` index (`stepRunId`, `msgId`); `MERGE` on the relationship makes
+the link **idempotent** (a retry after a crash between the post and the link re-links exactly once — no
+duplicate `PRODUCED`, verified). This is the **second** query of the deliberately two-step emission (post
+the message via the guarded §4 write, then link) — the message is the durable artifact; a missing link is
+a diagnosable, retry-able gap, not a torn thread (§3/§9). **Distinct from `EMITTED`** (§10) — verified a
+`PRODUCED` write adds zero `EMITTED` edges.*
+
+### 12.7 `get_run` — read a run's state
+
+```cypher
+// $runId
+MATCH (r:WorkflowRun {runId: $runId})
+OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step)
+OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot)
+RETURN r.runId AS runId, r.status AS status, r.stepCount AS stepCount, r.maxSteps AS maxSteps,
+       r.trace AS trace, r.ctx AS ctx, r.startedAt AS startedAt, r.endedAt AS endedAt,
+       r.waitingThreadId AS waitingThreadId,
+       cur.key AS atStepKey, snap.key AS defKey, snap.version AS defVersion
+```
+*Point lookup on `WorkflowRun.runId`. `atStepKey` is `null` for terminal runs (§12.5). Route via
+`GRAPH.RO_QUERY`.*
+
+### 12.8 `read_step_runs` — the NEXT-ordered audit trail
+
+```cypher
+// $runId
+MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr)
+WITH sr, pv WHERE pv IS NULL                    // the head = the one StepRun with no NEXT predecessor
+MATCH (sr)-[:NEXT*0..]->(x:StepRun)
+RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, x.status AS status,
+       x.startedAt AS startedAt, x.endedAt AS endedAt, x.input AS input, x.output AS output
+ORDER BY x.startedAt
+```
+*Anchors on `Node By Index Scan | (r:WorkflowRun)`, finds the chain head via **`OPTIONAL MATCH` +
+`IS NULL`** (never the broken `exists()`-in-pattern check — quirks KB), then walks `NEXT*0..`. Ordered by
+the executor's monotonic `startedAt` (same lock-guarded clock as messages — ties impossible at source),
+which coincides with `NEXT` order. Route via `GRAPH.RO_QUERY`.*
+
+### 12.9 `find_waiting_run_for_thread` — the resume lookup (index-anchored)
+
+```cypher
+// $threadId — resume a parked run when a human replies in its thread (§2.4/§6)
+MATCH (r:WorkflowRun {status: 'waiting'})
+WHERE r.waitingThreadId = $threadId
+RETURN r.runId AS runId, r.status AS status
+LIMIT 1
+```
+*Anchors on `Node By Index Scan | (r:WorkflowRun)` via the **existing `WorkflowRun.status` index**
+(point lookup on value `'waiting'`), then a residual `Filter` on the denormed `waitingThreadId`.
+**No new index** — the `waiting` set is tiny (at most a handful of parked conversations per workspace;
+the value-index visits only `waiting` nodes, never the accumulating `done` runs), so the residual filter
+is trivial. **Decision (this gate):** the `TRIGGERED_BY`→`Message` traversal alternative also
+index-anchors on `status` but adds a `Conditional Traverse` and depends on the trigger edge surviving —
+the denorm is simpler and self-contained. RAM: **zero new index**; `waitingThreadId` is one short
+string property per run. Route via `GRAPH.RO_QUERY`. (A thread holds at most one `waiting` run at a time
+— `LIMIT 1` is belt-and-suspenders.)*
+
+### 12.10 `append_trace_event` — write one debug trace record (FR-4)
+
+```cypher
+// $stepRunId, $traceId (server-minted), $seq (order within the StepRun), $kind, $at, $payload
+// Called ONLY when the run is a debug instance (WorkflowRun.trace = true) — the GraphTracer;
+// the NullTracer (non-debug) issues no query, so a lean run writes zero TraceEvent nodes.
+MATCH (sr:StepRun {stepRunId: $stepRunId})
+CREATE (te:TraceEvent {traceId: $traceId, seq: $seq, kind: $kind, at: $at, payload: $payload})
+CREATE (sr)-[:TRACED]->(te)
+RETURN te.traceId AS traceId
+```
+*`kind ∈ {node_rationale, guard_judgment, tool_call, tool_result, graphrag_retrieval, llm_prompt,
+llm_response, step_timing}` (DESIGN §5, app-enforced — opaque in-graph). `payload` is a flat serialized
+string, length-capped at the write boundary (rule 6). Backed by the `TraceEvent.traceId` UNIQUE
+constraint.*
+
+### 12.11 `read_trace` — reconstruct a run's execution (debug)
+
+```cypher
+// $runId
+MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)-[:TRACED]->(te:TraceEvent)
+RETURN sr.stepRunId AS stepRunId, sr.stepKey AS stepKey,
+       te.traceId AS traceId, te.seq AS seq, te.kind AS kind, te.at AS at, te.payload AS payload
+ORDER BY sr.startedAt, te.seq
+```
+*Anchors on `Node By Index Scan | (r:WorkflowRun)`, traverses to step-runs then their trace events,
+ordered by `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction (FR-4). A
+non-debug run has zero `TRACED` edges → empty result (AC-5's negative half, by construction). Route via
+`GRAPH.RO_QUERY`.*
+
+**Live-verified build quirks that shape §12** (all confirmed on `falkordb:v4.18.11`, module `41811`,
+against an isolated `ws:gdbtest`):
+- **The tail-pointer advance (§12.2) plans edge-anchored** — the previous `StepRun` is found by
+  `Optional Conditional Traverse` of `LAST_STEP_RUN`, not a scan of the `NEXT` chain. This is what makes
+  the atomic advance O(1) regardless of trail length (M4).
+- **`DELETE` of a null `OPTIONAL MATCH`ed relationship is a no-op** (§12.5) — no guard needed to
+  re-complete an already-terminal run.
+- **Guarded CAS via `WHERE` on the current status value** (§12.3/§12.4) gives single-flight
+  suspend/resume without a lock — per-query atomicity serializes the read-modify-write.
+- **`waitingThreadId` on `WorkflowRun` rides the `status` index** (§12.9) — a value-point index scan on
+  `status:'waiting'` + a residual property filter, no dedicated `waitingThreadId` index.

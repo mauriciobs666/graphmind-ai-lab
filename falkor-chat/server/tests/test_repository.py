@@ -903,5 +903,370 @@ def test_list_snapshots_returns_materialized(wf_repo):
     assert ("a", "1") in keys and ("b", "1") in keys
 
 
+# ── §12 Workflow execution — runs, step-runs & traces (M3 executor, K-022) ───────
+#
+# Integration tests against `ws:test`; each method wraps a verified QUERIES §12
+# query 1:1. A run + its trace are a workspace-local subgraph anchored on a
+# materialized snapshot (§11) and a trigger `Message`. A 3-step conversation def
+# (intake→research→answer) is the fixture: intake `waitsForHuman`, research→answer
+# unconditional (D5), answer terminal.
+
+from falkorchat.repository import (  # noqa: E402
+    StepBudgetExceededError,
+    WorkflowRunNotFoundError,
+)
+
+RUN_STEPS = [
+    {"key": "intake", "type": "agent", "config": '{"waitsForHuman":true}'},
+    {"key": "research", "type": "agent", "config": "{}"},
+    {"key": "answer", "type": "agent", "config": "{}"},
+]
+RUN_TRANSITIONS = [
+    {"from": "intake", "to": "research", "on": "ready",
+     "guard": '{"kind":"llm","text":"enough info?"}', "order": 0},
+    {"from": "research", "to": "answer", "on": "done", "guard": "", "order": 0},
+]
+
+
+def _uid(step_key, *, key="triage", version="1"):
+    return f"{key}:{version}:{step_key}"
+
+
+def _seed_run_fixtures(repo, *, trigger="trig1"):
+    """Materialize the triage snapshot + a thread with one trigger message."""
+    repo.materialize_snapshot(
+        "test", key="triage", version="1", name="Triage", kind="conversation",
+        start_key="intake", steps=RUN_STEPS, transitions=RUN_TRANSITIONS,
+    )
+    _seed_thread(repo)  # channel c1 + thread t1 + user u1
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id=trigger, author_id="u1",
+        text="please help", role="user", created_at=120,
+    )
+
+
+def _start(repo, *, run_id="r1", trigger="trig1", trace=False, max_steps=12):
+    return repo.start_run(
+        "test", run_id=run_id, def_key="triage", def_version="1",
+        started_at=1000, trigger_msg_id=trigger,
+        ctx='{"threadId":"t1"}', trace=trace, max_steps=max_steps,
+    )
+
+
+# ── §12.1 start_run ──────────────────────────────────────────────────────────
+
+def test_start_run_creates_the_run_subgraph(wf_repo):
+    _seed_run_fixtures(wf_repo)
+
+    res = _start(wf_repo)
+
+    assert res["runId"] == "r1"
+    assert res["startKey"] == "intake"
+    assert res["status"] == "running"
+    assert res["stepCount"] == 0
+
+    got = wf_repo.get_run("test", run_id="r1")
+    assert got["status"] == "running"
+    assert got["atStepKey"] == "intake"
+    assert got["defKey"] == "triage"
+    assert got["defVersion"] == "1"
+    assert got["maxSteps"] == 12
+    assert got["trace"] is False
+    assert got["waitingThreadId"] == ""
+
+
+def test_start_run_zero_rows_when_trigger_missing(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    assert _start(wf_repo, trigger="ghost") is None
+
+
+def test_start_run_zero_rows_when_snapshot_missing(wf_repo):
+    _seed_thread(wf_repo)
+    wf_repo.post_first_message(
+        "test", thread_id="t1", msg_id="trig1", author_id="u1",
+        text="hi", role="user", created_at=120,
+    )
+    assert _start(wf_repo) is None
+
+
+# ── §12.2 record_step_and_advance ────────────────────────────────────────────
+
+def _advance(repo, *, run_id="r1", step_run_id, to_step, status="done",
+             output="out"):
+    return repo.record_step_and_advance(
+        "test", run_id=run_id, step_run_id=step_run_id, step_status=status,
+        started_at=1001, ended_at=1002, input="in", output=output,
+        to_step_uid=_uid(to_step),
+    )
+
+
+def test_first_advance_seeds_tail_bumps_count_relinks_at_step(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    res = _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    assert res["stepCount"] == 1
+    assert res["stepRunId"] == "sr1"
+    assert res["ranStepKey"] == "intake"          # records the step LEFT
+    assert wf_repo.get_run("test", run_id="r1")["atStepKey"] == "research"
+    # exactly one StepRun, no NEXT yet
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert [s["stepKey"] for s in trail] == ["intake"]
+
+
+def test_second_advance_appends_next_in_order(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    res = _advance(wf_repo, step_run_id="sr2", to_step="answer")
+
+    assert res["stepCount"] == 2
+    assert res["ranStepKey"] == "research"
+    assert wf_repo.get_run("test", run_id="r1")["atStepKey"] == "answer"
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert [s["stepKey"] for s in trail] == ["intake", "research"]  # NEXT order
+
+
+def test_advance_to_self_records_a_step_run(wf_repo):
+    # the self-loop / suspend / terminal record shape: to == cur
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    res = _advance(wf_repo, step_run_id="sr1", to_step="intake")
+
+    assert res["stepCount"] == 1
+    assert wf_repo.get_run("test", run_id="r1")["atStepKey"] == "intake"
+
+
+def test_advance_zero_rows_when_run_missing(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    assert _advance(wf_repo, run_id="ghost", step_run_id="x", to_step="research") is None
+
+
+def test_advance_round_trips_input_and_output_verbatim(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research", output="verbatim-out")
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert trail[0]["input"] == "in"
+    assert trail[0]["output"] == "verbatim-out"
+    assert trail[0]["status"] == "done"
+
+
+# ── §12.3 / §12.4 suspend / resume CAS ───────────────────────────────────────
+
+def test_suspend_run_flips_running_to_waiting_and_denorms_thread(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    res = wf_repo.suspend_run("test", run_id="r1", thread_id="t1")
+
+    assert res["status"] == "waiting"
+    got = wf_repo.get_run("test", run_id="r1")
+    assert got["status"] == "waiting"
+    assert got["waitingThreadId"] == "t1"
+
+
+def test_suspend_of_non_running_run_is_zero_rows_no_write(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.suspend_run("test", run_id="r1", thread_id="t1")  # now waiting
+
+    # a second suspend can't apply — the CAS WHERE status='running' fails
+    assert wf_repo.suspend_run("test", run_id="r1", thread_id="t1") is None
+
+
+def test_resume_run_flips_waiting_to_running_single_flight(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.suspend_run("test", run_id="r1", thread_id="t1")
+
+    first = wf_repo.resume_run("test", run_id="r1")
+    second = wf_repo.resume_run("test", run_id="r1")  # loser of the race
+
+    assert first["status"] == "running"
+    assert second is None                              # single-flight CAS
+    assert wf_repo.get_run("test", run_id="r1")["waitingThreadId"] == ""
+
+
+# ── §12.5 complete / fail ────────────────────────────────────────────────────
+
+def test_complete_run_clears_at_step_and_sets_done(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    res = wf_repo.complete_run("test", run_id="r1", ended_at=2000)
+
+    assert res["status"] == "done"
+    got = wf_repo.get_run("test", run_id="r1")
+    assert got["status"] == "done"
+    assert got["atStepKey"] is None
+    assert got["endedAt"] == 2000
+
+
+def test_fail_run_clears_at_step_stamps_ctx_note(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    res = wf_repo.fail_run(
+        "test", run_id="r1", ended_at=2000, ctx='{"error":"step budget exceeded"}'
+    )
+
+    assert res["status"] == "failed"
+    got = wf_repo.get_run("test", run_id="r1")
+    assert got["status"] == "failed"
+    assert got["atStepKey"] is None
+    assert got["ctx"] == '{"error":"step budget exceeded"}'
+
+
+def test_complete_missing_run_zero_rows(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    assert wf_repo.complete_run("test", run_id="ghost", ended_at=2000) is None
+
+
+def test_step_runs_retained_after_fail(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+    wf_repo.fail_run("test", run_id="r1", ended_at=2000, ctx="{}")
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert [s["stepKey"] for s in trail] == ["intake"]  # audit trail preserved
+
+
+# ── §12.6 link_step_emission (PRODUCED) ──────────────────────────────────────
+
+def test_link_step_emission_creates_produced_edge(wf_repo, conn):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    res = wf_repo.link_step_emission("test", step_run_id="sr1", msg_id="trig1")
+
+    assert res == {"stepRunId": "sr1", "msgId": "trig1"}
+    produced = _probe(
+        conn,
+        "MATCH (sr:StepRun {stepRunId:'sr1'})-[:PRODUCED]->(m:Message) "
+        "RETURN m.msgId",
+    )
+    assert produced == [["trig1"]]
+
+
+def test_link_step_emission_is_idempotent(wf_repo, conn):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+    wf_repo.link_step_emission("test", step_run_id="sr1", msg_id="trig1")
+    wf_repo.link_step_emission("test", step_run_id="sr1", msg_id="trig1")  # retry
+
+    count = _probe(
+        conn,
+        "MATCH (:StepRun {stepRunId:'sr1'})-[e:PRODUCED]->(:Message) RETURN count(e)",
+    )
+    assert count == [[1]]  # MERGE → exactly one edge
+
+
+# ── §12.7 / §12.8 reads ──────────────────────────────────────────────────────
+
+def test_get_run_none_when_absent(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    assert wf_repo.get_run("test", run_id="ghost") is None
+
+
+def test_read_step_runs_empty_before_any_advance(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    assert wf_repo.read_step_runs("test", run_id="r1") == []
+
+
+def test_read_step_runs_returns_next_ordered_trail(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+    _advance(wf_repo, step_run_id="sr2", to_step="answer")
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+
+    assert [s["stepRunId"] for s in trail] == ["sr1", "sr2"]
+    assert [s["stepKey"] for s in trail] == ["intake", "research"]
+
+
+# ── §12.9 find_waiting_run_for_thread ────────────────────────────────────────
+
+def test_find_waiting_run_for_thread_finds_parked_run(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.suspend_run("test", run_id="r1", thread_id="t1")
+
+    res = wf_repo.find_waiting_run_for_thread("test", thread_id="t1")
+
+    assert res["runId"] == "r1"
+    assert res["status"] == "waiting"
+
+
+def test_find_waiting_run_none_when_not_parked(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)  # running, not waiting
+    assert wf_repo.find_waiting_run_for_thread("test", thread_id="t1") is None
+
+
+def test_find_waiting_run_none_for_other_thread(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.suspend_run("test", run_id="r1", thread_id="t1")
+    assert wf_repo.find_waiting_run_for_thread("test", thread_id="other") is None
+
+
+# ── §12.10 / §12.11 trace write & read ───────────────────────────────────────
+
+def test_append_trace_event_then_read_trace_round_trips(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo, trace=True)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    wf_repo.append_trace_event(
+        "test", step_run_id="sr1", trace_id="te1", seq=0,
+        kind="guard_judgment", at=1500, payload="verdict=true; because ...",
+    )
+    wf_repo.append_trace_event(
+        "test", step_run_id="sr1", trace_id="te2", seq=1,
+        kind="node_rationale", at=1501, payload="posted a clarifying question",
+    )
+
+    events = wf_repo.read_trace("test", run_id="r1")
+
+    assert [e["kind"] for e in events] == ["guard_judgment", "node_rationale"]
+    assert events[0]["payload"] == "verdict=true; because ..."
+    assert events[0]["stepKey"] == "intake"
+    assert [e["seq"] for e in events] == [0, 1]
+
+
+def test_append_trace_event_zero_rows_when_step_run_missing(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo, trace=True)
+    assert wf_repo.append_trace_event(
+        "test", step_run_id="ghost", trace_id="te1", seq=0,
+        kind="node_rationale", at=1500, payload="x",
+    ) is None
+
+
+def test_read_trace_empty_for_non_debug_run(wf_repo):
+    # AC-5 negative half at the query level: a run with no TRACED edges reads empty
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo, trace=False)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+    assert wf_repo.read_trace("test", run_id="r1") == []
+
+
+# ── typed errors exist and are re-exported by services ───────────────────────
+
+def test_workflow_run_errors_are_exception_subclasses():
+    assert issubclass(WorkflowRunNotFoundError, Exception)
+    assert issubclass(StepBudgetExceededError, Exception)
+
+
 def test_list_snapshots_empty_when_none(wf_repo):
     assert wf_repo.list_snapshots("test") == []

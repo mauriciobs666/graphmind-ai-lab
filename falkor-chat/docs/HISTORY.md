@@ -5,6 +5,50 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-12 — M3 K-022 Landing 1: LLM-native workflow executor (U1–U10), analyst-gated
+
+First landing of the reframed **K-022 — LLM-native workflow executor**: the offline executor +
+node capabilities (Phases 0–3, units U1–U10). Delivered by the **teco-coordinated
+graph-dba → tdd-engineer → coder** chain with a **mandatory analyst review gate** — the team's
+first fully-gated coordinated run. Plan `docs/plans/m3-executor.md`; coordination log
+`docs/plans/m3-executor-coordination.md`. Trigger + proof flow (Landing 2, U11–U15) is a separate
+later run, **not started**. New baselines: **query suite 193 → 241/241**, **server pytest 196 → 283**,
+both green (teco re-verified independently).
+
+- **U1–U2 (graph-dba):** `bootstrap_schema.sh` adds `TraceEvent.traceId` index **then** UNIQUE
+  (index-before-constraint, idempotent). DESIGN §5.1/§5.2/§6.1/§6.2/§7.1/§13 reconciled — LLM-judged
+  guards + the `type:'agent'` node kind, §13 guard-language open question marked resolved, and the
+  stale `EMITTED` on StepRun→Message corrected to **`PRODUCED`** (§5.1/§5.2). QUERIES §12 = twelve
+  live-verified/PROFILEd run / step-run / trace queries. The M4
+  `WorkflowRun-[:LAST_STEP_RUN]->StepRun` tail pointer makes `record_step_and_advance` an O(1)
+  atomic advance (no chain-walk). No new index — resume rides the existing `status` index.
+- **U3–U5 (tdd-engineer):** `repository.py` — the §12 methods 1:1 + `WorkflowRunNotFoundError` /
+  `StepBudgetExceededError`. New `executor.py` — `WorkflowExecutor` (the §2.1 A/B/C loop),
+  `Tracer`/`NullTracer`/`GraphTracer`, run-level step budget, monotonic StepRun clock.
+  `services.py` — start/resume/read-run methods, tenant seam respected. The slice-1 `start_key` =
+  `start:True` contract was kept.
+- **U6 (coder):** `llm.chat(messages, tools) -> ChatResult` with dual-shape parsing (native
+  `tool_calls` field primary, content-embedded-JSON fallback); `complete()` preserved byte-for-byte.
+- **U7–U8 (tdd-engineer):** `guards.py` `evaluate_guard` (DS-note Q1 extract-then-judge,
+  `{decision,rationale}`, bias-to-suspend on ambiguity; `""`=unconditional; `expr`/unknown =
+  `NotImplementedError` seam, M7). `executor._run_agent_node` — a bounded, tool-scoped agent loop
+  with defensive **AC-6** rejection of ungranted/malformed calls (re-prompt, never dispatched) and
+  graceful `maxIterations` exhaustion. The §2.1 loop was left byte-for-byte unchanged.
+- **U9–U10 (coder):** `tools.py` `ToolRegistry` + `post_message` (§4 write as the agent →
+  `PRODUCED` link via `services.link_step_emission`), `graphrag_retrieve` (Q2 τ≈0.5 cutoff / cap 5 /
+  floor 1 / abstain), `human_handoff` (registered capability, granted to no node). `McpToolClient`
+  MCP-client seam — stub-tested in-memory; real external servers deferred.
+- **Analyst gate:** `docs/reviews/m3-executor-impl.md` — **approve-with-suggestions, 0 blockers**
+  (1 major, 3 minor, 3 nit). Major **M-1**: `executor._drive` has no top-level `try/except`, so an
+  unexpected mid-drive exception leaves the run stuck at `status='running'` — a permanent
+  un-resumable zombie once live defs/tools run (not a green-suite blocker; the offline path is
+  deterministic). Both deliberately-deferred seams — live `PRODUCED`-link ordering and agent-node
+  thread-message context — were ruled **acceptable for Landing 1** and carried to U11.
+- Layering held (no Cypher outside `repository.py`); D1–D5 and the M4/M7 decisions honored; AC-5
+  (trace on/off) and AC-6 hold by construction; the default app import stays network-free. Cost
+  datapoint recorded in the coordination doc: **~1.20M subagent tokens / 238 tool uses / 6
+  delegations + the gate** (the first measurable cost/benefit reading for the review gate).
+
 ## 2026-07-11 — Docs unification: kaizen/ retired into docs/ (repo module convention)
 
 Unified the component's two documentation homes into one `docs/` tree — the repo-wide module

@@ -31,13 +31,18 @@ from .config import CallContext
 from .repository import EmbeddingDimensionError as EmbeddingDimensionError
 from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
+from .repository import StepBudgetExceededError as StepBudgetExceededError
 from .repository import WorkflowDefNotFoundError as WorkflowDefNotFoundError
 from .repository import WorkflowDefSpecError as WorkflowDefSpecError
+from .repository import WorkflowRunNotFoundError as WorkflowRunNotFoundError
 
 # ── §11 workflow spec whitelists (plan §B5 / DESIGN §6.1) ───────────────────────
 WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
+# `agent` is the M3 LLM-native node kind (§3) — a plain-language system prompt the
+# model runs as a bounded, tool-scoped agent. `type` stays opaque in-graph (rule 8);
+# this whitelist only gates what a def may declare at publish time.
 STEP_TYPES: frozenset[str] = frozenset(
-    {"prompt", "tool", "decision", "human", "message", "wait"}
+    {"prompt", "tool", "decision", "human", "message", "wait", "agent"}
 )
 
 # ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
@@ -115,12 +120,22 @@ class Services:
         *,
         clock: Callable[[], int] = _default_clock,
         id_gen: Callable[[], str] = _default_id,
+        executor: Any = None,
     ) -> None:
         self._repo = repo
         self._clock = clock
         self._id = id_gen
         self._ts_lock = threading.Lock()
         self._last_ts = 0
+        # The workflow-run engine (M3 §12). Injected — and, because the executor
+        # holds a back-reference to these services (post/retrieve seams), it can be
+        # bound late via `set_executor` when the app wires both (avoids a
+        # construction cycle). Off by default so the M1/M2 surface is untouched.
+        self._executor = executor
+
+    def set_executor(self, executor: Any) -> None:
+        """Late-bind the workflow executor (Phase-4 app wiring — see `__init__`)."""
+        self._executor = executor
 
     def _next_ts(self) -> int:
         """Monotonic per-process ms clock — makes same-ms message ties impossible
@@ -542,3 +557,103 @@ class Services:
     ) -> list[dict[str, Any]]:
         """List the workspace's materialized snapshots. §11.6."""
         return self._repo.list_snapshots(ctx.ws, limit=limit)
+
+    # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
+    #
+    # The service mints the run id + start timestamp (server clock — never
+    # client-supplied), resolves the trigger message's thread into the run `ctx`
+    # (so a suspend can denorm it for the resume lookup, §2.4), starts the run
+    # (repository, §12.1), then hands off to the injected executor which drives the
+    # §2.1 loop. Reads are thin, `ctx.ws`-scoped pass-throughs. All Cypher lives in
+    # `repository.py`; the engine logic lives in `executor.py`.
+
+    def _require_executor(self):
+        if self._executor is None:
+            raise RuntimeError(
+                "workflow executor is not wired — enable the workflow engine "
+                "(app._build_default_app) before starting/resuming runs"
+            )
+        return self._executor
+
+    def start_workflow_run(
+        self, ctx: CallContext, *, def_key: str, version: str,
+        trigger_msg_id: str, trace: bool = False,
+    ) -> dict[str, Any]:
+        """Start a run for a materialized def snapshot and drive it (FR-7/AC-1).
+
+        Mints the run id + start clock, resolves the trigger message's thread into
+        the initial `ctx` (`{"threadId": …}` — the resume denorm anchor, §2.4),
+        starts the run at the snapshot's START step with the executor's step budget,
+        then drives the §2.1 loop out-of-band-ready (synchronous here; a background
+        task in the trigger wiring). Raises `WorkflowRunNotFoundError` when the
+        snapshot or trigger message is missing (nothing is started).
+        """
+        executor = self._require_executor()
+        msg = self._repo.get_message(ctx.ws, msg_id=trigger_msg_id)
+        thread_id = msg["threadId"] if msg else ""
+        run_id = self._id()
+        started_at = self._clock()
+        run_ctx = json.dumps(
+            {"threadId": thread_id}, separators=(",", ":"), sort_keys=True
+        )
+        started = self._repo.start_run(
+            ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
+            started_at=started_at, trigger_msg_id=trigger_msg_id, ctx=run_ctx,
+            trace=trace, max_steps=executor.step_budget,
+        )
+        if started is None:
+            raise WorkflowRunNotFoundError(
+                f"cannot start run: snapshot {def_key!r}@{version!r} has no START "
+                f"or trigger message {trigger_msg_id!r} is missing in this workspace"
+            )
+        status = executor.run(ctx, run_id=run_id)
+        return {
+            "runId": run_id, "status": status, "defKey": def_key,
+            "defVersion": version, "trace": trace,
+        }
+
+    def resume_workflow_run(
+        self, ctx: CallContext, *, run_id: str
+    ) -> dict[str, Any]:
+        """Resume a parked run on a human reply (§2.4/§6).
+
+        Delegates to the executor's single-flight `waiting→running` CAS + drive;
+        `status` is `None` when the CAS did not apply (the run was not waiting, or a
+        concurrent reply already resumed it) — the caller treats that as a no-op.
+        """
+        executor = self._require_executor()
+        status = executor.resume(ctx, run_id=run_id)
+        return {"runId": run_id, "status": status}
+
+    def link_step_emission(
+        self, ctx: CallContext, *, step_run_id: str, msg_id: str
+    ) -> dict[str, Any] | None:
+        """Link `StepRun -[:PRODUCED]-> Message` (D2). QUERIES.md §12.6.
+
+        The second query of the deliberately two-step emission (§3/§9): the message is
+        posted via the guarded §4 write (`post_agent_answer`), then the emission is linked
+        here. `PRODUCED` is distinct from K-013's `EMITTED` (§10). `None` when an endpoint
+        is missing — a diagnosable, retry-able gap, not a torn thread. The `post_message`
+        node tool (`tools.py`) drives this after posting.
+        """
+        return self._repo.link_step_emission(
+            ctx.ws, step_run_id=step_run_id, msg_id=msg_id
+        )
+
+    def get_workflow_run(
+        self, ctx: CallContext, *, run_id: str
+    ) -> dict[str, Any] | None:
+        """Read a run's state (RO pass-through). QUERIES.md §12.7."""
+        return self._repo.get_run(ctx.ws, run_id=run_id)
+
+    def read_workflow_step_runs(
+        self, ctx: CallContext, *, run_id: str
+    ) -> list[dict[str, Any]]:
+        """The NEXT-ordered audit trail (RO pass-through). QUERIES.md §12.8."""
+        return self._repo.read_step_runs(ctx.ws, run_id=run_id)
+
+    def read_workflow_trace(
+        self, ctx: CallContext, *, run_id: str
+    ) -> list[dict[str, Any]]:
+        """A debug run's reconstruction (RO pass-through). QUERIES.md §12.11."""
+        return self._repo.read_trace(ctx.ws, run_id=run_id)

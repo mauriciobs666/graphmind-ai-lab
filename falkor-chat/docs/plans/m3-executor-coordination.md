@@ -79,6 +79,47 @@ Minors: M5 (`graphrag_retrieve` omits the embed step `hybrid_search` needs → U
 already 8000, answer the "bump?" question → U1), M7 (`expr` guard kind is dead/untested in this cut →
 prune or defer, U7), M8 (DESIGN §6.2/§7.1 doc sync → U1).
 
+## Cost datapoint (K-022 done-condition — vs. K-020/K-021 baseline ~100k tokens / 23 tool uses / ~45 min, ungated)
+Running tally for this gated Landing-1 run (U1–U10 + analyst impl-review gate). Filled at close.
+
+| Delegation | Owner | Units | ~Tokens | Tool uses | Wall time | Verdict/notes |
+|---|---|---|---|---|---|---|
+| D1 | graph-dba | U1+U2 | ~221k | 48 | ~47 min | Phase-0 gate done; suite 193→241/241; PRODUCED locked; no new index (resume rides `status` idx) |
+| D2a | tdd-engineer (cut off) | — | ~86k | 5 | — | Session-limit abort before any edit; no changes made; re-dispatched fresh |
+| D2 | tdd-engineer | U3+U4+U5 | ~214k | 49 | ~31 min | repository §12 (1:1), executor.py loop (A/B/C), services run methods; pytest 196→240; suite still 241 |
+| D3 | coder | U6 | ~57k | 23 | ~5 min | `llm.chat(messages, tools)->ChatResult` dual-shape parse; `complete` unchanged; pytest 240→248 |
+| D4a | tdd-engineer (cut off) | — | ~127k | 11 | — | Session-limit abort mid-read; no edits; re-dispatched fresh |
+| D4 | tdd-engineer | U7+U8 | ~161k | 35 | ~133 min | `guards.py` extract-then-judge + `_run_agent_node` (AC-6 reject, bounded loop, graceful exhaustion); §2.1 loop intact; pytest 248→263 |
+| D5 | coder | U9+U10 | ~184k | 42 | ~14 min | `tools.py` ToolRegistry + post_message/graphrag_retrieve(τ/cap/abstain)/human_handoff + PRODUCED link + McpToolClient (stub-tested); pytest 263→283 |
+| Gate | analyst | impl review | ~149k | 25 | ~7 min | **approve-with-suggestions, 0 blocker / 1 major / 3 minor / 3 nit**; both deferrals ruled acceptable-for-Landing-1 |
+| **TOTAL** | 6 deleg + gate (+2 cutoff retries) | U1–U10 + gate | **~1.20M** | **238** | **~4h productive** | vs K-020/21 baseline ~100k / 23 / ~45min **ungated & 2 units**; this = 10 units + independent gate |
+
+## Landing-1 delegation grouping (efficiency, not ceremony)
+Same-owner, same-phase units are handed as one brief to cut cold-start overhead (each brief still
+points the owner at the plan/coordination doc **by path** to read directly — no paraphrase). The
+final analyst gate reviews the whole Landing-1 diff. Grouping:
+- **D1 = graph-dba** — Phase 0 gate (**U1+U2**): schema/DDL + DESIGN reconciliation + QUERIES §12.
+- **D2 = tdd-engineer** — Phase 1 (**U3+U4+U5**): repository + executor loop + services (offline).
+- **D3 = coder** — Phase 2a (**U6**): LLM `chat(messages, tools)` seam.
+- **D4 = tdd-engineer** — Phase 2b (**U7+U8**): fuzzy guard + agent-node loop.
+- **D5 = coder** — Phase 3 (**U9+U10**): tools/ToolRegistry + MCP-client seam.
+- **Gate = analyst** — impl review of the Landing-1 diff → `docs/reviews/m3-executor-impl.md`.
+
+The chain is inherently sequential (each unit builds on the prior's code); no parallelism available.
+
+## Carried to Landing 2 (surfaced during Landing 1 — NOT Landing-1 blockers)
+- **PRODUCED link ordering (from D5/U9).** The executor's drive loop creates the current step's
+  `StepRun` in `record_step_and_advance` **after** `_execute_step` runs (where tools fire), so at
+  `post_message` dispatch time no `stepRunId` exists yet and the live `StepRun-[:PRODUCED]->Message`
+  link cannot fire in the integrated flow. `graphrag_retrieve`/`post_message` are correct + live-proven
+  when a `stepRunId` is resolvable, and gracefully skip-with-`linked:false` otherwise (message is the
+  durable artifact, §3/§9). **Landing-2 decision (U11 wiring):** either pre-mint+create the StepRun
+  before executing an agent node, or link emitted messages after `_record`. The coder correctly did
+  **not** mutate the locked U8 loop — routed here. Analyst gate should confirm this is acceptable to
+  defer for Landing 1.
+- **Agent-node thread-message context (from D4/U8).** `_run_agent_node` assembles run `ctx` only; full
+  thread-message context assembly is deferred to the trigger/services seam (Landing 2, U11).
+
 ## Status log
 - 2026-07-10 — Requirements confirmed (tico) → architect plan delivered (`m3-executor.md`) → user
   review requested. D1–D4 locked. This split authored.
@@ -90,3 +131,83 @@ prune or defer, U7), M8 (DESIGN §6.2/§7.1 doc sync → U1).
   one handler/request), M4 (`WorkflowRun→LAST_STEP_RUN` tail pointer → O(1) atomic advance) all
   closed; D5 + minors M5–M8 folded in; DS note referenced as delivered. No new decisions created.
   **Plan is gap-free and ready for implementation. Held for user go on U1 (graph-dba gate).**
+- 2026-07-12 — **User go received; Landing 1 (U1–U10) started.** Env verified: FalkorDB up;
+  baselines green (`test_queries.sh` **193/193**, `pytest` **196**). Delegation grouping recorded
+  above (D1–D5 by phase/owner). Analyst impl-review gate (K-022 done-condition) is non-negotiable.
+  U11–U15 explicitly out of scope for this run. **D1 (graph-dba, Phase 0 U1+U2) dispatched.**
+- 2026-07-12 — **D1 ✅ (graph-dba, U1+U2).** `bootstrap_schema.sh` adds `TraceEvent.traceId` index
+  THEN UNIQUE; DESIGN §5.1/§5.2/§6.1/§6.2/§7.1/§13 reconciled (D1/D2/M6/M8; §5.1/§5.2 had stale
+  `EMITTED` on StepRun→Message — corrected to `PRODUCED`). QUERIES §12 live-verified+PROFILEd:
+  `start_run, record_step_and_advance, suspend_run, resume_run, complete_run, fail_run,
+  link_step_emission, get_run, read_step_runs, find_waiting_run_for_thread, append_trace_event,
+  read_trace` (last name added by gate for the tracer write path). M4 advance is O(1) tail-anchored
+  (PROFILE-confirmed, no chain-walk). Resume lookup: **no new index** — `waitingThreadId` denorm rides
+  the existing `status` index (`Node By Index Scan`). `test_queries.sh` **193→241/241**, +48
+  assertions; **teco re-verified 241/241 green**. pytest untouched (196). RAM: run/step-run
+  hot-growth line + debug-only TraceEvent line, no M2 vector-line change. No blockers.
+  **D2 (tdd-engineer, Phase 1 U3+U4+U5) dispatched.**
+- 2026-07-12 — D2 first attempt aborted mid-run on a provider session limit (5 tool uses, no edits
+  made — verified via git status; D1's graph work intact). Re-dispatched fresh.
+- 2026-07-12 — **D2 ✅ (tdd-engineer, U3+U4+U5).** `repository.py`: 12 §12 methods 1:1 +
+  `WorkflowRunNotFoundError`/`StepBudgetExceededError`. `executor.py` (new): `WorkflowExecutor` with
+  injected seams (`llm`/`guard_judge`/`tool_registry`/`tracer` — latter three used now, llm parked for
+  U6), the §2.1 A/B/C loop, monotonic StepRun clock, `Tracer`/`NullTracer`/`GraphTracer`, AC-5
+  trace-on/off. `services.py`: `start_workflow_run`/`resume_workflow_run` + reads, tenant-seam scoped,
+  late-bound executor to break the ctor cycle. `start_key` = slice-1 `start:True` contract kept
+  (resolved via the `START` snapshot edge, executor never re-derives). pytest **196→240**;
+  **teco re-verified 240 green**; suite still 241; default app import network-free (verified). **One
+  in-scope reconciliation** (flagged, not a deviation): B/C outcomes record a StepRun via
+  advance-to-self so the audit trail is per-execution and the step budget counts every StepRun (§7
+  reading) — lives in executor code, no graph/spec change. Logged for the analyst gate to see.
+  **D3 (coder, Phase 2a U6 — LLM chat seam) dispatched.**
+- 2026-07-12 — **D3 ✅ (coder, U6).** `llm.py`: `ChatResult`/`ToolCall` types + `LMStudioLLM.chat(
+  messages, tools)->ChatResult` with Q3 dual-shape parsing (native `tool_calls` field primary;
+  content-embedded-JSON fallback for the LM Studio/Qwen3 failure mode; plain text otherwise).
+  `complete()` byte-for-byte unchanged (regression-tested); `LLM` Protocol gains `chat`. pytest
+  **240→248** (+8, all green); suite still 241; network-free import verified. Name-against-granted-set
+  + re-prompt correctly deferred to U8. **D4 (tdd-engineer, Phase 2b U7+U8 — guard + agent loop)
+  dispatched.**
+- 2026-07-12 — D4 first attempt aborted mid-read on a provider session limit (11 tool uses, no edits;
+  verified pytest still 248, no `guards.py`). Re-dispatched fresh.
+- 2026-07-12 — **D4 ✅ (tdd-engineer, U7+U8).** `guards.py` (new): `evaluate_guard` — `""`
+  unconditional (lowest priority, never calls judge — D5 path); `{kind:'llm'}` = Q1 extract-then-judge
+  (`_extract_understanding` → injected judge → `{decision,rationale}` with bias-to-suspend on
+  ambiguity, traced); `expr`/unknown = `NotImplementedError` (M7). Wired into `_select_transition`.
+  `executor._run_agent_node`: scoped-tool offering (ungranted never offered), bounded loop
+  (`maxIterations` default 4), **AC-6 defensive rejection** of ungranted/malformed calls via re-prompt
+  (never dispatched), graceful exhaustion (best text + trace note, does not fail run). §2.1 A/B/C loop
+  **byte-for-byte unchanged** (all 9 D2 loop tests pass). pytest **248→263** (+15); **teco re-verified
+  263 green**; suite 241; network-free import verified. **Flag for analyst gate:** agent-node
+  thread-message context assembly deferred to the trigger/services seam (Landing 2, U11) — only run
+  `ctx` is assembled now; not a locked-decision deviation, noted. **D5 (coder, Phase 3 U9+U10 —
+  tools + MCP client) dispatched.**
+- 2026-07-12 — **D5 ✅ (coder, U9+U10).** `tools.py` (new): `ToolRegistry` (`schema`/`dispatch` matching
+  U8's calls); `post_message` (§4 write as agent → `services.link_step_emission` → **PRODUCED**),
+  `graphrag_retrieve` (injected Embedder → `hybrid_search` → Q2 τ≈0.5 cutoff/cap 5/floor 1/**abstain**,
+  all ctor-configurable), `human_handoff` (registered capability, raises `HumanHandoffSignal`, granted
+  to no node). `McpToolClient` MCP-**client** seam (sync over a bg asyncio loop), MCP tools unify with
+  built-ins through the same dispatch path — stub `FastMCP` in-memory tested; real servers deferred.
+  `services.link_step_emission` passthrough added. **D2 honored** (PRODUCED, never EMITTED). pytest
+  **263→283** (+20); **teco re-verified 283 green**; suite 241; network-free import + ruff clean.
+  Two Landing-2 seams surfaced (see "Carried to Landing 2" above) — correctly routed, no locked-code
+  mutation. **All Landing-1 implementation (U1–U10) complete. Dispatching the mandatory analyst
+  impl-review gate → `docs/reviews/m3-executor-impl.md` (K-022 non-negotiable done-condition).**
+- 2026-07-12 — **Analyst gate ✅ — verdict `approve-with-suggestions`, NO blockers** (review at
+  `docs/reviews/m3-executor-impl.md`). Counts: 0 blocker / 1 major / 3 minor / 3 nit. Both carried
+  deferrals ruled **acceptable for Landing 1**. The one **major M-1** (→ tdd-engineer, executor.py):
+  `_drive` has no top-level `try/except`, so an unexpected mid-drive exception leaves the run stuck at
+  `status='running'` — a permanent un-resumable zombie once live defs/tools run (not a Landing-1
+  green-suite blocker; the offline path is deterministic). Analyst says fold M-1 into the U11 dispatch;
+  since no blockers, no re-review cycle forced. **Landing 1 (U1–U10) satisfies the K-022 done-condition
+  — DONE.** Cost datapoint finalized in the table above.
+- 2026-07-12 — Briefly paused, then **user resumed: proceed to completion.**
+- 2026-07-12 — **Doc rollup ✅ (delegated to coder — teco's Write/Edit is coordination-doc-only by
+  hook, so BACKLOG/HISTORY go through an implementer).** `docs/HISTORY.md`: prepended the 2026-07-12
+  Landing-1 entry. `docs/BACKLOG.md`: K-022 marked `🟡 Landing 1 ✅ delivered + analyst-approved` with a
+  Delivered bullet; **M-1 + the two deferrals carried into K-023 (U11)** as inputs; top critical-path
+  note updated (§13 resolved; next = Landing 2 → K-025 QA). **teco verified all edits by reading.**
+- 2026-07-12 — ✅✅ **LANDING 1 (U1–U10) FULLY DONE** — implementation + mandatory analyst gate
+  (approve-with-suggestions, 0 blockers) + documentation rollup all complete. Suites green: query
+  **241/241**, pytest **283**. Nothing committed (per convention — commit on user request). FalkorDB
+  left running. **Open follow-ups for Landing 2 (U11–U15, separate run): M-1 zombie-run guard,
+  live PRODUCED-link ordering, agent-node thread context** — all logged in K-023 + the review doc.

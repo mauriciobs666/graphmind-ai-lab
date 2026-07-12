@@ -801,6 +801,200 @@ assert_index_scan "§11.5 read-snapshot steps anchors on WorkflowDefSnapshot ind
 prof=$(gp "$WS" "MATCH (snap:WorkflowDefSnapshot {key:'wf_review',version:'1'})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step) RETURN from.key, to.key, tr.on")
 assert_index_scan "§11.5 read-snapshot transitions anchors on WorkflowDefSnapshot index" "$prof"
 
+# ── §12: workflow execution — runs, step-runs & traces (M3 executor — K-022) ──
+#
+# Canonical bodies: QUERIES.md §12 (1:1 with repository.py, U3). Runs against the
+# wf_review snapshot materialized into ws:test by the §11 block above (steps
+# start→gather→decide→done). Uses th1 + m1 as the run's thread + trigger message.
+# Every state-move is a single GRAPH.QUERY; each read anchors on an index (asserted
+# via PROFILE). PRODUCED (StepRun→Message) is DISTINCT from EMITTED (Message→Message,
+# §10) — D2. record_step_and_advance is the M4 tail-anchored O(1) atomic advance.
+
+echo ""
+echo "▶ §12 workflow execution — start_run"
+
+# 12.1 start_run: create wr1 OF_DEF wf_review, AT_STEP start, TRIGGERED_BY m1
+out=$(gq "$WS" 'CYPHER runId="wr1" defKey="wf_review" defVersion="1" startedAt=7000 ctx="{}" trace=true maxSteps=12 triggerMsgId="m1" MATCH (snap:WorkflowDefSnapshot {key:$defKey, version:$defVersion})-[:START]->(start:Step) MATCH (trigger:Message {msgId:$triggerMsgId}) CREATE (r:WorkflowRun {runId:$runId, defKey:$defKey, defVersion:$defVersion, status:"running", startedAt:$startedAt, ctx:$ctx, trace:$trace, maxSteps:$maxSteps, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger) RETURN "start="+start.key+" status="+r.status+" sc="+toString(r.stepCount) AS s')
+assert_contains "§12.1 start_run creates wr1 at START step, running, stepCount 0" "start=start status=running sc=0" "$out"
+
+# start subgraph: OF_DEF + AT_STEP + TRIGGERED_BY all present
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"}) OPTIONAL MATCH (r)-[:OF_DEF]->(d:WorkflowDefSnapshot) OPTIONAL MATCH (r)-[:AT_STEP]->(a:Step) OPTIONAL MATCH (r)-[:TRIGGERED_BY]->(m:Message) RETURN "def="+d.key+" at="+a.key+" trig="+m.msgId AS s')
+assert_contains "§12.1 start subgraph: OF_DEF + AT_STEP + TRIGGERED_BY" "def=wf_review at=start trig=m1" "$out"
+
+# start_run anchors on indexes (snapshot.key + message.msgId), no label scan
+prof=$(gp "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) RETURN start.key, trigger.msgId')
+assert_index_scan "§12.1 start_run anchoring MATCHes use indexes" "$prof"
+
+# runId UNIQUE constraint backstop
+out=$(gq "$WS" 'CREATE (:WorkflowRun {runId:"wr1"})' 2>&1)
+assert_contains "§12.1 WorkflowRun.runId constraint blocks duplicate" "unique constraint violation" "$out"
+
+echo ""
+echo "▶ §12.2 record_step_and_advance (M4 tail-anchored atomic advance)"
+
+ADV='MATCH (r:WorkflowRun {runId:$runId})-[atRel:AT_STEP]->(cur:Step) MATCH (to:Step {stepUid:$toStepUid}) OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) CREATE (sr:StepRun {stepRunId:$stepRunId, stepKey:cur.key, status:$stepStatus, startedAt:$startedAt, endedAt:$endedAt, input:$input, output:$output}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:RAN]->(cur) FOREACH (p IN CASE WHEN prevSR IS NULL THEN [] ELSE [prevSR] END | CREATE (p)-[:NEXT]->(sr)) FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | DELETE lr) CREATE (r)-[:LAST_STEP_RUN]->(sr) DELETE atRel CREATE (r)-[:AT_STEP]->(to) SET r.stepCount = r.stepCount + 1 RETURN "sc="+toString(r.stepCount)+" ran="+cur.key+" sr="+sr.stepRunId AS s'
+
+# advance 1: start ran -> move to gather (first advance: seeds the tail, no NEXT)
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"start out\" toStepUid=\"wf_review:1:gather\" $ADV")
+assert_contains "§12.2 advance 1: start ran, stepCount 1" "sc=1 ran=start sr=wsr1" "$out"
+
+# state after advance 1: AT_STEP moved to gather (exactly one), tail=wsr1, zero NEXT
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->(a:Step) WITH r, count(a) AS atc, collect(a.key)[0] AS atk MATCH (r)-[:LAST_STEP_RUN]->(l:StepRun) RETURN "atc="+toString(atc)+" at="+atk+" tail="+l.stepRunId AS s')
+assert_contains "§12.2 after adv1: exactly one AT_STEP=gather, tail=wsr1" "atc=1 at=gather tail=wsr1" "$out"
+out=$(gq "$WS" 'MATCH (:StepRun)-[n:NEXT]->(:StepRun) RETURN count(n) AS n')
+assert_contains "§12.2 after adv1: zero NEXT edges (first step-run)" "0" "$out"
+
+# advance 2: gather ran -> move to decide (tail relink: NEXT wsr1->wsr2, tail moves)
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"gather out\" toStepUid=\"wf_review:1:decide\" $ADV")
+assert_contains "§12.2 advance 2: gather ran, stepCount 2" "sc=2 ran=gather sr=wsr2" "$out"
+
+# state after advance 2: AT_STEP=decide, NEXT wsr1->wsr2, exactly one tail=wsr2, 2 HAS_STEP_RUN
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->(a:Step) RETURN a.key AS at')
+assert_contains "§12.2 after adv2: AT_STEP moved to decide" "decide" "$out"
+out=$(gq "$WS" 'MATCH (a:StepRun)-[:NEXT]->(b:StepRun) RETURN "next="+a.stepRunId+"->"+b.stepRunId AS s')
+assert_contains "§12.2 after adv2: NEXT appended wsr1->wsr2" "next=wsr1->wsr2" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[l:LAST_STEP_RUN]->(sr) RETURN "tailc="+toString(count(l))+" tail="+collect(sr.stepRunId)[0] AS s')
+assert_contains "§12.2 after adv2: exactly one tail, moved to wsr2" "tailc=1 tail=wsr2" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:HAS_STEP_RUN]->(sr) RETURN count(sr) AS n')
+assert_contains "§12.2 after adv2: 2 HAS_STEP_RUN members" "2" "$out"
+out=$(gq "$WS" 'MATCH (sr:StepRun)-[:RAN]->(s:Step) RETURN collect(sr.stepRunId+":"+s.key) AS ran ORDER BY ran')
+assert_contains "§12.2 RAN edges: wsr1 ran start" "wsr1:start" "$out"
+assert_contains "§12.2 RAN edges: wsr2 ran gather" "wsr2:gather" "$out"
+
+# advance is edge-anchored: index scan on WorkflowRun + Step, no label scan (profiled on a throwaway run)
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_prof", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+prof=$(gp "$WS" "CYPHER runId=\"wr_prof\" stepRunId=\"wpsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" $ADV")
+assert_index_scan "§12.2 record_step_and_advance is edge/index-anchored" "$prof"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_prof"}) OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(sr) DETACH DELETE r, sr' > /dev/null
+
+echo ""
+echo "▶ §12.3/§12.4 suspend / resume — guarded single-flight CAS"
+
+# 12.3 suspend_run: running -> waiting
+out=$(gq "$WS" 'CYPHER runId="wr1" threadId="th1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN "status="+r.status AS s')
+assert_contains "§12.3 suspend_run CAS running->waiting" "status=waiting" "$out"
+
+# suspend again (already waiting) -> zero rows (CAS no-op)
+out=$(gq "$WS" 'CYPHER runId="wr1" threadId="th1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "running" SET r.status="waiting", r.waitingThreadId=$threadId RETURN "status="+r.status AS s')
+assert_not_contains "§12.3 second suspend is a no-op (zero rows)" "status=waiting" "$out"
+
+# 12.9 find_waiting_run_for_thread: th1 -> wr1, index-anchored
+out=$(gq "$WS" 'CYPHER threadId="th1" MATCH (r:WorkflowRun {status:"waiting"}) WHERE r.waitingThreadId = $threadId RETURN r.runId AS runId LIMIT 1')
+assert_contains "§12.9 find_waiting_run_for_thread finds wr1" "wr1" "$out"
+prof=$(gp "$WS" 'CYPHER threadId="th1" MATCH (r:WorkflowRun {status:"waiting"}) WHERE r.waitingThreadId = $threadId RETURN r.runId LIMIT 1')
+assert_index_scan "§12.9 resume lookup anchors on WorkflowRun.status index (no label scan)" "$prof"
+
+# 12.4 resume_run: waiting -> running (single-flight)
+out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="" RETURN "status="+r.status AS s')
+assert_contains "§12.4 resume_run CAS waiting->running (winner)" "status=running" "$out"
+
+# concurrent second resume -> zero rows (single-flight guard)
+out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="" RETURN "status="+r.status AS s')
+assert_not_contains "§12.4 second concurrent resume is a no-op (single-flight)" "status=running" "$out"
+
+echo ""
+echo "▶ §12.6 link_step_emission — StepRun -[:PRODUCED]-> Message (D2, distinct from EMITTED)"
+
+# wsr2 produced the ag2 message (any existing message in th1)
+out=$(gq "$WS" 'CYPHER stepRunId="wsr2" msgId="ag2" MATCH (sr:StepRun {stepRunId:$stepRunId}) MATCH (m:Message {msgId:$msgId}) MERGE (sr)-[:PRODUCED]->(m) RETURN sr.stepRunId+"->"+m.msgId AS s')
+assert_contains "§12.6 link_step_emission wsr2 PRODUCED ag2" "wsr2->ag2" "$out"
+
+# idempotent MERGE: re-link creates no duplicate
+gq "$WS" 'CYPHER stepRunId="wsr2" msgId="ag2" MATCH (sr:StepRun {stepRunId:$stepRunId}) MATCH (m:Message {msgId:$msgId}) MERGE (sr)-[:PRODUCED]->(m) RETURN 1' > /dev/null
+out=$(gq "$WS" 'MATCH (:StepRun {stepRunId:"wsr2"})-[e:PRODUCED]->(:Message {msgId:"ag2"}) RETURN count(e) AS n')
+assert_contains "§12.6 PRODUCED link is idempotent (exactly one edge)" "1" "$out"
+
+# PRODUCED is distinct from EMITTED: no StepRun has an EMITTED edge (EMITTED is Message->Message, §10)
+out=$(gq "$WS" 'MATCH (sr:StepRun)-[e:EMITTED]->() RETURN count(e) AS n')
+assert_contains "§12.6 PRODUCED distinct from EMITTED (no StepRun EMITTED edge)" "0" "$out"
+
+echo ""
+echo "▶ §12.7/§12.8 get_run + read_step_runs (NEXT-ordered audit trail)"
+
+# 12.7 get_run
+out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step) OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot) RETURN "status="+r.status+" sc="+toString(r.stepCount)+" at="+cur.key+" def="+snap.key AS s')
+assert_contains "§12.7 get_run returns status, stepCount, atStep, def" "status=running sc=2 at=decide def=wf_review" "$out"
+
+# 12.8 read_step_runs: NEXT-ordered (head-find via OPTIONAL MATCH + IS NULL, then walk)
+RSR='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey ORDER BY x.startedAt'
+out=$(gq "$WS" "$RSR")
+assert_contains "§12.8 read_step_runs returns wsr1 (start)" "wsr1" "$out"
+assert_contains "§12.8 read_step_runs returns wsr2 (gather)" "wsr2" "$out"
+wsr1_line=$(echo "$out" | grep -n "wsr1" | head -1 | cut -d: -f1)
+wsr2_line=$(echo "$out" | grep -n "wsr2" | head -1 | cut -d: -f1)
+if [ -n "$wsr1_line" ] && [ -n "$wsr2_line" ] && [ "$wsr1_line" -lt "$wsr2_line" ]; then
+  echo "  ✓ §12.8 read_step_runs is NEXT-ordered (wsr1 before wsr2)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §12.8 read_step_runs order wrong (wsr1 ${wsr1_line}, wsr2 ${wsr2_line})"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+prof=$(gp "$WS" "$RSR")
+assert_index_scan "§12.8 read_step_runs anchors on WorkflowRun.runId index" "$prof"
+
+echo ""
+echo "▶ §12.10/§12.11 trace write/read (debug) + non-debug is empty"
+
+# 12.10 append_trace_event x2 on wsr1
+gq "$WS" 'CYPHER stepRunId="wsr1" traceId="wtr1" seq=0 kind="guard_judgment" at=7001 payload="verdict=false; needs more info" MATCH (sr:StepRun {stepRunId:$stepRunId}) CREATE (te:TraceEvent {traceId:$traceId, seq:$seq, kind:$kind, at:$at, payload:$payload}) CREATE (sr)-[:TRACED]->(te) RETURN te.traceId' > /dev/null
+out=$(gq "$WS" 'CYPHER stepRunId="wsr1" traceId="wtr2" seq=1 kind="node_rationale" at=7002 payload="asked clarifying question" MATCH (sr:StepRun {stepRunId:$stepRunId}) CREATE (te:TraceEvent {traceId:$traceId, seq:$seq, kind:$kind, at:$at, payload:$payload}) CREATE (sr)-[:TRACED]->(te) RETURN te.traceId AS t')
+assert_contains "§12.10 append_trace_event writes a TraceEvent" "wtr2" "$out"
+
+# TraceEvent.traceId UNIQUE constraint blocks a duplicate
+out=$(gq "$WS" 'CREATE (:TraceEvent {traceId:"wtr1"})' 2>&1)
+assert_contains "§12.10 TraceEvent.traceId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# 12.11 read_trace: ordered by (StepRun.startedAt, TraceEvent.seq)
+RT='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun)-[:TRACED]->(te:TraceEvent) RETURN te.kind AS kind, te.payload AS payload ORDER BY sr.startedAt, te.seq'
+out=$(gq "$WS" "$RT")
+assert_contains "§12.11 read_trace returns guard_judgment event" "guard_judgment" "$out"
+assert_contains "§12.11 read_trace returns node_rationale event" "node_rationale" "$out"
+gj_line=$(echo "$out" | grep -n "guard_judgment" | head -1 | cut -d: -f1)
+nr_line=$(echo "$out" | grep -n "node_rationale" | head -1 | cut -d: -f1)
+if [ -n "$gj_line" ] && [ -n "$nr_line" ] && [ "$gj_line" -lt "$nr_line" ]; then
+  echo "  ✓ §12.11 read_trace ordered by seq (guard_judgment seq0 before node_rationale seq1)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ §12.11 read_trace order wrong"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+prof=$(gp "$WS" "$RT")
+assert_index_scan "§12.11 read_trace anchors on WorkflowRun.runId index" "$prof"
+
+# non-debug run records zero trace: a fresh run with no append writes no TraceEvent (AC-5 negative)
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_lean", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+out=$(gq "$WS" 'CYPHER runId="wr_lean" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(:StepRun)-[:TRACED]->(te:TraceEvent) RETURN count(te) AS n')
+assert_contains "§12.11 non-debug run read_trace is empty (AC-5 negative)" "0" "$out"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_lean"}) DETACH DELETE r' > /dev/null
+
+echo ""
+echo "▶ §12.5 fail_run (step budget) + complete_run — terminal clears AT_STEP, retains trail"
+
+# step-budget fail: seed wr3 with stepCount 13 > maxSteps 12, fail_run
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr3", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:13, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+out=$(gq "$WS" 'CYPHER runId="wr3" endedAt=7100 ctx="{\"error\":\"step budget exceeded\"}" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="failed", r.endedAt=$endedAt, r.ctx=$ctx RETURN "status="+r.status AS s')
+assert_contains "§12.5 fail_run (step budget) sets failed" "status=failed" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr3"})-[:AT_STEP]->() RETURN count(*) AS n')
+assert_contains "§12.5 fail_run clears AT_STEP" "0" "$out"
+
+# complete_run: wr1 (at decide) -> done, AT_STEP cleared, StepRun trail retained
+out=$(gq "$WS" 'CYPHER runId="wr1" endedAt=7200 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done", r.endedAt=$endedAt RETURN "status="+r.status AS s')
+assert_contains "§12.5 complete_run sets done" "status=done" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:AT_STEP]->() RETURN count(*) AS n')
+assert_contains "§12.5 complete_run clears AT_STEP" "0" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr1"})-[:HAS_STEP_RUN]->(sr) RETURN count(sr) AS n')
+assert_contains "§12.5 complete_run retains the StepRun audit trail (2)" "2" "$out"
+
+# re-complete (AT_STEP already null) — DELETE of a null OPTIONAL edge must not error
+out=$(gq "$WS" 'CYPHER runId="wr1" endedAt=7201 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done", r.endedAt=$endedAt RETURN "status="+r.status AS s' 2>&1)
+assert_contains "§12.5 re-complete with null AT_STEP is a no-op (no error)" "status=done" "$out"
+
+# terminal-move on a missing run -> zero rows (WorkflowRunNotFound)
+out=$(gq "$WS" 'CYPHER runId="ghost" endedAt=1 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done" RETURN "status="+r.status AS s')
+assert_not_contains "§12.5 complete of a missing run is zero rows" "status=done" "$out"
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

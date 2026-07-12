@@ -183,7 +183,7 @@ traversal needs to walk (e.g. an ontology fragment).
 
 // Workflow ↔ chat linkage (all within ws graph)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
-(:StepRun)-[:EMITTED]->(:Message)
+(:StepRun)-[:PRODUCED]->(:Message)                     // step-emitted chat message (D2 — NOT the K-013 EMITTED)
 ```
 
 **Key properties:**
@@ -212,7 +212,8 @@ traversal needs to walk (e.g. an ontology fragment).
 - **`Message.role` as a property, not derived from `POSTED_BY` label**: lets the app filter by
   role (`WHERE m.role = 'assistant'`) without an extra hop.
 - **AI as `Agent` author, not a magic flag**: assistant messages share one timeline with human
-  messages; `EMITTED` provenance back to `StepRun` is explicit and auditable.
+  messages; a workflow step's `PRODUCED` edge (§6.2, D2) and an answer's `EMITTED` seed provenance
+  (§9 / K-013, QUERIES §10) make an AI message's origin explicit and auditable.
 
 ### 5.3 Thread append (write path)
 
@@ -253,7 +254,7 @@ A definition is a directed graph of steps; a run is an execution trace that walk
 (:WorkflowDef {key, version, name, kind})         // kind: 'conversation' | 'process'
 (:WorkflowDef)-[:HAS_STEP]->(:Step)                // index-anchored containment (all steps of a def)
 (:WorkflowDef)-[:START]->(:Step)                   // the entry step
-(:Step {stepUid, key, type, config})               // type: prompt|tool|decision|human|message|wait
+(:Step {stepUid, key, type, config})               // type: agent|prompt|tool|decision|human|message|wait
 (:Step)-[:TRANSITION {on, guard, order}]->(:Step)  // edge-labeled state machine
 ```
 
@@ -268,36 +269,79 @@ A definition is a directed graph of steps; a run is an execution trace that walk
 > Canonical publish/materialize/read Cypher: **`QUERIES.md` §11**.
 
 `type` unifies conversational and business flows:
-- `prompt` / `message` / `tool` → agent flows (LLM call, post a message, invoke a tool)
+- **`agent` → LLM-native node** (M3 executor / K-022): the `config` string carries a plain-language
+  `systemPrompt` + an author-set tool fence + bounds; the model runs as a bounded, tool-scoped agent
+  loop. This is the type the triage proof uses.
+- `prompt` / `message` / `tool` → agent-adjacent flows (LLM call, post a message, invoke a tool)
 - `human` / `decision` / `wait` → business processes (assignee task, branch, SLA/timer)
 
-`TRANSITION.guard` is an expression evaluated against run context; `on` is the event/outcome
-that fires it. One model, both worlds.
+`Step.config` and `TRANSITION.guard` are **opaque serialized strings** parsed app-side only (rule 8) —
+`type:'agent'` needs **no DDL** (whitelist-only add). The `agent` config deserializes to
+`{mode, systemPrompt, tools[], permissions{}, waitsForHuman, maxIterations}`; `waitsForHuman:true` is the
+explicit suspend signal for a node that parks awaiting a human reply (only intake, in the triage flow).
+
+**`TRANSITION.guard` is LLM-native (K-022, supersedes the old "expression" wording — §13 resolved).**
+The guard string is either **empty `""`** — an unconditional/default transition (lowest priority; fires
+whenever reached; this is how deterministic transitions are expressed) — or a `{kind, text}` JSON
+discriminator, with `kind == 'llm'` judged in natural language against run context (a structured boolean
+verdict + traced rationale). `on` is the event/outcome that fires it; guards are evaluated in
+`TRANSITION.order`, first-firing wins. A would-be `expr` kind is a deliberate `NotImplementedError` seam
+(no expression library is built here). One model, both worlds. Runtime evaluation & the run/step-run
+schema: §6.2; verified Cypher: **`QUERIES.md` §12**.
 
 ### 6.2 Run (per-workspace, real local edges to the materialized def)
 
 ```
-(:WorkflowRun {runId, defKey, defVersion, status, startedAt, ctx})
+(:WorkflowRun {runId, defKey, defVersion, status, startedAt, endedAt,
+               ctx, trace, maxSteps, stepCount, waitingThreadId})   // status ∈ running|waiting|done|failed
 (:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot {key, version})   // local, materialized
-(:WorkflowRun)-[:AT_STEP]->(:Step)                               // current position
-(:WorkflowRun)-[:HAS_STEP_RUN]->(:StepRun)
-(:StepRun {stepKey, status, startedAt, endedAt, input, output})
+(:WorkflowRun)-[:AT_STEP]->(:Step)                               // current position (cleared on terminal)
+(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)                       // the @mention that started it (FR-7)
+(:WorkflowRun)-[:HAS_STEP_RUN]->(:StepRun)                       // membership
+(:WorkflowRun)-[:LAST_STEP_RUN]->(:StepRun)                      // TAIL pointer → the NEXT anchor (M4)
+(:StepRun {stepRunId, stepKey, status, startedAt, endedAt, input, output})
 (:StepRun)-[:RAN]->(:Step)                                       // which def step
 (:StepRun)-[:NEXT]->(:StepRun)                                   // execution order (audit trail)
-(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)                       // chat linkage
-(:StepRun)-[:EMITTED]->(:Message)
+(:StepRun)-[:PRODUCED]->(:Message)                               // step-emitted chat message (D2)
+(:StepRun)-[:TRACED]->(:TraceEvent)                              // debug-only trace record (FR-4)
+(:TraceEvent {traceId, seq, kind, at, payload})                  // debug runs only; payload = flat string
 ```
 
-> `ctx` (on `WorkflowRun`) and `input`/`output` (on `StepRun`) are **flat, serialised strings**,
-> not nested maps — FalkorDB stores only scalars and scalar lists. Queries never filter *inside*
-> them (see §1.2).
+> `ctx` (on `WorkflowRun`), `input`/`output` (on `StepRun`) and `payload` (on `TraceEvent`) are **flat,
+> serialised strings**, not nested maps — FalkorDB stores only scalars and scalar lists. Queries never
+> filter *inside* them (see §1.2).
 
-The engine loop: read `AT_STEP` → evaluate outgoing `TRANSITION` guards against `ctx` →
-create the next `StepRun` → execute (LLM/tool/human) → append to the `NEXT` trace → move
-`AT_STEP`. The whole walk is local to the workspace graph (fast, isolated, fully auditable).
+**Run-model additions (M3 executor, K-022):**
+- **`trace`/`maxSteps`/`stepCount`** on `WorkflowRun` — the debug-instance flag (§5 gates all trace
+  writes), the run-level step budget (§7, DS default 12), and the executed-step counter the atomic
+  advance bumps. **`waitingThreadId`** denorms the parked run's thread so resume is an index-anchored
+  lookup (rides the existing `status` index — no new index; QUERIES §12.9). `endedAt` stamps terminal.
+- **`LAST_STEP_RUN` — the tail pointer (M4).** Mirrors the locked `Thread` HEAD/TAIL pattern (§5.2):
+  `record_step_and_advance` reads it to find the previous `StepRun`, hangs `NEXT`, and moves the tail —
+  all in one query → **O(1) atomic advance, no chain-walk / label scan**. One edge per run (the tail
+  moves, it does not accumulate).
+- **`PRODUCED`, not `EMITTED` (D2, locked).** StepRun→Message emission is a **distinct** edge type —
+  `EMITTED` is already the K-013 **Message→Message** provenance edge (§9/QUERIES §10); overloading it
+  would conflate "cited that seed" with "produced that message."
+- **`TraceEvent` + `TRACED` (FR-4) — debug-only.** A debug run writes one `TraceEvent` per LLM
+  prompt/response, tool call/result, guard judgment, and retrieval (dozens per run); a non-debug run
+  writes **zero**. New node type → new DDL: `TraceEvent.traceId` index **then** UNIQUE (§7.1).
+- **`stepRunId`** is the `StepRun`'s stable identity (indexed + UNIQUE, §7.1).
+
+> `ctx`/`input`/`output`/`payload` are opaque; the executor (de)serializes app-side.
+
+The engine loop: read `AT_STEP` → execute the step (LLM-native agent loop or deterministic handler) →
+evaluate outgoing `TRANSITION` guards against `ctx` (first-firing wins) → `record_step_and_advance`
+(create the `StepRun`, append `NEXT` via the tail, move `AT_STEP`) — **or** suspend to `waiting` if the
+step declares `waitsForHuman` and no guard fired, **or** terminate (`done`/`failed`). Runaway loops are
+bounded by `maxSteps` (run budget) + per-node `maxIterations` (§7). The whole walk is local to the
+workspace graph (fast, isolated, fully auditable). **Verified Cypher: `QUERIES.md` §12** — this section
+is the *why*, not a query copy.
 
 > **`status` as a property, not a label**, so a run's state changes in place without
-> re-labeling churn; index it for "all running workflows" queries.
+> re-labeling churn; index it for "all running workflows" and the `waiting`-run resume lookup (§12.9).
+> Suspend/resume are guarded single-query CAS flips (`running↔waiting`) so concurrent replies can't
+> double-resume (QUERIES §12.3/§12.4).
 
 ### 6.3 Coordination is workflow, not a separate primitive
 
@@ -313,7 +357,7 @@ presence field. This avoids a parallel model that would later need migrating int
 ### 7.1 Per workspace graph `ws:{id}`
 
 > **Executable DDL is `scripts/bootstrap_schema.sh` — the single source of truth**, asserted by
-> `test_queries.sh` (126/126). This section describes *what* is indexed/constrained and *why*, not
+> `test_queries.sh` (241/241). This section describes *what* is indexed/constrained and *why*, not
 > the runnable statements, so the two can't drift (the same discipline §5.3/§8 apply to queries).
 > `bootstrap_schema.sh <wsId>` is idempotent; `EMBEDDING_DIM` (default `1536`) sets the vector
 > dimension per workspace.
@@ -341,6 +385,7 @@ composite-keyed `WorkflowDefSnapshot`:
 | `Entity` | `entityId` | UNIQUE 1 |
 | `WorkflowRun` | `runId` | UNIQUE 1 |
 | `StepRun` | `stepRunId` | UNIQUE 1 |
+| `TraceEvent` | `traceId` | UNIQUE 1 (debug-only nodes; M3 K-022) |
 | `ReadCursor` | `cursorId` | UNIQUE 1 |
 | `WorkflowDefSnapshot` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
 | `Step` | `key`, `stepUid` (two indexes) | UNIQUE 1 (`stepUid`); `key` index-only (§6.1) |
@@ -592,7 +637,7 @@ with **no** vectors present) — budget from `INFO memory` deltas, never `GRAPH.
 
 ## 13. Open questions
 
-- **Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`? (→ M3, decided with the engine.)
+- ~~**Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`?~~ **RESOLVED (M3 executor, K-022): LLM-native + coexist.** A `TRANSITION.guard` is either the empty-string unconditional/default form or a `{kind:'llm', text}` discriminator judged in natural language against run context (§6.1/§6.2); deterministic transitions use the empty form. **No expression library is built** — a would-be `expr` kind is a `NotImplementedError` seam (zero dead code). Rule 8 respected: the `{kind}` discriminator is parsed app-side, never filtered in Cypher.
 - **Retention** — do old messages/embeddings age out (and how does that interact with the always-in-RAM constraint)? (→ decide on K-011 load-test data; evicting cold embeddings is the cheapest lever — ~10 KB of the 12.5 KB/msg is vector + index.)
 - **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph. (Cost accepted §4; mechanism open, no milestone yet.)
 - **Real-time gateway transport** — for the M2.5 push path, Bolt (port `65535`, confirmed in `GRAPH.CONFIG`) vs. RESP/WebSocket. The M1 app *driver* is settled (RESP via `falkordb-py`); this is only the push-gateway choice. (→ K-018.)

@@ -8,6 +8,7 @@ against a fake repository so the logic is pinned without a live database.
 from __future__ import annotations
 
 import itertools
+import json
 
 import pytest
 from redis.exceptions import ResponseError
@@ -22,6 +23,7 @@ from falkorchat.services import (
     ThreadNotFoundError,
     UnknownActorError,
     UnknownMemberError,
+    WorkflowRunNotFoundError,
 )
 
 CTX = CallContext(ws="test", actor="u1")
@@ -54,6 +56,13 @@ class FakeRepo:
         self.materialized: list[dict] = []     # materialize_snapshot kwargs, in order
         self.defs: dict[tuple, dict] = {}      # (key, version) -> def subgraph/meta
         self.snapshots: dict[tuple, dict] = {}  # (key, version) -> snapshot subgraph/meta
+        # §12 workflow-run state
+        self.messages: dict[str, dict] = {}    # msgId -> message (for get_message)
+        self.started_runs: list[dict] = []     # start_run kwargs, in order
+        self.start_run_result = _UNSET        # override to None to simulate a miss
+        self.runs: dict[str, dict] = {}        # runId -> run state (for get_run)
+        self.step_runs: dict[str, list] = {}   # runId -> step-run trail
+        self.trace: dict[str, list] = {}       # runId -> trace events
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -189,10 +198,65 @@ class FakeRepo:
         self.calls.append(("list_snapshots", ws, limit))
         return list(self.snapshots.values())
 
+    # ── §12 workflow runs ────────────────────────────────────────────────────
 
-def make_service(repo, *, now=1000):
+    def get_message(self, ws, *, msg_id):
+        self.calls.append(("get_message", ws, msg_id))
+        return self.messages.get(msg_id)
+
+    def start_run(self, ws, *, run_id, def_key, def_version, started_at,
+                  trigger_msg_id, ctx, trace, max_steps):
+        self.started_runs.append({
+            "ws": ws, "run_id": run_id, "def_key": def_key,
+            "def_version": def_version, "started_at": started_at,
+            "trigger_msg_id": trigger_msg_id, "ctx": ctx, "trace": trace,
+            "max_steps": max_steps,
+        })
+        if self.start_run_result is _UNSET:
+            return {"runId": run_id, "startKey": "intake", "status": "running",
+                    "stepCount": 0}
+        return self.start_run_result
+
+    def get_run(self, ws, *, run_id):
+        self.calls.append(("get_run", ws, run_id))
+        return self.runs.get(run_id)
+
+    def read_step_runs(self, ws, *, run_id):
+        self.calls.append(("read_step_runs", ws, run_id))
+        return self.step_runs.get(run_id, [])
+
+    def read_trace(self, ws, *, run_id):
+        self.calls.append(("read_trace", ws, run_id))
+        return self.trace.get(run_id, [])
+
+
+_UNSET = object()
+
+
+class StubExecutor:
+    """Records `run`/`resume` calls and returns scripted statuses (U5 tests the
+    service orchestration in isolation; the real engine is covered in U4)."""
+
+    def __init__(self, *, step_budget=12, run_status="waiting", resume_status="done"):
+        self.step_budget = step_budget
+        self._run_status = run_status
+        self._resume_status = resume_status
+        self.run_calls: list[str] = []
+        self.resume_calls: list[str] = []
+
+    def run(self, ctx, *, run_id):
+        self.run_calls.append(run_id)
+        return self._run_status
+
+    def resume(self, ctx, *, run_id):
+        self.resume_calls.append(run_id)
+        return self._resume_status
+
+
+def make_service(repo, *, now=1000, executor=None):
     ids = (f"id{n}" for n in itertools.count(1))
-    return Services(repo, clock=lambda: now, id_gen=lambda: next(ids))
+    return Services(repo, clock=lambda: now, id_gen=lambda: next(ids),
+                    executor=executor)
 
 
 # ── create_channel / create_thread ─────────────────────────────────────────────
@@ -879,3 +943,119 @@ def test_list_snapshots_passthrough_uses_ctx_ws():
 
     assert out and out[0]["key"] == "a"
     assert ("list_snapshots", "test", 50) in repo.calls
+
+
+# ── §12 workflow-run orchestration (U5) ─────────────────────────────────────────
+#
+# The service mints the run id + start timestamp (server clock), resolves the
+# trigger message's thread into the run `ctx` (so a suspend can denorm it for the
+# resume lookup), starts the run via the repository, then hands off to the injected
+# executor. Reads are thin, ctx.ws-scoped pass-throughs. The engine itself is U4.
+
+
+def test_start_workflow_run_mints_run_seeds_thread_ctx_and_drives():
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    ex = StubExecutor(step_budget=12, run_status="waiting")
+    svc = make_service(repo, executor=ex)
+
+    out = svc.start_workflow_run(
+        CTX, def_key="triage", version="1", trigger_msg_id="trig1", trace=True
+    )
+
+    # minted a run id + started it at the snapshot, using the executor's budget
+    started = repo.started_runs[0]
+    assert started["def_key"] == "triage"
+    assert started["def_version"] == "1"
+    assert started["trigger_msg_id"] == "trig1"
+    assert started["trace"] is True
+    assert started["max_steps"] == 12
+    # the trigger's thread is seeded into ctx for the resume denorm (§2.4)
+    assert json.loads(started["ctx"]) == {"threadId": "t1"}
+    # then drove the engine and returned its status
+    assert ex.run_calls == [out["runId"]]
+    assert out["status"] == "waiting"
+
+
+def test_start_workflow_run_missing_anchor_raises_nothing_driven():
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    repo.start_run_result = None  # snapshot/trigger anchor missed
+    ex = StubExecutor()
+    svc = make_service(repo, executor=ex)
+
+    with pytest.raises(WorkflowRunNotFoundError):
+        svc.start_workflow_run(
+            CTX, def_key="ghost", version="1", trigger_msg_id="trig1"
+        )
+    assert ex.run_calls == []  # never handed to the engine
+
+
+def test_start_workflow_run_without_executor_raises():
+    repo = FakeRepo()
+    svc = make_service(repo)  # no executor wired
+    with pytest.raises(RuntimeError):
+        svc.start_workflow_run(
+            CTX, def_key="triage", version="1", trigger_msg_id="trig1"
+        )
+
+
+def test_resume_workflow_run_delegates_to_executor():
+    repo = FakeRepo()
+    ex = StubExecutor(resume_status="done")
+    svc = make_service(repo, executor=ex)
+
+    out = svc.resume_workflow_run(CTX, run_id="r1")
+
+    assert ex.resume_calls == ["r1"]
+    assert out == {"runId": "r1", "status": "done"}
+
+
+def test_get_workflow_run_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.runs["r1"] = {"runId": "r1", "status": "running", "atStepKey": "intake"}
+
+    got = svc.get_workflow_run(CTX, run_id="r1")
+
+    assert got["status"] == "running"
+    assert ("get_run", "test", "r1") in repo.calls
+
+
+def test_read_workflow_step_runs_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.step_runs["r1"] = [{"stepRunId": "sr1", "stepKey": "intake"}]
+
+    out = svc.read_workflow_step_runs(CTX, run_id="r1")
+
+    assert out and out[0]["stepKey"] == "intake"
+    assert ("read_step_runs", "test", "r1") in repo.calls
+
+
+def test_read_workflow_trace_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.trace["r1"] = [{"traceId": "te1", "kind": "guard_judgment"}]
+
+    out = svc.read_workflow_trace(CTX, run_id="r1")
+
+    assert out and out[0]["kind"] == "guard_judgment"
+    assert ("read_trace", "test", "r1") in repo.calls
+
+
+def test_agent_step_type_is_accepted_by_publish_validation():
+    # the LLM-native node kind (§3): STEP_TYPES gains 'agent' so a triage def
+    # (type:'agent' steps) validates and publishes
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    svc.publish_workflow_def(
+        CTX, key="triage", version="1", name="Triage", kind="conversation",
+        steps=[{"key": "intake", "type": "agent", "start": True,
+                "config": {"waitsForHuman": True}}],
+        transitions=[],
+    )
+
+    assert repo.published[0]["key"] == "triage"
+    assert repo.published[0]["steps"][0]["type"] == "agent"
