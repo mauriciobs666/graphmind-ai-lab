@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field
 MAX_NAME_LEN = 200
 MAX_TEXT_LEN = 8000
 MAX_MENTIONS = 50
+# Server-minted ids (runId, msgId, …) are hex uuids; bound path params defensively so a
+# pathological id can't reach a query (rule 6 — the boundary caps every string input).
+MAX_ID_LEN = 200
 
 
 class CreateChannelIn(BaseModel):

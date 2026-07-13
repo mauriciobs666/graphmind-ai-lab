@@ -79,8 +79,22 @@ class StubRegistry:
         return self._results.get(name, f"result:{name}")
 
 
-def _executor(*, llm, registry):
-    return WorkflowExecutor(None, None, llm=llm, tool_registry=registry, guard_judge=None)
+class StubThreadServices:
+    """Records `read_thread` calls; returns a scripted thread transcript."""
+
+    def __init__(self, thread_msgs=None):
+        self._thread_msgs = thread_msgs or []
+        self.read_calls: list[str] = []
+
+    def read_thread(self, ctx, *, thread_id):
+        self.read_calls.append(thread_id)
+        return list(self._thread_msgs)
+
+
+def _executor(*, llm, registry, services=None):
+    return WorkflowExecutor(
+        services, None, llm=llm, tool_registry=registry, guard_judge=None
+    )
 
 
 def _config(**over):
@@ -184,6 +198,86 @@ def test_max_iterations_exhaustion_terminates_gracefully_with_trace_note():
     assert result.output == "thinking"
     assert len(reg.dispatched) == 2                 # bounded by maxIterations=2
     assert any(k == "node_note" for k, _ in result.trace)
+
+
+# ── thread-message context folded into the agent-node prompt (AC-2 prereq) ────
+
+def test_agent_node_folds_thread_messages_into_prompt():
+    # AC-2: intake must SEE the human's thread turns to judge "enough info". The node
+    # reads the thread via services.read_thread and folds role-mapped turns ahead of
+    # the CONTEXT block.
+    thread = [
+        {"role": "user", "text": "reset my password", "authorId": "u1",
+         "displayName": "Alice"},
+        {"role": "assistant", "text": "what is your username?", "authorId": "assistant",
+         "displayName": "Bot"},
+    ]
+    svc = StubThreadServices(thread)
+    llm = StubChatLLM([ChatResult(text="ok")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg, services=svc)
+
+    ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert svc.read_calls == ["t1"]
+    msgs = llm.calls[0]["messages"]
+    # the human turn maps to role user, the agent turn to role assistant; the speaker
+    # is named in the content so the model sees who spoke.
+    user_turns = [m for m in msgs if m["role"] == "user"]
+    assert any("Alice: reset my password" in m["content"] for m in user_turns)
+    assistant_turns = [m for m in msgs if m["role"] == "assistant"]
+    assert any("what is your username?" in m["content"] for m in assistant_turns)
+
+
+def test_agent_node_skips_thread_read_when_no_thread_id():
+    # offline unit path: no threadId → no read (network-free stub path preserved).
+    svc = StubThreadServices([{"role": "user", "text": "hi", "authorId": "u1"}])
+    llm = StubChatLLM([ChatResult(text="ok")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg, services=svc)
+
+    ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert svc.read_calls == []
+
+
+# ── Option B — emitted msgIds are captured on the StepResult for later linking ─
+
+def test_agent_node_captures_posted_msg_ids_as_emissions():
+    # post_message dispatch returns a JSON envelope carrying the posted msgId (the
+    # tool no longer links inline — Option B). _run_agent_node buffers those ids on
+    # StepResult.emissions so _drive can link StepRun→PRODUCED→Message after _record.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "post_message", {"text": "here you go"})]),
+        ChatResult(text="done"),
+    ])
+    reg = StubRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        results={"post_message": '{"posted": "m42", "threadId": "t1"}'},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert result.emissions == ["m42"]
+
+
+def test_agent_node_emissions_empty_when_no_post():
+    # a node that only retrieves (no post) emits nothing to link.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "graphrag_retrieve", {"query": "q"})]),
+        ChatResult(text="answer"),
+    ])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA},
+                       results={"graphrag_retrieve": '{"seeds": []}'})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert result.emissions == []
 
 
 # ── the loop is reached through the public step-execution seam ───────────────

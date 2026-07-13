@@ -38,6 +38,7 @@ without moving `AT_STEP`). The step budget is enforced on the *continue* paths
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import uuid
@@ -48,6 +49,9 @@ from typing import Any, Protocol
 from .config import CallContext
 from .guards import GuardVerdict, evaluate_guard
 from .repository import Repository, WorkflowRunNotFoundError
+from .tools import HumanHandoffSignal
+
+_log = logging.getLogger(__name__)
 
 # Run-level step budget default (DS note Q4 / §7 — per-def default 12).
 DEFAULT_STEP_BUDGET = 12
@@ -55,23 +59,43 @@ DEFAULT_STEP_BUDGET = 12
 DEFAULT_MAX_ITERATIONS = 4
 # Cap a trace payload at the write boundary (rule 6 — RAM). Matches MAX_CONFIG_LEN.
 TRACE_PAYLOAD_MAX = 8000
+# Cap the recent-thread window folded into an agent-node prompt (rule 6 — RAM/latency).
+# A long thread cannot blow the prompt; the last N turns carry the live intake context.
+THREAD_CONTEXT_WINDOW = 20
+
+
+# ── defaults ─────────────────────────────────────────────────────────────────
+
+def _default_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _default_clock() -> int:
+    return int(time.time() * 1000)
 
 
 # ── value objects ────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class StepResult:
-    """The outcome of executing one step: its opaque `output`, emitted `on`, and the
-    debug trace events the node collected during execution (empty for the offline stub).
+    """The outcome of executing one step: its opaque `output`, emitted `on`, the
+    debug trace events, and the msgIds the node posted (empty for the offline stub).
 
     `trace` is a list of `(kind, payload)` the node accumulates while it runs (llm
     prompts/responses, tool calls/results, an exhaustion note). It is emitted by
     `_trace_step` **after** the StepRun exists (the record→trace order), so the events
-    key to a real `stepRunId`. A `NullTracer` drops them all (AC-5)."""
+    key to a real `stepRunId`. A `NullTracer` drops them all (AC-5).
+
+    `emissions` are the msgIds this node posted (`post_message`), buffered during
+    execution and drained by `_link_emissions` **after** the StepRun exists — the exact
+    same deferred, stepRun-keyed lifecycle as `trace` (Option B, K-023). The tool no
+    longer links inline (no `stepRunId` is resolvable at dispatch time); the executor
+    owns the `StepRun -[:PRODUCED]-> Message` audit link once `_record` has run."""
 
     output: str = ""
     on: str = "done"
     trace: list[tuple[str, str]] = field(default_factory=list)
+    emissions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -109,8 +133,8 @@ class GraphTracer:
     (§12.10). Mints `traceId`s and stamps `at` from injected id/clock; caps the
     payload length at the write boundary (rule 6)."""
 
-    def __init__(self, repo: Repository, *, id_gen: Callable[[], str],
-                 clock: Callable[[], int]) -> None:
+    def __init__(self, repo: Repository, *, id_gen: Callable[[], str] = _default_id,
+                 clock: Callable[[], int] = _default_clock) -> None:
         self._repo = repo
         self._id = id_gen
         self._clock = clock
@@ -124,16 +148,6 @@ class GraphTracer:
 
 
 _NULL_TRACER = NullTracer()
-
-
-# ── defaults ─────────────────────────────────────────────────────────────────
-
-def _default_id() -> str:
-    return uuid.uuid4().hex
-
-
-def _default_clock() -> int:
-    return int(time.time() * 1000)
 
 
 def _short(value: Any, limit: int = 200) -> str:
@@ -267,6 +281,33 @@ class WorkflowExecutor:
     # ── the §2.1 loop ──────────────────────────────────────────────────────────
 
     def _drive(self, ctx: CallContext, run: dict[str, Any]) -> str:
+        """Drive `run` to a stopping point, converting any fault into a defined terminal
+        (M-1). The §2.1 loop lives in `_drive_loop`; this wrapper is the top-level fault
+        net so a mid-drive exception can never leave a `running` zombie:
+
+          * `HumanHandoffSignal` (a granted `human_handoff` tool, §2.4) → **suspend** the
+            run pending a human (reusing the intake suspend/resume mechanics), return
+            `waiting`. Caught **before** the generic net (it is an `Exception` subclass);
+            defensive — the triage proof grants no `human_handoff`.
+          * any other exception → **fail, don't zombie.** Stamp `fail_run` with a diagnostic
+            `ctx` note (the `_fail_budget` shape) then **re-raise** so `_safe_run_workflow`'s
+            isolation logs the stack. The run ends `failed` with `AT_STEP` cleared —
+            resumable-never, but no longer a permanent `running` orphan (m-3's named
+            `WorkflowConfigError` and the M7 `NotImplementedError` reach this net)."""
+        run_id = run["runId"]
+        run_ctx = _load_json_obj(run["ctx"])
+        try:
+            return self._drive_loop(ctx, run)
+        except HumanHandoffSignal:
+            self._repo.suspend_run(
+                ctx.ws, run_id=run_id, thread_id=run_ctx.get("threadId", "")
+            )
+            return "waiting"
+        except Exception as exc:
+            self._fail_with_note(ctx, run_id, run_ctx, f"unexpected: {exc!r}")
+            raise
+
+    def _drive_loop(self, ctx: CallContext, run: dict[str, Any]) -> str:
         snap = self._repo.get_snapshot(
             ctx.ws, key=run["defKey"], version=run["defVersion"]
         )
@@ -298,6 +339,7 @@ class WorkflowExecutor:
 
             rec = self._record(ctx, run, current_key, to_key, result)
             self._trace_step(ctx, tracer, rec["stepRunId"], result, decision)
+            self._link_emissions(ctx, rec["stepRunId"], result.emissions)
 
             if firing is not None:
                 # OUTCOME A — a guard fired: advance, then enforce the budget
@@ -307,7 +349,10 @@ class WorkflowExecutor:
                 continue
 
             if config.get("waitsForHuman"):
-                # OUTCOME B — suspend (guaranteed human-unblockable, §2.4)
+                # OUTCOME B — suspend (guaranteed human-unblockable, §2.4). No budget
+                # check here by design: the intake loop is human-paced, bounded by the
+                # DS clarifying-round ceiling (a ctx-write follow-up), NOT `maxSteps` —
+                # a parked run cannot self-drive (plan §7, closing review m-1).
                 self._repo.suspend_run(
                     ctx.ws, run_id=run_id, thread_id=run_ctx.get("threadId", "")
                 )
@@ -374,8 +419,10 @@ class WorkflowExecutor:
         }
         max_iter = int(config.get("maxIterations", DEFAULT_MAX_ITERATIONS))
 
-        messages = self._assemble_messages(config, run_ctx)
+        thread_msgs = self._read_thread_context(ctx, run_ctx)
+        messages = self._assemble_messages(config, run_ctx, thread_msgs)
         trace: list[tuple[str, str]] = []
+        emissions: list[str] = []
         last_text = ""
 
         for iteration in range(1, max_iter + 1):
@@ -389,12 +436,13 @@ class WorkflowExecutor:
                 last_text = result.text
 
             if not result.is_tool_call:
-                return StepResult(output=result.text or "", on="done", trace=trace)
+                return StepResult(output=result.text or "", on="done",
+                                  trace=trace, emissions=emissions)
 
             messages.append(_assistant_turn(result))
             for call in result.tool_calls:
                 content = self._handle_tool_call(
-                    call, granted_set, required_by, ctx, run, trace
+                    call, granted_set, required_by, ctx, run, trace, emissions
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": content}
@@ -405,16 +453,18 @@ class WorkflowExecutor:
             ("node_note", f"max iterations ({max_iter}) reached; terminating node "
                           f"with best current text")
         )
-        return StepResult(output=last_text, on="done", trace=trace)
+        return StepResult(output=last_text, on="done", trace=trace, emissions=emissions)
 
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
         required_by: dict[str, list[str]], ctx: CallContext, run: dict[str, Any],
-        trace: list[tuple[str, str]],
+        trace: list[tuple[str, str]], emissions: list[str],
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
-        refuse) — both a bounded re-prompt, never a dispatch."""
+        refuse) — both a bounded re-prompt, never a dispatch. A dispatch that posts a
+        message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
+        onto `emissions` for post-record PRODUCED linking (Option B, K-023)."""
         if call.name not in granted_set:  # AC-6 defensive rejection
             trace.append(("tool_call", f"REJECTED ungranted tool {call.name!r} (AC-6)"))
             return (f"error: tool {call.name!r} is not granted to this node "
@@ -427,20 +477,58 @@ class WorkflowExecutor:
         trace.append(("tool_call", f"{call.name}({_short(call.arguments)})"))
         out = self._tools.dispatch(call.name, call.arguments, ctx=ctx, run=run)
         trace.append(("tool_result", _short(out)))
-        return out if isinstance(out, str) else str(out)
+        content = out if isinstance(out, str) else str(out)
+        self._buffer_emission(content, emissions)
+        return content
+
+    @staticmethod
+    def _buffer_emission(content: str, emissions: list[str]) -> None:
+        """If a tool result is a `post_message` envelope (`{"posted": msgId, …}`), buffer
+        the msgId for post-record PRODUCED linking. Non-post tools / non-JSON results are
+        ignored — the executor owns audit linking, keeping the tool decoupled (Option B)."""
+        obj = _load_json_obj(content)
+        msg_id = obj.get("posted")
+        if isinstance(msg_id, str) and msg_id:
+            emissions.append(msg_id)
+
+    def _read_thread_context(
+        self, ctx: CallContext, run_ctx: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Fetch the recent thread transcript for the agent node (U11.3, AC-2 prereq).
+
+        The intake node must see the human's replies to judge "enough info" — so the
+        node reads the thread via the **service layer** (layering: the executor holds
+        `self._services`, holds no Cypher). `read_thread` (QUERIES §4) is **thread-scoped**
+        via `HEAD`/`NEXT*0..` — the workspace-wide channel caveat (K-015) does NOT apply.
+        Absent `threadId` (offline unit tests) or no wired services → no read, so the
+        network-free stub path is preserved. The window is capped app-side so a long
+        thread cannot blow the prompt (RAM/latency hygiene, rule 6)."""
+        thread_id = run_ctx.get("threadId")
+        if not thread_id or self._services is None:
+            return []
+        msgs = self._services.read_thread(ctx, thread_id=thread_id)
+        return msgs[-THREAD_CONTEXT_WINDOW:]
 
     @staticmethod
     def _assemble_messages(
-        config: dict[str, Any], run_ctx: dict[str, Any]
+        config: dict[str, Any], run_ctx: dict[str, Any],
+        thread_msgs: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Build the node's opening message list (§2.2): the node `systemPrompt` plus an
-        assembled context message carrying the run's serialized state. Recent thread
-        messages are folded in by the services/trigger layer when wired (a later unit); the
-        offline node sees the run `ctx`."""
+        """Build the node's opening message list (§2.2): the node `systemPrompt`, then the
+        recent thread turns as conversation messages (role-mapped, speaker-named so the
+        model sees who spoke), then a compact `CONTEXT` block carrying the run's serialized
+        state (the prior nodes' output). Thread turns come pre-capped by
+        `_read_thread_context`; an empty list (offline stub path) leaves only system+CONTEXT."""
         messages: list[dict[str, Any]] = []
         system = config.get("systemPrompt", "")
         if system:
             messages.append({"role": "system", "content": system})
+        for m in thread_msgs:
+            role = "assistant" if m.get("role") == "assistant" else "user"
+            speaker = m.get("displayName") or m.get("authorId") or "member"
+            messages.append(
+                {"role": role, "content": f"{speaker}: {m.get('text', '')}"}
+            )
         context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
         messages.append({"role": "user", "content": f"CONTEXT:\n{context}"})
         return messages
@@ -510,13 +598,21 @@ class WorkflowExecutor:
     ) -> str:
         """Transition the run to `failed` with a step-budget note stamped in `ctx`
         (§7 runaway guard)."""
+        self._fail_with_note(ctx, run_id, run_ctx, "step budget exceeded")
+        return "failed"
+
+    def _fail_with_note(
+        self, ctx: CallContext, run_id: str, run_ctx: dict[str, Any], error: str
+    ) -> None:
+        """Stamp the run `failed` with a diagnostic `error` note in `ctx` (§7/§12.5). Shared
+        by the step-budget guard and the M-1 top-level fault net so both terminate a faulted
+        run identically (AT_STEP cleared, a readable cause) — never a `running` zombie."""
         note = dict(run_ctx)
-        note["error"] = "step budget exceeded"
+        note["error"] = error
         self._repo.fail_run(
             ctx.ws, run_id=run_id, ended_at=self._clock(),
             ctx=json.dumps(note, separators=(",", ":"), sort_keys=True),
         )
-        return "failed"
 
     def _trace_step(
         self, ctx: CallContext, tracer: Tracer, step_run_id: str,
@@ -542,6 +638,26 @@ class WorkflowExecutor:
                 ctx.ws, step_run_id=step_run_id, seq=seq, kind="guard_judgment",
                 payload=f"{text} -> {verdict.decision}: {verdict.rationale}",
             )
+
+    def _link_emissions(
+        self, ctx: CallContext, step_run_id: str, msg_ids: list[str]
+    ) -> None:
+        """Link `StepRun -[:PRODUCED]-> Message` for each msgId the node posted (Option B,
+        K-023). Mirrors `_trace_step`: emissions are buffered during execution and drained
+        **after** `_record` created the StepRun, keyed to its real `stepRunId`. The link is
+        the deliberately two-step, non-atomic second query (§3/§9) — a `None` return (a
+        missing endpoint) is a diagnosable, retry-able gap that is logged, **never raised**:
+        a missing audit link must not fail a run whose message already stands (the durable
+        artifact)."""
+        for msg_id in msg_ids:
+            linked = self._services.link_step_emission(
+                ctx, step_run_id=step_run_id, msg_id=msg_id
+            )
+            if linked is None:
+                _log.warning(
+                    "PRODUCED link gap: stepRun %s -> msg %s (endpoint missing)",
+                    step_run_id, msg_id,
+                )
 
     @staticmethod
     def _uid(run: dict[str, Any], step_key: str) -> str:

@@ -12,6 +12,7 @@ import itertools
 import pytest
 from fastapi.testclient import TestClient
 
+from falkorchat import db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
 from falkorchat.repository import Repository
@@ -322,6 +323,77 @@ def test_default_app_has_no_wiring_and_posts_normally(client):
     assert r.status_code == 201
 
 
+# ── K-023 trigger wiring: exactly one handler per request (trigger XOR responder) ─
+
+
+class RecordingTrigger:
+    """Records maybe_trigger calls scheduled on BackgroundTasks."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def maybe_trigger(self, ctx, *, thread_id, msg_id, text, role, mentions):
+        self.calls.append(
+            {"thread_id": thread_id, "msg_id": msg_id, "text": text,
+             "role": role, "mentions": mentions}
+        )
+        return None
+
+
+@pytest.fixture()
+def wired_wf(conn):
+    """App wired with an embed-worker, a trigger AND a responder — the M3 shape.
+
+    The trigger holds the responder for its fall-through, so the API must schedule the
+    trigger and NOT the responder (exactly one handler per request).
+    """
+    services = Services(Repository(conn))
+    Repository(conn).ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingWorker()
+    trigger = RecordingTrigger()
+    responder = RecordingResponder()
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+        embed_worker=worker,
+        trigger=trigger,
+        responder=responder,
+    )
+    return TestClient(app), worker, trigger, responder
+
+
+def test_trigger_wired_schedules_trigger_not_responder(wired_wf):
+    client, _, trigger, responder = wired_wf
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.post(
+        f"/threads/{tid}/messages", json={"text": "@bot help", "mentions": []}
+    )
+    assert r.status_code == 201
+    mid = r.json()["msgId"]
+
+    # exactly one handler fired — the trigger, never the responder (no double-response)
+    assert len(trigger.calls) == 1
+    assert trigger.calls[0]["msg_id"] == mid
+    assert trigger.calls[0]["text"] == "@bot help"
+    assert responder.calls == []
+
+
+def test_trigger_wired_still_embeds_every_message(wired_wf):
+    client, worker, trigger, _ = wired_wf
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.post(f"/threads/{tid}/messages", json={"text": "hello"})
+    mid = r.json()["msgId"]
+
+    # embedding path is independent of the trigger path
+    assert ("test", mid, "hello") in worker.calls
+    assert len(trigger.calls) == 1
+
+
 # ── §11 Workflow definitions & snapshots REST surface (M3 Slice 1) ──────────────
 
 
@@ -412,3 +484,55 @@ def test_materialize_missing_def_is_404(wf_client):
 
     assert r.status_code == 404
     assert r.json()["error"] == "WorkflowDefNotFoundError"
+
+
+# ── U12 run-inspection REST reads (AC-5 observability seam) ─────────────────────
+
+
+def _seed_run(conn):
+    """Seed a debug run with one StepRun + one TraceEvent directly in ws:test."""
+    g = db.workspace_graph(conn, "test")
+    g.query(
+        "CREATE (r:WorkflowRun {runId:'r1', status:'done', stepCount:1, maxSteps:12, "
+        "trace:true, ctx:'{}', startedAt:1, endedAt:9, waitingThreadId:''})"
+    )
+    g.query(
+        "MATCH (r:WorkflowRun {runId:'r1'}) "
+        "CREATE (r)-[:HAS_STEP_RUN]->(sr:StepRun {stepRunId:'sr1', stepKey:'intake', "
+        "status:'done', startedAt:1, endedAt:2, input:'', output:'asked a question'})"
+    )
+    g.query(
+        "MATCH (sr:StepRun {stepRunId:'sr1'}) "
+        "CREATE (sr)-[:TRACED]->(te:TraceEvent {traceId:'te1', seq:0, "
+        "kind:'node_rationale', at:1, payload:'asked a question'})"
+    )
+
+
+def test_get_workflow_run(client, conn):
+    _seed_run(conn)
+    r = client.get("/workflow-runs/r1")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["runId"] == "r1"
+    assert body["status"] == "done"
+
+
+def test_get_workflow_run_missing_is_404(client):
+    r = client.get("/workflow-runs/ghost")
+    assert r.status_code == 404
+
+
+def test_get_workflow_step_runs(client, conn):
+    _seed_run(conn)
+    r = client.get("/workflow-runs/r1/step-runs")
+    assert r.status_code == 200
+    rows = r.json()
+    assert [s["stepKey"] for s in rows] == ["intake"]
+
+
+def test_get_workflow_trace(client, conn):
+    _seed_run(conn)
+    r = client.get("/workflow-runs/r1/trace")
+    assert r.status_code == 200
+    events = r.json()
+    assert events and events[0]["kind"] == "node_rationale"

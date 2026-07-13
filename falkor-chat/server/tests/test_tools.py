@@ -22,7 +22,6 @@ import json
 import pytest
 from conftest import TEST_EMBEDDING_DIM
 
-from falkorchat import db
 from falkorchat.config import CallContext
 from falkorchat.services import Services
 from falkorchat.tools import (
@@ -126,10 +125,13 @@ def test_build_builtin_registry_registers_all_three():
 
 # ── post_message (unit, stub services) ───────────────────────────────────────
 
-def test_post_message_posts_as_agent_and_links_emission():
+def test_post_message_posts_as_agent_and_returns_posted_msg_id():
+    # Option B (K-023): the tool posts as the agent and returns the msgId in its
+    # envelope; it does NOT link the emission (the executor owns PRODUCED linking
+    # after the StepRun exists).
     svc = StubServices()
     tool = PostMessageTool(svc, agent_id="assistant")
-    run = {"runId": "r1", "ctx": json.dumps({"threadId": "t1"}), "stepRunId": "sr1"}
+    run = {"runId": "r1", "ctx": json.dumps({"threadId": "t1"})}
 
     out = json.loads(tool.run({"text": "hello"}, ctx=CTX, run=run))
 
@@ -137,23 +139,24 @@ def test_post_message_posts_as_agent_and_links_emission():
     assert svc.posted == [
         {"actor": "assistant", "thread_id": "t1", "text": "hello", "mentions": None}
     ]
-    # emission linked StepRun→PRODUCED→Message for the current step run
-    assert svc.linked == [{"step_run_id": "sr1", "msg_id": out["posted"]}]
-    assert out["linked"] is True
+    # the tool no longer links — that is the executor's job (Option B)
+    assert svc.linked == []
+    assert out["posted"]                 # the posted msgId, for the executor to link
     assert out["threadId"] == "t1"
+    assert "linked" not in out           # no linked flag — linking moved to the executor
 
 
-def test_post_message_skips_link_when_no_step_run_id():
+def test_post_message_does_not_link_even_with_step_run_id_on_run():
+    # Even if a stepRunId happens to be on the run dict, the tool never links
+    # (Option B decouples the tool from audit linking).
     svc = StubServices()
     tool = PostMessageTool(svc, agent_id="assistant")
-    run = {"ctx": json.dumps({"threadId": "t1"})}  # no stepRunId yet
+    run = {"ctx": json.dumps({"threadId": "t1"}), "stepRunId": "sr1"}
 
-    out = json.loads(tool.run({"text": "hi"}, ctx=CTX, run=run))
+    tool.run({"text": "hi"}, ctx=CTX, run=run)
 
-    # message still posted (durable artifact); link is a diagnosable gap, not a failure
     assert len(svc.posted) == 1
     assert svc.linked == []
-    assert out["linked"] is False
 
 
 def test_post_message_reads_thread_from_explicit_run_key():
@@ -235,7 +238,9 @@ def test_human_handoff_dispatch_signals_suspend():
     assert exc.value.reason == "needs a person"
 
 
-# ── integration: post_message writes via §4 and creates the PRODUCED link ─────
+# ── integration: post_message writes the agent message via §4 (durable artifact) ─
+# The PRODUCED audit edge is asserted at executor altitude now (Option B — the
+# executor links after the StepRun exists); see test_executor_produced.py.
 
 def _configure_services(repo, *, actor="u1"):
     clock = itertools.count(1000)
@@ -243,7 +248,7 @@ def _configure_services(repo, *, actor="u1"):
     return Services(repo, clock=lambda: next(clock), id_gen=lambda: next(ids))
 
 
-def test_post_message_writes_message_and_produced_edge_live(repo, conn):
+def test_post_message_writes_agent_message_live(repo, conn):
     repo.ensure_user(WS, user_id="u1")
     repo.ensure_agent(WS, agent_id="assistant", name="Bot")
     repo.create_channel(WS, channel_id="c1", name="c1", created_at=1)
@@ -252,13 +257,10 @@ def test_post_message_writes_message_and_produced_edge_live(repo, conn):
         WS, thread_id="t1", msg_id="trigger", author_id="u1",
         text="please help", role="user", created_at=10,
     )
-    graph = db.workspace_graph(conn, WS)
-    graph.query("CREATE (:StepRun {stepRunId: 'sr1', stepKey: 'answer', "
-                "status: 'done', startedAt: 1, endedAt: 1, input: '', output: ''})")
 
     svc = _configure_services(repo)
     tool = PostMessageTool(svc, agent_id="assistant")
-    run = {"runId": "r1", "ctx": json.dumps({"threadId": "t1"}), "stepRunId": "sr1"}
+    run = {"runId": "r1", "ctx": json.dumps({"threadId": "t1"})}
 
     out = json.loads(tool.run({"text": "here is your answer"}, ctx=CTX, run=run))
 
@@ -266,13 +268,6 @@ def test_post_message_writes_message_and_produced_edge_live(repo, conn):
     assert posted["text"] == "here is your answer"
     assert posted["role"] == "assistant"            # role derived, agent author
     assert posted["authorId"] == "assistant"
-    assert out["linked"] is True
-    # the PRODUCED emission edge exists StepRun→Message (distinct from EMITTED, D2)
-    res = graph.query(
-        "MATCH (:StepRun {stepRunId: 'sr1'})-[:PRODUCED]->(m:Message {msgId: $mid}) "
-        "RETURN count(*) AS n", {"mid": out["posted"]}
-    )
-    assert res.result_set[0][0] == 1
 
 
 # ── integration: graphrag_retrieve threshold + abstention over seeded ws:test ─

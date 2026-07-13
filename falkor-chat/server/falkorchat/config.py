@@ -71,6 +71,18 @@ def _env_flag(name: str, default: bool = False) -> bool:
 # network is only touched when a posted message schedules the background tasks.
 ENABLE_AGENT: bool = _env_flag("FALKORCHAT_ENABLE_AGENT", default=False)
 
+# ── M3 workflow engine (K-022/K-023) ───────────────────────────────────────────
+# Whether `falkorchat.app:app` wires the LLM-native workflow executor + trigger. When
+# on, an `@mention` of `AGENT_ID` starts (or a plain reply resumes) a run of the
+# `TRIGGER_DEF_KEY`@`TRIGGER_DEF_VERSION` def; when off (the default) the app is exactly
+# the M2 wiring and the import + pytest baseline stay network-free. The trigger holds the
+# responder for its no-workflow fall-through, so exactly one handler fires per message.
+WORKFLOW_ENABLED: bool = _env_flag("FALKORCHAT_WORKFLOW_ENABLED", default=False)
+# The materialized def an `@mention` starts — must match the seeded `key`/`version`
+# (see `scripts/seed_workflows.sh`) or the trigger's @mention-to-start step never fires.
+TRIGGER_DEF_KEY: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_KEY", "triage")
+TRIGGER_DEF_VERSION: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_VERSION", "v1")
+
 
 @dataclass(frozen=True)
 class CallContext:

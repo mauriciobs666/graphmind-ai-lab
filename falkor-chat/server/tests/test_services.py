@@ -63,6 +63,7 @@ class FakeRepo:
         self.runs: dict[str, dict] = {}        # runId -> run state (for get_run)
         self.step_runs: dict[str, list] = {}   # runId -> step-run trail
         self.trace: dict[str, list] = {}       # runId -> trace events
+        self.waiting_runs: dict[str, dict] = {}  # threadId -> waiting run (resume lookup)
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -228,6 +229,10 @@ class FakeRepo:
     def read_trace(self, ws, *, run_id):
         self.calls.append(("read_trace", ws, run_id))
         return self.trace.get(run_id, [])
+
+    def find_waiting_run_for_thread(self, ws, *, thread_id):
+        self.calls.append(("find_waiting_run_for_thread", ws, thread_id))
+        return self.waiting_runs.get(thread_id)
 
 
 _UNSET = object()
@@ -1042,6 +1047,23 @@ def test_read_workflow_trace_passthrough_uses_ctx_ws():
 
     assert out and out[0]["kind"] == "guard_judgment"
     assert ("read_trace", "test", "r1") in repo.calls
+
+
+def test_find_waiting_run_for_thread_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.waiting_runs["t1"] = {"runId": "r1", "status": "waiting"}
+
+    got = svc.find_waiting_run_for_thread(CTX, thread_id="t1")
+
+    assert got["runId"] == "r1"
+    assert ("find_waiting_run_for_thread", "test", "t1") in repo.calls
+
+
+def test_find_waiting_run_for_thread_returns_none_when_nothing_parked():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    assert svc.find_waiting_run_for_thread(CTX, thread_id="t1") is None
 
 
 def test_agent_step_type_is_accepted_by_publish_validation():

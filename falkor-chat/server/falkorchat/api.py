@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 
 from .config import CallContext
 from .config import get_context as _resolve_context
 from .schemas import (
+    MAX_ID_LEN,
     CreateChannelIn,
     CreateThreadIn,
     PostMessageIn,
@@ -67,9 +68,33 @@ def _safe_respond(responder: Any, ctx: CallContext, posted: dict[str, Any]) -> N
         _log.exception("background responder failed (msgId=%s)", posted.get("msgId"))
 
 
+def _safe_run_workflow(trigger: Any, ctx: CallContext, posted: dict[str, Any]) -> None:
+    """Fire the workflow trigger out-of-band, swallowing+logging any failure.
+
+    Runs on `BackgroundTasks`, off the guarded write path, mirroring `_safe_respond`.
+    The trigger applies the §6 ordered rule (resume/start/responder fall-through) and
+    **owns** the responder, so this is the *single* handler when a trigger is wired —
+    exactly one of trigger-vs-responder is scheduled per request (the M3 one-handler
+    guarantee). Its latency never blocks the poster.
+    """
+    try:
+        trigger.maybe_trigger(
+            ctx,
+            thread_id=posted["threadId"],
+            msg_id=posted["msgId"],
+            text=posted["text"],
+            role=posted["role"],
+            mentions=posted.get("mentions", []),
+        )
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception(
+            "background workflow trigger failed (msgId=%s)", posted.get("msgId")
+        )
+
+
 def build_router(
     services: Services, *, responder: Any | None = None,
-    embed_worker: Any | None = None,
+    embed_worker: Any | None = None, trigger: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -127,7 +152,13 @@ def build_router(
             background.add_task(
                 _safe_embed, embed_worker, ctx.ws, posted["msgId"], posted["text"]
             )
-        if responder is not None:
+        # Exactly ONE of {trigger, responder} handles the message (M3 one-handler
+        # guarantee). When a trigger is wired it owns the responder fall-through
+        # (§6), so `_safe_respond` is NOT also scheduled — an @mention can never
+        # fire both a workflow and a direct reply.
+        if trigger is not None:
+            background.add_task(_safe_run_workflow, trigger, ctx, posted)
+        elif responder is not None:
             background.add_task(_safe_respond, responder, ctx, posted)
         return posted
 
@@ -208,6 +239,35 @@ def build_router(
         key: str, version: str, ctx: CallContext = Depends(get_context)
     ):
         return services.materialize_def(ctx, key=key, version=version)
+
+    # ── §12 Workflow-run inspection (U12 — AC-5 observability seam) ───────────
+    # Thin, size-bounded RO pass-throughs so QA can read a run / its step-runs /
+    # its trace black-box (no reaching into Cypher). A missing run → 404 (step-runs
+    # and trace return [] for an unknown run, matching the RO query semantics).
+
+    @router.get("/workflow-runs/{run_id}")
+    def get_workflow_run(
+        run_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        run = services.get_workflow_run(ctx, run_id=run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="workflow run not found")
+        return run
+
+    @router.get("/workflow-runs/{run_id}/step-runs")
+    def read_workflow_step_runs(
+        run_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.read_workflow_step_runs(ctx, run_id=run_id)
+
+    @router.get("/workflow-runs/{run_id}/trace")
+    def read_workflow_trace(
+        run_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.read_workflow_trace(ctx, run_id=run_id)
 
     @router.get("/workspaces/{ws}/snapshots")
     def list_snapshots(

@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from falkorchat.guards import GuardVerdict, evaluate_guard
+from falkorchat.guards import GuardVerdict, WorkflowConfigError, evaluate_guard
 
 
 class StubJudge:
@@ -49,6 +49,32 @@ def test_empty_guard_is_unconditional_and_never_calls_the_judge():
     )
     assert isinstance(verdict, GuardVerdict)
     assert verdict.decision is True
+
+
+# ── null guard — treated as unconditional (n-2 safety net) ───────────────────
+
+def test_none_guard_is_unconditional_and_never_calls_the_judge():
+    # A hand-crafted / pre-existing transition may carry a null guard. `None`
+    # means "no condition", so it fires when reached (like ""), never raising
+    # NotImplementedError (which would orphan a drive → M-1). n-2.
+    verdict = evaluate_guard(
+        None, ctx={}, run={}, step_output="", thread=None, judge=_boom_judge
+    )
+    assert verdict.decision is True
+
+
+# ── llm guard with no judge wired — named config error (m-3) ──────────────────
+
+def test_llm_guard_without_judge_raises_named_config_error():
+    # An {kind:'llm'} guard driven by an executor built without a guard_judge must
+    # raise a NAMED WorkflowConfigError (not a bare TypeError from calling None(...)),
+    # so the M-1 fault net can fail the run with a clear diagnostic. m-3.
+    with pytest.raises(WorkflowConfigError) as exc:
+        evaluate_guard(
+            '{"kind":"llm","text":"enough info?"}',
+            ctx={}, run={}, step_output="", thread=None, judge=None,
+        )
+    assert "judge" in str(exc.value).lower()
 
 
 # ── llm guard — advance / suspend ────────────────────────────────────────────

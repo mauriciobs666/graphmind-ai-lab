@@ -40,6 +40,17 @@ _NEGATION_CUES: tuple[str, ...] = (
 )
 
 
+class WorkflowConfigError(Exception):
+    """A workflow def / executor misconfiguration surfaced loudly at drive time.
+
+    Raised (m-3) when an `{"kind":"llm"}` guard is reached but the executor was built
+    without a `guard_judge` — calling `None(...)` would otherwise be a bare `TypeError`
+    that names no seam. The executor's M-1 fault net converts this into a `fail_run`
+    carrying this clear message, so the run reaches a defined terminal instead of a
+    zombie `running`. A subclass of `Exception`, so that net catches it.
+    """
+
+
 @dataclass(frozen=True)
 class GuardVerdict:
     """A guard judgment: a boolean `decision` plus a traced `rationale` (FR-4)."""
@@ -55,21 +66,33 @@ Judge = Callable[..., Any]
 
 
 def evaluate_guard(
-    guard: str,
+    guard: str | None,
     *,
     ctx: dict[str, Any],
     run: dict[str, Any],
     step_output: str,
     thread: Any,
-    judge: Judge,
+    judge: Judge | None,
 ) -> GuardVerdict:
     """Evaluate one transition guard → a `GuardVerdict` (see module docstring)."""
-    if guard == "":
+    # `None` and `""` both mean "no condition" → unconditional. Treating a null
+    # guard here (not just the empty string) is the n-2 safety net: a hand-crafted
+    # or pre-existing transition with a null `guard` fires-when-reached rather than
+    # falling through to the `NotImplementedError` seam (which would orphan a drive).
+    if not guard:
         return GuardVerdict(decision=True, rationale="unconditional (empty guard)")
 
     parsed = _load_obj(guard)
     kind = parsed.get("kind")
     if kind == "llm":
+        # m-3: fail loudly and by name when no judge is wired for an llm guard, rather
+        # than calling `None(...)` → an opaque TypeError. The M-1 net turns this into a
+        # `fail_run` carrying the message.
+        if judge is None:
+            raise WorkflowConfigError(
+                "no guard_judge is wired for an llm guard — the executor was built "
+                "without a judge; wire a production judge before running llm-guarded defs"
+            )
         understanding = _extract_understanding(step_output, ctx)
         raw = judge(
             parsed.get("text", ""),

@@ -19,10 +19,12 @@ D2 — distinct from K-013's `EMITTED`).
 
 Built-ins (§4):
   * `post_message` (FR-5a) — post into the run's thread as the workflow agent (guarded §4
-    write via `services.post_agent_answer`, role derived `assistant`), then link the emission
-    `StepRun -[:PRODUCED]-> Message`. The link is the deliberately **two-step, non-atomic**
-    second query (§3/§9): the message is the durable artifact, a missing link is a
-    diagnosable/retry-able gap, not a torn thread.
+    write via `services.post_agent_answer`, role derived `assistant`) and return the posted
+    `msgId`. The `StepRun -[:PRODUCED]-> Message` emission link is **not** made here (Option B,
+    K-023): no `stepRunId` is resolvable at dispatch time (the StepRun is created after the
+    node runs), so the **executor** buffers the returned msgId and links after `_record`. The
+    link is the deliberately **two-step, non-atomic** second query (§3/§9): the message is the
+    durable artifact, a missing link is a diagnosable/retry-able gap, not a torn thread.
   * `graphrag_retrieve` (FR-5b) — embed the query via the injected `Embedder`, hit
     `services.hybrid_search`, then apply the DS-note **Q2** policy (distance cutoff τ, cap 5 /
     floor 1, **abstain** when nothing passes τ) — deliberately NOT the responder's raw-k=10
@@ -158,11 +160,12 @@ class PostMessageTool:
     """FR-5a — post into the run's thread as the workflow agent, then link the emission.
 
     Reuses the guarded §4 write via `services.post_agent_answer` (actor swapped to the agent
-    id so `role` derives to `assistant` in the service, never trusted from the caller). After
-    the post, links `StepRun -[:PRODUCED]-> Message` via `services.link_step_emission` — the
-    two-step, non-atomic emission (§3/§9): the message is the durable artifact; the link fires
-    when the current `stepRunId` is available on the run (populated by the integrated executor
-    — see the module's Landing-2 note) and a missing link is a retry-able gap, not a torn thread.
+    id so `role` derives to `assistant` in the service, never trusted from the caller). The
+    `StepRun -[:PRODUCED]-> Message` audit link is **not** made here (Option B, K-023): at
+    dispatch time no `stepRunId` is resolvable (the StepRun is created by `record_step_and_
+    advance` *after* the node runs), so the tool returns the posted `msgId` in its result
+    envelope and the **executor** buffers it and links after `_record` (`executor._link_
+    emissions`). This keeps the tool decoupled — audit linking is the executor's concern.
     """
 
     name = "post_message"
@@ -213,16 +216,10 @@ class PostMessageTool:
         )
         msg_id = posted["msgId"]
 
-        # Two-step, non-atomic emission link (§3/§9). Fires when the current StepRun id is
-        # on the run; otherwise the message still stands (durable artifact) and the link is
-        # a diagnosable gap. StepRun→PRODUCED→Message, distinct from K-013's EMITTED (D2).
-        step_run_id = run.get("stepRunId")
-        linked = False
-        if step_run_id:
-            linked = self._services.link_step_emission(
-                ctx, step_run_id=step_run_id, msg_id=msg_id
-            ) is not None
-        return json.dumps({"posted": msg_id, "threadId": thread_id, "linked": linked})
+        # Return the posted msgId in the envelope; the executor buffers it and links
+        # StepRun→PRODUCED→Message after `_record` (Option B, K-023). The link is the
+        # two-step, non-atomic second query (§3/§9) — distinct from K-013's EMITTED (D2).
+        return json.dumps({"posted": msg_id, "threadId": thread_id})
 
 
 class GraphragRetrieveTool:

@@ -164,6 +164,81 @@ def test_default_app_wiring_is_gated_on_enable_agent(monkeypatch):
     assert captured["responder"]._agent_id == "assistant"
 
 
+def test_workflow_wiring_is_gated_on_workflow_enabled(monkeypatch):
+    """WORKFLOW_ENABLED off (default) → the M2 wiring (responder, no trigger). On →
+    the trigger is wired (holding the responder) and no bare responder is passed, so
+    the API schedules exactly one handler. Constructing the clients is offline."""
+    from falkorchat import app as app_mod
+
+    captured: dict = {}
+
+    def fake_create_app(services=None, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(app_mod, "create_app", fake_create_app)
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", True)
+    monkeypatch.setattr(app_mod.config, "AGENT_ID", "assistant")
+
+    # WORKFLOW off: responder wired, trigger not.
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", False)
+    app_mod._build_default_app()
+    assert captured.get("responder") is not None
+    assert captured.get("trigger") is None
+
+    # WORKFLOW on: trigger wired (targets the agent + configured def), responder held
+    # by the trigger (not passed to create_app → API schedules only the trigger).
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", True)
+    monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_KEY", "triage")
+    monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_VERSION", "v1")
+    app_mod._build_default_app()
+    assert captured.get("trigger") is not None
+    assert captured.get("responder") is None
+    trig = captured["trigger"]
+    assert trig._agent_id == "assistant"
+    assert trig._def_key == "triage"
+    assert trig._responder is not None       # holds the responder for fall-through
+
+
+def test_build_llm_judge_parses_a_json_verdict():
+    """The production judge matches the injected shape `(condition, *, understanding,
+    ctx, step_output) -> {decision, rationale}` and parses the LLM's JSON verdict."""
+    from falkorchat.app import _build_llm_judge
+
+    class StubLLM:
+        def __init__(self, text):
+            self._text = text
+            self.calls = []
+
+        def complete(self, messages):
+            self.calls.append(messages)
+            return self._text
+
+    llm = StubLLM('{"decision": true, "rationale": "all fields present"}')
+    judge = _build_llm_judge(llm)
+
+    verdict = judge("enough info?", understanding={"missing": []}, ctx={}, step_output="")
+
+    assert verdict["decision"] is True
+    assert "present" in verdict["rationale"]
+    assert llm.calls  # the llm was actually driven
+
+
+def test_build_llm_judge_biases_to_suspend_on_unparseable_output():
+    from falkorchat.app import _build_llm_judge
+
+    class StubLLM:
+        def complete(self, messages):
+            return "I think it is probably fine"      # not JSON
+
+    verdict = _build_llm_judge(StubLLM())(
+        "enough info?", understanding={}, ctx={}, step_output=""
+    )
+    # a non-parseable verdict must not advance — guards._coerce_verdict then holds
+    assert verdict["decision"] is False
+
+
 def test_web_ui_served_at_root_without_shadowing_rest(tmp_path, conn):
     web = tmp_path / "web"
     web.mkdir()

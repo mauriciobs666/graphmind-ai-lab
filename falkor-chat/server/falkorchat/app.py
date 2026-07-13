@@ -94,6 +94,7 @@ def create_app(
     web_dir: Path | None = None,
     responder: object | None = None,
     embed_worker: object | None = None,
+    trigger: object | None = None,
 ) -> FastAPI:
     """Build the FastAPI app.
 
@@ -161,7 +162,9 @@ def create_app(
         app.dependency_overrides[api.get_context] = context_provider
 
     app.include_router(
-        api.build_router(services, responder=responder, embed_worker=embed_worker)
+        api.build_router(
+            services, responder=responder, embed_worker=embed_worker, trigger=trigger
+        )
     )
     _register_error_handlers(app)
 
@@ -210,7 +213,76 @@ def _build_default_app() -> FastAPI:
     responder = AgentResponder(
         services, embedder, LMStudioLLM(), worker, agent_id=config.AGENT_ID
     )
+
+    # M3 workflow engine (K-023): checked AFTER the responder/embedder/LLM exist (the
+    # trigger holds the responder for its no-workflow fall-through). Off by default; the
+    # imports are lazy so the disabled path carries no weight. Constructing the executor
+    # + trigger is offline — the first network call is when a posted message runs its
+    # background tasks. The trigger (not the responder) is passed to `create_app`, so the
+    # API schedules exactly one handler per request.
+    if config.WORKFLOW_ENABLED:
+        from .executor import GraphTracer, WorkflowExecutor
+        from .tools import build_builtin_registry
+        from .trigger import WorkflowTrigger
+
+        registry = build_builtin_registry(services, embedder, agent_id=config.AGENT_ID)
+        judge = _build_llm_judge(LMStudioLLM())
+        executor = WorkflowExecutor(
+            services, repo, llm=LMStudioLLM(), guard_judge=judge,
+            tool_registry=registry, tracer=GraphTracer(repo),
+        )
+        services.set_executor(executor)  # late-bind (breaks the services↔executor cycle)
+        trigger = WorkflowTrigger(
+            services, agent_id=config.AGENT_ID, def_key=config.TRIGGER_DEF_KEY,
+            def_version=config.TRIGGER_DEF_VERSION, responder=responder,
+        )
+        return create_app(services, trigger=trigger, embed_worker=worker)
+
     return create_app(services, responder=responder, embed_worker=worker)
+
+
+_JUDGE_SYSTEM_PROMPT = (
+    "You are a strict gate deciding whether a workflow may advance. You are given a "
+    "CONDITION and the agent's compact UNDERSTANDING of the user's request "
+    "(request/known/missing). Decide whether the CONDITION is clearly met. Reply with a "
+    'single JSON object and nothing else: {"decision": <true|false>, "rationale": '
+    '"<one short sentence>"}. Answer true ONLY when the condition is clearly satisfied; '
+    "when in doubt answer false."
+)
+
+
+def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
+    """Build the production fuzzy-guard judge callable (DS §Q1) over an LLM.
+
+    Matches the injected judge shape `guards.evaluate_guard` calls:
+    `(condition, *, understanding, ctx, step_output) -> {decision, rationale}`. Builds the
+    §Q1 extract-then-judge prompt from the compact `understanding` (not the raw transcript),
+    asks the LLM for a JSON verdict, and parses it. A non-JSON / malformed reply resolves to
+    `{"decision": False, …}` — and `guards._coerce_verdict` applies the same bias-to-suspend
+    downstream, so an unreliable judge never falsely advances. Calibration (κ / false-advance)
+    is a U14/U15 concern; the wired judge must simply exist so an `llm` guard never hits the
+    m-3 "no judge" path in the served flow.
+    """
+    import json as _json
+
+    def judge(condition, *, understanding, ctx, step_output):  # noqa: ANN001
+        user = _json.dumps(
+            {"CONDITION": condition, "UNDERSTANDING": understanding},
+            separators=(",", ":"), sort_keys=True, default=str,
+        )
+        text = llm.complete([
+            {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ])
+        try:
+            parsed = _json.loads(text)
+        except (ValueError, TypeError):
+            return {"decision": False, "rationale": "unparseable judge output"}
+        if not isinstance(parsed, dict):
+            return {"decision": False, "rationale": "non-object judge output"}
+        return parsed
+
+    return judge
 
 
 # Default ASGI app for `uvicorn falkorchat.app:app`.

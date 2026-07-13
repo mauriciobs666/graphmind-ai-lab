@@ -249,3 +249,81 @@ def test_run_missing_raises_not_found(wf_repo):
     ex = _make_executor(wf_repo, guard_judge=StubJudge([]))
     with pytest.raises(WorkflowRunNotFoundError):
         ex.run(CTX, run_id="ghost")
+
+
+# ── M-1 — an unexpected mid-drive exception fails the run (no zombie `running`) ─
+
+class _BoomExecutor(WorkflowExecutor):
+    """Raises inside the drive loop (at step execution) to exercise the M-1 net."""
+
+    def _execute_step(self, ctx, run, step, config, run_ctx):
+        raise RuntimeError("boom in a step handler")
+
+
+def _boom_executor(repo, **over):
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    return _BoomExecutor(
+        None, repo, guard_judge=StubJudge([]),
+        id_gen=lambda: next(ids), clock=lambda: next(clock), **over,
+    )
+
+
+def test_unexpected_exception_fails_the_run_and_reraises(wf_repo):
+    # M-1: an unexpected exception mid-drive must leave the run `failed` (AT_STEP
+    # cleared, a diagnostic ctx note) and re-raise — never a stuck `running` zombie.
+    _start_run(wf_repo)
+    ex = _boom_executor(wf_repo)
+
+    with pytest.raises(RuntimeError):
+        ex.run(CTX, run_id="r1")
+
+    run = wf_repo.get_run("test", run_id="r1")
+    assert run["status"] == "failed"
+    assert run["atStepKey"] is None
+    assert "boom in a step handler" in run["ctx"]
+
+
+def test_llm_guard_without_judge_fails_the_run_with_named_error(wf_repo):
+    # m-3 via the M-1 net: an llm guard reached with guard_judge=None raises the named
+    # WorkflowConfigError, which the net converts into a `failed` run carrying the message.
+    _start_run(wf_repo)  # intake→research guard is {kind:llm}
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = WorkflowExecutor(
+        None, wf_repo, guard_judge=None,        # no judge wired
+        id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    from falkorchat.guards import WorkflowConfigError
+    with pytest.raises(WorkflowConfigError):
+        ex.run(CTX, run_id="r1")
+
+    run = wf_repo.get_run("test", run_id="r1")
+    assert run["status"] == "failed"
+    assert "judge" in run["ctx"].lower()
+
+
+def test_human_handoff_signal_suspends_the_run(wf_repo):
+    # A granted human_handoff tool raises HumanHandoffSignal; the M-1 net parks the run
+    # as `waiting` (not `failed`), reusing the intake suspend/resume mechanics (§2.4).
+    from falkorchat.tools import HumanHandoffSignal
+
+    class _HandoffExecutor(WorkflowExecutor):
+        def _execute_step(self, ctx, run, step, config, run_ctx):
+            raise HumanHandoffSignal("a human is needed")
+
+    _start_run(wf_repo)
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = _HandoffExecutor(
+        None, wf_repo, guard_judge=StubJudge([]),
+        id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "waiting"
+    run = wf_repo.get_run("test", run_id="r1")
+    assert run["status"] == "waiting"
+    assert run["waitingThreadId"] == "t1"       # denormed for the resume lookup

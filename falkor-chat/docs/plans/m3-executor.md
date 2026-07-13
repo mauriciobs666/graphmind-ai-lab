@@ -381,20 +381,34 @@ nested bounds, no wall-clock/token budget** (the requirements explicitly set no 
 1. **Run-level step budget** — `WorkflowRun.maxSteps` (**per-def default `12`, global hard ceiling
    `25`** — DS note Q4, §10). `record_step_and_advance` increments `stepCount`; when
    `stepCount > maxSteps` the executor transitions the run to `status = 'failed'` with a
-   `TraceEvent`/`ctx` note ("step budget exceeded"). This is the primary runaway guard, and the
-   backstop for a `type:'agent'` step re-looping under §2.1 outcome C.
+   `TraceEvent`/`ctx` note ("step budget exceeded"). This is the **runaway-autonomy** guard — it bounds
+   a run that *self-drives* (a `type:'agent'` node re-looping under §2.1 outcome C, an
+   advance-per-step chain), and it is enforced on the **autonomous continue paths only** (outcome A
+   advance, outcome C re-loop). It is deliberately **not** checked on the suspend path (see the intake
+   note below).
 2. **Per-node iteration cap** — `config.maxIterations` (**default `4`** for the tool-light proof
    nodes; the DS note keeps `6` only as an upper bound for a wider-fenced future node) bounds a single
    LLM-native node's tool-calling loop, so one node cannot spin forever calling tools. On exhaustion
    the node terminates with its best current text + a trace note (graceful — it does **not** hard-fail
    the run); only `maxSteps` exceeded fails the run.
 
+**The intake (suspend/resume) loop is human-paced, bounded by the clarifying-round ceiling — NOT
+`maxSteps`** (K-023, closing review m-1). Each suspend (§2.1 outcome B) records one StepRun and then
+*stops*, resuming only when a human posts a reply; the loop **cannot self-drive**, so `maxSteps` — an
+autonomy ceiling — is the wrong bound for it, and the executor deliberately does not check the budget
+on the suspend path. A `waiting` run consumes **no autonomous budget** while parked (only executed
+steps count, and a parked run executes none). The correct bound for the intake loop is the DS-note
+**3-round clarifying ceiling** (`m3-executor-ml.md` Q1), carried in `ctx`. **Round-ceiling enforcement
+is a follow-up** that needs the executor to write `ctx` back (the m-2 finding — today the executor
+never mutates `ctx`); it is tracked with that ctx-write work, not forced into U11 (AC-2 closes via
+thread re-read on resume, not ctx accumulation). Until it lands the intake loop is human-paced and
+unbounded-by-`maxSteps` — acceptable for the proof.
+
 **Not** a "never revisit a step" rule — the intake self-loop (AC-2, via §2.1 outcome B resume) and a
-non-waiting node's re-execution (§2.1 outcome C) are *legitimate* cycles; the step budget (which
-counts every StepRun including re-runs) is the correct bound. A `waiting` run consumes no budget while
-parked (only executed steps count). Tracing (FR-4) aids diagnosis but, as the requirements note, does
-not prevent loops — the budget does. Defaults come from the DS note (§10 Q4), coupled to the judge/
-agent reliability gates — do not raise them to paper over a failing calibration.
+non-waiting node's re-execution (§2.1 outcome C) are *legitimate* cycles; the step budget is the
+correct bound for the **autonomous** cycle (outcome C). Tracing (FR-4) aids diagnosis but, as the
+requirements note, does not prevent loops — the budget does. Defaults come from the DS note (§10 Q4),
+coupled to the judge/agent reliability gates — do not raise them to paper over a failing calibration.
 
 ---
 

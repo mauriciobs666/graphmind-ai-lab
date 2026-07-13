@@ -657,3 +657,14 @@ class Services:
     ) -> list[dict[str, Any]]:
         """A debug run's reconstruction (RO pass-through). QUERIES.md §12.11."""
         return self._repo.read_trace(ctx.ws, run_id=run_id)
+
+    def find_waiting_run_for_thread(
+        self, ctx: CallContext, *, thread_id: str
+    ) -> dict[str, Any] | None:
+        """The resume lookup: the thread's parked (`waiting`) run, if any (RO). §12.9.
+
+        Index-anchored on `WorkflowRun.status` + the denormed `waitingThreadId` (no new
+        index). The trigger (§6) uses this to route a human reply to a waiting run before
+        it considers @mention-to-start. `None` when nothing is parked in this thread.
+        """
+        return self._repo.find_waiting_run_for_thread(ctx.ws, thread_id=thread_id)

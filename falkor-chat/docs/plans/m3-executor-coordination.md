@@ -211,3 +211,95 @@ The chain is inherently sequential (each unit builds on the prior's code); no pa
   **241/241**, pytest **283**. Nothing committed (per convention — commit on user request). FalkorDB
   left running. **Open follow-ups for Landing 2 (U11–U15, separate run): M-1 zombie-run guard,
   live PRODUCED-link ordering, agent-node thread context** — all logged in K-023 + the review doc.
+
+## LANDING 2 (U11–U15) — trigger + triage proof + QA acceptance
+- 2026-07-12 — **Landing 2 started.** Env re-verified green (FalkorDB up; query **241/241**, pytest
+  **283**). Architect design-patch delivered → `docs/plans/m3-executor-landing2.md` covering the U11
+  wiring + the three carried deferrals (M-1, agent-node thread context) + m-1.
+- 2026-07-12 — **DECISION (user go): PRODUCED-link ordering = Option B** — buffer emissions during
+  agent-node execution, link `StepRun-[:PRODUCED]->Message` after `_record` (mirrors the existing
+  `_trace_step` pattern). Keeps `record_step_and_advance` (§12.2 / M4) byte-for-byte and the §2.1
+  A/B/C loop untouched; zero graph/DDL/QUERIES change (suite holds 241/241); no graph-dba gate
+  re-open. Option A (pre-mint StepRun) rejected — would split the locked atomic advance. Rationale:
+  `m3-executor-landing2.md` §★.
+- 2026-07-12 — **D6 (tdd-engineer, U11+U12) dispatched.** Trigger wiring + Option B emission linking
+  + M-1 fault-handling + m-1 §7 amendment + agent-node thread context + optional REST run inspection.
+  Analyst impl-review gate remains the non-negotiable K-022 done-condition.
+- 2026-07-12 — **D6 ✅ (tdd-engineer, U11+U12).** teco re-verified: **pytest 283→312 (+29), green;
+  query suite 241/241 unchanged** (zero graph/DDL/QUERIES change per Option B); default-app import
+  network-free (`WORKFLOW_ENABLED` default off). Delivered:
+  - **Option B** — `StepResult.emissions`; `_handle_tool_call`/`_buffer_emission` capture posted
+    msgIds; `_link_emissions` after `_trace_step` (above the branch dispatch, §2.1 A/B/C loop block
+    byte-for-byte unchanged); `PostMessageTool.run` drops the inline link → returns `{"posted",
+    "threadId"}`. Integration test asserts a real `StepRun-[:PRODUCED]->Message` edge.
+  - **M-1** — `_drive` is now a fault-net wrapper over extracted `_drive_loop`: `HumanHandoffSignal`
+    →suspend; any other exception→`fail_run` + diagnostic ctx note, then re-raise. No more zombie
+    `running` run. **m-3** — `guards.WorkflowConfigError` (named) when an `llm` guard has no judge.
+    **n-2** — null guard treated as `""` unconditional.
+  - **m-1** — plan `m3-executor.md` §7 amended: intake loop is human-paced, bounded by the DS 3-round
+    ceiling, NOT `maxSteps`; no suspend-path budget check.
+  - **Thread context (AC-2 prereq)** — `_read_thread_context` via `services.read_thread` (§4,
+    thread-scoped, cap `THREAD_CONTEXT_WINDOW=20`); `_assemble_messages` folds role-mapped turns in.
+  - **Trigger** — new `trigger.py` `WorkflowTrigger.maybe_trigger` (§6 ordered rule; signature gains
+    `text` for fall-through); `services.find_waiting_run_for_thread`; `api._safe_run_workflow` +
+    one-handler dispatch (trigger XOR responder); `app._build_default_app` `WORKFLOW_ENABLED` branch
+    (wires executor+registry+production `_build_llm_judge`+trigger); `config` flags default off.
+  - **U12** — `GET /workflow-runs/{id}` + `/step-runs` + `/trace` size-bounded pass-throughs.
+  - New tests: `test_trigger.py` (7), `test_executor_produced.py` (2) + additions across
+    executor/agent/guards/services/api/app; `test_tools.py` link tests updated to the new contract.
+
+---
+
+## ⏸️ PARKED 2026-07-13 — RESUME HERE
+
+**State:** U11+U12 implementation DONE and verified green (**pytest 312**, **query 241/241**).
+All work is **uncommitted** (per repo convention — commit on user request). Nothing is broken;
+this is a clean stopping point *between* implementation and the mandatory review gate.
+
+**Uncommitted working tree (from `git status`):**
+- New: `docs/plans/m3-executor-landing2.md` (architect design-patch), `server/falkorchat/trigger.py`,
+  `server/tests/test_executor_produced.py`, `server/tests/test_trigger.py`.
+- Modified source: `server/falkorchat/{api,app,config,executor,guards,schemas,services,tools}.py`,
+  `server/.env.example`; test files `test_{api,app,executor,executor_agent,guards,services,tools}.py`.
+- Modified docs: `docs/plans/m3-executor.md` (§7 m-1 amendment), this coordination doc.
+- **Note the source tree is `server/falkorchat/` (NOT `server/src/falkorchat/`).** venv: `server/.venv`.
+
+**Verify-on-resume (env: FalkorDB must be up — `docker ps | grep falkor`):**
+```
+cd falkor-chat && ./scripts/test_queries.sh                 # expect 241/241
+cd server && .venv/bin/python -m pytest -q                  # expect 312 passed
+```
+
+**Remaining Landing-2 work, in order:**
+1. **▶ NEXT — Analyst impl-review gate (NON-NEGOTIABLE K-022 done-condition).** Dispatch `analyst`
+   to statically review the U11+U12 diff (the uncommitted working tree above) against
+   `docs/plans/m3-executor-landing2.md`, the plan §6/§7, and the review's closed items
+   (M-1/m-1/m-3/n-2). Deliverable: `docs/reviews/m3-executor-landing2-impl.md` with a verdict.
+   A "needs changes" loops back to tdd-engineer (`SendMessage` to agent `a7f82a9555f62278c` keeps
+   context), then re-review. Confirm Option B, the byte-for-byte loop, and the M-1 net specifically.
+2. **U13 (coder, +devops if env)** — `scripts/seed_workflows.sh`: publish + materialize the triage
+   def (3 `type:'agent'` steps + guards per `m3-executor.md` §8 table) additive-only into `ws:acme`,
+   idempotent; register the trigger. Architect flagged: wrap a Python one-shot over the **service
+   layer** (real validation/start-key derivation), run after `bootstrap_schema` + `seed_demo`,
+   key/version matching `TRIGGER_DEF_KEY`/`TRIGGER_DEF_VERSION` config. **Only here** should
+   `WORKFLOW_ENABLED` be flipped on in `scripts/start_server.sh` (D6 left it off — flipping before a
+   def is published makes @mention-to-start silently no-op).
+3. **U14 (tdd-engineer)** — one `live`-marked e2e test exercising AC-1…AC-4 (real LM Studio, like the
+   M2 responder smoke): assert `TRIGGERED_BY`, StepRun NEXT trace, run `done`. **Env dependency:**
+   running it live needs LM Studio at :1234 + `FALKORCHAT_ENABLE_AGENT`/`WORKFLOW_ENABLED` on at the
+   workspace embedding dim — surface to user if unreachable; the test is written marker-gated so the
+   network-free baseline stays green regardless.
+4. **U15 (qa-engineer)** — acceptance pass AC-1…AC-6, black-box; test plan + report under
+   `docs/test-{plans,reports}/`. U12's REST reads give the observability hook. This is K-025.
+
+**Doc rollup owed at close (coordinator-driven, via an implementer — teco's Write is docs/plans-only):**
+`docs/HISTORY.md` (Landing-2 entry) + `docs/BACKLOG.md` (K-022 Landing 2 → done; K-023/K-024/K-025
+status) once the gate + U13/U14/U15 land. **Carried nit n-1** (add `node_note` to the QUERIES §12.10 /
+DESIGN §5 trace-kind enumeration) — fold into that rollup.
+
+## Landing-2 cost datapoint (vs. Landing-1 ~1.20M tok / 238 tool uses / ~4h for U1–U10 + gate)
+| Delegation | Owner | Units | ~Tokens | Tool uses | Wall time | Notes |
+|---|---|---|---|---|---|---|
+| Architect | architect | U11 design-patch | ~157k | 24 | ~8 min | Option B recommended (surfaced to user, approved); M-1/m-1/thread/trigger designed |
+| D6 | tdd-engineer | U11+U12 | ~254k | 131 | ~43 min | pytest 283→312; M-1/m-3/n-2 closed; m-1 §7 amend; Option B; U12 REST |
+| — | | remaining | — | — | — | analyst gate + U13 + U14 + U15 pending |
