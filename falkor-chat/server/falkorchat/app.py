@@ -243,33 +243,70 @@ def _build_default_app() -> FastAPI:
 
 _JUDGE_SYSTEM_PROMPT = (
     "You are a strict gate deciding whether a workflow may advance. You are given a "
-    "CONDITION and the agent's compact UNDERSTANDING of the user's request "
-    "(request/known/missing). Decide whether the CONDITION is clearly met. Reply with a "
-    'single JSON object and nothing else: {"decision": <true|false>, "rationale": '
-    '"<one short sentence>"}. Answer true ONLY when the condition is clearly satisfied; '
-    "when in doubt answer false."
+    "CONDITION and evidence about the conversation: a CURRENT STATE (the agent's compact "
+    "understanding of the request — request/known/missing) and/or RECENT TURNS (the latest "
+    "messages, oldest first, for context only). One of them may be absent; judge the "
+    "CONDITION against whatever you are given. Reply with a single JSON object and nothing "
+    'else: {"decision": <true|false>, "rationale": "<one short sentence>"}. Answer true '
+    "ONLY when the condition is clearly satisfied; when in doubt answer false. The "
+    "rationale must state ONLY the evidence supporting your decision: when advancing, say "
+    "what the user DID provide — never mention what is absent, missing or unclear."
 )
+
+# The assembled judge user message is capped (≈1500 tokens, the DS §Q1 budget). Oldest turns
+# are dropped first; 6 turns × 400 chars ≈ 2.4k, so this is a backstop, not a routine path.
+JUDGE_USER_MAX_CHARS = 6000
+
+
+def _render_judge_user(
+    condition: object, understanding: object, recent_turns: object
+) -> str:
+    """Assemble the DS §Q1 judge user message: CONDITION / CURRENT STATE / RECENT TURNS.
+
+    Each evidence block is omitted when empty (the omit rule itself lives upstream in
+    `guards.evaluate_guard` — this only renders what it is handed). The result is capped at
+    `JUDGE_USER_MAX_CHARS` by dropping **oldest** turns first, so the newest turn — the one
+    the condition is usually about — always survives; a hard truncation backstops the rest.
+    """
+    import json as _json
+
+    blocks = [f"CONDITION: {condition}"]
+    if understanding:
+        state = _json.dumps(understanding, indent=2, sort_keys=True, default=str)
+        blocks.append(f"CURRENT STATE:\n{state}")
+
+    turns = list(recent_turns) if isinstance(recent_turns, list) else []
+    while turns:
+        rendered = "\n".join(
+            f"{t.get('speaker', 'member')}: {t.get('text', '')}" for t in turns
+        )
+        candidate = blocks + [f"RECENT TURNS (context only):\n{rendered}"]
+        text = "\n\n".join(candidate)
+        if len(text) <= JUDGE_USER_MAX_CHARS:
+            return text
+        turns.pop(0)  # drop the oldest turn and retry
+
+    return "\n\n".join(blocks)[:JUDGE_USER_MAX_CHARS]
 
 
 def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
     """Build the production fuzzy-guard judge callable (DS §Q1) over an LLM.
 
     Matches the injected judge shape `guards.evaluate_guard` calls:
-    `(condition, *, understanding, ctx, step_output) -> {decision, rationale}`. Builds the
-    §Q1 extract-then-judge prompt from the compact `understanding` (not the raw transcript),
-    asks the LLM for a JSON verdict, and parses it. A non-JSON / malformed reply resolves to
-    `{"decision": False, …}` — and `guards._coerce_verdict` applies the same bias-to-suspend
-    downstream, so an unreliable judge never falsely advances. Calibration (κ / false-advance)
-    is a U14/U15 concern; the wired judge must simply exist so an `llm` guard never hits the
-    m-3 "no judge" path in the served flow.
+    `(condition, *, understanding, recent_turns, ctx, step_output) -> {decision, rationale}`.
+    Builds the §Q1 prompt from whichever evidence tier `guards` selected — the compact
+    `understanding` (primary) or the RECENT-TURNS fallback; the omit rule is applied
+    upstream in `guards.evaluate_guard`, so this judge is a **dumb renderer** of what it is
+    handed. A non-JSON / malformed reply resolves to `{"decision": False, …}` — and
+    `guards._coerce_verdict` applies the same bias-to-suspend downstream, so an unreliable
+    judge never falsely advances. Calibration (κ / false-advance) is a U14/U15 concern; the
+    wired judge must simply exist so an `llm` guard never hits the m-3 "no judge" path in
+    the served flow.
     """
     import json as _json
 
-    def judge(condition, *, understanding, ctx, step_output):  # noqa: ANN001
-        user = _json.dumps(
-            {"CONDITION": condition, "UNDERSTANDING": understanding},
-            separators=(",", ":"), sort_keys=True, default=str,
-        )
+    def judge(condition, *, understanding, recent_turns, ctx, step_output):  # noqa: ANN001
+        user = _render_judge_user(condition, understanding, recent_turns)
         text = llm.complete([
             {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": user},

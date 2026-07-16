@@ -9,8 +9,13 @@ branches plus a raising seam (plan §2.5):
     (the deterministic default; **lowest priority** — the caller orders it last). This is
     how the **D5** research→answer transition is expressed (unconditional, not LLM-judged).
   * ``{"kind":"llm","text":…}`` — the fuzzy branch: the **Q1 extract-then-judge** method
-    (`docs/plans/m3-executor-ml.md`). The compact `understanding` object (`{request, known,
-    missing}`) the node emitted is extracted and handed — *not the raw transcript* — to the
+    (`docs/plans/m3-executor-ml.md`). The evidence handed to the judge is **two-tier**:
+    the compact `understanding` object (`{request, known, missing}`) the node emitted is the
+    **primary** signal; when the node emitted none (prose output — the shipped intake def),
+    the last `RECENT_TURNS_N` thread turns carried out on `StepResult.thread` are handed over
+    as the DS-specified **degraded fallback** ("omit if understanding is present"). Judging a
+    compact state beats judging a transcript, but a judge with *no* evidence at all can only
+    bias to suspend forever — that was Defect A. Evidence goes to the
     **injected** `judge`, which returns a ``{decision, rationale}`` verdict. The Q1 ambiguity
     policy is applied here: parse failure / non-bool decision / a rationale that contradicts a
     `true` decision → **bias-to-suspend** (`decision=False`), safe for the human-unblockable
@@ -30,14 +35,38 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
+# DS §Q1: "RECENT TURNS (context only) … N = 6, newest last" — the fallback evidence tier.
+RECENT_TURNS_N = 6
+# Per-turn char cap (rule 6): one long turn must not crowd the window out of the judge's
+# prompt. 6 × 400 ≈ 2.4k chars, comfortably inside the DS ~1500-token judge budget.
+TURN_TEXT_MAX = 400
+
 # Rationale cues that contradict a `decision:true` — an internally inconsistent verdict is
 # treated as false (bias-to-suspend). The over-suspend direction is the safe error for a
 # human-unblockable guard (DS note Q1); a stronger judge / more concrete guard text is the
 # real fix if this trips too often.
+#
+# These are **deficiency assertions**, and each must be matched *in its polarity* — see
+# `_rationale_contradicts`. A transcript-fed judge writes wordier rationales in which a cue
+# often appears NEGATED ("no more info is needed", "nothing is unclear") and therefore
+# AFFIRMS the advance. A bare substring match turns those into forced suspends — a failure
+# indistinguishable from Defect A ("the guard never fires"). Hence the negator rule below.
 _NEGATION_CUES: tuple[str, ...] = (
-    "not enough", "insufficient", "still missing", "cannot ", "unable",
-    "unclear", "no relevant", "not yet", "more info", "need more",
+    "not enough", "insufficient", "still missing", "still need", "cannot ", "unable",
+    "unclear", "not yet", "more info", "need more",
 )
+# Dropped from the cue set: "no relevant". It **embeds its own negator**, so the negator rule
+# cannot resolve its polarity — "no relevant details are missing" (advance) and "no relevant
+# information was provided" (suspend) are indistinguishable to it. It is the one cue that is
+# unfixable rather than tightenable; "still need" replaces the coverage it was carrying.
+
+# A cue immediately preceded by one of these is negated → it affirms rather than contradicts.
+_NEGATORS: tuple[str, ...] = ("no ", "not ", "nothing ", "never ", "n't ")
+# Only the text *immediately* before the cue counts. Wide enough for a copula ("nothing IS
+# unclear"), deliberately too narrow to span a clause boundary: in "did not provide the
+# version; more info is needed" the "not " belongs to another clause and must NOT negate the
+# cue. Erring narrow keeps the failure on the safe (over-suspend) side — DS Q1.
+_NEGATOR_WINDOW = 12
 
 
 class WorkflowConfigError(Exception):
@@ -74,7 +103,12 @@ def evaluate_guard(
     thread: Any,
     judge: Judge | None,
 ) -> GuardVerdict:
-    """Evaluate one transition guard → a `GuardVerdict` (see module docstring)."""
+    """Evaluate one transition guard → a `GuardVerdict` (see module docstring).
+
+    `thread` is the recent thread window carried out of the node on `StepResult.thread`
+    (no extra graph read — m-C neutral). `None`/`[]`/malformed → the understanding-only
+    path; it is only consulted when no `understanding` was emitted (the DS omit rule).
+    """
     # `None` and `""` both mean "no condition" → unconditional. Treating a null
     # guard here (not just the empty string) is the n-2 safety net: a hand-crafted
     # or pre-existing transition with a null `guard` fires-when-reached rather than
@@ -94,9 +128,16 @@ def evaluate_guard(
                 "without a judge; wire a production judge before running llm-guarded defs"
             )
         understanding = _extract_understanding(step_output, ctx)
+        # DS §Q1: RECENT TURNS is the *fallback* — "omit if understanding is present".
+        # Truthiness, not presence: an emitted-but-empty `{}` understanding knows nothing,
+        # so the turns are still the only evidence available. The precedence lives here,
+        # not in the judge — it is a method decision every judge should inherit rather
+        # than re-derive, and it stays unit-testable offline against a stub judge.
+        recent_turns = [] if understanding else _recent_turns(thread)
         raw = judge(
             parsed.get("text", ""),
-            understanding=understanding, ctx=ctx, step_output=step_output,
+            understanding=understanding, recent_turns=recent_turns,
+            ctx=ctx, step_output=step_output,
         )
         return _coerce_verdict(raw)
 
@@ -128,8 +169,53 @@ def _coerce_verdict(raw: Any) -> GuardVerdict:
 
 
 def _rationale_contradicts(rationale: str) -> bool:
+    """True when the rationale *asserts a deficiency*, i.e. contradicts a `decision:true`.
+
+    Polarity-aware by necessity (R-1): a cue is only a contradiction when it is **not
+    negated**. "Not enough information" contradicts an advance; "no more info is needed"
+    affirms it, yet both contain a cue. The check is a backstop against an internally
+    inconsistent verdict — it is not a prose grep for negative-sounding words.
+    """
     low = rationale.lower()
-    return any(cue in low for cue in _NEGATION_CUES)
+    for cue in _NEGATION_CUES:
+        start = low.find(cue)
+        while start != -1:
+            if not _is_negated(low, start):
+                return True
+            start = low.find(cue, start + 1)
+    return False
+
+
+def _is_negated(low: str, cue_start: int) -> bool:
+    """Is the cue at `cue_start` immediately preceded by a negator (→ it affirms)?"""
+    window = low[max(0, cue_start - _NEGATOR_WINDOW):cue_start]
+    return any(neg in window for neg in _NEGATORS)
+
+
+def _recent_turns(thread: Any, n: int = RECENT_TURNS_N) -> list[dict[str, str]]:
+    """The 'fallback' half of extract-then-judge (DS §Q1): the last `n` thread turns,
+    newest last, normalized to a compact `{speaker, role, text}`.
+
+    Input rows are `repository.read_thread` shape and already **chronological**
+    (`ORDER BY m.createdAt`), so `thread[-n:]` *is* "newest last". Tolerant by design —
+    `None` / non-list / malformed rows → `[]`; a guard must never crash a drive (the
+    offline stub path and non-agent steps legitimately carry no thread).
+    """
+    if not isinstance(thread, list):
+        return []
+    turns: list[dict[str, str]] = []
+    for row in thread[-n:]:
+        if not isinstance(row, Mapping):
+            continue
+        text = row.get("text")
+        if not isinstance(text, str) or not text:
+            continue
+        speaker = row.get("displayName") or row.get("authorId") or "member"
+        role = row.get("role") or "user"
+        turns.append({
+            "speaker": str(speaker), "role": str(role), "text": text[:TURN_TEXT_MAX],
+        })
+    return turns
 
 
 def _extract_understanding(step_output: str, ctx: dict[str, Any]) -> dict[str, Any]:

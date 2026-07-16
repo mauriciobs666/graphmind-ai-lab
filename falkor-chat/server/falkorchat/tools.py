@@ -25,6 +25,9 @@ Built-ins (§4):
     node runs), so the **executor** buffers the returned msgId and links after `_record`. The
     link is the deliberately **two-step, non-atomic** second query (§3/§9): the message is the
     durable artifact, a missing link is a diagnosable/retry-able gap, not a torn thread.
+    An unresolvable `mentions` id (the model reaching for a *display name* it saw in the
+    folded thread context) comes back as an `error:` string for the model to correct — a
+    hallucinated `@mention` must not end the run.
   * `graphrag_retrieve` (FR-5b) — embed the query via the injected `Embedder`, hit
     `services.hybrid_search`, then apply the DS-note **Q2** policy (distance cutoff τ, cap 5 /
     floor 1, **abstain** when nothing passes τ) — deliberately NOT the responder's raw-k=10
@@ -50,6 +53,7 @@ from typing import Any, Protocol
 
 from .config import CallContext
 from .embedding import Embedder
+from .services import UnknownMemberError
 
 # ── DS-note Q2 retrieval-to-context policy (calibration starting points, configurable) ──
 # `score` from `hybrid_search` is **cosine distance** (0 = identical, ASC). τ keeps seeds
@@ -211,9 +215,20 @@ class PostMessageTool:
             return "error: no thread is bound to this run; cannot post a message"
 
         agent_ctx = CallContext(ws=ctx.ws, actor=self._agent_id)
-        posted = self._services.post_agent_answer(
-            agent_ctx, thread_id=thread_id, text=text, mentions=mentions
-        )
+        try:
+            posted = self._services.post_agent_answer(
+                agent_ctx, thread_id=thread_id, text=text, mentions=mentions
+            )
+        except UnknownMemberError as exc:
+            # The node's prompt carries the thread transcript as `"{displayName}: {text}"`
+            # (executor `_assemble_messages`), so a model reliably reaches for the *name*
+            # it can see — `mentions:["alice"]` — while §4 resolves **member ids**. Turn
+            # that into an actionable refusal in the tool's own error dialect (like the
+            # no-thread case above) so the re-prompt is a correction, not a blind retry.
+            # The executor's tool-error net would also survive this generically; naming the
+            # id-vs-name confusion here is what actually gets the next turn right.
+            return (f"error: unknown member id(s) {exc}; `mentions` takes member ids, not "
+                    f"display names — retry with valid member ids or omit `mentions`")
         msg_id = posted["msgId"]
 
         # Return the posted msgId in the envelope; the executor buffers it and links

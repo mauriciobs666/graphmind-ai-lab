@@ -91,6 +91,14 @@ Respond exactly:
 {"decision": true|false, "rationale": "<one short sentence>"}
 ```
 
+> **Implemented (2026-07-15, K-022 U14):** this prompt — including the RECENT-TURNS fallback and its
+> omit rule — is built at `app._build_llm_judge` / `app._render_judge_user`, with the precedence and
+> the N=6 window at `guards._recent_turns` / `guards.evaluate_guard`. The fallback had been specified
+> here but **lost in implementation** (the judge was handed `{}` every turn and suspended forever):
+> this note's own **risk #4** materialized as **Defect A**, fixed per
+> [`m3-guard-thread-context.md`](m3-guard-thread-context.md). The *method* below was right and is
+> unchanged.
+
 - **Output schema:** `{"decision": bool, "rationale": str}`. Request JSON/structured output mode.
   **Do not** ask a 4B for a confidence score — its self-reported confidence is not calibrated and
   would be false precision. The bias rule below replaces it.
@@ -269,7 +277,7 @@ or a thrashing agent bounded — do **not** raise them to paper over a failing c
 
 | Layer | Metric | Data | Acceptance threshold |
 |---|---|---|---|
-| **Guard judge (Q1)** | accuracy, **Cohen's κ**, **false-advance rate** | `golden_guards.jsonl`, 20–30 hand-labeled `{understanding, turns, condition, expected}` | Wire live only if **κ ≥ 0.6 AND false-advance ≤ 10%**. Report confusion matrix. |
+| **Guard judge (Q1)** | ~~accuracy, **Cohen's κ**, **false-advance rate**~~ → **SUPERSEDED** | `golden_guards.jsonl` — authored at `server/tests/eval/golden_guards.jsonl` (26 cases) | ⚠️ **This row's gate (κ ≥ 0.6 AND false-advance ≤ 10%) is superseded by [`m3-guard-calibration.md`](m3-guard-calibration.md) §4.** κ is symmetric and this note's own Q1 bias-to-suspend decision makes the judge deliberately asymmetric; κ is retained as a **reported diagnostic**, and the gate is now **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**. The *intent* of risk #1 below — never wire an uncalibrated judge — is unchanged. |
 | **Retrieval (Q2, AC-3)** | **recall@5** (primary), recall@10, MRR | `golden_retrieval.jsonl` extended to the seeded triage corpus; paraphrased, human-verified | First run = baseline (record). AC-3: **recall@5 ≥ baseline**; no verbatim self-retrieval (assert). |
 | **Findings groundedness (Q2, AC-3)** | 3-point groundedness (grounded-when-relevant vs correctly-abstained) | ~15 seeded triage Q&A | Report as baseline; **judge–human agreement ≥ ~0.7** before trusting; human spot-check fallback. |
 | **Threshold τ tuning (Q2)** | recall@5 vs median seeds-fed | same retrieval golden set | τ accepted only if it **holds recall@5** while cutting median seeds-fed (drops noise, not signal). |
@@ -285,7 +293,8 @@ callable, so calibration runs against the real judge without touching executor c
 ## Risks & open questions
 
 1. **Judge calibration is the executor's reliability gate (highest).** If `golden_guards.jsonl` fails
-   κ ≥ 0.6 / false-advance ≤ 10%, the fuzzy guard is not trustworthy and the intake loop should not
+   the gate (**thresholds now per [`m3-guard-calibration.md`](m3-guard-calibration.md) §4/§7**, not the
+   κ figure once quoted here), the fuzzy guard is not trustworthy and the intake loop should not
    ship live on the 4B — escalate to a stronger judge model or more concrete guard `text`. Do not
    wire an uncalibrated judge and rely on `maxSteps` to hide it.
 2. **Seeded-corpus representativeness (inherited).** AC-3's retrieval metric is only as good as the

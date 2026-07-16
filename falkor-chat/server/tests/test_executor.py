@@ -34,7 +34,7 @@ class StubJudge:
         self._verdicts = list(verdicts)
         self.calls: list[str] = []
 
-    def __call__(self, condition, *, understanding, ctx, step_output):
+    def __call__(self, condition, *, understanding, recent_turns, ctx, step_output):
         self.calls.append(condition)
         decision = self._verdicts.pop(0) if self._verdicts else False
         return {"decision": decision, "rationale": f"stub verdict={decision}"}
@@ -302,6 +302,83 @@ def test_llm_guard_without_judge_fails_the_run_with_named_error(wf_repo):
     run = wf_repo.get_run("test", run_id="r1")
     assert run["status"] == "failed"
     assert "judge" in run["ctx"].lower()
+
+
+# ── Defect B — a failing tool must not kill the run (drive level) ─────────────
+
+class _FailingToolLLM:
+    """First turn: call `post_message` with a hallucinated displayName mention.
+    Every later turn: a plain final text (the model "recovers" after the re-prompt)."""
+
+    def __init__(self):
+        self.turns = 0
+
+    def chat(self, messages, tools):
+        from falkorchat.llm import ChatResult, ToolCall
+        self.turns += 1
+        if self.turns == 1:
+            return ChatResult(text="", tool_calls=[
+                ToolCall("c1", "post_message",
+                         {"text": "hello", "mentions": ["alice"]})])
+        return ChatResult(text="node answer")
+
+
+class _MentionRejectingRegistry:
+    """`post_message` rejects the hallucinated displayName mention, as the §4 write does."""
+
+    SCHEMA = {"type": "function",
+              "function": {"name": "post_message",
+                           "parameters": {"type": "object", "properties": {},
+                                          "required": []}}}
+
+    def schema(self, name):
+        return self.SCHEMA
+
+    def dispatch(self, name, arguments, *, ctx, run):
+        from falkorchat.services import UnknownMemberError
+        raise UnknownMemberError(["alice"])
+
+
+TOOL_STEPS = [
+    {"key": "answer", "type": "agent",
+     "config": '{"tools":["post_message"],"maxIterations":4}'},
+    {"key": "end", "type": "task", "config": "{}"},   # terminal, non-agent → stub
+]
+TOOL_TRANSITIONS = [
+    {"from": "answer", "to": "end", "on": "done", "guard": "", "order": 0},
+]
+
+
+def test_hallucinated_mention_does_not_fail_the_run(wf_repo):
+    # Defect B end-to-end through the real §2.1 drive loop: the model passes a
+    # displayName as a mention, the tool raises UnknownMemberError — the run must still
+    # reach `done`. Before the fix this propagated to the M-1 net → status `failed`.
+    _start_run(wf_repo, steps=TOOL_STEPS, transitions=TOOL_TRANSITIONS,
+               start_key="answer", trace=True)
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    tracer = GraphTracer(
+        wf_repo, id_gen=(lambda c=itertools.count(1): f"te{next(c)}"),
+        clock=(lambda c=itertools.count(9000): next(c)),
+    )
+    ex = WorkflowExecutor(
+        None, wf_repo, llm=_FailingToolLLM(),
+        tool_registry=_MentionRejectingRegistry(), guard_judge=StubJudge([]),
+        tracer=tracer, id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    run = wf_repo.get_run("test", run_id="r1")
+    assert run["status"] == "done"
+    # the step was recorded — and, because the node survived, its trace was NOT lost
+    # (the observability gap: _trace_step runs after _record, which never happened).
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert [s["stepKey"] for s in trail] == ["answer", "end"]
+    events = wf_repo.read_trace("test", run_id="r1")
+    assert any(e["kind"] == "tool_result" and e["payload"].startswith("ERROR:")
+               for e in events)
 
 
 def test_human_handoff_signal_suspends_the_run(wf_repo):

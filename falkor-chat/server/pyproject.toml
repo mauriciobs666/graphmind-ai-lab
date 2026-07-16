@@ -24,7 +24,14 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# `-m "not live"` DESELECTS the live-marked tests by default so the standard
+# `pytest` run stays network-free and fast even when LM Studio happens to be up
+# (a reachability-skip alone would not — it would run them). Opt in explicitly
+# with `pytest -m live`: a command-line `-m` overrides this one.
+addopts = '-ra -m "not live"'
+markers = [
+    "live: end-to-end test against a REAL LM Studio (+ FalkorDB); deselected by default, run with `pytest -m live` (see AGENTS.md)",
+]
 
 [tool.ruff]
 target-version = "py312"

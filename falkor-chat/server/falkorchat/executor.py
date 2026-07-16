@@ -49,6 +49,7 @@ from typing import Any, Protocol
 from .config import CallContext
 from .guards import GuardVerdict, evaluate_guard
 from .repository import Repository, WorkflowRunNotFoundError
+from .services import ServiceError
 from .tools import HumanHandoffSignal
 
 _log = logging.getLogger(__name__)
@@ -90,12 +91,19 @@ class StepResult:
     execution and drained by `_link_emissions` **after** the StepRun exists — the exact
     same deferred, stepRun-keyed lifecycle as `trace` (Option B, K-023). The tool no
     longer links inline (no `stepRunId` is resolvable at dispatch time); the executor
-    owns the `StepRun -[:PRODUCED]-> Message` audit link once `_record` has run."""
+    owns the `StepRun -[:PRODUCED]-> Message` audit link once `_record` has run.
+
+    `thread` is the recent thread window the node already read (`_read_thread_context`) —
+    carried out so the transition guard can judge against the live conversation (DS §Q1
+    RECENT-TURNS fallback) **without a second read** (m-C neutral). Empty for the offline
+    stub path and for non-agent steps; `evaluate_guard` then degrades to the
+    `understanding`-only path."""
 
     output: str = ""
     on: str = "done"
     trace: list[tuple[str, str]] = field(default_factory=list)
     emissions: list[str] = field(default_factory=list)
+    thread: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -206,8 +214,10 @@ class WorkflowExecutor:
       * `llm` / `tool_registry` — LLM tool-calling + node capabilities (later units;
         accepted here, unused offline).
       * `guard_judge` — the fuzzy-guard decision seam handed to `guards.evaluate_guard`
-        as `judge=`: a callable `(condition, *, understanding, ctx, step_output) ->
-        {decision, rationale}` (Q1 extract-then-judge). Only invoked for `{"kind":"llm"}`
+        as `judge=`: a callable `(condition, *, understanding, recent_turns, ctx,
+        step_output) -> {decision, rationale}` (Q1 extract-then-judge; `recent_turns` is
+        the DS RECENT-TURNS fallback, non-empty only when no `understanding` was
+        emitted — `guards` applies the omit rule). Only invoked for `{"kind":"llm"}`
         guards; the empty-string unconditional guard never calls it. `evaluate_guard`
         applies the bias-to-suspend policy on malformed/contradictory output.
       * `tracer` — the debug `GraphTracer` (or any `Tracer`); a `NullTracer` is used
@@ -289,7 +299,11 @@ class WorkflowExecutor:
             run pending a human (reusing the intake suspend/resume mechanics), return
             `waiting`. Caught **before** the generic net (it is an `Exception` subclass);
             defensive — the triage proof grants no `human_handoff`.
-          * any other exception → **fail, don't zombie.** Stamp `fail_run` with a diagnostic
+          * any other exception → **fail, don't zombie.** This net is for *engine* faults:
+            a **tool-level** failure (a `ServiceError` — the model's arguments rejected by
+            the domain) is absorbed at the node as a re-prompt (`_handle_tool_call`) and
+            never reaches here, so one bad tool argument cannot end a run. Stamp `fail_run`
+            with a diagnostic
             `ctx` note (the `_fail_budget` shape) then **re-raise** so `_safe_run_workflow`'s
             isolation logs the stack. The run ends `failed` with `AT_STEP` cleared —
             resumable-never, but no longer a permanent `running` orphan (m-3's named
@@ -404,6 +418,10 @@ class WorkflowExecutor:
         **AC-6 (defensive):** a call naming an *ungranted* tool is rejected by the dispatcher
         (not merely un-offered) and a *malformed* call (missing required args) is refused —
         both surface an error back to the model as a bounded re-prompt, **never a dispatch**.
+        A dispatched tool that **fails** on the model's arguments (a `ServiceError` — e.g. a
+        hallucinated `@mention`) is the third case of the same rule: the error goes back to
+        the model, it does not kill the run. Every one of those re-prompts costs an ordinary
+        iteration, so the cycle is bounded by `maxIterations` like any other turn.
         On `maxIterations` exhaustion the node terminates gracefully with its best current
         text + a trace note; it does **not** hard-fail the run (only `maxSteps` does, §7).
 
@@ -437,7 +455,8 @@ class WorkflowExecutor:
 
             if not result.is_tool_call:
                 return StepResult(output=result.text or "", on="done",
-                                  trace=trace, emissions=emissions)
+                                  trace=trace, emissions=emissions,
+                                  thread=thread_msgs)
 
             messages.append(_assistant_turn(result))
             for call in result.tool_calls:
@@ -453,7 +472,8 @@ class WorkflowExecutor:
             ("node_note", f"max iterations ({max_iter}) reached; terminating node "
                           f"with best current text")
         )
-        return StepResult(output=last_text, on="done", trace=trace, emissions=emissions)
+        return StepResult(output=last_text, on="done", trace=trace,
+                          emissions=emissions, thread=thread_msgs)
 
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
@@ -462,7 +482,10 @@ class WorkflowExecutor:
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
-        refuse) — both a bounded re-prompt, never a dispatch. A dispatch that posts a
+        refuse) — both a bounded re-prompt, never a dispatch. A *dispatched* tool that
+        fails with a `ServiceError` (the domain rejecting the model's arguments) takes that
+        same re-prompt path; an engine fault and `HumanHandoffSignal` still propagate (see
+        the `except` below). A dispatch that posts a
         message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
         onto `emissions` for post-record PRODUCED linking (Option B, K-023)."""
         if call.name not in granted_set:  # AC-6 defensive rejection
@@ -475,7 +498,25 @@ class WorkflowExecutor:
             return (f"error: call to {call.name} is missing required argument(s) "
                     f"{missing}; fix the arguments and retry")
         trace.append(("tool_call", f"{call.name}({_short(call.arguments)})"))
-        out = self._tools.dispatch(call.name, call.arguments, ctx=ctx, run=run)
+        try:
+            out = self._tools.dispatch(call.name, call.arguments, ctx=ctx, run=run)
+        except ServiceError as exc:
+            # A `ServiceError` is a **tool-level** failure — the model asked for something
+            # the domain rejected (an unknown mention, a missing thread). That is a bad
+            # *argument*, exactly like the ungranted/malformed cases above, so it takes the
+            # same bounded re-prompt: hand the error to the model and let it correct itself.
+            # It is deliberately NOT a blanket `except Exception`:
+            #   * an engine fault (a driver/`Repository`/programming error) still propagates
+            #     to the M-1 fault net in `_drive` → `fail_run` — telling a model to "retry"
+            #     a broken database would burn the budget and hide a real bug; and
+            #   * `HumanHandoffSignal` is **control flow** raised *through* `dispatch`
+            #     (§2.4) and must reach `_drive`'s suspend path — swallowing it here would
+            #     silently break the handoff contract.
+            # The re-prompt is bounded by `maxIterations` like any other turn (§7): a model
+            # that keeps failing exhausts the node gracefully, it never spins.
+            trace.append(("tool_result", f"ERROR: {type(exc).__name__}: {exc}"))
+            return (f"error: {call.name} failed: {type(exc).__name__}: {exc}; "
+                    f"fix the arguments and retry, or continue without this tool")
         trace.append(("tool_result", _short(out)))
         content = out if isinstance(out, str) else str(out)
         self._buffer_emission(content, emissions)
@@ -563,7 +604,7 @@ class WorkflowExecutor:
             guard = tr["guard"]
             verdict = evaluate_guard(
                 guard, ctx=run_ctx, run=run, step_output=result.output,
-                thread=None, judge=self._guard_judge,
+                thread=result.thread, judge=self._guard_judge,
             )
             parsed = _load_json_obj(guard)
             if parsed.get("kind") == "llm":

@@ -203,7 +203,7 @@ def test_workflow_wiring_is_gated_on_workflow_enabled(monkeypatch):
 
 def test_build_llm_judge_parses_a_json_verdict():
     """The production judge matches the injected shape `(condition, *, understanding,
-    ctx, step_output) -> {decision, rationale}` and parses the LLM's JSON verdict."""
+    recent_turns, ctx, step_output) -> {decision, rationale}` and parses the JSON verdict."""
     from falkorchat.app import _build_llm_judge
 
     class StubLLM:
@@ -218,7 +218,10 @@ def test_build_llm_judge_parses_a_json_verdict():
     llm = StubLLM('{"decision": true, "rationale": "all fields present"}')
     judge = _build_llm_judge(llm)
 
-    verdict = judge("enough info?", understanding={"missing": []}, ctx={}, step_output="")
+    verdict = judge(
+        "enough info?", understanding={"missing": []}, recent_turns=[],
+        ctx={}, step_output="",
+    )
 
     assert verdict["decision"] is True
     assert "present" in verdict["rationale"]
@@ -233,7 +236,7 @@ def test_build_llm_judge_biases_to_suspend_on_unparseable_output():
             return "I think it is probably fine"      # not JSON
 
     verdict = _build_llm_judge(StubLLM())(
-        "enough info?", understanding={}, ctx={}, step_output=""
+        "enough info?", understanding={}, recent_turns=[], ctx={}, step_output=""
     )
     # a non-parseable verdict must not advance — guards._coerce_verdict then holds
     assert verdict["decision"] is False
@@ -256,3 +259,67 @@ def test_web_ui_served_at_root_without_shadowing_rest(tmp_path, conn):
         assert "falkor-chat" in root.text
         # the catch-all static mount must not shadow the REST API
         assert c.get("/channels").status_code == 200
+
+
+# ── the DS §Q1 judge prompt: CONDITION / CURRENT STATE / RECENT TURNS ─────────
+#
+# The judge prompt had no RECENT TURNS block at all — so even once `guards` selected the
+# fallback tier, the evidence had nowhere to land (Defect A's third link). These pin the
+# rendering; the omit rule itself is `guards`' job and is pinned in test_guards.py.
+
+def _turns(n, *, text=None):
+    return [
+        {"speaker": f"Alice{i}", "role": "user", "text": text or f"turn {i}"}
+        for i in range(n)
+    ]
+
+
+def test_judge_prompt_renders_recent_turns_newest_last():
+    # T10 — the block exists, is labelled context-only, and preserves chronology.
+    from falkorchat.app import _render_judge_user
+
+    user = _render_judge_user("enough info?", {}, _turns(3))
+
+    assert "CONDITION: enough info?" in user
+    assert "RECENT TURNS (context only):" in user
+    assert "Alice0: turn 0" in user
+    assert user.index("turn 0") < user.index("turn 2")   # newest last
+    assert "CURRENT STATE" not in user                   # nothing to render
+
+
+def test_judge_prompt_omits_recent_turns_when_an_understanding_is_present():
+    # T11 — the renderer is a dumb renderer: handed no turns, it emits no block.
+    from falkorchat.app import _render_judge_user
+
+    user = _render_judge_user("enough info?", {"request": "reset password"}, [])
+
+    assert "RECENT TURNS" not in user
+    assert "CURRENT STATE:" in user
+    assert "reset password" in user
+
+
+def test_judge_prompt_is_capped_by_dropping_the_oldest_turns_first():
+    # T12 — the newest turn is the one the condition is usually about; it must survive
+    # the cap. Oldest-first eviction, then a hard truncation backstop.
+    from falkorchat.app import JUDGE_USER_MAX_CHARS, _render_judge_user
+
+    turns = [
+        {"speaker": f"S{i:02d}", "role": "user", "text": "x" * 400}
+        for i in range(50)
+    ]
+    user = _render_judge_user("enough info?", {}, turns)
+
+    assert len(user) <= JUDGE_USER_MAX_CHARS
+    assert "S49:" in user      # the newest turn survives the cap
+    assert "S00:" not in user  # the oldest was evicted first
+
+
+def test_judge_prompt_survives_a_condition_with_no_evidence_at_all():
+    # The degenerate case must still be a well-formed prompt, not a crash: the judge
+    # then correctly biases to suspend (that behavior is Defect A's *symptom*, and is
+    # the right answer when there genuinely is no evidence).
+    from falkorchat.app import _render_judge_user
+
+    user = _render_judge_user("enough info?", {}, [])
+
+    assert user == "CONDITION: enough info?"

@@ -142,11 +142,11 @@ duplication is what lets the copies drift. The invariants that govern those quer
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
-| `./scripts/test_queries.sh` | End-to-end test suite against the live instance. Must pass before any schema change is committed. |
+| `./scripts/test_queries.sh` | End-to-end test suite against the live instance. Must pass before any schema change is committed. **⚠️ Deletes the global `reference` graph at teardown** — that wipes the published `triage@v1` def (the `ws:<id>` snapshot survives), so `@mention`-to-start silently no-ops afterwards. **Re-run `./scripts/seed_workflows.sh <wsId>` after this suite** before exercising a workflow flow. (`start_server.sh` self-heals — it seeds on every start.) |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
 | `./scripts/load_test.sh` | K-011 M1 DoD closeout harness: load-tests the REST append path (`scripts/load_append.py`), `GRAPH.PROFILE`s the four hot reads, and captures a per-workspace RAM delta — all against an isolated throwaway `ws:load` (torn down at the end unless `KEEP_WS=1`). Results folded into DESIGN §11.1–§11.2. Env: `LOAD_MESSAGES`/`LOAD_WORKERS`/`SERVER_PORT`. Needs FalkorDB up + the `server/.venv`. |
 | `./scripts/seed_demo.sh [<wsId>]` | K-014 M2 demo seed: registers the AI **Agent** (`FALKORCHAT_AGENT_ID`, default `assistant`) + a demo `Channel`/`Thread` (fixed ids → MERGE, backed by the uniqueness constraints) + `MEMBER_OF` edges, so a human can open the web UI and `@mention` the agent. Idempotent. `start_server.sh` runs it automatically. Run `bootstrap_schema.sh` first. |
-| `./scripts/seed_workflows.sh [<wsId>]` | K-022 M3 U13: publishes + materializes the **triage** proof workflow def (`triage@v1`, kind `conversation`, intake→research→answer `type:'agent'` steps per `docs/plans/m3-executor.md` §8) into `reference` + `ws:<id>`. Wraps a Python one-shot over the **service layer** (`publish_workflow_def`+`materialize_def` — real validation/start-key derivation, not raw Cypher). Additive-only, idempotent (MERGE on the fixed `key`/`version`; key/version must match `config.TRIGGER_DEF_KEY`/`TRIGGER_DEF_VERSION`). Run **after** `bootstrap_schema.sh` + `seed_demo.sh`. `start_server.sh` runs it when `FALKORCHAT_WORKFLOW_ENABLED` is on (its default there). |
+| `./scripts/seed_workflows.sh [<wsId>]` | K-022 M3 U13: publishes + materializes the **triage** proof workflow def (`triage@v1`, kind `conversation`, intake→research→answer `type:'agent'` steps per `docs/plans/m3-executor.md` §8) into `reference` + `ws:<id>`. Wraps a Python one-shot over the **service layer** (`publish_workflow_def`+`materialize_def` — real validation/start-key derivation, not raw Cypher). Additive-only, idempotent (MERGE on the fixed `key`/`version`; key/version must match `config.TRIGGER_DEF_KEY`/`TRIGGER_DEF_VERSION`). Run **after** `bootstrap_schema.sh` + `seed_demo.sh`. `start_server.sh` runs it when `FALKORCHAT_WORKFLOW_ENABLED` is on (its default there). **Re-run it after `test_queries.sh`** — that suite drops `reference`, taking the def with it. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
@@ -159,7 +159,8 @@ The M1 app (FastAPI REST + MCP Streamable-HTTP + static web UI on one process) l
 ```bash
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
-.venv/bin/python -m pytest -q                                # needs FalkorDB up
+.venv/bin/python -m pytest -q                                # needs FalkorDB up; network-free
+.venv/bin/python -m pytest -m live -s                        # opt-in live e2e — needs LM Studio too
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
@@ -172,7 +173,21 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
   (`QUERIES.md` §5, workspace-wide — the channel-scoping MATCH is omitted).
 - Repository/services tests run against the isolated `ws:test` graph (same approach as
   `test_queries.sh`); the `conftest` fixture bootstraps schema + wipes node data per test.
+  **`ws:test` vector indexes are dim 4** (`conftest.TEST_EMBEDDING_DIM`) — never use it for a
+  real-embedder test: a wrong-dim `vecf32` write is silently accepted and then drops out of ANN,
+  so the retrieval passes while finding nothing.
 - MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.
+- **The `live` pytest marker (K-022 U14):** tests needing a **real LM Studio** are marked
+  `@pytest.mark.live` and **deselected by default** (`addopts = -ra -m "not live"` in
+  `server/pyproject.toml`), so the standard `pytest` baseline stays network-free and fast *even
+  when LM Studio is running* — a reachability-skip alone would not do that. Opt in with
+  `pytest -m live` (a command-line `-m` overrides the addopts one). Live tests still skip with a
+  reason when a dep is unreachable, so they never fail for environmental reasons.
+  `tests/test_workflow_live.py` is the triage-flow e2e (AC-1…AC-4): it needs FalkorDB **and** LM
+  Studio (chat + embedding model) at `:1234`, and builds its own throwaway **`ws:live`** graph
+  bootstrapped at the **probed** live embedding dim (never hardcoded 1024 — the loaded model
+  decides), seeding the real def via `scripts/seed_workflows.sh` rather than a copy that could
+  drift. `KEEP_WS=1` keeps the graph for post-mortem inspection.
 - **Live AI agent loop (K-014, gated):** `app.py` builds the module-level `app` via
   `_build_default_app()`, which wires the real `LMStudioEmbedder` + `EmbeddingWorker` +
   `LMStudioLLM` + `AgentResponder` **only when `FALKORCHAT_ENABLE_AGENT` is truthy** — off by

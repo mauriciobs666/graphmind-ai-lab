@@ -337,6 +337,295 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
   - **▶ NEXT: U14 (tdd-engineer)** — marker-gated live e2e over AC-1…AC-4. Then U15 (qa-engineer,
     K-025), then the doc rollup (HISTORY/BACKLOG + m-A/n-1 + m-B + this gotcha).
 
+- 2026-07-15 — **U14 ⚠️ DELIVERED RED (tdd-engineer) — the live triage flow does NOT reach `done`.**
+  `server/tests/test_workflow_live.py` (new, `live`-marked e2e over AC-1…AC-4) + `live` marker
+  registered in `server/pyproject.toml` + AGENTS.md doc updates. **teco re-verified: default pytest
+  **312 passed, 1 deselected** (baseline exactly held); gating is `addopts = -ra -m "not live"` —
+  a real deselect, not just a reachability skip (LM Studio *is* up, so a skip alone would have let
+  the live test run on every default `pytest`). Query suite untouched by design — **zero**
+  graph/DDL/QUERIES change (confirmed: no `QUERIES.md`/`DESIGN.md`/`bootstrap_schema.sh` in the diff),
+  so **241/241** stands from the recovery run. The test is **deliberately RED** — it pins two real
+  defects; the engine was correctly **not** touched (constraint #3 honored).
+  - **Defect A — the intake→research guard can NEVER fire (structural, not prompt calibration).**
+    **teco verified in source:** `executor.py:566` passes `thread=None`; `guards.py` declares
+    `thread: Any` (line 74) and **never uses it**; `_extract_understanding` (line 135) reads only
+    `step_output`-as-JSON and `ctx["understanding"]`, falling back to `{}`. In the shipped flow both
+    are guaranteed empty — the intake `systemPrompt` (plan §8, seeded verbatim) never asks for an
+    `understanding` object, and the executor never writes `ctx` back (known **m-2**). The DS note's
+    prescribed **RECENT-TURNS fallback (N=6) does not exist**; `_build_llm_judge` sends only
+    CONDITION+UNDERSTANDING. Live evidence: judge rationale *"The user has not provided any
+    information to research their request"* on the very turn the node said *"Thank you for providing
+    all the details, Alice"* — the fingerprint of an empty understanding, not a rich transcript.
+    Observed 4× `intake`, every judgment `False`. **The DS note's own risk #4 predicted this.**
+    **⇒ AC-2b, AC-3, AC-4 are unreachable live. U15 cannot pass until this is fixed.**
+  - **Defect B — a hallucinated `@mention` fails the whole run.** **teco verified in source:**
+    `executor.py:478` dispatches with **no `try/except`**, so any tool error propagates to the M-1
+    net → `fail_run`; `tools.py:208` forwards `mentions` **unvalidated** → `UnknownMemberError(['alice'])`.
+    Cause: `_assemble_messages` folds thread turns in as `f"{speaker}: {text}"`, so the model sees
+    `Alice: …` and mentions her. **Irony: the U11.3 thread-context feature added *for* AC-2 induces
+    this.** Reproduced 2 of 3 runs. **Side effect — observability gap:** the failing step's trace is
+    lost (`_trace_step` runs after `_record`, which never happens) exactly when it's most needed.
+  - **Test-design calls (teco concurs):** throwaway **`ws:live`** at the **probed** embedding dim —
+    `ws:test` is **dim 4**, where a real 1024-dim vector is silently accepted then drops out of ANN,
+    so AC-3 would have "passed" while retrieving nothing (trap now documented). Test drives the real
+    `seed_workflows.sh` rather than a copied def, so it tracks what ships. Left **RED, not `xfail`ed**
+    — the red is the regression guard for the fix.
+  - **⏸️ PAUSED FOR USER DECISION — Defects A+B are new work beyond U14/U15's scope.** Neither is the
+    tdd-engineer's to fix under the locked-code constraint. Routing options put to the user; U15
+    (qa-engineer) is **blocked on Defect A** and not dispatched.
+
+- 2026-07-15 — **Defect-A design ✅ (architect)** → `docs/plans/m3-guard-thread-context.md`. Verdict:
+  **structural defect (a declared seam no callee honors), localized fix** — ~40 lines, additive, **zero
+  graph/DDL/QUERIES change, no graph-dba gate**, and `_drive_loop` **not edited at all** (the §2.1 lock
+  satisfied by construction). Design: the thread turns `_run_agent_node` **already reads**
+  (`executor.py:422`) ride out on a new `StepResult.thread` → `_select_transition` passes
+  `thread=result.thread` (the one-line fix at :566) → `guards._recent_turns(thread, n=6)` with the DS
+  precedence (**understanding primary; turns only when empty**) → `_build_llm_judge` renders the real
+  §Q1 prompt. Having the guard read the thread itself was **rejected**: it would edit the locked loop's
+  call line *and* double reads/step (m-C worse). Riding the existing read = **zero extra reads, m-C
+  neutral**. Positions: **m-2 not fixed** (unnecessary — `step_output` is fresh in the same loop
+  iteration, incl. across resume; fixing it would re-open the graph-dba gate for zero benefit);
+  **m-C not fixed** (neutral by construction, inherits its eventual fix free).
+  - **R-1 (highest risk, teco-verified):** `guards.py:132` substring-matches `_NEGATION_CUES`, which
+    includes **`"more info"`** (line 39). A transcript-fed judge writes wordier rationales — *"…no more
+    info is needed"* trips the cue → **forced suspend on a correct advance, looking IDENTICAL to Defect
+    A**. The plan carries a rationale×expected contract table to drive minimal cue tightening.
+  - **R-3 (sequencing):** the live test **cannot** go green on the Defect-A fix alone while Defect B
+    reproduces — this fix is precisely what first drives the flow through B's unguarded `dispatch`.
+    **Land B first.** (B is in flight with tdd-engineer.)
+  - **OQ-2 — def-prompt change:** architect recommends it as a **genuine complement, landed SECOND**
+    (after S1–S4 is live-verified alone): the seam fix alone leaves the shipped def permanently on the
+    DS's **degraded fallback** path; the def prompt is what reaches the **primary** extract-then-judge
+    path. Sequencing it second keeps "green for the right reason" attributable. Blast radius nil.
+  - **OQ-4 — ⚠️ THE JUDGE IS WIRED LIVE UNCALIBRATED (teco-verified).** `server/tests/eval/
+    golden_guards.jsonl` **does not exist** (nothing matches `golden*` in the repo). The DS note §272
+    is explicit: *"Wire live only if **κ ≥ 0.6 AND false-advance ≤ 10%**"* and calls it "the executor's
+    reliability gate". **Stakeholder decision — not the implementer's.**
+  - **OQ-5 — ⚠️ NEW FINDING: the `answer` node never sees the research findings (teco-verified).**
+    Findings live only in `StepRun.output`, which **nothing reads** (`executor.py` uses `result.output`
+    only for the *current* step's guard :565, its own StepRun :589, trace :628 — never a *prior* step's);
+    research posts nothing to the thread; `r.ctx` is only `SET` in `fail_run` (`repository.py:1217`),
+    never on success (m-2). **⇒ AC-4 can pass STRUCTURALLY while being ungrounded in substance** — the
+    live test asserts a `PRODUCED` reply, not its provenance. A real fix needs the m-2 ctx-write
+    ⇒ **graph-dba gate**. Out of scope for the Defect-A patch; flagged so U15 judges AC-4 with eyes open.
+  - **Review-gate posture (justified trim, stated explicitly):** no separate analyst *plan* review for
+    this patch — it is a localized additive ~40-line fix whose every claim the architect verified in
+    source and teco spot-verified independently (R-1, OQ-4, OQ-5 all confirmed). **The analyst
+    impl-review gate remains NON-NEGOTIABLE**, and R-1 is exactly the class of silent failure it exists
+    to catch.
+  - **⏸️ PAUSED — OQ-4 + OQ-5 are stakeholder decisions put to the user.** Defect-A implementation not
+    dispatched pending them (and pending Defect B landing first, per R-3). U15 still blocked.
+
+## Locked decisions — round 2 (from the user, 2026-07-15)
+- **D6 — OQ-4 = build the golden set (option a).** The DS reliability gate is **honored, not waived**:
+  `server/tests/eval/golden_guards.jsonl` (20–30 hand-labeled cases) is built and the judge is wired
+  live **only if κ ≥ 0.6 AND false-advance ≤ 10%** (DS note §272). Rationale: calibration is cheap
+  relative to the credibility of every guard verdict, and the DS note's track record here is good — it
+  **predicted Defect A** (its risk #4). Owner split: **data-scientist authors the golden set + the
+  calibration protocol** (method/labeling = judgment); **tdd-engineer implements the eval harness** and
+  runs it (DS is advisory, never implements). Calibration runs **after** the Defect-A fix — the judge
+  prompt changes (gains the RECENT TURNS block), so calibrating the current judge would measure a
+  prompt that is about to be replaced.
+- **D7 — OQ-5 = accept for the proof, document the limitation (option b).** The `answer` node not
+  seeing the research findings is a **scope** question, not a correctness trap. **AC-4 is
+  STRUCTURAL-ONLY** for this cut — the live test asserts a `PRODUCED` reply, not its provenance. This
+  must be **explicit in U15's brief and its test report**, and carried as a follow-up (needs the m-2
+  ctx-write ⇒ graph-dba gate). The triage flow demos green while the middle step is, in substance,
+  decorative — say so plainly rather than let AC-4 imply more than it proves.
+- **D8 — OQ-2 = def-prompt change lands SECOND**, as the architect recommended: after the S1–S4 seam
+  fix is live-verified **alone**. The seam fix alone leaves the shipped def on the DS's *degraded*
+  fallback path; the def prompt reaches the *primary* extract-then-judge path. Sequencing it second is
+  what keeps "green for the right reason" attributable to a single change.
+
+- 2026-07-15 — **D6/D7/D8 locked; DS golden-set authoring dispatched** (parallel with Defect B, which
+  is still in flight — the two share no files). Remaining chain, order forced by R-3: **Defect B →
+  Defect A impl (S1–S4) → live-verify alone → def-prompt (D8) → eval harness + calibration run (D6) →
+  analyst impl gate → U15 (AC-4 structural-only per D7) → doc rollup.**
+
+- 2026-07-15 — **Defect B ✅ FIXED (tdd-engineer).** Reproduction tests first (7 new, each confirmed RED
+  for the right reason before the fix). Localized: two `try/except`, **no new mechanism**.
+  `executor._handle_tool_call:492` — `except ServiceError` around `dispatch` → trace + `return
+  "error: …"`, the **exact existing convention** for ungranted/malformed calls; `tools.PostMessageTool.run`
+  catches `UnknownMemberError` → an error string naming the **id-vs-display-name** confusion (a generic
+  error is a blind retry; a specific one lets the model *fix* it). Both, deliberately: the executor catch
+  is the survival property, the tool catch is the corrective signal. Pre-flight mention validation
+  **rejected** — `services._validate_and_derive_role` already resolves mentions; validating in the tool
+  would duplicate that graph read to prevent an error the write reports anyway.
+  - **teco re-verified the safety-critical claims IN SOURCE (not taken on trust) — the class hierarchy
+    makes the fix structurally safe:** `services.py:58` `ServiceError(Exception)` → `services.py:70`
+    `UnknownMemberError(ServiceError)` is **caught**; `tools.py:308` **`HumanHandoffSignal(Exception)`
+    is NOT a `ServiceError`**, so it cannot be swallowed and still reaches suspend; the catch at :492 is
+    **narrow, never blanket** (its own comment at :497 says so); the **M-1 net at :306/:311 is intact**.
+    All three proved by the agent's tests *through dispatch*, not asserted. pytest **312→319** (+7);
+    query **241/241** (zero graph/DDL/QUERIES change); ruff clean; imports network-free. The `live` test
+    stays deselected and **still RED — Defect A untouched, exactly as briefed.**
+  - **Judgment calls (teco concurs):** dropped its own `tool_error` trace kind — it would force a QUERIES
+    §12.10 enum change ⇒ re-opening the graph-dba gate; reused the established kind+marker convention
+    (`tool_result` / `ERROR: …`) instead. **Trace loss fixed for this path** (node survives → `_record`
+    runs → trace emitted; asserted in the graph), **deferred in general** (an engine fault still loses its
+    trace — needs the locked `_record`/`_trace_step` ordering changed; correctly **not forced**). Docs:
+    `m3-executor.md` §2.2 step 3 amended with the tool-error rule + its narrow boundary; `AGENTS.md`
+    needed nothing (it never described tool-error semantics — correct call, not an omission).
+  - **Rejected alternative (flagged for the record):** having `post_message` silently **drop** unknown
+    mentions and post anyway — recovers in zero extra iterations but discards model intent and hides the
+    bug. Available if we ever want that trade.
+  - **Learnings inbox filed ✅** (teco confirmed): `materialize_snapshot` with `transitions=[]` raises
+    `IndexError` at the caller — an **unguarded empty-`UNWIND` collapse**, a *second* instance of the
+    quirk `AGENTS.md` documents only for the mentions write-block. Durable; for cobb to promote.
+  - **R-3 now satisfied → Defect A implementation unblocked and dispatched (S1–S4).**
+
+- 2026-07-15/16 — ⚠️ **Both parallel agents cut off by a provider session limit.** teco established the
+  real on-disk state (did **not** trust the abort summaries):
+  - **Defect A impl — PARTIAL, tree left RED.** The agent wrote its **Step-1 RED tests**
+    (`test_guards.py`, incl. the R-1 cue contract) and was cut off **before implementing the fix**.
+    `executor.py:596` still reads `thread=None` (line moved 566→596 by the Defect-B fix). **pytest is
+    27 failed / 314 passed / 1 deselected.** This is **mid-TDD, not corruption** — the RED tests are
+    correct-by-design and awaiting their fix. **Do not "repair" the baseline by deleting them.**
+  - **DS golden set — NOTHING DURABLE.** No `server/tests/eval/` dir, no `golden_guards.jsonl`, no
+    calibration doc. Its work existed only in context. Its last signal is a **real methodological
+    finding worth preserving**: *"the FAR arm behaves very differently from κ … re-run under the
+    judge's actual designed operating point — **bias-to-suspend** — since symmetric accuracy is the
+    wrong model here."* That is exactly the kind of insight a fresh dispatch would lose.
+  - **Recovery = resume both via SendMessage (context intact), not fresh dispatch.** Differs from the
+    Landing-1 precedent (D2a/D4a were re-dispatched fresh) — **because those had made no edits**. Here
+    one agent has half-written RED tests on disk and the other holds unsaved analysis; a cold agent
+    would misread the RED tree as breakage and the DS insight would be lost outright.
+  - **Coordination learning:** a session-limit abort is **not** uniformly "no edits made". Check the
+    tree before choosing resume-vs-redispatch; the right call depends on what actually landed.
+
+- 2026-07-16 — **D6 golden set ✅ (data-scientist, resumed).** Deliverables **teco-verified on disk**:
+  `server/tests/eval/golden_guards.jsonl` (**26 cases**; schema richer than §272 — adds `tier`/`path`/
+  `r1_probe`), `docs/plans/m3-guard-calibration.md` (the protocol), and `m3-executor-ml.md` §272/risk-#1
+  **struck through + marked SUPERSEDED with bidirectional links** (teco read the row). No source touched.
+  Separate doc rather than rewriting the note: *"a note that predicted Defect A shouldn't be silently
+  rewritten — better to state the disagreement explicitly."* **teco concurs.**
+  - **⚠️ THE APPROVED GATE WAS THE WRONG INSTRUMENT — D6's thresholds are superseded (needs user
+    ratification).** The resumed FAR-vs-κ finding (preserved from the pre-cutoff context — it would have
+    been lost in a cold restart) is **structural, and the killer argument is unanswerable: an
+    always-suspend judge scores a PERFECT 0% FAR.** FAR is a function of specificity only; `_coerce_verdict`
+    pins specificity near its ceiling **by design**, so at the designed operating point **FAR is nearly
+    information-free and κ is covertly doing an advance-recall gate's job** — noisily, and contaminated by
+    case-mix (same judge: E[κ] 0.70 at 11/10, 0.55 at 18/3). **The gate contradicted the design it was
+    written to protect**: the note's own Q1 bias-to-suspend decision made the raters asymmetric *two
+    sections before* it reached for a symmetric metric. **Instrument bug, not a reason to distrust the
+    note — risk #1's intent (never wire an uncalibrated judge) is preserved intact.**
+  - **Replacement gate (§4):** **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ demoted to a
+    reported diagnostic-with-marginals. Advance-recall is a **safety** arm, not a usefulness one — a judge
+    that won't advance burns the 3-round ceiling and then **force-advances with no judgment applied**,
+    which is the exact harm FAR exists to prevent. **Gate failure ⇒ block the wiring, no override, no
+    compensating with `maxSteps`. κ < 0.6 with both gates passing ⇒ do NOT block** (the behavioral change).
+  - **Sample-size honesty (unprompted, and the mark of a trustworthy deliverable):** **26 cases CANNOT
+    support a κ ≥ 0.6 claim** — observed κ=0.6 at N=21 has 95% CI ≈ **[0.24, 0.90]**; a true-0.85 judge
+    fails 20% of the time; a judge exactly at true κ=0.60 passes **59% — a coin flip on the gate's own
+    boundary**. The *kept* arm is no better: 0/10 perfect on FAR still yields **[0%, 27.8%]**; bounding
+    true FAR ≤10% needs ~30 suspend cases at zero failures (**~50–60 total**). Replicates don't rescue it
+    (repeated measures on the same inputs). **⇒ D6 is right but under-specified about the DIRECTION of
+    inference: its *rejection* power is real (a true-0.5 judge fails advance-recall 97% of the time) —
+    that IS the decision D6 needs — but PASS ⇏ CALIBRATED**, only "no blocker found at a sample size that
+    could only have found a large one." Made **structural, not a matter of the reader's care**: §8 requires
+    that caveat **verbatim next to the verdict line**.
+  - **Case mix:** 21 gated (11 advance / 10 suspend ≈52/48) + **5 boundary cases reported-not-gated**
+    (all 26 labels are the DS's own — boundary cases excluded from both gates precisely to avoid gating on
+    one labeler's policy preferences). 15 understanding-fed / 7 turns-only, with `ca-01/tn-01` + `ca-02/tn-02`
+    as deliberate **near-pairs carrying identical evidence through both paths — the delta IS the
+    fallback-cost estimate for risk #4**. Load-bearing: `cs-04` (`missing:[]` but vacuous) vs `ca-04/05/08`
+    (`missing` non-empty but immaterial) jointly detect **a judge reading `len(missing)` instead of assessing
+    sufficiency — the one failure mode that passes both gates**. `tn-05` catches the judge crediting its own
+    unanswered clarifying question.
+  - **R-1 finding (teco-verified):** R-1 is **already owned deterministically** by `test_guards.py:279+`
+    (pins both directions incl. the exact `"no more info is needed"` string). **The golden set is NOT the
+    R-1 detector** — its distinct job is live incidence via a **coercion-flip rate** (raw vs. coerced
+    decision — the only thing distinguishing R-1 from Defect A from outside). Honest limit stated:
+    fixtures can't force rationale wording, so a **zero flip rate is weak evidence**.
+  - **Schema finds:** §272's schema **cannot** be splatted into `evaluate_guard` — the real signature takes
+    no `understanding`/`turns`, it **derives** them; the harness must synthesize `step_output`/`ctx`/`thread`
+    (better — runs the real precedence + coercion). §104 and §272 **disagree on field names** — flagged and
+    chosen, not silently picked. **`authorType` is `labels(author)` → a LIST, not a string** (plan prose says
+    otherwise) — inbox-filed with the κ finding.
+  - **Couldn't measure (stated):** the live judge (fix in flight — *every number is a simulated property of
+    the metric, not a measurement of the judge*); self-preference (same 4B emitting **and** judging);
+    inter-human agreement on the 5 boundary labels. **"Nobody should compute a headline accuracy over all
+    26 — it would gate on my policy preferences."**
+  - **⏸️ NEEDS USER RATIFICATION: D6's gate thresholds change** (κ≥0.6 ∧ FAR≤10% → **FAR≤10% ∧
+    advance-recall≥0.80**), and "pass" is **weak evidence** at N=26 (~50–60 needed for a real bound).
+
+## Locked decisions — round 3 (from the user, 2026-07-16)
+- **D9 — the superseded gate is RATIFIED.** D6's thresholds are replaced by
+  **`m3-guard-calibration.md` §4: false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ is a
+  **reported diagnostic**, not a gate — **κ < 0.6 with both arms passing does NOT block**. Gate failure
+  ⇒ **block the wiring**, no override, no compensating with `maxSteps`. Rationale accepted as decisive:
+  **an always-suspend judge scores a perfect 0% FAR**, so the old gate could be passed by a judge that
+  never advances — it contradicted the bias-to-suspend design it was written to protect. Risk #1's
+  intent (never wire an uncalibrated judge) is **unchanged**; this is an instrument fix, not a waiver.
+- **D10 — this cut's calibration is a SCREEN, not a certification (accepted with eyes open).** At N=26,
+  **pass ⇏ calibrated** — it means *"no blocker found at a sample size that could only have found a
+  large one."* The gate's **rejection** power is what we're buying (a true-0.5 judge fails advance-recall
+  97% of the time). The §8 verbatim caveat next to the verdict line is **mandatory and must survive to
+  the U15 test report** — it is not editorial garnish.
+- **D11 — golden-set expansion to ~50–60 cases is a FOLLOW-UP, not a U15 blocker.** Logged for the
+  backlog (a real FAR ≤ 10% bound needs ~30 suspend cases at zero failures). Known limit carried with
+  it: **all labels are one labeler's** — expansion should add a second labeler for the boundary tier,
+  or it buys precision without buying independence.
+
+- 2026-07-16 — **D9/D10/D11 locked.** Eval-harness implementation (tdd-engineer, against the DS §4/§7
+  protocol) **deliberately NOT dispatched yet** — it must run against the **fixed** judge, and the
+  Defect-A agent is still live in `guards.py`/`executor.py`/`app.py`. Sequencing holds: **Defect A
+  live-verified alone → def-prompt (D8) → eval harness + calibration run (D9/D10) → analyst impl gate
+  → U15 (AC-4 structural-only per D7) → doc rollup.**
+
+- 2026-07-16 — **Defect A ✅ FIXED + live-verified alone (tdd-engineer, resumed). DEFECT A IS DEAD.**
+  **teco re-verified:** pytest **348 passed, 1 deselected** (RED 27→0; baseline 319 **+29 pins**);
+  `guards.py:136` `recent_turns = [] if understanding else _recent_turns(thread)` — the DS precedence
+  (**understanding primary; turns only when empty**) exactly; `executor.py:607` `thread=result.thread`
+  — the one-line seam fix; **query 241/241 with ZERO graph change** (teco confirmed `QUERIES.md`/
+  `DESIGN.md`/`bootstrap_schema.sh`/`seed_workflows.sh` have **no diff** — D8 held, no graph-dba gate).
+  Imports network-free (proved with `FALKORDB_HOST=10.255.255.1`). **Locked loop:** agent
+  **AST-extracted `_drive_loop` and compared byte-for-byte to HEAD (2839b → 2839b)** — *not* inferred
+  from hunk ranges; `record_step_and_advance` untouched; Defect-B's hunks undisturbed. ⚠️ **teco
+  confirmed `executor.py` changed (+50/-9) but did NOT independently re-verify the `_drive_loop`
+  byte-identity — the analyst impl gate must confirm it.**
+  - **Live: the flow REACHES `done` and the judge reasons from real evidence.** Every run:
+    `intake → intake → research → answer`, `status=done`, `stepCount=4`, **2 clarifying rounds** (inside
+    the DS 3-round ceiling, not the `MAX_CLARIFY_ROUNDS=4` headroom). Judgment 1 `False` (correct on the
+    vague opener); judgment 2 `True` — *"The user provided a clear timeline of the issue, including the
+    specific version deployment, the error type, and that rolling back fixed it…"* — **cites the user's
+    actual facts (v4.2, 502, rollback)**, i.e. plan §5 Step-4 criterion 2: reasoning from evidence, not
+    being talked into yes. **This is green for the right reason**, on the DS's *degraded* turns-only
+    fallback path, as designed for this cut.
+  - **⚠️ NEW — DEFECT C: the `answer` node doesn't reliably call `post_message`. AC-4 passes ~1 in 3.**
+    **The engineer's first `-m live` run PASSED — and it did not stop there.** It re-ran **7 more times:
+    ~2 pass / 6 fail**. It nearly reported a false green and **caught itself**. Failure is always the
+    same and always **downstream** of the fix: `AssertionError: the answer node never posted a reply
+    (AC-4); posts came from: ['intake','intake','intake']`. The node produces a **good grounded answer
+    as final text** but doesn't call the tool → no `PRODUCED` edge. **Not a Defect-A regression** (the
+    guard fires identically in passing and failing runs); previously **invisible because the flow never
+    reached `answer`**. **This is D4's accepted risk (4B function-calling reliability) materializing.**
+    The test was **not** bent to force green.
+  - **OQ-5 partially answered (inferred, not proven):** the answer node's text **is** well-grounded
+    despite never seeing research findings — **it reads the thread turns directly**. OQ-5's *structural*
+    concern stands (D7), but the observed symptom is **not** ungroundedness.
+  - **R-1 bit — and demanded more than a tightening (teco-verified in source).** The cue table exposed
+    **three** distinct modes, not one: (1) **negated cues** — `"no more info is needed"` tripped
+    `more info`, `"nothing is unclear"` tripped `unclear` → fixed with a **polarity rule** (a cue
+    preceded within **12 chars** by `no `/`not `/`nothing `/`never `/`n't ` **affirms**); the window is
+    deliberately **too narrow to cross a clause boundary** (`"did not provide the version; more info is
+    needed"` still suspends) — **erring narrow keeps failures on the safe over-suspend side**.
+    (2) **`"no relevant"` embeds its own negator** — no window rule can resolve its polarity
+    (`"no relevant details are missing"` vs `"no relevant information was provided"`) → **removed as
+    unfixable-rather-than-tightenable**, documented in-place. (3) `"The user still needs to provide the
+    version."` matched **nothing** → required a **new** cue (`"still need"`), which also replaces the
+    coverage `no relevant` carried. The check itself + the DS bias-to-suspend policy are intact;
+    `_coerce_verdict` untouched. **R-1 did NOT bite live** — the S4 prompt rule ("state only supporting
+    evidence") kept the real rationale purely affirmative.
+  - **Process notes worth keeping:** two of its own tests were wrong — **it fixed the tests, not the
+    code**, and when T7/T8 passed on first write it **reverted S1 to prove they genuinely go RED** (they
+    did — that is what makes them pins). The 9 signature failures in `test_executor.py`/`test_app.py`
+    were **R-6 exactly as the plan predicted** (stub judges needing `recent_turns`) — signature updates
+    only, **no assertions weakened**. **m-C pinned neutral** (T8: exactly one `read_thread`, not two).
+  - **Docs (plan §10):** `m3-executor.md` §2.5 now states the **two-tier evidence contract** — *its
+    silence is what let the seam ship*; `m3-executor-ml.md` §Q1 gained a dated implemented-at pointer.
+  - **⏸️ Defect C needs triage before U15 — AC-4 currently passes ~1 in 3.** Options put to the user.
+
 ## Landing-2 cost datapoint (vs. Landing-1 ~1.20M tok / 238 tool uses / ~4h for U1–U10 + gate)
 | Delegation | Owner | Units | ~Tokens | Tool uses | Wall time | Notes |
 |---|---|---|---|---|---|---|

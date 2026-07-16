@@ -129,6 +129,16 @@ The executor runs this as an agent loop (`executor.WorkflowExecutor._run_agent_n
    ungranted name is rejected by the dispatcher).
 3. If the LLM returns a **tool call** → dispatch via the `ToolRegistry` (§4), append the result as a
    tool message, loop (bounded by `maxIterations`).
+   **A tool that fails is a re-prompt, not a dead run** (K-022 U14 Defect B — amended 2026-07-15).
+   The node's three argument-level failure modes are one rule: an **ungranted** tool name, a
+   **malformed** call (missing required args), and a **dispatched tool raising a `ServiceError`**
+   (the domain rejecting the model's arguments — e.g. a hallucinated `@mention` resolving to no
+   member) all feed the error back to the model as an ordinary tool message and let it correct
+   itself. Each costs one iteration, so the cycle is bounded by `maxIterations` exactly like a
+   successful turn. The boundary is deliberate and narrow: **only `ServiceError`** is absorbed —
+   an *engine* fault still propagates to the §2.1 M-1 fault net (`fail_run`, loudly), and
+   `HumanHandoffSignal` is control flow raised *through* dispatch that must still reach the
+   suspend path (§2.4). A blanket `except Exception` here would break both.
 4. If the LLM returns a **final text / an explicit outcome** → that is the step's `output` and the
    emitted `on` outcome (default `"done"`; a node may emit a named outcome the guards branch on).
 5. Every LLM prompt/response, tool call/result, and the iteration count are handed to the tracer
@@ -206,11 +216,28 @@ serialized `kind`, and in this cut resolves to exactly **two** live branches plu
 - **Unconditional (empty guard `""`)** → fires whenever the transition is reached (lowest priority).
   This is how **deterministic** transitions are expressed in the triage flow — including the **D5**
   research→answer transition, which is unconditional (see below).
-- `kind == 'llm'` → build a **judge prompt** (the guard `text` + the relevant run context/thread
-  slice) and ask the LLM for a **structured boolean verdict + rationale**. The rationale is traced
-  (FR-4). The judge prompt design, the context window fed to it, calibration, and the
-  ambiguous-verdict policy are delivered by the DS note (§10) — the executor treats the judge as an
-  injected callable so it is stub-testable offline.
+- `kind == 'llm'` → build a **judge prompt** (the guard `text` + the evidence contract below) and ask
+  the LLM for a **structured boolean verdict + rationale**. The rationale is traced (FR-4). The judge
+  prompt design, calibration, and the ambiguous-verdict policy are delivered by the DS note (§10) —
+  the executor treats the judge as an injected callable so it is stub-testable offline.
+
+  **The guard's evidence channel is two-tier** (DS note §Q1 extract-then-judge; implemented at
+  `guards.evaluate_guard` + `app._build_llm_judge` — amended 2026-07-15, K-022 U14 **Defect A**,
+  plan [`m3-guard-thread-context.md`](m3-guard-thread-context.md)). This section's earlier silence on
+  *where the judge's evidence comes from* is precisely what let a broken seam ship:
+  - **Primary — the compact `understanding`** (`{request, known, missing}`) the node emitted, read
+    from `step_output` then `ctx`. Judging this compact state rather than a raw transcript is the
+    DS's single highest-leverage reliability decision.
+  - **Fallback — the last `RECENT_TURNS_N` (6) thread turns**, newest last, used **only when no
+    `understanding` was emitted** (the DS *omit rule* — truthiness, not presence). Degraded but
+    functional; it exists so a node emitting prose leaves the judge with evidence rather than `{}`.
+    A judge handed `{}` every turn can only bias to suspend forever — that **was** Defect A.
+  - **The turns cost no extra graph read.** `_run_agent_node` already reads its thread window; it
+    rides out on `StepResult.thread` and `_select_transition` passes it through (m-C neutral). A
+    `{"kind":"llm"}` guard on a **non-agent** step therefore sees `thread == []` and correctly
+    degrades to the understanding-only path.
+  - **The precedence lives in `guards`, not in the judge** — judges are dumb renderers of whichever
+    tier they are handed, so every judge implementation inherits the rule instead of re-deriving it.
 - **Any other `kind` (e.g. a would-be `expr`) → a pure `NotImplementedError` seam (M7).** The
   stakeholder reframed the §13 open question to "LLM, not an expression library," so we deliberately
   do **not** build an expression evaluator, and the triage proof exercises **no** `expr` guard (its
@@ -494,9 +521,20 @@ Phased so the tree stays buildable/green and each phase is reviewable. The compo
 
 | Step (`type:'agent'`) | `config` flags | systemPrompt (plain language) | tools | outgoing guard |
 |---|---|---|---|---|
-| **intake** (start) | `waitsForHuman: true` | "Ask the user clarifying questions until you can state their request precisely; ask one question at a time." | `post_message` | `{kind:'llm', text:"the user has provided enough information to research their request"}` → **research**; false + `waitsForHuman` → **suspend/`waiting`** (§2.1 outcome B, AC-2) |
+| **intake** (start) | `waitsForHuman: true` | Ask one clarifying question at a time via `post_message`; **never pass `mentions`**; end each turn with ONLY the `{"understanding":{request,known,missing}}` JSON object (D8/S5 — the `understanding` primary path; see below). | `post_message` | `{kind:'llm', text:"the user has provided enough information to research their request"}` → **research**; false + `waitsForHuman` → **suspend/`waiting`** (§2.1 outcome B, AC-2) |
 | **research** | — (no wait) | "Retrieve relevant context from the workspace and produce concise findings grounded only in what you retrieve; if nothing relevant is found, say so." | `graphrag_retrieve` | **`""` unconditional (D5)** → **answer** — fires as soon as findings exist; sufficiency is the node's own abstention (§4/§10 Q2), **not** an LLM guard (no human to unblock a suspend here) |
-| **answer** | — (no wait) | "Post a reply to the thread that answers the user's request, grounded in the research findings; cite what you used." | `post_message` | terminal (no outgoing transitions) → §2.1 outcome C → run `done` (AC-4) |
+| **answer** | — (no wait) | **MUST** deliver the grounded answer by calling `post_message` (an answer emitted as plain text is discarded — Defect C); **never pass `mentions`**; cite the research findings used. | `post_message` | terminal (no outgoing transitions) → §2.1 outcome C → run `done` (AC-4) |
+
+> **D8/S5 (intake) — `docs/plans/m3-guard-thread-context.md`.** The intake prompt asks the model to
+> emit the compact `understanding` object as its final turn text so `guards._extract_understanding`
+> reaches the DS **primary** extract-then-judge path (`m3-executor-ml.md` §Q1). Without it the guard
+> runs forever on the degraded turns-only fallback. Shape mirrors `server/tests/eval/golden_guards.jsonl`.
+>
+> **Defect C (answer) — `m3-executor-coordination.md`.** Two measured 4B failure modes the answer
+> prompt mitigates: (a) emitting the answer as final **text** instead of calling `post_message`; and
+> (b) calling `post_message` with `mentions:["<displayName>"]` (the folded `"{displayName}: {text}"`
+> thread context leaks the name), which §4 rejects — after which the 4B drops the tool and emits text,
+> posting nothing. Both are prompt-only mitigations of an accepted D4 risk, not an engine guarantee.
 
 - AC-1: @mention starts the run, `TRIGGERED_BY` the message. AC-2: intake posts a question and
   **suspends** (only intake sets `waitsForHuman`), resuming on the next human reply **without a

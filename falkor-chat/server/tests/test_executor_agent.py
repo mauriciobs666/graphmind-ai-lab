@@ -13,9 +13,13 @@ Both collaborators are injected stubs — no LLM, no network, no graph.
 
 from __future__ import annotations
 
+import pytest
+
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
 from falkorchat.llm import ChatResult, ToolCall
+from falkorchat.services import UnknownMemberError
+from falkorchat.tools import HumanHandoffSignal
 
 CTX = CallContext(ws="test", actor="u1")
 RUN = {"runId": "r1", "defKey": "triage", "defVersion": "1"}
@@ -77,6 +81,18 @@ class StubRegistry:
     def dispatch(self, name, arguments, *, ctx, run):
         self.dispatched.append((name, arguments))
         return self._results.get(name, f"result:{name}")
+
+
+class RaisingRegistry(StubRegistry):
+    """Dispatch always raises `exc` — the tool-failure seam (Defect B)."""
+
+    def __init__(self, schemas, exc):
+        super().__init__(schemas)
+        self._exc = exc
+
+    def dispatch(self, name, arguments, *, ctx, run):
+        self.dispatched.append((name, arguments))
+        raise self._exc
 
 
 class StubThreadServices:
@@ -200,6 +216,93 @@ def test_max_iterations_exhaustion_terminates_gracefully_with_trace_note():
     assert any(k == "node_note" for k, _ in result.trace)
 
 
+# ── Defect B — a failing tool re-prompts the model, it does NOT kill the run ──
+
+def test_tool_level_error_is_reprompted_not_raised():
+    # Defect B (K-022 U14, reproduced live 2/3 runs): the model hallucinated
+    # `mentions: ["alice"]` (a displayName it read off the folded thread context), the
+    # §4 write raised UnknownMemberError, and — with no try/except around dispatch —
+    # the error escaped the node, hit the M-1 fault net and failed the WHOLE run.
+    # A tool-level error is a bad *argument*, not an engine fault: it must come back to
+    # the model as a bounded re-prompt, exactly like the ungranted/malformed cases.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "post_message", {"text": "hi", "mentions": ["alice"]})]),
+        ChatResult(text="posted without the bogus mention"),
+    ])
+    reg = RaisingRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        UnknownMemberError(["alice"]),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    # the node survives and finishes on the model's next turn
+    assert result.output == "posted without the bogus mention"
+    # the failure is surfaced back to the model as a tool message (a re-prompt)
+    tool_msgs = [m for m in llm.calls[1]["messages"] if m["role"] == "tool"]
+    assert tool_msgs and "error" in tool_msgs[0]["content"]
+    assert "alice" in tool_msgs[0]["content"]
+    # and it is traced — the diagnostic must not vanish with the exception
+    assert any(k == "tool_result" and p.startswith("ERROR:")
+               for k, p in result.trace)
+
+
+def test_repeated_tool_errors_are_bounded_by_max_iterations():
+    # An error/re-prompt cycle must not spin forever: it burns the SAME per-node
+    # iteration budget as any other turn, then terminates gracefully (§7 — only
+    # maxSteps hard-fails a run, never a node).
+    llm = AlwaysToolLLM(ToolCall("c1", "post_message", {"text": "x"}))
+    reg = RaisingRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        UnknownMemberError(["ghost"]),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _config(tools=["post_message"], maxIterations=3), {}
+    )
+
+    assert result.on == "done"
+    assert len(reg.dispatched) == 3                 # bounded by maxIterations
+    assert any(k == "node_note" for k, _ in result.trace)
+
+
+def test_engine_fault_in_a_tool_still_escapes_to_the_m1_net():
+    # The M-1 net must NOT be neutered: only *tool-level* (service-validation) errors
+    # become re-prompts. An unexpected engine fault still propagates so the run fails
+    # loudly rather than the model being told to "retry" a broken database.
+    llm = AlwaysToolLLM(ToolCall("c1", "post_message", {"text": "x"}))
+    reg = RaisingRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        RuntimeError("engine exploded"),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    with pytest.raises(RuntimeError, match="engine exploded"):
+        ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+
+def test_human_handoff_signal_escapes_the_tool_loop_to_the_suspend_path():
+    # HumanHandoffSignal is CONTROL FLOW raised *through* dispatch, not an error — a
+    # blanket `except Exception` around dispatch would swallow it and break the suspend
+    # contract (§2.4). It must pass straight through the node loop.
+    llm = AlwaysToolLLM(ToolCall("c1", "human_handoff", {"reason": "need a human"}))
+    reg = RaisingRegistry(
+        {"human_handoff": {"type": "function",
+                           "function": {"name": "human_handoff", "parameters": {}}}},
+        HumanHandoffSignal("need a human"),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    with pytest.raises(HumanHandoffSignal):
+        ex._run_agent_node(CTX, RUN, STEP, _config(tools=["human_handoff"]), {})
+
+
 # ── thread-message context folded into the agent-node prompt (AC-2 prereq) ────
 
 def test_agent_node_folds_thread_messages_into_prompt():
@@ -291,3 +394,65 @@ def test_execute_step_routes_agent_type_through_the_agent_loop():
 
     assert result.output == "node output"
     assert llm.calls  # the llm was actually driven
+
+
+# ── Defect A — the node's thread window rides out on StepResult.thread ────────
+#
+# `_run_agent_node` already reads the recent thread turns to build its own prompt, then
+# dropped them on the floor — so `_select_transition` had nothing to hand the guard judge
+# and passed the literal `None` (executor.py, `thread=None`). The judge was asked to rule
+# on an empty state every turn and correctly biased to suspend forever. These pin the
+# restored seam: the turns ride out on the StepResult, at ZERO extra graph reads (m-C).
+
+def _thread_rows(n):
+    return [
+        {"msgId": f"m{i}", "text": f"turn {i}", "role": "user",
+         "createdAt": 1000 + i, "authorId": "u1", "displayName": "Alice",
+         "authorType": "User"}
+        for i in range(n)
+    ]
+
+
+def test_agent_node_carries_its_thread_window_out_on_the_step_result():
+    # T7 — the Defect-A regression pin. The turns the node read are the evidence the
+    # guard needs; they must leave the node, not die in it.
+    rows = _thread_rows(8)
+    svc = StubThreadServices(rows)
+    llm = StubChatLLM([ChatResult(text="Thank you for the details, Alice.")])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}),
+                   services=svc)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert result.thread == rows
+    assert svc.read_calls == ["t1"]          # T8 (m-C): exactly ONE read, not two
+
+
+def test_the_thread_window_also_rides_out_when_max_iterations_are_exhausted():
+    # The graceful-exhaustion return path is the one a chatty node actually takes; it
+    # must carry the same evidence, or the guard goes blind exactly when it matters.
+    rows = _thread_rows(3)
+    svc = StubThreadServices(rows)
+    # never emits a final text → always a tool call → exhausts maxIterations
+    llm = StubChatLLM([
+        ChatResult(text="thinking", tool_calls=[ToolCall("c1", "graphrag_retrieve", {})])
+    ] * 4)
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}),
+                   services=svc)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(maxIterations=2), {"threadId": "t1"})
+
+    assert result.thread == rows
+
+
+def test_a_node_with_no_thread_context_carries_an_empty_window():
+    # The offline stub path / a node with no threadId degrades to `[]` — guards then
+    # takes the understanding-only path (never a crash).
+    svc = StubThreadServices([])
+    llm = StubChatLLM([ChatResult(text="done")])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}),
+                   services=svc)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert result.thread == []

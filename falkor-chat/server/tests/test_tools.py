@@ -23,7 +23,7 @@ import pytest
 from conftest import TEST_EMBEDDING_DIM
 
 from falkorchat.config import CallContext
-from falkorchat.services import Services
+from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
     GraphragRetrieveTool,
     HumanHandoffSignal,
@@ -180,6 +180,41 @@ def test_post_message_forwards_mentions():
     tool.run({"text": "hey", "mentions": ["u2"]}, ctx=CTX,
              run={"threadId": "t1"})
     assert svc.posted[0]["mentions"] == ["u2"]
+
+
+def test_post_message_returns_actionable_error_for_unknown_mentions():
+    # Defect B at the source: the model reads `Alice: …` off the folded thread context
+    # and passes the *displayName* as a mention id. The §4 write rejects it with
+    # UnknownMemberError. The tool turns that into an actionable error string — the
+    # same shape as its no-thread refusal — so the model can retry, and so the failure
+    # never leaves the tool as an exception at all (defense in depth with the executor's
+    # own tool-error net).
+    class _RejectingServices(StubServices):
+        def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
+            raise UnknownMemberError(["alice"])
+
+    svc = _RejectingServices()
+    tool = PostMessageTool(svc, agent_id="assistant")
+
+    out = tool.run({"text": "hey", "mentions": ["alice"]}, ctx=CTX,
+                   run={"threadId": "t1"})
+
+    assert out.startswith("error:")
+    assert "alice" in out
+    # the model is told WHY, so the re-prompt is a correction and not a blind retry
+    assert "member id" in out
+
+
+def test_post_message_lets_unrelated_service_errors_propagate():
+    # Only the mention-resolution failure is translated here. Anything else keeps
+    # escaping the tool — the executor's tool-error net (or the M-1 net) classifies it.
+    class _BoomServices(StubServices):
+        def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
+            raise RuntimeError("engine exploded")
+
+    tool = PostMessageTool(_BoomServices(), agent_id="assistant")
+    with pytest.raises(RuntimeError, match="engine exploded"):
+        tool.run({"text": "hey"}, ctx=CTX, run={"threadId": "t1"})
 
 
 # ── graphrag_retrieve (unit, stub services + embedder) ───────────────────────
