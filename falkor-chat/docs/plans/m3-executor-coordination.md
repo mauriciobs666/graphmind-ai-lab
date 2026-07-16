@@ -297,6 +297,46 @@ cd server && .venv/bin/python -m pytest -q                  # expect 312 passed
 status) once the gate + U13/U14/U15 land. **Carried nit n-1** (add `node_note` to the QUERIES §12.10 /
 DESIGN §5 trace-kind enumeration) — fold into that rollup.
 
+- 2026-07-15 — **Resumed from PARKED.** Env re-verified green (FalkorDB restarted; query **241/241**,
+  pytest **312** — matches parked state, no drift). U11+U12 was committed as **514346b** ("parked
+  pre-gate"). **Analyst impl-review gate ✅ dispatched on the 514346b diff** →
+  `docs/reviews/m3-executor-landing2-impl.md`. **Verdict: approve-with-suggestions, 0 blocker / 0
+  major / 3 minor / 3 nit.** All four mandated confirmations HOLD: Option B correct + §2.1 A/B/C loop
+  byte-for-byte unchanged (`_link_emissions` at executor.py:342, above branch dispatch); M-1 fault net
+  closes the Landing-1 zombie-run major; PRODUCED-not-EMITTED (live-test-asserted); one-handler
+  trigger XOR responder (api.py:155-161, test-asserted). m-3/n-2/m-1/thread-context/U12 all confirmed
+  closed; analyst re-ran pytest → 312. **The K-022 done-condition for U11+U12 is SATISFIED — no
+  re-review cycle.** Minors → doc rollup at close: **m-A** (n-1: `node_note` missing from QUERIES
+  §12.10 / DESIGN §5 trace-kind enum), **m-B** (HISTORY/BACKLOG entry owed at gate exit). **m-C**
+  (every agent node does an unbounded `read_thread` then slices app-side — O(thread-length)/step) →
+  non-blocking Landing-2-scale follow-up, routed to tdd-engineer/architect. **Proceeding to U13
+  (coder — seed_workflows.sh).**
+
+- 2026-07-15 — 💥 **CRASH + RECOVERY.** The machine crashed after U13's implementation landed but
+  before it was logged/committed. **Nothing was lost.** Recovery performed by teco:
+  - **Env rebuilt:** the `falkordb-dev` container did not survive; the **`falkordb-data` volume did**.
+    Restarted via `./scripts/start_falkordb.sh -d`.
+  - **No drift:** query suite **241/241**, pytest **312 passed** — both match the pre-crash parked
+    numbers exactly. Working tree intact; no git stash/merge/rebase leftovers.
+  - **U13 ✅ (coder) — recovered and live-verified by teco.** `scripts/seed_workflows.sh` (204 lines,
+    untracked), `scripts/start_server.sh` (5→6 stages, `FALKORCHAT_WORKFLOW_ENABLED` default 1 with
+    the def seeded *before* uvicorn), `AGENTS.md` script-table row. teco ran the script **twice**:
+    publishes+materializes `triage@v1` (3 `type:'agent'` steps, 2 transitions — matches
+    `m3-executor.md` §8 incl. the D5 unconditional research→answer guard), second run a clean
+    `already present — no-op` on both def and snapshot. Wraps a Python one-shot over the **service
+    layer** as the architect flagged. Done-condition met.
+  - **U14 ❌ not started** — no artifacts on disk (no live-marked workflow e2e test; the
+    `maybe_trigger` hits in `test_api.py`/`test_trigger.py` are D6's). The in-flight dispatch, if
+    any, produced nothing. Resume = a clean U14 dispatch, no salvage needed.
+  - **⚠️ New ops gotcha (surfaced during recovery, not previously documented):** `test_queries.sh`
+    **deletes the global `reference` graph** at teardown, which wipes the published `triage@v1` def
+    (the ws snapshot survives). Running the query suite therefore de-fangs `@mention`-to-start until
+    `seed_workflows.sh` is re-run. `start_server.sh` self-heals this by seeding on every start.
+    **→ fold into the doc rollup at close** (AGENTS.md script table / seed_workflows row).
+  - **Env for U14 confirmed:** LM Studio reachable at `:1234` (HTTP 200) — the live e2e is unblocked.
+  - **▶ NEXT: U14 (tdd-engineer)** — marker-gated live e2e over AC-1…AC-4. Then U15 (qa-engineer,
+    K-025), then the doc rollup (HISTORY/BACKLOG + m-A/n-1 + m-B + this gotcha).
+
 ## Landing-2 cost datapoint (vs. Landing-1 ~1.20M tok / 238 tool uses / ~4h for U1–U10 + gate)
 | Delegation | Owner | Units | ~Tokens | Tool uses | Wall time | Notes |
 |---|---|---|---|---|---|---|
