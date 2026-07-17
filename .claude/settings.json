@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/home/mauricio/prg/graphmind-ai-lab/claude/scripts/audit-team.sh)",
+      "Bash(/home/mauricio/prg/graphmind-ai-lab/claude/scripts/audit-team.sh *)",
+      "Bash(./claude/scripts/audit-team.sh)",
+      "Bash(./claude/scripts/audit-team.sh *)"
+    ]
+  }
+}
