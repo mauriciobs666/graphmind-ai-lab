@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), and the learnings-inbox distillation procedure (verify → route → log → clear each agent's kaizen/inbox.md). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team or process its learnings inboxes.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-inbox distillation procedure (verify → route → log → clear each agent's kaizen/inbox.md), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings inboxes.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -23,6 +23,7 @@ touched.
 - **Reconciling** an already-drifted context doc → run the audit pass (§3).
 - **Certifying team coherence** (rosters, handoff contracts, enforcement parity across the collection) → run the certification pass (§4).
 - **Distilling learnings inboxes** (on request, and folded into every certification pass) → run the distillation procedure (§5).
+- **Linting a single artifact's prompt quality** (on authoring/review, and folded into §4) → run the prompt-quality lint (§7).
 
 ---
 
@@ -281,9 +282,17 @@ personal-info rule, §2). Fix any FAIL before judging the rest.
    judgment — and when a new specialist borders an existing one, add the pair
    to `BOUNDARY_PAIRS` in the script.
 
+**Fold in the single-artifact lint (§7):** run the prompt-quality lint over
+every artifact changed since the last certification — the semantic,
+intra-artifact defects (contradiction, ambiguity, persona, cognitive load,
+coverage, composition conflict) that the five inter-agent checks above can't
+see. Mirrors the §5 inbox-distillation fold-in; roll its findings into the
+certificate.
+
 **Certificate:** log a dated entry in the maintainer's kaizen history (cobb's,
-in graphmind-ai-lab) recording scope, script result, findings, and fixes — so
-"when was the team last certified?" is answerable from the log.
+in graphmind-ai-lab) recording scope, script result, findings (including any
+§7 lint findings), and fixes — so "when was the team last certified?" is
+answerable from the log.
 
 ---
 
@@ -355,3 +364,72 @@ For *how* to test the agents/skills you maintain — the two-altitude standard
 (pytest for deterministic code; the eval/bless harness for agent behavior) and
 the reusable agent-eval-harness pattern — see **`claude/cobb/TESTING.md`** in the
 graphmind-ai-lab repo. Keep it in sync when the harness pattern evolves.
+
+---
+
+## 7. Prompt quality review (single-artifact lint)
+
+The passes above are *structural* (catalogs vs. disk, §3) and *inter-agent*
+(the interfaces between agents, §4). This one is *semantic* and
+*intra-artifact*: a judgment lint of a **single** prompt — an agent/subagent
+system prompt, a `SKILL.md` body, a steering doc, a memory file — for the
+defects an LLM reviewer can see but a grep can't. Run it when authoring or
+reviewing any one artifact, and — folded into §4 — over every artifact changed
+since the last certification.
+
+It is LLM judgment, not a script: read the artifact, then work the six
+dimensions below. For each, emit findings as **`finding — severity
+(blocker / major / minor) — suggested rewrite`** (a concrete rewrite where the
+fix is a wording change; a pointer where it's structural). "Clean" on a
+dimension is a valid result — say so rather than inventing a finding.
+Severity for a prompt: **blocker** = would cause wrong behavior in most
+sessions; **major** = a real gap that bites in some sessions; **minor** =
+polish. When one issue spans dimensions, **report it once under the most
+informative dimension** (note the others in a clause) rather than filing it
+several times.
+
+1. **Contradiction** — logical, behavioral, or format conflicts *within* the
+   one prompt. Probes: does any instruction countermand another (an "always X"
+   and an "except-when-X" placed far apart)? Do two rules demand incompatible
+   outputs (terse vs. exhaustive; JSON-only vs. prose)? Does a tool/permission
+   grant collide with a "never do Y" rule?
+2. **Semantic ambiguity** — instructions open to more than one reading. Probes:
+   pronouns/scope with no clear referent ("update it"); undefined thresholds
+   ("large files", "when appropriate") with no operational test; sequencing
+   left implicit where order matters. Rewrite each into one operational reading.
+3. **Persona consistency** — one coherent voice and altitude. Probes:
+   conflicting traits (terse *and* thorough; deferential *and* decisive) with
+   no resolving rule; tone drift across sections; role labels that overclaim
+   (the 2026-07 "senior"-removal class). Rewrite toward a single stance.
+4. **Cognitive load** — is the prompt followable in one pass? Probes: count the
+   hard rules and competing priorities (when many items are top-priority, none
+   is); nested/conditional depth (if-A-unless-B-except-C); always-loaded bulk
+   that belongs in a progressively-disclosed skill (the Lean-context principle,
+   here for instruction-following load, not just tokens). Suggest splitting,
+   ranking, or demoting to on-demand.
+5. **Semantic coverage** — gaps in the intents the artifact claims to handle.
+   Probes: for each stated responsibility, is the *success* path **and** the
+   failure/empty/blocked path specified? Are the triggers for each named
+   handoff defined? For a subagent, is the can't-ask-mid-run path covered
+   (question returns as the deliverable)? Flag the missing path; don't invent
+   scope the artifact never claimed.
+6. **Composition conflict** — the artifact never runs alone. **Resolve its full
+   load-set first** — the `CLAUDE.md`/`AGENTS.md` chain that auto-loads, every
+   `@`-import, wired skills, and steering with a reaching `inclusion` mode
+   (what reaches a subagent differs per tool — verify via the `agent-standards`
+   skill) — then re-run the contradiction / persona / coverage probes over the
+   *combined* context. Probes: does the artifact restate (and now contradict) a
+   rule its memory file already sets? Does a loaded skill's persona fight the
+   prompt's? Do two loaded sources give conflicting defaults? Report each
+   conflict as a pair (artifact rule ↔ load-set rule) with which should win.
+
+**Output:** a per-dimension list of findings (or "clean"), each with severity
+and a rewrite/pointer. On a review-only pass, record the notable ones in the
+artifact's `plan.md` (§1). This is a lint, not a gate — it surfaces; the author
+(or the user) decides.
+
+> Origin: 2026-07-16 — the user asked whether cobb's machinery covered six
+> LLM-judgment prompt dimensions (contradiction, ambiguity, persona, cognitive
+> load, coverage, composition); it covered only structural (§3) and inter-agent
+> (§4) drift. Promoted from cobb's dormant "self-review checklist" parking-lot
+> idea (re-flagged 2026-06-07).

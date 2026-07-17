@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-16 — Applied K-004 + K-005 to teco.md (from the §7 lint)
+- **What:** Two surgical prompt additions, user-approved from the same-day §7 lint. **K-004** — Step 4 ("Integrate & verify") gained a *deficient-result* path: when a delegate errors, runs out of turns, or returns something off-brief/empty (explicitly distinct from a *blocker* that changes direction and a review *verdict*), re-brief the same owner once with the gap made explicit, and pause to the user if it recurs or the unit is mis-scoped — "rather than re-spawning blindly". **K-005** — the Documentation-curation "Scan at decomposition" list now names `docs/HISTORY.md` (which takes an entry for every delivered change) and `docs/BACKLOG.md` "where the module uses the convention", closing the gap between teco's curator role and the module-documentation convention in root `AGENTS.md`. No frontmatter/description/catalog change — role unchanged, so the catalog entries still describe teco correctly. K-006 left proposed (not approved).
+- **Why:** User approved acting on the two higher-value lint findings; both were surgical additions at teco's existing altitude, not a rewrite.
+- **Plan items:** K-004 ✅, K-005 ✅ (moved to the done-notes block in plan.md); K-006 stays open.
+
+## 2026-07-16 — §7 prompt-quality lint (review-only, no prompt change)
+- **What:** cobb ran the new `agent-maintenance` §7 single-artifact prompt-lint against `teco.md` across all six dimensions, resolving teco's full load-set (root + `claude/` `CLAUDE.md`→`@AGENTS.md` chain, the injected specialist `description`s, the coordination-doc write guard) for the composition check. **Persona:** clean. **Contradiction / ambiguity / cognitive load:** clean bar minor nits (parked). **Coverage + composition:** three findings filed — K-004 (no deficient/failed-delegate-result path), K-005 (doc-curation scope omits the module `docs/HISTORY.md`/`BACKLOG.md` conventions from `AGENTS.md` — highest-value, surfaced only by the composition load-set resolution), K-006 (no independent reviewer assigned for agent-engineering deliverables). No blocker; no source change.
+- **Why:** Smoke test of the §7 procedure cobb authored the same day; teco is a mature, certified prompt so a clean-ish result was expected and validated that §7 surfaces real gaps without manufacturing findings.
+- **Plan items:** opened K-004, K-005, K-006; minors parked.
+
 ## 2026-07-12 — K-003 ✅: review-gate invariant proven on the first fully-gated run — kept, no prompt change
 - **What:** Closed K-003 with disposition **(a) keep the invariant** — "work ships
   independently reviewed; when you trim ceremony, the review gate is the last thing to go."

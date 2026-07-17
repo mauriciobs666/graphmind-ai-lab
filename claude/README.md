@@ -53,7 +53,7 @@ Plans and histories:
 
 Skills were unified into the repo-root [`skills/`](../skills/) home — see [`skills/README.md`](../skills/README.md) for the full catalog. `cobb` relies on two of them:
 
-- [**`agent-maintenance`**](../skills/agent-maintenance/SKILL.md) — kaizen/documentation/file-location/drift-audit machinery `cobb` follows when it creates/edits/reviews an agent or skill, plus the **team-coherence certification** pass (rosters, handoff contracts, hook parity). Its deterministic half is scripted: [`scripts/audit-team.sh`](./scripts/audit-team.sh) (read-only; exit 1 on drift).
+- [**`agent-maintenance`**](../skills/agent-maintenance/SKILL.md) — kaizen/documentation/file-location/drift-audit machinery `cobb` follows when it creates/edits/reviews an agent or skill, plus the **team-coherence certification** pass (rosters, handoff contracts, hook parity) and the **single-artifact prompt-quality lint** (§7 — semantic review of one prompt over six dimensions). Its deterministic half is scripted: [`scripts/audit-team.sh`](./scripts/audit-team.sh) (read-only; exit 1 on drift).
 - [**`agent-standards`**](../skills/agent-standards/SKILL.md) — perishable per-tool reference specifics (frontmatter fields, paths, inclusion modes) for Claude Code, Kiro, and OpenCode, each `Verified:`-stamped.
 
 ## Deployment

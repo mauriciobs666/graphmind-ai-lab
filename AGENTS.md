@@ -66,7 +66,8 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
 `skills/README.md` for the catalog.
 
 - `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
-  procedures; perishable per-tool reference specifics). Loaded on demand so cobb's prompt stays lean.
+  procedures + single-artifact prompt-quality lint; perishable per-tool reference specifics).
+  Loaded on demand so cobb's prompt stays lean.
 - `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
   OpenCode-authored skills.
 

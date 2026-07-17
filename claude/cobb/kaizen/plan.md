@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `cobb` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09
+> Last reviewed: 2026-07-16
 
 ## Active
 
@@ -15,7 +15,7 @@
 | K-008 | 2026-06-07 | low | 🔵 | Dog-food the frontmatter cobb teaches: evaluate adding `memory: project` for a persistent cross-session drift/verified-date store (distinct from kaizen). |
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
-> **Closed:** K-004 (audit/reconcile method) — documented in the `agent-maintenance` skill (§3), done 2026-06-07, see history. K-006 (slim the prompt) — done 2026-06-07, see history. K-007 (extract standards → reference skill) — done 2026-06-07, the `agent-standards` skill, see history. K-010 (cobb subagent-awareness clause) + K-011 (destructive-ops guard parity: shared core + graph-dba/qa-engineer wrappers) — done 2026-07-11, see history.
+> **Closed:** K-004 (audit/reconcile method) — documented in the `agent-maintenance` skill (§3), done 2026-06-07, see history. K-006 (slim the prompt) — done 2026-06-07, see history. K-007 (extract standards → reference skill) — done 2026-06-07, the `agent-standards` skill, see history. K-010 (cobb subagent-awareness clause) + K-011 (destructive-ops guard parity: shared core + graph-dba/qa-engineer wrappers) — done 2026-07-11, see history. K-012 (single-artifact prompt-quality lint — promoted from the dormant self-review-checklist parking-lot idea) — done 2026-07-16, `agent-maintenance` skill §7 + cobb.md trigger + §4 fold-in, see history. K-013 (§7 refinements from the first-run teco smoke test: prompt-severity rubric + cross-cutting-finding attribution) — done 2026-07-16, see history.
 
 ### K-001 — Re-verify standards against live docs
 - **Status:** 🔵 proposed
@@ -53,5 +53,5 @@
 - **Notes:** Surfaced 2026-06-07 self-review.
 
 ## Parking lot / ideas
-- Consider a lightweight self-review checklist Cobb runs before delivering any agent artifact (frontmatter valid, description routing-friendly, right mechanism chosen, perishable facts dated). *(Re-flagged 2026-06-07 — candidate for promotion to an active item or a short resident checklist.)*
 - Maintain a small catalog of agents/skills Cobb has authored, cross-linking their kaizen files.
+- The §7 prompt-lint is judgment-only by design; if a *deterministic* pre-check for a single artifact ever proves cheap (frontmatter valid, description non-empty, no personal identifiers), consider a small script assist — but keep the six semantic dimensions in the skill, not a grep. *(Noted 2026-07-16 during the §7 build; the composition load-set enumerator the design floated was skipped as not-cheap-enough.)*
