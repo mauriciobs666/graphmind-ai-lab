@@ -30,12 +30,20 @@ scripts/pipeline.sh <source> --graph cpg_myrepo --workdir ./joern-work --load
 # omit --load to stop at the .cypher artifact (./joern-work/load.cypher)
 ```
 
+`pipeline.sh` is generic — the caller names the source/graph, nothing is baked in.
+Useful flags: `--language <lang>` forces a frontend (**Python → `pythonsrc`**, see
+Gotchas); `--reset` `GRAPH.DELETE`s the target graph before `--load` for a clean
+reload (destructive, guard-gated); `--repr <r>` narrows the exported layers. After
+transform it asserts the CPG produced nodes (a failed frontend exits 0 but yields
+an empty graph), and after `--load` it verifies node/edge counts.
+
 Or run the stages individually:
 
 ```bash
 # 1. Parse source -> CPG binary (overlays applied: call graph, control/data flow)
 scripts/build-cpg.sh <source-dir> cpg.bin
-#    JOERN_LANGUAGE=python forces a frontend; joern-parse auto-detects otherwise.
+#    JOERN_LANGUAGE=<lang> forces a frontend; joern-parse auto-detects otherwise.
+#    For Python use pythonsrc (the pysrc2cpg frontend), NOT python — see Gotchas.
 
 # 2. (optional) Query in the REPL before/instead of exporting — see CPGQL below
 joern cpg.bin
@@ -48,6 +56,9 @@ scripts/export-cpg.sh cpg.bin cpg-export cpg neo4jcsv
 # 4. Transform the export into FalkorDB Cypher, and load it
 python3 scripts/cpg-to-falkordb.py cpg-export -o load.cypher --graph cpg_myrepo --load
 #    without --load: writes load.cypher only (the "export to Cypher" artifact)
+#    --load streams statements over ONE persistent socket (not a redis-cli per
+#    statement) — required at scale: a batched CREATE exceeds the 128KB argv limit
+#    and thousands of short-lived connections trigger a reset storm.
 ```
 
 ### What the export looks like
@@ -85,7 +96,9 @@ FalkorDB's RAM; size it with `graph-dba` and export only the `--repr` you need.
 
 ### Reloading is deliberate (destructive)
 
-The loader **refuses a non-empty graph**. For a clean reload, reset it first:
+The loader **refuses a non-empty graph**. For a clean reload, reset it first —
+either the explicit command, or `pipeline.sh --reset` (which runs it for you,
+only if the graph exists):
 
 ```bash
 redis-cli GRAPH.DELETE cpg_myrepo   # destructive, shared-state — escalates via joern's guard
@@ -118,6 +131,17 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
 
 ## Gotchas
 
+- **Python frontend token is `pythonsrc`, not `python`** (Joern v4.0.579).
+  `--language python` routes to a legacy generator that fails with *"CPG generator
+  does not exist at: …/py2cpg.sh"* (not shipped). Use `pythonsrc` (the `pysrc2cpg`
+  frontend). `joern-parse --list-languages` shows both tokens. **Worse, a failed
+  frontend still exits 0** with an empty CPG — `pipeline.sh` guards this by
+  asserting the export produced node data before loading.
+- **Loading at scale needs one persistent connection.** `--load` streams over a
+  single socket for exactly this reason: a per-statement `redis-cli` hits Linux's
+  128KB per-argv limit on a batched CREATE (`Argument list too long`) and, at
+  smaller batches, a connection-reset storm from thousands of short-lived TCP
+  connections. Don't reintroduce a per-statement spawn.
 - **JVM startup is slow** (~30–60s per `joern-*` invocation). A full
   parse+export of a real repo takes minutes; expect it and run long jobs in the
   background.

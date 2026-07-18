@@ -15,8 +15,10 @@ FalkorDB model (a sensible default; graph-dba owns real tuning):
   * nodes/edges are created with UNWIND-batched CREATE (deduped by id / triple).
 
 Output: a newline-delimited .cypher file (one runnable statement per line) — the
-"export to Cypher" artifact. With --load, each statement is sent via
-`redis-cli GRAPH.QUERY <graph>`. The loader REFUSES a non-empty graph: resetting
+"export to Cypher" artifact. With --load, statements are streamed to FalkorDB over
+a single persistent socket (RESP GRAPH.QUERY) — not one `redis-cli` spawn per
+statement, which fails at scale (128KB argv limit + connection-reset storm). The
+loader REFUSES a non-empty graph: resetting
 it (`redis-cli GRAPH.DELETE <graph>`) is a deliberate, destructive op left to the
 operator (and caught by joern's destructive-ops guard), not hidden in here.
 
@@ -26,7 +28,7 @@ Usage:
                      [--batch 500] [--append]
 Stdlib only.
 """
-import argparse, csv, glob, json, os, subprocess, sys
+import argparse, csv, glob, json, os, socket, subprocess, sys
 
 csv.field_size_limit(1 << 24)  # CODE properties can be large
 
@@ -148,6 +150,90 @@ def redis_cli(host, port, *args):
                           capture_output=True, text=True)
 
 
+def _resp_encode(args):
+    """Encode a command as a RESP array of bulk strings."""
+    out = [b"*%d\r\n" % len(args)]
+    for a in args:
+        b = a.encode() if isinstance(a, str) else a
+        out += [b"$%d\r\n" % len(b), b, b"\r\n"]
+    return b"".join(out)
+
+
+def _resp_read_reply(f):
+    """Read one RESP reply; return 'err' if it (or any array element) is an error."""
+    line = f.readline()
+    if not line:
+        raise EOFError("connection closed by server")
+    t, rest = line[:1], line[1:].rstrip(b"\r\n")
+    if t in (b"+", b":"):
+        return "ok"
+    if t == b"-":
+        return "err"
+    if t == b"$":
+        n = int(rest)
+        if n >= 0:
+            f.read(n + 2)  # payload + CRLF
+        return "ok"
+    if t == b"*":
+        n = int(rest)
+        status = "ok"
+        for _ in range(max(n, 0)):
+            if _resp_read_reply(f) == "err":
+                status = "err"
+        return status
+    raise ValueError(f"unexpected RESP type {t!r} in {line!r}")
+
+
+def load_statements(host, port, graph, stmts):
+    """Stream statements to FalkorDB over ONE persistent socket via RESP.
+
+    Replaces a per-statement `redis-cli` spawn, which fails two ways at scale:
+    a single batched CREATE exceeds Linux's 128KB per-argv limit (MAX_ARG_STRLEN),
+    and thousands of short-lived connections trigger a connection-reset storm.
+    One socket sidesteps both. Tolerates 'already exists' on the index DDL (stmt 0).
+    Returns (ok, failed, first_errs).
+    """
+    s = socket.create_connection((host, int(port)))
+    f = s.makefile("rb")
+    ok = failed = 0
+    first_errs = []
+    try:
+        for i, q in enumerate(stmts):
+            s.sendall(_resp_encode(["GRAPH.QUERY", graph, q]))
+            # peek for the index-DDL 'already exists' race on stmt 0
+            line = f.readline()
+            if not line:
+                raise EOFError("connection closed by server")
+            t, rest = line[:1], line[1:].rstrip(b"\r\n")
+            if t == b"-":
+                msg = rest.decode(errors="replace")
+                if i == 0 and "already" in msg.lower():
+                    ok += 1
+                else:
+                    failed += 1
+                    if len(first_errs) < 5:
+                        first_errs.append(f"stmt {i}: {msg[:160]}")
+                continue
+            # non-error head: consume the rest of this reply, then count ok
+            if t == b"$":
+                n = int(rest)
+                if n >= 0:
+                    f.read(n + 2)
+            elif t == b"*":
+                n = int(rest)
+                status = "ok"
+                for _ in range(max(n, 0)):
+                    if _resp_read_reply(f) == "err":
+                        status = "err"
+                if status == "err":
+                    failed += 1
+                    continue
+            ok += 1
+    finally:
+        s.close()
+    return ok, failed, first_errs
+
+
 def graph_nonempty(host, port, graph):
     """True iff the graph exists AND holds at least one node.
 
@@ -176,7 +262,7 @@ def main():
     ap.add_argument("-o", "--out", default="load.cypher")
     ap.add_argument("--graph", default="cpg")
     ap.add_argument("--batch", type=int, default=500)
-    ap.add_argument("--load", action="store_true", help="also send each statement to FalkorDB via redis-cli")
+    ap.add_argument("--load", action="store_true", help="stream statements into FalkorDB over one persistent socket")
     ap.add_argument("--host", default=os.environ.get("FALKORDB_HOST", "localhost"))
     ap.add_argument("--port", default=os.environ.get("FALKORDB_PORT", "6379"))
     ap.add_argument("--append", action="store_true", help="allow loading into a non-empty graph")
@@ -203,16 +289,10 @@ def main():
                  f"(destructive, escalates):\n  redis-cli -h {args.host} -p {args.port} "
                  f"GRAPH.DELETE {args.graph}\n...or pass --append to add to it.")
 
-    failed = 0
-    for i, q in enumerate(stmts):
-        r = redis_cli(args.host, args.port, "GRAPH.QUERY", args.graph, q)
-        if r.returncode != 0 or "(error)" in r.stdout.lower() or r.stderr.strip():
-            # tolerate "index already exists" on the first statement
-            if i == 0 and "already" in (r.stdout + r.stderr).lower():
-                continue
-            failed += 1
-            sys.stderr.write(f"  stmt {i} failed: {(r.stdout + r.stderr).strip()[:200]}\n")
-    print(f"cpg-to-falkordb: loaded into '{args.graph}' ({len(stmts) - failed}/{len(stmts)} "
+    ok, failed, first_errs = load_statements(args.host, args.port, args.graph, stmts)
+    for e in first_errs:
+        sys.stderr.write(f"  {e}\n")
+    print(f"cpg-to-falkordb: loaded into '{args.graph}' ({ok}/{len(stmts)} "
           f"statements ok, {failed} failed)", file=sys.stderr)
     sys.exit(1 if failed else 0)
 
