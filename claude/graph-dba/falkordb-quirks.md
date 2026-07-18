@@ -118,6 +118,16 @@ to the general fact here.
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
+- **A read via `GRAPH.QUERY` materializes an empty graph key** — running e.g.
+  `MATCH (n) RETURN count(n)` against a *non-existent* graph creates the key (it
+  then shows up in `GRAPH.LIST` with 0 nodes). `GRAPH.RO_QUERY` on the same
+  non-existent graph instead returns `ERR Invalid graph operation on empty key`
+  and creates **nothing**. So to test "does this graph already hold data?"
+  without side effects, probe with `RO_QUERY` and treat the `empty key` error as
+  "absent/empty"; never scan the whole `redis-cli` reply for digits (the
+  `Query internal execution time: 0.179153 milliseconds` line makes everything
+  look non-empty — parse the count from the lone pure-integer output line).
+  (Verified 2026-07-17 on v4.18.11; surfaced building the `joern` CPG loader.)
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely**; a write runs to
   completion regardless of clause or default. Reads enforce it batch-granularly

@@ -2,6 +2,24 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-17 — Two live-verified quirks added to `falkordb-quirks.md` (graph lifecycle)
+- **What:** added to the "Ops, config & tooling" section: (1) a read via `GRAPH.QUERY`
+  **materializes an empty graph key** (shows up in `GRAPH.LIST` with 0 nodes), whereas
+  `GRAPH.RO_QUERY` on a non-existent graph returns `ERR Invalid graph operation on empty key`
+  and creates nothing — so `RO_QUERY` is the side-effect-free emptiness probe; (2) never scan
+  the whole `redis-cli` reply for digits to gauge emptiness (the execution-time stat line makes
+  everything look non-empty — parse the lone integer output line). Both stamped verified
+  2026-07-17 on v4.18.11.
+- **Why:** surfaced during the `joern` CPG loader's live load test (K-001); these are generic
+  FalkorDB engine facts, not joern-specific, so they belong in graph-dba's quirks KB (the
+  established home) per the fold-in rule. cobb promoted them same-run.
+- **Plan items:** none. (No change to `graph-dba.md` itself.)
+
+## 2026-07-16 — Boundary reciprocity with new `joern` agent
+- **What:** Appended a clause to the frontmatter `description`: generating a repository's Code Property Graph / operating the Joern toolset routes to the new `joern` agent (which owns CPG generation + the mechanical load), while graph-dba owns the code graph's FalkorDB model and tuning.
+- **Why:** `joern` was created (CPG → FalkorDB pipeline) and borders graph-dba; the `joern:graph-dba` pair was added to `audit-team.sh` BOUNDARY_PAIRS, which requires each side's description to name the other (routing-contract symmetry). No other graph-dba behavior changed.
+- **Plan items:** none.
+
 ## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol (quirks-file exception kept)
 - **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt. Live-verified quirks of the pinned FalkorDB build keep their established direct home (`falkordb-quirks.md`, dated); the inbox captures everything else (client-SDK gotchas, lab conventions, non-FalkorDB tool quirks).
 - **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day) — graph-dba's quirks file was the pattern the loop generalizes, so it stays first-class rather than being rerouted through the inbox. Requested by the user.

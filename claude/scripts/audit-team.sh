@@ -99,7 +99,7 @@ for a in "${agents[@]}"; do
 done
 
 # 6. boundary-pair symmetry in frontmatter descriptions
-BOUNDARY_PAIRS=("coder:tdd-engineer" "coder:frontend-engineer" "analyst:qa-engineer" "graph-dba:devops" "architect:data-scientist" "analyst:data-scientist" "graph-dba:data-scientist" "tdd-engineer:qa-engineer")
+BOUNDARY_PAIRS=("coder:tdd-engineer" "coder:frontend-engineer" "analyst:qa-engineer" "graph-dba:devops" "architect:data-scientist" "analyst:data-scientist" "graph-dba:data-scientist" "tdd-engineer:qa-engineer" "joern:graph-dba")
 desc_of() { awk '/^---$/{f++} f==1 && /^description:/{sub(/^description:[ \t]*/,""); print; exit}' "$CL/$1/$1.md"; }
 echo
 for p in "${BOUNDARY_PAIRS[@]}"; do

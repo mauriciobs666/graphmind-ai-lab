@@ -12,7 +12,9 @@ does and when to use it lives in the injected descriptions and [`README.md`](./R
 `teco` (coordinator) · `tico` (product owner; **first-order**: `claude --agent tico`) ·
 `architect` · `coder` · `tdd-engineer` · `frontend-engineer` · `qa-engineer` · `analyst` ·
 `data-scientist` · `graph-dba` (carries two on-demand knowledge bases: `falkordb-quirks.md`,
-live-verified and perishable — re-verify on upgrades — and `falkordb-reference.md`) · `devops` (user-scoped —
+live-verified and perishable — re-verify on upgrades — and `falkordb-reference.md`) ·
+`joern` (Code Property Graph specialist; drives the Joern toolset via the `joern-cpg` skill to
+build a repo's CPG and export/load it into FalkorDB as Cypher) · `devops` (user-scoped —
 runs in every project) · `cobb` (team maintainer: `agent-maintenance`/`agent-standards` skills,
 `scripts/audit-team.sh`, testing standards in `cobb/TESTING.md`).
 
@@ -21,8 +23,8 @@ runs in every project) · `cobb` (team maintainer: `agent-maintenance`/`agent-st
 The five doc-scoped write guards (architect, analyst, data-scientist, teco, tico) are thin
 wrappers over one shared core, **`scripts/guard-doc-writes.sh`** — each wrapper passes its
 allowed-path globs and escalation message; the core does jq→python3 path extraction, fail-open,
-and the `permissionDecision: "ask"` escalation. The three destructive-ops guards (devops,
-graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destructive-ops.sh`**
+and the `permissionDecision: "ask"` escalation. The four destructive-ops guards (devops,
+graph-dba, qa-engineer, joern) are likewise thin wrappers over **`scripts/guard-destructive-ops.sh`**
 (each passes its agent name; the core matches Bash command patterns — `GRAPH.DELETE`,
 `FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f` — not write paths). Frontmatter wires every
 hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment

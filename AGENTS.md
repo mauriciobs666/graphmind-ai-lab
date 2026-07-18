@@ -22,7 +22,8 @@ and OpenCode artifacts).
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
   `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
-  `agent-standards` (cobb's machinery) and `python-coding`, `write-tutorial`,
+  `agent-standards` (cobb's machinery), `joern-cpg` (drives the `joern` agent's Joern
+  CPG→FalkorDB pipeline), and `python-coding`, `write-tutorial`,
   `comparison-driver`, `skill-builder`, `user-preferences` (OpenCode-authored). See
   `skills/README.md`. Format ports across Claude Code/OpenCode/Kiro; tool-gating &
   activation behavior do not — verify per tool.
@@ -44,8 +45,8 @@ Every agent's frontmatter `description` is auto-injected into each session — t
 the live routing contract, and **the full catalog lives once, in
 [`claude/README.md`](claude/README.md)**; this is just the roster: `teco` (coordinator) ·
 `tico` (product owner, first-order) · `architect` · `coder` · `tdd-engineer` ·
-`frontend-engineer` · `qa-engineer` · `analyst` · `data-scientist` · `graph-dba` · `devops` ·
-`cobb`.
+`frontend-engineer` · `qa-engineer` · `analyst` · `data-scientist` · `graph-dba` · `joern` ·
+`devops` · `cobb`.
 
 ## OpenCode agents (`opencode/agents/`)
 
@@ -68,6 +69,8 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
 - `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
   procedures + single-artifact prompt-quality lint; perishable per-tool reference specifics).
   Loaded on demand so cobb's prompt stays lean.
+- `joern-cpg` — drives the `joern` agent: parse → export (neo4jcsv) → transform → FalkorDB load
+  scripts for turning a repo into a Code Property Graph and ingesting it as Cypher.
 - `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
   OpenCode-authored skills.
 

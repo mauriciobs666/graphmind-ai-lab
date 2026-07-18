@@ -2,6 +2,51 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-17 — joern K-001 closed: live FalkorDB load verified; 2 transformer bugs fixed + learnings routed
+- **Scope:** ran the live `--load` verification the creation pass had deferred (FalkorDB was down).
+  Started `falkordb:v4.18.11`, ran the joern pipeline end-to-end into an isolated `cpg_smoke` graph
+  (pre-existing `reference`/`ws:live`/`ws:acme` untouched; test graph removed after).
+- **Result:** real CPG round-tripped — 107 nodes / 462 edges loaded 30/30 stmts, index present,
+  full CPG edge-layer set, call graph traverses correctly. The `CREATE INDEX FOR (n:CpgNode) ON
+  (n.id)` DDL is accepted by this build.
+- **Two bugs the test caught (fixed in `skills/joern-cpg/scripts/cpg-to-falkordb.py`):**
+  `graph_nonempty` regex-scanned the whole redis-cli reply → the exec-time stat line made every
+  graph read "non-empty" (loader refused all loads); and `:boolean` columns stored as strings →
+  boolean predicates never matched. Fixed via `GRAPH.RO_QUERY`+integer-line parse and a `bool`
+  kind emitting Cypher `true`/`false`. Details in `claude/joern/kaizen/history.md`.
+- **Learnings routed same-run (§5, cobb acting as maintainer):** UPPER_CASE property-name query
+  gotcha → `skills/joern-cpg/references/cpg-model.md`; two FalkorDB engine quirks (`GRAPH.QUERY`
+  read materializes an empty key; `RO_QUERY` errors + creates nothing on a missing graph) →
+  `claude/graph-dba/falkordb-quirks.md` (+ graph-dba history). No inbox residue.
+- **Scope note:** no roster/boundary/frontmatter change → no re-certification needed; the 2026-07-17
+  creation certificate below still stands. `joern.md` unchanged, so no §7 re-lint.
+
+## 2026-07-17 — Created the `joern` agent + `joern-cpg` skill; team re-certified
+- **Scope:** built a new CPG specialist (`claude/joern/` + `skills/joern-cpg/`) end to end — see
+  `claude/joern/kaizen/history.md` for the full artifact manifest. Then ran the §4 certification
+  (roster-changing edit) folding in the §7 single-artifact lint.
+- **Deterministic audit (`audit-team.sh`):** all 13 agents; **every joern check PASS** — kaizen
+  triple, deployment symlink, hook executable, present in teco's roster, cataloged in all three
+  docs, and boundary reciprocity **both** ways (`joern`↔`graph-dba` after adding the pair to
+  BOUNDARY_PAIRS + the reciprocal clause in graph-dba's description).
+- **Pre-existing FAIL (not from this work):** check 7 flags `.claude/settings.json` (committed
+  `ef8b2d7`) hardcoding the maintainer's absolute `/home/<user>/…/audit-team.sh` path in a
+  `permissions.allow` Bash matcher. Genericizing it needs care — `${CLAUDE_PROJECT_DIR}` expansion
+  in *permission matchers* (vs. hooks) is unverified — so it's surfaced to the user, not silently
+  rewritten. Tracked as a follow-up, separate from joern.
+- **§4 judgment checklist:** roster accuracy ✓ (teco routing row + handoff note added), handoff
+  symmetry ✓ (joern's non-doc artifact convention stated on joern + teco), subagent-awareness ✓
+  (can't-ask-mid-run → return the question; destructive request → return to caller),
+  enforcement parity ✓ (destructive-ops guard wired + described on both sides), boundary
+  reciprocity ✓.
+- **§7 lint of `joern.md`:** clean — no blocker/major. The "owns the mechanical load" vs. "defer
+  the FalkorDB model to graph-dba" split is stated explicitly (no contradiction); persona and
+  altitude consistent; composition with the repo `AGENTS.md` (FalkorDB = OpenCypher, no APOC/GDS)
+  agrees with the skill.
+- **Verification of the artifact itself:** full pipeline ran green on a Python sample (build →
+  export → transform → 29 Cypher stmts, exit 0); live FalkorDB `--load` not exercised (server
+  down) — logged as joern K-001.
+
 ## 2026-07-16 — §7 refined from the first-run smoke test (K-013)
 - **What:** Two one-sentence additions to `skills/agent-maintenance/SKILL.md` §7's output-form paragraph, from the same-day teco.md smoke test. (1) A **prompt-severity rubric**: blocker = wrong behavior in most sessions; major = a real gap that bites in some sessions; minor = polish. (2) **Cross-cutting attribution**: when one issue spans dimensions, report it once under the most informative dimension (note the others in a clause) rather than filing it several times. No renumbering, no other §7 change; the section stayed lean.
 - **Why:** The teco lint applied `blocker/major/minor` with ad-hoc calibration and hit a finding that landed on three dimensions at once (contradiction + composition + cognitive load) — the checklist gave labels but no rubric and no attribution rule. Both gaps were one-sentence fixes; deferred from the review-only smoke-test run per its brief, then approved.

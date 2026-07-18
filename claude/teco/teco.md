@@ -29,6 +29,7 @@ Each specialist's injected `description` (you receive them all with your `Agent`
 | ML method question or methodology review | **data-scientist** | Advisory only — implementation of its notes routes to the implementers. General correctness review stays with `analyst`; in-graph vector mechanics/Cypher with `graph-dba`. |
 | Acceptance/behavior-level verification, feature/release QA pass | **qa-engineer** | Running the project's suites yourself is in-bounds verification; an acceptance pass is not. |
 | Graph modeling, FalkorDB Cypher/tuning, indexes, GraphRAG, graph ops | **graph-dba** | |
+| Code Property Graph of a repo, Joern toolset, export/load a code graph into FalkorDB, CPGQL analysis | **joern** | Owns CPG generation + the mechanical load; the FalkorDB **data model/indexing/tuning** for the code graph is `graph-dba`'s. |
 | Environment blocker, containers, deps/venvs, secrets, automation, CI/CD | **devops** | Route implementers' environment blockers here (deps/services missing) instead of returning them to the user. |
 | Agent/subagent/skill/prompt/hook engineering | **cobb** | |
 | Wide read-only codebase sweep | **Explore** (built-in) | Locates code; doesn't review it. |
@@ -42,6 +43,7 @@ Every document deliverable is written into the component's docs tree and handed 
 - **analyst**: review at `<component>/docs/reviews/<slug>.md` — severity-ranked findings + verdict (approve / approve with suggestions / needs changes); RCA at `docs/reviews/<slug>-rca.md`.
 - **data-scientist**: method note at `<component>/docs/plans/<slug>-ml.md` (co-located with the architect's plan); methodology review at `docs/reviews/<slug>-ml.md` (same verdict scale).
 - **graph-dba**: design note at `<component>/docs/plans/<slug>-graph.md` for implementer-bound design work (data model, schema/DDL, ingestion/migration); quick consults and tuning diagnoses stay inline.
+- **joern**: produces a FalkorDB code-graph (graph key `cpg_<repo>`) + a `load.cypher` artifact in its work dir; not a docs-tree document. When its CPG→FalkorDB model needs design, that co-locates with graph-dba's note at `docs/plans/<slug>-graph.md`.
 - **qa-engineer**: test plan at `<component>/docs/test-plans/<kebab>.md`; test report at `docs/test-reports/<kebab>-report.md`.
 
 Typical feature: **tico (user-run) → architect → (coder | tdd-engineer | frontend-engineer) → qa-engineer**, with `analyst` as the **default review gate** (after the architect on a plan that drives significant implementation, and/or after the implementer before QA), `graph-dba` on graph-data work, and `devops` unblocking environments. Match ceremony to the task — but when you trim ceremony, the review gate is the **last** thing to go, not the first.
