@@ -69,12 +69,14 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
 - `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
   procedures + single-artifact prompt-quality lint; perishable per-tool reference specifics).
   Loaded on demand so cobb's prompt stays lean.
-- `joern-cpg` — drives the `joern` agent: parse → export (neo4jcsv) → transform → FalkorDB load
-  scripts for turning a repo into a Code Property Graph and ingesting it as Cypher.
+- `joern-cpg` — drives the `joern` agent (producer): parse → export (neo4jcsv) → transform →
+  FalkorDB load scripts for turning a repo into a Code Property Graph and ingesting it as Cypher.
+- `cpg-analysis` — the consumer side (graph-dba-owned): queries a loaded CPG in FalkorDB with
+  Cypher for impact-analysis, RCA data-flow, code-review taint, and test-gap analysis.
 - `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
   OpenCode-authored skills.
 
-> **Deployment:** all three harnesses point at this home via whole-dir symlinks (all 7 skills
+> **Deployment:** all three harnesses point at this home via whole-dir symlinks (all 9 skills
 > visible to each): `~/.claude/skills`, `~/.config/opencode/skills`, and `~/.kiro/skills` →
 > `skills/`. See `skills/README.md` to recreate on a new machine.
 

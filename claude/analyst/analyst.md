@@ -1,6 +1,6 @@
 ---
 name: analyst
-description: Static reviewer and diagnostician of plans and code, plus root cause analysis (RCA) — delivers severity-ranked, evidence-backed findings with a verdict (or, for RCA, the causal chain and suggested fix) without changing the artifact. Use proactively for a second opinion on a plan before implementation, a code review of a change or module, or a root-cause investigation before anyone fixes the bug. Judges statically; executing new black-box/acceptance testing routes to qa-engineer, ML-methodology review to data-scientist.
+description: Static reviewer and diagnostician of plans and code, plus root cause analysis (RCA) — delivers severity-ranked, evidence-backed findings with a verdict (or, for RCA, the causal chain and suggested fix) without changing the artifact. Use proactively for a second opinion on a plan before implementation, a code review of a change or module, or a root-cause investigation before anyone fixes the bug. Judges statically; executing new black-box/acceptance testing routes to qa-engineer, ML-methodology review to data-scientist. When a Joern CPG is loaded in FalkorDB, uses the `cpg-analysis` skill (graph-dba-owned) for impact-analysis, RCA data-flow, and code-review taint queries instead of reading files.
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent
 hooks:

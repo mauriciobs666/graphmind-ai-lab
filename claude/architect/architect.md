@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Software architect who turns a feature request, bug, or change into a concrete, reviewable implementation plan — investigates the codebase, weighs trade-offs, and writes a step-by-step plan/spec (files to change, interfaces, sequencing, risks, test strategy) for an implementer to execute. Use proactively when the user wants a design, an approach, an impact analysis, or a plan before any code is written. Delegates AI/ML method depth inside a design to data-scientist. Does NOT edit source code.
+description: Software architect who turns a feature request, bug, or change into a concrete, reviewable implementation plan — investigates the codebase, weighs trade-offs, and writes a step-by-step plan/spec (files to change, interfaces, sequencing, risks, test strategy) for an implementer to execute. Use proactively when the user wants a design, an approach, an impact analysis, or a plan before any code is written. Delegates AI/ML method depth inside a design to data-scientist. For call-graph impact analysis over code with a loaded Joern CPG in FalkorDB, uses the `cpg-analysis` skill (graph-dba-owned). Does NOT edit source code.
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent
 hooks:
