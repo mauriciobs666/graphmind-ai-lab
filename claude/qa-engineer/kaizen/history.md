@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-19 — CPG test-gap capability wired into the routing description (M2 / C-207)
+- **What:** Frontmatter `description` gained one clause: for test-gap analysis over a loaded Joern CPG in FalkorDB, the qa-engineer uses the `cpg-analysis` skill (graph-dba-owned) to find production code no test structurally reaches. `claude/README.md` catalog entry updated to match. No body change (skill is progressively disclosed).
+- **Why:** M2 delivered the `cpg-analysis` skill; `qa-engineer` is the named consumer of the test-gap recipe (FR-13, structural reachability — not runtime coverage). C-207 makes the routing contract advertise it. Wired by cobb as part of Gate-2b (skill passed the standards vet).
+- **Plan items:** none.
+
 ## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol
 - **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt: durable, non-obvious environment facts discovered during runs are appended as dated, evidence-backed inbox entries; the agent never promotes its own entries.
 - **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `architect` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09
+> Last reviewed: 2026-07-19
 
 ## Active
 

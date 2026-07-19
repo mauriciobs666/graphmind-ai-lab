@@ -106,6 +106,13 @@ to the general fact here.
   each block back to one row with an aggregation (`WITH d, count(st) AS stepCount`)
   so the query returns a single clean status row. The write itself is unaffected —
   this is a result-cardinality issue, not a correctness one.
+- **Cannot combine an aggregation with a reference to a prior variable in the same
+  `WITH`** when building an accumulator. `WITH acc + [x IN collect(DISTINCT c.NAME)
+  WHERE NOT x IN acc] AS acc2` fails at runtime with `_AR_EXP_UpdateEntityIdx:
+  Unable to locate a value with alias <acc>`. Split into two steps: `WITH acc,
+  collect(DISTINCT c.NAME) AS lvl` then `WITH acc + [x IN lvl WHERE NOT x IN acc]
+  AS acc2`. Surfaced building a multi-level name-based reachability closure for a
+  test-gap query. (Verified 2026-07-19 on v4.18.11 / `cpg_falkorchat`.)
 
 ## Query tuning
 

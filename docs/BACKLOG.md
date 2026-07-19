@@ -6,7 +6,7 @@
 > Item IDs use the `C-` prefix (distinct from falkor-chat's `K-`); the hundreds digit tracks the
 > milestone (C-2xx = M2).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done · ⚪ deferred
-> Last reviewed: 2026-07-18.
+> Last reviewed: 2026-07-19.
 
 ## Handoff — `teco` drives M2 (2026-07-18)
 
@@ -42,7 +42,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
 | **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified | `joern` agent + `joern-cpg` skill — delivered 2026-07-17, commit `b2b9a6e` (see [`HISTORY.md`](./HISTORY.md)) |
-| **M2 — CPG consumer skill** 🔵 | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated | **C-201 → C-208** |
+| **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -59,26 +59,26 @@ static CPG has structure/reachability, not runtime line/branch coverage.
 
 ## M2 — CPG consumer skill (`cpg-analysis`)
 
-- **C-201 — Adopt the schema contract.** 🔵 Confirm `skills/joern-cpg/references/cpg-model.md` is
+- **C-201 — Adopt the schema contract.** ✅ Confirm `skills/joern-cpg/references/cpg-model.md` is
   the canonical node/edge/property reference the recipes cite; fill any *consumer-query* gap
   (label → Cypher idiom mapping, the UPPER_CASE-property + `id`-lowercase + real-boolean gotchas).
   *No new schema doc — reuse.* Owner: graph-dba.
-- **C-202 — Skill core (`SKILL.md`).** 🔵 FalkorDB connection via `redis-cli GRAPH.QUERY`; the
+- **C-202 — Skill core (`SKILL.md`).** ✅ FalkorDB connection via `redis-cli GRAPH.QUERY`; the
   `CpgNode(id)` model + per-label index reality; shared traversal idioms (callers/callees over
   `CALL`, transitive reach, data-flow over `REACHING_DEF`, symbol def/ref). Owner: graph-dba.
-- **C-203 — Recipe: impact-analysis.** 🔵 Callers/callees + transitive up/downstream reach —
+- **C-203 — Recipe: impact-analysis.** ✅ Callers/callees + transitive up/downstream reach —
   **FR-2, FR-3 / AC-2, AC-3**. Consumers: `analyst`, `architect`. *In-scope, no reqs change.*
-- **C-204 — Recipe: rca.** 🔵 Data-flow back from a symptom (`REACHING_DEF`) + cross-file symbol
+- **C-204 — Recipe: rca.** ✅ Data-flow back from a symptom (`REACHING_DEF`) + cross-file symbol
   def/ref — **FR-4, FR-5 / AC-4, AC-5**. Consumer: `analyst`. *In-scope, no reqs change.*
-- **C-205 — Recipe: code-review.** 🔵 Taint/sink & suspicious-pattern queries (data-flow to risky
+- **C-205 — Recipe: code-review.** ✅ Taint/sink & suspicious-pattern queries (data-flow to risky
   calls) — **FR-12 / AC-7**. Consumer: `analyst`. *(Was a scope extension; approved into scope
   2026-07-18 — no longer gated.)*
-- **C-206 — Recipe: test-gap.** 🔵 Reachability from prod entrypoints vs. test entrypoints
+- **C-206 — Recipe: test-gap.** ✅ Reachability from prod entrypoints vs. test entrypoints
   (code reachable in prod but from no test) — **FR-13 / AC-8**. Consumer: `qa-engineer`. *(Was a
   scope extension; approved into scope 2026-07-18 — no longer gated.)*
-- **C-207 — Agent wiring.** 🔵 Add CPG-capability lines to `analyst` / `architect` / `qa-engineer`
+- **C-207 — Agent wiring.** ✅ Add CPG-capability lines to `analyst` / `architect` / `qa-engineer`
   descriptions (their live routing contract); note graph-dba ownership. cobb reviews. Owner: cobb.
-- **C-208 — Catalog & doc sync.** 🔵 `skills/README.md` (new skill), root `AGENTS.md`, `claude/README.md`
+- **C-208 — Catalog & doc sync.** ✅ `skills/README.md` (new skill), root `AGENTS.md`, `claude/README.md`
   if agent descriptions change, and this backlog → `HISTORY.md` on delivery. Per AGENTS.md, skill +
   catalog + agent wiring land in the **same** change.
 
@@ -98,3 +98,15 @@ C-201 (schema contract) ─▶ C-202 (skill core) ─┬─▶ C-203 (impact)   
                                                 └─▶ C-206 (test-gap)  ─┘
 Critical path: C-201 → C-202 → C-203/C-204 → C-207 → C-208 (recipes C-205/C-206 parallel after C-202).
 ```
+
+## Follow-ups (post-M2)
+
+- **C-101 — Fix `joern-cpg` loader `MAX_ARG_STRLEN` failure + masked exit code.** 🔵 The M1
+  `cpg-to-falkordb.py --load` passes each 500-node `UNWIND` batch as a single `redis-cli` argv;
+  on large `CODE` properties this exceeds the Linux 128 KiB `MAX_ARG_STRLEN` limit →
+  `OSError: [Errno 7] Argument list too long`, yet `pipeline.sh` still reports **exit 0**
+  (the failure is masked). Discovered 2026-07-19 during the M2 CPG substrate build; worked
+  around by streaming batches via stdin (`redis-cli -x`). Fix both defects: (a) stream each
+  batch via stdin instead of argv, and (b) propagate the loader's real exit code so
+  `pipeline.sh` fails loudly. Owner: `joern` (producer skill). Ref: `docs/HISTORY.md` M1;
+  details in the M2 coordination doc.

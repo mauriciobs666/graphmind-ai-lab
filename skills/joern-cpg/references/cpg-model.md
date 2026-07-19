@@ -87,3 +87,57 @@ convention) if an implementer will build on it.
   strings.)
 - Relationship types cannot be parameterized in Cypher; the transformer inlines
   each Joern edge type (they are safe identifiers like `AST`, `REACHING_DEF`).
+
+## Consumer-query facts (topology gotchas for reading the loaded graph)
+
+> Additive section for **consumers** who query an already-loaded CPG with Cypher
+> (the `cpg-analysis` skill). These are **schema/topology facts**, not producer
+> semantics — nothing above changes. The Cypher *idioms* that use them live in
+> `skills/cpg-analysis/SKILL.md`. **Verified 2026-07-19** against a `pysrc2cpg`
+> CPG of `falkor-chat/server` (graph `cpg_falkorchat`, 79.6k nodes / 522k edges,
+> falkordb `v4.18.11`). `pysrc2cpg`-specific; re-verify for other frontends.
+
+- **`CALL` is a call-*site* node, not a method→method edge.** The table row
+  "Call graph | `CALL`" refers to the call-site node. There are **two** distinct
+  `CALL` things: the **`:CALL` node** (one per call expression) and the **`CALL`
+  *edge*** from a call-site node to the callee `METHOD`. Direct
+  `(:METHOD)-[:CALL]->(:METHOD)` does **not** exist (count 0 on the verified graph).
+- **Resolve callees via the `CALL` edge; resolve callers via `CONTAINS`.**
+  - Callee of a call site: `(:CALL)-[:CALL]->(callee:METHOD)`.
+  - Caller (the method a call site sits in): `(caller:METHOD)-[:CONTAINS]->(:CALL)`.
+    So "callers of M" and "callees of M" are **not** one symmetric edge.
+- **Inbound call resolution is sparse (frontend limit).** On `pysrc2cpg` the
+  `(:CALL)-[:CALL]->(:METHOD)` edge is present for only a minority of call sites
+  (~1.3k of ~20k) — reliably for **same-object `self.x()` / same-file** dispatch,
+  plus synthetic `…<metaClassAdapter>` wrappers. **Cross-object dispatch**
+  (a value holding another class's instance, e.g. a service calling into a
+  repository it was handed) is **not** resolved. Consequence: **downstream/callee**
+  traversal over the `CALL` edge is trustworthy; **upstream/caller** traversal over
+  it is not — match callers by `CALL.NAME` instead.
+- **`METHOD_FULL_NAME` (on `CALL` nodes) resolves inconsistently** for the same
+  callee: you may see a short form (`Services.post_message`), a full path
+  (`falkorchat/services.py:<module>.Services.post_message`), a phantom
+  `…<returnValue>.post_message`, or `<unknownFullName>` / `<empty>`. Do **not**
+  key joins on it; match call sites by `CALL.NAME` (+ disambiguate by the callee
+  `METHOD`'s `FILENAME`). It **is** a real key on `CALL` (confirmed present).
+- **`IS_EXTERNAL` is a real boolean on `METHOD`** (confirmed key). `WHERE
+  m.IS_EXTERNAL = false` selects first-party methods; library/builtin stubs are
+  `true`. Filter with it to keep transitive traversals first-party and bounded.
+- **`FILENAME` is only reliable on `METHOD` and `TYPE_DECL`.** `CALL`,
+  `IDENTIFIER`, `LOCAL`, `LITERAL`, etc. carry **empty/absent `FILENAME`** (and
+  usually empty `CODE`-level file context). To get the file of any such node,
+  hop to its enclosing method: `(owner:METHOD)-[:CONTAINS]->(n)` and read
+  `owner.FILENAME`. `LINE_NUMBER` **is** present on most nodes (including `CALL`).
+- **`METHOD` structural children attach via `AST`, not `CONTAINS`.** Params
+  (`METHOD_PARAMETER_IN`), the `BLOCK`, `METHOD_RETURN`, and `MODIFIER` are `AST`
+  children. `CONTAINS` from a `METHOD` reaches its nested **`CALL` sites** (used
+  for the call graph). Reach a parameter with
+  `(m:METHOD)-[:AST]->(:METHOD_PARAMETER_IN)`; its position is the node property
+  `INDEX` (call-site arguments carry the matching `ARGUMENT_INDEX`).
+- **`REACHING_DEF` (data flow) is intraprocedural and carries no edge
+  properties.** It links def→use **within one method** and stops at call-site
+  arguments — it does **not** cross into a callee. Interprocedural flow must be
+  reconstructed by bridging over the `CALL` edge (call-site → callee → matching
+  `METHOD_PARAMETER_IN` by `INDEX`), which is only as complete as the sparse call
+  resolution above. For high-fidelity interprocedural taint, run Joern's
+  `reachableBy` in the REPL (the `joern` agent) rather than pure Cypher.

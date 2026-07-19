@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-07-19 — CPG capability wired into the routing description (M2 / C-207)
+- **What:** Frontmatter `description` gained one clause: when a Joern CPG is loaded in FalkorDB, the analyst uses the `cpg-analysis` skill (graph-dba-owned) for impact-analysis, RCA data-flow, and code-review taint queries instead of reading files. `claude/README.md` catalog entry updated to match. No body change — the skill is progressively disclosed and self-describes; the description clause is the routing signal.
+- **Why:** M2 delivered the `cpg-analysis` skill (`analyst` is a named consumer for impact/RCA/code-review recipes per FR-10/11/12). C-207 makes the consumer agents' routing contract advertise the capability. cobb wired it as part of Gate-2b (skill also passed the standards vet).
+- **Plan items:** none.
+
 ## 2026-07-12 — K-001: code-review half of the shakedown proven (K-022 impl review) — RCA remains
 - **What:** The **code-review** half of the first-run shakedown ran for real. On falkor-chat
   **K-022 Landing 1** (executor implementation, committed `3921f87`) the analyst reviewed the

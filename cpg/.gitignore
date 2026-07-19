@@ -1,0 +1,3 @@
+# Durable CPG reload artifacts (cpg.bin + 37MB load.cypher + loader) — kept locally
+# so FalkorDB can be reloaded if it restarts; not source, do not commit.
+.cpg-artifacts/
