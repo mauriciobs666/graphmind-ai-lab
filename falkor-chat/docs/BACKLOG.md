@@ -4,7 +4,16 @@
 > keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
 > plan documents move to [`archive/`](./archive/).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-12 (**K-022 amended:** analyst post-implementation review added to its
+> Last reviewed: 2026-07-19 (**K-022 Landing 2 delivered ✅ + analyst-gated** — trigger + triage proof
+> flow (U11–U14), the Defect-A guard thread-context seam fix, Defect-B tool-error survival, the U13
+> workflow seed; gate `approve with suggestions`, 0 blocker / 2 major (both closed) / 3 minor / 3 nit
+> → `docs/reviews/m3-guard-thread-context-impl.md`. New server baseline **pytest 350 passed, 0
+> skipped**; query suite unchanged **241/241**. **U15 (qa-engineer acceptance = K-025) was NOT run** —
+> per decision D12-B the executor *mechanism* is proven and live-triage *reliability* is descoped to
+> the new **K-027**, which also carries the gate's minors/nits. K-023 (chat linkage) closed by the U11
+> trigger + Option-B `PRODUCED` wiring; K-024 is half-delivered (conversational triage flow seeded and
+> run; the LLM-free `kind:'process'` flow not built). See HISTORY.md 2026-07-19. Prior review
+> 2026-07-12 — **K-022 amended:** analyst post-implementation review added to its
 > owner chain and done-condition — the team's first fully-gated coordinated run; see the
 > review-gate note on the item. Prior review 2026-07-09: **M3 — Workflow engine started: slice 1
 > delivered ✅** — K-020 (def
@@ -24,7 +33,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1, 2026-07-09) → **K-022 → K-023 → K-024 → K-025** |
+| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) → **K-024** (conversational flow done, process flow open) → **K-025** (QA = U15, **not run**). K-027 (live-triage reliability) is a follow-up, not an M3-green gate. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -75,12 +84,14 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 ## Active
 
 > **Milestone M3 — Workflow engine, in progress.** Slice 1 (**K-020 + K-021**) delivered
-> 2026-07-09 → HISTORY.md. The remaining M3 chain is essentially linear:
-> **K-022 (executor) → K-023 (chat linkage) → K-024 (proof flows) → K-025 (QA) ⇒ M3 ✅.**
+> 2026-07-09; **K-022 (executor, both landings) + K-023 (chat linkage)** delivered 2026-07-19 →
+> HISTORY.md. Remaining to M3 ✅: **K-024** (the second, LLM-free `kind:'process'` proof flow) →
+> **K-025 (QA acceptance = U15, not yet run)**. **K-027** (live-triage reliability) is a parallel
+> follow-up track, explicitly *not* an M3-green gate per decision D12-B.
 > Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
 
-### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022…K-025 queued —
+### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022 ✅, K-023 ✅, K-024 partial, K-025 open —
 
 > **K-020 — Workflow definition model in `reference`** and **K-021 — Snapshot materialization
 > into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → HISTORY.md.** Suites raised to
@@ -88,7 +99,24 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > `start_key` contract (implemented as "exactly one step declares `start: True`"); the
 > `-[:HAS_STEP]->` containment edge added at the gate (index-anchored def-scoped reads).
 
-### K-022 — Run + StepRun executor core (Slice 2) (🟡 Landing 1 ✅ delivered + analyst-approved 2026-07-12 — Landing 2 (trigger+proof, U11–U15) remaining)
+### K-022 — Run + StepRun executor core (Slice 2) (✅ delivered + analyst-gated — Landing 1 2026-07-12, Landing 2 2026-07-19 · **U15 acceptance not run**, descoped to K-025/K-027 per D12-B)
+
+- **Delivered (Landing 2, U11–U14) ✅ 2026-07-19:** the `@mention` trigger (`trigger.py`, resume-before-
+  start, one handler per request, `WORKFLOW_ENABLED` default off), Option-B `StepRun-[:PRODUCED]->Message`
+  emission linking, the Landing-1 **M-1** zombie-run fault net, agent-node thread context, U12 REST run
+  inspection, the U13 `seed_workflows.sh` triage seed, and the U14 live e2e — plus the two defects that
+  landing it exposed: **Defect A** (the intake→research guard could never fire — `thread=None` at the
+  seam; fixed at the seam, not in a prompt) and **Defect B** (a hallucinated `@mention` failed the whole
+  run; tool errors now survivable, split per **D16**: propagate every non-allowlisted `ServiceError` to
+  the M-1 net and log unconditionally). **D14** reverted the S5 `understanding`-JSON intake instruction
+  (it regressed live intake advancement **10/10 → 3/10** on the shipped Qwen3-4B) while **retaining** the
+  Defect-C prompt mitigations ⇒ the shipped guard runs only on the **degraded RECENT-TURNS tier**.
+  Baselines: **pytest 283 → 350 passed, 0 skipped**; query suite **241/241** (zero graph/DDL/QUERIES
+  surface in the whole landing). Analyst gate = **approve with suggestions, 0 blocker / 2 major / 3
+  minor / 3 nit** (`docs/reviews/m3-guard-thread-context-impl.md`); both majors closed before the commit.
+  **Not accepted:** U15 was not run — mechanism proven, live-triage reliability descoped to **K-027**.
+  See HISTORY.md 2026-07-19, `docs/plans/m3-executor-landing2.md`, `docs/plans/m3-guard-thread-context.md`,
+  and the coordination log `docs/plans/m3-executor-coordination.md`.
 
 - **Delivered (Landing 1, U1–U10) ✅ 2026-07-12:** the offline LLM-native executor + node
   capabilities (Phases 0–3) — schema/DDL + DESIGN reconciliation + QUERIES §12, `executor.py`
@@ -99,8 +127,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   graph-dba → tdd-engineer → coder with a mandatory analyst review gate — the team's first
   fully-gated run. See `docs/HISTORY.md` (2026-07-12), the review at
   `docs/reviews/m3-executor-impl.md`, and the coordination log
-  `docs/plans/m3-executor-coordination.md`. **Remaining: Landing 2 (trigger + triage proof,
-  U11–U15)** — carried into K-023 below.
+  `docs/plans/m3-executor-coordination.md`. Landing 2 (U11–U14) landed 2026-07-19 — see the bullet
+  above; U15 remains open as K-025.
 
 - **Owner:** **`architect`** design pass first — engine-loop semantics **+ resolve DESIGN §13
   guard expression language (expr lib vs minimal DSL in `Step.config`/`TRANSITION.guard`) — a
@@ -131,7 +159,16 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** gate contract assertions for run write/advance; pytest executor units with a
   stub step-executor; guard-evaluation tests.
 
-### K-023 — Workflow ↔ chat linkage (Slice 3) (🔵 proposed — needs K-022)
+### K-023 — Workflow ↔ chat linkage (Slice 3) (✅ delivered 2026-07-19 inside K-022 Landing 2 → HISTORY.md)
+
+> **Closed by K-022 Landing 2 (U11).** `TRIGGERED_BY` + the trigger wiring shipped in `trigger.py`;
+> the StepRun→Message sense was **disambiguated as `PRODUCED`** (locked decision D2 — K-013's
+> `EMITTED` Message→Message provenance is untouched), delivered via **Option B** (buffer emissions,
+> link after `_record`) so the §2.1 loop and `record_step_and_advance` stayed byte-for-byte. All three
+> carried inputs below are closed: **M-1** (the `_drive` fault net), **PRODUCED-link ordering**
+> (Option B), **agent-node thread context** (`_read_thread_context`, and the Defect-A seam fix that
+> finally made the guard read it). Zero graph/DDL/QUERIES change. Original item text kept below for
+> provenance.
 
 - **Owner:** **`graph-dba`** gate (`TRIGGERED_BY` / StepRun-`EMITTED` writes/reads) →
   **`tdd-engineer`**/`coder`.
@@ -156,7 +193,14 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   queryable both directions. **Risks:** edges negligible; the `EMITTED` overload is the
   modeling-clarity risk. **Test strategy:** gate assertions; pytest linkage + triggered-run tests.
 
-### K-024 — Proof flows: one conversational + one business-process (Slice 4) (🔵 proposed — needs K-023)
+### K-024 — Proof flows: one conversational + one business-process (Slice 4) (🟡 half-delivered 2026-07-19 — conversational done, process flow open)
+
+> **Conversational flow ✅** — the `kind:'conversation'` **triage** def (`triage@v1`, intake→research→
+> answer, three `type:'agent'` steps) is published + materialized by `scripts/seed_workflows.sh`
+> (K-022 U13, idempotent, service-layer-driven) and runs end-to-end to `status='done'` against live
+> LM Studio (`tests/test_workflow_live.py`, `live`-marked). **Reliability is model-gated, not proven** —
+> see K-027. **Business-process flow ⚪ not built** — the LLM-free `kind:'process'` def over
+> `human`/`decision`/`wait` steps (the §6.3 coordination-is-workflow proof) is the remaining work here.
 
 - **Owner:** **`coder`**/`tdd-engineer` + `scripts/seed_workflows.sh` (mirrors `seed_demo.sh`).
 - **Scope:** the M3 DoD proof — publish two canonical defs, materialize into `ws:acme`
@@ -170,10 +214,105 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 ### K-025 — QA acceptance pass on M3 (Slice 5) (🔵 proposed — needs K-020…K-024)
 
+> **This is the un-run U15.** K-022 Landing 2 closed without it (decision **D12-B**): the executor
+> *mechanism* is proven, live-triage *reliability* is descoped to K-027. When it runs, its scope is
+> **AC-1/AC-5/AC-6 verified** with **AC-2b/AC-3/AC-4 recorded model-gated and
+> structurally-demonstrated** (per D7, AC-4 is **structural-only** — the live test asserts a `PRODUCED`
+> reply, not its provenance, because the `answer` node cannot see the research findings). Two
+> constraints travel with the pass: the **D10 small-n caveat must appear verbatim next to any verdict
+> line** sourced from the guard calibration, and the shipped guard runs only on the **degraded
+> RECENT-TURNS tier** (D14) — a `guard_judgment` citing turn text is expected, not a defect.
+> ⚠️ Sequencing: `pytest` and `test_queries.sh` both wipe the global `reference` graph, so the order is
+> **`pytest` → re-seed (`seed_workflows.sh`) → verify → live acceptance**, never the reverse.
+
 - **Owner:** **`qa-engineer`**. Black-box publish → materialize → run → trace → chat linkage for
   both proof flows; versioned plan/report per repo convention (`docs/test-plans/`,
   `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
+
+### K-027 — Live triage reliability + carried gate findings (🔵 proposed — the D12-B descope from K-022 Landing 2)
+
+> **Numbering note:** the coordination log calls these "**K-023 follow-ups**", but K-023 is already
+> taken (workflow ↔ chat linkage, now ✅). They are collected here as **K-027**, the next free number.
+
+- **Why it exists:** K-022 Landing 2 proved the executor **mechanism** and stopped there (decision
+  **D12-B**). What is *not* proven is that the live triage flow behaves reliably: the terminal
+  `post_message` call is unreliable on the shipped 4B, and the fuzzy-guard judge is **uncalibrated**.
+  Those are **local-model-quality + engine-guarantee** problems, not executor bugs — so they were
+  descoped rather than fixed unit-by-unit. **Not an M3-green gate** (see K-024/K-025).
+- **Owner:** **`architect`** for the terminal-node contract (an executor change) → **`coder`/
+  `tdd-engineer`**; **`data-scientist`** owns calibration method + golden-set expansion (advisory,
+  never implements) with **`tdd-engineer`** running the harness.
+- **Scope:**
+  1. **Judge-parse robustness** — `app._build_llm_judge` uses `complete()` + a **bare `json.loads`**.
+     A model that wraps its JSON in a ```` ```json ```` fence breaks *every* verdict silently: in the
+     D13 probe Ministral scored **26/26 "unparseable judge output"**, including one correct
+     `decision:true` destroyed by the fence. The shipped Qwen path is unaffected (its JSON is
+     unfenced), which is exactly why this can rot unnoticed. Fix = fence/prose-tolerant parsing or
+     structured output.
+  2. **Terminal-node-must-post engine contract** — the structural fix for **Defect C**. Today's
+     mitigation is prompt-level and **does not hold on a 4B**: the `answer` node emits a good grounded
+     answer as plain text with no tool call, so no `PRODUCED` edge (AC-4 measured ~2/8, then 0/3 after
+     a strengthened prompt, then 2/3 in the probe replay). A second measured mechanism: the folded
+     `"{displayName}: {text}"` thread context leaks a display name into `mentions` → the §4 write
+     rejects → the model "recovers" by dropping the tool. Needs an engine-level guarantee, not a prompt.
+  3. **Judge calibration (D9/D10)** — run the protocol in `docs/plans/m3-guard-calibration.md` §4:
+     **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ is a **reported diagnostic**, not a
+     gate (an always-suspend judge scores a perfect 0% FAR, so the original κ-based gate could be
+     passed by a judge that never advances). Gate failure ⇒ **block the wiring** — no override, no
+     compensating with `maxSteps`. **D10 is binding:** at N=26 a pass means *"no blocker found at a
+     sample size that could only have found a large one"* — the §8 verbatim caveat must travel with
+     every verdict line. Diagnostic already on record: on clean golden inputs Qwen's judge passes both
+     arms (recall 0.818, false-advance 0.067), so the live 3/10 is a **generator-half** problem, not a
+     judge problem.
+  4. **Golden-set expansion (D11)** — `server/tests/eval/golden_guards.jsonl` exists (**26 rows**,
+     well-formed and labeled) but **nothing reads it yet** (gate nit **n-3**) — the file will rot
+     unless this item consumes it. A real FAR ≤ 10% bound needs ~30 suspend cases at zero failures
+     (≈50–60 total), and **all current labels are one labeler's** — expansion should add a second
+     labeler for the boundary tier or it buys precision without independence.
+  5. **Ministral re-probe (D13 finding 2)** — Ministral-3B is *better* at the terminal tool call
+     (native `post_message` 3/3 in replay where Qwen emitted prose 3/3) but far worse at judging
+     (fence-fixed advance-recall 0.364 vs Qwen 0.818). Worth re-probing **only if** the judge is made
+     model-robust (item 1). Notes: `docs/plans/m3-capability-probe-ml.md`,
+     `docs/plans/local-model-ram-budget-ml.md` (the ~4–5GB fits-16GB chat-model budget).
+  6. **Exit** — these outcomes are what would let the **K-025 / U15 acceptance** move AC-2b/AC-3/AC-4
+     from *model-gated, structurally demonstrated* to *verified*. K-025 can run before this item; it
+     just cannot claim more than D12-B allows.
+- **Carried findings from the analyst gate** (`docs/reviews/m3-guard-thread-context-impl.md`, minors +
+  nits — recorded here so they cannot rot):
+  - **m-1 · `guards.py` negator window leaks across clause boundaries.** The 12-char window misses
+    e.g. `"The user did not say; more info is needed."`, and a missed contradiction is a
+    **false advance** — the *dangerous* direction under DS Q1, and the **opposite** of what the code
+    comment claims ("erring narrow keeps the failure on the safe over-suspend side"). Stakes are
+    limited (the backstop only fires on an already-inconsistent verdict; the prompt rule is the primary
+    defense). **At minimum, fix the comment;** the real fix is a same-clause requirement plus pinning
+    the three missed rationales in `SUSPENDING_RATIONALES` (only the safe direction is pinned today).
+  - **m-2 · `guards._recent_turns` slices before filtering** (`thread[-n:]` then skips malformed/empty
+    rows), so malformed rows shrink the evidence window exactly when the judge is on its degraded tier.
+    Fix = filter first, slice second.
+  - **m-3 · the judge's evidence tier is invisible in the trace** — `_select_transition` traces
+    `(transition, guard_text, verdict)` only, so nothing records whether a judgment ran on
+    `understanding` (primary) or `recent_turns` (fallback). Calibration (item 3) needs results
+    **stratified by tier**. Fix = return the tier on `GuardVerdict` and fold it into the
+    `guard_judgment` payload — additive, no graph change.
+  - **n-1 ·** function-local `import json as _json` in `app._render_judge_user` / `_build_llm_judge`;
+    every other module imports it at the top. **n-2 ·** the judge-prompt cap loop re-joins the whole
+    message on each eviction — **O(n²)** in turn count (irrelevant at N=6, but a test drives it with 50).
+  - **Doc-drift · the `_drive_loop` byte-identity lock is quoted as SHA `71055f756280` + 2844 bytes.**
+    The **SHA is correct and reproducible; the byte count is wrong** (the extraction yielding that hash
+    is 2860 bytes; a third figure, 2839, appears in an earlier coordination entry). A future gate
+    verifying the lock by byte count would wrongly report it broken. Correct the figure wherever the
+    lock is quoted — or drop the byte count and verify by SHA only.
+  - **m-A / n-1 (carried from the earlier `m3-executor-landing2-impl.md` gate) ·** `node_note` is
+    missing from the trace-kind enumeration in `docs/QUERIES.md` §12.10 and `docs/DESIGN.md` §5,
+    although the executor emits it.
+- **Risks/RAM (rule 6):** none new — no node type, index, or vector dimension changes. The terminal-node
+  contract touches the executor loop, whose §2.1 A/B/C block is byte-identity-locked: any change there
+  is a deliberate, reviewed act, not a refactor.
+- **Test strategy:** offline pins for the parse-robustness + negator fixes (fenced-JSON and
+  clause-boundary cases as fixtures); a `live`-marked reliability run for the terminal-post contract
+  with an explicit n and no cherry-picking; the calibration harness reading `golden_guards.jsonl` per
+  the §4/§7 protocol, reporting both arms with the D10 caveat attached.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
@@ -332,7 +471,12 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 | Path | Scope |
 |---|---|
 | `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
-| `docs/plans/m3-executor.md` | K-022: run/step-run executor + the §13 guard-language decision (author at pickup). |
+| `docs/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
+| `docs/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
+| `docs/plans/m3-guard-thread-context.md` | **Created ✅ 2026-07-15** — the Defect-A design (guard thread-context seam; ~40 lines, zero graph change, `_drive_loop` untouched by construction). |
+| `docs/plans/m3-guard-calibration.md` | **Created ✅ 2026-07-16** — K-027 item 3: the judge-calibration protocol (D9 gate = false-advance ≤ 10% ∧ advance-recall ≥ 0.80; D10 small-n caveat mandatory). |
+| `docs/plans/m3-capability-probe-ml.md` | **Created ✅ 2026-07-19** — the D13 fits-16GB Qwen3-4B-vs-Ministral-3B comparison + its run results (no model swap). |
+| `docs/plans/local-model-ram-budget-ml.md` | **Created ✅ 2026-07-18** — local-model RAM budget for the downgraded 16GB host (what fits alongside FalkorDB + the co-resident embedder). |
 | `docs/archive/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
 | `docs/archive/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
 | `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |
@@ -356,3 +500,9 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard expression language (M3),
   real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
   for the gateway (K-018).
+- **WSL2 memory cap for the 16GB host** (parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
+  default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
+  likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +
+  `autoMemoryReclaim=gradual` in `C:\Users\mauri\.wslconfig` (keep `networkingMode=mirrored`), then `wsl --shutdown`.
+  Full diagnostic + apply procedure: `docs/plans/wsl2-memory-diagnostic.md`. Un-park (apply) if the crashes recur —
+  verdict was confirmed-by-defaults, not reproduced live (FalkorDB was down during the diagnostic).

@@ -46,3 +46,15 @@
 - **Suggested home:** prompt (standing rule: for a deliberately asymmetric judge, gate on
   class-conditional rates — false-advance + advance-recall — and demote κ/accuracy to reported
   diagnostics with marginals)
+
+## 2026-07-19 — falkor-chat fuzzy-guard judge JSON parsing is model-fragile (bare `json.loads`, not fence-tolerant)
+
+- **Evidence:** `_build_llm_judge` (`falkor-chat/server/falkorchat/app.py:~305`) calls `llm.complete()` (free text, no `response_format`) and parses the verdict with a **bare `json.loads(text)`** — no markdown-fence/prose stripping, unlike `llm.py`'s own tool-call `_extract_json_object`. In the D13 capability probe, `mistralai_ministral-3-3b-instruct-2512` wrapped every judge reply in a ```` ```json ```` fence → 26/26 golden cases + all 40 live guard judgments returned `"unparseable judge output"` → `_coerce_verdict` biased-to-suspend → intake advanced 0/10. `qwen/qwen3-4b-2507` emits bare JSON and is unaffected (golden advance-recall 0.818). Raw capture: fenced JSON with an underlying `decision:true` was forced to False.
+- **Context:** running the K-022 D13 Qwen-vs-Ministral capability probe; the judge fence artifact was the dominant cause of Ministral's M1=0/10, distinct from (and masking) a genuine over-suspend weakness (fence-tolerant recall still only 0.364).
+- **Suggested home:** project docs (K-023 follow-up) + knowledge base — the judge parser should reuse `_extract_json_object` or use structured-output/`response_format`; any fence-wrapping model (Mistral/Gemma family) silently breaks the intake guard otherwise.
+
+## 2026-07-19 — On the terminal `post_message` tool call, Ministral-3B is MORE reliable than Qwen3-4B (native tool_calls vs prose)
+
+- **Evidence:** direct replay of the answer-node `post_message` schema against LM Studio (`:1234`): `mistralai_ministral-3-3b-instruct-2512` emitted a native OpenAI `tool_calls` `post_message` 3/3 draws (parsed cleanly by `llm.py`); `qwen/qwen3-4b-2507` emitted plain prose with **no** tool call 3/3 draws (the Defect-C / D4 genuine-no-post). LM Studio's OpenAI-compat layer surfaces Ministral's tool call correctly — the §4 "Mistral tool-call format won't parse" risk did **not** materialize on the native path.
+- **Context:** §4 classification of the D13 probe; flips the naive "smaller model = worse at tool calls" prior for AC-4 specifically (though Ministral never reached the answer node live, so it's not a banked M2 datapoint).
+- **Suggested home:** knowledge base — small-model tool-calling realism note for this lab's LM-Studio stack.

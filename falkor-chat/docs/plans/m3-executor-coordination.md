@@ -626,9 +626,435 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
     silence is what let the seam ship*; `m3-executor-ml.md` §Q1 gained a dated implemented-at pointer.
   - **⏸️ Defect C needs triage before U15 — AC-4 currently passes ~1 in 3.** Options put to the user.
 
+- 2026-07-16 — **D8/S5 + Defect-C attempt (coder) — DELIVERED AS TWO HONEST NEGATIVES.** *(Subagent
+  carried a security flag; teco reviewed: destructive shared-state ops — `DETACH DELETE ws:acme` +
+  `test_queries.sh` dropping `reference` — but **benign, disclosed, each followed by a re-seed**; teco
+  verified graph state intact: only `ws:acme`+`reference` exist, both carry `triage@v1`; ws:live/livetest
+  cleaned up. **Engine source 0-diff** on all four files — verified. Process note: coder doing unilateral
+  graph surgery on the demo workspace should have routed through devops.)*
+  - **Scope verified clean:** only `scripts/seed_workflows.sh` (prompt-only, no version bump, no config
+    change) + `claude/coder/kaizen/inbox.md` in the tree; pytest **348** holds (no Python touched);
+    query **241/241** (agent ran it, re-seeded after). *(Note: the agent's `m3-executor.md` §8 doc edit
+    landed in the tree in time to be swept into teco's commit `aa8b813` — a benign concurrent-edit bleed.)*
+  - **D8/S5 GOAL MET — the guard now runs on the PRIMARY path (proven).** Intake final text is a
+    well-formed `{"understanding":{request,known,missing}}`; `_extract_understanding` parses it non-empty
+    ⇒ `guards.py:136` runs the judge understanding-fed, `recent_turns=[]`. KEEP_WS trace confirms.
+  - **⚠️ BUT S5 EMPIRICALLY *REGRESSES* THE FLOW — this is the critical finding.** The 4B fills
+    `understanding.missing` with forensic demands (server logs, infra details) on **every** turn and never
+    empties it; the **uncalibrated** judge reads `missing != []` and suspends. **Intake advancement
+    (reaches `answer`), n=10 each: BEFORE (degraded turns path) 10/10 → AFTER (S5 primary path) 3/10.**
+    On the degraded path the judge saw the raw human turns ("that's everything, please research now") and
+    advanced; on the primary path it sees the 4B's structured missing-list and suspends. **This inverts
+    the DS Q1 premise ("compact state beats transcript") for THIS 4B + an uncalibrated judge — OQ-4
+    materializing on the primary path, exactly as the note warned "do not wire an uncalibrated judge."**
+    Coder verdict (teco concurs): **S5 must NOT go live as-is.** Left in the tree as the mandated D8
+    deliverable, uncommitted.
+  - **⚠️ Defect-C PROMPT FIX DID NOT HOLD.** AC-4 posting: BEFORE 1/10 → AFTER 0/3 (small-n, but
+    decisively not-reliable). Two measured mechanisms persist through the strengthened prompt: (a) answer
+    node emits the answer as **plain text**, no tool call (D4's 4B risk); (b) it calls `post_message` with
+    `mentions:["alice"]` (leaked from the folded `"{displayName}: {text}"` thread context) → §4 rejects →
+    the 4B "recovers" by dropping the tool and emitting text. **Prompting a 4B does not hold this →
+    needs an engine-level "terminal node must post" contract (architect; executor change, out of coder
+    scope).**
+  - **Immutable-def hazard CONFIRMED at source** (`repository.py:916` `_PUBLISH_CYPHER` `MERGE (st:Step) ON
+    CREATE SET st.config` — existing config never updates; def + each ws snapshot go stale independently).
+    Compounding trap: `test_queries.sh` drops `reference` but **not** `ws:acme`, so a naive re-seed leaves
+    a def/snapshot **split-brain**. Coder filed it to its inbox. **→ doc rollup / AGENTS.md candidate.**
+  - **OQ-5 corroborated LIVE:** the `answer` node asked the user for logs while `research` had already
+    found the real root cause (pool 100→10) — the answer node cannot see research findings (m-2, D7).
+  - **⏸️ STRATEGIC CROSSROADS — put to the user.** The executor *mechanism* is proven (Defect A dead,
+    flow *can* reach `done`); the remaining blockers (judge over-weights `missing`; 4B won't reliably call
+    the terminal tool) are **local-model-quality + engine-guarantee** issues, not executor bugs. What
+    "done" means for the K-022 **proof** is now a scope decision, not another fix-by-fix delegation.
+
+## Locked decisions — round 4 (from the user, 2026-07-16)
+- **D12 — "C then B".** First a **one-shot capability probe** (C): put a **more capable model** behind
+  the **unchanged, model-agnostic seams** and re-measure the two regressed numbers (intake advancement
+  3/10 on the S5 primary path; AC-4 posting 0/3). Purpose: distinguish *"the design is sound, the 4B
+  can't keep up"* from *"the design needs an engine crutch."* **Then B** regardless of the probe's
+  outcome: **declare the executor mechanism proven and descope live-triage reliability** — U15 becomes a
+  scoped acceptance (mechanism + AC-1/AC-5/AC-6 verified; AC-2b/AC-3/AC-4 recorded **model-gated,
+  structurally-demonstrated**); the "terminal node must post" engine contract + judge calibration
+  (D9/D10) + golden-set expansion (D11) become **K-023 follow-ups**, not U15 blockers. The probe is a
+  **data point that informs how B is framed**, not a gate on reaching it.
+- **Probe constraints:** config/env only — **no seam code change** (`guards`/`executor`/`tools`/`app`
+  untouched), **no def-prompt change** beyond the S5 already in the tree (test the primary path as-is).
+  If no more-capable model is available/loadable in LM Studio, that's a **blocker → surface to user**;
+  do not download/install models. S5 stays **uncommitted** either way (it regresses on the 4B).
+
+- 2026-07-16 — **D12 locked; capability probe dispatched (data-scientist).** Then → B framing (scoped
+  U15) irrespective of result.
+- 2026-07-18 — **Probe dispatch was lost when the user's machine crashed (nothing durable produced).
+  RESUMED with a fresh data-scientist dispatch.** Env re-verified by teco before re-dispatch: FalkorDB
+  restarted (`falkordb-data` volume survived); `reference` **still carries the S5 `triage@v1` def**
+  (intake systemPrompt confirmed to contain the S5 `{"understanding":…}` JSON instruction — no def
+  surgery needed, live re-seed is a safe republish); LM Studio up at :1234 with capable candidates
+  available (`google/gemma-4-12b`, `qwen/qwen3.5-9b`, `openai/gpt-oss-20b`); network-free **pytest 348
+  passed / 1 deselected** (no post-crash drift). `ws:acme` lost its def snapshot in the crash but the
+  probe rides the live test's throwaway `ws:live`, so it's not needed. Probe brief: config/env-only
+  model swap via `FALKORCHAT_LLM_MODEL`, S5 in tree, re-measure intake advancement (4B baseline 3/10)
+  + AC-4 posting (4B baseline 0/3); deliverable `docs/plans/m3-capability-probe-ml.md`. Then B framing
+  (scoped U15) regardless of result.
+
+## Locked decisions — round 5 (from the user, 2026-07-18)
+
+**Context — hardware downgrade breaks D12's premise.** The user's machine was downgraded **32GB → 16GB**
+total RAM (repeated overload crashes; see `docs/plans/local-model-ram-budget-ml.md` +
+`docs/plans/wsl2-memory-diagnostic.md`). D12's capability probe was specced to try a **more capable
+(bigger)** model (`gemma-4-12b` / `qwen3.5-9b` / `gpt-oss-20b`) to see if it fixes the two regressed
+numbers — **but none of those fit 16GB alongside FalkorDB + the co-resident embedder**, and even a passing
+result would be unshippable. So the "would a *better* model fix it?" question D12's probe was built to
+answer is now moot in the upward direction.
+
+- **D13 — redirect D12's capability probe from an UPWARD (bigger-model) probe to a FITS-16GB model
+  comparison for this task (user, Option A).** The probe now compares **`qwen/qwen3-4b-2507` (baseline)
+  vs. Ministral 3 3B (2512, Apache 2.0)** — both fit the ~4–5GB chat-model budget (budget analysis:
+  `local-model-ram-budget-ml.md` §1 + §7). Everything else about D12 is **unchanged and still binding**:
+  **config/env-only** (`FALKORCHAT_LLM_MODEL` swap, **no `guards`/`executor`/`tools`/`app` seam change**,
+  no def-prompt change beyond the S5 already in the tree), **S5 stays uncommitted**, and the probe
+  re-measures the **same two numbers** — intake advancement on the S5 primary path (4B baseline **3/10**)
+  and AC-4 terminal-post reliability (4B baseline **0/3**) — plus the guard-gate diagnostics
+  (advance-recall ≥ 0.80 / false-advance ≤ 10% per `m3-guard-calibration.md` §4, reported not blocking
+  here). **Then B regardless of result** (scoped U15) — D12's "then B" is untouched.
+  - **Honest expectation set with the user:** the live blockers are a 4B being *too weak* to reliably
+    call the terminal tool + an uncalibrated judge over-weighting `missing`. Ministral-3B is *smaller/
+    weaker* than the 4B, so the probe is **most likely confirmatory** (Qwen3-4B is the best that fits;
+    blockers persist ⇒ they are K-023 engine/calibration follow-ups, not a model choice). The user wants
+    the Ministral-vs-Qwen number **on record** for this task regardless — that is the deliverable.
+  - **⚠️ Prerequisite / likely blocker — Ministral not yet in LM Studio.** LM Studio currently exposes
+    `gemma-4-12b` / `qwen3.5-9b` / `gpt-oss-20b` (per the 2026-07-18 env check), **not** Ministral 3 3B.
+    D12's "do not download/install models" constraint stands, so the probe **cannot run until the user
+    loads Ministral 3 3B (2512) into LM Studio**. If unavailable at run time → surface to user, do not
+    self-provision. Owner split unchanged: **data-scientist** owns the probe method note + judgment
+    (redirect `m3-capability-probe-ml.md`); it runs the measurement once the model is loadable; it never
+    edits seams.
+  - **Prior probe dispatch:** the 2026-07-18 fresh data-scientist probe (upward candidates) is
+    **superseded by D13** — if it is still running from a prior session it should be stopped/ignored;
+    its bigger-model measurements are moot under the RAM ceiling.
+
+- 2026-07-18 — **D13 locked; probe redirected.** Coordination doc updated (this entry). Data-scientist
+  dispatched to redirect `docs/plans/m3-capability-probe-ml.md` to the Qwen3-4B-vs-Ministral-3B fits-16GB
+  comparison spec (ready to run once Ministral 3 3B is loaded in LM Studio). Then B framing (scoped U15)
+  regardless of result. RESUME POINT is now: **load Ministral in LM Studio → run the redirected probe →
+  B (scoped U15)**.
+
+- 2026-07-19 — **Probe note ✅ DELIVERED + teco-verified on disk.** `docs/plans/m3-capability-probe-ml.md`
+  (22KB, 8 sections + provenance, complete/untruncated) — the redirected Qwen3-4B-vs-Ministral-3B fits-16GB
+  spec. ⚠️ **Recovery note:** the data-scientist dispatch reported *failed* on a session limit with an
+  abort summary saying "no prior note exists, I'll author fresh" — but the tree shows the full on-brief file
+  was written *before* the cutoff. Verified by content, not the summary (the Landing-1/2 crash lesson: check
+  the tree). **No re-dispatch needed.** Key spec points: config/env-only `FALKORCHAT_LLM_MODEL` swap, S5 in
+  tree, M1 intake-advancement (4B baseline 3/10, n=10) + M2 AC-4 terminal-post (4B baseline 0/3, conditional
+  denominator); two structural cautions load-bearing — (1) M2's denominator is downstream of M1 so a weak
+  intake starves the AC-4 sample, (2) a Ministral no-post may be a **parse artifact** (Mistral tool-call
+  format) that must be classified before M2 is trusted; mandatory small-n honesty caveat travels with every
+  number. **⛔ Run is gated on the user loading Ministral 3 3B (2512) into LM Studio** (`bartowski/
+  mistralai_Ministral-3-3B-Instruct-2512-GGUF`, Q4_K_M ~2GB, ctx 8192, KV Q8; readiness check `curl -s
+  localhost:1234/v1/models | grep -i ministral`) — LM Studio currently has only the bigger candidates.
+  **RESUME POINT unchanged: user loads Ministral → dispatch the measurement run (data-scientist owns it) →
+  B (scoped U15).**
+
+- 2026-07-19 — **D13 probe RUN + COMPLETE (data-scientist). Ministral LOSES; Qwen3-4B stays.** User loaded
+  Ministral 3 3B at **Q8_0** (fair-capability quant — teco+user call, folded into probe note §6 with the
+  "Q4 reconfirm only if Ministral wins both" rule); teco brought FalkorDB up and verified both arms + embedder
+  served. Results appended to `docs/plans/m3-capability-probe-ml.md` §"Results (run 2026-07-19)", teco-verified
+  on disk (paired, same-session, n=10/arm, shipped wiring, S5 in tree):
+  | Metric | Qwen3-4B (A) | Ministral-3B (B) |
+  |---|---|---|
+  | M1 intake advancement | **3/10** (re-measured = baseline exactly) | **0/10** |
+  | M2 AC-4 terminal post | **2/3** (2 genuine posts, all §4-classified, 0 parse artifacts) | **not measurable (R1 — 0 reached `answer`)** |
+  - **Verdict: no model swap — Qwen3-4B remains the shipped chat model.** The Q4_K_M reconfirm rule does
+    **not** trigger (Ministral won neither number). Expected/confirmatory outcome per D13; the two live blockers
+    are **K-023 engine/calibration work, not a model choice.**
+  - **§4 classification (mandatory, done) — Ministral's 0/10 is NOT a clean capability loss, and it split into
+    two findings that matter for K-023:**
+    - **(K-023 finding 1 — NEW HARNESS DEFECT) the fuzzy-guard judge JSON parse is model-fragile.**
+      `app._build_llm_judge` uses `complete()` + a **bare `json.loads`**; Ministral wraps its JSON in a
+      ```` ```json ```` fence → **26/26 golden cases "unparseable judge output"** (one had a correct
+      `decision:true` destroyed by the fence). Silently breaks **any** fence/prose-wrapping model. Fix =
+      fence/prose-tolerant parse or structured output. **Does NOT affect the shipped Qwen path** (Qwen's JSON
+      isn't fenced — parses fine), so it is not a B/U15 blocker; it is a K-023 robustness item.
+    - **Even fence-fixed, Ministral would still lose:** fence-tolerant re-parse recovers its judge
+      advance-recall to only **0.364** (vs Qwen **0.818**) — a genuine over-suspend weakness underneath the
+      artifact.
+    - **(K-023 finding 2) Ministral is actually BETTER on the terminal tool call** — native `post_message`
+      3/3 in replay where Qwen emitted prose 3/3 (D4's 4B risk). Worth a targeted re-probe *only if* the judge
+      is ever made model-robust. Does not change today's decision.
+  - **Diagnostic that sharpens B:** Qwen's judge gate on clean golden inputs **passes both arms** (recall
+    0.818, false-advance 0.067), so **Qwen's live 3/10 is a GENERATOR-half problem** (intake emits
+    prose/forensic-`missing`), **not a judge problem** — informs how U15 frames the AC-2b/AC-3 model-gating.
+  - **Env leftover (minor):** the run left throwaway `ws:live` + `ws:probe` graphs resident (RAM cost on the
+    16GB box) — drop at convenience (`GRAPH.DELETE`, a mutating op → not teco's to run; devops/graph-dba or a
+    manual `redis-cli`); not a blocker.
+
+## ▶ RESUME HERE (2026-07-19) — probe done, into "B" (scoped U15)
+
+D12/D13 "then B regardless" is now due. **B is user-locked in principle but its execution carries real
+sub-steps and one genuine decision** — surfaced to the user, NOT auto-launched:
+1. **DECISION owed — S5 disposition.** S5 is uncommitted and **regresses the shipped 4B** (intake advancement
+   10/10 degraded-turns path → 3/10 S5 primary path). "B" ships Qwen, so S5 as-is makes the shipped flow worse.
+   Options: **revert S5** (ship the 10/10 degraded turns path, guard on fallback), **keep S5 uncommitted/parked**
+   (primary path exists for K-023 once the judge is model-robust + calibrated), or ship S5 accepting 3/10. User's call.
+2. **Analyst impl-review gate (NON-NEGOTIABLE) still owed on the Defect-A/B fixes** — incl. the `_drive_loop`
+   byte-identity teco flagged as not-independently-reverified. Must precede U15.
+3. **U15 (qa-engineer)** — scoped acceptance per D12-B/D7: mechanism + AC-1/AC-5/AC-6 verified; AC-2b/AC-3/AC-4
+   recorded model-gated/structurally-demonstrated; the D10 verbatim small-n caveat survives to the report.
+4. **K-023 follow-ups** (NOT U15 blockers): judge-parse robustness (finding 1), terminal-node-must-post engine
+   contract, judge calibration (D9/D10), golden-set expansion (D11), Ministral re-probe (finding 2).
+5. **Doc rollup at close** (HISTORY/BACKLOG + carried nits m-A/n-1, m-B, the `test_queries.sh` drops-`reference`
+   gotcha, the immutable-def hazard, and the two new K-023 findings).
+
+## Locked decisions — round 6 (from the user, 2026-07-19)
+- **D14 — S5 REVERTED (option a).** Ship the **degraded recent-turns fallback path** (intake advancement
+  **10/10**), not the S5 primary extract-then-judge path (**3/10** on the shipped Qwen3-4B). The primary
+  path is not reachable in this cut by design; it needs a **model-robust + calibrated judge** (K-023
+  findings 1 + D9/D10) before it is worth re-landing. Rationale: "B" ships Qwen, so S5 as-is makes the
+  shipped flow strictly worse; keeping it uncommitted would leave a permanently dirty tree and an
+  ambiguous "what did we ship" story.
+  - **⚠️ Scope nuance teco caught before dispatch — the uncommitted `seed_workflows.sh` diff bundled TWO
+    independent changes, and a blanket `git checkout` would have overshot the user's decision.**
+    (1) **S5** = the `intake` node's `{"understanding":{request,known,missing}}` JSON instruction — the
+    thing that regressed 10/10→3/10. **Reverted.** (2) The **Defect-C prompt mitigations** — `intake`'s
+    "deliver questions via `post_message`, never pass `mentions`" + the whole `answer`-node rewrite
+    (mandate the terminal tool call; never pass `mentions`, since the folded `"{displayName}: {text}"`
+    thread context leaks a display name into `mentions` → §4 rejects → the 4B drops the tool and posts
+    nothing). These address a **different, separately-measured** failure mode, did not cause the intake
+    regression, and are **KEPT**. Flagged to the user for override.
+
+- 2026-07-19 — **D14 locked; two units dispatched in parallel** (no shared files):
+  - **coder** — surgical S5-only revert of `scripts/seed_workflows.sh` (Defect-C mitigations retained,
+    removal site commented so a future reader doesn't re-add S5) + a **live-graph parity report**: the
+    `reference` graph still holds the **S5** `triage@v1`, and defs are effectively immutable on republish
+    (`repository.py` `_PUBLISH_CYPHER` `MERGE (st:Step) ON CREATE SET st.config` — existing config never
+    updates), so the script revert alone does **not** fix the live def. Coder investigates and reports the
+    minimum safe procedure (version bump vs. delete-and-republish); **executing it is destructive
+    shared-state work → user/coordinator call, not the implementer's.** Parity must be resolved before
+    U15 runs live. Baseline to hold: pytest **348 passed / 1 deselected**; `test_queries.sh` deliberately
+    NOT run (it drops `reference` and would worsen the split-brain).
+  - **analyst** — the **non-negotiable impl-review gate**, target pinned to commit **`aa8b813`**
+    (Defect-A guard seam + Defect-B tool-error survival). The `514346b` U11+U12 gate is already closed and
+    is not re-reviewed. Five mandatory confirmations briefed: `_drive_loop` **byte-identity** (teco flagged
+    it as not-independently-reverified), S1–S4 completeness incl. the DS understanding-primary precedence
+    and the m-C-neutral "zero extra reads" claim, **R-1** negation-cue trap (`"more info"` substring →
+    silent forced suspend that looks identical to Defect A), Defect-B catch **narrowness**
+    (`HumanHandoffSignal` must not be swallowed; M-1 net intact), and zero graph/DDL/QUERIES change.
+    Known-and-accepted items (m-2, m-C, OQ-5/D7, the K-023 judge/terminal-post items) explicitly fenced
+    off so the gate doesn't re-litigate settled decisions. → `docs/reviews/m3-guard-thread-context-impl.md`.
+  - **Still owed after these two: U15 (qa-engineer, scoped per D12-B/D7) → doc rollup.**
+
+- 2026-07-19 — **S5 revert ✅ (coder) — teco-verified on disk, not taken on trust.** `grep` confirms
+  `seed_workflows.sh` no longer instructs the `understanding` JSON (the only surviving `understanding`
+  hits are the new do-not-re-add comment at lines 99/104); the **Defect-C mitigations are intact in both
+  nodes** (intake :117-118, answer :156-159 — "deliver via `post_message`", "never pass `mentions`").
+  Diff shrank +52/-4 → **+45/-3**. `bash -n` + `ast.parse` of the embedded heredoc clean; STEPS(3)/
+  TRANSITIONS(2) untouched.
+  - **⚠️ NEW ENVIRONMENT FINDING — the pytest baseline itself wipes `reference` (teco-verified in
+    source).** `server/tests/conftest.py` `wf_repo` fixture runs `db.reference_graph(conn).query("MATCH
+    (n) DETACH DELETE n")`. So it is **not only `test_queries.sh`** that drops the global `reference`
+    graph — a plain `pytest` with the DB up destroys the published `triage@v1` while leaving the
+    `ws:acme` snapshot intact: **the same silent split-brain**, from the command we treat as the routine
+    baseline. `conftest` also `.delete()`s the whole `ws:test` graph per session. AGENTS.md's M1-server
+    pytest bullet still advertises that suite as safe/network-free with no such warning → **doc-rollup
+    item** (the coder flagged it; correctly did not expand scope).
+  - **Baseline caveat — 348 was NOT observed, and the reason matters.** FalkorDB is **down**
+    (teco-verified `docker ps` → 0 containers). Observed: **171 passed, 177 skipped, 1 deselected**;
+    171+177+1 = **349 collected**, reconciling exactly with 348-passed+1-deselected — nothing lost,
+    newly deselected, or failing. The coder **deliberately did not start the DB**, because doing so
+    would have made the routine `pytest` a destructive act on `reference` (above). **teco concurs —
+    that was the right call, and the restraint is the point:** the "green" pytest line with the DB down
+    is not evidence the graph half ran. Filed to the coder's learnings inbox.
+  - **AGENTS.md `seed_workflows.sh` row rewritten** (coder, in-scope — the revert invalidated the old
+    "additive-only, idempotent" wording): "idempotent" = **create-only, not update**, with the
+    `_PUBLISH_CYPHER` `ON CREATE SET` citation; independent def/snapshot staleness; both wipers named
+    (`test_queries.sh` **and** the `wf_repo` fixture); and that landing a def edit needs an explicit act.
+  - **Live-def parity — REPORTED, NOT EXECUTED (correct: destructive shared-state ⇒ user's call).**
+    Recommendation **Option B, delete-and-republish `v1`** — keeps `key`/`version` matching
+    `config.TRIGGER_DEF_KEY`/`_VERSION` with **zero code change**. **Option A (version bump) rejected as
+    costlier than it looks:** `start_server.sh` neither forwards nor exports
+    `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION`, so an env-only bump would seed `v2` nowhere and keep
+    triggering `v1` — it needs `start_server.sh` + `.env.example` + a hardcoded echo changed, and leaves
+    permanent dead-def clutter. **Option B's caveat is load-bearing:** `DETACH DELETE` on the Steps
+    severs live runs' `AT_STEP`/`OF_DEF` (`record_step_and_advance` anchors on `AT_STEP`), making any
+    suspended run permanently unadvanceable and **indistinguishable from a normal zero-row miss** ⇒ the
+    read-only run-check must run first. **Sequencing rule: `pytest` → parity repair → verify → U15
+    live**, never the reverse, or the wipe re-creates the split-brain and U15 measures a stale snapshot.
+  - **Analyst gate re-dispatched** after the user stopped the first attempt (it had produced nothing —
+    no review doc, tree untouched). Running against `aa8b813` with the corrected baseline expectation.
+  - ⚠️ **teco process error, logged for honesty:** the baseline correction to the running analyst was
+    sent via a **new `Agent` spawn instead of `SendMessage`**, starting a second, contextless analyst.
+    Its output is to be **disregarded** — the gate of record is the re-dispatched one. No tree impact
+    (analysts are read-only until their deliverable).
+
+## Locked decisions — round 7 (from the user, 2026-07-19)
+- **D15 — live-def parity = Option B (delete-and-republish `v1`), authorized for THIS dev environment.**
+  User: *"for this env please do cleanup and recreate, no need to migrate anything."* ⇒ the Option-B
+  run-breakage caveat is **explicitly accepted** — no `WorkflowRun` is worth preserving here, so the
+  read-only run-check becomes informational (report what it finds) rather than a stop-gate. Option A
+  (version bump) stays rejected per the coder's cost analysis (`start_server.sh` forwards/exports
+  neither `FALKORCHAT_TRIGGER_DEF_KEY` nor `_VERSION`). **Scope note: this authorization is
+  environment-specific — it is NOT a precedent for a shared/production graph, where severing
+  `AT_STEP`/`OF_DEF` on live runs is a genuine data-loss event.**
+- **Sequencing constraint (teco, load-bearing):** the repair is **held until the analyst gate returns**.
+  The gate's brief has it run `pytest`, and `conftest.py:93` wipes `reference` whenever the DB is up —
+  republishing first would let the gate silently re-create the split-brain on a graph that then *looks*
+  repaired. Order is **`pytest` → parity repair → verify → U15**, never reversed.
+
+- 2026-07-19 — **D15 locked; graph-dba dispatch PREPARED, deliberately not yet sent** (waiting on the
+  gate per the sequencing constraint). Brief to cover: start FalkorDB (`./scripts/start_falkordb.sh -d`)
+  → read-only inventory of `triage@v1` in `reference` + `ws:acme` (+ any `WorkflowRun`s, reported not
+  gating per D15) → `DETACH DELETE` the def/snapshot + their `Step`s in both graphs → republish via the
+  **reverted** `seed_workflows.sh` (must print `created`/`materialized`, **NOT** `already present —
+  no-op`; a no-op means the delete missed ⇒ do not proceed to U15) → verify the live `intake` config
+  contains **no** `understanding` instruction → drop the D13 leftovers `ws:live`/`ws:probe` (RAM on the
+  16GB box). **After the repair, `pytest`/`test_queries.sh` must not run against this DB without a
+  re-seed** — both wipe `reference`.
+
+- 2026-07-19 — **✅ ANALYST IMPL GATE DELIVERED — `approve with suggestions`, 0 blocker / 2 major /
+  3 minor / 3 nit** → `docs/reviews/m3-guard-thread-context-impl.md` (22.8KB, untracked; teco confirmed
+  on disk). **The K-022 non-negotiable done-condition for the Defect-A/B commit `aa8b813` is SATISFIED**
+  — no re-review cycle forced. All five mandatory confirmations affirmative:
+  1. **`_drive_loop` byte-identity ESTABLISHED MECHANICALLY** (the item teco flagged as unverified):
+     identical across `514346b`/`c3cc239`/`aa8b813` — SHA `71055f756280`, 2844 bytes, only its line
+     offset moved 310→324. `_drive`/`_record` code-identical (docstring-only changes).
+  2. **Defect-A S1–S4 complete** — `executor.py:607` passes `thread=result.thread`; DS
+     understanding-primary precedence at `guards.py:136`; **exactly one `read_thread` per node**, so the
+     m-C-neutral "zero extra reads" claim holds and is test-pinned.
+  3. **R-1 addressed** — cue matching is now polarity-aware; `"no relevant"` dropped as unresolvable;
+     both directions pinned in `test_guards.py`.
+  4. **Defect-B catch provably narrow** — `HumanHandoffSignal` disjoint from `ServiceError` (MRO-verified);
+     engine faults still reach the intact M-1 net.
+  5. **Zero graph/DDL/QUERIES surface** in the diff.
+  - **Two majors to close BEFORE U15** (teco spot-verified both in source — they hold):
+    - **M-1 (doc drift → owner of the seed unit):** `m3-executor.md` §8 still documents the **D8/S5 intake
+      + Defect-C answer** prompts that the **reverted** `seed_workflows.sh` no longer contains. QA would
+      otherwise test against a spec matching **neither** the shipped script nor the live graph. Note this
+      major is a **direct consequence of the D14 revert** — the revert was right, the spec just has to
+      follow it.
+    - **M-2 (code → coder):** `executor.py:503` `except ServiceError` also absorbs `UnknownActorError`
+      and `ThreadNotFoundError` — **teco verified the hierarchy at `services.py:66/74`, both ARE
+      `ServiceError` subclasses** — which are **not model-correctable**, and there is no log call. Net
+      effect: a misconfigured agent id yields a run that reaches `done` having **posted nothing**, silently.
+      The narrowness confirmation (#4) and this over-breadth finding are **both true**: the catch correctly
+      excludes engine faults, but is still wider than the "bad argument the model can fix" rationale in
+      its own comment (`executor.py:504-509`).
+  - **Verification caveat carried forward (honest, not green-washed):** FalkorDB was **down**, so the gate
+    observed **171 passed / 177 skipped / 1 deselected** (349 collected, consistent with 348+1). The
+    affected files ran green (61 passed), but the **drive-level Defect-B pin
+    `test_hallucinated_mention_does_not_fail_the_run` was SKIPPED** — the very test that proves a
+    hallucinated mention no longer fails a run has **not been executed since the fix**. Must be covered
+    by the U15 live pass or a DB-up rerun. The gate **correctly did not start FalkorDB** despite the
+    stale "expect 348" brief (teco's correction never reached it — see the SendMessage slip above), so
+    the feared unattended `reference` wipe **did not occur**.
+  - **Revised order to U15:** close **M-2** (coder, code) + **M-1** (doc sync to the reverted script) →
+    **then** the D15 parity repair (graph-dba) → verify → **U15**. Rationale: M-2's fix triggers a
+    `pytest` run, which wipes `reference` — so the graph repair must come after it, per the standing
+    sequencing constraint. The parity repair is therefore still **held**, now behind the fixes rather
+    than behind the gate.
+
 ## Landing-2 cost datapoint (vs. Landing-1 ~1.20M tok / 238 tool uses / ~4h for U1–U10 + gate)
 | Delegation | Owner | Units | ~Tokens | Tool uses | Wall time | Notes |
 |---|---|---|---|---|---|---|
 | Architect | architect | U11 design-patch | ~157k | 24 | ~8 min | Option B recommended (surfaced to user, approved); M-1/m-1/thread/trigger designed |
 | D6 | tdd-engineer | U11+U12 | ~254k | 131 | ~43 min | pytest 283→312; M-1/m-3/n-2 closed; m-1 §7 amend; Option B; U12 REST |
 | — | | remaining | — | — | — | analyst gate + U13 + U14 + U15 pending |
+
+---
+
+## Locked decisions — round 8
+
+**D16 (2026-07-19) — tool-error split: propagate + log.** Closing the analyst gate's open
+question 1. `UnknownActorError` / `ThreadNotFoundError` (and every future `ServiceError`
+subclass) **propagate** to the M-1 fault net; only an explicit allowlist
+(`UnknownMemberError`, `InvalidSearchQueryError`) is absorbed as a model re-prompt. Every
+failed dispatch logs unconditionally (`_log.warning`), never tracer-gated. Rationale: these
+are deployment misconfigurations, not model-correctable arguments — absorbing them produced a
+run reaching `done` having posted nothing, which is precisely the AC-4 failure signature U15
+exists to detect. Coordinator decision, matching the analyst's recommendation; written into
+`m3-executor.md` §2.2.
+
+## Gate majors closed (coder, aa1ba7ccf0004c81c)
+
+- **M-2 (code) — closed.** `executor.py`: module constant `MODEL_CORRECTABLE_TOOL_ERRORS`
+  (allowlist), unconditional `_log.warning`, `raise` for everything else; comment + docstring
+  rewritten to state the split. Coder chose an **allowlist over a propagate-list** so the rule
+  **fails closed** — a `ServiceError` subclass added later propagates by default instead of
+  silently becoming a re-prompt. `ChannelNotFoundError` lands on the propagate side (its
+  `channel_id` comes from deployment config, not model arguments) — correct under D16.
+  Two new tests: `test_non_model_correctable_service_error_propagates_to_the_m1_net`
+  (asserts escape on the *first* dispatch, so no `maxIterations` burn) and
+  `test_a_model_correctable_tool_error_is_logged_even_without_a_tracer`.
+- **M-1 (doc) — closed.** `m3-executor.md` §8 now describes what the working-tree
+  `seed_workflows.sh` actually seeds: the S5 `understanding`-JSON instruction is **demoted to
+  "Proposed, NOT seeded"** (rationale kept verbatim, D14 revert + 10/10→3/10 recorded, K-023
+  re-landing gate named); Defect-C mitigations marked **RETAINED and seeded**, verified
+  line-by-line; a **"Consequence for QA"** paragraph states that the shipped guard runs only on
+  the degraded RECENT-TURNS tier, so a `guard_judgment` citing turn text is expected, not a
+  defect. `scripts/seed_workflows.sh` untouched (settled by D14).
+
+**Teco verification (not taken on the coder's word):** `git diff -U0` shows all five
+`executor.py` hunks in imports / module constant / docstring / the except block — **none near
+`_drive_loop`** (~line 324); lock intact. Independent `pytest -q` reproduces **173 passed, 177
+skipped, 1 deselected** (= the gate's 171 + the 2 new tests). Doc edits confirmed present at
+§2.2 (D16) and §8 (the demotion + QA consequence).
+
+**Carried caveat (unchanged):** FalkorDB was down for both the gate and this unit, so the 177
+graph-backed tests — including the Defect-B drive-level pin
+`test_executor.py::test_hallucinated_mention_does_not_fail_the_run` — **still have not executed
+since the Defect-A/B fix**. This must be covered by the DB-up run or U15.
+
+**New finding (doc drift, for the rollup):** the `_drive_loop` lock is cited in the review and
+plan as SHA `71055f756280` **+ 2844 bytes**. The SHA is real and reproducible; the byte count is
+**wrong** — the extraction yielding that hash is **2860 bytes**. Anyone verifying the lock by
+byte count would wrongly conclude it is broken. Fix the figure wherever the lock is quoted.
+
+**Still open, in order:** D15 parity repair (graph-dba, authorized, now unblocked) → verify →
+U15. Carried gate minors m-1 (negator window leaks across clause boundaries; residual failure
+mode is *false-advance*, opposite of what the code comment claims), m-2 (`_recent_turns` slices
+before filtering), m-3 (judge evidence tier invisible in the trace), nits n-1/n-2/n-3.
+
+## Env-up verification run (teco, 2026-07-19)
+
+FalkorDB started (`./scripts/start_falkordb.sh -d`, v4.18.11, ready in 1s). Full server suite:
+**350 passed, 0 skipped, 1 deselected** — the first fully green graph-backed baseline since the
+Defect-A/B fix. This **closes the carried caveat**: the drive-level pin
+`tests/test_executor.py::test_hallucinated_mention_does_not_fail_the_run` **executed and passed**
+(Defect B now proven at drive level, not just node level), as did both new D16 tests under a
+real DB.
+
+**Split-brain confirmed empirically (as predicted, not assumed).** The pytest run wiped
+`reference` exactly as documented: `reference` is now **0 nodes** (no `WorkflowDef` at all),
+while `ws:acme` retains `WorkflowDefSnapshot` x1 + `Step` x3 (plus Agent/Channel/Thread/User,
+`Message` x15). This is the precise state the D15 repair must resolve — def gone, snapshot
+stale and still the thing the executor drives.
+
+Pre-existing graphs present: `ws:test`, `ws:probe`, `ws:live`, `cpg_falkorchat`,
+`cpg_salesperson`. `ws:probe`/`ws:live` are the D15 cleanup targets.
+
+## D15 parity repair — DONE (graph-dba adb3d1ab98d4d9063, 2026-07-19)
+
+Executed and teco-verified. Before: `reference` 0 nodes; `ws:acme` held a stale
+`WorkflowDefSnapshot` + 3 `Step`s whose `intake.config` **still carried the S5
+`understanding`-JSON block** — i.e. the D14-reverted instruction was live in the graph the
+executor drives. `WorkflowRun` count was 0, so nothing was broken by the delete.
+
+Repair: `DETACH DELETE` of the snapshot + its Steps in `ws:acme` (4 nodes, 6 rels; Agent/
+Channel/Thread/User/Message untouched), then `./scripts/seed_workflows.sh acme` → `reference
+def … (created)` / `ws:acme snapshot … (materialized)` — **not** `already present — no-op`,
+confirming the delete was complete. `ws:probe` and `ws:live` dropped.
+
+**Teco-verified independently:** `GRAPH.LIST` = `cpg_falkorchat`, `cpg_salesperson`,
+`reference`, `ws:acme`, `ws:test`. Both `reference` and `ws:acme`: `HAS_STEP` 3, `TRANSITION`
+2, `intake.config CONTAINS 'understanding'` → **false**, `CONTAINS 'Never pass'` → **true**.
+Split-brain resolved. Suite re-run green (350). Because that run re-wiped `reference`, teco
+re-seeded last; final state verified with the def present.
+
+**Numbering correction:** the "K-023 follow-ups" phrase used throughout this ledger is **wrong**
+— K-023 was already taken (workflow↔chat linkage, delivered by U11). The follow-up bucket is
+**K-027**, now filed in `docs/BACKLOG.md`. Read every earlier "K-023" in this doc as K-027.
+
+**Also correct earlier in this ledger:** the `_drive_loop` byte figure appears as 2839 (line
+~584) and 2844 (line ~917); both are wrong. The extraction that yields SHA `71055f756280` is
+**2860 bytes**. Verify the lock by **SHA only** — the byte count has now been miscopied three
+different ways.
+
+**Status: U15 (qa-engineer acceptance) remains NOT RUN** — descoped per D12-B, tracked as K-025.

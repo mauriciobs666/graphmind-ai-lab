@@ -49,7 +49,7 @@ from typing import Any, Protocol
 from .config import CallContext
 from .guards import GuardVerdict, evaluate_guard
 from .repository import Repository, WorkflowRunNotFoundError
-from .services import ServiceError
+from .services import InvalidSearchQueryError, ServiceError, UnknownMemberError
 from .tools import HumanHandoffSignal
 
 _log = logging.getLogger(__name__)
@@ -63,6 +63,15 @@ TRACE_PAYLOAD_MAX = 8000
 # Cap the recent-thread window folded into an agent-node prompt (rule 6 — RAM/latency).
 # A long thread cannot blow the prompt; the last N turns carry the live intake context.
 THREAD_CONTEXT_WINDOW = 20
+# D16 (`m3-executor.md` §2.2) — the *model-correctable* subset of `ServiceError`: failures
+# caused by the arguments the model chose, which it can plausibly fix on a re-prompt. This is
+# an **allowlist on purpose**: every other `ServiceError` — today `UnknownActorError`,
+# `ThreadNotFoundError`, `ChannelNotFoundError`, and any subclass added later — propagates to
+# the M-1 fault net rather than being silently re-prompted away.
+MODEL_CORRECTABLE_TOOL_ERRORS: tuple[type[ServiceError], ...] = (
+    UnknownMemberError,
+    InvalidSearchQueryError,
+)
 
 
 # ── defaults ─────────────────────────────────────────────────────────────────
@@ -482,10 +491,12 @@ class WorkflowExecutor:
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
-        refuse) — both a bounded re-prompt, never a dispatch. A *dispatched* tool that
-        fails with a `ServiceError` (the domain rejecting the model's arguments) takes that
-        same re-prompt path; an engine fault and `HumanHandoffSignal` still propagate (see
-        the `except` below). A dispatch that posts a
+        refuse) — both a bounded re-prompt, never a dispatch. A *dispatched* tool that fails
+        with a **model-correctable** `ServiceError` (`MODEL_CORRECTABLE_TOOL_ERRORS` — the
+        domain rejecting the model's own arguments) takes that same re-prompt path; every
+        other `ServiceError` (a misconfigured actor, a missing thread/channel), an engine
+        fault, and `HumanHandoffSignal` propagate — D16, see the `except` below. Every failed
+        dispatch is logged unconditionally, tracer or not. A dispatch that posts a
         message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
         onto `emissions` for post-record PRODUCED linking (Option B, K-023)."""
         if call.name not in granted_set:  # AC-6 defensive rejection
@@ -501,19 +512,34 @@ class WorkflowExecutor:
         try:
             out = self._tools.dispatch(call.name, call.arguments, ctx=ctx, run=run)
         except ServiceError as exc:
-            # A `ServiceError` is a **tool-level** failure — the model asked for something
-            # the domain rejected (an unknown mention, a missing thread). That is a bad
-            # *argument*, exactly like the ungranted/malformed cases above, so it takes the
-            # same bounded re-prompt: hand the error to the model and let it correct itself.
-            # It is deliberately NOT a blanket `except Exception`:
-            #   * an engine fault (a driver/`Repository`/programming error) still propagates
-            #     to the M-1 fault net in `_drive` → `fail_run` — telling a model to "retry"
-            #     a broken database would burn the budget and hide a real bug; and
+            # D16 (`m3-executor.md` §2.2) — **log always, absorb only what the model can
+            # fix.** Every failed dispatch is logged unconditionally here: the trace is not a
+            # substitute, because `_trace_step` uses `_NULL_TRACER` unless `run["trace"]` is
+            # set, so on a normal run the trace record never leaves the process.
+            #
+            # Then the split. A `ServiceError` in `MODEL_CORRECTABLE_TOOL_ERRORS` is a bad
+            # *argument* the model chose (an unresolvable mention, a malformed search query),
+            # exactly like the ungranted/malformed cases above, so it takes the same bounded
+            # re-prompt: hand the error back and let the model correct itself. Everything
+            # else is **not** the model's to fix — `UnknownActorError` comes from the
+            # deployment's agent id, `ThreadNotFoundError`/`ChannelNotFoundError` from the
+            # run's own `ctx` — and re-prompting on those would burn `maxIterations` and let
+            # the run reach `done` having posted nothing (the AC-4 failure signature). Those
+            # propagate to the M-1 fault net in `_drive` → `fail_run`, loudly. The allowlist
+            # is deliberate: a `ServiceError` subclass added later fails loud by default.
+            #
+            # This is still deliberately NOT a blanket `except Exception`:
+            #   * an engine fault (a driver/`Repository`/programming error) is never caught
+            #     here at all — telling a model to "retry" a broken database would burn the
+            #     budget and hide a real bug; and
             #   * `HumanHandoffSignal` is **control flow** raised *through* `dispatch`
             #     (§2.4) and must reach `_drive`'s suspend path — swallowing it here would
             #     silently break the handoff contract.
             # The re-prompt is bounded by `maxIterations` like any other turn (§7): a model
             # that keeps failing exhausts the node gracefully, it never spins.
+            _log.warning("tool %s failed: %r", call.name, exc)
+            if not isinstance(exc, MODEL_CORRECTABLE_TOOL_ERRORS):
+                raise
             trace.append(("tool_result", f"ERROR: {type(exc).__name__}: {exc}"))
             return (f"error: {call.name} failed: {type(exc).__name__}: {exc}; "
                     f"fix the arguments and retry, or continue without this tool")

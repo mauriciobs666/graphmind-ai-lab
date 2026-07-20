@@ -93,9 +93,29 @@ STEPS = [
         "start": True,
         "config": {
             "waitsForHuman": True,
+            # D14 (docs/plans/m3-executor-coordination.md, 2026-07-19): S5
+            # (docs/plans/m3-guard-thread-context.md §5) is DELIBERATELY NOT HERE.
+            # S5 asked this node to end every turn with a
+            # `{"understanding":{request,known,missing}}` object so the intake→research
+            # llm guard could run on its *primary* extract-then-judge path
+            # (`m3-executor-ml.md` §Q1). Measured live on the shipped chat model
+            # (Qwen3-4B) it REGRESSED intake advancement 10/10 → 3/10, so this cut ships
+            # the guard on the DS's degraded recent-turns fallback instead — the 10/10
+            # path. Do not "helpfully" re-add the understanding-JSON instruction: it is
+            # only worth re-landing once the judge is model-robust (fence/prose-tolerant
+            # parse) AND calibrated — a K-023 follow-up.
+            # The "never pass mentions" rule below is a separate, separately-measured
+            # Defect-C mitigation, not part of S5: the node's thread context is folded
+            # in as "{displayName}: {text}", so the model reliably reaches for
+            # `mentions:["alice"]`, which §4 rejects (it resolves member *ids*) — and a
+            # 4B recovers from that rejection by dropping the tool and emitting text,
+            # i.e. silently posting nothing.
             "systemPrompt": (
+                "You are triaging a user's request in a chat thread.\n\n"
                 "Ask the user clarifying questions until you can state their request "
-                "precisely; ask one question at a time."
+                "precisely; ask one question at a time. Deliver every question by "
+                "calling the `post_message` tool — text you merely write is never seen "
+                "by anyone. Never pass `mentions`; omit that argument entirely."
             ),
             "tools": ["post_message"],
             "maxIterations": 4,
@@ -117,9 +137,31 @@ STEPS = [
         "key": "answer",
         "type": "agent",
         "config": {
+            # Defect C (docs/plans/m3-executor-coordination.md, Defect C): the answer
+            # node reliably produces a good grounded answer but often posts nothing —
+            # no PRODUCED edge, AC-4 fails. Two measured mechanisms, both prompt-level:
+            #   (a) it emits the answer as final TEXT instead of calling post_message
+            #       (D4's 4B tool-calling risk); and
+            #   (b) it DOES call post_message but with `mentions:["alice"]` (the folded
+            #       "{displayName}: {text}" thread context leaks the display name), §4
+            #       rejects it, and the 4B "recovers" by dropping the tool and emitting
+            #       text — silently posting nothing.
+            # So: mandate the tool call as the node's REQUIRED final action, and forbid
+            # `mentions`. This is a prompt-only mitigation of an accepted 4B risk; the
+            # durable fix, if it doesn't hold, is an engine-level "terminal node must
+            # post" contract (out of scope here — routes to the architect).
             "systemPrompt": (
-                "Post a reply to the thread that answers the user's request, grounded "
-                "in the research findings; cite what you used."
+                "You are delivering the final answer to the user's request in a chat "
+                "thread.\n\n"
+                "You MUST post your answer by calling the `post_message` tool. This is "
+                "the only way the user receives it — an answer you write as plain text "
+                "is discarded and the user sees nothing. Do not end your turn until you "
+                "have called `post_message`. Never pass `mentions`; omit that argument "
+                "entirely (passing a display name there fails and loses your answer).\n\n"
+                "Write the `text` as a direct, grounded answer to the user's request, "
+                "using the research findings above; cite what you used. If the findings "
+                "do not cover the request, say so plainly in the posted message — but "
+                "still post it."
             ),
             "tools": ["post_message"],
         },

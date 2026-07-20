@@ -18,7 +18,7 @@ import pytest
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
 from falkorchat.llm import ChatResult, ToolCall
-from falkorchat.services import UnknownMemberError
+from falkorchat.services import UnknownActorError, UnknownMemberError
 from falkorchat.tools import HumanHandoffSignal
 
 CTX = CallContext(ws="test", actor="u1")
@@ -285,6 +285,53 @@ def test_engine_fault_in_a_tool_still_escapes_to_the_m1_net():
 
     with pytest.raises(RuntimeError, match="engine exploded"):
         ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+
+def test_non_model_correctable_service_error_propagates_to_the_m1_net(caplog):
+    # D16 (`m3-executor.md` §2.2): only the model's own bad *arguments* are absorbed as a
+    # re-prompt. `UnknownActorError` comes from the DEPLOYMENT (a misconfigured
+    # FALKORCHAT_AGENT_ID) — the model cannot fix it, so re-prompting would burn
+    # maxIterations and let the run reach `done` having posted nothing (the AC-4 failure
+    # signature). It must reach the M-1 fault net instead, and be logged on the way out.
+    llm = AlwaysToolLLM(ToolCall("c1", "post_message", {"text": "x"}))
+    reg = RaisingRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        UnknownActorError("assistant"),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        with pytest.raises(UnknownActorError):
+            ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    # it escaped on the FIRST failure — no bounded re-prompt loop swallowed it
+    assert len(reg.dispatched) == 1
+    # and the diagnostic is logged unconditionally (not tracer-gated)
+    assert any("post_message" in r.getMessage() and "UnknownActorError" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_a_model_correctable_tool_error_is_logged_even_without_a_tracer(caplog):
+    # M-2(a): the trace record is not enough — `_trace_step` uses `_NULL_TRACER` unless
+    # `run["trace"]` is set, so on a normal run the only durable diagnostic is this log line.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "post_message", {"text": "hi", "mentions": ["alice"]})]),
+        ChatResult(text="recovered"),
+    ])
+    reg = RaisingRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        UnknownMemberError(["alice"]),
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert result.output == "recovered"          # still absorbed as a re-prompt
+    assert any("UnknownMemberError" in r.getMessage() for r in caplog.records)
 
 
 def test_human_handoff_signal_escapes_the_tool_loop_to_the_suspend_path():

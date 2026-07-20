@@ -139,6 +139,22 @@ The executor runs this as an agent loop (`executor.WorkflowExecutor._run_agent_n
    an *engine* fault still propagates to the §2.1 M-1 fault net (`fail_run`, loudly), and
    `HumanHandoffSignal` is control flow raised *through* dispatch that must still reach the
    suspend path (§2.4). A blanket `except Exception` here would break both.
+
+   **D16 (2026-07-19, closing analyst finding M-2) — log always; absorb only the model-correctable
+   `ServiceError`s.** "Only `ServiceError`" was still too wide: `ServiceError` also covers failures
+   the model *cannot* fix, and re-prompting on those burns `maxIterations` and lets the run reach
+   `done` having posted nothing — the AC-4 failure signature, arriving silently. So the rule is an
+   **allowlist**, `executor.MODEL_CORRECTABLE_TOOL_ERRORS`: **absorbed as a re-prompt** =
+   `UnknownMemberError` and `InvalidSearchQueryError` (the model chose the mention / the query, so it
+   can choose better). **Propagated to the M-1 fault net** = everything else — `UnknownActorError`
+   (the deployment's `FALKORCHAT_AGENT_ID`), `ThreadNotFoundError` / `ChannelNotFoundError` (the
+   run's own `ctx`), and **any `ServiceError` subclass added later**, which fails loud by default
+   until someone deliberately allowlists it. Independently of the split, **every** failed dispatch is
+   logged (`_log.warning("tool %s failed: %r", …)`) — unconditionally, not tracer-gated, because
+   `_trace_step` uses `_NULL_TRACER` unless `run["trace"]` is set, so on a normal run the trace
+   record never leaves the process. Pinned by
+   `tests/test_executor_agent.py::test_non_model_correctable_service_error_propagates_to_the_m1_net`
+   and `::test_a_model_correctable_tool_error_is_logged_even_without_a_tracer`.
 4. If the LLM returns a **final text / an explicit outcome** → that is the step's `output` and the
    emitted `on` outcome (default `"done"`; a node may emit a named outcome the guards branch on).
 5. Every LLM prompt/response, tool call/result, and the iteration count are handed to the tracer
@@ -517,21 +533,39 @@ Phased so the tree stays buildable/green and each phase is reviewable. The compo
 
 ### The triage proof flow (AC-1…AC-4) mapped to the model
 
-`kind: 'conversation'`, three `type:'agent'` steps + guards:
+`kind: 'conversation'`, three `type:'agent'` steps + guards. **This table describes what
+`scripts/seed_workflows.sh` actually seeds today** — it is the def spec QA reads at U15, so
+anything not in that script is called out inline as *proposed*, never left implied:
 
 | Step (`type:'agent'`) | `config` flags | systemPrompt (plain language) | tools | outgoing guard |
 |---|---|---|---|---|
-| **intake** (start) | `waitsForHuman: true` | Ask one clarifying question at a time via `post_message`; **never pass `mentions`**; end each turn with ONLY the `{"understanding":{request,known,missing}}` JSON object (D8/S5 — the `understanding` primary path; see below). | `post_message` | `{kind:'llm', text:"the user has provided enough information to research their request"}` → **research**; false + `waitsForHuman` → **suspend/`waiting`** (§2.1 outcome B, AC-2) |
+| **intake** (start) | `waitsForHuman: true` | Ask one clarifying question at a time via `post_message`; **never pass `mentions`**. *(Proposed, NOT seeded: also end each turn with ONLY the `{"understanding":{request,known,missing}}` JSON object — D8/S5, reverted per D14; see below.)* | `post_message` | `{kind:'llm', text:"the user has provided enough information to research their request"}` → **research**; false + `waitsForHuman` → **suspend/`waiting`** (§2.1 outcome B, AC-2) |
 | **research** | — (no wait) | "Retrieve relevant context from the workspace and produce concise findings grounded only in what you retrieve; if nothing relevant is found, say so." | `graphrag_retrieve` | **`""` unconditional (D5)** → **answer** — fires as soon as findings exist; sufficiency is the node's own abstention (§4/§10 Q2), **not** an LLM guard (no human to unblock a suspend here) |
 | **answer** | — (no wait) | **MUST** deliver the grounded answer by calling `post_message` (an answer emitted as plain text is discarded — Defect C); **never pass `mentions`**; cite the research findings used. | `post_message` | terminal (no outgoing transitions) → §2.1 outcome C → run `done` (AC-4) |
 
-> **D8/S5 (intake) — `docs/plans/m3-guard-thread-context.md`.** The intake prompt asks the model to
+> **D8/S5 (intake) — PROPOSED, NOT SEEDED (deferred by D14).** The design: have the intake prompt
 > emit the compact `understanding` object as its final turn text so `guards._extract_understanding`
-> reaches the DS **primary** extract-then-judge path (`m3-executor-ml.md` §Q1). Without it the guard
-> runs forever on the degraded turns-only fallback. Shape mirrors `server/tests/eval/golden_guards.jsonl`.
+> reaches the DS **primary** extract-then-judge path (`m3-executor-ml.md` §Q1), shape mirroring
+> `server/tests/eval/golden_guards.jsonl`. That rationale still stands, but the instruction was
+> **deliberately reverted** from `scripts/seed_workflows.sh`: measured live on the shipped chat model
+> (Qwen3-4B) it regressed intake advancement **10/10 → 3/10**, so Landing 2 ships the guard on the
+> fallback tier instead (D14 in `docs/plans/m3-executor-coordination.md`; the land-the-seam-first
+> sequencing is `docs/plans/m3-guard-thread-context.md` §6.3). Re-landing it is gated on a
+> model-robust (fence/prose-tolerant) parse **and** a calibrated judge — a K-023 follow-up.
 >
-> **Defect C (answer) — `m3-executor-coordination.md`.** Two measured 4B failure modes the answer
-> prompt mitigates: (a) emitting the answer as final **text** instead of calling `post_message`; and
+> **⇒ Consequence for QA (read this before taking AC-2 from the table above):** in the **shipped**
+> configuration the intake→research llm guard **never** runs on the `understanding` primary tier. It
+> runs only on the degraded **RECENT TURNS** fallback tier (`guards._recent_turns`, the last 6 turns
+> — `m3-guard-thread-context.md` S3/S4). Any AC-2 observation is an observation of the fallback tier;
+> a `guard_judgment` that cites turn text rather than an extracted understanding is **expected**, not
+> a defect.
+>
+> **Defect C (intake + answer) — RETAINED, and seeded.** Unlike S5, both Defect-C mitigations are
+> live in `scripts/seed_workflows.sh` today: the `post_message`-tool-call requirement and the "never
+> pass `mentions`; omit that argument entirely" instruction appear on the **answer** node, and the
+> same two rules (deliver questions via `post_message`; never pass `mentions`) on the **intake**
+> node. They were measured separately from S5 and are unaffected by D14. The two measured 4B failure
+> modes the answer prompt mitigates: (a) emitting the answer as final **text** instead of calling `post_message`; and
 > (b) calling `post_message` with `mentions:["<displayName>"]` (the folded `"{displayName}: {text}"`
 > thread context leaks the name), which §4 rejects — after which the 4B drops the tool and emits text,
 > posting nothing. Both are prompt-only mitigations of an accepted D4 risk, not an engine guarantee.

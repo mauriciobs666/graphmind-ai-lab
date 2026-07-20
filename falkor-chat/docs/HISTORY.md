@@ -5,6 +5,103 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-19 — M3 K-022 Landing 2: trigger + triage proof flow (U11–U14), analyst-gated — **U15 not run**
+
+Second landing of **K-022 — LLM-native workflow executor**: the `@mention` trigger, the triage proof
+flow, and the two live defects that landing it exposed. Delivered by the teco-coordinated chain —
+**tdd-engineer** (U11 trigger wiring + U12 REST run inspection, and later both defect reproduction
+suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code major) — with the
+**mandatory analyst review gate** as a non-negotiable done-condition. Plan `docs/plans/m3-executor.md`
++ the U11 design patch `docs/plans/m3-executor-landing2.md`; coordination log
+`docs/plans/m3-executor-coordination.md`. New server baseline: **pytest 283 → 350 passed, 0 skipped,
+1 deselected** (with FalkorDB up; teco re-verified independently). Query suite unchanged at
+**241/241** — Landing 2 has **zero** graph/DDL/QUERIES surface.
+
+- **U11–U12 (tdd-engineer):** `trigger.py` `WorkflowTrigger.maybe_trigger` (§6 ordered rule:
+  loop-guard → resume-if-waiting → `@mention`-to-start → fall through to the M2 responder), one
+  handler per request (trigger XOR responder), `WORKFLOW_ENABLED`/`TRIGGER_DEF_KEY` config **default
+  off** so the baseline stays network-free; **Option B** emission linking (buffer during agent-node
+  execution, `StepRun-[:PRODUCED]->Message` after `_record`, keeping the §2.1 A/B/C loop and
+  `record_step_and_advance` byte-for-byte); the Landing-1 **M-1** fault net (`_drive` wraps
+  `_drive_loop`, so a mid-drive fault can no longer leave a zombie `status='running'` run); agent-node
+  thread context (`_read_thread_context`, window 20); `GET /workflow-runs/{id}` + `/step-runs` +
+  `/trace`. Its own analyst gate (`docs/reviews/m3-executor-landing2-impl.md`) came back
+  **approve-with-suggestions, 0 blocker / 0 major**.
+- **U13 (coder):** `scripts/seed_workflows.sh` — publishes + materializes `triage@v1` (three
+  `type:'agent'` steps, intake→research→answer) through the **service layer**, not raw Cypher;
+  `start_server.sh` seeds it before uvicorn.
+- **U14 (tdd-engineer):** `tests/test_workflow_live.py`, the `live`-marked AC-1…AC-4 e2e, delivered
+  **deliberately RED** — it pinned two real defects rather than being bent to green.
+- **Defect A — the intake→research guard could never fire (fixed).** Structural, not prompt
+  calibration: `executor.py` passed `thread=None` and `guards.py` declared the parameter but never
+  read it, so the DS-prescribed **recent-turns fallback (N=6) did not exist** and the judge always
+  saw an empty understanding. Fixed **at the seam, not in a prompt**: the thread window the agent node
+  already reads rides out on `StepResult.thread` → `thread=result.thread` → `guards._recent_turns`,
+  with the DS precedence (understanding primary, turns only when empty). Zero extra graph reads; the
+  locked `_drive_loop` untouched. Design: `docs/plans/m3-guard-thread-context.md`.
+- **Defect B — a hallucinated `@mention` failed the whole run (fixed).** Tool errors are now
+  survivable: a failed dispatch returns an error string the model can act on instead of propagating
+  to `fail_run`. Pinned at drive level by
+  `tests/test_executor.py::test_hallucinated_mention_does_not_fail_the_run`.
+- **D14 — S5 reverted.** The intake `{"understanding":{…}}` JSON instruction did reach the *primary*
+  extract-then-judge path, but **regressed live intake advancement 10/10 → 3/10** on the shipped
+  Qwen3-4B (the model filled `missing` with forensic demands on every turn and the uncalibrated judge
+  suspended). It was **surgically reverted** from `scripts/seed_workflows.sh`, with the removal site
+  commented so it is not re-added; the separately-measured **Defect-C prompt mitigations were
+  retained**. Consequence to carry: the shipped guard runs only on the **degraded RECENT-TURNS tier** —
+  a `guard_judgment` citing turn text is expected, not a defect — and the `understanding` primary tier
+  is unreachable in this cut by design.
+- **D16 — tool-error split (propagate + log).** `UnknownActorError`/`ThreadNotFoundError` — and any
+  future `ServiceError` subclass — **propagate** to the M-1 fault net; only an explicit fail-closed
+  allowlist (`UnknownMemberError`, `InvalidSearchQueryError`) is absorbed as a model re-prompt, and
+  every failed dispatch logs unconditionally. These are deployment misconfigurations, not
+  model-correctable arguments; absorbing them produced a run reaching `done` having posted nothing.
+  Closes analyst finding M-2.
+- **Analyst gate: `approve with suggestions` — 0 blocker / 2 major / 3 minor / 3 nit**
+  (`docs/reviews/m3-guard-thread-context-impl.md`, on commit `aa8b813`). All five mandatory
+  confirmations affirmative, including the `_drive_loop` byte-identity (SHA `71055f756280`, unchanged
+  across `514346b`/`c3cc239`/`aa8b813`). **Both majors closed before the commit:** **M-1** (doc drift —
+  `m3-executor.md` §8 documented prompts the reverted script no longer seeds) and **M-2** (the silent
+  `ServiceError` catch, closed by D16). The three minors + three nits are carried on
+  [`BACKLOG.md`](./BACKLOG.md) under K-027 so they cannot rot.
+- **D13 capability probe (data-scientist):** a fits-16GB comparison of the shipped `qwen/qwen3-4b-2507`
+  against Ministral 3 3B (Q8_0), config/env-only. **Ministral loses — no model swap.** Intake
+  advancement 3/10 vs 0/10; AC-4 terminal post 2/3 vs not-measurable. Two findings routed to K-027: the
+  fuzzy-guard judge's **bare `json.loads` is model-fragile** (a fenced ```` ```json ```` reply made all
+  26 golden cases unparseable — the shipped Qwen path is unaffected), and Ministral is actually
+  *better* at the terminal tool call. Note: `docs/plans/m3-capability-probe-ml.md`.
+- **D15 parity repair (graph-dba, user-authorized destructive op on this dev box).** The stale
+  `ws:acme` `WorkflowDefSnapshot` was deleted and `triage@v1` republished into **both** `reference` and
+  `ws:acme`, resolving a **split-brain** in which the def had been wiped while the stale snapshot — the
+  thing the executor actually drives — survived. Throwaway graphs `ws:probe`/`ws:live` dropped. No
+  `WorkflowRun` existed, so nothing was severed. Environment-specific authorization: on a shared graph,
+  `DETACH DELETE` on a def's `Step`s severs live runs' `AT_STEP`/`OF_DEF` and is a data-loss event.
+- **⚠️ Two environment hazards, now documented in `AGENTS.md`:** (1) `server/tests/conftest.py`'s
+  `wf_repo` fixture wipes the global `reference` graph — so it is **not only `test_queries.sh`**: a
+  plain `pytest` with the DB up destroys the published def while leaving the `ws:acme` snapshot, the
+  same silent split-brain, from the command we treat as the routine baseline. Re-run
+  `seed_workflows.sh` after either. (2) Published defs are effectively **immutable** —
+  `repository._PUBLISH_CYPHER` is `MERGE (st:Step …) ON CREATE SET st.config`, so editing a prompt and
+  re-seeding prints a clean `already present — no-op` while the old config stays live.
+- **❗ Explicitly NOT done — U15 (qa-engineer acceptance, = K-025) was not run.** Per decision **D12-B**
+  the executor **mechanism** is proven (Defect A dead; the flow reaches `done` with the judge reasoning
+  from real evidence), while live-triage **reliability** is descoped to K-027: the terminal
+  `post_message` call is unreliable on a 4B (**Defect C** — AC-4 posting measured ~2/8, then 0/3 after
+  a strengthened prompt, then 2/3 in the probe replay: unreliable in every measurement) and the judge is
+  still **uncalibrated**. **Landing 2 is delivered and gated, not accepted** — AC-2b/AC-3/AC-4 remain
+  model-gated and only structurally demonstrated, and M3 does not reach ✅ on this landing.
+
+## 2026-07-18 — WSL2 memory diagnostic produced; fix parked (not applied)
+
+Read-only devops diagnostic of the WSL2 memory-overload crashes on the downgraded 16GB host,
+persisted at `docs/plans/wsl2-memory-diagnostic.md`. **Verdict: ballooning confirmed by defaults** —
+WSL2 runs uncapped at its 8GB default (50% of the host) with `autoMemoryReclaim` off, overcommitting
+host RAM alongside Windows-side LM Studio (not reproduced live — FalkorDB was down during the run).
+Recommended fix (`memory=6GB` + `swap=4GB` + `autoMemoryReclaim=gradual` in `C:\Users\mauri\.wslconfig`,
+keeping `networkingMode=mirrored`; needs `wsl --shutdown`) was **parked, not applied, per the user's
+decision** — un-park if the crashes recur. Tracked as a Parking-lot bullet in
+[`BACKLOG.md`](./BACKLOG.md) (`## Parking lot / ideas`). Docs-only; no config or code changed.
+
 ## 2026-07-12 — M3 K-022 Landing 1: LLM-native workflow executor (U1–U10), analyst-gated
 
 First landing of the reframed **K-022 — LLM-native workflow executor**: the offline executor +
