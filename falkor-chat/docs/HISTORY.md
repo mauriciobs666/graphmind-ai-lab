@@ -5,6 +5,74 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-21 — M3 K-025: the QA acceptance pass — verdict **PASS with parked, model-gated limitations** ⇒ **MILESTONE M3 ✅**
+
+Closes **K-025**, the un-run U15, and with it **milestone M3 — Workflows**. `qa-engineer` executed
+a risk-based, black-box acceptance pass against commit **`98a3cc8`** (tree clean, no source file
+changed by the pass). Artifacts: test plan **`docs/test-plans/m3-workflow-engine.md`** (v1.0,
+written *before* execution) and test report
+**`docs/test-reports/m3-workflow-engine-report.md`**. Baselines held on entry **and** on exit:
+server pytest **533 passed / 1 deselected**, query suite **256/256**.
+
+**Verdict: PASS with parked, model-gated limitations ⇒ M3 ✅. Zero blocking defects.**
+
+- **AC-1 · AC-5 · AC-6 — VERIFIED by execution.** An `@mention` on the served app started a triage
+  run read back from the graph as `(:WorkflowRun {status:'waiting', defKey:'triage'})-[:TRIGGERED_BY]->
+  (:Message)` anchored to the exact triggering message (AC-1); the same 8-step process flow run with
+  `trace:true` recorded **18 `TraceEvent`s** (`node_rationale` ×8, `guard_judgment` ×8, `node_note`
+  ×2 — every guard with its verdict *and* its why) against **0** events for the identical flow run
+  non-debug, so both halves of AC-5 hold; and the per-node fence held on **both** sides (AC-6) —
+  only the granted schema was offered on every iteration, and a scripted ungranted call was
+  **defensively rejected without dispatch**, while the corrected granted call still dispatched for
+  real. AC-6 was driven through the **real** executor, the **real** builtin `ToolRegistry` and the
+  **real** graph with a scripted LLM, not a stub estate.
+- **The whole `access-request@v1` process flow — VERIFIED.** All three `m3-process-flow.md` §4.3
+  paths reproduce the plan's step-by-step table **exactly**, step counts included: privileged
+  (`contractor`) **8** steps `submit,submit,route,approval,approval,provision,provision,activate` →
+  `done` at `activate`; standard-hire (`engineer`) **6**, no approval; rejected **6**, terminal
+  `rejected`, run **`done` not `failed`**. Nine publish-invariant negatives (missing
+  `waitsForHuman` on `human` *and* `wait`, a typo'd `cmp` op, zero transitions, 0/2 start steps, an
+  unwhitelisted path root, a dangling endpoint, a duplicate step key) all return **400 and write
+  nothing** — the unrepairable zero-transition half-write hazard is closed. The input error map is
+  precise (400 rejected / 404 unknown run / 409 not parked) and **every rejection is free**:
+  `stepCount` unchanged across empty, undeclared-key, reserved-key and `expects`-violating
+  submissions. Budget exhaustion and the `NotImplementedError` typed-handler seam both surface as
+  the **D-G `{"status":"failed"}` envelope, never a 500**, with the run correctly terminal in the
+  graph.
+- **AC-2b · AC-3 · AC-4 — recorded model-gated, structurally demonstrated** (decisions **D12-B** /
+  **D7**), not as failures. All three were *observed working* in a live interactive run on `ws:qa`:
+  intake parked → a plain reply with **no re-`@mention`** resumed it → the fuzzy guard advanced →
+  `research` (which correctly **abstained**, `no relevant context found`, on a near-empty
+  workspace) → `answer` posted a real reply `PRODUCED`-linked from its `StepRun` → run `done` in
+  ~18 s. `pytest -m live` then failed **2/2** on the AC-4 answer-post assertion (`the answer node
+  never posted a reply … posts came from: ['intake', …]`) with every prior AC-1/AC-2/AC-3 assertion
+  passing. That is **K-027** (Defect C, live-triage reliability on the local 4B) — a known, filed
+  limitation, **not** a new defect and **not** an M3-green gate.
+- **Specified behaviour confirmed and explicitly *not* filed as defects:** a parked `wait`
+  unchanged after 25 s (`awaiting {"kind":"signal","signal":"provisioned"}`) — signal-driven, no
+  scheduler (**D-C**; timers are K-028); `prompt` → `NotImplementedError` (**D-E**); the degraded
+  RECENT-TURNS guard tier (**D14**); create-only def publishes — an *edited* re-publish returned a
+  clean **`201`** while the stored def kept its old name, kind and step config.
+- **No verdict line in the report is sourced from the guard calibration**, so the **D10** caveat is
+  attached to no line there; it remains binding for K-027 item 3, which owns that measurement.
+- **Two non-blocking findings, both filed rather than left in the report:**
+  **K-031** (new) — there is **no black-box way to read a def's or snapshot's structure**
+  (`GET /workflow-defs/{key}` is metadata-only), so the component's most dangerous documented
+  trap — create-only publishes with independently-stale `reference` and `ws:{id}` — is
+  **documented but undetectable**; the pass had to drop to raw Cypher. Carries a nit: the step
+  budget overshoots by one (`maxSteps:2` → `stepCount:3`). And an **addendum appended to K-027**:
+  the prose-tool-call failure is **not terminal-node-specific** — the *intake* node emitted the
+  literal `post_message({...})` in bare function-call syntax, a shape
+  `llm._parse_content_tool_calls` does not recover, so the clarifying question never reached the
+  thread while the run parked looking healthy. Widening that parser is a cheap, offline-testable
+  mitigation that would have converted the observed run — recommended **before** the engine-level
+  terminal-node contract.
+- **Environment discipline:** `ws:qa` created at the live-probed embedding dim (1024), exercised,
+  and **deleted**; `reference`/`ws:acme` additive-only with **no def or snapshot subgraph ever
+  deleted**; the documented `pytest → test_queries.sh → seed_workflows.sh → verify → exercise`
+  order followed throughout — and the `reference`-wipe trap was **observed live twice**, confirming
+  the AGENTS.md warning is accurate and load-bearing. Nothing committed by the pass.
+
 ## 2026-07-21 — M3 K-024 (second half): the LLM-free `kind:'process'` proof flow, analyst-gated twice — **M3's last build item ✅**
 
 Closes **K-024** — the `kind:'process'` business-process proof flow the DESIGN §6.3

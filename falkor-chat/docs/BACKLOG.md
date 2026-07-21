@@ -4,7 +4,19 @@
 > keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
 > plan documents move to [`archive/`](./archive/).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-21 (**K-024 delivered ✅ + analyst-gated twice** — the LLM-free
+> Last reviewed: 2026-07-21 (**K-025 delivered ✅ ⇒ MILESTONE M3 ✅** — the `qa-engineer`
+> acceptance pass ran against commit `98a3cc8` on green baselines (server pytest **533 passed / 1
+> deselected**, query suite **256/256**, both re-confirmed afterwards) and returned **PASS with
+> parked, model-gated limitations, zero blocking defects**. **AC-1 / AC-5 / AC-6 verified by
+> execution**; the entire `access-request@v1` process flow verified (all three §4.3 paths reproduce
+> the plan's step table exactly); **AC-2b / AC-3 / AC-4 recorded model-gated, structurally
+> demonstrated** per D12-B / D7 — observed working in a live interactive run, with `pytest -m live`
+> red 2/2 on the AC-4 answer post, which is **K-027**, not a new defect. Two non-blocking findings:
+> **K-031** (new — no black-box read of a def's/snapshot's structure, making the create-only
+> split-brain undetectable; plus a one-step budget overshoot nit) and an addendum on **K-027** (the
+> prose-tool-call failure is not terminal-node-specific and has a cheap parse-layer mitigation).
+> Artifacts: `docs/test-plans/m3-workflow-engine.md` + `docs/test-reports/m3-workflow-engine-report.md`;
+> see HISTORY.md 2026-07-21. Prior review 2026-07-21: **K-024 delivered ✅ + analyst-gated twice** — the LLM-free
 > `kind:'process'` proof flow (`access-request@v1`) closes M3's last **build** item, so **K-025 (QA
 > acceptance) is unblocked** and is now all that stands between the component and **M3 ✅**. Units
 > U0–U5: deterministic `cmp` guards, typed `human`/`decision`/`wait` step handlers + two publish
@@ -44,7 +56,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows now exist) → **K-025** (QA = U15, **the only item left; unblocked**) ⇒ M3 ✅ on its PASS. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) are follow-ups, not M3-green gates. |
+| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) and K-031 (filed out of K-025) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -103,7 +115,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
 
-### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022 ✅, K-023 ✅, K-024 ✅, K-025 open —
+### — Milestone M3 (Workflow engine) — ✅ DELIVERED (K-020…K-025 → HISTORY.md 2026-07-21) —
 
 > **K-020 — Workflow definition model in `reference`** and **K-021 — Snapshot materialization
 > into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → HISTORY.md.** Suites raised to
@@ -242,9 +254,41 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** one e2e run test per flow (conversational behind a live marker; process
   deterministic/offline).
 
-### K-025 — QA acceptance pass on M3 (Slice 5) (🔵 proposed — **UNBLOCKED 2026-07-21**: K-020…K-024 all ✅)
+### K-025 — QA acceptance pass on M3 (Slice 5) (✅ **DELIVERED 2026-07-21 — verdict PASS with parked, model-gated limitations ⇒ M3 ✅**)
 
-> **Ready to run — it is the only item left before M3 ✅.** K-024's delivery (2026-07-21) removed the
+> **Run and closed.** `qa-engineer` executed the pass against commit `98a3cc8` on green baselines
+> (server pytest **533 passed / 1 deselected**; query suite **256/256**, both re-confirmed after the
+> pass). Artifacts: test plan `docs/test-plans/m3-workflow-engine.md` (v1.0, written before
+> execution) + test report `docs/test-reports/m3-workflow-engine-report.md`.
+> **Verdict: PASS with parked, model-gated limitations ⇒ M3 → ✅.** Zero blocking defects.
+> - **AC-1 / AC-5 / AC-6 — VERIFIED by execution.** `@mention` → `WorkflowRun-[:TRIGGERED_BY]->Message`
+>   read back from the graph; a debug run recorded **18 `TraceEvent`s** (`node_rationale` ×8,
+>   `guard_judgment` ×8, `node_note` ×2, each guard with its verdict *and* its why) against **0** for
+>   the same flow non-debug; the AC-6 fence held on **both** sides — only the granted schema offered on
+>   every iteration, and an ungranted call defensively rejected without dispatch.
+> - **The whole `access-request@v1` process flow — VERIFIED.** All three §4.3 paths reproduce the
+>   plan's step-by-step table **exactly**, step counts included (privileged 8, standard-hire 6,
+>   rejected 6 — rejected ends `done`, not `failed`). Nine publish-invariant negatives all reject
+>   **before any write** (the zero-transition half-write hazard is closed); the input error map
+>   (400/404/409) is precise and every rejection is **free** (`stepCount` unchanged); budget
+>   exhaustion and the `NotImplementedError` seam both surface as the D-G `{"status":"failed"}`
+>   envelope, never a 500.
+> - **AC-2b / AC-3 / AC-4 — recorded model-gated, structurally demonstrated** per **D12-B** / **D7**.
+>   All three were observed working in a live interactive run (intake parked → plain reply resumed →
+>   research → answer → `done`, with a real `PRODUCED`-linked answer post); `pytest -m live` then
+>   failed **2/2** on the AC-4 answer-post assertion. That is **K-027**, not a new defect and not an
+>   M3 gate.
+> - **Specified behaviour confirmed, not filed as defects:** a parked `wait` unchanged after 25 s
+>   (D-C); `prompt` → `NotImplementedError` (D-E); the RECENT-TURNS guard tier (D14); create-only
+>   def publishes (an edited re-publish returned `201` while the stored def kept its old content).
+> - **No verdict line in the report is sourced from the guard calibration**, so the D10 caveat is not
+>   attached to any line there; it remains binding for K-027 item 3.
+> - **Two non-blocking findings:** **K-031** (new — no black-box read of a def's/snapshot's structure,
+>   plus the one-step budget overshoot nit) and an addendum appended to **K-027** (the prose-tool-call
+>   failure is **not** terminal-node-specific and has a cheap parse-layer mitigation).
+> - `ws:qa` created and deleted; `reference`/`ws:acme` additive-only; nothing committed by the pass.
+
+> **(Original item text, for the record.)** K-024's delivery (2026-07-21) removed the
 > last prerequisite: both proof flows now exist, so the pass can cover the conversational
 > `triage@v1` *and* the LLM-free `access-request@v1` process flow. **Carry into the pass:** the
 > process flow is fully offline (no LM Studio needed for that half); `wait` is **signal-driven, not
@@ -316,6 +360,22 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   6. **Exit** — these outcomes are what would let the **K-025 / U15 acceptance** move AC-2b/AC-3/AC-4
      from *model-gated, structurally demonstrated* to *verified*. K-025 can run before this item; it
      just cannot claim more than D12-B allows.
+- **Addendum from the K-025 QA pass (2026-07-21) — the failure is not terminal-node-specific, and
+  has a second, cheaper shape.** In a live interactive run the **intake** node (non-terminal) emitted
+  the literal text `post_message({"text": "…could you please provide more details…"})` as its step
+  output. The model *did* intend a tool call — it wrote it in **bare function-call syntax**, which
+  `llm._parse_content_tool_calls` does not recover (it handles only JSON shapes: a
+  `{"tool_calls": […]}` envelope or a JSON-object wrapper). The clarifying question therefore never
+  reached the thread while the run parked correctly and looked healthy from the outside — a worse
+  user-visible symptom than the terminal case, because nobody was ever shown the question the run is
+  waiting on. Two consequences for this item: **(a)** item 2's terminal-node scope is too narrow —
+  the engine-level guarantee must cover any node whose contract is "post"; **(b)** this is the exact
+  structural twin of **item 1** (a parse layer intolerant of the shapes small local models actually
+  emit), so widening `_parse_content_tool_calls` to recognise `name({json})` is a cheap,
+  offline-testable mitigation that would have converted the observed run — **do it before the engine
+  surgery, then re-measure.** Also recorded: `pytest -m live` is **RED deterministically (2/2)** on
+  the AC-4 answer-post assertion — a known, filed limitation (D12-B), not an unknown regression.
+  Evidence: `docs/test-reports/m3-workflow-engine-report.md` §3.9 / DEF-K027-A / DEF-K027-B.
 - **Carried findings from the analyst gate** (`docs/reviews/m3-guard-thread-context-impl.md`, minors +
   nits — recorded here so they cannot rot):
   - **m-1 · `guards.py` negator window leaks across clause boundaries.** The 12-char window misses
@@ -450,6 +510,41 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** a publish and a materialize of a genuine single-step, zero-transition def, both
   asserted to succeed *and* to leave a complete subgraph (steps + `START` + the returned row); the
   existing ordering pins for the other publish invariants must stay green.
+
+### K-031 — Def/snapshot **structure** read surface (make the create-only split-brain detectable) (🔵 proposed — filed out of the K-025 QA pass, DEF-1)
+
+> **Why it exists.** `GET /workflow-defs/{key}` and `GET /workspaces/{ws}/snapshots` return
+> **metadata only** (`{key, version, name, kind}` — `repository.get_def`, QUERIES §11.3). There is
+> **no REST surface** that returns a def's steps, transitions, guards or `startKey`, nor a snapshot's
+> materialized structure. The K-025 pass had to drop to raw Cypher to answer *"is what I think is
+> published actually published?"* — which is precisely the component's most dangerous documented
+> trap: published defs are **create-only**, so re-seeding an edited def is a **silent no-op**
+> (QA confirmed: an edited re-publish of `qa-imm@v1` returned **`201`** while the stored def kept its
+> old `name`, `kind` **and** step config), and `reference` (def) vs `ws:{id}` (snapshot) go stale
+> **independently**. AGENTS.md documents the hazard thoroughly; nothing makes it **detectable**.
+- **Owner:** **`architect`** (the read-surface shape — expand-on-demand vs. a dedicated subgraph
+  endpoint vs. a diff endpoint) → **`coder`**. No `graph-dba` gate expected: `read_def_subgraph`
+  already exists and is used by materialize; this is an adapter-layer exposure, not new Cypher.
+- **Scope sketch (to be designed, not decided here):** a structure read for a def
+  (`GET /workflow-defs/{key}/versions/{version}?expand=steps`, or a `/subgraph` sibling) and the same
+  for a workspace snapshot, so an operator can **diff def against snapshot in one call** and see the
+  split-brain the docs warn about. Optionally a `scripts/verify_workflows.sh <ws>` that asserts "both
+  defs present in `reference` **and** snapshot-consistent in `ws:<id>`" — trivial once the read exists,
+  and it turns a documented discipline into a one-command check (QA feedback item 5).
+- **Also in scope (nit, same file surface):** the step budget **overshoots by one** — a run started
+  with `maxSteps: 2` reached `stepCount: 3` before failing, because the budget is checked *after* a
+  step executes. Harmless today, but it makes `maxSteps` mean "at least N", which a future
+  SLA/costing story would trip over. Fix the check or document the off-by-one where `maxSteps` is
+  specified.
+- **Explicitly not in scope:** changing publish semantics. Create-only is a **decision**
+  (`MERGE … ON CREATE SET`); converging the seed sources is **K-029** and allowing zero-transition
+  defs is **K-030**. This item only makes the current semantics **observable**.
+- **Risks/RAM:** none — read-only, no new node type, index or property. The only real risk is
+  response size on a large def; bound it the way the other §12 RO reads are bounded.
+- **Test strategy:** an offline contract test that a published def reads back with its exact steps,
+  transitions and guards; a test that a def edited-and-re-published reads back **unchanged** (pinning
+  the create-only semantics rather than hiding them); a def-vs-snapshot divergence fixture asserting
+  the read makes the divergence visible.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
@@ -607,6 +702,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 | Path | Scope |
 |---|---|
+| `docs/test-plans/m3-workflow-engine.md` + `docs/test-reports/m3-workflow-engine-report.md` | **Created ✅ 2026-07-21** — the K-025 M3 acceptance pass: risk-based plan (written before execution) + report (verdict **PASS with parked, model-gated limitations** ⇒ M3 ✅). |
 | `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
 | `docs/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
 | `docs/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
