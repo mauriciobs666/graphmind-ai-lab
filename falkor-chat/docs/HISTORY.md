@@ -5,6 +5,111 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-21 — M3 K-024 (second half): the LLM-free `kind:'process'` proof flow, analyst-gated twice — **M3's last build item ✅**
+
+Closes **K-024** — the `kind:'process'` business-process proof flow the DESIGN §6.3
+"coordination is workflow" claim rests on — and with it the last **build** item of M3. Only
+**K-025** (QA acceptance) now stands between the component and **M3 ✅**. Delivered by the
+teco-coordinated chain over five units: **graph-dba** (U0), **tdd-engineer** (U1), **coder**
+(U2, U3, U4, U4b), **teco** (U5 + every integration run), with the **mandatory analyst gate** run
+**twice** as a non-negotiable done-condition. Plan `docs/plans/m3-process-flow.md` (v2.1);
+coordination log `docs/plans/m3-process-flow-coordination.md`; all three gates in
+`docs/reviews/m3-process-flow.md`. New baselines: server pytest **523 → 533 passed / 1 deselected**
+(350 at the start of the slice); query suite **241 → 256**.
+
+**The central design claim, and it held: `_drive_loop` was never modified.** SHA `71055f756280`
+before the slice, after every edit, and at closeout. A business process fell out of *park-and-branch*
+with **no new primitive, no new run state and no scheduler**: a `human` step is just a step whose
+outgoing guard reads a `ctx` key that does not exist yet, so the executor's existing "no transition
+fired" outcome parks it — and writing that key from outside makes the same guard fire on resume.
+Only two capabilities were missing: **read `ctx` in a guard** (U1) and **write `ctx` from outside**
+(U3).
+
+- **U0 (graph-dba) — two additive queries, no DDL.** `QUERIES.md` §12.12 `start_run_untriggered`
+  (a run with no chat `Message` anchor — finding F-2) and §12.13 `resume_run_with_ctx` (the ctx write
+  **folded into** the existing resume CAS, decision D-F, so no window exists where one writer's ctx is
+  read by another's in-flight drive). PROFILEs beat the plan's assumption — `start_run_untriggered`
+  is a single `Node By Index Scan` and is *cheaper* than §12.1; `resume_run_with_ctx` has no residual
+  `Filter`. Zero-row contracts **verified, not assumed** (the CAS loser wrote neither the flip nor the
+  ctx). `bootstrap_schema.sh` untouched, RAM ≈ nil. Query suite 241 → 256.
+- **U1 (tdd-engineer) — the deterministic `cmp` guard family** (decision D-A):
+  `{kind:'cmp', path, op, value}` + `all`/`any`/`not`, whitelisted ops, two whitelisted path roots
+  (`ctx.`/`output.`), depth/width/node caps, `validate_cmp` + `render_label`, populated `rationale`.
+  **No parser, no `eval`, no new dependency** — and named `cmp`, not `expr`, so DESIGN §13's "no
+  expression library is built" stays literally true (`kind:'expr'` still raises). **Strict at publish,
+  total at drive** (open item O-1): an unwhitelisted path root is rejected at seed time, but a missing
+  path at drive is simply `False`. `test_guards.py` 33 → 143, including a De Morgan contrast pair that
+  pins the `ne`-vs-`not` asymmetry side by side.
+- **U2 (coder) — typed step handlers + two publish invariants.** `_execute_step` became an explicit
+  dispatch: `agent`+LLM → the agent loop; `agent` without an LLM → the preserved empty stub (finding
+  F-3, load-bearing for the whole offline estate, now documented as to *why*); `human`/`decision`/`wait`
+  → three pure handlers. **⚠️ Behaviour change (R-3): `prompt`/`tool`/`message` and any unknown type
+  now raise `NotImplementedError`** naming the plan, where they previously fell through to a **silent
+  no-op** — a `decision` node used to "succeed" doing nothing. The M-1 fault net stamps `fail_run` and
+  re-raises. `_validate_def_spec` gained both invariants, running **last** and each preceded by
+  `_normalize_opaque` so the REST front door (which types `config`/`guard` as `str`) cannot escape
+  them. **Named fixture edits, exactly as budgeted by gate findings B-1/B-2:**
+  `test_executor.py:345`'s `{"key":"end","type":"task"}` → `type:"agent"` (it is executed by the real
+  loop inside the Defect-B regression pin, which the new `NotImplementedError` would otherwise have
+  killed), and the `type:"human"` fixtures in `test_api.py` + `test_services.py` that declared no
+  `waitsForHuman`; the five affected `pytest.raises` gained `match=` so none went vacuous. Six
+  mutations, all killed.
+- **U3 (coder) — start-without-trigger + the human-input channel** (decision D-B, REST):
+  `POST /workflow-runs` and `POST /workflow-runs/{id}/input`, with the D-G five-handler error map
+  (`WorkflowRunNotFoundError` 404 · `WorkflowRunNotWaitingError` 409 · `WorkflowInputRejectedError`
+  400 · `WorkflowConfigError` 400 · `WorkflowEngineDisabledError` 503) registered via a table — no
+  blanket `RuntimeError` handler. Reserved ctx keys (`threadId`, `error`) are rejected at the
+  **service** layer so MCP inherits the rule, closing the latent bug where a caller-set `threadId`
+  would let any chat message resume a process run. Submitted input is validated against the parked
+  step *before* the merge (D-H), so a mistake costs no step budget. A drive fault reports the run's
+  **graph truth** — `status` *and* `ctx` from the same post-fault re-read — and a non-terminal
+  re-read re-raises rather than dressing a zombie run as success.
+- **U4 (coder) — the proof def, its seed and an offline acceptance test.**
+  `server/falkorchat/proof_defs.py` ships `ACCESS_REQUEST_DEF`: **`access-request@v1`**, six steps /
+  six transitions, submit→route→approval→provision→activate\|rejected, `human`×2 / `decision`×3 /
+  `wait`×1, the four `cmp` ops `exists`/`in`/`eq`/`truthy`, two terminal outcomes,
+  `ACCESS_REQUEST_MAX_STEPS = 24`. (The key is **`access-request`**, not `onboarding` — that key
+  collides with long-standing test fixtures.) `scripts/seed_workflows.sh` now loops over **both** defs.
+  `server/tests/test_process_flow.py` drives all three §4.3 paths — privileged (8 steps), standard hire
+  (6, exercising conditional-beats-unconditional from the *losing* side) and rejected (6) — through the
+  service layer, **fully offline: no LLM, no network, no `live` marker**. It imports the same constant
+  the seed script publishes, so seed and test cannot drift.
+- **U4b (coder) — the implementation gate's findings, closed at the right layer.** A drive fault on
+  the `@mention` start path was left with **no log line anywhere** once D-G's catch swallowed it —
+  fixed with one `logging.exception` inside the existing `except`, envelope byte-unchanged and the
+  catch deliberately *not* gated to REST callers. **Open item O-6 was fixed, not filed:** a def
+  published with zero transitions collapsed `_PUBLISH_CYPHER`'s trailing `UNWIND` **after** the steps
+  and `START` were written, raising `IndexError` on a partial write — and because publish is
+  create-only, the corrected retry was a silent no-op on a permanently poisoned `(key, version)`. A
+  `_validate_def_spec` rule (running last, like the other two) now rejects it **before any repository
+  call**. An empty input body is likewise rejected before it can win the CAS and burn a step. The
+  acceptance test moved to the test-only version **`access-request@v1-test`** so a finished pytest
+  session can never leave a *test's* publish masquerading as a real seed of the production pair —
+  overriding **only** the version key, so the anti-drift property survives.
+- **U5 (teco) — closeout.** DESIGN §6.1 rewritten for what the engine actually executes (including
+  finding **F-1**'s two-part correction: `TRANSITION.on`/`StepResult.on` are **vestigial and
+  descriptive only**, and guards sort by `(guard == "", order)` — *conditional first*, `order` only a
+  tie-break within each class), §6.3 gained the proof pointer + the K-025 handoff note, §13 amended
+  with `cmp`-not-`expr`. K-024 → ✅, K-025 marked unblocked, and three items filed rather than folded
+  in: **K-028** (workflow timers — `wait` is signal-driven because this system has **no scheduler**;
+  decision D-C), **K-029** (converge the seed def sources into `proof_defs.py`; `triage@v1`'s literal
+  is still inline in `seed_workflows.sh` — carries the unenforced symmetric `decision` publish
+  invariant of nit n-3), **K-030** (allow zero-transition defs by guarding the `UNWIND` the way §4's
+  mention block does, instead of rejecting them; folds in the residual **publish-only** asymmetry —
+  `materialize_snapshot` reuses the same unguarded query).
+- **Gates.** Plan gate: **request changes** (2 blocker / 6 major) → plan v2.1, all closed in text and
+  re-verified diff-scoped. Implementation gate U0–U4: **approve with suggestions**, 0 blockers, two
+  majors (M-A the swallowed stack trace, M-B the reachable O-6 route). Re-gate U4b: **approve with
+  suggestions**, no blockers, all seven findings closed *as ruled* — not more, not less. Both gates
+  independently re-verified the `_drive_loop` SHA and confirmed the blast radius on the existing test
+  estate was exactly the named fixtures, with **no assertion weakened, deleted or made conditional**.
+- **Process incident (contained, no work lost).** During U3 the implementer twice reached for a
+  tree-mutating git command to *read* or *undo* something; the second (`git checkout <path>`) reverted
+  `services.py` to HEAD and destroyed the unit's work in one command. It was reconstructed and
+  independently verified against `efdeeb3` — no top-level symbol lost, every diff deletion accounted
+  for. **Standing rule now in every implementer brief:** never `stash`/`checkout <path>`/`restore`/
+  `reset` a working tree — read baselines with `git show <ref>:<path>`.
+
 ## 2026-07-19 — M3 K-022 Landing 2: trigger + triage proof flow (U11–U14), analyst-gated — **U15 not run**
 
 Second landing of **K-022 — LLM-native workflow executor**: the `@mention` trigger, the triage proof

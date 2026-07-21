@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
@@ -85,9 +86,12 @@ def _make_services(repo):
 
 
 def _materialize(repo, *, steps, transitions, start_key, key="access-request"):
-    # NOTE: a def with zero transitions trips the latent empty-`UNWIND` collapse in
-    # `_PUBLISH_CYPHER` (out of U3's scope) — every fixture here carries ≥1
-    # transition, and a terminal step is one with no *outgoing* transition.
+    # NOTE: a def with zero transitions trips the empty-`UNWIND` collapse in
+    # `_PUBLISH_CYPHER` — an `IndexError` after a partial write. U4b guards the
+    # **publish** path (`_validate_def_spec` rejects it), but this helper calls
+    # `materialize_snapshot` *directly*, which reuses the same query and is still
+    # unguarded (backlog **K-030**). So every fixture here must carry ≥1 transition;
+    # a terminal step is one with no *outgoing* transition.
     repo.materialize_snapshot(
         "test", key=key, version="1", name="Access request", kind="process",
         start_key=start_key, steps=steps, transitions=transitions,
@@ -517,6 +521,28 @@ def test_the_failed_envelope_ctx_is_the_graphs_post_fault_ctx_not_the_submission
     assert "error" in out["ctx"]                   # the engine's diagnostic note
 
 
+def test_a_swallowed_drive_fault_still_logs_its_stack(svc, wf_repo, caplog):
+    # U4b M-A — D-G's catch also covers the CHAT start path (`trigger.py` step 3 calls
+    # `start_workflow_run`), and `api._safe_run_workflow`'s isolation only ever logs
+    # what propagates out of it. Without this line a live run that dies on an unwired
+    # judge or an unimplemented step type leaves no trace anywhere.
+    _materialize(wf_repo, steps=TOOL_START_STEPS,
+                 transitions=[{"from": "call", "to": "granted", "on": "done",
+                               "guard": "", "order": 0}],
+                 start_key="call")
+
+    with caplog.at_level(logging.ERROR, logger="falkorchat.services"):
+        out = svc.start_workflow_run(CTX, def_key="access-request", version="1")
+
+    assert out["status"] == "failed"     # the envelope is unchanged (D-G verbatim)
+    faults = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert faults, "the swallowed drive fault produced no log record"
+    assert out["runId"] in faults[0].getMessage()
+    # `.exception`, not `.error` — the stack is the point
+    assert faults[0].exc_info is not None
+    assert faults[0].exc_info[0] is NotImplementedError
+
+
 def test_the_clean_path_envelope_ctx_still_equals_the_persisted_merge(svc, wf_repo):
     # Guard the other direction: with no fault the envelope's ctx is the merge the
     # CAS wrote, which is the graph's ctx — the two paths agree by construction.
@@ -659,6 +685,25 @@ def test_an_undeclared_input_key_is_rejected_for_free(svc, wf_repo):
     assert after["stepCount"] == before      # no budget consumed
     assert json.loads(after["ctx"]) == {}    # nothing written
     assert after["status"] == "waiting"
+
+
+def test_an_empty_input_is_rejected_for_free(svc, wf_repo):
+    # U4b m-A — the mistake a UI is most likely to emit: submit with nothing filled in.
+    # `{}` breaks no other rule, so it used to win the resume CAS, re-execute the parked
+    # step against unchanged ctx, fire no guard and re-park — one step of budget gone.
+    started = _parked_run(svc, wf_repo)
+    before = wf_repo.get_run("test", run_id=started["runId"])["stepCount"]
+
+    with pytest.raises(WorkflowInputRejectedError, match="no input submitted"):
+        svc.submit_workflow_input(CTX, run_id=started["runId"], input={})
+
+    after = wf_repo.get_run("test", run_id=started["runId"])
+    assert after["stepCount"] == before      # no budget consumed
+    assert json.loads(after["ctx"]) == {}    # nothing written
+    assert after["status"] == "waiting"      # still parked, still advanceable
+    assert svc.submit_workflow_input(
+        CTX, run_id=started["runId"], input={"decision": "approve"}
+    )["status"] == "done"
 
 
 def test_a_value_outside_config_expects_is_rejected_for_free(svc, wf_repo):

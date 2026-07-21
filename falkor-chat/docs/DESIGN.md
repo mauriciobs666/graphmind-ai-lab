@@ -268,26 +268,61 @@ A definition is a directed graph of steps; a run is an execution trace that walk
 > `HAS_STEP` keeps step/transition reads anchored on the def's index (`Node By Index Scan`, verified).
 > Canonical publish/materialize/read Cypher: **`QUERIES.md` §11**.
 
-`type` unifies conversational and business flows:
+`type` unifies conversational and business flows. **What the engine executes today (K-024 U2):**
 - **`agent` → LLM-native node** (M3 executor / K-022): the `config` string carries a plain-language
   `systemPrompt` + an author-set tool fence + bounds; the model runs as a bounded, tool-scoped agent
-  loop. This is the type the triage proof uses.
-- `prompt` / `message` / `tool` → agent-adjacent flows (LLM call, post a message, invoke a tool)
-- `human` / `decision` / `wait` → business processes (assignee task, branch, SLA/timer)
+  loop. This is the type the triage proof uses. **`agent` with no LLM wired returns an empty stub
+  result** — deliberate, and load-bearing for the offline test estate.
+- `human` / `decision` / `wait` → business processes, **implemented and proven** by the
+  `access-request@v1` proof flow (K-024, §6.3):
+  - **`human`** — parks the run awaiting an assignee. `config.waitsForHuman: true` is **mandatory**
+    and enforced at publish; the `StepRun.output` carries an `awaiting` envelope
+    (`prompt`/`fields`/`assignee`), so a client learns what the run is waiting for from
+    `GET /workflow-runs/{id}/step-runs` with no new query.
+  - **`decision`** — **no side effect at all**: its semantics are entirely its outgoing guards. With
+    no outgoing transition it is a terminal outcome node (the run ends `done`).
+  - **`wait`** — **signal-driven, not timer-driven.** This system has **no scheduler** (decision
+    D-C); a `wait` step parks exactly as `human` does and is released by an **external signal**
+    delivered through `POST /workflow-runs/{id}/input`. Mechanically it *is* `human` to the engine —
+    only the `awaiting.kind` string differs, and it carries the same mandatory `waitsForHuman: true`.
+    Real timers/scheduled wakeups are backlog **K-028**, not a gap in this model.
+- `prompt` / `message` / `tool` → agent-adjacent flows (LLM call, post a message, invoke a tool) —
+  **not implemented**: `executor._execute_step` raises `NotImplementedError` naming
+  `docs/plans/m3-process-flow.md` (the documented typed-handler seam, decision D-E). A deliberate
+  behaviour change from the pre-K-024 silent no-op, so an unimplemented type fails a run loudly
+  instead of "succeeding" having done nothing.
 
 `Step.config` and `TRANSITION.guard` are **opaque serialized strings** parsed app-side only (rule 8) —
 `type:'agent'` needs **no DDL** (whitelist-only add). The `agent` config deserializes to
 `{mode, systemPrompt, tools[], permissions{}, waitsForHuman, maxIterations}`; `waitsForHuman:true` is the
 explicit suspend signal for a node that parks awaiting a human reply (only intake, in the triage flow).
 
-**`TRANSITION.guard` is LLM-native (K-022, supersedes the old "expression" wording — §13 resolved).**
-The guard string is either **empty `""`** — an unconditional/default transition (lowest priority; fires
-whenever reached; this is how deterministic transitions are expressed) — or a `{kind, text}` JSON
-discriminator, with `kind == 'llm'` judged in natural language against run context (a structured boolean
-verdict + traced rationale). `on` is the event/outcome that fires it; guards are evaluated in
-`TRANSITION.order`, first-firing wins. A would-be `expr` kind is a deliberate `NotImplementedError` seam
-(no expression library is built here). One model, both worlds. Runtime evaluation & the run/step-run
-schema: §6.2; verified Cypher: **`QUERIES.md` §12**.
+**`TRANSITION.guard` is LLM-native *and* deterministic (K-022 + K-024, supersedes the old
+"expression" wording — §13 resolved).** The guard string is one of:
+- **empty `""`** — an unconditional/default transition (**lowest** priority; fires whenever reached);
+- a `{kind:'llm', text}` discriminator — judged in natural language against run context (a structured
+  boolean verdict + traced rationale);
+- a **`cmp`-family** discriminator (K-024) — `{kind:'cmp', path, op, value}` plus the combinators
+  `all` / `any` / `not`. A closed comparator, **not** an expression language: whitelisted ops, two
+  whitelisted path roots (`ctx.` / `output.`), depth/width/node caps, no parser and no `eval`.
+  It is **total at drive** (a missing path ⇒ `False`, never a raised error) and **strict at
+  publish** (a typo'd `op` or an unwhitelisted path root is a `WorkflowConfigError` at seed time, not
+  a run that parks forever). This is what makes an LLM-free `kind:'process'` flow possible.
+
+A would-be **`expr`** kind is still a deliberate `NotImplementedError` seam — no expression library is
+built here (the deterministic family is deliberately named `cmp` to keep that literally true).
+
+**Two corrections to earlier wording (K-024 finding F-1):**
+1. **`on` is descriptive only.** `TRANSITION.on` and `StepResult.on` are **vestigial** — nothing in
+   the engine reads either. `on` is a human-readable outcome label, *not* "the event that fires the
+   transition"; the guard alone decides.
+2. **Guards are not evaluated in plain `TRANSITION.order`.** The sort key is
+   `(guard == "", order)` — i.e. **conditional guards first**, with `order` as a tie-break *within*
+   each class, then first-firing wins. That is what makes "conditional beats unconditional" work and
+   an empty guard a true default arm.
+
+One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; verified Cypher:
+**`QUERIES.md` §12**.
 
 ### 6.2 Run (per-workspace, real local edges to the materialized def)
 
@@ -367,6 +402,30 @@ Agent/team coordination (task lifecycle, "room state") is modelled as an M3 `Wor
 `kind:'process'` over `Step` + `TRANSITION` + `StepRun` — **not** a flat `Task` node or a
 presence field. This avoids a parallel model that would later need migrating into the engine
 (single-store philosophy). Full rationale/ADR: `docs/archive/plans/m1-chat-mcp.md` Appendix B.
+
+**The proof now exists (K-024, 2026-07-21).** `access-request@v1` — an LLM-free `kind:'process'`
+def of six steps and six transitions over `human` / `decision` / `wait` — runs end to end with **no
+LLM and no network**:
+
+| Artifact | Where |
+|---|---|
+| The def (the single source both seed and test read) | `server/falkorchat/proof_defs.py` — `ACCESS_REQUEST_DEF` |
+| Offline acceptance test (all three §4.3 paths) | `server/tests/test_process_flow.py` |
+| Seeding into `reference` + `ws:{id}` | `scripts/seed_workflows.sh` (second def) |
+| Design + traced paths | `docs/plans/m3-process-flow.md` |
+
+The design claim it settles: **a business process needs no new primitive, no new run state and no
+scheduler.** A `human` step is just a step whose outgoing guard reads a `ctx` key that does not exist
+yet — the executor's existing "no transition fired" outcome parks it; writing the key
+(`POST /workflow-runs/{id}/input`) makes the same guard fire on resume. The executor's drive loop was
+**not modified** to support any of it.
+
+> **Handoff note for K-025 (QA acceptance) — repeated from §6.1 because it is the single most
+> misreadable thing here:** `wait` is **signal-driven, not timer-driven, and mechanically identical
+> to `human`** — only the `awaiting.kind` string differs. There is no scheduler in this system
+> (decision D-C); a parked `wait` is released by an external signal on the input endpoint, never by
+> elapsed time. Timers/scheduled wakeups are backlog **K-028**. A `wait` step that never advances on
+> its own is the specified behaviour, not a defect.
 
 ---
 
@@ -656,6 +715,13 @@ with **no** vectors present) — budget from `INFO memory` deltas, never `GRAPH.
 ## 13. Open questions
 
 - ~~**Workflow guard expression language** — reuse an existing expr lib or define a minimal DSL stored in `Step.config`?~~ **RESOLVED (M3 executor, K-022): LLM-native + coexist.** A `TRANSITION.guard` is either the empty-string unconditional/default form or a `{kind:'llm', text}` discriminator judged in natural language against run context (§6.1/§6.2); deterministic transitions use the empty form. **No expression library is built** — a would-be `expr` kind is a `NotImplementedError` seam (zero dead code). Rule 8 respected: the `{kind}` discriminator is parsed app-side, never filtered in Cypher.
+  **Amended (K-024, decision D-A): the deterministic half is `cmp`, not `expr`.** The LLM-free
+  `kind:'process'` proof flow needed a guard that could branch on run state without a model, so a
+  **closed structured comparator** was added: `{kind:'cmp', path, op, value}` + `all`/`any`/`not`,
+  with whitelisted ops, two whitelisted path roots (`ctx.`/`output.`), depth/width/node caps, total
+  at drive and strict at publish (§6.1). It is deliberately **named `cmp` and not `expr`** so this
+  resolution stays literally true: there is still no parser, no `eval`, no expression library and no
+  new dependency, and `kind:'expr'` still raises `NotImplementedError`.
 - **Retention** — do old messages/embeddings age out (and how does that interact with the always-in-RAM constraint)? (→ decide on K-011 load-test data; evicting cold embeddings is the cheapest lever — ~10 KB of the 12.5 KB/msg is vector + index.)
 - **Cross-workspace analytics** — app-layer fan-out vs. a dedicated `analytics` rollup graph. (Cost accepted §4; mechanism open, no milestone yet.)
 - **Real-time gateway transport** — for the M2.5 push path, Bolt (port `65535`, confirmed in `GRAPH.CONFIG`) vs. RESP/WebSocket. The M1 app *driver* is settled (RESP via `falkordb-py`); this is only the push-gateway choice. (→ K-018.)

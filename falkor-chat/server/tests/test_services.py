@@ -852,6 +852,36 @@ def test_publish_workflow_def_multiple_start_steps_raises_nothing_written():
     assert repo.published == []
 
 
+def test_publish_workflow_def_zero_transitions_raises_nothing_written():
+    # O-6 (U4b M-B): `POST /workflow-defs` with `"transitions": []` is schema-legal, and
+    # `_PUBLISH_CYPHER`'s trailing `UNWIND $transitions` collapses the row stream AFTER
+    # the def, its steps and the START edge are MERGEd — a 500 plus a `(key, version)`
+    # that `MERGE … ON CREATE SET` can never repair. Reject before any write instead.
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefSpecError, match="at least one transition"):
+        _publish(svc, repo, transitions=[])
+
+    assert repo.published == []
+
+
+def test_the_zero_transition_rule_runs_last_and_cannot_mask_an_older_check():
+    # Ordering pin, same contract as the U2 invariants' pin: this spec violates BOTH
+    # the start-count rule and the transitions rule, and must fail for the start count.
+    repo = FakeRepo()
+    svc = make_service(repo)
+    no_start = [
+        {"key": "a", "type": "human", "config": {"waitsForHuman": True}},
+        {"key": "b", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefSpecError, match="exactly one start step"):
+        _publish(svc, repo, steps=no_start, transitions=[])
+
+    assert repo.published == []
+
+
 def test_publish_workflow_def_dangling_transition_from_raises_nothing_written():
     repo = FakeRepo()
     svc = make_service(repo)
@@ -1083,11 +1113,14 @@ def test_agent_step_type_is_accepted_by_publish_validation():
     repo = FakeRepo()
     svc = make_service(repo)
 
+    # ≥1 transition (O-6) — a def that publishes successfully must carry one, so this
+    # fixture declares a second step and the transition into it.
     svc.publish_workflow_def(
         CTX, key="triage", version="1", name="Triage", kind="conversation",
         steps=[{"key": "intake", "type": "agent", "start": True,
-                "config": {"waitsForHuman": True}}],
-        transitions=[],
+                "config": {"waitsForHuman": True}},
+               {"key": "answer", "type": "agent"}],
+        transitions=[{"from": "intake", "to": "answer", "on": "done", "order": 0}],
     )
 
     assert repo.published[0]["key"] == "triage"

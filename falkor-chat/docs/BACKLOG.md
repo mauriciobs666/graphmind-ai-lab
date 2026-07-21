@@ -4,7 +4,18 @@
 > keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
 > plan documents move to [`archive/`](./archive/).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-19 (**K-022 Landing 2 delivered ✅ + analyst-gated** — trigger + triage proof
+> Last reviewed: 2026-07-21 (**K-024 delivered ✅ + analyst-gated twice** — the LLM-free
+> `kind:'process'` proof flow (`access-request@v1`) closes M3's last **build** item, so **K-025 (QA
+> acceptance) is unblocked** and is now all that stands between the component and **M3 ✅**. Units
+> U0–U5: deterministic `cmp` guards, typed `human`/`decision`/`wait` step handlers + two publish
+> invariants, start-without-trigger + the human-input REST endpoint, the proof def + offline
+> acceptance test, closeout. The central design claim held — **`_drive_loop` was never modified**
+> (SHA `71055f756280` throughout). New baselines: server pytest **523 → 533 passed / 1 deselected**;
+> query suite **241 → 256**. Gates: plan gate (request-changes → v2.1 approved), implementation gate
+> U0–U4 and re-gate U4b (both *approve with suggestions*, no blockers) →
+> `docs/reviews/m3-process-flow.md`. Three items filed out of it: **K-028** (workflow timers),
+> **K-029** (converge the seed def sources), **K-030** (allow zero-transition defs). See
+> HISTORY.md 2026-07-21. Prior review 2026-07-19 (**K-022 Landing 2 delivered ✅ + analyst-gated** — trigger + triage proof
 > flow (U11–U14), the Defect-A guard thread-context seam fix, Defect-B tool-error survival, the U13
 > workflow seed; gate `approve with suggestions`, 0 blocker / 2 major (both closed) / 3 minor / 3 nit
 > → `docs/reviews/m3-guard-thread-context-impl.md`. New server baseline **pytest 350 passed, 0
@@ -33,7 +44,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) → **K-024** (conversational flow done, process flow open) → **K-025** (QA = U15, **not run**). K-027 (live-triage reliability) is a follow-up, not an M3-green gate. |
+| **M3 — Workflows** 🟡 | Def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, QA-accepted | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows now exist) → **K-025** (QA = U15, **the only item left; unblocked**) ⇒ M3 ✅ on its PASS. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) are follow-ups, not M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -84,14 +95,15 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 ## Active
 
 > **Milestone M3 — Workflow engine, in progress.** Slice 1 (**K-020 + K-021**) delivered
-> 2026-07-09; **K-022 (executor, both landings) + K-023 (chat linkage)** delivered 2026-07-19 →
-> HISTORY.md. Remaining to M3 ✅: **K-024** (the second, LLM-free `kind:'process'` proof flow) →
-> **K-025 (QA acceptance = U15, not yet run)**. **K-027** (live-triage reliability) is a parallel
-> follow-up track, explicitly *not* an M3-green gate per decision D12-B.
+> 2026-07-09; **K-022 (executor, both landings) + K-023 (chat linkage)** delivered 2026-07-19;
+> **K-024 (both proof flows)** delivered 2026-07-21 → HISTORY.md. **All build items are done.**
+> Remaining to M3 ✅: **K-025 (QA acceptance = U15) — unblocked, not yet run**. **K-027**
+> (live-triage reliability) is a parallel follow-up track, explicitly *not* an M3-green gate per
+> decision D12-B; so are **K-028/K-029/K-030**, filed out of the K-024 gates.
 > Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
 
-### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022 ✅, K-023 ✅, K-024 partial, K-025 open —
+### — Milestone M3 (Workflow engine) — slice 1 ✅, K-022 ✅, K-023 ✅, K-024 ✅, K-025 open —
 
 > **K-020 — Workflow definition model in `reference`** and **K-021 — Snapshot materialization
 > into `ws:{id}` on publish** — **delivered ✅ 2026-07-09 → HISTORY.md.** Suites raised to
@@ -193,14 +205,32 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   queryable both directions. **Risks:** edges negligible; the `EMITTED` overload is the
   modeling-clarity risk. **Test strategy:** gate assertions; pytest linkage + triggered-run tests.
 
-### K-024 — Proof flows: one conversational + one business-process (Slice 4) (🟡 half-delivered 2026-07-19 — conversational done, process flow open)
+### K-024 — Proof flows: one conversational + one business-process (Slice 4) (✅ delivered — conversational 2026-07-19, process flow 2026-07-21, analyst-gated twice → HISTORY.md)
 
-> **Conversational flow ✅** — the `kind:'conversation'` **triage** def (`triage@v1`, intake→research→
-> answer, three `type:'agent'` steps) is published + materialized by `scripts/seed_workflows.sh`
-> (K-022 U13, idempotent, service-layer-driven) and runs end-to-end to `status='done'` against live
-> LM Studio (`tests/test_workflow_live.py`, `live`-marked). **Reliability is model-gated, not proven** —
-> see K-027. **Business-process flow ⚪ not built** — the LLM-free `kind:'process'` def over
-> `human`/`decision`/`wait` steps (the §6.3 coordination-is-workflow proof) is the remaining work here.
+> **Delivered ✅.** Both proof flows exist and run. **Conversational** — the `kind:'conversation'`
+> **triage** def (`triage@v1`, intake→research→answer, three `type:'agent'` steps) is published +
+> materialized by `scripts/seed_workflows.sh` (K-022 U13, idempotent, service-layer-driven) and runs
+> end-to-end to `status='done'` against live LM Studio (`tests/test_workflow_live.py`, `live`-marked);
+> its *reliability* remains model-gated, not proven — see K-027. **Business process** — the LLM-free
+> `kind:'process'` def **`access-request@v1`** (six steps / six transitions, submit→route→approval→
+> provision→activate\|rejected over `human`/`decision`/`wait`) is the DESIGN §6.3
+> coordination-is-workflow proof, and it needed **no new primitive, no new run state and no
+> scheduler**: a `human` step is a step whose outgoing guard reads a `ctx` key that does not exist
+> yet, so the executor's existing "no transition fired" outcome parks it, and writing the key over
+> REST makes the same guard fire on resume. Delivered across five units — **U0** two additive
+> queries (`start_run_untriggered`, `resume_run_with_ctx`, graph-dba-gated and PROFILEd, no DDL),
+> **U1** the deterministic `cmp` guard family (`all`/`any`/`not`, whitelisted ops + path roots, caps,
+> no parser/`eval`/dependency, total at drive & strict at publish), **U2** typed
+> `human`/`decision`/`wait` handlers + a `NotImplementedError` seam for `prompt`/`tool`/`message`
+> (a deliberate behaviour change from the old silent no-op) + two publish invariants, **U3**
+> start-without-trigger + `POST /workflow-runs/{id}/input` with a five-handler error map, **U4/U4b**
+> the def in `server/falkorchat/proof_defs.py`, its seeding, and the fully offline acceptance test
+> `server/tests/test_process_flow.py`, **U5** closeout. The central bet held: **`_drive_loop` was
+> never modified** — SHA `71055f756280` before, during and after. Baselines: server pytest
+> **523 → 533 passed / 1 deselected**, query suite **256/256**. Plan `docs/plans/m3-process-flow.md`
+> (v2.1); coordination `docs/plans/m3-process-flow-coordination.md`; gates (plan, implementation
+> U0–U4, re-gate U4b) in `docs/reviews/m3-process-flow.md`. Follow-ups filed rather than folded in:
+> **K-028**, **K-029**, **K-030**.
 
 - **Owner:** **`coder`**/`tdd-engineer` + `scripts/seed_workflows.sh` (mirrors `seed_demo.sh`).
 - **Scope:** the M3 DoD proof — publish two canonical defs, materialize into `ws:acme`
@@ -212,7 +242,15 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Test strategy:** one e2e run test per flow (conversational behind a live marker; process
   deterministic/offline).
 
-### K-025 — QA acceptance pass on M3 (Slice 5) (🔵 proposed — needs K-020…K-024)
+### K-025 — QA acceptance pass on M3 (Slice 5) (🔵 proposed — **UNBLOCKED 2026-07-21**: K-020…K-024 all ✅)
+
+> **Ready to run — it is the only item left before M3 ✅.** K-024's delivery (2026-07-21) removed the
+> last prerequisite: both proof flows now exist, so the pass can cover the conversational
+> `triage@v1` *and* the LLM-free `access-request@v1` process flow. **Carry into the pass:** the
+> process flow is fully offline (no LM Studio needed for that half); `wait` is **signal-driven, not
+> timer-driven, and mechanically identical to `human`** — a parked `wait` that never advances on its
+> own is specified behaviour, not a defect (DESIGN §6.1/§6.3, decision D-C; real timers are K-028);
+> `prompt`/`tool`/`message` steps raise `NotImplementedError` by design (D-E).
 
 > **This is the un-run U15.** K-022 Landing 2 closed without it (decision **D12-B**): the executor
 > *mechanism* is proven, live-triage *reliability* is descoped to K-027. When it runs, its scope is
@@ -313,6 +351,105 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   clause-boundary cases as fixtures); a `live`-marked reliability run for the terminal-post contract
   with an explicit n and no cherry-picking; the calibration harness reading `golden_guards.jsonl` per
   the §4/§7 protocol, reporting both arms with the D10 caveat attached.
+
+### K-028 — Workflow timers / scheduled wakeups (🔵 proposed — filed out of K-024, decision D-C)
+
+> **Why it exists.** K-024 settled `wait` as **signal-driven, not timer-driven**, for a verifiable
+> reason: **this system has no scheduler.** FastAPI `BackgroundTasks` are request-scoped, so nothing
+> in the process outlives a request to wake a parked run at a future time. Rather than pretend
+> otherwise, `wait` was implemented as mechanically identical to `human` — it parks and is released
+> by an external signal on `POST /workflow-runs/{id}/input`; only the `awaiting.kind` string differs
+> (DESIGN §6.1/§6.3). That is honest and complete for the proof flow, but it means an **SLA/escalation
+> step ("if no approval in 48h, escalate") cannot be expressed today** without an external cron
+> poking the endpoint.
+- **Owner:** **`architect`** (the scheduling mechanism is an ops/architecture choice, not a step-type
+  choice) → **`coder`**; **`devops`** for whatever process/timer surface it lands on;
+  **`graph-dba`** only if a due-time index is added.
+- **Scope sketch (to be designed, not decided here):** a durable due-time on a parked run
+  (a `WorkflowRun.wakeAt` property + an index, or a separate timer node), plus *something that ticks*
+  — an in-process scheduler, an external cron calling a `POST /workflow-runs/due` sweep, or a Redis
+  keyspace-notification consumer. The sweep must reuse the **existing** resume CAS so a timer wakeup
+  and a human signal cannot double-resume the same run.
+- **Explicitly not in scope of K-024:** `wait`'s current semantics are correct and shipped; this item
+  *adds* a release mechanism, it does not fix a defect. A parked `wait` that never advances on its own
+  is specified behaviour.
+- **Risks/RAM:** a due-time index on `WorkflowRun` is small but non-zero (AGENTS.md rule 6 — call it
+  out at design time). The real risk is the scheduler becoming a second source of truth for run state.
+- **Test strategy:** offline — an injected clock driving the sweep; a CAS-contention test proving a
+  timer wakeup and a concurrent human submit resolve to exactly one resume.
+
+### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
+
+> **Why it exists.** The two seeded defs use **two different source conventions**, deliberately for
+> the K-024 slice: `access-request@v1`'s spec is imported from `server/falkorchat/proof_defs.py`
+> (so the seed script and the offline acceptance test provably cannot drift), while **`triage@v1`'s
+> literal is still inline in `scripts/seed_workflows.sh`**. Moving `triage`'s def *during* K-024 was
+> declined with a reason: published defs are **create-only** (`MERGE … ON CREATE SET`), so a byte-diff
+> introduced while relocating a **live** def is silently swallowed — the re-seed prints
+> `already present — no-op` while the old config keeps running, and `reference`/`ws:<id>` can go stale
+> independently. That is a split-brain risk to take on its own, with its own verification, not as a
+> rider on a feature slice.
+- **Owner:** **`coder`**, with an explicit before/after equality check on the published def subgraph
+  (not just "the script ran").
+- **Scope:** (1) move `triage@v1`'s inline literal into `proof_defs.py` beside `ACCESS_REQUEST_DEF`,
+  leaving `seed_workflows.sh` a pure driver over the service layer for **both** defs; (2) prove the
+  move is byte-identical *in the graph*, which given create-only semantics means either verifying
+  against a freshly published `reference` or bumping `triage`'s version in lockstep with
+  `config.TRIGGER_DEF_KEY`/`TRIGGER_DEF_VERSION` (note `start_server.sh` neither forwards nor exports
+  those two vars today — a version bump also needs a script change); (3) fold the `n-A` warning
+  (`ACCESS_REQUEST_DEF`'s key set **is** `publish_workflow_def`'s keyword signature) into whatever
+  shape both defs end up sharing.
+- **Also carries nit n-3 — the symmetric `decision` publish invariant.** K-024 enforces
+  "a `human`/`wait` step must declare `config.waitsForHuman: true`" at publish, but **not** its
+  mirror: **a `decision` step whose outgoing transitions are *all* conditional and which does not
+  declare `waitsForHuman` self-loops until the step budget fails the run.** It is documented as a
+  warning in `falkor-chat/AGENTS.md` and deliberately left unenforced because the symmetric check
+  would **retro-reject existing test fixtures** (`server/tests/test_services.py`) — the same
+  blast-radius problem B-2 caused in K-024, which is precisely why it belongs in an item that can
+  budget for the fixture edits.
+- **Risks:** touching a live published def is the risk; there is no new graph surface and no RAM cost.
+- **Test strategy:** a test that both defs come from importable constants; a publish-equality check
+  over the def subgraph; if n-3 is implemented, one ordering pin (it must run **last**, like the other
+  three invariants) plus the fixture edits it forces.
+
+### K-030 — Allow zero-transition (single-step) workflow defs; guard the `UNWIND` instead of rejecting (🔵 proposed — filed out of K-024 re-gate findings r-1/r-2)
+
+> **Why it exists.** `repository._PUBLISH_CYPHER` ends in a bare `UNWIND $transitions AS tr …
+> RETURN …`. With `$transitions = []` the row stream **collapses** — after the `WorkflowDef`, its
+> `Step`s and the `START` edge have already been written — so the caller's `res.result_set[0]` raises
+> `IndexError` on a **partially written** def. Because publish is `MERGE … ON CREATE SET`, retrying
+> the corrected spec on the same `(key, version)` is a **silent no-op on the half-written def**: the
+> version is permanently wrong and cannot be repaired by re-publishing. This is the same empty-`UNWIND`
+> class that `AGENTS.md` documents as *guarded* for the §4 mention write-block; this path was not
+> guarded. K-024 U4b **closed the reachable route** with a `_validate_def_spec` rule (running last)
+> that rejects a transition-less spec **before any repository call** — prevention, not a nicer
+> exception.
+- **What is still open (re-gate r-1):** the fix is **publish-only**. `services.materialize_def` →
+  `repository.materialize_snapshot` (`repository.py:1397`) **reuses the same query shape** and performs
+  **no** spec validation, so a def poisoned before U4b — or any zero-transition subgraph read back by
+  `read_def_subgraph`, which returns `transitions: []` rather than `None` — is still an unguarded
+  `IndexError`/500 on materialize. Low likelihood (materialize is fed by publish, now guarded), but the
+  guard is **asymmetric**, and the docs/tests currently imply it isn't:
+  `server/tests/test_services.py:916` seeds a `FakeRepo` def with `"transitions": []` and asserts
+  materialize **succeeds** — true of the fake, and exactly the shape the real query rejects.
+- **Accepted limitation to remove (re-gate r-2):** the U4b rule also **rejects a legitimate shape** —
+  a genuine single-step def. All four doc sites state the workaround ("a terminal outcome is a step
+  with no *outgoing* transition, never a def with none") but none records it as **debt**. Without a
+  `K-` number the next person needing a one-step def will either fight the rule or bypass validation.
+- **The known cheap remedy:** guard the trailing `UNWIND` in `_PUBLISH_CYPHER` (and therefore
+  `materialize_snapshot`, which reuses it) with the **§4 empty-`UNWIND` `CASE` pattern** this codebase
+  already relies on and documents as load-bearing — `UNWIND (CASE WHEN $transitions = [] THEN [null]
+  ELSE $transitions END) AS tr` with a `FOREACH` that never filters — then **relax**
+  `_validate_def_spec`'s rule, and drop the `transitions=[]` mitigation comments in `proof_defs.py`
+  and `tests/test_process_input.py`.
+- **Owner:** **`graph-dba`** (the query change needs a gate + a re-PROFILE: the guard must not turn the
+  index-anchored publish plan into a scan) → **`coder`** for the service-layer relaxation and the
+  fixture/doc cleanup.
+- **Risks/RAM:** none — no new node, index or property; a query-shape change only. The risk is plan
+  regression, which is what the re-PROFILE is for.
+- **Test strategy:** a publish and a materialize of a genuine single-step, zero-transition def, both
+  asserted to succeed *and* to leave a complete subgraph (steps + `START` + the returned row); the
+  existing ordering pins for the other publish invariants must stay green.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
@@ -473,6 +610,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 | `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
 | `docs/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
 | `docs/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
+| `docs/plans/m3-process-flow.md` | **Created ✅ 2026-07-19, v2.1 approved 2026-07-20** — K-024's second half: the LLM-free `kind:'process'` proof flow (park-and-branch, the `cmp` guard family, typed step handlers, start-without-trigger + the input endpoint, the `access-request@v1` def in §4). Coordination log: `m3-process-flow-coordination.md`; gates: `docs/reviews/m3-process-flow.md`. |
 | `docs/plans/m3-guard-thread-context.md` | **Created ✅ 2026-07-15** — the Defect-A design (guard thread-context seam; ~40 lines, zero graph change, `_drive_loop` untouched by construction). |
 | `docs/plans/m3-guard-calibration.md` | **Created ✅ 2026-07-16** — K-027 item 3: the judge-calibration protocol (D9 gate = false-advance ≤ 10% ∧ advance-recall ≥ 0.80; D10 small-n caveat mandatory). |
 | `docs/plans/m3-capability-probe-ml.md` | **Created ✅ 2026-07-19** — the D13 fits-16GB Qwen3-4B-vs-Ministral-3B comparison + its run results (no model swap). |

@@ -62,12 +62,13 @@ Per `m3-process-flow.md` §6. Every unit's done-condition includes: suites green
 
 | U | Unit | Owner | Depends on |
 |---|---|---|---|
-| U0 | graph-dba gate — `start_run_untriggered` (§12.1b) + `set_run_ctx` (§12.12), queries only | `graph-dba` | — (blocks U3) |
+| U0 | graph-dba gate — **as built:** §12.12 `start_run_untriggered` + §12.13 `resume_run_with_ctx`, queries only (the planned `§12.1b`/`set_run_ctx` shape was dropped by D-F/n-5 — the ctx write folded into the resume CAS) | `graph-dba` | — (blocks U3) |
 | U1 | deterministic `cmp` guard (`guards.py` only) | `tdd-engineer` | — (parallel with U0) |
 | U2 | typed step handlers (`human`/`decision`/`wait`) + publish invariant | `coder` | U1 (soft) |
 | U3 | start-without-trigger + input endpoint | `coder` | U0 |
-| U4 | the `onboarding@v1` def, seed & offline acceptance | `coder` | U1, U2, U3 |
-| U5 | closeout (BACKLOG/HISTORY/DESIGN §6.3, file K-028) | `teco` | all |
+| U4 | the **`access-request@v1`** def (renamed from `onboarding` — key collision with a test fixture), seed & offline acceptance | `coder` | U1, U2, U3 |
+| U4b | implementation-gate fixes — M-A (log the swallowed drive fault), M-B (**O-6 fixed**, not filed), m-A/m-B/m-C | `coder` | U4 + gate |
+| U5 | closeout (BACKLOG/HISTORY/DESIGN §6.1/§6.3/§13, file K-028/K-029/K-030) + re-gate cleanups r-1/r-3/r-5 | `coder` (docs) + `teco` (ledger/integration) | all |
 
 ## Decisions
 
@@ -76,7 +77,7 @@ Per `m3-process-flow.md` §6. Every unit's done-condition includes: suites green
 | D-A | Deterministic guard language | ✅ **settled (user, 2026-07-19): structured `cmp` comparator** — `{"kind":"cmp","path":…,"op":…,"value":…}` + `all`/`any`/`not`. Whitelisted ops, two whitelisted path roots (`ctx.`/`output.`), depth/width caps, no parser, no `eval`, no dependency. Named `cmp` deliberately so `kind:'expr'` keeps raising and DESIGN §13's "no expression library was built" stays literally true. |
 | D-B | Human-input channel | ✅ **settled (user): REST** — `POST /workflow-runs` (start without a chat `Message`, per F-2) + `POST /workflow-runs/{id}/input` (body merges flat into run `ctx`, then the existing `resume_run` CAS drives). MCP `submit_workflow_input` is a non-blocking follow-up, not this slice. |
 | D-C | `wait` semantics | ✅ **settled (user): external signal, not a timer.** No scheduler exists (BackgroundTasks are request-scoped). Must be stated **plainly** in DESIGN §6.1 rather than implied by the step name; real timers filed as new backlog item **K-028**. |
-| D-D | The proof def | ⏳ taken as recommended — **`onboarding@v1`** (`kind:'process'`, brand-new key/version, `triage@v1` untouched): 6 steps / 7 transitions, `human`×2, `decision`×3, `wait`×1; ops `exists`/`in`/`eq`/`truthy`; conditional-beats-unconditional ordering; two terminal outcomes; 8 of the 12-step budget. Confirm against the analyst gate. |
+| D-D | The proof def | ✅ **settled — `access-request@v1`** (`kind:'process'`, brand-new key/version, `triage@v1` untouched). Renamed from `onboarding` (that key collides with a long-standing test fixture) and **recounted**: **6 steps / 6 transitions** (not 7), `human`×2, `decision`×3, `wait`×1; **four** ops `exists`/`in`/`eq`/`truthy` (not three); conditional-beats-unconditional ordering; two terminal outcomes; **`maxSteps = 24`** per D-H (not the old 12-step budget). Gate-verified against the shipped def. |
 | D-E | Scope boundary | ⏳ taken as recommended — implement `human`/`decision`/`wait`; `prompt`/`tool`/`message` become an explicit `NotImplementedError` seam (a **behaviour change** from today's silent no-op — R-3). Confirm against the analyst gate. |
 
 ## Gate plan
@@ -322,35 +323,40 @@ deliberately did **not** run `pytest` or `test_queries.sh` — both wipe the sha
 has no scheduler" is verifiable and C2's cost is named, not hidden). **D-B's option set covered
 *who submits* but never the *write mechanic*** ⇒ M-1. **D-D contradicts §4 internally**: prose says
 "seven transitions" / "three ops", §4 shows **six** and **four** — recount before U4.
+**✅ CLOSED (2026-07-21):** the recount landed in plan v2.1, the shipped def is **six transitions /
+four ops** (implementation-gate verified against `proof_defs.py`), and the D-D row above is corrected.
 
-## Resume anchor — next session starts here
+## Closeout — K-024 DELIVERED (2026-07-21)
 
-Plan is **approved** (v2.1). **U0, U1, U2, U3 are DONE, committed and independently verified.**
-Session paused at the user's request (session-limit pressure), not blocked.
+**All units done: U0, U1, U2, U3, U4, U4b, U5.** Three analyst gates run (plan gate v1
+*request changes* → v2.1 *approved*; implementation gate U0–U4 *approve with suggestions*;
+re-gate U4b *approve with suggestions, no blockers*) — all three in
+`docs/reviews/m3-process-flow.md`.
 
 **Committed:** `788e5bf` (U0+U1) · `efdeeb3` (U2) · `670474a` (U3).
-**Baselines at pause:** server pytest **523 passed / 1 deselected** · `test_queries.sh`
-**256/256** · `reference` re-seeded and verified · `_drive_loop` SHA **`71055f756280`**.
-Working tree clean apart from this ledger.
+**Uncommitted in the working tree:** U4 + U4b + U5 (`proof_defs.py`, `test_process_flow.py`,
+`services.py`, `executor.py` docstring, four test files, `seed_workflows.sh`, `AGENTS.md`,
+`DESIGN.md`, `BACKLOG.md`, `HISTORY.md`, this ledger).
 
-**Next session starts at U4 — no decision is pending, nothing is half-finished.**
+**Final integrated baselines — run by teco, not self-reported:** server pytest **533 passed /
+1 deselected** (523 at the pause, 350 at slice start) · `test_queries.sh` **256/256** ·
+`_drive_loop` SHA **`71055f756280`** unchanged (the design's central claim) · both defs
+(`triage@v1` + `access-request@v1`) re-seeded and verified live in `reference` + `ws:acme`.
 
-1. **U4** (`coder`) — the **`access-request@v1`** proof def (note the rename; *not* `onboarding`,
-   which collides with a long-standing test fixture key), `proof_defs.py`, the `seed_workflows.sh`
-   wiring, and the offline acceptance test. Plan §4 is the spec; §4.3 traces all three paths.
-   Brief it with: **every def must carry ≥1 transition** (O-6 below — a zero-transition publish
-   raises `IndexError` *after* a partial write), the def declares **`maxSteps = 24`** with the
-   mistakes arithmetic in §4, and the seeding order is **`bootstrap_schema.sh` → `seed_demo.sh` →
-   `seed_workflows.sh`**, with a re-seed after any pytest run.
-2. **`analyst` implementation gate** over U0–U4 as one diff (the plan gate was worth it twice;
-   this is the second, non-negotiable gate in the pattern).
-3. **U5** (`teco`) — closeout: `docs/BACKLOG.md` (K-024 → ✅, K-025 unblocked, milestone row),
-   `docs/HISTORY.md` entry, **DESIGN §6.1/§13** (O-4: F-1's two-part correction, D-C's "`wait` is
-   signal-driven and mechanically identical to `human`", §13's `cmp`-not-`expr` amendment),
-   `AGENTS.md` key-scripts row for the new seed, and **file three backlog items**: **K-028**
-   (workflow timers), **K-029** (consolidate `triage@v1`'s inline def literal into `proof_defs.py`),
-   and **O-6** (the `_PUBLISH_CYPHER` zero-transition partial write).
-4. Hand off to **K-025** (`qa-engineer` acceptance) ⇒ **M3 → ✅**.
+**Open items closed:** O-4 (DESIGN §6.1/§13 edits) landed in U5 · O-6 (`_PUBLISH_CYPHER`
+zero-transition partial write) **fixed in U4b**, not filed — publish now rejects before any write ·
+m-D ledger drift corrected above.
+**Filed as backlog:** **K-028** (workflow timers/scheduled wakeups, carrying D-C) · **K-029**
+(converge the seed def sources into `proof_defs.py`, folding in n-3's symmetric `decision`
+invariant) · **K-030** (allow zero-transition defs by guarding the trailing `UNWIND`; folds in
+re-gate finding r-1 — the O-6 guard is publish-only, `materialize_snapshot` is still unguarded).
+
+**One item outstanding (not a blocker):** re-gate finding **r-4** — a single stale sentence in
+`AGENTS.md:149`'s `seed_workflows.sh` row ("both wipe `reference`") that contradicts its own
+correction upstream. The U5 edit was denied by the permission system; the exact replacement text
+is in the U5 report and in the re-gate section of the review.
+
+**Next: K-025** (`qa-engineer` acceptance pass) — the only item left before **M3 ✅**.
 
 **Standing rule to repeat in every implementer brief** (learned the hard way in U3): never use a
 tree-mutating git command — `stash`, `checkout <path>`, `restore`, `reset` — on the user's working

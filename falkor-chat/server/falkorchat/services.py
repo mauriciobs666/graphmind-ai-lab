@@ -13,6 +13,7 @@ these methods; they carry no business logic.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import uuid
@@ -519,10 +520,11 @@ class Services:
         service invariant that lets the repository's inner `MATCH (start/from/to
         …)` always resolve for a valid spec (QUERIES.md §11 note).
 
-        Two further invariants (K-024 U2) run **last**, after all of the above:
-        a `human`/`wait` step must declare `config.waitsForHuman: true`, and a
-        `cmp`-family transition guard must be structurally sound
-        (`guards.validate_cmp` → `WorkflowConfigError`). Running them last is
+        Three further invariants run **last**, after all of the above: a `human`/
+        `wait` step must declare `config.waitsForHuman: true` (K-024 U2); a
+        `cmp`-family transition guard must be structurally sound (K-024 U2,
+        `guards.validate_cmp` → `WorkflowConfigError`); and a def must carry **at
+        least one transition** (K-024 U4b, O-6). Running them last is
         load-bearing: an older check must keep failing for its **own** reason, so a
         new invariant can never mask — or make vacuous a test of — a pre-existing one.
         """
@@ -587,6 +589,25 @@ class Services:
             if isinstance(guard, dict) and guard.get("kind") in CMP_KINDS:
                 validate_cmp(guard)
 
+        # ── K-024 U4b (O-6) — also LAST, for the same reason ───────────────────
+        # `repository._PUBLISH_CYPHER` ends in `UNWIND $transitions`, which collapses
+        # the row stream to zero rows AFTER the `WorkflowDef`, its `Step`s and the
+        # `START` edge have already been MERGEd. `publish_def` then indexes
+        # `result_set[0]` ⇒ `IndexError` ⇒ 500 — and because publish is
+        # `MERGE … ON CREATE SET`, re-publishing the corrected spec on the same
+        # `(key, version)` is a silent no-op on the half-written def: the version is
+        # permanently wrong and unrepairable. `POST /workflow-defs` accepts
+        # `"transitions": []` (schemas.py defaults it), so this is reachable from the
+        # public route. Rejecting here turns an unrepairable poisoning into a clean
+        # 400 with nothing written. A terminal step is one with no *outgoing*
+        # transition — never a def with no transitions at all.
+        if not transitions:
+            raise WorkflowDefSpecError(
+                "a def must declare at least one transition — a zero-transition "
+                "publish partially writes the def and then fails (see O-6); model a "
+                "terminal outcome as a step with no outgoing transition instead"
+            )
+
         return start_keys[0]
 
     def publish_workflow_def(
@@ -599,6 +620,12 @@ class Services:
         nothing is written. `config`/`guard` are serialized to opaque strings.
         A step declares itself the start via `start: True` (exactly one required);
         that step's key becomes the repository `start_key`. Global write: no `ws`.
+
+        **Every def must carry at least one transition** (O-6): the publish query
+        ends in `UNWIND $transitions`, so an empty list would half-write the def and
+        then fail — and since publish is `MERGE … ON CREATE SET`, that `(key,
+        version)` could never be repaired by re-publishing. A terminal outcome is a
+        step with no *outgoing* transition, not a def with none.
         """
         start_key = self._validate_def_spec(
             kind=kind, steps=steps, transitions=transitions
@@ -768,7 +795,9 @@ class Services:
         Order is load-bearing:
           1. `get_run` → absent ⇒ `WorkflowRunNotFoundError` (404).
           2. not `waiting` ⇒ `WorkflowRunNotWaitingError` (409) — nothing to unblock.
-          3. **Validate before touching anything (D-H):** reserved keys, then the
+          3. **Validate before touching anything (D-H):** an **empty** `input` (the
+             mistake a UI is most likely to emit — a submit with nothing filled in),
+             then reserved keys, then the
              parked step's own declarations (`config.fields` / `config.signal` /
              `config.expects`), resolved from `run["atStepKey"]` + `get_snapshot`
              — two existing RO reads, **no new query**. A rejected value is a free
@@ -794,6 +823,17 @@ class Services:
             raise WorkflowRunNotWaitingError(
                 f"workflow run {run_id!r} is {run.get('status')!r}, not 'waiting' — "
                 f"there is nothing to unblock"
+            )
+
+        if not input:
+            # m-A: `{}` passes every other rule (no reserved key, no undeclared key),
+            # merges to a no-op, wins the resume CAS and re-executes the parked step
+            # against unchanged ctx — no guard fires, the step re-parks, and one of
+            # the run's steps is gone. D-H's "mistakes are free" has to cover this
+            # one too, and at the service layer so MCP (OQ-2) inherits it.
+            raise WorkflowInputRejectedError(
+                "no input submitted — an empty input cannot advance a parked run "
+                "and would consume a step of the run's budget"
             )
 
         self._reject_reserved_keys(input, where="input")
@@ -941,10 +981,21 @@ class Services:
             says the run is still `running` (or the run has vanished), the fault
             escaped before `fail_run` landed — re-raise, because a 500 is a better
             answer than a success envelope describing a zombie run (plan m-12).
+
+        **The fault is logged with its stack before the envelope is built** (U4b M-A).
+        Swallowing the exception here also swallows it for the *chat* start path:
+        `start_workflow_run` is what `trigger.py` step 3 (@mention-to-start) calls, and
+        `api._safe_run_workflow`'s `logging.exception` only ever sees what propagates
+        out of it. Without this line a live `triage@v1` run that dies on an unwired
+        judge leaves no log entry anywhere — only a `failed` run someone has to go
+        looking for. The envelope itself is D-G verbatim; only the trace is restored.
         """
         try:
             return drive(), None, None
         except (NotImplementedError, WorkflowConfigError) as exc:
+            logging.getLogger(__name__).exception(
+                "workflow drive fault for run %s", run_id
+            )
             run = self._repo.get_run(ctx.ws, run_id=run_id)
             status = run.get("status") if run else None
             if status not in TERMINAL_OR_PARKED_STATUSES:

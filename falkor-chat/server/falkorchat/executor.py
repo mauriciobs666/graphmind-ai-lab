@@ -349,8 +349,13 @@ class WorkflowExecutor:
             the domain) is absorbed at the node as a re-prompt (`_handle_tool_call`) and
             never reaches here, so one bad tool argument cannot end a run. Stamp `fail_run`
             with a diagnostic
-            `ctx` note (the `_fail_budget` shape) then **re-raise** so `_safe_run_workflow`'s
-            isolation logs the stack. The run ends `failed` with `AT_STEP` cleared —
+            `ctx` note (the `_fail_budget` shape) then **re-raise**. Where that re-raise
+            lands depends on the caller: `resume_workflow_run` and the K-014 chat loop let
+            it propagate to `api._safe_run_workflow`'s isolation, which logs the stack;
+            `start_workflow_run`/`submit_workflow_input` intercept it in
+            `services._drive_or_fault` (K-024 D-G) and convert it into a `failed`
+            envelope — that catch logs the stack itself, so a drive fault is never
+            silent on either route. The run ends `failed` with `AT_STEP` cleared —
             resumable-never, but no longer a permanent `running` orphan (m-3's named
             `WorkflowConfigError` and the M7 `NotImplementedError` reach this net)."""
         run_id = run["runId"]

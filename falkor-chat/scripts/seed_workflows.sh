@@ -1,34 +1,72 @@
 #!/usr/bin/env bash
-# seed_workflows.sh — publish + materialize the M3 "triage" proof workflow so an
-# @mention of the agent starts a run (K-022 / U13).
+# seed_workflows.sh — publish + materialize the M3 proof workflows (K-022 U13, K-024 U4).
 #
 # Usage:
 #   ./scripts/seed_workflows.sh [<workspaceId>]     # default: $FALKORCHAT_WS_ID or "acme"
 #
-# What it seeds (additive-only, idempotent — safe to re-run):
-#   * WorkflowDef {triage@v1}          — published into the GLOBAL `reference` graph
-#   * WorkflowDefSnapshot {triage@v1}  — materialized into ws:<id> (the workspace copy
-#                                        the executor drives)
-# The def is the 3-step conversational triage flow from `docs/plans/m3-executor.md`
-# §8 (kind `conversation`): intake -> research -> answer, three `type:'agent'` steps.
-#   intake  (start, waitsForHuman) --{llm guard}--> research --{"" unconditional, D5}--> answer (terminal)
+# What it seeds — TWO defs, additive-only, idempotent (safe to re-run). Each is published
+# as a WorkflowDef into the GLOBAL `reference` graph and materialized as a
+# WorkflowDefSnapshot into ws:<id> (the workspace copy the executor actually drives):
+#
+#   1. triage@v1          — kind `conversation`, the LLM-driven flow an @mention starts
+#                           (docs/plans/m3-executor.md §8): three `type:'agent'` steps,
+#      intake (start, waitsForHuman) --{llm guard}--> research --{"" uncond., D5}--> answer (terminal)
+#                           Def content is INLINE below (see the two-source note).
+#   2. access-request@v1  — kind `process`, the LLM-FREE proof flow (K-024,
+#                           docs/plans/m3-process-flow.md §4): six `human`/`decision`/`wait`
+#                           steps, six deterministic `cmp`-guarded transitions, started over
+#                           REST (`POST /workflow-runs`), never by an @mention.
+#      submit(human) -> route(decision) -> approval(human) -> provision(wait) -> activate | rejected
+#                           Def content is IMPORTED from `falkorchat.proof_defs`
+#                           (ACCESS_REQUEST_DEF) — the same constant the offline acceptance
+#                           test `server/tests/test_process_flow.py` drives, so the seeded
+#                           def and the tested def cannot drift.
+#
+# TWO def-source conventions in one script, deliberately (plan §4.4, gate m-9): moving the
+# published, live triage literal into `proof_defs.py` during this slice risked a byte-diff
+# that `MERGE … ON CREATE SET` would silently swallow. Filed as proposed backlog item K-029
+# — "converge seed def sources into proof_defs.py".
 #
 # WHY a Python one-shot over the SERVICE LAYER (not raw redis-cli Cypher like
 # seed_demo.sh): publishing a def runs real validation (start-key derivation, step-type
-# whitelist, transition-endpoint checks, opaque-JSON config/guard serialization) inside
-# `services.publish_workflow_def`. Reimplementing that in bash Cypher would drift from the
-# service invariants. Both `publish_workflow_def` and `materialize_def` are idempotent by
-# construction (constraint-backed MERGE, immutable per version), so a re-run is a clean
-# no-op — no duplicate defs or snapshots.
+# whitelist, transition-endpoint checks, the `waitsForHuman` + `cmp`-guard publish
+# invariants, opaque-JSON config/guard serialization) inside `services.publish_workflow_def`.
+# Reimplementing that in bash Cypher would drift from the service invariants. Both
+# `publish_workflow_def` and `materialize_def` are idempotent by construction
+# (constraint-backed MERGE, immutable per version), so a re-run is a clean no-op — it
+# prints `already present — no-op` for BOTH defs and writes nothing.
+#
+# ⚠️ "Idempotent" means CREATE-ONLY, not update — for both defs. `repository._PUBLISH_CYPHER`
+# is `MERGE (…) ON CREATE SET …`, so EDITING a step config / guard / prompt here (or in
+# `proof_defs.py`) and re-running changes NOTHING live: the run reports a clean
+# `already present — no-op` while the old content stays. Worse, `reference` (def) and
+# `ws:<id>` (snapshot) go stale INDEPENDENTLY — `scripts/test_queries.sh` and the pytest
+# `wf_repo` fixture both wipe `reference` but not `ws:<id>` — so a naive re-seed after either
+# republishes the NEW def while the workspace keeps the OLD snapshot, a silent split-brain,
+# and the snapshot is what the executor drives. Landing a def edit therefore requires an
+# explicit act: delete the def + snapshot subgraphs and republish, or bump `key`/`version`
+# (for triage, kept in sync with config.TRIGGER_DEF_KEY/TRIGGER_DEF_VERSION — note
+# start_server.sh neither forwards nor exports those two vars). Deleting a snapshot breaks
+# live WorkflowRuns that point at it via OF_DEF/AT_STEP — a destructive shared-state op.
 #
 # ORDERING — run this AFTER:
 #   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws)
 #   2. ./scripts/seed_demo.sh <wsId>          (the `assistant` Agent + a channel/thread to @mention)
 # It depends on the workspace graph + its schema existing; it does NOT touch chat or demo data.
+# RE-RUN IT after `./scripts/test_queries.sh` or a server pytest run — for DIFFERENT reasons:
+#   * test_queries.sh DELETES `reference` at teardown, taking BOTH defs with it (ws:<id> survives);
+#   * the pytest `wf_repo` fixture wipes `reference` at fixture SETUP, per workflow test, so a
+#     finished pytest session LEAVES BEHIND whatever the last workflow test published. After a
+#     pytest run, `already present — no-op` may therefore be reporting a TEST's publish rather
+#     than a real seed, while ws:<id> still holds the older snapshot the executor drives.
+#     (The acceptance test publishes `access-request@v1-test`, deliberately not the production
+#     version, so it cannot be the def you find here.)
 #
-# The def key/version MUST match the trigger config (config.TRIGGER_DEF_KEY /
+# The TRIAGE def key/version MUST match the trigger config (config.TRIGGER_DEF_KEY /
 # TRIGGER_DEF_VERSION, defaults triage/v1) or the @mention-to-start step never resolves
 # the def. Flip the trigger on with FALKORCHAT_WORKFLOW_ENABLED=1 (start_server.sh does this).
+# `access-request@v1` needs no config var at all: it is started over REST, so nothing in
+# config.py / .env.example / start_server.sh refers to it.
 #
 # Env vars (all optional):
 #   FALKORDB_HOST          (default: 127.0.0.1)
@@ -36,6 +74,10 @@
 #   FALKORCHAT_WS_ID       (default: acme)     — workspace id (graph key ws:<id>)
 #   FALKORCHAT_TRIGGER_DEF_KEY     (default: triage)  — must match config.TRIGGER_DEF_KEY
 #   FALKORCHAT_TRIGGER_DEF_VERSION (default: v1)      — must match config.TRIGGER_DEF_VERSION
+#   FALKORCHAT_PROCESS_DEF_KEY     (default: access-request) — LOCAL to this script; no
+#   FALKORCHAT_PROCESS_DEF_VERSION (default: v1)              config var reads these two,
+#                                  and `test_process_flow.py` drives the defaults, so an
+#                                  override seeds a def nothing else refers to.
 
 set -euo pipefail
 
@@ -44,6 +86,14 @@ PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
 DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
+# ⚠️ These two defaults DUPLICATE `ACCESS_REQUEST_DEF["key"]` / `["version"]` (re-gate r-5).
+# The splat below (`{**ACCESS_REQUEST_DEF, "key": …, "version": …}`) *overrides* both, so the
+# seed never reads the constant's own pair — the duplication is kept in sync by hand. It is
+# pinned on one side only, by `test_process_flow.py`'s assertion that the constant is
+# ("access-request", "v1"). A key/version bump therefore has to touch all THREE sites:
+# these defaults, `proof_defs.py`, and that test.
+PROCESS_DEF_KEY="${FALKORCHAT_PROCESS_DEF_KEY:-access-request}"
+PROCESS_DEF_VERSION="${FALKORCHAT_PROCESS_DEF_VERSION:-v1}"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER_DIR="$REPO_DIR/server"
@@ -61,15 +111,18 @@ redis-cli -h "$HOST" -p "$PORT" PING | grep -q PONG || {
   exit 1
 }
 
-echo "── seeding workflow def '${DEF_KEY}@${DEF_VERSION}' into reference + ws:${WS_ID} ──"
+echo "── seeding workflow defs '${DEF_KEY}@${DEF_VERSION}' + '${PROCESS_DEF_KEY}@${PROCESS_DEF_VERSION}' into reference + ws:${WS_ID} ──"
 
-# The triage def content lives in the service-layer payload below; the def spec (start-key
-# derivation, opaque-JSON serialization, transition validation) is enforced by the service.
+# The triage def content lives in the service-layer payload below (the access-request def is
+# imported from `falkorchat.proof_defs`); the def spec (start-key derivation, opaque-JSON
+# serialization, transition + publish-invariant validation) is enforced by the service.
 # Runtime values (ws/key/version) are read from the environment inside Python — never
 # interpolated into the payload — so the shell quoting never touches the def content.
 FALKORCHAT_WS_ID="$WS_ID" \
 FALKORDB_HOST="$HOST" FALKORDB_PORT="$PORT" \
 FALKORCHAT_TRIGGER_DEF_KEY="$DEF_KEY" FALKORCHAT_TRIGGER_DEF_VERSION="$DEF_VERSION" \
+FALKORCHAT_PROCESS_DEF_KEY="$PROCESS_DEF_KEY" \
+FALKORCHAT_PROCESS_DEF_VERSION="$PROCESS_DEF_VERSION" \
 "$VENV_PY" - <<'PY'
 import os
 import sys
@@ -77,6 +130,7 @@ import sys
 from redis.exceptions import ResponseError
 
 from falkorchat import config, db
+from falkorchat.proof_defs import ACCESS_REQUEST_DEF
 from falkorchat.repository import Repository
 from falkorchat.services import Services
 
@@ -192,6 +246,27 @@ TRANSITIONS = [
     # answer is terminal — no outgoing transition (run -> done, AC-4).
 ]
 
+# The two defs this script seeds, in order. `triage` is the inline literal above;
+# `access-request` is the SHIPPED constant (falkorchat.proof_defs) that the offline
+# acceptance test drives — the no-drift property from plan §4.4. The process def's
+# key/version are overridable locally (they are referenced by no config var), so the
+# imported spec is copied rather than mutated in place.
+DEFS = [
+    {
+        "key": KEY,
+        "version": VERSION,
+        "name": "Triage",
+        "kind": "conversation",
+        "steps": STEPS,
+        "transitions": TRANSITIONS,
+    },
+    {
+        **ACCESS_REQUEST_DEF,
+        "key": os.environ["FALKORCHAT_PROCESS_DEF_KEY"],
+        "version": os.environ["FALKORCHAT_PROCESS_DEF_VERSION"],
+    },
+]
+
 services = Services(Repository(db.connect()))
 ctx = config.get_context()
 
@@ -208,39 +283,40 @@ def _probe(fn):
             return None
         raise
 
-def_pre = _probe(lambda: services.get_workflow_def(ctx, key=KEY, version=VERSION))
-snap_pre = _probe(lambda: services.get_snapshot(ctx, key=KEY, version=VERSION))
+for spec in DEFS:
+    key, version = spec["key"], spec["version"]
+    def_pre = _probe(lambda: services.get_workflow_def(ctx, key=key, version=version))
+    snap_pre = _probe(lambda: services.get_snapshot(ctx, key=key, version=version))
 
-pub = services.publish_workflow_def(
-    ctx,
-    key=KEY,
-    version=VERSION,
-    name="Triage",
-    kind="conversation",
-    steps=STEPS,
-    transitions=TRANSITIONS,
-)
-mat = services.materialize_def(ctx, key=KEY, version=VERSION)
+    pub = services.publish_workflow_def(ctx, **spec)
+    mat = services.materialize_def(ctx, key=key, version=version)
 
-print(
-    f"  reference def   {pub['key']}@{pub['version']}  "
-    f"steps={pub['stepCount']} transitions={pub['transitionCount']}  "
-    f"({'already present — no-op' if def_pre is not None else 'created'})"
-)
-print(
-    f"  ws:{ctx.ws} snapshot {mat['key']}@{mat['version']}  "
-    f"steps={mat['stepCount']} transitions={mat['transitionCount']}  "
-    f"({'already present — no-op' if snap_pre is not None else 'materialized'})"
-)
+    print(
+        f"  reference def   {pub['key']}@{pub['version']}  "
+        f"steps={pub['stepCount']} transitions={pub['transitionCount']}  "
+        f"({'already present — no-op' if def_pre is not None else 'created'})"
+    )
+    print(
+        f"  ws:{ctx.ws} snapshot {mat['key']}@{mat['version']}  "
+        f"steps={mat['stepCount']} transitions={mat['transitionCount']}  "
+        f"({'already present — no-op' if snap_pre is not None else 'materialized'})"
+    )
 
-# Sanity: the trigger resolves the def by (key, version); confirm the snapshot the
-# executor drives is readable back from the workspace.
-snap = services.get_snapshot(ctx, key=KEY, version=VERSION)
-if snap is None:
-    print("ERROR: snapshot not found after materialize", file=sys.stderr)
-    sys.exit(1)
+    # Sanity: a run resolves its def by (key, version) — the trigger for triage, the
+    # REST start body for access-request; confirm the snapshot the executor drives is
+    # readable back from the workspace.
+    if services.get_snapshot(ctx, key=key, version=version) is None:
+        print(
+            f"ERROR: snapshot {key}@{version} not found after materialize",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 PY
 
 echo ""
-echo "Triage workflow seeded (idempotent). Trigger it by turning the workflow engine on"
-echo "(FALKORCHAT_WORKFLOW_ENABLED=1, done by start_server.sh) and @mentioning the agent."
+echo "Both workflow defs seeded (idempotent, create-only)."
+echo "  ${DEF_KEY}@${DEF_VERSION}: trigger it by turning the workflow engine on"
+echo "    (FALKORCHAT_WORKFLOW_ENABLED=1, done by start_server.sh) and @mentioning the agent."
+echo "  ${PROCESS_DEF_KEY}@${PROCESS_DEF_VERSION}: start it over REST —"
+echo "    POST /workflow-runs {\"defKey\":\"${PROCESS_DEF_KEY}\",\"version\":\"${PROCESS_DEF_VERSION}\",\"maxSteps\":24}"
+echo "    then POST /workflow-runs/{runId}/input to advance it."

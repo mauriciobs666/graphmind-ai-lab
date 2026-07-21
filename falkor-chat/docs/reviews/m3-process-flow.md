@@ -563,3 +563,552 @@ Tell the implementer to locate these by test name / content; the `test_executor.
 Both new queries' PROFILE plans and zero-row contracts — now including §12.13's *nothing-written*
 contract, which D-F's entire argument rests on and which the plan correctly flags as "verify, do not
 assume". Plus the real suite counts and the RAM delta at integration.
+
+---
+
+# Implementation gate (U0–U4)
+
+> **Reviewer:** `analyst` · **Date:** 2026-07-21 · **Artifact:** the K-024 implementation —
+> commits `788e5bf` (U0+U1) · `efdeeb3` (U2) · `670474a` (U3) plus the **uncommitted U4
+> working tree** (`server/falkorchat/proof_defs.py`, `server/tests/test_process_flow.py`,
+> `scripts/seed_workflows.sh`, `AGENTS.md`), reviewed as one diff against `e3c09b3`.
+> **Baseline:** `docs/plans/m3-process-flow.md` v2.1 (§3 design, §4 def, §6 done-conditions,
+> §7 test strategy), `docs/plans/m3-process-flow-coordination.md` (D-A…D-H, O-1…O-6), and the
+> two prior gates in this file.
+> **Method:** static only. Per the brief I did **not** run `pytest` or `test_queries.sh` (both
+> wipe the shared `reference` graph); no tree-mutating git command was used — baselines were
+> read with `git show <ref>:<path>`. The only things executed were `py_compile` and a
+> read-only import of `proof_defs` + `guards.validate_cmp` over the shipped def.
+
+## Verdict: **approve with suggestions**
+
+No blockers. The slice does what the plan says, in the places the plan says, and the test
+estate binds it rather than decorating it. `_drive_loop` is untouched (SHA verified), the
+three §4.3 paths trace correctly through the real engine, and every finding from both prior
+gates is closed **in code**, not merely claimed. Two majors below are worth fixing before
+U5 closes K-024; neither invalidates the delivery.
+
+## 1. Verified (ran or traced end-to-end)
+
+- **`_drive_loop` lock intact.** The §3.1 awk/sha command prints **`71055f756280`** on the
+  current tree. The three sanctioned edit sites are all outside the locked region and none
+  changes park-and-branch semantics: `resume` (`executor.py:308`) only chooses between
+  `resume_run` and `resume_run_with_ctx` and still re-reads the run with `get_run` after the
+  CAS, so `_drive_loop` still loads the just-written ctx; `_execute_step` (`:432`) is a pure
+  dispatch whose `agent`+`llm is None` branch returns the identical stub as before;
+  `_select_transition` (`:732`) changed only the *judgment-recording* filter and label
+  (`TRACED_GUARD_KINDS`, `render_label`) — the `sorted(..., key=(guard == "", order))` rule and
+  the first-firing return are byte-identical; `_trace_step` (`:812`) only prefixes the payload.
+  No new `suspend_run`/`complete_run`/budget call sites exist outside the lock.
+- **The three §4.3 paths, traced against the real loop** with `proof_defs.ACCESS_REQUEST_DEF`:
+  privileged = park/advance ×3 → `activate`, **8** steps; standard hire = 6 (#2 loses, the
+  unconditional #3 wins — the conditional-beats-unconditional rule exercised from the "loses"
+  side); rejected = 6 → `rejected`, status `done`. Terminal `decision` nodes reach
+  `complete_run` via OUTCOME C (`executor.py:426–428`). The step-count arithmetic matches
+  §4.3 and matches what `test_process_flow.py` asserts.
+- **The shipped def matches plan §4 exactly**: 6 steps, **6** transitions, ops
+  `{exists, in, eq, truthy}` (checked by importing and by running `guards.validate_cmp` over
+  every guard — all pass), `ACCESS_REQUEST_MAX_STEPS = 24`, key **`access-request`**, kind
+  `process`, start `submit` (`proof_defs.py:46–144`).
+- **U2 publish invariants.** `WAITING_STEP_TYPES` + the `waitsForHuman` check and the
+  `validate_cmp` call both sit **after** the kind / step-type / duplicate-key / start-count /
+  dangling-endpoint checks (`services.py:569–588`), i.e. last, and the ordering is *pinned* by
+  `test_executor_process.py:392`. `_normalize_opaque` (`services.py:177`) is applied to both
+  `config` and `guard` before either check, with the M-7 shape matrix covering all four
+  directions (`test_executor_process.py:457–520`) — including that a **string** `'{"waitsForHuman":
+  true}'` passes and `"{}"` is rejected, so the REST door cannot escape either invariant.
+  `validate_cmp` is called only for `kind ∈ CMP_KINDS`, so `{"expr":"x>0"}` and `"raw-string"`
+  still publish (`:431`). Strict-at-publish / total-at-drive (O-1) is real: one validator, the
+  `check_paths` flag (`guards.py:256` vs `:331`).
+- **Every prior-gate finding closed in code:** B-1 (`test_executor.py:345` `task`→`agent`);
+  B-2 (exactly the named fixture edits, and the five `pytest.raises` now carry `match=`; the
+  diff against `e3c09b3` shows **no other** pre-existing test touched); M-1/D-F
+  (`resume_run_with_ctx`, `repository.py:1251`; `set_run_ctx` appears nowhere outside plan
+  prose); M-2/F-6 (`RESERVED_CTX_KEYS`, rejected before any write on the start ctx *and* the
+  input); M-3/D-G (five handlers registered via a table, no blanket `RuntimeError` handler,
+  `app.py:93–127`); M-4; M-5/D-H; M-6; M-7; m-11 (**no** `StepBudgetExceededError` invented —
+  `_fail_budget` still *returns* `"failed"`, pinned at `test_process_input.py:593`); m-12
+  (`TERMINAL_OR_PARKED_STATUSES` re-raise, pinned twice, plus the teco ruling that `ctx` comes
+  from the same post-fault `get_run`).
+- **O-6 mitigation holds in fact.** The shipped def carries 6 transitions; all **9** `_publish`
+  call sites in `test_executor_process.py` pass a non-empty `transitions`; `test_process_flow.py`
+  publishes the real def; `test_process_input._materialize` (`:86`) documents the constraint in
+  a comment. No new fixture publishes zero transitions.
+- **The coder's pytest/`reference` learning is correct.** `conftest.wf_repo` (`tests/conftest.py:85`)
+  wipes `reference` at **fixture setup**, once per test — so a pytest session *leaves behind* the
+  last workflow test's published defs rather than emptying the graph. See m-C.
+- **Test quality spot-check (the "9 mutations, 0 survivors" claim).** I did not re-run mutation
+  testing, but the tests bind behaviour rather than execute it: the D-H "typos are free" test
+  asserts `stepCount`, `status`, `atStepKey` **and** ctx equality before/after three rejections
+  and then proves the run is still advanceable (`test_process_flow.py:244–279`); the failed-envelope
+  tests assert `out["ctx"] != {"decision": "approve"}` and `== graph_ctx`, which kills the obvious
+  `"ctx": merged` mutation; `test_the_failed_envelope_status_comes_from_a_post_fault_get_run`
+  forces the graph to say `done` so a hardcoded `"failed"` cannot pass; the F-5 assertion
+  `find_waiting_run_for_thread(thread_id="")` is made **while a parked process run exists**, so
+  deleting the short-circuit fails it. Two assertions are tautological rather than behavioural
+  (`test_process_flow.py:297–304` asserts properties of `ACCESS_REQUEST_DEF` against itself) —
+  harmless as spec pins, but they are not evidence of engine behaviour.
+
+## 2. Findings
+
+### M-A · major — the D-G drive-fault catch also swallows the **chat/@mention** start path, silencing its only stack trace
+
+**Evidence.** `services.start_workflow_run` routes *both* start paths through `_drive_or_fault`
+(`services.py:748`), which catches `NotImplementedError` and `WorkflowConfigError` and returns a
+dict. `trigger.py:76` (step 3, @mention-to-start) calls that same method, and `api._safe_run_workflow`
+(`api.py:82–92`) is a `try/except` whose *whole purpose* is to log the stack of anything that
+propagates out of the background trigger. Nothing in `_drive_or_fault` logs. `executor.py:352–355`
+still documents the M-1 net as re-raising "so `_safe_run_workflow`'s isolation logs the stack" —
+which is now false for the start path (it remains true for `resume_workflow_run`, which does not
+use `_drive_or_fault`, so the two chat paths now behave differently).
+
+**Why it matters.** A live `triage@v1` run that dies on an unwired judge (`WorkflowConfigError`) or
+an unimplemented step type now leaves **no log line anywhere** — only a `failed` run with a ctx note
+that someone has to go look for. That is exactly the live-triage diagnosability K-027 exists to
+improve, degraded by this slice. Plan §6 U3's done-condition says "no change to the existing
+`@mention` start path's behaviour (pinned by a test)"; the graph outcome is indeed unchanged, but
+the propagation/observability contract is not, and no test pins it (`test_trigger.py:34` uses a fake
+`Services`, so it cannot see this).
+
+**Suggested improvement.** One line in `_drive_or_fault`'s `except`:
+`logging.getLogger(__name__).exception("workflow drive fault for run %s", run_id)` before the
+re-read — it keeps D-G's envelope exactly as specified while restoring the trace. Then correct the
+`_drive` docstring (`executor.py:352–355`) to say the re-raise reaches `_safe_run_workflow` *unless*
+a service-level D-G catch intercepts it. (Alternative, heavier: gate the catch on a `catch_faults`
+flag the REST routes pass and the trigger does not — more faithful to D-G's "the *endpoints* catch
+the drive fault", but more surface.)
+
+### M-B · major — O-6 is reachable from the public publish route and **poisons** the `(key, version)`; the mitigation is documented only where implementers already knew
+
+**Evidence.** `schemas.PublishWorkflowDefIn.transitions` is `Field(default_factory=list, …)`
+(`schemas.py:71`), and `_validate_def_spec` has no non-empty-transitions rule, so
+`POST /workflow-defs` with `"transitions": []` is a schema-legal, validation-passing body. It then
+reaches `_PUBLISH_CYPHER` (`repository.py:937–956`), whose trailing `UNWIND $transitions` collapses
+the row stream **after** the `WorkflowDef`, its `Step`s and the `START` edge are already MERGEd;
+`publish_def` (`repository.py:1019`) indexes `res.result_set[0]` ⇒ `IndexError` ⇒ **HTTP 500**.
+Because publish is `MERGE … ON CREATE SET`, the corrected retry on the same `key@version` is a
+**silent no-op on the half-written def** — the version is permanently wrong and cannot be repaired
+by re-publishing. Same for `materialize_snapshot` (`:1397`).
+
+**Why it matters.** O-6 was raised as "latent, invisible today because every publish test carries ≥1
+transition". That is true of the *test estate*, but the front door is open, and the failure mode is
+worse than an `IndexError`: it is an unrepairable def version. Today the constraint is written down
+in `proof_defs.py`'s docstring and a comment in `test_process_input.py:86` — both places an author
+who already knows about it would look. It is **not** in `services.publish_workflow_def`'s docstring,
+not in `AGENTS.md`'s workflow-def invariants list, and not in `QUERIES.md` §11.1.
+
+**Suggested improvement (for U5, with the backlog filing).** (a) Add the constraint to
+`services.publish_workflow_def`'s docstring and to the `AGENTS.md` executor/workflow-def invariants
+bullets — one sentence each, the same slot the `waitsForHuman` bullet already occupies. (b) Consider
+the cheap real fix rather than only filing it: a non-empty `transitions` check in `_validate_def_spec`
+(running **last**, like the other two) turns a 500 + poisoned version into a clean
+`WorkflowDefSpecError` → 400 with nothing written. Retro-cost is exactly **one** fixture:
+`test_services.py:1080` (`test_agent_step_type_is_accepted_by_publish_validation`) is the only
+existing test that publishes *successfully* with `transitions=[]` (the four others at `:802/:821/
+:835/:850` already raise on an earlier rule). Note this rejects a legitimate shape — a single-step
+def — so if that is wanted, fix the query instead (guard the `UNWIND` the way the §4 mention block
+does) and keep the publish permissive.
+
+### m-A · minor — an **empty** input body is accepted, wins the CAS and burns a step of budget
+
+**Evidence.** `SubmitWorkflowInputIn.input` defaults to `{}` (`schemas.py:123`), and
+`submit_workflow_input` (`services.py:759`) has no empty-payload rule: `{}` passes the reserved-key
+check and the parked-step check (nothing is undeclared), merges to a no-op, wins the resume CAS,
+re-executes the parked step, fires no guard and re-parks — costing one step of the 24. D-H's
+"mistakes are free" argument covers wrong *values* and undeclared *keys*, but not the one mistake a
+UI is most likely to emit (a submit with nothing filled in). 16 such calls kill an
+`access-request` run.
+
+**Suggested improvement.** Reject an empty `input` in `submit_workflow_input` with
+`WorkflowInputRejectedError` ("no input submitted") — service layer, so MCP (OQ-2) inherits it, and
+it is free by the same argument the other three rules use.
+
+### m-B · minor — the `_publish` test helper's `transitions=()` default invites O-6 back in
+
+**Evidence.** `tests/test_executor_process.py:344` — `def _publish(svc, *, steps, transitions=(), …)`.
+All nine current call sites pass a non-empty list, so nothing is broken today, but the helper's
+default is precisely the shape that produces a partial write plus `IndexError` in a future test, and
+the failure would look like an unrelated engine bug.
+
+**Suggested improvement.** Make `transitions` a required keyword (or default it to
+`[SINK_TRANSITION]`), with a one-line comment naming O-6.
+
+### m-C · minor — the new `AGENTS.md` seed row says pytest "drops `reference`"; it actually **leaves the last workflow test's defs behind**, which is what makes the `already present — no-op` verdict untrustworthy
+
+**Evidence.** `wf_repo` (`tests/conftest.py:85–96`) wipes `reference` at **fixture setup**, per test.
+A finished pytest session therefore leaves `reference` holding whatever the last `wf_repo` test
+published — and `test_process_flow.py:68` publishes `ACCESS_REQUEST_DEF` under the **production**
+`access-request@v1` key/version into that shared graph. Concretely, the hazard the row warns about
+gets *harder* to see: edit `proof_defs.py` → run pytest (the test republishes the **new** def into
+`reference`) → run `seed_workflows.sh acme` (prints `already present — no-op` for the def) while
+`ws:acme` still holds the **old** snapshot, which is what the executor drives. The row's own
+split-brain paragraph is right; its "both drop `reference`" premise is what misleads.
+
+**Suggested improvement.** One clarifying clause in the `seed_workflows.sh` row and the script
+header: *"pytest wipes `reference` per workflow test, so a finished run leaves the last test's defs
+behind — `already present — no-op` after a pytest run may be reporting a test's publish, not a
+seed."* Optionally have `test_process_flow.py` publish under a test-only version (e.g. `v1-test`)
+via `{**ACCESS_REQUEST_DEF, "version": …}`; that keeps the no-drift property for content while
+removing the production-key collision — at the cost of no longer proving the shipped `(key, version)`
+pair publishes. Worth a deliberate call in U5, not a silent one.
+
+### m-D · minor — doc drift for U5 (report-only, as briefed) — and the drift is **not** where it was expected
+
+The brief anticipated stale prose in plan §4. It is not there: `m3-process-flow.md:88–97` states
+"Six steps, six transitions … four `cmp` ops" and carries the m-1 recount note, and §4.2's table is
+six. The stale copies are all in the **coordination ledger**:
+
+- `m3-process-flow-coordination.md:69` — U4's row still reads "the `onboarding@v1` def".
+- `:79` — D-D still reads "`onboarding@v1` … 6 steps / 7 transitions … 8 of the 12-step budget"
+  (the rename, the recount and D-H's `maxSteps = 24` all post-date it).
+- `:65` — U0's row still names "`set_run_ctx` (§12.12)" and "§12.1b", both dropped by D-F/n-5.
+- `:324` — the v1 gate note "recount before U4" is now closed and should say so.
+
+U5 already owns the Decisions table fill-in; folding these four in costs nothing.
+
+### n-A · nit — the seed script's `**ACCESS_REQUEST_DEF` splat makes the constant's key set a signature
+
+`scripts/seed_workflows.sh` builds `{**ACCESS_REQUEST_DEF, "key": …, "version": …}` and calls
+`services.publish_workflow_def(ctx, **spec)`. Adding any field to `ACCESS_REQUEST_DEF` (a `notes`,
+a `budget`) breaks the seed with a `TypeError` at run time — and only there, since the acceptance
+test splats it the same way. A comment on `ACCESS_REQUEST_DEF` saying "these six keys are
+`publish_workflow_def`'s signature — do not add fields" would cost one line.
+
+### n-B · nit — `services.py` now imports `MAX_CONFIG_LEN` from `schemas.py`
+
+Justified in the comment (`services.py:44–49`) and harmless today (`schemas` is a pydantic-only
+leaf), but it is the first boundary→service constant import in this codebase. If a second one
+appears, move both to `config.py` rather than growing the dependency.
+
+## 3. What's solid
+
+- The central design bet held: **`_drive_loop` never moved**, and a business process fell out of
+  park-and-branch with no new outcome, no new state and no scheduler. That is the strongest thing
+  in this slice and it is worth saying plainly.
+- `guards.py` is the model deliverable of the four units: closed whitelists, no parser, no `eval`,
+  total at drive, strict at publish, and the two easy-to-get-wrong rules (totality, the De Morgan
+  asymmetry) written into the module docstring *and* pinned by a contrasting test pair.
+- The D-G/m-12 envelope is now internally consistent — `status` and `ctx` from one post-fault
+  observation — and the teco ruling that produced it is the right call.
+- D-H's "mistakes are free" is a genuinely good property and is asserted, not assumed.
+- The blast radius on the existing estate is exactly what the plan budgeted: the `git diff` against
+  `e3c09b3` touches `test_api.py`, `test_executor.py` and `test_services.py` **only** at the named
+  fixtures, and the five type-only `pytest.raises` are now message-asserting. The two remaining
+  untightened `pytest.raises(WorkflowDefSpecError)` (`test_services.py:778, 801`) are not vacuous —
+  their specs fail on the kind / step-type whitelist, which runs first.
+- Doc discipline held: QUERIES §12.12/§12.13 carry PROFILEs and the zero-row contracts, DESIGN §7.1's
+  pinned count moved 241→256, DESIGN §6.2 and §14.4 carry the ctx-write posture and the full error
+  map, and the `AGENTS.md` invariants list (including the *unenforced* n-3 warning) is accurate.
+
+## 4. Not verifiable statically / deliberately not checked
+
+- The suites. Per the brief I ran neither `pytest` nor `test_queries.sh`; the reported
+  **529 passed / 1 deselected** and **256/256**, the live re-seed, and both defs' presence in
+  `reference` + `ws:acme` are the coordinator's evidence, not mine.
+- The "9 mutations, 0 survivors" figure — I read the tests and confirmed they kill the obvious
+  mutations named in §1, but I did not re-run mutation testing.
+- Whether `seed_workflows.sh` prints `already present — no-op` for both defs on a clean re-run
+  (it is structurally right — `_probe` reads before publishing, per def — but it was not executed
+  here).
+- Any RAM measurement; §5's "≈ nil" is inherited from U0's gate.
+
+## 5. Open questions for the coordinator
+
+1. **M-A's shape.** Log-and-swallow (one line, keeps D-G verbatim) or gate the catch to the REST
+   callers (truer to D-G's wording, more surface)? This touches K-027's territory, so a decision
+   now avoids two people fixing it differently.
+2. **M-B(b).** Fix O-6 in this slice (one validator rule + one fixture edit) or file it only?
+   Filing it leaves a public route that can permanently poison a def version.
+3. **m-C's second half.** Should the acceptance test keep publishing the production
+   `access-request@v1` into the shared `reference`, or move to a test-only version? Either is
+   defensible; it should be a written choice in U5, since the current state makes the seed
+   script's own success line unreliable.
+
+---
+
+# Re-gate (U4b)
+
+> **Reviewer:** `analyst` · **Date:** 2026-07-21 · **Artifact:** the **uncommitted U4b working
+> tree** on top of committed `670474a` — `server/falkorchat/{services.py, executor.py,
+> proof_defs.py}`, `server/tests/{test_process_input, test_services, test_process_flow,
+> test_executor_process}.py`, `AGENTS.md`, `scripts/seed_workflows.sh`.
+> **Baseline:** the "Implementation gate (U0–U4)" section above — findings **M-A, M-B, m-A,
+> m-B, m-C, n-A, n-B** and its §5 open questions, plus the coordinator's rulings on those
+> three questions.
+> **Scope:** diff-scoped re-gate only. U0–U4 were gated *approve with suggestions* and are not
+> re-reviewed; m-D (coordination-ledger drift) is U5's and is untouched here by design.
+> **Method:** static only. Per the brief I ran **neither** `pytest` nor `test_queries.sh`, and
+> used no tree-mutating git command (baselines via `git diff` / `git show`). Nothing was
+> executed; every claim below is from reading `services.py`, `executor.py`, `repository.py`,
+> `app.py`, `trigger.py`, `schemas.py`, the four test modules and the two docs.
+
+## Verdict: **approve with suggestions**
+
+No blockers. All seven findings are closed, and closed **as the coordinator ruled** — not
+more, not less. The two majors are fixed at the right layer with the right blast radius: M-A
+is exactly one `logging.exception` line inside the existing `except`, with D-G's envelope
+untouched and the catch *not* gated to REST callers; M-B is one rule, placed last, that
+provably prevents the write rather than renaming the exception. The three new tests bind
+behaviour rather than execute it. Five residual items below, all minor/nit; one of them
+(**r-1**) is a real remaining hole on the *materialize* side of the same defect and is worth a
+U5 line, and **r-2** is the backlog filing the brief asked me to rule on — it deserves one.
+
+## 1. Per-finding disposition
+
+### M-A — **closed** ✔ (log-and-swallow, exactly as ruled)
+
+- One line added: `services.py:996` — `logging.getLogger(__name__).exception("workflow drive
+  fault for run %s", run_id)`, placed **inside** the existing
+  `except (NotImplementedError, WorkflowConfigError)` and **before** the post-fault
+  `get_run`. The only other module change is `import logging` (`services.py:16`).
+- **D-G's envelope is byte-unchanged.** The `git diff` on `_drive_or_fault` shows zero edits
+  to the `run = get_run(...)` / `status` / `TERMINAL_OR_PARKED_STATUSES` re-raise / return
+  tuple — the log line is a pure prefix. The `app.py:93–127` error map is untouched, so the
+  200/201 `{"status":"failed", …}` shape and every mapped code are as gated.
+- **Not gated to REST callers** — no `catch_faults` flag, no caller-dependent branch. K-027's
+  territory is untouched, as ruled.
+- **The corrected `executor.py:352–358` comment describes the actual two-path behaviour.** I
+  verified both halves against the code: `resume_workflow_run` (`services.py:1009–1020`) calls
+  `executor.resume` directly with **no** catch, so a fault propagates — and `trigger.py:72`
+  (the chat resume leg) routes through it into `api._safe_run_workflow` (`api.py:73`). The
+  other leg, `trigger.py:76`, calls `start_workflow_run`, which *does* go through
+  `_drive_or_fault` (`services.py:775`). The docstring says precisely that, and its closing
+  claim ("so a drive fault is never silent on either route") is now true.
+- Pinned by `test_process_input.py:521` (see §3 for the mutation check).
+
+### M-B / O-6 — **closed** ✔ (the partial write is genuinely prevented, not renamed)
+
+Traced end-to-end:
+
+- The rule is `services.py:604` (`if not transitions: raise WorkflowDefSpecError(...)`), inside
+  the **static** `_validate_def_spec`.
+- `publish_workflow_def` (`services.py:640`) calls `_validate_def_spec` **before** building
+  `repo_steps`/`repo_transitions` and before `self._repo.publish_def(...)`. The raise therefore
+  happens with **no** repository call at all — this is prevention, not a nicer exception.
+- Against `repository._PUBLISH_CYPHER` (`repository.py:937–956`): the query MERGEs `d`, UNWINDs
+  `$steps` (MERGE `Step` + `HAS_STEP`), `MATCH`es the start step and MERGEs `(d)-[:START]->`,
+  and only **then** `UNWIND $transitions` → `WITH d, stepCount, count(rel)` → `RETURN`. With
+  `$transitions = []` the stream collapses at that UNWIND, after three write clauses, and
+  `publish_def`'s `res.result_set[0]` raises `IndexError`. The diagnosis in the prior gate is
+  confirmed against the actual Cypher; the fix removes the only reachable route to it via
+  publish.
+- **The ordering pin is real**, on both sides: the rule sits after the kind / step-type /
+  duplicate-key / start-count / dangling-endpoint checks *and* after the two U2 invariants
+  (`services.py:569–602`), and `test_services.py:869` publishes a spec that violates **both**
+  the start-count rule and the transitions rule and asserts it fails with
+  `match="exactly one start step"`. Independently, the four pre-existing tests at
+  `test_services.py:802/821/835/850` all pass `transitions=[]` and expect *earlier* errors — so
+  a mis-placed rule would fail five tests, not one.
+- **No existing fixture now fails for the wrong reason.** The only test in the estate that
+  published successfully with `transitions=[]` was
+  `test_agent_step_type_is_accepted_by_publish_validation` (`test_services.py:1113`); it gained
+  a second `agent` step plus one transition, and still asserts exactly what it asserted before
+  (`repo.published[0]["key"] == "triage"` — that `agent` is an accepted step type). Nothing
+  about the assertion was weakened. A repo-wide grep for `transitions=[]` / `"transitions": []`
+  finds no other publish-path caller.
+- Documentation landed in the three places the finding named: `services.publish_workflow_def`'s
+  docstring (`:624`), `_validate_def_spec`'s docstring (`:523`, "Three further invariants"), and
+  the `AGENTS.md` executor/workflow-def invariant bullets ("All three run **last**"). QUERIES.md
+  §11.1 was **not** updated — acceptable, since the rule is a service invariant, not a query
+  contract, but see **r-2**.
+
+### m-A — **closed** ✔
+
+`services.py:828` — `if not input: raise WorkflowInputRejectedError("no input submitted …")`,
+placed after the 404/409 checks and **before** `_reject_reserved_keys` /
+`_validate_against_parked_step` / the merge / the CAS, i.e. before anything is written and
+before any budget is spent. The docstring's order-is-load-bearing list (`:798`) was updated to
+match the code. It is at the service layer, so MCP inherits it (OQ-2), and `app.py:107` already
+maps `WorkflowInputRejectedError → 400`, so the REST answer is a clean 400 with no new mapping.
+Side benefit: `input=None` (possible from a non-pydantic caller) now also yields the 400 rather
+than a downstream `TypeError`.
+
+### m-B — **closed** ✔
+
+`tests/test_executor_process.py:344` — `def _publish(svc, *, steps, transitions, key=…)`, the
+default removed, with a comment naming O-6. All **nine** call sites (`:364, 380, 403, 422, 441,
+463, 480, 496, 514`) pass `transitions` explicitly, so the signature change is inert today and
+purely preventive — which is what was asked.
+
+### m-C — **closed** ✔, and §4.4's anti-drift property **survives the override**
+
+I verified the anti-drift claim by reading, not by trusting the comment:
+
+- `test_process_flow.py:53–54` — `VERSION = "v1-test"`, `TEST_DEF = {**ACCESS_REQUEST_DEF,
+  "version": VERSION}`. **Only the version key is overridden**; `KEY` still comes from the
+  constant (`:45`), and the fixture publishes `**TEST_DEF` (`:79`) then materializes
+  `key=KEY, version=VERSION` (`:80`), and every run starts from that snapshot (`:86`).
+- Consequence: a guard-`op` mutation in `proof_defs.py` still flows constant → publish →
+  `validate_cmp` → snapshot → the three §4.3 path tests. A structurally invalid op fails at
+  publish (fixture error, whole module red); a *valid but wrong* op changes the branch a run
+  takes and fails the path assertions. The drift-proof property is intact.
+- The production pair is pinned at `test_process_flow.py:301` (`(key, version) ==
+  ("access-request", "v1")`). What is *lost* is the proof that the production pair itself
+  publishes — negligible, since the spec is identical apart from a version string that is not
+  semantically interpreted anywhere. Worth naming in the U5 note as a conscious trade, which
+  the fixture docstring already does.
+- The wording fix is correct and now distinguishes the two mechanisms properly:
+  `AGENTS.md` seed row ("`test_queries.sh` deletes `reference` at **teardown** … `wf_repo`
+  wipes `reference` at fixture **setup**, once per workflow test, so a finished pytest session
+  *leaves the last workflow test's defs behind*") and the same in the script header
+  (`scripts/seed_workflows.sh:56–63`). I re-checked `tests/conftest.py:85` — setup-time wipe,
+  per test; the corrected wording matches the code.
+- Collision check: the other workflow tests publish/materialize under version `"1"`
+  (`test_process_input._materialize`, `test_executor_process._publish`), not `"v1"`, so nothing
+  in the estate now writes the production `(access-request, v1)` pair into `reference`. The
+  script's parenthetical ("anything else published by a test can") is correctly hedged.
+
+### n-A — **closed** ✔
+
+`proof_defs.py:49–53` — the five-line warning that the constant's key set *is*
+`publish_workflow_def`'s keyword signature, with the correct remedy (a module-level constant,
+"the way `ACCESS_REQUEST_MAX_STEPS` is").
+
+### n-B — **not actioned, and that is right** ✔
+
+The finding was explicitly conditional ("*if* a second boundary→service constant import
+appears, move both to `config.py`"). U4b adds exactly one import to `services.py` — stdlib
+`logging` — so the trigger condition did not fire. Acting now would be speculative churn
+against a still-single import. Leave it as the standing note it was written to be.
+
+## 2. New findings introduced by the fixes
+
+### r-1 · minor — the O-6 guard is **publish-only**; `materialize_def` reaches the same collapse, and one existing test now asserts the opposite of the new invariant
+
+**Evidence.** `services.materialize_def` (`services.py:655`) reads the def subgraph and calls
+`repo.materialize_snapshot`, which reuses the *same* `_PUBLISH_CYPHER` shape
+(`repository.py:1397`) — same trailing `UNWIND $transitions`, same `result_set[0]`. It performs
+**no** spec validation. `read_def_subgraph` → `_read_subgraph` (`repository.py:976–997`) returns
+a dict (not `None`) whenever the root `WorkflowDef` node exists, with `transitions = []` when the
+transitions query yields nothing — which is exactly the shape a *pre-U4b half-written def* has.
+So a def poisoned before this fix is still an unrepairable 500 on materialize, and the new rule
+cannot see it. Concretely inconsistent artefacts left behind:
+
+- `tests/test_services.py:916–925`
+  (`test_materialize_def_two_phase_reads_reference_then_writes_workspace`) seeds
+  `repo.defs[...] = {… "transitions": []}` and asserts materialize **succeeds**. It passes only
+  because `FakeRepo` has no Cypher; against the real repository that same input is the 500 this
+  slice just outlawed. The test isn't wrong for what it proves (two-phase read→write), but its
+  fixture is now the one shape the codebase declares illegal.
+- `tests/test_process_input.py:88–91` — the `_materialize` helper's comment still reads "a def
+  with zero transitions trips the latent empty-`UNWIND` collapse … (out of U3's scope)". Post
+  U4b that is stale in a misleading direction: the collapse is no longer latent on publish, but
+  this helper calls `materialize_snapshot` **directly**, which is precisely the path that is
+  *still* unguarded.
+- `falkorchat/proof_defs.py:26–29` describes the constraint as "a zero-transition publish raises
+  `IndexError` *after* the steps are written" — the pre-fix behaviour. It now raises
+  `WorkflowDefSpecError` before any write.
+
+**Why it matters.** Low likelihood (materialize is fed by publish, which is now guarded) but the
+docs and one test now say three different things about the same invariant, which is how the next
+author concludes the guard is symmetric when it isn't.
+
+**Suggested improvement (U5, cheap).** (a) Two comment refreshes — `proof_defs.py:26–29` to name
+`WorkflowDefSpecError` at publish, `test_process_input.py:88–91` to say the guard is
+publish-side only and `materialize_snapshot` is still raw. (b) One sentence on the
+`test_services.py:916` fixture noting it is a FakeRepo shape that the real query would reject.
+(c) Optionally a `if not sub["transitions"]: raise WorkflowDefSpecError(...)` in
+`materialize_def` — one line, turns the residual 500 into a 400 — but it is defensible to leave
+it to the r-2 filing instead.
+
+### r-2 · minor — the accepted trade-off (a single-step / transition-less def is now unpublishable) is stated as a **modelling rule**, never as a **limitation**; it deserves a U5 backlog filing
+
+**Evidence.** All four new doc sites (`services.py:604–612` comment, `:624` docstring, `:523`
+docstring, `AGENTS.md` bullet) say the same thing: "a terminal outcome is a step with no
+*outgoing* transition, never a def with none." That is the *workaround*, correctly stated. What
+none of them records is that (i) a genuinely single-step def is a legitimate shape that this
+rule now rejects outright, and (ii) the alternative fix exists and is known — guard
+`_PUBLISH_CYPHER`'s trailing `UNWIND` the way the §4 mention write-block guards its own
+(`UNWIND (CASE WHEN $x = [] THEN [null] ELSE $x END)`), a pattern this codebase already relies
+on and which `AGENTS.md` documents as load-bearing.
+
+**Ruling on the brief's question 6:** yes, this deserves a backlog filing. The trade-off is
+*documented as behaviour* but not *recorded as debt*, and the debt has a named, cheap, already-
+proven remedy that only needs a graph-dba gate. Without a `K-` number, the next person who
+needs a one-step def will rediscover the rule and either fight it or bypass validation.
+
+**Suggested improvement.** File in `docs/BACKLOG.md` during U5 (one line, e.g. *"K-030 — allow
+zero-transition defs: guard `_PUBLISH_CYPHER`/`materialize_snapshot`'s trailing `UNWIND` with
+the §4 empty-`UNWIND` `CASE` pattern, then relax `_validate_def_spec`'s O-6 rule; graph-dba gate
++ re-PROFILE"*), and fold r-1's residual materialize gap into the same item.
+
+### r-3 · nit — one of the two new `test_process_flow.py` assertions is vacuous
+
+`test_process_flow.py:305` — `assert TEST_DEF == {**ACCESS_REQUEST_DEF, "version": VERSION}`
+re-evaluates, verbatim, the expression that defined `TEST_DEF` at `:54`. It can only fail if the
+constant is mutated at run time. The assertion one line above (`:301`, the production `(key,
+version)` pair) *is* a real pin and should stay; this one is documentation wearing an `assert`.
+Same class as the two tautological assertions flagged in the U0–U4 gate §1 — harmless, but it
+inflates the apparent pin count.
+
+### r-4 · nit — the `AGENTS.md` seed row still contains the sentence m-C objected to
+
+The corrected explanation is now at the top of the row, but ~5 lines later the same paragraph
+still reads "`test_queries.sh` and `server/tests`' `wf_repo` fixture **both wipe** `reference`
+but not `ws:<id>`". Not false, but it is the exact phrasing that produced the wrong mental model,
+now sitting downstream of its own correction in a row that has grown to ~25 lines. One clause
+(`— by the two different mechanisms above —`) or a cut would settle it. U5 doc pass.
+
+### r-5 · nit — the seed script's `access-request` / `v1` defaults still duplicate the constant
+
+`scripts/seed_workflows.sh:89–90` hardcodes the shell defaults, and `:258–260` splats
+`**ACCESS_REQUEST_DEF` while *overriding* key and version from the environment — so the seed
+never reads the constant's own `key`/`version`. The duplication is now pinned on one side by
+`test_process_flow.py:301`, which is a real improvement over U4, but the pin is a literal, kept
+in sync by hand. Acceptable; noting it so the next `key`/`version` bump touches all three.
+
+## 3. Mutation-claim spot-check (read, not re-run)
+
+The "7 mutations / 0 survivors" claim holds for the mutations I could name from the code. What
+each new test actually kills:
+
+- **`.exception` → `.error`** — killed. `test_process_input.py:539–540` asserts
+  `faults[0].exc_info is not None` **and** `faults[0].exc_info[0] is NotImplementedError`. A
+  plain `.error(...)` produces a record with `exc_info = None`, so the stack — not merely the
+  message — is what is pinned. (A mutation to `.error(..., exc_info=True)` would survive, but
+  that is behaviourally identical, so it is not a real survivor.)
+- **Delete the log line** — killed by `assert faults, "…produced no log record"` (`:536`).
+- **Drop the run id from the message** — killed by `assert out["runId"] in
+  faults[0].getMessage()` (`:538`), which also pins the lazy `%s` interpolation.
+- **Envelope regression while adding the log** — killed by `assert out["status"] == "failed"`
+  (`:534`) in the same test, plus the pre-existing D-G envelope tests.
+- **Delete the O-6 rule** — killed by `test_services.py:855` (raises + `repo.published == []`).
+- **Move the O-6 rule earlier / raise after the write** — killed respectively by
+  `test_services.py:869` (must fail on the start count) and by `repo.published == []` in both
+  new tests.
+- **Delete the empty-input rule, or move it after the CAS** — killed by
+  `test_process_input.py:687`: `pytest.raises(match="no input submitted")` **plus**
+  `stepCount == before`, `ctx == {}`, `status == "waiting"`, and a follow-up real submit that
+  reaches `done` — i.e. it proves the rejection was free *and* non-poisoning, not just that an
+  exception was raised.
+- **m-B (the removed `transitions` default)** is the one item no test can kill — a mutation
+  reinstating the default is invisible while all nine call sites pass the argument. That is
+  inherent to a lint-grade guard, not a gap.
+
+No new `pytest.raises` is vacuous: all three carry `match=`, and in each case the asserted
+message belongs to the rule under test (I checked the message strings against the raise sites at
+`services.py:605`, `:834` and the start-count raise at `:559`).
+
+## 4. Blast radius on the existing estate
+
+Checked the whole `git diff` for the four test modules: the only edits to pre-existing tests are
+(a) the `_publish` signature at `test_executor_process.py:344` (nine call sites already
+compliant, no assertion touched) and (b) the `test_services.py:1113` fixture gaining a step and
+a transition (assertion unchanged, and it still proves the `agent` step type is accepted). No
+assertion anywhere was weakened, deleted or made conditional; no shared fixture (`conftest.py`,
+`wf_repo`, `svc`, `_materialize`, `_parked_run`) changed behaviour. The `test_process_flow.py`
+fixture change is a version-only override, analysed above. `executor.py` is docstring-only —
+`_drive_loop` is not in the diff at all, consistent with the coordinator's SHA verification.
+
+## 5. Not verifiable statically / deliberately not checked
+
+- **Both suites.** Per the brief I ran neither. The reported **533 passed / 1 deselected**,
+  **256/256**, the `_drive_loop` SHA `71055f756280`, and both defs' presence in `reference` +
+  `ws:acme` are the coordinator's evidence, not mine. Note the +4 tests vs the U4 gate's 529
+  matches exactly the four added here (`test_services` ×2, `test_process_input` ×2).
+- **The log actually reaching a deployed handler.** `caplog` proves the record is emitted with
+  `exc_info`; whether uvicorn's configuration surfaces `falkorchat.services` at ERROR in
+  production is a deployment question (K-027's territory) and was not checked.
+- **Mutation testing** was not re-run; §3 is a read of the tests against mutations I named.
+- Whether `seed_workflows.sh` prints `already present — no-op` for both defs after this change
+  (structurally unaffected — U4b changed only its header comment).

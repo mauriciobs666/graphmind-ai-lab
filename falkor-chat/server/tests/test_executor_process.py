@@ -341,7 +341,10 @@ SINK_STEP = {"key": "sink", "type": "decision", "config": "{}"}
 SINK_TRANSITION = {"from": "park", "to": "sink", "on": "done", "order": 0}
 
 
-def _publish(svc, *, steps, transitions=(), key="access-request"):
+def _publish(svc, *, steps, transitions, key="access-request"):
+    # `transitions` is REQUIRED, with no default (m-B): a zero-transition publish is the
+    # O-6 shape — now rejected by `_validate_def_spec`, so an omitted default would make
+    # a future test fail on the transitions rule instead of the rule it meant to test.
     return svc.publish_workflow_def(
         CTX, key=key, version="1", name="Access request", kind="process",
         steps=steps, transitions=list(transitions),
