@@ -223,6 +223,44 @@ The review gate is non-negotiable — it was the pattern that caught both K-022 
 - **2026-07-20 · teco** — U2 committed (`efdeeb3`); **U3 dispatched** (serialized behind U2 — both
   touch `services.py`).
 
+- **2026-07-20 · coder (U3) — DONE, green.** Both endpoints live. Handler map as built:
+  `WorkflowRunNotFoundError` 404 · `WorkflowRunNotWaitingError` 409 (new) ·
+  `WorkflowInputRejectedError` 400 (new) · `WorkflowConfigError` 400 ·
+  `WorkflowEngineDisabledError` 503 (new, `RuntimeError` subclass) — registered via a table +
+  `add_exception_handler` loop, **no blanket `RuntimeError` handler**. **m-11 correctly resisted**:
+  `StepBudgetExceededError` was not invented, and a test pins that budget exhaustion returns
+  `"failed"` through the normal path with **no** `error` key. **m-12 pinned twice** (a "status came
+  from `get_run`, not a literal" test *and* a forced-zombie test). **M-2 enforced at the service
+  layer** via `RESERVED_CTX_KEYS`, asserted at both the service and REST layers, with a companion
+  test proving the parked run (`waitingThreadId == ''`) is invisible to the thread lookup **from
+  both ends**. m-5 layer split as built: pydantic owns the *submitted* dict + `maxSteps` 1…50;
+  `services.submit_workflow_input` owns the **merged** ctx bound, the reserved-key rule and the D-H
+  check (one test per side, 422 vs 400). `executor.py` touched only in `resume`'s sanctioned
+  `run_ctx_json`. pytest **483 → 521**, then **523** after the teco ruling below.
+- **2026-07-20 · teco (ruling on U3's seven underspecified points)** — Six ratified as built
+  (notably: an explicitly-declared empty `config.fields` **is** a declaration and accepts nothing,
+  only an *absent* one is permissive; an unresolvable parked step degrades permissively rather than
+  500-ing, so a deleted snapshot doesn't turn every input into an engine error; a vanished run is
+  not a terminal status ⇒ re-raise). **One change ordered and delivered (item 7):** the failed
+  envelope's `ctx` now comes from the **same** post-fault `get_run` re-read that supplies `status`,
+  not from the submitted merge. Reason: m-12 exists so the envelope reports *graph truth*; a
+  `get_run` status beside a submitted ctx half-applies that rule, and the two disagree exactly when
+  a reader most needs them consistent. Mutation-checked (reverting to `"ctx": merged` fails the new
+  test), with a companion test guarding the clean path against drift.
+- **⚠️ 2026-07-20 · process incident (U3, contained — no work lost).** The coder twice reached for a
+  **tree-mutating git command to read or undo something**: first `git stash push --keep-index` to
+  probe a ruff baseline, then `git checkout falkorchat/services.py` to undo a mutation-test edit —
+  the second reverted the file to HEAD and **destroyed all of U3's `services.py` work in one
+  command**. It reconstructed the file from its own context and the suite passed. **teco verified
+  independently rather than trusting that**: no top-level symbol and no `def`/`class` lost vs
+  `efdeeb3`; line count 727 → 1021; every deletion in the diff reviewed and accounted for
+  (including the apparent loss of U2's `from .guards import …`, which is a *modification* — the
+  line was extended with `WorkflowConfigError`, and U2's invariant is intact and still running
+  last). Independent re-run: **523 passed**, `reference` re-seeded, SHA `71055f756280`.
+  **Standing rule for every future implementer brief:** never use `stash`/`checkout <path>`/
+  `restore`/`reset` on the user's working tree — use `git show <ref>:<path>` to read a baseline and
+  a file copy before mutating. The coder logged it to its learnings inbox.
+
 ## Open items carried out of U0/U1 (must be resolved in U2/U4/U5, not dropped)
 
 | # | Item | Raised by | Lands in |
@@ -287,23 +325,35 @@ has no scheduler" is verifiable and C2's cost is named, not hidden). **D-B's opt
 
 ## Resume anchor — next session starts here
 
-Plan is **approved** (v2, analyst re-gate 2026-07-20). U0 ∥ U1 are **in flight**.
+Plan is **approved** (v2.1). **U0, U1, U2, U3 are DONE, committed and independently verified.**
+Session paused at the user's request (session-limit pressure), not blocked.
 
-1. Integrate **U0** (`graph-dba`: `start_run_untriggered` + `resume_run_with_ctx` in QUERIES §12,
-   PROFILE evidence, zero-row contracts, `test_queries.sh` at a new pinned count, `reference`
-   re-seeded) and **U1** (`tdd-engineer`: `cmp`/`all`/`any`/`not` + `validate_cmp` in `guards.py`).
-   Run the **integrated full baseline** yourself — neither unit was allowed to, by the shared-state
-   protocol. Order is always **pytest → re-seed → verify**.
-2. Then **U2** (`coder`) — typed handlers + publish invariant. Carries **M-7** (normalize
-   string-shaped `config`/`guard` before validating; `validate_cmp` keeps taking a parsed dict, so
-   U1 is unaffected) and the B-1/B-2 fixture edits. U2 also owns `_select_transition`/`_trace_step`
-   (M-6) — **outside** the SHA lock; say so in the brief so the implementer doesn't freeze at the
-   stop-and-escalate rule.
-3. Then **U3** (`coder`) — start-without-trigger + input endpoint, per D-G/D-H. Carries **m-11**
-   (drop the non-existent `StepBudgetExceededError`) and **m-12** (re-raise when the post-fault
-   re-read isn't terminal).
-4. **U4** (the `access-request@v1` def, seed, offline acceptance) → **U5** (closeout: BACKLOG,
-   HISTORY, DESIGN §6.3, file **K-028** timers and **K-029** def-literal consolidation).
-5. Hands off to **K-025** (`qa-engineer`) ⇒ **M3 → ✅**.
+**Committed:** `788e5bf` (U0+U1) · `efdeeb3` (U2) · `670474a` (U3).
+**Baselines at pause:** server pytest **523 passed / 1 deselected** · `test_queries.sh`
+**256/256** · `reference` re-seeded and verified · `_drive_loop` SHA **`71055f756280`**.
+Working tree clean apart from this ledger.
+
+**Next session starts at U4 — no decision is pending, nothing is half-finished.**
+
+1. **U4** (`coder`) — the **`access-request@v1`** proof def (note the rename; *not* `onboarding`,
+   which collides with a long-standing test fixture key), `proof_defs.py`, the `seed_workflows.sh`
+   wiring, and the offline acceptance test. Plan §4 is the spec; §4.3 traces all three paths.
+   Brief it with: **every def must carry ≥1 transition** (O-6 below — a zero-transition publish
+   raises `IndexError` *after* a partial write), the def declares **`maxSteps = 24`** with the
+   mistakes arithmetic in §4, and the seeding order is **`bootstrap_schema.sh` → `seed_demo.sh` →
+   `seed_workflows.sh`**, with a re-seed after any pytest run.
+2. **`analyst` implementation gate** over U0–U4 as one diff (the plan gate was worth it twice;
+   this is the second, non-negotiable gate in the pattern).
+3. **U5** (`teco`) — closeout: `docs/BACKLOG.md` (K-024 → ✅, K-025 unblocked, milestone row),
+   `docs/HISTORY.md` entry, **DESIGN §6.1/§13** (O-4: F-1's two-part correction, D-C's "`wait` is
+   signal-driven and mechanically identical to `human`", §13's `cmp`-not-`expr` amendment),
+   `AGENTS.md` key-scripts row for the new seed, and **file three backlog items**: **K-028**
+   (workflow timers), **K-029** (consolidate `triage@v1`'s inline def literal into `proof_defs.py`),
+   and **O-6** (the `_PUBLISH_CYPHER` zero-transition partial write).
+4. Hand off to **K-025** (`qa-engineer` acceptance) ⇒ **M3 → ✅**.
+
+**Standing rule to repeat in every implementer brief** (learned the hard way in U3): never use a
+tree-mutating git command — `stash`, `checkout <path>`, `restore`, `reset` — on the user's working
+tree. Read a baseline with `git show <ref>:<path>`; copy the file before a mutation test.
 
 D-A…D-H are all settled. **No user decision is pending.**
