@@ -415,7 +415,11 @@ DEF_BODY = {
     "name": "Onboarding",
     "kind": "process",
     "steps": [
-        {"key": "start", "type": "human", "config": "{}", "start": True},
+        # config is a **string** here — the REST shape (`schemas.py` types it `str`).
+        # A `human` step must declare `waitsForHuman` (K-024 U2), and the publish
+        # validator normalizes the string before checking it (M-7).
+        {"key": "start", "type": "human", "config": '{"waitsForHuman": true}',
+         "start": True},
         {"key": "done", "type": "message"},
     ],
     "transitions": [

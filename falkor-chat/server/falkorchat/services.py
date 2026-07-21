@@ -22,6 +22,7 @@ from typing import Any
 from redis.exceptions import ResponseError
 
 from .config import CallContext
+from .guards import CMP_KINDS, validate_cmp
 
 # `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
 # re-exported (redundant-alias idiom) as part of the service error surface: the
@@ -44,6 +45,12 @@ WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
 STEP_TYPES: frozenset[str] = frozenset(
     {"prompt", "tool", "decision", "human", "message", "wait", "agent"}
 )
+# Step types that park the run pending an outside actor (a person for `human`, a
+# signalling system for `wait` — mechanically identical to the engine, K-024 D-C). Both
+# MUST declare `config.waitsForHuman: true`: the executor's OUTCOME B keys on exactly
+# that flag, so a parking step without it self-loops (OUTCOME C) until the step budget
+# kills the run — a silent, expensive footgun best caught at authoring time.
+WAITING_STEP_TYPES: frozenset[str] = frozenset({"human", "wait"})
 
 # ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
 # The FalkorDB global TIMEOUT default is 1000 ms and writes ignore it; GraphRAG
@@ -111,6 +118,27 @@ def _serialize_opaque(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _normalize_opaque(value: Any) -> Any:
+    """The inverse of `_serialize_opaque`, for validating a spec before it is written.
+
+    `_validate_def_spec` sees `config`/`guard` **heterogeneously typed** (M-7), because
+    serialization to opaque strings happens *after* it, in `publish_workflow_def`: the
+    REST front door types both as `str` (`schemas.py`), while service-layer and MCP
+    callers hand over dicts. Validating without normalizing would either blow up on a
+    string (`AttributeError` → a 500 on `POST /workflow-defs`) or — worse — skip every
+    string-shaped value, letting **every REST-published def escape the invariants**
+    silently. So: a `str` is parsed as JSON when it can be, and returned unchanged when
+    it cannot (an opaque `"raw-string"` config stays exactly that); anything else is
+    already parsed and passes through.
+    """
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return value
+    return value
 
 
 class Services:
@@ -436,6 +464,13 @@ class Services:
         `from`/`to` references a key that is not a declared step. This is the
         service invariant that lets the repository's inner `MATCH (start/from/to
         …)` always resolve for a valid spec (QUERIES.md §11 note).
+
+        Two further invariants (K-024 U2) run **last**, after all of the above:
+        a `human`/`wait` step must declare `config.waitsForHuman: true`, and a
+        `cmp`-family transition guard must be structurally sound
+        (`guards.validate_cmp` → `WorkflowConfigError`). Running them last is
+        load-bearing: an older check must keep failing for its **own** reason, so a
+        new invariant can never mask — or make vacuous a test of — a pre-existing one.
         """
         if kind not in WORKFLOW_KINDS:
             raise WorkflowDefSpecError(
@@ -476,6 +511,28 @@ class Services:
                         f"transition {endpoint} {tr[endpoint]!r} is not a declared "
                         f"step key {sorted(declared)}"
                     )
+
+        # ── K-024 U2 invariants — deliberately LAST (see the docstring) ─────────
+        for step in steps:
+            if step.get("type") not in WAITING_STEP_TYPES:
+                continue
+            cfg = _normalize_opaque(step.get("config"))
+            if not isinstance(cfg, dict) or not cfg.get("waitsForHuman"):
+                raise WorkflowDefSpecError(
+                    f"step {step['key']!r} of type {step['type']!r} must declare "
+                    f"config.waitsForHuman: true — a parking step without it "
+                    f"self-loops until the step budget fails the run"
+                )
+
+        for tr in transitions:
+            guard = _normalize_opaque(tr.get("guard"))
+            # A guard that does not normalize to a dict, or that carries no `kind`, is
+            # **not a declaration this validator owns** — `{"expr":"x>0"}` and an opaque
+            # `"raw-string"` publish exactly as before. Only the cmp family is validated
+            # here; `{"kind":"llm"}`/`{"kind":"expr"}` keep their drive-time semantics.
+            if isinstance(guard, dict) and guard.get("kind") in CMP_KINDS:
+                validate_cmp(guard)
+
         return start_keys[0]
 
     def publish_workflow_def(

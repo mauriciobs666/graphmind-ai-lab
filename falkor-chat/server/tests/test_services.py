@@ -716,7 +716,9 @@ from falkorchat.services import (  # noqa: E402
 )
 
 VALID_STEPS = [
-    {"key": "start", "type": "human", "config": {"a": 1}, "start": True},
+    # `waitsForHuman` is mandatory on a `human`/`wait` step (K-024 U2 publish invariant).
+    {"key": "start", "type": "human", "config": {"a": 1, "waitsForHuman": True},
+     "start": True},
     {"key": "review", "type": "decision", "config": "raw-string"},
     {"key": "done", "type": "message"},  # no config → serializes to ""
 ]
@@ -746,7 +748,8 @@ def test_publish_workflow_def_derives_start_and_serializes_config_and_guard():
     assert pub["start_key"] == "start"                 # derived from start:True
     # steps handed to the repo carry only {key,type,config}; config is a string
     by_key = {s["key"]: s for s in pub["steps"]}
-    assert by_key["start"]["config"] == '{"a":1}'      # dict → compact JSON
+    # dict → compact JSON, stable key order
+    assert by_key["start"]["config"] == '{"a":1,"waitsForHuman":true}'
     assert by_key["review"]["config"] == "raw-string"  # str passthrough
     assert by_key["done"]["config"] == ""              # missing → ""
     assert "start" not in by_key["start"]              # start flag stripped
@@ -805,11 +808,16 @@ def test_publish_workflow_def_duplicate_step_key_raises_nothing_written():
     repo = FakeRepo()
     svc = make_service(repo)
     dup = [
-        {"key": "start", "type": "human", "start": True},
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
         {"key": "start", "type": "message"},
     ]
 
-    with pytest.raises(WorkflowDefSpecError):
+    # `match=` is load-bearing (B-2): the K-024 U2 invariants were added AFTER this
+    # check, so a type-only assertion would pass even if the duplicate-key check were
+    # deleted and some later invariant raised instead. Asserting the message keeps this
+    # test a real regression net for the rule it names.
+    with pytest.raises(WorkflowDefSpecError, match="duplicate step key"):
         _publish(svc, repo, steps=dup, transitions=[])
 
     assert repo.published == []
@@ -819,11 +827,11 @@ def test_publish_workflow_def_no_start_step_raises_nothing_written():
     repo = FakeRepo()
     svc = make_service(repo)
     no_start = [
-        {"key": "a", "type": "human"},
+        {"key": "a", "type": "human", "config": {"waitsForHuman": True}},
         {"key": "b", "type": "message"},
     ]
 
-    with pytest.raises(WorkflowDefSpecError):
+    with pytest.raises(WorkflowDefSpecError, match="exactly one start step"):
         _publish(svc, repo, steps=no_start, transitions=[])
 
     assert repo.published == []
@@ -833,11 +841,12 @@ def test_publish_workflow_def_multiple_start_steps_raises_nothing_written():
     repo = FakeRepo()
     svc = make_service(repo)
     two_starts = [
-        {"key": "a", "type": "human", "start": True},
+        {"key": "a", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
         {"key": "b", "type": "message", "start": True},
     ]
 
-    with pytest.raises(WorkflowDefSpecError):
+    with pytest.raises(WorkflowDefSpecError, match="exactly one start step"):
         _publish(svc, repo, steps=two_starts, transitions=[])
 
     assert repo.published == []
@@ -848,11 +857,12 @@ def test_publish_workflow_def_dangling_transition_from_raises_nothing_written():
     svc = make_service(repo)
     bad_tr = [{"from": "ghost", "to": "done", "on": "x", "order": 0}]
     steps = [
-        {"key": "start", "type": "human", "start": True},
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
         {"key": "done", "type": "message"},
     ]
 
-    with pytest.raises(WorkflowDefSpecError):
+    with pytest.raises(WorkflowDefSpecError, match="from 'ghost' is not a declared"):
         _publish(svc, repo, steps=steps, transitions=bad_tr)
 
     assert repo.published == []
@@ -863,11 +873,12 @@ def test_publish_workflow_def_dangling_transition_to_raises_nothing_written():
     svc = make_service(repo)
     bad_tr = [{"from": "start", "to": "ghost", "on": "x", "order": 0}]
     steps = [
-        {"key": "start", "type": "human", "start": True},
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
         {"key": "done", "type": "message"},
     ]
 
-    with pytest.raises(WorkflowDefSpecError):
+    with pytest.raises(WorkflowDefSpecError, match="to 'ghost' is not a declared"):
         _publish(svc, repo, steps=steps, transitions=bad_tr)
 
     assert repo.published == []

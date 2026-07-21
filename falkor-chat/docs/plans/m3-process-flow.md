@@ -473,6 +473,33 @@ clicks approve, killing a live run, instead of at seed time.
   the `_validate_def_spec` call site (§3.3 normalization box, U2) — **U1's deliverable is unaffected
   by M-7**.
 
+> **U2 ratifications of the three open items U1 left (O-1/O-2/O-3, coordination ledger).**
+> Recorded here so no later unit re-derives them differently. All three are **as U1 built
+> them** — U2 changed no `guards.py` behaviour, only called it.
+> - **O-1 · unwhitelisted path root: strict at publish, total at drive.** §3.2 contradicted
+>   itself (evaluation said "treat as missing ⇒ `False`", validation said
+>   `WorkflowConfigError`). Both are right *for their call site*: an unresolvable path is an
+>   **authoring defect** worth failing the publish, but at drive time it is only "a value that
+>   is not there". One validator, one flag — `validate_cmp(spec)` checks paths,
+>   `_evaluate_cmp` passes `check_paths=False`. **U2's publish call site uses the strict
+>   (default) form**, so `services._validate_def_spec` rejects a bad root. Both halves are
+>   pinned (`test_guards.py::test_an_undeclared_value_is_rejected_at_publish_but_total_at_
+>   drive_time`).
+> - **O-2 · `in` with a non-list literal: confirmed as-is — `False` at drive, NO publish
+>   rule.** Two reasons, the second decisive: (a) §3.2 enumerates the validator's rules
+>   exhaustively (unknown `op`, path root, missing `path`/`value`, `not` arity, caps) and a
+>   type rule on the literal is not among them — inventing one at implementation time is
+>   exactly the drift the O-list exists to prevent; (b) it would reject a shape that **works**:
+>   `_in(left, value)` delegates to `_contains`, which accepts a **string** container, so
+>   `{"op":"in","path":"ctx.tag","value":"abcdef"}` is a legitimate substring test. A rule
+>   naïvely spelled "`value` must be a list" would forbid it. A genuinely dead literal (an int)
+>   simply never fires — the same bias-to-not-fire every other missing/uncomparable case has.
+> - **O-3 · bare `ctx` as a path: confirmed — not a value.** Rejected by `validate_cmp`,
+>   `_MISSING` at drive. `ctx` is the whole run state, so `{"path":"ctx","op":"exists"}` would
+>   be trivially true (and `truthy` would mean "the run has any state at all") — a guard that
+>   looks like a data check and is actually a constant. Bare `output` **is** blessed (§3.2)
+>   because it is one step's raw output string, i.e. an actual value.
+
 **Trace rendering (gate M-6).** `GuardVerdict.rationale` is filled with a compact rendering
 (`"ctx.decision eq 'approve' → true"`). To make that reach the debug trace, U2 edits
 `_select_transition` (`executor.py:636`) so the judgment filter is
@@ -544,6 +571,20 @@ self-loops against the budget until `fail_run` — a silent, expensive footgun.
 > than a red test. Tightening them makes that class of failure impossible in future too.
 > These edits are named test-by-test so the reviewer can confirm no *other* existing test was
 > touched — see U2's done-condition (§6) and §7.
+
+> **As built (U2, 2026-07-20) — two notes where §3.3 was underspecified.**
+> - **Where the `waitsForHuman` check lives:** `services.WAITING_STEP_TYPES =
+>   {"human","wait"}`, checked with the same **truthiness** the engine uses
+>   (`config.get("waitsForHuman")`, `executor.py` OUTCOME B) rather than an `is True`
+>   identity test — a publish invariant that accepted a value the engine would then ignore
+>   (or vice versa) would be worse than no invariant.
+> - **Normalization helper:** `services._normalize_opaque` — the deliberate inverse of the
+>   existing `_serialize_opaque`, so the two shapes of the same field are handled by a
+>   matched pair rather than an ad-hoc `json.loads` at each check.
+> - **Handler signature:** the three handlers take `(step, config)` only. §3.3 calls them
+>   "pure and side-effect-free", and giving them `ctx`/`run`/`run_ctx` they must not use would
+>   have made that a comment instead of a fact. `config.fields` is read through a defensive
+>   list-of-strings view (author-supplied data must not raise inside a pure handler).
 
 **Deliberately *not* enforced (gate n-3, declined with reason):** "a `decision` step with outgoing
 transitions must have an unconditional default or `waitsForHuman`". It is a real footgun (OUTCOME C

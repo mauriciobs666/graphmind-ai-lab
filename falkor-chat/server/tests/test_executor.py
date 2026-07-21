@@ -342,7 +342,11 @@ class _MentionRejectingRegistry:
 TOOL_STEPS = [
     {"key": "answer", "type": "agent",
      "config": '{"tools":["post_message"],"maxIterations":4}'},
-    {"key": "end", "type": "task", "config": "{}"},   # terminal, non-agent → stub
+    # terminal step the *node* loop must not derail: it was `type:"task"` until K-024 U2
+    # made an unimplemented type a raising seam (D-E), which would have killed this
+    # Defect-B pin. `agent` keeps the step's role (it runs no tool and posts nothing) and
+    # its assertions unchanged.
+    {"key": "end", "type": "agent", "config": "{}"},
 ]
 TOOL_TRANSITIONS = [
     {"from": "answer", "to": "end", "on": "done", "guard": "", "order": 0},

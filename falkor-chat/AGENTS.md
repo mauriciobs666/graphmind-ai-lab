@@ -201,6 +201,34 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 - **Since-read `displayName` (K-014):** `read_thread_since`/`read_ws_since` (QUERIES.md §9.1/§9.2)
   carry `author.displayName` so the polling web client shows member names, not raw ids; clients
   tolerate `null`.
+- **Executor / workflow-def invariants (K-024 U2, `docs/plans/m3-process-flow.md` §3.3):**
+  - A `human` or `wait` step **must** declare `config.waitsForHuman: true` — enforced at
+    **publish** (`services._validate_def_spec`, `WorkflowDefSpecError`). Without it the step never
+    reaches the executor's OUTCOME B park and self-loops until the step budget fails the run.
+  - A `cmp`-family transition guard (`kind` ∈ `cmp|all|any|not`) is **structurally validated at
+    publish** (`guards.validate_cmp` → `WorkflowConfigError`): a typo'd `op` is an authoring error
+    at seed time, not a live run that parks forever. Path roots are **strict at publish and total
+    at drive** (an unwhitelisted root is rejected on publish, but only "missing" ⇒ `False` when a
+    run evaluates it). A guard with **no `kind`** (e.g. `{"expr":"x>0"}`) or one that does not
+    normalize to a dict is *not a declaration this validator owns* and publishes unchanged.
+  - Both invariants run **last** in `_validate_def_spec`, after the key-uniqueness / start-count /
+    dangling-endpoint checks, so an older check keeps failing for its own reason. `config`/`guard`
+    are **normalized first** (`_normalize_opaque`): the REST front door types them `str` while
+    service/MCP callers pass dicts, and a validator that skipped strings would let every
+    REST-published def escape both invariants silently.
+  - A `decision` step has **no side effect** — its semantics are entirely its outgoing guards; with
+    no outgoing transitions it is a terminal outcome node (run ends `done`).
+  - `wait` is **signal-driven, not timer-driven** (there is no scheduler — proposed K-028), and is
+    mechanically identical to `human` to the engine; only the `awaiting.kind` string differs.
+  - ⚠️ **Not enforced (n-3):** a `decision` step whose outgoing transitions are *all* conditional
+    and which does not declare `waitsForHuman` **self-loops to budget exhaustion**. The symmetric
+    invariant would retro-reject existing fixtures; filed as a proposed hardening with K-029.
+  - `prompt` / `tool` / `message` (and any unknown type) **raise** `NotImplementedError` from
+    `executor._execute_step` — the documented typed-handler seam (D-E). The M-1 fault net stamps
+    `fail_run` and re-raises. `agent` **without a wired LLM** deliberately keeps returning the empty
+    stub: it is the affordance the whole offline executor test estate rests on.
+  - `_drive_loop` is **SHA-locked** (`71055f756280`, see `docs/plans/m3-process-flow.md` §3.1) —
+    `_execute_step`, `_select_transition`, `_trace_step` and `resume` sit **outside** the lock.
 
 ---
 

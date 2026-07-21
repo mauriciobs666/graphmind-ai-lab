@@ -10,9 +10,10 @@ it holds **no Cypher** of its own (layering, AGENTS.md).
 seams so the whole engine (advance, NEXT audit trail, `AT_STEP` relink,
 suspend/resume, step budget, done/fail, tracing) is unit-testable with **stub**
 handlers/guards — no LLM, no network. The LLM-native agent-node loop (`type:'agent'`
-execution) and the fuzzy-guard judge prompt land in later units (U6–U8); here
-`_execute_step` is a deterministic Phase-1 stub and the guard judge is an injected
-callable.
+execution) and the fuzzy-guard judge prompt landed in U6–U8; the deterministic typed
+handlers (`decision`/`human`/`wait`, K-024 U2) are pure and offline by construction,
+and the guard judge remains an injected callable. `_execute_step` documents which step
+types the engine executes today and which are an explicit raising seam.
 
 The §2.1 loop, mapped to code (`_drive`):
 
@@ -47,7 +48,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .config import CallContext
-from .guards import GuardVerdict, evaluate_guard
+from .guards import CMP_KINDS, GuardVerdict, evaluate_guard, render_label
 from .repository import Repository, WorkflowRunNotFoundError
 from .services import InvalidSearchQueryError, ServiceError, UnknownMemberError
 from .tools import HumanHandoffSignal
@@ -72,6 +73,10 @@ MODEL_CORRECTABLE_TOOL_ERRORS: tuple[type[ServiceError], ...] = (
     UnknownMemberError,
     InvalidSearchQueryError,
 )
+# Guard kinds that contribute a `guard_judgment` trace line (M-6): the LLM judge's
+# verdicts **and** the deterministic `cmp` family. The unconditional default guard
+# judges nothing and is deliberately absent.
+TRACED_GUARD_KINDS: frozenset[str] = frozenset({"llm"}) | CMP_KINDS
 
 
 # ── defaults ─────────────────────────────────────────────────────────────────
@@ -197,6 +202,22 @@ def _assistant_turn(result: Any) -> dict[str, Any]:
             for c in result.tool_calls
         ],
     }
+
+
+def _str_list(value: Any) -> list[str]:
+    """A defensive list-of-strings view of an authored config list (`config.fields`).
+
+    Config is author-supplied data, so a non-list (or a list of non-strings) must not
+    raise inside a pure handler — it degrades to what it can describe."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _dumps(obj: Any) -> str:
+    """Serialize a step-output envelope compactly and deterministically (stable key order,
+    so a `StepRun.output` is byte-comparable across runs)."""
+    return json.dumps(obj, separators=(",", ":"), sort_keys=True)
 
 
 def _load_json_obj(raw: str | None) -> dict[str, Any]:
@@ -399,17 +420,100 @@ class WorkflowExecutor:
     ) -> StepResult:
         """Execute one step and return its `(output, on)`.
 
-        Dispatches on `Step.type` (§2.3): a `type:'agent'` node with a wired LLM runs
-        the bounded, tool-scoped agent loop (`_run_agent_node`, U8). Without a wired LLM
-        (the offline loop-engine tests, D2) — or for any other type in this cut — it
-        falls back to the deterministic no-op stub; the guard-based branching
-        (`_select_transition`) is what drives the engine there, so an empty result
-        exercises the whole loop without a network. The deterministic typed-step handler
-        library (§2.3) is a later slice.
+        Dispatches on `Step.type` (§2.3, `m3-process-flow.md` §3.3 / D-E). Four types are
+        executed today; the rest are an explicit, named seam:
+
+          * `agent` **with a wired LLM** → the bounded, tool-scoped agent loop
+            (`_run_agent_node`, U8).
+          * `agent` **without an LLM** → the deterministic empty stub. This is
+            **deliberate, not a fall-through accident** (plan F-3): it is the affordance
+            the offline loop-engine tests are built on — guard-based branching
+            (`_select_transition`) drives the whole §2.1 loop with no network, so an
+            empty result still exercises advance / suspend / re-loop / terminate. Never
+            "tidy" it into a raise.
+          * `decision` / `human` / `wait` → the pure typed handlers below (K-024 U2).
+            They have **no side effect**: their whole job is to produce an auditable
+            `StepResult` describing what the step is (or is waiting for). All branching
+            stays in the outgoing guards.
+          * `prompt` / `tool` / `message` and any unknown type → `NotImplementedError`,
+            the documented typed-handler seam (D-E). It reaches the M-1 fault net in
+            `_drive`, which stamps `fail_run` with the message and re-raises — a named
+            terminal, never a silent no-op that "succeeds" doing nothing.
         """
-        if step.get("type") == "agent" and self._llm is not None:
+        step_type = step.get("type")
+        if step_type == "agent":
+            if self._llm is None:
+                return StepResult(output="", on="done")
             return self._run_agent_node(ctx, run, step, config, run_ctx)
-        return StepResult(output="", on="done")
+        if step_type == "decision":
+            return self._run_decision_node(step, config)
+        if step_type == "human":
+            return self._run_human_node(step, config)
+        if step_type == "wait":
+            return self._run_wait_node(step, config)
+        raise NotImplementedError(
+            f"step type {step_type!r} is not implemented in this cut "
+            f"(typed-handler seam); see docs/plans/m3-process-flow.md §D-E"
+        )
+
+    # ── typed step handlers (K-024 U2 — pure, side-effect-free) ────────────────
+
+    @staticmethod
+    def _run_decision_node(
+        step: dict[str, Any], config: dict[str, Any]
+    ) -> StepResult:
+        """A `decision` node: a pure branch point. It computes nothing — its semantics
+        live entirely in its outgoing guards, and with **zero** outgoing transitions it is
+        a terminal outcome node (the run completes `done` there, OUTCOME C).
+
+        The envelope key is `node`, **not** `decision` (plan n-1): `decision` is already
+        the name of an approval *value* in `ctx` (`ctx.decision`), and a guard path reading
+        `output.decision` would then mean something quite different from `ctx.decision`.
+        """
+        return StepResult(
+            output=_dumps({"node": {"step": step["key"]}}),
+            on="done",
+            trace=[("node_note", "decision node — branching in guards")],
+        )
+
+    @staticmethod
+    def _run_human_node(step: dict[str, Any], config: dict[str, Any]) -> StepResult:
+        """A `human` node: park until a person supplies the declared fields.
+
+        The park itself is the existing OUTCOME B (`config.waitsForHuman` + no firing
+        guard) — this handler only *describes* the wait. Because the envelope lands on the
+        `StepRun.output`, `GET /workflow-runs/{id}/step-runs` tells a client exactly what
+        the run is waiting for with no new query. `on` stays `"done"`: `on` is vestigial
+        (plan F-1) and inventing an `"await"` value for a dead field would be inconsistent.
+        """
+        return StepResult(
+            output=_dumps({"awaiting": {
+                "kind": "human",
+                "prompt": config.get("prompt", ""),
+                "assignee": config.get("assignee", ""),
+                "fields": _str_list(config.get("fields")),
+            }}),
+            on="done",
+        )
+
+    @staticmethod
+    def _run_wait_node(step: dict[str, Any], config: dict[str, Any]) -> StepResult:
+        """A `wait` node: park until an external actor signals back (D-C).
+
+        **Signal-driven, not timer-driven — this system has no scheduler** (no periodic
+        worker, no due-run sweep; `BackgroundTasks` are request-scoped). Real timers are
+        proposed backlog item K-028. To the engine a `wait` step is therefore
+        **mechanically identical to `human`** (plan m-7): same park, same publish
+        invariant, same input path, same guard mechanism. The only difference is the
+        `awaiting.kind` string, which exists so a client renders the right prompt.
+        """
+        return StepResult(
+            output=_dumps({"awaiting": {
+                "kind": "signal",
+                "signal": config.get("signal", ""),
+            }}),
+            on="done",
+        )
 
     def _run_agent_node(
         self, ctx: CallContext, run: dict[str, Any], step: dict[str, Any],
@@ -620,9 +724,16 @@ class WorkflowExecutor:
         default — the empty guard is **lowest priority** (§2.5), firing only when no
         conditional guard matches. Within each class, `TRANSITION.order` breaks ties.
         Each guard is resolved by `guards.evaluate_guard` (empty → unconditional;
-        `{"kind":"llm"}` → the injected judge with the bias-to-suspend policy; any other
-        `kind` → `NotImplementedError`, the M7 seam). Only LLM-judged guards contribute a
-        `guard_judgment` to the trace (§5) — the unconditional default judges nothing.
+        `{"kind":"llm"}` → the injected judge with the bias-to-suspend policy;
+        `{"kind":"cmp"|"all"|"any"|"not"}` → the deterministic comparator; any other
+        `kind` → `NotImplementedError`, the M7 seam). Every *judged* guard contributes a
+        `guard_judgment` to the trace (§5, M-6) — LLM and `cmp`-family alike; the
+        unconditional default judges nothing and so traces nothing.
+
+        The traced label is the guard's own `text` when it has one (LLM guards) and
+        `guards.render_label` otherwise: a `cmp` guard carries no `text`, and
+        `_trace_step`'s `f"{label} -> …"` payload would otherwise open with a bare
+        `" -> "` and name nothing.
         """
         ordered = sorted(transitions, key=lambda t: (t["guard"] == "", t["order"]))
         judgments: list[tuple[dict[str, Any], str, GuardVerdict]] = []
@@ -633,8 +744,10 @@ class WorkflowExecutor:
                 thread=result.thread, judge=self._guard_judge,
             )
             parsed = _load_json_obj(guard)
-            if parsed.get("kind") == "llm":
-                judgments.append((tr, parsed.get("text", ""), verdict))
+            if parsed.get("kind") in TRACED_GUARD_KINDS:
+                judgments.append(
+                    (tr, parsed.get("text") or render_label(parsed), verdict)
+                )
             if verdict.decision:
                 return _TransitionDecision(firing=tr, judgments=judgments)
         return _TransitionDecision(firing=None, judgments=judgments)
@@ -687,8 +800,13 @@ class WorkflowExecutor:
     ) -> None:
         """Emit the debug trace records for one executed step: a `node_rationale` for the
         execution, then the node's own collected events (llm prompts/responses, tool
-        calls/results, any exhaustion note — U8), then one `guard_judgment` per LLM guard
-        judged. `seq` orders events within the StepRun (§12.10). A `NullTracer` no-ops (AC-5)."""
+        calls/results, any exhaustion note — U8), then one `guard_judgment` per judged
+        guard (LLM **and** `cmp`-family, M-6). `seq` orders events within the StepRun
+        (§12.10). A `NullTracer` no-ops (AC-5).
+
+        The judgment payload is `"{label} -> {decision}: {rationale}"`. `_select_transition`
+        guarantees a non-empty label for every judged guard; the empty-label branch here is
+        the belt that keeps a trace line from ever opening with a bare `" -> "`."""
         seq = 0
         tracer.record(
             ctx.ws, step_run_id=step_run_id, seq=seq, kind="node_rationale",
@@ -699,11 +817,12 @@ class WorkflowExecutor:
             tracer.record(
                 ctx.ws, step_run_id=step_run_id, seq=seq, kind=kind, payload=payload,
             )
-        for _tr, text, verdict in decision.judgments:
+        for _tr, label, verdict in decision.judgments:
             seq += 1
+            prefix = f"{label} -> " if label else ""
             tracer.record(
                 ctx.ws, step_run_id=step_run_id, seq=seq, kind="guard_judgment",
-                payload=f"{text} -> {verdict.decision}: {verdict.rationale}",
+                payload=f"{prefix}{verdict.decision}: {verdict.rationale}",
             )
 
     def _link_emissions(
