@@ -20,6 +20,8 @@ from .schemas import (
     CreateThreadIn,
     PostMessageIn,
     PublishWorkflowDefIn,
+    StartWorkflowRunIn,
+    SubmitWorkflowInputIn,
 )
 from .services import Services
 
@@ -239,6 +241,36 @@ def build_router(
         key: str, version: str, ctx: CallContext = Depends(get_context)
     ):
         return services.materialize_def(ctx, key=key, version=version)
+
+    # ── §12 Workflow-run start + human/signal input (K-024 U3) ────────────────
+    # The non-chat front door for a `kind:'process'` run: start it from a snapshot
+    # with no trigger `Message` (§12.12), then advance each parked `human`/`wait`
+    # step with structured input (§12.13). Driving is **synchronous** — a process
+    # drive is pure graph work with no LLM, so it is fast and deterministically
+    # testable; D-G is what makes that safe at the HTTP boundary.
+    #
+    # Error map (all app-level handlers): 404 unknown run · 409 not parked / lost
+    # the resume CAS · 400 rejected input or malformed guard · 503 engine unwired.
+    # A fault *during* the drive is NOT an error status: the run is already
+    # correctly terminal in the graph, so it comes back 201/200 carrying
+    # `{"status": "failed", "error": …}`.
+
+    @router.post("/workflow-runs", status_code=201)
+    def start_workflow_run(
+        body: StartWorkflowRunIn, ctx: CallContext = Depends(get_context)
+    ):
+        return services.start_workflow_run(
+            ctx, def_key=body.defKey, version=body.version, run_ctx=body.ctx,
+            trace=body.trace, max_steps=body.maxSteps,
+        )
+
+    @router.post("/workflow-runs/{run_id}/input")
+    def submit_workflow_input(
+        body: SubmitWorkflowInputIn,
+        run_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.submit_workflow_input(ctx, run_id=run_id, input=body.input)
 
     # ── §12 Workflow-run inspection (U12 — AC-5 observability seam) ───────────
     # Thin, size-bounded RO pass-throughs so QA can read a run / its step-runs /

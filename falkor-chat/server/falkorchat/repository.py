@@ -71,6 +71,27 @@ class WorkflowRunNotFoundError(Exception):
     """
 
 
+class WorkflowRunNotWaitingError(Exception):
+    """Input was submitted to a run that is not parked (`waiting`) (K-024 D-G).
+
+    The §12.13 resume-with-ctx CAS returns zero rows for **two** reasons — the run
+    does not exist, or it exists but is not `waiting` — and the query cannot tell
+    them apart. The service splits them with a prior `get_run`: absent →
+    `WorkflowRunNotFoundError` (404); present-but-not-waiting (or the CAS lost to a
+    concurrent submitter) → this (409). Re-exported by `services`.
+    """
+
+
+class WorkflowInputRejectedError(Exception):
+    """Submitted run input (or a start `ctx`) failed validation (K-024 D-H/M-2).
+
+    Raised **before anything is written and before any step budget is consumed**:
+    a reserved key (`threadId`/`error`), a key the parked step does not declare, a
+    value outside the step's `config.expects` list, or a merged ctx over the size
+    bound. 400. Re-exported by `services`.
+    """
+
+
 class StepBudgetExceededError(Exception):
     """A run exceeded its `maxSteps` budget (M3 §7 / §12.5).
 
@@ -1103,6 +1124,50 @@ class Repository:
             "stepCount": row[3],
         }
 
+    def start_run_untriggered(
+        self, ws: str, *, run_id: str, def_key: str, def_version: str,
+        started_at: int, ctx: str, trace: bool, max_steps: int,
+    ) -> dict[str, Any] | None:
+        """Begin a run with **no** chat trigger message. QUERIES.md §12.12.
+
+        Parent: §12.1 (`start_run`), minus the `MATCH (trigger:Message …)` anchor
+        and the `TRIGGERED_BY` edge — a `kind:'process'` run (K-024) is started from
+        REST/API, so there is no `Message`, no `Thread` and nothing to link.
+        Deliberately a **second, self-contained write path** rather than an
+        `OPTIONAL MATCH` + `FOREACH` conditional inside §12.1 (the §4
+        first/subsequent doctrine; it sidesteps the empty-row-collapse bug class).
+
+        Single anchor ⇒ `None` = the snapshot has no `START` (or `(key, version)`
+        does not exist) and **nothing is written**. `waitingThreadId` starts `''`
+        and stays `''` — a process run has no thread, which is why §12.9's lookup
+        must never be called with an empty `threadId` (plan F-5/F-6).
+        """
+        res = self._graph(ws).query(
+            "MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})"
+            "-[:START]->(start:Step) "
+            "CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, "
+            "                       defVersion: $defVersion, status: 'running', "
+            "                       startedAt: $startedAt, ctx: $ctx, trace: $trace, "
+            "                       maxSteps: $maxSteps, stepCount: 0, "
+            "                       waitingThreadId: ''}) "
+            "CREATE (r)-[:OF_DEF]->(snap) "
+            "CREATE (r)-[:AT_STEP]->(start) "
+            "RETURN r.runId AS runId, start.key AS startKey, r.status AS status, "
+            "       r.stepCount AS stepCount",
+            {
+                "runId": run_id, "defKey": def_key, "defVersion": def_version,
+                "startedAt": started_at, "ctx": ctx, "trace": trace,
+                "maxSteps": max_steps,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "runId": row[0], "startKey": row[1], "status": row[2],
+            "stepCount": row[3],
+        }
+
     def record_step_and_advance(
         self, ws: str, *, run_id: str, step_run_id: str, step_status: str,
         started_at: int, ended_at: int, input: str, output: str, to_step_uid: str,
@@ -1180,6 +1245,36 @@ class Repository:
             "SET r.status = 'running', r.waitingThreadId = '' "
             "RETURN r.runId AS runId, r.status AS status",
             {"runId": run_id},
+        )
+        return self._status_row(res)
+
+    def resume_run_with_ctx(
+        self, ws: str, *, run_id: str, ctx: str
+    ) -> dict[str, Any] | None:
+        """Guarded CAS `waiting → running` **that also writes `ctx`**. §12.13.
+
+        Parent: §12.4 (`resume_run`), which stays in use unchanged for the
+        chat/trigger resume path (no ctx is submitted there). This variant is §12.4
+        plus one `SET` term and is the human/signal-input path for a `process` run
+        (K-024 **D-F**): the submitted input, already validated and merged into the
+        run ctx service-side, rides **inside** the CAS so the write and the flip
+        cannot be split.
+
+        Zero-row contract (live-verified, QUERIES.md §12.13 — the whole D-F argument
+        rests on it): a run that is not `waiting` matches the node but fails the
+        `WHERE` ⇒ **`None` and NOTHING is written — neither the status flip nor the
+        ctx**. Only the CAS *winner's* ctx is ever persisted, so "which input
+        advanced the run" and "which input is in `ctx`" can never disagree; the
+        loser's input is rejected (409), never silently lost. A missing `runId` is
+        likewise zero rows — the service splits the two cases with a prior
+        `get_run` (absent → 404, present-but-not-waiting → 409).
+        """
+        res = self._graph(ws).query(
+            "MATCH (r:WorkflowRun {runId: $runId}) "
+            "WHERE r.status = 'waiting' "
+            "SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx "
+            "RETURN r.runId AS runId, r.status AS status",
+            {"runId": run_id, "ctx": ctx},
         )
         return self._status_row(res)
 

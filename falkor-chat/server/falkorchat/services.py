@@ -22,7 +22,7 @@ from typing import Any
 from redis.exceptions import ResponseError
 
 from .config import CallContext
-from .guards import CMP_KINDS, validate_cmp
+from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 
 # `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
 # re-exported (redundant-alias idiom) as part of the service error surface: the
@@ -35,7 +35,16 @@ from .repository import Repository
 from .repository import StepBudgetExceededError as StepBudgetExceededError
 from .repository import WorkflowDefNotFoundError as WorkflowDefNotFoundError
 from .repository import WorkflowDefSpecError as WorkflowDefSpecError
+from .repository import WorkflowInputRejectedError as WorkflowInputRejectedError
 from .repository import WorkflowRunNotFoundError as WorkflowRunNotFoundError
+from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
+
+# `MAX_CONFIG_LEN` is the opaque-payload bound declared once at the REST boundary;
+# the service reuses that single number for the bound pydantic structurally CANNOT
+# enforce — the size of the **merged** run ctx (plan m-5). `schemas.py` is a leaf
+# module (pydantic only), so this import adds no cycle and no layering inversion:
+# the constant flows boundary → service, never logic service → boundary.
+from .schemas import MAX_CONFIG_LEN
 
 # ── §11 workflow spec whitelists (plan §B5 / DESIGN §6.1) ───────────────────────
 WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
@@ -51,6 +60,34 @@ STEP_TYPES: frozenset[str] = frozenset(
 # that flag, so a parking step without it self-loops (OUTCOME C) until the step budget
 # kills the run — a silent, expensive footgun best caught at authoring time.
 WAITING_STEP_TYPES: frozenset[str] = frozenset({"human", "wait"})
+
+# ── §12 run-ctx keys the engine owns — never caller-supplied (K-024 M-2/F-6) ────
+# `threadId` is the resume denorm anchor: `_drive_loop`'s suspend copies it into
+# `WorkflowRun.waitingThreadId`, and `trigger.py` step 2 resumes ANY waiting run
+# whose `waitingThreadId` matches a posted message's thread — before it even looks
+# at mentions. A caller-set `threadId` would therefore park a process run against a
+# live chat thread and let the next ordinary human message drive it one step with
+# no input and no guard data. `error` is the diagnostic note `fail_run` stamps.
+# Enforced in the SERVICE (both the start ctx and submitted input), not only in
+# `schemas.py`: MCP tools and direct service callers never see a pydantic model.
+RESERVED_CTX_KEYS: frozenset[str] = frozenset({"threadId", "error"})
+
+# Statuses a run may legitimately hold after the executor's M-1 fault net has
+# stamped it (K-024 D-G / m-12). Anything else — notably a still-`running` zombie —
+# means the fault escaped before `fail_run` landed, and the service re-raises so the
+# caller gets a 500 rather than a success-shaped envelope describing a broken run.
+TERMINAL_OR_PARKED_STATUSES: frozenset[str] = frozenset({"failed", "done", "waiting"})
+
+
+class WorkflowEngineDisabledError(RuntimeError):
+    """The workflow executor is not wired into this app (K-024 D-G, folds OQ-1).
+
+    A **named** `RuntimeError` subclass on purpose: it maps cleanly to 503 in
+    `app._register_error_handlers` without a blanket `RuntimeError` handler that
+    would mask genuine bugs, and any existing `pytest.raises(RuntimeError)` stays
+    green. Lives here, not in `repository.py`: wiring the engine is a service-layer
+    concern and no repository code can raise it.
+    """
 
 # ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
 # The FalkorDB global TIMEOUT default is 1000 ms and writes ignore it; GraphRAG
@@ -118,6 +155,23 @@ def _serialize_opaque(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _load_json_dict(raw: Any) -> dict[str, Any]:
+    """Deserialize an opaque stored `ctx` into a dict; `{}` for anything unusable.
+
+    A run's `ctx` is a flat serialized string (rule 8). Never raise here — a run
+    whose ctx got corrupted must still be advanceable rather than permanently 500.
+    """
+    parsed = _normalize_opaque(raw) if raw else None
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _str_values(value: Any) -> list[str]:
+    """A defensive list-of-strings view over author-supplied config data."""
+    if not isinstance(value, list):
+        return []
+    return [v for v in value if isinstance(v, str)]
 
 
 def _normalize_opaque(value: Any) -> Any:
@@ -626,7 +680,7 @@ class Services:
 
     def _require_executor(self):
         if self._executor is None:
-            raise RuntimeError(
+            raise WorkflowEngineDisabledError(
                 "workflow executor is not wired — enable the workflow engine "
                 "(app._build_default_app) before starting/resuming runs"
             )
@@ -634,40 +688,272 @@ class Services:
 
     def start_workflow_run(
         self, ctx: CallContext, *, def_key: str, version: str,
-        trigger_msg_id: str, trace: bool = False,
+        trigger_msg_id: str | None = None, run_ctx: dict[str, Any] | None = None,
+        trace: bool = False, max_steps: int | None = None,
     ) -> dict[str, Any]:
         """Start a run for a materialized def snapshot and drive it (FR-7/AC-1).
 
-        Mints the run id + start clock, resolves the trigger message's thread into
-        the initial `ctx` (`{"threadId": …}` — the resume denorm anchor, §2.4),
-        starts the run at the snapshot's START step with the executor's step budget,
-        then drives the §2.1 loop out-of-band-ready (synchronous here; a background
-        task in the trigger wiring). Raises `WorkflowRunNotFoundError` when the
-        snapshot or trigger message is missing (nothing is started).
+        Two self-contained start paths — the §4 first/subsequent doctrine, never a
+        conditional write (K-024 D-B / plan F-2):
+
+          * **`trigger_msg_id` given** — the chat path, byte-identical to before:
+            `repo.start_run` (§12.1) with the `TRIGGERED_BY` edge, and the trigger
+            message's thread seeded into the run `ctx` (`{"threadId": …}`, the
+            §2.4 resume denorm anchor).
+          * **`trigger_msg_id is None`** — the process path (§12.12): no `Message`,
+            no `Thread`, no `TRIGGERED_BY`. The initial ctx is the caller's
+            `run_ctx` (default `{}`).
+
+        `max_steps` lets a `process` def declare its own budget (D-H part c —
+        `access-request@v1` passes 24); omitted ⇒ the executor's global default.
+        Raises `WorkflowInputRejectedError` on a reserved ctx key (M-2, below),
+        `WorkflowRunNotFoundError` when the snapshot (or trigger message) anchor
+        misses — nothing is started in either case. A fault *during the drive* is
+        caught per D-G: the run is already correctly terminal in the graph, so the
+        caller gets `{"status": "failed", "error": …}`, not a traceback.
         """
         executor = self._require_executor()
-        msg = self._repo.get_message(ctx.ws, msg_id=trigger_msg_id)
-        thread_id = msg["threadId"] if msg else ""
         run_id = self._id()
         started_at = self._clock()
-        run_ctx = json.dumps(
-            {"threadId": thread_id}, separators=(",", ":"), sort_keys=True
-        )
-        started = self._repo.start_run(
-            ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
-            started_at=started_at, trigger_msg_id=trigger_msg_id, ctx=run_ctx,
-            trace=trace, max_steps=executor.step_budget,
-        )
+        budget = executor.step_budget if max_steps is None else max_steps
+
+        if trigger_msg_id is not None:
+            msg = self._repo.get_message(ctx.ws, msg_id=trigger_msg_id)
+            thread_id = msg["threadId"] if msg else ""
+            initial_ctx = json.dumps(
+                {"threadId": thread_id}, separators=(",", ":"), sort_keys=True
+            )
+            started = self._repo.start_run(
+                ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
+                started_at=started_at, trigger_msg_id=trigger_msg_id,
+                ctx=initial_ctx, trace=trace, max_steps=budget,
+            )
+        else:
+            # M-2/F-6: reject engine-owned keys BEFORE anything is written. A
+            # caller-set `threadId` would park this run against a real chat thread
+            # and let `trigger.py` step 2 advance it on the next ordinary message.
+            self._reject_reserved_keys(run_ctx or {}, where="run ctx")
+            initial_ctx = self._dump_ctx(run_ctx or {})
+            started = self._repo.start_run_untriggered(
+                ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
+                started_at=started_at, ctx=initial_ctx, trace=trace,
+                max_steps=budget,
+            )
+
         if started is None:
             raise WorkflowRunNotFoundError(
                 f"cannot start run: snapshot {def_key!r}@{version!r} has no START "
                 f"or trigger message {trigger_msg_id!r} is missing in this workspace"
             )
-        status = executor.run(ctx, run_id=run_id)
-        return {
+        status, error, _fault_ctx = self._drive_or_fault(
+            ctx, run_id=run_id, drive=lambda: executor.run(ctx, run_id=run_id)
+        )
+        out = {
             "runId": run_id, "status": status, "defKey": def_key,
             "defVersion": version, "trace": trace,
         }
+        if error is not None:
+            out["error"] = error
+        return out
+
+    def submit_workflow_input(
+        self, ctx: CallContext, *, run_id: str, input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Advance a parked (`waiting`) run with human / external-signal input.
+
+        The non-chat half of D-B: a `human` or `wait` step parks because its
+        outgoing guards read data that is not in `ctx` yet; this supplies that data
+        and lets the same step re-execute against it.
+
+        Order is load-bearing:
+          1. `get_run` → absent ⇒ `WorkflowRunNotFoundError` (404).
+          2. not `waiting` ⇒ `WorkflowRunNotWaitingError` (409) — nothing to unblock.
+          3. **Validate before touching anything (D-H):** reserved keys, then the
+             parked step's own declarations (`config.fields` / `config.signal` /
+             `config.expects`), resolved from `run["atStepKey"]` + `get_snapshot`
+             — two existing RO reads, **no new query**. A rejected value is a free
+             400: nothing written, no step budget consumed, so ordinary human
+             mistakes are unbounded and cost nothing.
+          4. Merge **flat** into the run ctx (so guards read `ctx.decision`, not
+             `ctx.input.decision`) and bound the **merged** size here — pydantic
+             only ever sees the submitted input, never the ctx it merges into (m-5).
+          5. **One query (D-F):** the merged ctx rides inside the resume CAS
+             (§12.13). Zero rows ⇒ the run stopped being `waiting` under us (a
+             concurrent submitter won) ⇒ 409 with **nothing written** — the input is
+             visibly rejected, never silently lost, and never a wrong branch.
+
+        A drive fault after that point is D-G's failed envelope, not a 500.
+        """
+        executor = self._require_executor()
+        run = self._repo.get_run(ctx.ws, run_id=run_id)
+        if run is None:
+            raise WorkflowRunNotFoundError(
+                f"workflow run {run_id!r} not found in this workspace"
+            )
+        if run.get("status") != "waiting":
+            raise WorkflowRunNotWaitingError(
+                f"workflow run {run_id!r} is {run.get('status')!r}, not 'waiting' — "
+                f"there is nothing to unblock"
+            )
+
+        self._reject_reserved_keys(input, where="input")
+        self._validate_against_parked_step(ctx, run, input)
+
+        merged = _load_json_dict(run.get("ctx"))
+        merged.update(input)
+        merged_json = self._dump_ctx(merged)
+        if len(merged_json) > MAX_CONFIG_LEN:
+            raise WorkflowInputRejectedError(
+                f"merged run ctx would be {len(merged_json)} characters, over the "
+                f"{MAX_CONFIG_LEN}-character bound"
+            )
+
+        status, error, fault_ctx = self._drive_or_fault(
+            ctx, run_id=run_id,
+            drive=lambda: executor.resume(
+                ctx, run_id=run_id, run_ctx_json=merged_json
+            ),
+        )
+        if status is None:
+            # The CAS found the run no longer `waiting` — neither the flip nor the
+            # ctx was written (§12.13's live-verified zero-row contract).
+            raise WorkflowRunNotWaitingError(
+                f"workflow run {run_id!r} was resumed concurrently — the input was "
+                f"not applied; re-read the run and retry"
+            )
+        # On the clean path the merged ctx IS the graph's ctx (the CAS wrote exactly
+        # it). On the fault path the engine's net has since rewritten `ctx` with its
+        # diagnostic note, so the envelope reports **that** — status and ctx from one
+        # post-fault observation, never a re-read status beside a hoped-for ctx.
+        out = {
+            "runId": run_id, "status": status,
+            "ctx": merged if fault_ctx is None else fault_ctx,
+        }
+        if error is not None:
+            out["error"] = error
+        return out
+
+    # ── §12 input helpers (K-024 D-G / D-H / M-2) ────────────────────────────
+
+    @staticmethod
+    def _reject_reserved_keys(payload: dict[str, Any], *, where: str) -> None:
+        """M-2/F-6: engine-owned ctx keys are never caller-supplied."""
+        offending = sorted(RESERVED_CTX_KEYS & set(payload))
+        if offending:
+            raise WorkflowInputRejectedError(
+                f"reserved key(s) {offending} may not be set in the {where} — "
+                f"they are owned by the engine (see RESERVED_CTX_KEYS)"
+            )
+
+    @staticmethod
+    def _dump_ctx(value: dict[str, Any]) -> str:
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+    def _validate_against_parked_step(
+        self, ctx: CallContext, run: dict[str, Any], input: dict[str, Any]
+    ) -> None:
+        """D-H: check submitted input against the parked step's own declarations.
+
+        `suspend_run` does not clear `AT_STEP`, so a parked run always knows which
+        step it sits on — `run["atStepKey"]` plus `get_snapshot` (§11.5) resolves the
+        step's `config` with no new query.
+
+        **Permissive fallback, deliberately:** a step that declares neither `fields`
+        (`human`) nor `signal` (`wait`) accepts any non-reserved key. That is what
+        makes the invariant non-retroactive — no existing def or fixture can start
+        failing because it never declared a field list. An unresolvable parked step
+        (snapshot or step gone, opaque config) degrades the same way: a workspace
+        with a deleted snapshot must not turn every input into an engine error.
+        """
+        step_key = run.get("atStepKey")
+        if not step_key:
+            return
+        snapshot = self._repo.get_snapshot(
+            ctx.ws, key=run.get("defKey"), version=run.get("defVersion")
+        )
+        if snapshot is None:
+            return
+        step = next(
+            (s for s in snapshot.get("steps", []) if s.get("key") == step_key), None
+        )
+        if step is None:
+            return
+        config = _normalize_opaque(step.get("config"))
+        if not isinstance(config, dict):
+            return
+
+        # An explicitly-declared EMPTY `fields` list is still a declaration (accepts
+        # nothing); only an ABSENT declaration triggers the permissive fallback.
+        accepted: set[str] | None = None
+        if step.get("type") == "human" and config.get("fields") is not None:
+            accepted = set(_str_values(config.get("fields")))
+        elif step.get("type") == "wait" and config.get("signal"):
+            accepted = {str(config["signal"])}
+
+        if accepted is not None:
+            undeclared = sorted(set(input) - accepted)
+            if undeclared:
+                raise WorkflowInputRejectedError(
+                    f"key(s) {undeclared} are not declared by the parked step "
+                    f"{step_key!r} (accepts {sorted(accepted)})"
+                )
+
+        expects = config.get("expects")
+        if isinstance(expects, dict):
+            for field, allowed in expects.items():
+                # A non-list `allowed` is not an allowed-value declaration — skip it
+                # rather than invent a rule §3.4 does not state.
+                if field not in input or not isinstance(allowed, list):
+                    continue
+                if input[field] not in allowed:
+                    raise WorkflowInputRejectedError(
+                        f"value {input[field]!r} for {field!r} is not one of "
+                        f"{allowed} declared by step {step_key!r}"
+                    )
+
+    def _drive_or_fault(
+        self, ctx: CallContext, *, run_id: str, drive: Callable[[], str | None],
+    ) -> tuple[str | None, str | None, dict[str, Any] | None]:
+        """Run `drive`, converting a drive-time engine fault into D-G's envelope.
+
+        Returns `(status, error, fault_ctx)`. On the clean path `error` and
+        `fault_ctx` are `None`; on the fault path **both** `status` and `fault_ctx`
+        come from the *same* post-fault `get_run` re-read, so every field of the
+        envelope reports graph truth from one observation. Reporting a re-read
+        status beside the caller's submitted ctx would only half-apply m-12's rule,
+        and the two could then disagree in exactly the situation where a reader most
+        needs them consistent — the failed envelope must carry the engine's own
+        diagnostic `ctx` note, not what the caller hoped happened.
+
+        The executor's M-1 fault net has already `fail_run`-stamped the run before
+        re-raising, so the run **is** terminal and correct in the graph: a 500
+        traceback would misreport a correctly-recorded terminal run as a server bug
+        and break exactly the audit property DESIGN §6.3 exists to prove.
+
+        Two deliberate limits:
+          * Only `NotImplementedError` (the typed-handler seam) and
+            `WorkflowConfigError` (a malformed guard reaching evaluation) are caught,
+            and only out of the drive call. Faults raised *before* anything is
+            written keep their own status codes. **Budget exhaustion is not here and
+            must never be** — `_fail_budget` *returns* `"failed"` through the normal
+            path and raises nothing (plan m-11).
+          * The reported status comes from that re-read, never a guess. If the graph
+            says the run is still `running` (or the run has vanished), the fault
+            escaped before `fail_run` landed — re-raise, because a 500 is a better
+            answer than a success envelope describing a zombie run (plan m-12).
+        """
+        try:
+            return drive(), None, None
+        except (NotImplementedError, WorkflowConfigError) as exc:
+            run = self._repo.get_run(ctx.ws, run_id=run_id)
+            status = run.get("status") if run else None
+            if status not in TERMINAL_OR_PARKED_STATUSES:
+                raise
+            return (
+                status,
+                f"{type(exc).__name__}: {exc}",
+                _load_json_dict(run.get("ctx")),
+            )
 
     def resume_workflow_run(
         self, ctx: CallContext, *, run_id: str
@@ -723,5 +1009,13 @@ class Services:
         Index-anchored on `WorkflowRun.status` + the denormed `waitingThreadId` (no new
         index). The trigger (§6) uses this to route a human reply to a waiting run before
         it considers @mention-to-start. `None` when nothing is parked in this thread.
+
+        **An empty `thread_id` short-circuits to `None` without touching the graph**
+        (plan F-5): a `kind:'process'` run parks with `waitingThreadId = ''` because
+        it has no thread, so an empty-string lookup would match every parked process
+        run and hand one of them a chat reply. No caller passes `''` today — this
+        keeps it that way defensively, in the service rather than in the Cypher.
         """
+        if not thread_id:
+            return None
         return self._repo.find_waiting_run_for_thread(ctx.ws, thread_id=thread_id)

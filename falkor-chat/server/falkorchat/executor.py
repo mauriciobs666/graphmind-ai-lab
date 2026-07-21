@@ -305,12 +305,27 @@ class WorkflowExecutor:
             raise WorkflowRunNotFoundError(run_id)
         return self._drive(ctx, run)
 
-    def resume(self, ctx: CallContext, *, run_id: str) -> str | None:
+    def resume(
+        self, ctx: CallContext, *, run_id: str, run_ctx_json: str | None = None
+    ) -> str | None:
         """Resume a parked (`waiting`) run on a human reply. The `waiting→running`
         CAS is single-flight (§12.4): if it does not apply (the run is not waiting,
         or a concurrent reply already resumed it), returns `None` without driving.
-        Otherwise drives the loop and returns the terminal status."""
-        cas = self._repo.resume_run(ctx.ws, run_id=run_id)
+        Otherwise drives the loop and returns the terminal status.
+
+        `run_ctx_json` (K-024 **D-F**) carries a FULL merged run ctx to be written
+        **inside** the CAS (§12.13) instead of the plain flip (§12.4) — so only the
+        CAS winner's ctx is ever persisted and a loser writes neither the flip nor
+        the ctx. Omitted ⇒ the chat/trigger path, byte-identical in behaviour to
+        before. The post-CAS `get_run` below is what makes the just-written ctx the
+        one `_drive_loop` loads."""
+        cas = (
+            self._repo.resume_run(ctx.ws, run_id=run_id)
+            if run_ctx_json is None
+            else self._repo.resume_run_with_ctx(
+                ctx.ws, run_id=run_id, ctx=run_ctx_json
+            )
+        )
         if cas is None:
             return None
         run = self._repo.get_run(ctx.ws, run_id=run_id)

@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from . import api, config, db
 from . import mcp as mcp_mod
 from .config import CallContext
+from .guards import WorkflowConfigError
 from .repository import Repository
 from .services import (
     ChannelNotFoundError,
@@ -34,6 +35,10 @@ from .services import (
     ThreadNotFoundError,
     WorkflowDefNotFoundError,
     WorkflowDefSpecError,
+    WorkflowEngineDisabledError,
+    WorkflowInputRejectedError,
+    WorkflowRunNotFoundError,
+    WorkflowRunNotWaitingError,
 )
 
 
@@ -84,6 +89,42 @@ def _register_error_handlers(app: FastAPI) -> None:
             status_code=404,
             content={"error": type(exc).__name__, "detail": str(exc)},
         )
+
+    # §12 run start/input error map (K-024 D-G). Same envelope shape throughout.
+    # Note what is deliberately absent: a fault raised *during the drive* never
+    # reaches here — `services._drive_or_fault` converts it into a 200/201
+    # `{"status":"failed", …}` envelope, because the run is already correctly
+    # terminal in the graph and a 500 would misreport it (D-G). What is mapped
+    # below are the faults raised **before** anything was written.
+    _wf_run_error_codes: tuple[tuple[type[Exception], int], ...] = (
+        # the run id does not exist in this workspace
+        (WorkflowRunNotFoundError, 404),
+        # input for a run that is not parked, or that lost the resume CAS —
+        # nothing was written (§12.13's zero-row contract)
+        (WorkflowRunNotWaitingError, 409),
+        # reserved key / undeclared key / disallowed value (D-H) — a free
+        # rejection: nothing written, no step budget consumed
+        (WorkflowInputRejectedError, 400),
+        # a structurally malformed `cmp` guard, whose dominant source is
+        # publish-time validation — an authoring defect, same class as
+        # `WorkflowDefSpecError`
+        (WorkflowConfigError, 400),
+        # the engine is not wired into this deployment — a named RuntimeError
+        # subclass so this maps to 503 without a blanket handler masking real bugs
+        (WorkflowEngineDisabledError, 503),
+    )
+
+    def _register(exc_type: type[Exception], code: int) -> None:
+        async def _handler(_request, exc: Exception):  # noqa: ANN001
+            return JSONResponse(
+                status_code=code,
+                content={"error": type(exc).__name__, "detail": str(exc)},
+            )
+
+        app.add_exception_handler(exc_type, _handler)
+
+    for _exc_type, _code in _wf_run_error_codes:
+        _register(_exc_type, _code)
 
 
 def create_app(

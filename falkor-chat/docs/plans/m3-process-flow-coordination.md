@@ -200,6 +200,29 @@ The review gate is non-negotiable — it was the pattern that caught both K-022 
   (`triage@v1` created, `ws:acme` snapshot consistent — no split-brain); `_drive_loop` SHA
   re-verified **`71055f756280`** with `executor.py` untouched.
 
+- **2026-07-20 · coder (U2) — DONE, green.** `_execute_step` is now an explicit dispatch
+  (`agent`+LLM → agent loop; `agent` without LLM → the preserved F-3 stub, now documented as to
+  *why*; `decision`/`human`/`wait` → three pure handlers; everything else → `NotImplementedError`
+  naming the plan). `_validate_def_spec` gained both invariants, running **last**, each preceded by
+  `_normalize_opaque` (the deliberate inverse of `_serialize_opaque`) so the REST front door cannot
+  escape them. `_select_transition` traces `TRACED_GUARD_KINDS = {"llm"} | CMP_KINDS` with
+  `render_label`; `_trace_step` gained a belt so a payload can never open with a bare `" -> "`.
+  Fixture edits were **exactly** the named ones, and the five `pytest.raises` now carry `match=`.
+  pytest **460 → 483** (+23, all new). SHA re-verified before *and after every edit*; `reference`
+  re-seeded and verified. **Mutation-tested rather than trusted — six mutations, all killed**,
+  including both M-7 directions (replacing normalization with a bare `isinstance` skip) and
+  reverting the trace filter to `llm`-only. O-1 ratified as built; **O-2 confirmed with a better
+  reason than the plan had** (`_in` delegates to `_contains`, which accepts a *string* container,
+  so `{"op":"in","value":"abcdef"}` is a working substring test — a naive "must be a list" publish
+  rule would reject a shape that evaluates meaningfully); **O-3 confirmed** (bare `ctx` is the whole
+  run state, so `exists` would be trivially true — a guard that looks like a data check and is a
+  constant). Correction to the plan's B-1 rationale, right in outcome but wrong in fact:
+  `test_hallucinated_mention_does_not_fail_the_run` wires `_FailingToolLLM`, so the re-typed `end`
+  step runs `_run_agent_node` for one scripted turn, not the `llm=None` stub — every assertion
+  unchanged and passing.
+- **2026-07-20 · teco** — U2 committed (`efdeeb3`); **U3 dispatched** (serialized behind U2 — both
+  touch `services.py`).
+
 ## Open items carried out of U0/U1 (must be resolved in U2/U4/U5, not dropped)
 
 | # | Item | Raised by | Lands in |
@@ -208,6 +231,7 @@ The review gate is non-negotiable — it was the pattern that caught both K-022 
 | O-2 | **`in` with a non-list literal** is unspecified. Implemented as `False` at drive, with **no** validator rule (adding one would invent a rule the plan doesn't state). Decide whether publish should reject it. | U1 | U2 |
 | O-3 | **Bare `ctx` as a path** was unspecified (§3.2 blesses bare `output`). Implemented as *not* a value — rejected by `validate_cmp`, missing at drive — since it is the whole run state and would make `exists` trivially true. Confirm. | U1 | U2 |
 | O-4 | **DESIGN §6.1 / §13 edits** are in U1's plan clause but were excluded from its dispatched scope (and `DESIGN.md` was held by graph-dba at the time). Includes F-1's two-part correction, D-C's "`wait` is signal-driven, and mechanically identical to `human`" (m-7), and §13's `cmp`-not-`expr` amendment. | U1 | U5 |
+| O-6 | **Latent defect, found by U2, deliberately not fixed in-slice.** `repository._PUBLISH_CYPHER` ends with `UNWIND $transitions AS tr … RETURN …`, so publishing a def with **zero transitions** collapses the row stream and both `publish_def` (`repository.py:998`) and `materialize_snapshot` (`:1397`) raise `IndexError` — **after** the steps and `START` are already written, i.e. a partial write. Same `UNWIND []` class that AGENTS.md documents as *guarded* for the §4 mention block; this path is **not** guarded. Invisible today only because every publish test carries ≥1 transition. Mitigation in force: every new def fixture carries ≥1 transition (a terminal step is one with no *outgoing* transition). **File as a backlog item in U5.** | U2 | U5 (file) |
 | O-5 | **K-029** (proposed): consolidate `triage@v1`'s inline def literal in `seed_workflows.sh` into `proof_defs.py` — declined inside this slice as too risky during a split-brain-prone change. File it. | architect | U5 |
 
 ## Gate outcome (v1) — what had to change before U0/U1 started

@@ -330,6 +330,24 @@ schema: §6.2; verified Cypher: **`QUERIES.md` §12**.
 
 > `ctx`/`input`/`output`/`payload` are opaque; the executor (de)serializes app-side.
 
+**Who writes the run `ctx` (K-024 D-F).** Every write of `WorkflowRun.ctx` that carries human or
+external input rides **inside the resume CAS itself** — `resume_run_with_ctx` (QUERIES §12.13) is
+`resume_run` (§12.4) plus one `SET` term, one query. There is deliberately **no** standalone
+"set the ctx" write. With a split write, submitter B's ctx can land between A's ctx write and A's
+CAS, so the drive that runs is A's while the data it reads is B's — a **silent wrong branch**, and
+worse, a stale submitter could erase a key an earlier step already branched on, leaving a run whose
+own `ctx` no longer explains its own trail. Folded, only the CAS **winner's** ctx is ever written:
+"which input advanced the run" and "which input is in `ctx`" can never disagree, which is the audit
+property §6.3 exists to prove. A loser gets a visible 409 with **nothing written** — neither the
+status flip nor the ctx — never a silent loss.
+
+> **Residual window, stated plainly (R-1).** The *read* before the merge is still
+> non-transactional: two submitters can both read the same base ctx, merge onto it, and the
+> winner's merge may omit a key the loser intended to add. That is a lost update **on an unwritten
+> input, reported as a 409 to its submitter** — not a wrong branch and not an erased key a prior
+> step branched on. Single-approver use today; the real fix (a `ctxVersion` counter CAS) is a
+> deliberate follow-up, not built.
+
 The engine loop: read `AT_STEP` → execute the step (LLM-native agent loop or deterministic handler) →
 evaluate outgoing `TRANSITION` guards against `ctx` (first-firing wins) → `record_step_and_advance`
 (create the `StepRun`, append `NEXT` via the tail, move `AT_STEP`) — **or** suspend to `waiting` if the
@@ -718,6 +736,58 @@ changes** — everything below is untouched.
 | `GET /threads/{tid}/messages[?since=&limit=]` | `read_thread` / `read_messages` | §4 full thread; with `since`/`limit` → §9.1 window as a pure read (`since` defaults to 0 — the browser never touches cursors) |
 | `GET /messages/{mid}` | `get_message` | §4 get a single message |
 | `GET /search?q=` | `search_messages` | §5 full-text keyword search |
+
+**Workflow-run drive surface (M3 / K-024 U3)** — the non-chat front door for a `kind:'process'`
+run. (The §11 def-authoring routes `POST/GET /workflow-defs…` and the §12 inspection routes
+`GET /workflow-runs/{id}[/step-runs|/trace]` are also mounted; they are read/publish paths and are
+described at their own sections.)
+
+| Endpoint | Service method | `QUERIES.md` |
+|---|---|---|
+| `POST /workflow-runs` | `start_workflow_run` (`trigger_msg_id=None`) | §12.12 start a run from a snapshot with **no** chat trigger `Message` — → **201** |
+| `POST /workflow-runs/{runId}/input` | `submit_workflow_input` | §12.7 + §11.5 (validate) then §12.13 merge-into-ctx **and** resume in one CAS — → **200** |
+
+Both routes drive the run **synchronously**, not on `BackgroundTasks`: a process drive is pure
+graph work with no LLM, so it is fast and — the deciding property — deterministically testable.
+An LLM-bearing process def would want the background path; noted, not built.
+
+**Bounds, and which layer owns which (K-024 m-5).** Pydantic bounds only what it can see: the
+*submitted* dict (≤32 keys, key ≤ 200 chars, serialized ≤ 8000) and `maxSteps` (1…50). The
+**merged** ctx bound, the reserved-key rule and the parked-step declaration check live in
+`services.py`, because MCP tools and direct service callers never reach a pydantic model.
+
+**Reserved run-ctx keys — `threadId` and `error` — are rejected on both routes, in the service.**
+`threadId` is the resume denorm anchor: a caller-set one would park a process run against a live
+chat thread, and the trigger's step 2 would then advance it on the next ordinary human message
+there — no input, no guard data (K-024 M-2/F-6). A process run parks with `waitingThreadId = ''`,
+and the thread lookup short-circuits on an empty thread id from the other end (F-5).
+
+**Error map (D-G).**
+
+| Condition | Code |
+|---|---|
+| unknown run id | **404** `WorkflowRunNotFoundError` |
+| run is not parked, or lost the resume CAS (nothing written) | **409** `WorkflowRunNotWaitingError` |
+| reserved key / undeclared key / value outside `config.expects` / oversized merged ctx | **400** `WorkflowInputRejectedError` |
+| structurally malformed `cmp` guard (dominant source: publish-time validation) | **400** `WorkflowConfigError` |
+| workflow engine not wired into this deployment | **503** `WorkflowEngineDisabledError` |
+| **a fault *during* the drive** (unimplemented step type, malformed guard reaching evaluation) | **201/200** carrying `{"status":"failed","error":…}` |
+
+That last row is the deliberate one: the executor's fault net has already stamped the run
+`failed`, so the run *is* terminal and correct in the graph — a 500 traceback would misreport a
+correctly-recorded terminal run as a server bug.
+
+**The failed envelope reports graph truth, whole.** Its `status` **and** its `ctx` both come from
+the *same* post-fault `get_run` re-read — never a re-read status beside the caller's submitted
+input. So the `ctx` a caller gets back on the fault path is the engine's own state including the
+diagnostic note `fail_run` stamped, not the merge that was attempted; on the clean path the two
+are the same value by construction (the CAS wrote exactly that merge). Reporting one field from
+the graph and the other from what the caller hoped happened would half-apply the rule, and the two
+could disagree in exactly the situation where a reader most needs them consistent. If the re-read
+status is anything other than `failed`/`done`/`waiting` the service **re-raises**, because
+reporting a still-`running` zombie as success would be the worst outcome available.
+**Step-budget exhaustion is not a fault**: it returns `"failed"` through the normal path and
+reaches the same envelope without raising.
 
 Request bodies are size-bounded at the Pydantic boundary (`schemas.py`: text ≤ 8000 chars,
 name/title ≤ 200, mentions ≤ 50) — message text lands in graph RAM *and* the full-text index,
