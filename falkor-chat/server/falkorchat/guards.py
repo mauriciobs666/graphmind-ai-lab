@@ -1,9 +1,9 @@
-"""Transition-guard evaluation (M3, K-022 — Phase 2 / U7).
+"""Transition-guard evaluation (M3 — K-022 Phase 2 / U7; the `cmp` family, K-024 U1).
 
 A `TRANSITION.guard` is an opaque, set-on-create string (QUERIES §11.1). Its content
 is a serialized discriminator, parsed **app-side only** (rule 8 — never filtered in
-Cypher). `evaluate_guard` dispatches on the serialized `kind` to exactly **two** live
-branches plus a raising seam (plan §2.5):
+Cypher). `evaluate_guard` dispatches on the serialized `kind` to exactly **three** live
+branches plus a raising seam (plans `m3-executor.md` §2.5, `m3-process-flow.md` §3.2):
 
   * **Unconditional** — the empty string ``""`` fires whenever the transition is reached
     (the deterministic default; **lowest priority** — the caller orders it last). This is
@@ -21,11 +21,37 @@ branches plus a raising seam (plan §2.5):
     `true` decision → **bias-to-suspend** (`decision=False`), safe for the human-unblockable
     intake guard (a false-suspend costs one more cheap clarifying question). The verdict +
     rationale are returned for the tracer (FR-4).
+  * ``{"kind":"cmp"|"all"|"any"|"not", …}`` — the **deterministic** branch (K-024 D-A): a
+    structured comparator over already-parsed JSON. **No parser, no `eval`, no dependency**
+    — every op is a whitelisted Python callable (`_OPS`), every path root is one of two
+    (`PATH_ROOTS`), and depth/node/width caps make a pathological guard structurally
+    impossible. `validate_cmp` is the same rule set applied at **publish** time, so a
+    typo'd op is an authoring error rather than a live run that parks forever.
   * **Any other kind** (e.g. a would-be ``expr``) → a pure `NotImplementedError` seam (M7 —
-    no dead code). A full expression evaluator is a deferred slice; do not build it here.
+    no dead code). The comparator above is named `cmp` **precisely so `expr` stays shut**:
+    DESIGN §13's resolution "no expression library is built" remains literally true, and
+    the door to a DSL/`simpleeval` stays visibly closed. Do not implement `expr` here.
 
 The judge is injected so this whole module is stub-testable offline — no LLM, no network.
 The production judge (LLM-backed, building the DS §Q1 prompt) is wired in a later unit.
+
+Two rules of the `cmp` family that are easy to get wrong, both deliberate:
+
+**1. Totality — a missing path, or a type that cannot be compared, is `False` for every
+op** (including `exists` and `ne`), and no `cmp` guard ever raises for *data* reasons.
+This bias-to-not-fire mirrors `_coerce_verdict`'s bias-to-suspend: the safe error is to
+park, because a parked run is unblockable by a human while a wrongly-advanced one is not.
+Guards raise `WorkflowConfigError` only for *structural* faults — an unknown op, a bad
+combinator arity, a cap breach — which are authoring defects, not run data.
+
+**2. De Morgan does NOT hold on a missing path.** ``{"op":"ne","path":p,"value":v}`` and
+``{"kind":"not","of":[{"op":"eq","path":p,"value":v}]}`` are **not** interchangeable when
+`p` is absent: `ne` is a comparison against a value that is not there → `False` (rule 1),
+while `not` negates a *verdict* — the inner `eq` is `False`, so the negation is `True`.
+Both are correct for what they mean; they simply do not mean the same thing. Prefer `ne`
+when you want "present and different"; use `not(eq)` only when a missing value should
+fire the transition. The contrast is pinned by a dedicated test pair in
+`tests/test_guards.py` (plan m-10) so it stays a documented decision, not a surprise.
 """
 
 from __future__ import annotations
@@ -69,6 +95,64 @@ _NEGATORS: tuple[str, ...] = ("no ", "not ", "nothing ", "never ", "n't ")
 _NEGATOR_WINDOW = 12
 
 
+# ── the deterministic `cmp` comparator (K-024 U1, plan §3.2) ─────────────────
+
+# The guard kinds the deterministic comparator owns. `expr` is deliberately NOT here:
+# naming this family `cmp` is what keeps DESIGN §13's "no expression library is built"
+# literally true, and keeps `{"kind":"expr"}` a visible, still-raising seam.
+CMP_KINDS: frozenset[str] = frozenset({"cmp", "all", "any", "not"})
+
+def _order(fn: Callable[[Any, Any], bool]) -> Callable[[Any, Any], bool]:
+    """Wrap an ordering comparison so a mismatched/non-comparable pair is `False`.
+
+    A raised `TypeError` would escape into the drive and fail the run; a guard that
+    cannot decide must decline to fire (bias to not-fire), never crash.
+    """
+    def compare(left: Any, value: Any) -> bool:
+        try:
+            return bool(fn(left, value))
+        except TypeError:
+            return False
+    return compare
+
+
+def _contains(left: Any, value: Any) -> bool:
+    """`value` ∈ the list/str at `path`. A non-container (or an unhashable probe) ⇒ False."""
+    if not isinstance(left, (list, tuple, str)):
+        return False
+    try:
+        return value in left
+    except TypeError:
+        return False
+
+
+def _in(left: Any, value: Any) -> bool:
+    """The value at `path` ∈ the list literal `value`. A non-list literal ⇒ False."""
+    return _contains(value, left)
+
+
+# The **closed** whitelist of comparison callables. Every op is a plain Python function of
+# `(left, value)`; there is no parser and nothing is ever `eval`ed. An op outside this dict
+# is a named, loud `WorkflowConfigError` — never a silent False.
+_OPS: dict[str, Callable[[Any, Any], bool]] = {
+    # `eq`/`ne` use plain Python `==` on JSON-native types — no coercion.
+    "eq": lambda left, value: bool(left == value),
+    "ne": lambda left, value: bool(left != value),
+    "lt": _order(lambda left, value: left < value),
+    "le": _order(lambda left, value: left <= value),
+    "gt": _order(lambda left, value: left > value),
+    "ge": _order(lambda left, value: left >= value),
+    "in": _in,
+    "contains": _contains,
+    # Value-free ops: reaching them at all means the path resolved (see `_eval_leaf`).
+    "exists": lambda left, value: True,
+    "truthy": lambda left, value: bool(left),
+}
+
+# Ops that compare against a `value` literal; the rest (`exists`, `truthy`) are unary.
+_VALUE_OPS: frozenset[str] = frozenset(_OPS) - {"exists", "truthy"}
+
+
 class WorkflowConfigError(Exception):
     """A workflow def / executor misconfiguration surfaced loudly at drive time.
 
@@ -108,6 +192,11 @@ def evaluate_guard(
     `thread` is the recent thread window carried out of the node on `StepResult.thread`
     (no extra graph read — m-C neutral). `None`/`[]`/malformed → the understanding-only
     path; it is only consulted when no `understanding` was emitted (the DS omit rule).
+
+    A `cmp`-family guard consults neither the judge nor the thread — it reads only `ctx`
+    and `step_output`, and is therefore fully deterministic and offline. Note the two
+    module-docstring rules that govern it: **totality** (missing/uncomparable → `False`)
+    and the **De Morgan asymmetry** between `ne` and `not(eq)` on a missing path.
     """
     # `None` and `""` both mean "no condition" → unconditional. Treating a null
     # guard here (not just the empty string) is the n-2 safety net: a hand-crafted
@@ -141,10 +230,224 @@ def evaluate_guard(
         )
         return _coerce_verdict(raw)
 
+    if kind in CMP_KINDS:
+        return _evaluate_cmp(parsed, ctx=ctx, step_output=step_output)
+
     raise NotImplementedError(
         f"guard kind {kind!r} is not supported in this cut "
         f"(expr/deterministic-expression seam, M7)"
     )
+
+
+_MISSING = object()
+
+
+def _evaluate_cmp(
+    spec: dict[str, Any], *, ctx: dict[str, Any], step_output: str
+) -> GuardVerdict:
+    """Validate, then evaluate, a `cmp`-family guard into a traced `GuardVerdict`.
+
+    Validation runs first and is the **same** `validate_cmp` the publish path calls
+    (M-4): one implementation of the structural rules, two call sites. Everything the
+    evaluator below assumes about shape is therefore already guaranteed.
+    """
+    # Structural rules are enforced at drive time too (an unknown op must never be a
+    # silent False) — but paths stay total here; see `validate_cmp`.
+    _validate_node(spec, depth=1, counter=[0], check_paths=False)
+    decision = _eval_node(spec, ctx=ctx, step_output=step_output)
+    return GuardVerdict(
+        decision=decision,
+        rationale=f"{render_label(spec)} → {'true' if decision else 'false'}",
+    )
+
+
+def _eval_node(spec: Any, *, ctx: dict[str, Any], step_output: str) -> bool:
+    """Evaluate one **already-validated** guard node."""
+    kind = _node_kind(spec)
+    if kind in _COMBINATORS:
+        children = spec["of"]
+        if kind == "not":
+            return not _eval_node(children[0], ctx=ctx, step_output=step_output)
+        # `all([]) → True` / `any([]) → False`: the identity of each operator, chosen
+        # deliberately rather than inherited by accident (plan §7 case 11).
+        reduce = all if kind == "all" else any
+        return reduce(
+            _eval_node(child, ctx=ctx, step_output=step_output) for child in children
+        )
+    return _eval_leaf(spec, ctx=ctx, step_output=step_output)
+
+
+_COMBINATORS: frozenset[str] = frozenset({"all", "any", "not"})
+
+
+def _node_kind(spec: Any) -> str:
+    """The kind of one guard node. Nested children may omit `kind` when they carry `op`."""
+    kind = spec.get("kind") if isinstance(spec, Mapping) else None
+    if isinstance(kind, str):
+        return kind
+    return "cmp"
+
+
+def _eval_leaf(spec: Mapping[str, Any], *, ctx: dict[str, Any], step_output: str) -> bool:
+    op = spec.get("op")
+    left = _resolve_path(spec.get("path"), ctx=ctx, step_output=step_output)
+    if left is _MISSING:
+        return False
+    return _OPS[op](left, spec.get("value"))
+
+
+# Structural DoS caps (rule 6). A guard is data an author writes into a def; these make
+# a pathological guard a *structural* impossibility rather than a runtime gamble. Guards
+# are additionally bounded by `MAX_CONFIG_LEN` at the API boundary.
+MAX_GUARD_DEPTH = 5    # maximum nesting levels (a bare leaf is depth 1)
+MAX_GUARD_NODES = 32   # maximum total nodes in one guard
+MAX_GUARD_WIDTH = 8    # maximum children of one `all`/`any`/`not`
+
+# The two whitelisted path roots. `ctx.<key>…` reads the run ctx; `output.<key>…` reads
+# the current step's JSON output and a bare `output` its raw string. There is no third
+# root, no list indexing, no attribute access and no callable — traversal is dict-key
+# lookup, so a guard can never reach anything but data.
+PATH_ROOTS: frozenset[str] = frozenset({"ctx", "output"})
+
+
+def validate_cmp(spec: Any) -> None:
+    """Structurally validate a `cmp`-family guard; raise `WorkflowConfigError` if unsound.
+
+    Takes an **already-parsed dict** — normalizing a string-shaped guard is the caller's
+    job (`services._validate_def_spec` for the publish path). Called both at publish time
+    (so a typo'd `op` is an authoring error, not a dead live run) and at drive time, so
+    the rules exist exactly once.
+
+    Rejects: an unknown `op`; a `path` whose root is not `ctx.`/`output.` (bare `output`
+    allowed, bare `ctx` not — it is the whole run state, not a value); a missing `path`,
+    or a missing `value` for an op that compares against one; a combinator without a list
+    `of`; a `not` whose arity is not exactly 1; and any depth / node-count / width breach.
+
+    **Paths are strict here and total at drive time**, deliberately: an unresolvable path
+    is an authoring defect worth rejecting at publish, but at drive time it is just a
+    value that is not there → `False` (see the module docstring's totality rule). Same
+    validator, one flag — `_evaluate_cmp` passes `check_paths=False`.
+    """
+    _validate_node(spec, depth=1, counter=[0], check_paths=True)
+
+
+def _validate_node(
+    spec: Any, *, depth: int, counter: list[int], check_paths: bool
+) -> None:
+    if depth > MAX_GUARD_DEPTH:
+        raise WorkflowConfigError(
+            f"guard nesting depth exceeds the cap of {MAX_GUARD_DEPTH}"
+        )
+    counter[0] += 1
+    if counter[0] > MAX_GUARD_NODES:
+        raise WorkflowConfigError(
+            f"guard node count exceeds the cap of {MAX_GUARD_NODES}"
+        )
+    if not isinstance(spec, Mapping):
+        raise WorkflowConfigError(
+            f"guard node must be an object, got {type(spec).__name__}"
+        )
+
+    kind = _node_kind(spec)
+    if kind in _COMBINATORS:
+        of = spec.get("of")
+        if not isinstance(of, list):
+            raise WorkflowConfigError(
+                f"guard combinator {kind!r} requires a list `of` "
+                f"(got {type(of).__name__})"
+            )
+        if len(of) > MAX_GUARD_WIDTH:
+            raise WorkflowConfigError(
+                f"guard combinator {kind!r} width {len(of)} exceeds the cap of "
+                f"{MAX_GUARD_WIDTH}"
+            )
+        if kind == "not" and len(of) != 1:
+            raise WorkflowConfigError(
+                f"guard combinator 'not' takes exactly one child, got {len(of)}"
+            )
+        for child in of:
+            _validate_node(
+                child, depth=depth + 1, counter=counter, check_paths=check_paths
+            )
+        return
+
+    if kind != "cmp":
+        raise WorkflowConfigError(
+            f"guard kind {kind!r} is not part of the cmp family "
+            f"({', '.join(sorted(CMP_KINDS))})"
+        )
+    op = spec.get("op")
+    if op not in _OPS:
+        raise WorkflowConfigError(
+            f"unknown guard op {op!r} — allowed ops: {', '.join(sorted(_OPS))}"
+        )
+    if check_paths:
+        _validate_path(spec.get("path"))
+    if op in _VALUE_OPS and "value" not in spec:
+        raise WorkflowConfigError(f"guard op {op!r} requires a `value`")
+
+
+def _validate_path(path: Any) -> None:
+    if not isinstance(path, str) or not path:
+        raise WorkflowConfigError(
+            f"guard `path` must be a non-empty string, got {path!r}"
+        )
+    head, _, rest = path.partition(".")
+    if head not in PATH_ROOTS:
+        raise WorkflowConfigError(
+            f"guard path root {head!r} is not whitelisted "
+            f"(allowed: {', '.join(sorted(PATH_ROOTS))})"
+        )
+    if head == "ctx" and not rest:
+        raise WorkflowConfigError("guard path 'ctx' must name a key, e.g. 'ctx.decision'")
+    if rest and any(not segment for segment in rest.split(".")):
+        raise WorkflowConfigError(f"guard path {path!r} has an empty segment")
+
+
+def render_label(spec: Any) -> str:
+    """A compact, human-readable rendering of a guard — the M-6 trace label.
+
+    A `cmp` guard has no `text` field, so the executor's trace line would otherwise start
+    with a bare `" -> "`. Deliberately total and side-effect-free: it never raises, so a
+    malformed guard still traces (the loud failure is `validate_cmp`'s job, not a
+    renderer's).
+    """
+    if not isinstance(spec, Mapping):
+        return repr(spec)
+    kind = _node_kind(spec)
+    if kind in _COMBINATORS:
+        of = spec.get("of")
+        children = of if isinstance(of, list) else []
+        return f"{kind}({', '.join(render_label(child) for child in children)})"
+    op = spec.get("op")
+    path = spec.get("path")
+    if op in _VALUE_OPS:
+        return f"{path} {op} {spec.get('value')!r}"
+    return f"{path} {op}"
+
+
+def _resolve_path(path: Any, *, ctx: dict[str, Any], step_output: str) -> Any:
+    """Resolve a whitelisted `ctx.…` / `output.…` path → the value, or `_MISSING`."""
+    if not isinstance(path, str):
+        return _MISSING
+    head, _, rest = path.partition(".")
+    if head == "ctx":
+        # A bare `ctx` is not a value — it is the whole run state. Only `ctx.<key>…`
+        # resolves, and `validate_cmp` rejects the bare root at publish time to match.
+        if not rest:
+            return _MISSING
+        cursor: Any = ctx
+    elif head == "output":
+        cursor = step_output if not rest else _load_obj(step_output)
+    else:
+        return _MISSING
+    if not rest:
+        return cursor
+    for key in rest.split("."):
+        if not isinstance(cursor, Mapping) or key not in cursor:
+            return _MISSING
+        cursor = cursor[key]
+    return cursor
 
 
 def _coerce_verdict(raw: Any) -> GuardVerdict:

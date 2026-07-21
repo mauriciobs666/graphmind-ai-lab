@@ -357,7 +357,7 @@ presence field. This avoids a parallel model that would later need migrating int
 ### 7.1 Per workspace graph `ws:{id}`
 
 > **Executable DDL is `scripts/bootstrap_schema.sh` — the single source of truth**, asserted by
-> `test_queries.sh` (241/241). This section describes *what* is indexed/constrained and *why*, not
+> `test_queries.sh` (256/256). This section describes *what* is indexed/constrained and *why*, not
 > the runnable statements, so the two can't drift (the same discipline §5.3/§8 apply to queries).
 > `bootstrap_schema.sh <wsId>` is idempotent; `EMBEDDING_DIM` (default `1536`) sets the vector
 > dimension per workspace.

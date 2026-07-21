@@ -114,6 +114,15 @@ to the general fact here.
   AS acc2`. Surfaced building a multi-level name-based reachability closure for a
   test-gap query. (Verified 2026-07-19 on v4.18.11 / `cpg_falkorchat`.)
 
+- **An aggregation buried inside a concatenated `RETURN` expression, next to non-aggregated
+  terms, silently returns ZERO ROWS** (verified 2026-07-20 on v4.18.11).
+  `... OPTIONAL MATCH (r)-[:REL]->(m) RETURN "def="+d.key+" n="+toString(count(m)) AS s`
+  returns an empty result set — **no error**, just no rows — because the implicit grouping key
+  is the whole concatenated expression, which contains the aggregate. Put the aggregate
+  **first** and wrap the non-aggregated terms in `collect(x)[0]`:
+  `RETURN "n="+toString(count(m))+" def="+collect(d.key)[0] AS s`. Silent-zero-rows is the
+  dangerous shape here — a test asserting on the string just fails with an empty `got:`.
+
 ## Query tuning
 
 - **An `OR` across two label-specific properties as the scan anchor**
@@ -121,6 +130,16 @@ to the general fact here.
   both properties are indexed. Use two separate `OPTIONAL MATCH`es (one indexed
   lookup per label) + `coalesce()` instead. The `OR` form is fine once `n` is
   already bound by an indexed/traversal anchor — it's only a scan-anchor problem.
+
+- **A guarded-CAS `WHERE` on a *second* indexed property folds INTO the `Node By Index Scan` —
+  no residual `Filter` operator** (verified 2026-07-20 on v4.18.11 / `ws:test`).
+  `MATCH (r:Run {runId:$id}) WHERE r.status = 'waiting' SET …` with RANGE indexes on both
+  `runId` and `status` profiles as `Node By Index Scan | (r:Run)` → `Update` → `Project`, and
+  when the CAS fails the scan itself reports `Records produced: 0`. The planner still anchors
+  on the **selective** property: with five other `status:'waiting'` rows present the scan
+  produced exactly 1 record. Consequence: a zero-row CAS is a *scan-level* miss, so **nothing
+  downstream of it runs — no `SET` is partially applied**. Don't read the absent `Filter`
+  operator as "the predicate was dropped".
 
 ## Ops, config & tooling
 

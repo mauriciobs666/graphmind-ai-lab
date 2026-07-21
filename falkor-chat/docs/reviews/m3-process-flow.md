@@ -433,3 +433,133 @@ Worth protecting from churn:
 - **The plan's own OQ-1** (route reachable when `FALKORCHAT_WORKFLOW_ENABLED` is off → 503) is a
   reasonable call as recommended; note it is the same handler pass as M-3, so decide them together.
   **OQ-2** (MCP parity) as a follow-up is right.
+
+---
+
+# Re-gate (v2)
+
+> **Reviewer:** `analyst` · **Date:** 2026-07-20 · **Artifact:** `docs/plans/m3-process-flow.md`
+> **patch v2** (architect) · **Baseline:** the v1 gate above. **Scope:** delta review only — the
+> central mechanism (§3.1 park-and-branch, the §2 citations, §5's no-DDL claim) was verified in v1
+> and was **not** re-derived, except where the patch touched it. Static review; nothing executed
+> that mutates state (no `pytest`, no `test_queries.sh`).
+
+## Verdict: **approve with suggestions**
+
+All 2 blockers and all 6 majors are **genuinely closed in the text**, not just in the gate-response
+table — I checked each referenced section against the tree, and none of them moved rather than
+closed. D-F/D-G/D-H are internally consistent and correctly propagated. The declines are honest.
+**U0 and U1 can be dispatched now.**
+
+Three new findings, **all carried into implementation** (one for U2, two for U3); none blocks U0/U1
+and none blocks the plan.
+
+## 1. Blocker / major closure — verified against the tree
+
+| # | Closed? | Evidence I checked |
+|---|---|---|
+| **B-1** | **Yes** | §2 F-3 now names both stub cases; the fixture is real and the citation exact — `test_executor.py:345` is `{"key":"end","type":"task","config":"{}"}` driven by `test_hallucinated_mention_does_not_fail_the_run` (`:352`). The `task → agent` edit is in U2's file scope (§6) and in §7's baseline list. R-3 restated |
+| **B-2** | **Yes** (one execution gap, M-7 below) | Fixture list is **exhaustive** — I swept the tree for `human`/`wait` step fixtures: the only ones reaching `services._validate_def_spec` are `test_api.py:418` and `test_services.py:719/808/822/836/851/866`, exactly as listed. The three others are unaffected and correctly not listed: `test_repository.py:734` (repo-level publish, bypasses validation), `test_services.py:881` (a **materialize** test — `materialize_def` never validates), `test_queries.sh:681/752` (raw Cypher). Invariant runs **last** (§3.3 box) with an ordering pin (§7 U2.8b); the five `pytest.raises` gain `match=` |
+| **M-1 → D-F** | **Yes** | `set_run_ctx` is gone from §3.4, §3.5, §5 and U0/U3 — no residue anywhere. §12.13 is `resume_run` + one `SET` term. `executor.resume` is at `:287` and already re-reads via `get_run` at `:295` **after** the CAS, so the folded write is visible to the drive. R-1 correctly narrowed to the stale *merge read* |
+| **M-2** | **Yes** | New F-6 documents the live path; §3.4 step 3 puts the reserved-key rule **in the service**; tests 6b/6c; R-8 split into F-5 (latent) / F-6 (reachable) |
+| **M-3 → D-G** | **Yes** | Five handlers specified; each premise verified — `WorkflowRunNotFoundError` exists (`repository.py:64`) and is genuinely unhandled (`app._register_error_handlers` maps only `WorkflowDefSpecError`/`WorkflowDefNotFoundError`); `guards.WorkflowConfigError` is a plain `Exception` (`guards.py:72`), so an explicit handler is required; `_require_executor` (`services.py:570`) raises a bare `RuntimeError` today, and a subclass keeps `test_start_workflow_run_without_executor_raises` (`test_services.py:999`, `pytest.raises(RuntimeError)`) green exactly as D-G claims |
+| **M-4** | **Yes**, with M-7 | `guards.validate_cmp` authored in U1, called from `_validate_def_spec` in U2, gated on `kind ∈ {cmp,all,any,not}`; the `{"expr":"x>0"}` fixture contract is pinned (§7 U2.11) |
+| **M-5 → D-H** | **Yes** | Validation before merge, in the service; free-400 property asserted (§7 U3.14, U4 "typos are free"); `maxSteps = 24` with the arithmetic written out. The budget mechanics hold: park (OUTCOME B, `executor.py:374–382`) bumps `stepCount` with **no** budget check, and the *next advance* (OUTCOME A, `:369`) trips it — which is what D-H's "16 spare re-parks" describes |
+| **M-6** | **Yes** | `_select_transition` + `_trace_step` are in U2's file scope, and the §3.1 box is the right anti-freeze device |
+
+**SHA re-confirmed: `71055f756280`** (ran the §3.1 command verbatim). **The three "outside the lock"
+edit sites genuinely are:** the locked region is `_drive_loop` (`:333`) → `# ── seams` (`:394`);
+`resume` is `:287` (before it), `_execute_step` `:396`, `_select_transition` `:613`, `_trace_step`
+`:684` (all after the marker).
+
+## 2. New claims spot-checked
+
+- **D-H "no new query" — confirmed.** `get_run` (`repository.py:1245`) returns `atStepKey`, `defKey`,
+  `defVersion` (`:1255–1269`); `get_snapshot` (`:1403`) → `_read_subgraph` → `_READ_META_CYPHER`
+  (`:945`) collects `{key, type, config}` per step. Also load-bearing and true: `suspend_run`
+  (`:1151`) flips status only — it does **not** clear `AT_STEP`, so `atStepKey` survives the park and
+  the parked step is resolvable.
+- **`access-request@v1` rename — consistent everywhere.** The only remaining `onboarding` mentions in
+  the plan are the four historical ones explaining the rename (D-D, §4 header, summary, gate table).
+  §4, §6 U4, §7, `proof_defs.ACCESS_REQUEST_DEF`/`ACCESS_REQUEST_MAX_STEPS` and the seed section all
+  use the new key.
+- **`submit.fields = ["request"]` — matches §4.3.** Step 2 posts `{"request":{"role":…}}`, guard #1
+  reads `ctx.request.role` (`exists`). The other two declarations line up too: `approval.fields
+  ["decision"]` + `expects` vs. step 5's `{"decision":"approve"}`; `provision.signal "provisioned"`
+  vs. step 7's `{"provisioned":true}` and guard #6's `ctx.provisioned truthy`.
+- **Declines are honest, all three.** m-9: `triage@v1` really is a literal inside
+  `seed_workflows.sh`'s `<<'PY'` heredoc (`:73`–`:220`), and it is the **live published** def — the
+  create-only `MERGE … ON CREATE SET` risk is real; K-029 records it. n-3: `test_services.py:719`'s
+  `review` `decision` step's only outgoing transition (`:726`) is guarded, so the symmetric invariant
+  would indeed retro-reject it. Sentinel belt: `find_waiting_run_for_thread` (`:1299`) matches
+  `r.waitingThreadId = $threadId` by **equality**, so with the reserved-key rejection in place `''`
+  is structurally unmatchable from a real thread — the belt is genuinely redundant, not waved away.
+
+## 3. New findings (carry into implementation — none blocks U0/U1)
+
+### M-7 · major (U2) — the two new publish invariants assume dict-shaped `config`/`guard`, but the REST path delivers **strings**
+
+**Evidence.** `_validate_def_spec` (`services.py:426–478`) today inspects only `key`/`type`/`start`;
+it never touches `config` or `guard` — serialization happens after it, in `publish_workflow_def`
+(`:494/:504`) via `_serialize_opaque`. The values it receives are **heterogeneously typed**: over
+REST they are strings by schema (`schemas.py:48` `config: str | None`, `:58` `guard: str | None`) —
+`test_api.py:418` is `"config": "{}"` — while service-layer callers pass dicts
+(`test_services.py:719` `{"a": 1}`) or even non-JSON strings (`:720` `"raw-string"`).
+
+**Why it matters.** Two failure directions, both easy to land silently:
+(a) a naive `step.get("config", {}).get("waitsForHuman")` raises `AttributeError` on a str →
+**500 on `POST /workflow-defs`**; (b) if the implementer guards with `isinstance(..., dict)`, then
+**every def published over REST escapes both new invariants** — `access-request@v1` (seeded through
+the service layer with dicts) is validated, the REST surface is not, and M-4's whole "caught at
+authoring time" argument evaporates for the front door. Also, B-2's instruction "add
+`"waitsForHuman": true` to `test_api.py:418`" is not literally applicable to a string config — it
+must become `'{"waitsForHuman": true}'`.
+
+**Suggested improvement (U2, ~5 lines of plan text).** State the normalization once, in §3.3 and
+§3.2: *parse `config`/`guard` with `json.loads` when they arrive as `str`; a non-dict result is
+treated as "no declaration" for the guard check (so `{"expr":"x>0"}` and `"raw-string"` keep
+publishing) and as a **`WorkflowDefSpecError`** for a `human`/`wait` step (a step that must declare
+`waitsForHuman` cannot carry an opaque config).* Keep `guards.validate_cmp(spec)` taking an
+**already-parsed dict** — normalization belongs at the `_validate_def_spec` call site, so U1's
+deliverable is unchanged. Restate the `test_api.py:418` edit in its string form.
+
+### m-11 · minor (U3) — D-G's catch list names an exception that does not exist
+
+`StepBudgetExceededError` appears nowhere in the tree, and budget exhaustion **never raises**:
+`_fail_budget` (`executor.py:663`) stamps `fail_run` and *returns* `"failed"` through OUTCOME A/C
+(`:370`, `:387`). As written, D-G invites an implementer to invent the exception and convert a clean
+terminal return into a raise — a behaviour change to the existing engine, inside the unit that must
+not touch it. **Fix:** drop it from D-G's list and add one clause: *budget exhaustion already returns
+a terminal `failed` status and needs no catch — it reaches the same envelope through the normal
+return path.*
+
+### m-12 · minor (U3) — D-G should re-raise when the post-fault re-read is not terminal
+
+D-G re-reads the run and "reports the graph's status, never a guessed one". If a fault ever escapes
+*before* `_drive`'s net stamps `fail_run` (or if `fail_run` itself fails), that re-read returns
+`running` and the endpoint would report a **zombie run as a 200/201 success envelope** — the worst
+possible reporting for the audit property §6.3 exists to prove. **Fix:** one clause in D-G — *if the
+re-read status is not in `{failed, done, waiting}`, re-raise (a 500 is the correct answer there)* —
+plus an assertion in §7 U3.11 that the envelope's status came from `get_run`.
+
+### n-6 · nit — three line citations drifted (inherited from my v1 review)
+
+The five `pytest.raises(WorkflowDefSpecError)` tests are at `test_services.py:804/818/832/846/861`
+(the plan's `:803/817/831/845/860` point at the blank line above each `def`), and the
+`{"expr":"x>0"}` guard fixture is at **`:726`**, not `:721` (`:721` is the `done`/`message` step).
+Tell the implementer to locate these by test name / content; the `test_executor.py:345`,
+`test_api.py:418` and `test_services.py:719/808/822/836/851/866` citations are exact.
+
+## 4. What to carry, and what not to block on
+
+- **M-7** — worth a two-sentence plan patch before U2 starts, but U2 is three units away; it can also
+  be handed to the U2 implementer as a written constraint. **Does not block U0/U1.**
+- **m-11 / m-12 / n-6** — hand to the U3 implementer as-is; no plan patch required.
+- Everything from the v1 gate is answered. **Dispatch U0 (graph-dba, §12.12 + §12.13) and U1
+  (tdd-engineer, `guards.py`) now.**
+
+## 5. Still not verifiable statically (unchanged from v1 §5)
+
+Both new queries' PROFILE plans and zero-row contracts — now including §12.13's *nothing-written*
+contract, which D-F's entire argument rests on and which the plan correctly flags as "verify, do not
+assume". Plus the real suite counts and the RAM delta at integration.

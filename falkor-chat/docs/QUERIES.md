@@ -1,6 +1,7 @@
 # falkor-chat — Canonical Query Library
 
-Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green 2026-07-09.
+Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
+**256/256, 2026-07-20** (`./scripts/test_queries.sh`; 241/241 before the K-024 §12.12/§12.13 gate).
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
 In `falkordb-py`: `g.query(cypher, params={"key": value})`.
@@ -1218,6 +1219,97 @@ ORDER BY sr.startedAt, te.seq
 ordered by `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction (FR-4). A
 non-debug run has zero `TRACED` edges → empty result (AC-5's negative half, by construction). Route via
 `GRAPH.RO_QUERY`.*
+
+### 12.12 `start_run_untriggered` — begin a run with **no** chat trigger message
+
+Parent: **§12.1** (`start_run`). Identical, **minus** the `MATCH (trigger:Message …)` anchor and the
+`CREATE (r)-[:TRIGGERED_BY]->(trigger)` edge. A `kind:'process'` run (K-024) is started from
+REST/API — there is no `Message`, no `Thread`, and therefore no trigger to link. Deliberately a
+**second, self-contained write path** rather than an `OPTIONAL MATCH` + `FOREACH` conditional inside
+§12.1: same doctrine as the §4 first/subsequent message paths, and it sidesteps the
+empty-row-collapse class of bug entirely.
+
+```cypher
+// $runId,$defKey,$defVersion,$startedAt server-minted / caller-supplied
+// $ctx = opaque serialized state ("{}" or the caller's initial run ctx — reserved keys
+//        threadId/error are rejected service-side, see plan §3.4 M-2)
+// $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24)
+MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
+CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
+                       status: 'running', startedAt: $startedAt, ctx: $ctx,
+                       trace: $trace, maxSteps: $maxSteps, stepCount: 0,
+                       waitingThreadId: ''})
+CREATE (r)-[:OF_DEF]->(snap)
+CREATE (r)-[:AT_STEP]->(start)
+RETURN r.runId AS runId, start.key AS startKey, r.status AS status, r.stepCount AS stepCount
+```
+
+*Single anchor ⇒ **zero rows = the snapshot has no `START`** (or the `(key, version)` pair does not
+exist), and **nothing is written** — verified: the response carries no `Nodes created` and no
+`WorkflowRun` is left behind. Backed by the `WorkflowRun.runId` UNIQUE constraint (server-minted id ⇒
+plain `CREATE`, constraint as the concurrency backstop). `waitingThreadId` starts `''` and stays `''`
+for a process run — it has no thread, which is exactly why §12.9's thread lookup must never be called
+with an empty `threadId` (plan F-5/F-6).*
+
+**`GRAPH.PROFILE` (2026-07-20, v4.18.11 / module `41811`, `ws:test`)** — one `Node By Index Scan` on
+`WorkflowDefSnapshot.key`, **no label scan**:
+
+```
+Results | Records produced: 1
+    Project | Records produced: 1
+        Create | Records produced: 1
+            Create | Records produced: 1
+                Create | Records produced: 1
+                    Conditional Traverse | (snap)->(start:Step) | Records produced: 1
+                        Node By Index Scan | (snap:WorkflowDefSnapshot) | Records produced: 1
+```
+
+### 12.13 `resume_run_with_ctx` — guarded CAS `waiting → running` **that also writes `ctx`**
+
+Parent: **§12.4** (`resume_run`), which **remains in use unchanged** for the chat/trigger resume path
+(`trigger.py`, where no ctx is submitted). This variant is §12.4 **plus one `SET` term** and is the
+human/signal-input path for a `process` run (decision **D-F**): the submitted input, already merged
+into the run ctx service-side, rides **inside** the CAS so the write and the flip cannot be split.
+
+```cypher
+// $runId; $ctx = the FULL merged run ctx (opaque serialized string, rule 8) — the service
+// reads the current ctx, merges the validated input flat into it, and passes the result
+MATCH (r:WorkflowRun {runId: $runId})
+WHERE r.status = 'waiting'
+SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx
+RETURN r.runId AS runId, r.status AS status
+```
+
+**Zero-row contract (live-verified — this is what D-F rests on, do not assume it):** a run that is not
+`waiting` matches the node but fails the `WHERE` ⇒ **zero rows and NOTHING is written — neither the
+status flip nor the ctx**. Verified by replaying the CAS with a marker ctx (`{"decision":"LOSER"}`)
+against an already-`running` run: zero rows returned and `r.ctx` still holds the winner's value. So
+only the CAS **winner's** ctx is ever persisted — "which input advanced the run" and "which input is in
+`ctx`" can never disagree. A missing `runId` is likewise zero rows (the service distinguishes the two
+cases with a prior `get_run`: `None` ⇒ 404, present-but-not-waiting ⇒ 409). The loser's input is
+**rejected, never silently lost**.
+
+**`GRAPH.PROFILE` (2026-07-20)** — point lookup on `WorkflowRun.runId`, **no label scan**; the
+`status` predicate is folded **into** the index scan (no residual `Filter` operator), so a
+non-matching run produces zero records at the scan itself:
+
+```
+# winner (run is waiting)                     # loser (run already running)
+Results | Records produced: 1                 Results | Records produced: 0
+    Project | Records produced: 1                 Project | Records produced: 0
+        Update | Records produced: 1                 Update | Records produced: 0
+            Node By Index Scan | (r:WorkflowRun)        Node By Index Scan | (r:WorkflowRun)
+              | Records produced: 1                       | Records produced: 0
+```
+*Anchoring confirmed on `runId`, not `status`: with five other `waiting` runs in the graph the scan
+still produced exactly 1 record. (`WorkflowRun` carries RANGE indexes on both `runId` and `status`.)*
+
+**No DDL, no new index, ≈ zero RAM (rule 6).** Both queries reuse what `bootstrap_schema.sh` already
+creates in every workspace: `WorkflowDefSnapshot.key` (:117), `.version` (:120), `WorkflowRun.runId`
+(:123) and the `WorkflowRun` UNIQUE `{runId}` constraint (:179). No new label, no new property, no new
+index — **`bootstrap_schema.sh` is not touched**. The only RAM delta is a longer `ctx` string on
+`WorkflowRun` (tens of bytes of merged human input per run), on a node type that is rare compared to
+`Message`; §12.12 in fact stores *less* than §12.1 (one fewer relationship — no `TRIGGERED_BY`).
 
 **Live-verified build quirks that shape §12** (all confirmed on `falkordb:v4.18.11`, module `41811`,
 against an isolated `ws:gdbtest`):

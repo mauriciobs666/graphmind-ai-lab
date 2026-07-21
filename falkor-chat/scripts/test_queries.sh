@@ -893,6 +893,63 @@ out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) WHERE r.
 assert_not_contains "§12.4 second concurrent resume is a no-op (single-flight)" "status=running" "$out"
 
 echo ""
+echo "▶ §12.12/§12.13 untriggered start + resume-with-ctx (K-024 process flow, U0)"
+
+# A `kind:'process'` run has no chat trigger message and no thread: it is started by
+# REST/API (§12.12) and advanced by a human/signal input that rides INSIDE the resume
+# CAS (§12.13, decision D-F). Both are additive — no new label, property, index or DDL.
+
+# 12.12 start_run_untriggered: §12.1 minus the Message anchor and the TRIGGERED_BY edge
+START_UNTRIG='MATCH (snap:WorkflowDefSnapshot {key:$defKey, version:$defVersion})-[:START]->(start:Step) CREATE (r:WorkflowRun {runId:$runId, defKey:$defKey, defVersion:$defVersion, status:"running", startedAt:$startedAt, ctx:$ctx, trace:$trace, maxSteps:$maxSteps, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) RETURN "start="+start.key+" status="+r.status+" sc="+toString(r.stepCount) AS s'
+
+out=$(gq "$WS" "CYPHER runId=\"wru1\" defKey=\"wf_review\" defVersion=\"1\" startedAt=7300 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_contains "§12.12 start_run_untriggered creates wru1 at START, running, stepCount 0" "start=start status=running sc=0" "$out"
+
+# the run subgraph is OF_DEF + AT_STEP and NOTHING else — no TRIGGERED_BY, no Message
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) OPTIONAL MATCH (r)-[:OF_DEF]->(d:WorkflowDefSnapshot) OPTIONAL MATCH (r)-[:AT_STEP]->(a:Step) OPTIONAL MATCH (r)-[:TRIGGERED_BY]->(m:Message) RETURN "trigc="+toString(count(m))+" def="+collect(d.key)[0]+" at="+collect(a.key)[0] AS s')
+assert_contains "§12.12 untriggered subgraph: OF_DEF + AT_STEP, zero TRIGGERED_BY" "trigc=0 def=wf_review at=start" "$out"
+
+# untriggered start also parks with waitingThreadId '' (there is no thread — F-5/F-6)
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "wt=["+r.waitingThreadId+"] ms="+toString(r.maxSteps) AS s')
+assert_contains "§12.12 untriggered run starts with empty waitingThreadId and its own budget" "wt=[] ms=24" "$out"
+
+# snapshot without a START -> zero rows AND nothing written (single-anchor contract)
+gq "$WS" 'CREATE (:WorkflowDefSnapshot {key:"wf_nostart", version:"1", name:"No Start", kind:"process"})' > /dev/null
+out=$(gq "$WS" "CYPHER runId=\"wru_ghost\" defKey=\"wf_nostart\" defVersion=\"1\" startedAt=7301 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_not_contains "§12.12 snapshot without START -> zero rows" "status=running" "$out"
+assert_not_contains "§12.12 snapshot without START writes nothing" "Nodes created" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru_ghost"}) RETURN count(r) AS n')
+assert_contains "§12.12 no WorkflowRun left behind by the missed anchor" "0" "$out"
+
+# PROFILE: the single anchor is a Node By Index Scan on WorkflowDefSnapshot.key
+prof=$(gp "$WS" "CYPHER runId=\"wru_prof\" defKey=\"wf_review\" defVersion=\"1\" startedAt=7302 ctx=\"{}\" trace=false maxSteps=24 $START_UNTRIG")
+assert_index_scan "§12.12 start_run_untriggered anchors on WorkflowDefSnapshot index" "$prof"
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru_prof"}) DETACH DELETE r' > /dev/null
+
+# 12.13 resume_run_with_ctx: §12.4 + one SET term — the ctx write rides the CAS (D-F)
+RESUME_CTX='MATCH (r:WorkflowRun {runId:$runId}) WHERE r.status = "waiting" SET r.status="running", r.waitingThreadId="", r.ctx=$ctx RETURN "status="+r.status+" ctx="+r.ctx AS s'
+
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting", r.waitingThreadId="", r.ctx="{\"request\":1}"' > /dev/null
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctx=\"{\\\"request\\\":1,\\\"decision\\\":\\\"approve\\\"}\" $RESUME_CTX")
+assert_contains "§12.13 resume_run_with_ctx flips waiting->running AND writes ctx" 'status=running ctx={"request":1,"decision":"approve"}' "$out"
+
+# the CAS loser (run already running): zero rows, and its ctx is NOT written
+out=$(gq "$WS" "CYPHER runId=\"wru1\" ctx=\"{\\\"decision\\\":\\\"LOSER\\\"}\" $RESUME_CTX")
+assert_not_contains "§12.13 resume-with-ctx of a non-waiting run is zero rows" "status=running" "$out"
+out=$(gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) RETURN "ctx="+r.ctx AS s')
+assert_not_contains "§12.13 CAS loser wrote no ctx (nothing written, not just no flip)" "LOSER" "$out"
+assert_contains "§12.13 winner ctx survives the loser attempt" 'ctx={"request":1,"decision":"approve"}' "$out"
+
+# missing run -> zero rows (WorkflowRunNotFound is the service's business, not the query's)
+out=$(gq "$WS" "CYPHER runId=\"ghost\" ctx=\"{}\" $RESUME_CTX")
+assert_not_contains "§12.13 resume-with-ctx of a missing run is zero rows" "status=running" "$out"
+
+# PROFILE: point lookup on WorkflowRun.runId, no label scan
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wru1"}) SET r.status="waiting"' > /dev/null
+prof=$(gp "$WS" "CYPHER runId=\"wru1\" ctx=\"{}\" $RESUME_CTX")
+assert_index_scan "§12.13 resume_run_with_ctx anchors on WorkflowRun.runId index" "$prof"
+
+echo ""
 echo "▶ §12.6 link_step_emission — StepRun -[:PRODUCED]-> Message (D2, distinct from EMITTED)"
 
 # wsr2 produced the ag2 message (any existing message in th1)
