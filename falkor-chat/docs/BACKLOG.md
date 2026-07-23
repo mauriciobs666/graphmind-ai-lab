@@ -56,7 +56,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) and K-031 (filed out of K-025) are follow-ups, **not** M3-green gates. |
+| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), K-031 (filed out of K-025) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -545,6 +545,68 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   transitions and guards; a test that a def edited-and-re-published reads back **unchanged** (pinning
   the create-only semantics rather than hiding them); a def-vs-snapshot divergence fixture asserting
   the read makes the divergence visible.
+
+### K-032 — Materialize the workflow def's **data-dependence overlay** (CPG-style READS/WRITES) for publish-time static analysis (🔵 proposed — from a design conversation, 2026-07-22)
+
+> **The framing (Code Property Graph lens).** The def graph is already a control-flow graph:
+> `(:Step)-[:TRANSITION {guard, order}]->(:Step)` is a guarded CFG, `HAS_STEP` is one-level AST
+> containment, and `(:StepRun)-[:NEXT]->` is an executed CFG path. **What's missing is the
+> data-dependence layer (DDG):** which `ctx`/`output` keys each step *reads* (via its `cmp`/`llm`
+> guards and, for a `decision`/`human`, the keys it branches on) and which it *writes* (a `human`/
+> `wait` step's `config.expects`, a step's declared outputs). That information is **not missing —
+> it's trapped inside the opaque `guard`/`config` strings**, and `services._validate_def_spec` +
+> `guards.validate_cmp` already walk the `cmp` guard tree at publish, so ~90% of the extraction pass
+> exists and is currently thrown away. Materialize it as real edges and three otherwise-impossible
+> checks become one-hop Cypher.
+- **Why it's worth doing (the payoff).** Publish-time (not live-run) detection of:
+  1. **Dangling read** — a guard reads a `ctx`/`output` key no upstream step writes. This is exactly
+     the **un-enforced n-3 hazard** AGENTS.md documents (a `decision` step with all-conditional
+     outgoing transitions and no `waitsForHuman` **self-loops to budget exhaustion**) — today a live
+     discovery, turned into a `WorkflowDefSpecError` at seed time. Overlaps K-029's symmetric-invariant
+     proposal; this is the graph-shaped way to get there.
+  2. **Unreachable step / dead branch** — plain CFG reachability from `START`.
+  3. **Change-impact / blast radius** — "I changed `submit`'s output shape; which downstream guards
+     read it?" This matters **specifically because published defs are create-only + immutable**
+     (K-031): a def edit costs a version bump + snapshot republish + a `reference`↔`ws:{id}`
+     split-brain risk, so knowing the blast radius *before* the bump has real value here.
+- **Hard constraints (fall out of locked decisions — non-negotiable in any plan):**
+  - **Derive at publish, never parse in Cypher.** Rule 8 (`ctx`/`config`/`guard` opaque, never
+    filtered in Cypher) holds *iff* publish is treated as a compile step — `joern-parse` builds
+    overlays once, queries traverse edges; same contract. Extraction runs app-side in the publish
+    validator; only the resulting edges hit the graph.
+  - **Overlay edges built inside `_PUBLISH_CYPHER` and `materialize_snapshot`, same query.** A
+    separately-written overlay on a `MERGE … ON CREATE SET` def is a **new split-brain axis** on top
+    of the `reference`-vs-snapshot one — and per the K-030 note the materialize path still `IndexError`s
+    after a partial write, so the overlay must ride the existing atomic publish, not a follow-up write.
+  - **Static-only, on the def — never on `StepRun`.** The def graph is tens of nodes (overlay edges
+    are single-digit multiples → RAM non-issue, the inverse of a repo CPG where AST/CFG/REACHING_DEF
+    fan-out dominates). The run graph is thousands of nodes and RAM-bound; "why did *this run* branch
+    here" is a join through `RAN`, not a second copy of the layer.
+  - **Honest `READS_UNKNOWN` for what can't be derived statically** — an `agent`/`llm`-guard node
+    whose reads aren't extractable gets an explicit marker (Joern marks indirect calls the same way).
+    A **feature**: it says precisely which parts of a flow are analyzable vs. trust-the-model. Do
+    **not** attempt a probabilistic DDG — an unsound dependence edge produces confident-wrong impact
+    answers, worse than none.
+- **Owner:** **`graph-dba`** gates the FalkorDB model first (the overlay labels/edge types, whether a
+  `CtxKey`-style node is per-def or shared, indexes) → **`architect`** designs the publish-time
+  extraction pass + the three validations → **`coder`**/**`tdd-engineer`**. A CPG-model design note
+  would land at `falkor-chat/docs/plans/<slug>-graph.md` (graph-dba convention).
+- **Scope sketch (to be designed, not decided here):** first slice = extract read/write sets from
+  `cmp` guard paths (`ctx.`/`output.` roots) + `config.expects` at publish → materialize
+  `(:Step)-[:READS]->` / `(:Step)-[:WRITES]->` a key node → add the **dangling-read** and
+  **unreachable-step** publish validations (closes n-3 the graph way). `llm`-guard reads and the
+  change-impact query are follow-on slices. No DDL beyond one node label + its index; no rule-8
+  violation; no run-side cost.
+- **Relationship to neighbours:** complements **K-031** (that exposes def *structure* for reading;
+  this *analyzes* it), and overlaps **K-029**'s symmetric-`decision` invariant (K-029 proposes the
+  rule; K-032 proposes the graph mechanism that could enforce it). Not an M3-green gate — M3 is ✅.
+- **Risks/RAM:** negligible on the def side (see the static-only constraint). Real risk is *scope
+  creep* toward a general expression/data-flow engine — the `expr` seam stays a `NotImplementedError`;
+  this rides the existing closed `cmp` family only.
+- **Test strategy:** offline contract tests — a published def reads back with the exact READS/WRITES
+  overlay for its guards/`expects`; a def with a guard reading an unwritten key is **rejected at
+  publish**; an unreachable step is **rejected at publish**; a step whose reads can't be derived
+  carries `READS_UNKNOWN` rather than silently claiming zero reads.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
