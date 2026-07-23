@@ -1,9 +1,9 @@
 # M3 executor — Landing 2 (U11) wiring design-patch (K-022 / K-023)
 
 > **Status:** proposed (architect design-patch, 2026-07-12). Planning-only — no code/DDL changed.
-> **Extends:** `docs/plans/m3-executor.md` (approved plan, §6 trigger / §7 safety / Phases 4–5) and
-> `docs/plans/m3-executor-coordination.md` ("Carried to Landing 2" + D1–D5). Closes the analyst
-> impl-review items in `docs/reviews/m3-executor-impl.md` (M-1, m-1, m-3, n-2) that route to U11.
+> **Extends:** `docs/archive/plans/m3-executor.md` (approved plan, §6 trigger / §7 safety / Phases 4–5) and
+> `docs/archive/plans/m3-executor-coordination.md` ("Carried to Landing 2" + D1–D5). Closes the analyst
+> impl-review items in `docs/archive/reviews/m3-executor-impl.md` (M-1, m-1, m-3, n-2) that route to U11.
 > **Scope:** the U11 `@mention`→workflow trigger wiring + the seams the triage proof (U13/U14) and QA
 > (U15) need. It does **not** design the tests or the def content themselves.
 > **Baselines to hold:** `test_queries.sh` 241/241, pytest 283, default-app import network-free.
@@ -404,7 +404,7 @@ no DDL, no graph-dba gate re-open.
 
 ## Ready to implement — summary
 
-**Plan:** `falkor-chat/docs/plans/m3-executor-landing2.md`
+**Plan:** `falkor-chat/docs/archive/plans/m3-executor-landing2.md`
 
 1. **Surface-to-user decision — PRODUCED-link ordering: adopt Option B** (buffer emissions, link after
    `_record`). It keeps the M4/D2-locked atomic `record_step_and_advance` (§12.2) and the §2.1 A/B/C loop

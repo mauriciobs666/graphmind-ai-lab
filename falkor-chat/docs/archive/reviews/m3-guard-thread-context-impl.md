@@ -4,10 +4,10 @@
 > (blocks U15 / qa-engineer acceptance).
 > **Target:** commit **`aa8b813`** ("fix(falkor-chat): K-022 Landing 2 — guard-seam (Defect A) +
 > tool-error survival (Defect B)"), diffed against its parent **`c3cc239`**.
-> **Baselines read:** `falkor-chat/AGENTS.md`, `docs/plans/m3-executor.md` (§2.1/§2.2/§2.5/§7/§8),
-> `docs/plans/m3-guard-thread-context.md` (the Defect-A design, S1–S5), `docs/plans/m3-executor-ml.md`
-> (§Q1), `docs/reviews/m3-executor-impl.md`, `docs/reviews/m3-executor-landing2-impl.md`,
-> `docs/plans/m3-executor-coordination.md` (2026-07-15+ entries, treated as unverified claims).
+> **Baselines read:** `falkor-chat/AGENTS.md`, `docs/archive/plans/m3-executor.md` (§2.1/§2.2/§2.5/§7/§8),
+> `docs/archive/plans/m3-guard-thread-context.md` (the Defect-A design, S1–S5), `docs/archive/plans/m3-executor-ml.md`
+> (§Q1), `docs/archive/reviews/m3-executor-impl.md`, `docs/archive/reviews/m3-executor-landing2-impl.md`,
+> `docs/archive/plans/m3-executor-coordination.md` (2026-07-15+ entries, treated as unverified claims).
 > **Out of scope (per brief, not reviewed):** uncommitted working-tree changes (`AGENTS.md`,
 > `docs/*`, `scripts/seed_workflows.sh`); live/model behavior (`-m live`, qa-engineer's U15);
 > everything at or before `c3cc239`.
@@ -189,7 +189,7 @@ artifact.**
 Evidence: the diff rewrites §8's intake row to *"end each turn with ONLY the
 `{"understanding":{request,known,missing}}` JSON object (D8/S5 …)"* and the answer row to *"**MUST**
 deliver the grounded answer by calling `post_message` … **never pass `mentions`**"*
-(`docs/plans/m3-executor.md` §8, plus the new D8/S5 and Defect-C block beneath it). But
+(`docs/archive/plans/m3-executor.md` §8, plus the new D8/S5 and Defect-C block beneath it). But
 `git show aa8b813:falkor-chat/scripts/seed_workflows.sh` lines 96-99 still seeds the *old* intake
 prompt (`"Ask the user clarifying questions until you can state their request precisely; ask one
 question at a time."`) and lines 118-124 the old answer prompt — the commit message itself says the

@@ -9,9 +9,9 @@
 > **Closes:** the open half of **K-024** (`docs/BACKLOG.md`) — the LLM-free business-process proof
 > over `human` / `decision` / `wait` steps, i.e. the **DESIGN §6.3** "coordination is workflow, not a
 > separate primitive" proof. Unblocks **K-025** (qa-engineer acceptance → M3 ✅).
-> **Builds on:** `docs/plans/m3-executor.md` (§2.1 loop, §2.3 deterministic-node seam, §2.4
+> **Builds on:** `docs/archive/plans/m3-executor.md` (§2.1 loop, §2.3 deterministic-node seam, §2.4
 > suspend/resume, §2.5 guard dispatch), delivered as K-022 Landings 1+2.
-> **Coordination ledger:** `docs/plans/m3-process-flow-coordination.md` (teco).
+> **Coordination ledger:** `docs/archive/plans/m3-process-flow-coordination.md` (teco).
 > **Explicitly NOT in scope:** **K-027** (live-triage reliability, carried minors m-1…m-3, nits
 > n-1…n-3). Nothing from K-027 may be folded into a unit here.
 > **Baselines to preserve and raise:** server pytest **350 passed / 0 skipped / 1 deselected**
@@ -525,7 +525,7 @@ All branching stays in the guards.
 | `decision` | `_run_decision_node` | No side effect. Returns `StepResult(output=json({"node":{"step":<key>}}), on="done", trace=[("node_note","decision node — branching in guards")])`. **Envelope key is `node`, not `decision`** (gate n-1: `decision` would collide semantically with `ctx.decision`, the approval value in this very def). Its semantics live entirely in its outgoing guards; with **zero** outgoing transitions it is a terminal outcome node |
 | `human` | `_run_human_node` | Returns `StepResult(output=json({"awaiting":{"kind":"human","prompt":cfg.prompt,"assignee":cfg.assignee,"fields":cfg.fields}}), on="done")`. **`on="done"`, not a new `"await"` value** (gate n-2: `on` is vestigial per F-1; inventing a value for a field this plan declares dead is inconsistent). The output lands on the `StepRun` ⇒ **`GET /workflow-runs/{id}/step-runs` tells a client exactly what the run is waiting for**, with no new query |
 | `wait` | `_run_wait_node` | Same shape with `{"kind":"signal","signal":cfg.signal}`, `on="done"` (D-C — signal, not timer). **Mechanically identical to `human`** (m-7) — only this string differs |
-| `prompt` / `tool` / `message` | — | `raise NotImplementedError(f"step type {t!r} is not implemented in this cut (typed-handler seam); see docs/plans/m3-process-flow.md §D-E")` → M-1 fault net → `fail_run` → D-G envelope |
+| `prompt` / `tool` / `message` | — | `raise NotImplementedError(f"step type {t!r} is not implemented in this cut (typed-handler seam); see docs/archive/plans/m3-process-flow.md §D-E")` → M-1 fault net → `fail_run` → D-G envelope |
 | unknown type | — | same `NotImplementedError` path |
 
 **Publish-time invariant (new, in `services._validate_def_spec`):** a step of type `human` or `wait`
@@ -1070,7 +1070,7 @@ blocks any unit.)*
 
 ## Ready to implement — summary
 
-**Plan:** `falkor-chat/docs/plans/m3-process-flow.md` (this file, **patch v2**).
+**Plan:** `falkor-chat/docs/archive/plans/m3-process-flow.md` (this file, **patch v2**).
 
 **Decisions (all settled — do not reopen):** D-A `cmp` comparator, validated at **publish** as well
 as at drive time · D-B REST start + input · D-C `wait` = external signal (K-028 filed) · D-D
@@ -1108,7 +1108,7 @@ green" (§7); every Cypher parameter is bound, never interpolated; and the seed 
 
 ---
 
-## Gate response — analyst review `docs/reviews/m3-process-flow.md` (2026-07-19)
+## Gate response — analyst review `docs/archive/reviews/m3-process-flow.md` (2026-07-19)
 
 Every finding, what changed, and where. **Adopted: 2 blockers, 6 majors, 10 minors, 4 nits.
 Declined with reason: 1 nit (n-3, partially — advisory retained) and 1 minor (m-9, declined with a

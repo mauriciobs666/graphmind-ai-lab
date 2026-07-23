@@ -288,7 +288,7 @@ A definition is a directed graph of steps; a run is an execution trace that walk
     Real timers/scheduled wakeups are backlog **K-028**, not a gap in this model.
 - `prompt` / `message` / `tool` → agent-adjacent flows (LLM call, post a message, invoke a tool) —
   **not implemented**: `executor._execute_step` raises `NotImplementedError` naming
-  `docs/plans/m3-process-flow.md` (the documented typed-handler seam, decision D-E). A deliberate
+  `docs/archive/plans/m3-process-flow.md` (the documented typed-handler seam, decision D-E). A deliberate
   behaviour change from the pre-K-024 silent no-op, so an unimplemented type fails a run loudly
   instead of "succeeding" having done nothing.
 
@@ -412,7 +412,7 @@ LLM and no network**:
 | The def (the single source both seed and test read) | `server/falkorchat/proof_defs.py` — `ACCESS_REQUEST_DEF` |
 | Offline acceptance test (all three §4.3 paths) | `server/tests/test_process_flow.py` |
 | Seeding into `reference` + `ws:{id}` | `scripts/seed_workflows.sh` (second def) |
-| Design + traced paths | `docs/plans/m3-process-flow.md` |
+| Design + traced paths | `docs/archive/plans/m3-process-flow.md` |
 
 The design claim it settles: **a business process needs no new primitive, no new run state and no
 scheduler.** A `human` step is just a step whose outgoing guard reads a `ctx` key that does not exist

@@ -3,8 +3,8 @@
 > **Status:** proposed method note. Advisory deliverable — implementation routes to
 > `coder`/`tdd-engineer`; in-graph vector/Cypher changes route to `graph-dba`.
 > **Author:** data-scientist · **Date:** 2026-07-10
-> **Folds into:** `docs/plans/m3-executor.md` at **Phase 2**; gates units U6–U8 of
-> `docs/plans/m3-executor-coordination.md`.
+> **Folds into:** `docs/archive/plans/m3-executor.md` at **Phase 2**; gates units U6–U8 of
+> `docs/archive/plans/m3-executor-coordination.md`.
 > **Builds on:** `docs/plans/graphrag-eval-ml.md` (retrieval + faithfulness harness — reused, not
 > re-derived). **Reads:** `server/falkorchat/{responder,llm,config}.py` (the real seams).
 

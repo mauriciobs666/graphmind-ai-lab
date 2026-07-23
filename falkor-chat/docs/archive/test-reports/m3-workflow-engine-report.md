@@ -1,6 +1,6 @@
 # Test report — M3 workflow engine (K-025 acceptance pass)
 
-> **Plan:** [`docs/test-plans/m3-workflow-engine.md`](../test-plans/m3-workflow-engine.md) v1.0
+> **Plan:** [`docs/archive/test-plans/m3-workflow-engine.md`](../test-plans/m3-workflow-engine.md) v1.0
 > **Executed:** 2026-07-21 · **By:** `qa-engineer` · **Item:** K-025 (the un-run U15)
 > **Under test:** commit **`98a3cc8`**, tree clean (no source file changed by this pass)
 > **Environment:** FalkorDB `falkordb/falkordb:v4.18.11` (container `falkordb-dev`, already
@@ -38,7 +38,7 @@ are explicitly marked **not executed** (TP-063, TP-072) with the reason.
 ### 1.2 The D10 caveat
 
 **No verdict line in this report is sourced from the guard calibration**
-(`docs/plans/m3-guard-calibration.md`) — this pass ran no calibration arm, reports no
+(`docs/archive/plans/m3-guard-calibration.md`) — this pass ran no calibration arm, reports no
 false-advance or advance-recall figure, and makes no claim about judge fitness. The D10 caveat is
 therefore not attached to any line here; it remains binding for **K-027** item 3, which owns that
 measurement.
@@ -156,7 +156,7 @@ Served app on `ws:qa`, `FALKORCHAT_ENABLE_AGENT=1 FALKORCHAT_WORKFLOW_ENABLED=1`
 | ID | Title | Result | Evidence |
 |---|---|---|---|
 | TP-070 | Step budget enforced **and recorded** | **PASS** *(nit F-2)* | `maxSteps:2` → after filing the request the run is `failed` with graph ctx `{"error":"step budget exceeded", …}`, `endedAt` set, trail `submit, submit, route` retained. Surfaced as a **200 envelope** `{"status":"failed"}`, **not** a 500 — D-G honoured. Nit: `stepCount=3` for `maxSteps=2` (checked after the step runs) |
-| TP-071 | `prompt`/`tool`/`message` raise `NotImplementedError` **by design** | **PASS** *(specified, D-E)* | A def with a `prompt` start step publishes and materializes fine; starting it returns **`201`** with `{"status":"failed","error":"NotImplementedError: step type 'prompt' is not implemented in this cut (typed-handler seam); see docs/plans/m3-process-flow.md §D-E"}` and the run is terminal `failed` in the graph. The seam is loud, typed and correctly recorded |
+| TP-071 | `prompt`/`tool`/`message` raise `NotImplementedError` **by design** | **PASS** *(specified, D-E)* | A def with a `prompt` start step publishes and materializes fine; starting it returns **`201`** with `{"status":"failed","error":"NotImplementedError: step type 'prompt' is not implemented in this cut (typed-handler seam); see docs/archive/plans/m3-process-flow.md §D-E"}` and the run is terminal `failed` in the graph. The seam is loud, typed and correctly recorded |
 | TP-072 | Default budget fall-back (12) | **N/E** | Opportunistic P3; the budget mechanism is proven by TP-070 and the default is documented in plan §4.1 |
 
 ### 3.9 Live triage — **model-gated** (AC-2b / AC-3 / AC-4)

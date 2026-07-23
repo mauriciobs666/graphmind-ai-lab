@@ -1,8 +1,8 @@
 # M3 LLM-native executor — coordination & work breakdown
 > Owner: teco (coordinator) · Status: **awaiting user review before implementation** · Last updated: 2026-07-10
 >
-> Companion to the design plan **`docs/plans/m3-executor.md`** (architect) and the requirements
-> **`docs/requirements/llm-native-workflows.md`** (tico, stakeholder-confirmed). This doc slices the
+> Companion to the design plan **`docs/archive/plans/m3-executor.md`** (architect) and the requirements
+> **`docs/archive/requirements/llm-native-workflows.md`** (tico, stakeholder-confirmed). This doc slices the
 > plan's 6 phases into small, independently-shippable units of work and routes each to an owner.
 
 ## Locked decisions (from the user, 2026-07-10)
@@ -30,8 +30,8 @@ Two landings: **Landing 1 = U0–U10** (offline, suite green, no live LLM requir
 
 | # | Unit of work (user-story framing) | Owner | Dep | Done-condition |
 |---|---|---|---|---|
-| **U0** | *Method note:* LLM-as-judge fuzzy-guard reliability, research-node GraphRAG grounding & AC-3 eval, function-calling reliability + safety defaults. | **data-scientist** | plan | `docs/plans/m3-executor-ml.md` written; the §10 questions answered; folds into Phase 2. |
-| **R0** | *Review gate:* static review of `m3-executor.md` (grounding vs. real codebase, completeness, simpler alternatives). Complements the user's own review. | **analyst** | plan | Review at `docs/reviews/m3-executor.md` + verdict; findings routed to owners. |
+| **U0** | *Method note:* LLM-as-judge fuzzy-guard reliability, research-node GraphRAG grounding & AC-3 eval, function-calling reliability + safety defaults. | **data-scientist** | plan | `docs/archive/plans/m3-executor-ml.md` written; the §10 questions answered; folds into Phase 2. |
+| **R0** | *Review gate:* static review of `m3-executor.md` (grounding vs. real codebase, completeness, simpler alternatives). Complements the user's own review. | **analyst** | plan | Review at `docs/archive/reviews/m3-executor.md` + verdict; findings routed to owners. |
 | **U1** | As an operator, the graph carries the new workflow-execution schema and the DESIGN doc matches it (D1). | **graph-dba** | R0 | `bootstrap_schema.sh` adds `TraceEvent.traceId` index **then** UNIQUE (index-before-constraint), idempotent; DESIGN §6.1/§6.2/§13 reconciled per D1/D2; RAM delta called out. |
 | **U2** | The verified query library §12 exists so every run state-move is one atomic, index-anchored query. | **graph-dba** | U1 | QUERIES §12 (`start_run`, `record_step_and_advance`, `suspend`/`resume` CAS, `complete`/`fail_run`, `link_step_emission` via **PRODUCED**, `get_run`, `read_step_runs`, `find_waiting_run_for_thread` index-anchored, `read_trace`) live-verified + PROFILEd; `test_queries.sh` enumerated assertions; baseline 193→N pinned & green. |
 | **U3** | The repository exposes the §12 queries 1:1 with typed errors. | **tdd-engineer** | U2 | `repository.py` run/step-run/trace methods (1:1 §12) + `WorkflowRunNotFoundError`/`StepBudgetExceededError`; pytest green. |
@@ -59,7 +59,7 @@ Two landings: **Landing 1 = U0–U10** (offline, suite green, no live LLM requir
 - **Human hand-off (FR-5d)** ships as a *capability* (the `human_handoff` tool + suspend/resume in
   U4/U9) but is **not exercised** by the triage proof flow — per requirements out-of-scope.
 
-## Review outcome — R0 (analyst, `docs/reviews/m3-executor.md`)
+## Review outcome — R0 (analyst, `docs/archive/reviews/m3-executor.md`)
 **Verdict: approve with suggestions. No blockers** — plan claims verified against the real codebase.
 Four **majors** to close in the plan *before the unit each governs starts* (localized gaps, not
 redesigns → route to **architect** for a plan patch):
@@ -103,7 +103,7 @@ final analyst gate reviews the whole Landing-1 diff. Grouping:
 - **D3 = coder** — Phase 2a (**U6**): LLM `chat(messages, tools)` seam.
 - **D4 = tdd-engineer** — Phase 2b (**U7+U8**): fuzzy guard + agent-node loop.
 - **D5 = coder** — Phase 3 (**U9+U10**): tools/ToolRegistry + MCP-client seam.
-- **Gate = analyst** — impl review of the Landing-1 diff → `docs/reviews/m3-executor-impl.md`.
+- **Gate = analyst** — impl review of the Landing-1 diff → `docs/archive/reviews/m3-executor-impl.md`.
 
 The chain is inherently sequential (each unit builds on the prior's code); no parallelism available.
 
@@ -191,9 +191,9 @@ The chain is inherently sequential (each unit builds on the prior's code); no pa
   **263→283** (+20); **teco re-verified 283 green**; suite 241; network-free import + ruff clean.
   Two Landing-2 seams surfaced (see "Carried to Landing 2" above) — correctly routed, no locked-code
   mutation. **All Landing-1 implementation (U1–U10) complete. Dispatching the mandatory analyst
-  impl-review gate → `docs/reviews/m3-executor-impl.md` (K-022 non-negotiable done-condition).**
+  impl-review gate → `docs/archive/reviews/m3-executor-impl.md` (K-022 non-negotiable done-condition).**
 - 2026-07-12 — **Analyst gate ✅ — verdict `approve-with-suggestions`, NO blockers** (review at
-  `docs/reviews/m3-executor-impl.md`). Counts: 0 blocker / 1 major / 3 minor / 3 nit. Both carried
+  `docs/archive/reviews/m3-executor-impl.md`). Counts: 0 blocker / 1 major / 3 minor / 3 nit. Both carried
   deferrals ruled **acceptable for Landing 1**. The one **major M-1** (→ tdd-engineer, executor.py):
   `_drive` has no top-level `try/except`, so an unexpected mid-drive exception leaves the run stuck at
   `status='running'` — a permanent un-resumable zombie once live defs/tools run (not a Landing-1
@@ -214,7 +214,7 @@ The chain is inherently sequential (each unit builds on the prior's code); no pa
 
 ## LANDING 2 (U11–U15) — trigger + triage proof + QA acceptance
 - 2026-07-12 — **Landing 2 started.** Env re-verified green (FalkorDB up; query **241/241**, pytest
-  **283**). Architect design-patch delivered → `docs/plans/m3-executor-landing2.md` covering the U11
+  **283**). Architect design-patch delivered → `docs/archive/plans/m3-executor-landing2.md` covering the U11
   wiring + the three carried deferrals (M-1, agent-node thread context) + m-1.
 - 2026-07-12 — **DECISION (user go): PRODUCED-link ordering = Option B** — buffer emissions during
   agent-node execution, link `StepRun-[:PRODUCED]->Message` after `_record` (mirrors the existing
@@ -257,11 +257,11 @@ All work is **uncommitted** (per repo convention — commit on user request). No
 this is a clean stopping point *between* implementation and the mandatory review gate.
 
 **Uncommitted working tree (from `git status`):**
-- New: `docs/plans/m3-executor-landing2.md` (architect design-patch), `server/falkorchat/trigger.py`,
+- New: `docs/archive/plans/m3-executor-landing2.md` (architect design-patch), `server/falkorchat/trigger.py`,
   `server/tests/test_executor_produced.py`, `server/tests/test_trigger.py`.
 - Modified source: `server/falkorchat/{api,app,config,executor,guards,schemas,services,tools}.py`,
   `server/.env.example`; test files `test_{api,app,executor,executor_agent,guards,services,tools}.py`.
-- Modified docs: `docs/plans/m3-executor.md` (§7 m-1 amendment), this coordination doc.
+- Modified docs: `docs/archive/plans/m3-executor.md` (§7 m-1 amendment), this coordination doc.
 - **Note the source tree is `server/falkorchat/` (NOT `server/src/falkorchat/`).** venv: `server/.venv`.
 
 **Verify-on-resume (env: FalkorDB must be up — `docker ps | grep falkor`):**
@@ -273,8 +273,8 @@ cd server && .venv/bin/python -m pytest -q                  # expect 312 passed
 **Remaining Landing-2 work, in order:**
 1. **▶ NEXT — Analyst impl-review gate (NON-NEGOTIABLE K-022 done-condition).** Dispatch `analyst`
    to statically review the U11+U12 diff (the uncommitted working tree above) against
-   `docs/plans/m3-executor-landing2.md`, the plan §6/§7, and the review's closed items
-   (M-1/m-1/m-3/n-2). Deliverable: `docs/reviews/m3-executor-landing2-impl.md` with a verdict.
+   `docs/archive/plans/m3-executor-landing2.md`, the plan §6/§7, and the review's closed items
+   (M-1/m-1/m-3/n-2). Deliverable: `docs/archive/reviews/m3-executor-landing2-impl.md` with a verdict.
    A "needs changes" loops back to tdd-engineer (`SendMessage` to agent `a7f82a9555f62278c` keeps
    context), then re-review. Confirm Option B, the byte-for-byte loop, and the M-1 net specifically.
 2. **U13 (coder, +devops if env)** — `scripts/seed_workflows.sh`: publish + materialize the triage
@@ -300,7 +300,7 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
 - 2026-07-15 — **Resumed from PARKED.** Env re-verified green (FalkorDB restarted; query **241/241**,
   pytest **312** — matches parked state, no drift). U11+U12 was committed as **514346b** ("parked
   pre-gate"). **Analyst impl-review gate ✅ dispatched on the 514346b diff** →
-  `docs/reviews/m3-executor-landing2-impl.md`. **Verdict: approve-with-suggestions, 0 blocker / 0
+  `docs/archive/reviews/m3-executor-landing2-impl.md`. **Verdict: approve-with-suggestions, 0 blocker / 0
   major / 3 minor / 3 nit.** All four mandated confirmations HOLD: Option B correct + §2.1 A/B/C loop
   byte-for-byte unchanged (`_link_emissions` at executor.py:342, above branch dispatch); M-1 fault net
   closes the Landing-1 zombie-run major; PRODUCED-not-EMITTED (live-test-asserted); one-handler
@@ -374,7 +374,7 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
     tdd-engineer's to fix under the locked-code constraint. Routing options put to the user; U15
     (qa-engineer) is **blocked on Defect A** and not dispatched.
 
-- 2026-07-15 — **Defect-A design ✅ (architect)** → `docs/plans/m3-guard-thread-context.md`. Verdict:
+- 2026-07-15 — **Defect-A design ✅ (architect)** → `docs/archive/plans/m3-guard-thread-context.md`. Verdict:
   **structural defect (a declared seam no callee honors), localized fix** — ~40 lines, additive, **zero
   graph/DDL/QUERIES change, no graph-dba gate**, and `_drive_loop` **not edited at all** (the §2.1 lock
   satisfied by construction). Design: the thread turns `_run_agent_node` **already reads**
@@ -495,7 +495,7 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
 
 - 2026-07-16 — **D6 golden set ✅ (data-scientist, resumed).** Deliverables **teco-verified on disk**:
   `server/tests/eval/golden_guards.jsonl` (**26 cases**; schema richer than §272 — adds `tier`/`path`/
-  `r1_probe`), `docs/plans/m3-guard-calibration.md` (the protocol), and `m3-executor-ml.md` §272/risk-#1
+  `r1_probe`), `docs/archive/plans/m3-guard-calibration.md` (the protocol), and `m3-executor-ml.md` §272/risk-#1
   **struck through + marked SUPERSEDED with bidirectional links** (teco read the row). No source touched.
   Separate doc rather than rewriting the note: *"a note that predicted Defect A shouldn't be silently
   rewritten — better to state the disagreement explicitly."* **teco concurs.**
@@ -693,7 +693,7 @@ DESIGN §5 trace-kind enumeration) — fold into that rollup.
   passed / 1 deselected** (no post-crash drift). `ws:acme` lost its def snapshot in the crash but the
   probe rides the live test's throwaway `ws:live`, so it's not needed. Probe brief: config/env-only
   model swap via `FALKORCHAT_LLM_MODEL`, S5 in tree, re-measure intake advancement (4B baseline 3/10)
-  + AC-4 posting (4B baseline 0/3); deliverable `docs/plans/m3-capability-probe-ml.md`. Then B framing
+  + AC-4 posting (4B baseline 0/3); deliverable `docs/archive/plans/m3-capability-probe-ml.md`. Then B framing
   (scoped U15) regardless of result.
 
 ## Locked decisions — round 5 (from the user, 2026-07-18)
@@ -733,12 +733,12 @@ answer is now moot in the upward direction.
     its bigger-model measurements are moot under the RAM ceiling.
 
 - 2026-07-18 — **D13 locked; probe redirected.** Coordination doc updated (this entry). Data-scientist
-  dispatched to redirect `docs/plans/m3-capability-probe-ml.md` to the Qwen3-4B-vs-Ministral-3B fits-16GB
+  dispatched to redirect `docs/archive/plans/m3-capability-probe-ml.md` to the Qwen3-4B-vs-Ministral-3B fits-16GB
   comparison spec (ready to run once Ministral 3 3B is loaded in LM Studio). Then B framing (scoped U15)
   regardless of result. RESUME POINT is now: **load Ministral in LM Studio → run the redirected probe →
   B (scoped U15)**.
 
-- 2026-07-19 — **Probe note ✅ DELIVERED + teco-verified on disk.** `docs/plans/m3-capability-probe-ml.md`
+- 2026-07-19 — **Probe note ✅ DELIVERED + teco-verified on disk.** `docs/archive/plans/m3-capability-probe-ml.md`
   (22KB, 8 sections + provenance, complete/untruncated) — the redirected Qwen3-4B-vs-Ministral-3B fits-16GB
   spec. ⚠️ **Recovery note:** the data-scientist dispatch reported *failed* on a session limit with an
   abort summary saying "no prior note exists, I'll author fresh" — but the tree shows the full on-brief file
@@ -757,7 +757,7 @@ answer is now moot in the upward direction.
 - 2026-07-19 — **D13 probe RUN + COMPLETE (data-scientist). Ministral LOSES; Qwen3-4B stays.** User loaded
   Ministral 3 3B at **Q8_0** (fair-capability quant — teco+user call, folded into probe note §6 with the
   "Q4 reconfirm only if Ministral wins both" rule); teco brought FalkorDB up and verified both arms + embedder
-  served. Results appended to `docs/plans/m3-capability-probe-ml.md` §"Results (run 2026-07-19)", teco-verified
+  served. Results appended to `docs/archive/plans/m3-capability-probe-ml.md` §"Results (run 2026-07-19)", teco-verified
   on disk (paired, same-session, n=10/arm, shipped wiring, S5 in tree):
   | Metric | Qwen3-4B (A) | Ministral-3B (B) |
   |---|---|---|
@@ -839,7 +839,7 @@ sub-steps and one genuine decision** — surfaced to the user, NOT auto-launched
     silent forced suspend that looks identical to Defect A), Defect-B catch **narrowness**
     (`HumanHandoffSignal` must not be swallowed; M-1 net intact), and zero graph/DDL/QUERIES change.
     Known-and-accepted items (m-2, m-C, OQ-5/D7, the K-023 judge/terminal-post items) explicitly fenced
-    off so the gate doesn't re-litigate settled decisions. → `docs/reviews/m3-guard-thread-context-impl.md`.
+    off so the gate doesn't re-litigate settled decisions. → `docs/archive/reviews/m3-guard-thread-context-impl.md`.
   - **Still owed after these two: U15 (qa-engineer, scoped per D12-B/D7) → doc rollup.**
 
 - 2026-07-19 — **S5 revert ✅ (coder) — teco-verified on disk, not taken on trust.** `grep` confirms
@@ -910,7 +910,7 @@ sub-steps and one genuine decision** — surfaced to the user, NOT auto-launched
   re-seed** — both wipe `reference`.
 
 - 2026-07-19 — **✅ ANALYST IMPL GATE DELIVERED — `approve with suggestions`, 0 blocker / 2 major /
-  3 minor / 3 nit** → `docs/reviews/m3-guard-thread-context-impl.md` (22.8KB, untracked; teco confirmed
+  3 minor / 3 nit** → `docs/archive/reviews/m3-guard-thread-context-impl.md` (22.8KB, untracked; teco confirmed
   on disk). **The K-022 non-negotiable done-condition for the Defect-A/B commit `aa8b813` is SATISFIED**
   — no re-review cycle forced. All five mandatory confirmations affirmative:
   1. **`_drive_loop` byte-identity ESTABLISHED MECHANICALLY** (the item teco flagged as unverified):

@@ -1,12 +1,12 @@
 # Review — M3 LLM-native workflow executor plan (`m3-executor.md`)
 
 > Reviewer: analyst · 2026-07-10 · Static review-gate pass (R0 in the coordination doc).
-> Artifact under review: `docs/plans/m3-executor.md` (architect, proposed).
-> Baselines: `docs/requirements/llm-native-workflows.md` (FR-1…FR-7, AC-1…AC-6),
-> `docs/plans/m3-executor-coordination.md` (U0–U15), and the live `falkor-chat/` codebase
+> Artifact under review: `docs/archive/plans/m3-executor.md` (architect, proposed).
+> Baselines: `docs/archive/requirements/llm-native-workflows.md` (FR-1…FR-7, AC-1…AC-6),
+> `docs/archive/plans/m3-executor-coordination.md` (U0–U15), and the live `falkor-chat/` codebase
 > (`server/falkorchat/*`, `docs/DESIGN.md` §6/§13, `docs/QUERIES.md` §10/§11, `bootstrap_schema.sh`).
 > ML/DS methodology (judge reliability, retrieval grounding/eval) is **out of this review's scope** —
-> covered separately by the data-scientist at `docs/plans/m3-executor-ml.md` (U0).
+> covered separately by the data-scientist at `docs/archive/plans/m3-executor-ml.md` (U0).
 
 ## Scope & verdict
 

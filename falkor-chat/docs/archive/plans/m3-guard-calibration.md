@@ -2,7 +2,7 @@
 
 > **Deliverable pair:** `server/tests/eval/golden_guards.jsonl` (the labeled data) + this document
 > (the protocol a tdd-engineer implements against).
-> **Supersedes, in part:** `docs/plans/m3-executor-ml.md` §"Evaluation design" — the **Guard judge
+> **Supersedes, in part:** `docs/archive/plans/m3-executor-ml.md` §"Evaluation design" — the **Guard judge
 > (Q1)** row only. That row's gate (`κ ≥ 0.6 AND false-advance ≤ 10%`) is **replaced** by §4 below.
 > Everything else in that note stands, including its Q1 method (extract-then-judge) and its
 > risk #1 *intent* — do not wire an uncalibrated judge. This document honors that intent; it

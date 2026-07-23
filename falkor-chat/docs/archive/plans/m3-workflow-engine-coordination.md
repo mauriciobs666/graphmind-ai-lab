@@ -2,7 +2,7 @@
 
 > Coordination/work-breakdown doc for the start of milestone **M3 — Workflow engine**
 > (`falkor-chat`). Owned by teco (coordinator). Tracks delegation, sequencing, and integration.
-> Companion to the architect plan at `docs/plans/m3-workflow-engine.md` (authored under step 1).
+> Companion to the architect plan at `docs/archive/plans/m3-workflow-engine.md` (authored under step 1).
 > Last updated: 2026-07-09.
 
 ## Goal & definition of done (this engagement)
@@ -12,7 +12,7 @@ Start M3 per DESIGN §12.4. Two deliverables in order:
 1. **Decompose all of M3** into sequenced falkor-chat backlog items (K-020 onward), matching the
    existing item format (owner, inputs/prereqs, scope, done-condition, risks/RAM, test strategy),
    **plus** an implementation plan for **slice 1 only**. Architect deliverable, plan doc at
-   `docs/plans/m3-workflow-engine.md`, handed onward by path.
+   `docs/archive/plans/m3-workflow-engine.md`, handed onward by path.
 2. **Execute slice 1 only:** the workflow **definition model in the `reference` graph** +
    **snapshot materialization into a workspace graph on publish** (immutable, versioned).
    Shape per component convention: **graph-dba gate** (model + verified Cypher + `test_queries.sh`
@@ -67,7 +67,7 @@ Start M3 per DESIGN §12.4. Two deliverables in order:
 
 ## Architect deliverable (step 1) — DONE 2026-07-09
 
-Plan at `docs/plans/m3-workflow-engine.md`. Decomposition **K-020…K-025**:
+Plan at `docs/archive/plans/m3-workflow-engine.md`. Decomposition **K-020…K-025**:
 K-020 def model in `reference` → K-021 snapshot materialization into `ws:{id}` (**= Slice 1**) →
 K-022 run/step-run executor + guard eval (**§13 guard-language decision forced HERE, not slice 1**) →
 K-023 chat linkage (`TRIGGERED_BY` / StepRun-`EMITTED`) → K-024 two proof flows (conversational +
@@ -87,7 +87,7 @@ def. `Step.key` stays index-only. Expected suite target **149 → ~160 (K-020) �
 
 ## Delegation log
 
-- **2026-07-09 — architect delegated & DONE** (step 1): plan at `docs/plans/m3-workflow-engine.md`.
+- **2026-07-09 — architect delegated & DONE** (step 1): plan at `docs/archive/plans/m3-workflow-engine.md`.
 - **2026-07-09 — graph-dba delegated & DONE** (step 2a, consolidated K-020+K-021 gate):
   **`test_queries.sh` 149 → 193/193** (teco-verified). Added: `Step.stepUid` index+UNIQUE in both
   graphs + workspace `Step.key` index (`bootstrap_schema.sh`); `QUERIES.md` §11 (11.1 publish,
@@ -129,7 +129,7 @@ def. `Step.key` stays index-only. Expected suite target **149 → ~160 (K-020) �
   immutable-per-version so safe now; ties to deferred K-016 auth.
 - **QA acceptance pass:** parked at **K-025** per the architect plan (after the executor lands),
   covering publish → materialize → run → step-run → chat linkage for both proof flows.
-- **Backlog transcription:** the K-020…K-025 items drafted in `docs/plans/m3-workflow-engine.md`
+- **Backlog transcription:** the K-020…K-025 items drafted in `docs/archive/plans/m3-workflow-engine.md`
   Part A still need transcribing into `docs/BACKLOG.md` (with K-020+K-021 marked delivered) — a doc
   task not performed in this engagement.
 </content>

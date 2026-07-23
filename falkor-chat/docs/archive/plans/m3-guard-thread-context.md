@@ -3,7 +3,7 @@
 > **Status:** design/plan, ready to implement. **Author:** architect · **Date:** 2026-07-15
 > **Owner (implementer):** tdd-engineer · **Fixes:** Defect A (`m3-executor-coordination.md`,
 > 2026-07-15 U14 entry) — the intake→research fuzzy guard can never fire.
-> **Restores:** `docs/plans/m3-executor-ml.md` §Q1 (extract-then-judge + **RECENT TURNS fallback,
+> **Restores:** `docs/archive/plans/m3-executor-ml.md` §Q1 (extract-then-judge + **RECENT TURNS fallback,
 > N=6**) — a specified design lost in implementation, not a new invention. The DS note's own
 > **risk #4** predicted this failure.
 > **Unblocks:** AC-2b / AC-3 / AC-4 live; **U15** (qa-engineer acceptance).
@@ -63,7 +63,7 @@ Four links, all verified by reading the files:
   questions until you can state their request precisely; ask one question at a time.") — seeded
   verbatim from `m3-executor.md` §8 — **never asks the model for an `understanding` object**. The
   node's final text is prose ⇒ `_load_obj(step_output)` → `{}` (guards.py:151-159).
-- The executor **never writes `ctx` back** (known **m-2**, `docs/reviews/m3-executor-impl.md`), and
+- The executor **never writes `ctx` back** (known **m-2**, `docs/archive/reviews/m3-executor-impl.md`), and
   the trigger seeds `ctx` with run bookkeeping only ⇒ `ctx.get("understanding")` → `None`.
 
 So `_extract_understanding` returns `{}` on every turn, and the judge's entire user message is
@@ -245,8 +245,8 @@ This is **not a substitute** for S1–S4 and does not stand alone (§7). Mirror 
 | `server/tests/test_executor_agent.py` | T7–T8 (the seam pin + the one-read pin) | offline, network-free |
 | `server/tests/test_app.py` | T9–T11 (prompt shape/cap, stub LLM) | offline, network-free |
 | `scripts/seed_workflows.sh` *(S5, if approved)* | intake `systemPrompt` | re-run is still a clean `already present — no-op`… **see R-4** |
-| `docs/plans/m3-executor.md` | §2.5 (+§8 if S5) | §6 doc impact |
-| `docs/plans/m3-executor-ml.md` | one-line "implemented at …" pointer | §6 doc impact |
+| `docs/archive/plans/m3-executor.md` | §2.5 (+§8 if S5) | §6 doc impact |
+| `docs/archive/plans/m3-executor-ml.md` | one-line "implemented at …" pointer | §6 doc impact |
 
 **Not changed:** `repository.py`, `services.py`, `tools.py`, `trigger.py`, `config.py`,
 `QUERIES.md`, `DESIGN.md`, `bootstrap_schema.sh`, `AGENTS.md`, `test_workflow_live.py` (§5).
@@ -475,12 +475,12 @@ the belt, sequenced so the braces are provably doing the work. **The stakeholder
 ## 10. Documentation impact (the implementer's done-condition)
 
 **Changed by this design:**
-- **`docs/plans/m3-executor.md` §2.5** — the guard-evaluation section must state the two-tier evidence
+- **`docs/archive/plans/m3-executor.md` §2.5** — the guard-evaluation section must state the two-tier evidence
   contract (understanding primary; last-6 turns fallback; the omit rule; the thread rides out on
   `StepResult.thread` and costs no extra read). §2.5 is currently silent on where the guard's evidence
   comes from — that silence is what let the seam ship broken. **D5 wording stays untouched.**
-- **`docs/plans/m3-executor.md` §8** *(only if S5 lands)* — the intake row's systemPrompt cell.
-- **`docs/plans/m3-executor-ml.md`** — a one-line dated pointer under §Q1 that the RECENT-TURNS
+- **`docs/archive/plans/m3-executor.md` §8** *(only if S5 lands)* — the intake row's systemPrompt cell.
+- **`docs/archive/plans/m3-executor-ml.md`** — a one-line dated pointer under §Q1 that the RECENT-TURNS
   fallback is implemented at `guards._recent_turns` + `app._build_llm_judge` (and that risk #4
   materialized as Defect A). The note's *method* is unchanged — do not rewrite it; it was right.
 
@@ -497,7 +497,7 @@ the belt, sequenced so the braces are provably doing the work. **The stakeholder
 
 ## Ready to implement — summary
 
-**Plan:** `falkor-chat/docs/plans/m3-guard-thread-context.md`
+**Plan:** `falkor-chat/docs/archive/plans/m3-guard-thread-context.md`
 
 Defect A is a **broken contract across three files**, not a prompt problem: `executor.py:566` hardcodes
 `thread=None`, `guards.py:74` declares `thread` and never reads it, and `app.py`'s judge prompt has no

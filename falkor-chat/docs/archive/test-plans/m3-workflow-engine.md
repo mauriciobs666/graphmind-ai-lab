@@ -3,7 +3,7 @@
 > **Version:** 1.0 · **Author:** `qa-engineer` · **Written:** 2026-07-21 (before execution)
 > **Item:** `docs/BACKLOG.md` **K-025 — QA acceptance pass on M3 (Slice 5)** — the un-run U15.
 > **Under test:** commit `98a3cc8` (tree clean), `falkor-chat/server` + `scripts/`.
-> **Report:** `docs/test-reports/m3-workflow-engine-report.md` (sibling artifact, written after).
+> **Report:** `docs/archive/test-reports/m3-workflow-engine-report.md` (sibling artifact, written after).
 
 ---
 
@@ -25,9 +25,9 @@ what blocks it.
 
 | Artifact | What this plan takes from it |
 |---|---|
-| `docs/requirements/llm-native-workflows.md` | canonical **FR-1…FR-7 / AC-1…AC-6** text — every test item traces to an ID here |
-| `docs/plans/m3-executor.md` | §2 execution model · §4 node capabilities (AC-6 fence) · §5 tracing (AC-5) · §6 trigger (AC-1) · §7 runaway safety · §8.x triage-flow mapping |
-| `docs/plans/m3-process-flow.md` | §3.3 publish invariants · **§4** the `access-request@v1` def, its six transitions and its **three** expected paths (§4.3) |
+| `docs/archive/requirements/llm-native-workflows.md` | canonical **FR-1…FR-7 / AC-1…AC-6** text — every test item traces to an ID here |
+| `docs/archive/plans/m3-executor.md` | §2 execution model · §4 node capabilities (AC-6 fence) · §5 tracing (AC-5) · §6 trigger (AC-1) · §7 runaway safety · §8.x triage-flow mapping |
+| `docs/archive/plans/m3-process-flow.md` | §3.3 publish invariants · **§4** the `access-request@v1` def, its six transitions and its **three** expected paths (§4.3) |
 | `docs/DESIGN.md` §6.1–§6.3 | step types, guard semantics, "coordination is workflow" |
 | `docs/QUERIES.md` §12 | run/step-run/trace read contracts, used when reading the graph directly |
 | `docs/BACKLOG.md` K-025 / K-027 / K-028 / K-029 / K-030 | the binding scope boundaries below |
@@ -59,7 +59,7 @@ what blocks it.
   silent no-op. Documented, tested for, not filed as a bug.
 
 **Quotation rule (D10):** any verdict line sourced from the guard calibration must carry the
-**D10 small-n caveat verbatim** (`docs/plans/m3-guard-calibration.md` §8) immediately beside it.
+**D10 small-n caveat verbatim** (`docs/archive/plans/m3-guard-calibration.md` §8) immediately beside it.
 
 ### 1.3 Explicitly out of scope
 

@@ -5,13 +5,54 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-22 — M3-close documentation-archival sweep (doc-only)
+
+Housekeeping pass following **milestone M3 — Workflows ✅ (delivered 2026-07-21)**: its completed
+planning docs move to `docs/archive/` per the module documentation convention
+([`AGENTS.md`](../AGENTS.md) → "Module documentation convention"). **Doc-only — no source, test,
+or script file changed** (verified: every touched path ends in `.md`; git shows only renames + the
+link edits + this entry).
+
+**Moved (via `git mv`, history preserved) — 20 files:**
+
+- **12 plans** `docs/plans/ → docs/archive/plans/`: `m3-executor.md`, `m3-executor-ml.md`,
+  `m3-executor-landing2.md`, `m3-executor-coordination.md`, `m3-guard-calibration.md`,
+  `m3-guard-thread-context.md`, `m3-capability-probe-ml.md`, `m3-process-flow.md`,
+  `m3-process-flow-coordination.md`, `m3-workflow-engine.md`, `m3-workflow-engine-coordination.md`,
+  `m1-cleanup.md`.
+- **5 reviews** `docs/reviews/ → docs/archive/reviews/` (new archive subdir created):
+  `m3-executor-impl.md`, `m3-executor-landing2-impl.md`, `m3-executor.md`,
+  `m3-guard-thread-context-impl.md`, `m3-process-flow.md`.
+- **1 test-plan** `docs/test-plans/ → docs/archive/test-plans/`: `m3-workflow-engine.md`.
+- **1 test-report** `docs/test-reports/ → docs/archive/test-reports/`: `m3-workflow-engine-report.md`.
+- **1 requirement** `docs/requirements/ → docs/archive/requirements/` (new archive subdir created):
+  `llm-native-workflows.md` — the tico requirement (FR-1…FR-7 / AC-1…AC-6) that drove M3, now
+  realized by the delivered engine.
+
+**Inbound links fixed in the same change:** **157** component-root-relative path strings pointing
+at a moved file rewritten to their `docs/archive/…` target — 61 across the live docs (`BACKLOG.md`
+36, this file 17, `AGENTS.md` 4, `DESIGN.md` 2, `docs/plans/local-model-ram-budget-ml.md` 2) and
+96 in the moved docs' cross-references to each other (the last 4 being the archived plans/review/
+test-plan pointers to `llm-native-workflows.md`, repathed with it). Prefix collisions
+(the `plans/` copy vs the `reviews/` copy of `m3-executor.md`; the `-ml`/`-impl`/`-landing2`
+variants) were handled by full-path-anchored rewrites, not blind name substitution. Bare-filename
+prose citations without a `docs/…/` prefix (in `server/**.py`, `scripts/seed_workflows.sh`) are not
+path links and were left untouched.
+
+**Deliberately kept active (not completed plans):** the reusable runbook
+`docs/plans/demo-environment-bringup.md`; the forward-looking `docs/plans/graphrag-eval-ml.md`
+(K-026, not yet built); the two parked standing environment references
+`docs/plans/local-model-ram-budget-ml.md` and `docs/plans/wsl2-memory-diagnostic.md`; and the
+still-in-progress requirement `docs/requirements/summary-nodes.md` (status *Interviewing*, not yet
+built). Only the completed M3 requirement `llm-native-workflows.md` was archived.
+
 ## 2026-07-21 — M3 K-025: the QA acceptance pass — verdict **PASS with parked, model-gated limitations** ⇒ **MILESTONE M3 ✅**
 
 Closes **K-025**, the un-run U15, and with it **milestone M3 — Workflows**. `qa-engineer` executed
 a risk-based, black-box acceptance pass against commit **`98a3cc8`** (tree clean, no source file
-changed by the pass). Artifacts: test plan **`docs/test-plans/m3-workflow-engine.md`** (v1.0,
+changed by the pass). Artifacts: test plan **`docs/archive/test-plans/m3-workflow-engine.md`** (v1.0,
 written *before* execution) and test report
-**`docs/test-reports/m3-workflow-engine-report.md`**. Baselines held on entry **and** on exit:
+**`docs/archive/test-reports/m3-workflow-engine-report.md`**. Baselines held on entry **and** on exit:
 server pytest **533 passed / 1 deselected**, query suite **256/256**.
 
 **Verdict: PASS with parked, model-gated limitations ⇒ M3 ✅. Zero blocking defects.**
@@ -80,9 +121,9 @@ Closes **K-024** — the `kind:'process'` business-process proof flow the DESIGN
 **K-025** (QA acceptance) now stands between the component and **M3 ✅**. Delivered by the
 teco-coordinated chain over five units: **graph-dba** (U0), **tdd-engineer** (U1), **coder**
 (U2, U3, U4, U4b), **teco** (U5 + every integration run), with the **mandatory analyst gate** run
-**twice** as a non-negotiable done-condition. Plan `docs/plans/m3-process-flow.md` (v2.1);
-coordination log `docs/plans/m3-process-flow-coordination.md`; all three gates in
-`docs/reviews/m3-process-flow.md`. New baselines: server pytest **523 → 533 passed / 1 deselected**
+**twice** as a non-negotiable done-condition. Plan `docs/archive/plans/m3-process-flow.md` (v2.1);
+coordination log `docs/archive/plans/m3-process-flow-coordination.md`; all three gates in
+`docs/archive/reviews/m3-process-flow.md`. New baselines: server pytest **523 → 533 passed / 1 deselected**
 (350 at the start of the slice); query suite **241 → 256**.
 
 **The central design claim, and it held: `_drive_loop` was never modified.** SHA `71055f756280`
@@ -184,9 +225,9 @@ Second landing of **K-022 — LLM-native workflow executor**: the `@mention` tri
 flow, and the two live defects that landing it exposed. Delivered by the teco-coordinated chain —
 **tdd-engineer** (U11 trigger wiring + U12 REST run inspection, and later both defect reproduction
 suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code major) — with the
-**mandatory analyst review gate** as a non-negotiable done-condition. Plan `docs/plans/m3-executor.md`
-+ the U11 design patch `docs/plans/m3-executor-landing2.md`; coordination log
-`docs/plans/m3-executor-coordination.md`. New server baseline: **pytest 283 → 350 passed, 0 skipped,
+**mandatory analyst review gate** as a non-negotiable done-condition. Plan `docs/archive/plans/m3-executor.md`
++ the U11 design patch `docs/archive/plans/m3-executor-landing2.md`; coordination log
+`docs/archive/plans/m3-executor-coordination.md`. New server baseline: **pytest 283 → 350 passed, 0 skipped,
 1 deselected** (with FalkorDB up; teco re-verified independently). Query suite unchanged at
 **241/241** — Landing 2 has **zero** graph/DDL/QUERIES surface.
 
@@ -198,7 +239,7 @@ suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code m
   `record_step_and_advance` byte-for-byte); the Landing-1 **M-1** fault net (`_drive` wraps
   `_drive_loop`, so a mid-drive fault can no longer leave a zombie `status='running'` run); agent-node
   thread context (`_read_thread_context`, window 20); `GET /workflow-runs/{id}` + `/step-runs` +
-  `/trace`. Its own analyst gate (`docs/reviews/m3-executor-landing2-impl.md`) came back
+  `/trace`. Its own analyst gate (`docs/archive/reviews/m3-executor-landing2-impl.md`) came back
   **approve-with-suggestions, 0 blocker / 0 major**.
 - **U13 (coder):** `scripts/seed_workflows.sh` — publishes + materializes `triage@v1` (three
   `type:'agent'` steps, intake→research→answer) through the **service layer**, not raw Cypher;
@@ -211,7 +252,7 @@ suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code m
   saw an empty understanding. Fixed **at the seam, not in a prompt**: the thread window the agent node
   already reads rides out on `StepResult.thread` → `thread=result.thread` → `guards._recent_turns`,
   with the DS precedence (understanding primary, turns only when empty). Zero extra graph reads; the
-  locked `_drive_loop` untouched. Design: `docs/plans/m3-guard-thread-context.md`.
+  locked `_drive_loop` untouched. Design: `docs/archive/plans/m3-guard-thread-context.md`.
 - **Defect B — a hallucinated `@mention` failed the whole run (fixed).** Tool errors are now
   survivable: a failed dispatch returns an error string the model can act on instead of propagating
   to `fail_run`. Pinned at drive level by
@@ -231,7 +272,7 @@ suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code m
   model-correctable arguments; absorbing them produced a run reaching `done` having posted nothing.
   Closes analyst finding M-2.
 - **Analyst gate: `approve with suggestions` — 0 blocker / 2 major / 3 minor / 3 nit**
-  (`docs/reviews/m3-guard-thread-context-impl.md`, on commit `aa8b813`). All five mandatory
+  (`docs/archive/reviews/m3-guard-thread-context-impl.md`, on commit `aa8b813`). All five mandatory
   confirmations affirmative, including the `_drive_loop` byte-identity (SHA `71055f756280`, unchanged
   across `514346b`/`c3cc239`/`aa8b813`). **Both majors closed before the commit:** **M-1** (doc drift —
   `m3-executor.md` §8 documented prompts the reverted script no longer seeds) and **M-2** (the silent
@@ -242,7 +283,7 @@ suites), **coder** (the U13 workflow seed, the D14 revert, and the gate's code m
   advancement 3/10 vs 0/10; AC-4 terminal post 2/3 vs not-measurable. Two findings routed to K-027: the
   fuzzy-guard judge's **bare `json.loads` is model-fragile** (a fenced ```` ```json ```` reply made all
   26 golden cases unparseable — the shipped Qwen path is unaffected), and Ministral is actually
-  *better* at the terminal tool call. Note: `docs/plans/m3-capability-probe-ml.md`.
+  *better* at the terminal tool call. Note: `docs/archive/plans/m3-capability-probe-ml.md`.
 - **D15 parity repair (graph-dba, user-authorized destructive op on this dev box).** The stale
   `ws:acme` `WorkflowDefSnapshot` was deleted and `triage@v1` republished into **both** `reference` and
   `ws:acme`, resolving a **split-brain** in which the def had been wiped while the stale snapshot — the
@@ -280,8 +321,8 @@ decision** — un-park if the crashes recur. Tracked as a Parking-lot bullet in
 First landing of the reframed **K-022 — LLM-native workflow executor**: the offline executor +
 node capabilities (Phases 0–3, units U1–U10). Delivered by the **teco-coordinated
 graph-dba → tdd-engineer → coder** chain with a **mandatory analyst review gate** — the team's
-first fully-gated coordinated run. Plan `docs/plans/m3-executor.md`; coordination log
-`docs/plans/m3-executor-coordination.md`. Trigger + proof flow (Landing 2, U11–U15) is a separate
+first fully-gated coordinated run. Plan `docs/archive/plans/m3-executor.md`; coordination log
+`docs/archive/plans/m3-executor-coordination.md`. Trigger + proof flow (Landing 2, U11–U15) is a separate
 later run, **not started**. New baselines: **query suite 193 → 241/241**, **server pytest 196 → 283**,
 both green (teco re-verified independently).
 
@@ -308,7 +349,7 @@ both green (teco re-verified independently).
   `PRODUCED` link via `services.link_step_emission`), `graphrag_retrieve` (Q2 τ≈0.5 cutoff / cap 5 /
   floor 1 / abstain), `human_handoff` (registered capability, granted to no node). `McpToolClient`
   MCP-client seam — stub-tested in-memory; real external servers deferred.
-- **Analyst gate:** `docs/reviews/m3-executor-impl.md` — **approve-with-suggestions, 0 blockers**
+- **Analyst gate:** `docs/archive/reviews/m3-executor-impl.md` — **approve-with-suggestions, 0 blockers**
   (1 major, 3 minor, 3 nit). Major **M-1**: `executor._drive` has no top-level `try/except`, so an
   unexpected mid-drive exception leaves the run stuck at `status='running'` — a permanent
   un-resumable zombie once live defs/tools run (not a green-suite blocker; the offline path is
@@ -357,8 +398,8 @@ upgrade.
 First slice of **M3 — Workflow engine**, delivered end-to-end by the **teco-coordinated
 architect → graph-dba → tdd-engineer chain** (the teco K-001 nested-delegation validation run —
 see `claude/teco/docs/HISTORY.md` 2026-07-09). Architect decomposed all of M3 into
-**K-020…K-025** and wrote the slice-1 plan (`docs/plans/m3-workflow-engine.md`, Part A + Part B);
-coordination log at `docs/plans/m3-workflow-engine-coordination.md`. Suites verified
+**K-020…K-025** and wrote the slice-1 plan (`docs/archive/plans/m3-workflow-engine.md`, Part A + Part B);
+coordination log at `docs/archive/plans/m3-workflow-engine-coordination.md`. Suites verified
 independently after integration: **query suite 149 → 193/193, pytest 156 → 196.**
 
 - **K-020 — def model in `reference`.** *graph-dba gate:* `Step.stepUid = "{defKey}:{version}:{stepKey}"`

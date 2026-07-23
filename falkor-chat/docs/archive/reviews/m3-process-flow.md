@@ -1,6 +1,6 @@
 # Plan review — M3 `kind:'process'` proof flow (K-024, remaining half)
 
-> **Reviewer:** `analyst` · **Date:** 2026-07-19 · **Artifact:** `docs/plans/m3-process-flow.md`
+> **Reviewer:** `analyst` · **Date:** 2026-07-19 · **Artifact:** `docs/archive/plans/m3-process-flow.md`
 > (architect, proposed) · **Baseline tree:** `4f69a16` (working tree clean apart from the untracked
 > coordination ledger).
 > **Gate:** pre-implementation plan gate. Static review — nothing executed that mutates state.
@@ -10,7 +10,7 @@
 **Reviewed:** the plan end to end against the live tree — `server/falkorchat/{executor,guards,
 services,repository,api,app,trigger,schemas,config}.py`, `server/tests/*`, `scripts/
 {seed_workflows,bootstrap_schema,test_queries}.sh`, `docs/{DESIGN,QUERIES,BACKLOG}.md`,
-`docs/plans/m3-process-flow-coordination.md`, and `falkor-chat/AGENTS.md` + root `AGENTS.md`.
+`docs/archive/plans/m3-process-flow-coordination.md`, and `falkor-chat/AGENTS.md` + root `AGENTS.md`.
 Every file:line citation in plan §2 was checked individually.
 
 **Not reviewed / not verifiable statically:** the two new queries' `GRAPH.PROFILE` plans and
@@ -438,7 +438,7 @@ Worth protecting from churn:
 
 # Re-gate (v2)
 
-> **Reviewer:** `analyst` · **Date:** 2026-07-20 · **Artifact:** `docs/plans/m3-process-flow.md`
+> **Reviewer:** `analyst` · **Date:** 2026-07-20 · **Artifact:** `docs/archive/plans/m3-process-flow.md`
 > **patch v2** (architect) · **Baseline:** the v1 gate above. **Scope:** delta review only — the
 > central mechanism (§3.1 park-and-branch, the §2 citations, §5's no-DDL claim) was verified in v1
 > and was **not** re-derived, except where the patch touched it. Static review; nothing executed
@@ -572,8 +572,8 @@ assume". Plus the real suite counts and the RAM delta at integration.
 > commits `788e5bf` (U0+U1) · `efdeeb3` (U2) · `670474a` (U3) plus the **uncommitted U4
 > working tree** (`server/falkorchat/proof_defs.py`, `server/tests/test_process_flow.py`,
 > `scripts/seed_workflows.sh`, `AGENTS.md`), reviewed as one diff against `e3c09b3`.
-> **Baseline:** `docs/plans/m3-process-flow.md` v2.1 (§3 design, §4 def, §6 done-conditions,
-> §7 test strategy), `docs/plans/m3-process-flow-coordination.md` (D-A…D-H, O-1…O-6), and the
+> **Baseline:** `docs/archive/plans/m3-process-flow.md` v2.1 (§3 design, §4 def, §6 done-conditions,
+> §7 test strategy), `docs/archive/plans/m3-process-flow-coordination.md` (D-A…D-H, O-1…O-6), and the
 > two prior gates in this file.
 > **Method:** static only. Per the brief I did **not** run `pytest` or `test_queries.sh` (both
 > wipe the shared `reference` graph); no tree-mutating git command was used — baselines were

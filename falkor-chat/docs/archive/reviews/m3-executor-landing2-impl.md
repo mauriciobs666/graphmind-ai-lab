@@ -4,9 +4,9 @@
 > Baseline reviewed: commit **`514346b`** ("K-022 Landing 2 U11+U12 — @mention workflow trigger
 > wiring") vs. its parent `f71eaea`. All 22 files read in full (source diff + new `trigger.py` +
 > all changed tests + the three doc changes).
-> Specs judged against: `docs/plans/m3-executor-landing2.md` (the design-patch this diff implements,
-> incl. §★ Option-B ordering rationale), `docs/plans/m3-executor.md` (§6 trigger / §7 budget / §2.1
-> loop), `docs/plans/m3-executor-coordination.md` (Landing-2 / D6 claims), `docs/reviews/m3-executor-impl.md`
+> Specs judged against: `docs/archive/plans/m3-executor-landing2.md` (the design-patch this diff implements,
+> incl. §★ Option-B ordering rationale), `docs/archive/plans/m3-executor.md` (§6 trigger / §7 budget / §2.1
+> loop), `docs/archive/plans/m3-executor-coordination.md` (Landing-2 / D6 claims), `docs/archive/reviews/m3-executor-impl.md`
 > (the Landing-1 gate whose M-1/m-1/m-3/n-2 route here), `AGENTS.md`.
 > Evidence: I ran the suite — **pytest 312 passed** (1 warning) against live FalkorDB; the query
 > suite is untouched by design (no graph/DDL/QUERIES change — verified: no `QUERIES.md`/`DESIGN.md`/

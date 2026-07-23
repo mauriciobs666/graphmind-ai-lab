@@ -1,14 +1,14 @@
 # M3 — LLM-native workflow executor (K-022, reframed) — implementation plan
 
 > **Status:** proposed (architect plan, 2026-07-10). Planning-only artifact — no code/DDL changed.
-> **Designs to:** `docs/requirements/llm-native-workflows.md` (stakeholder-confirmed, "Ready for
+> **Designs to:** `docs/archive/requirements/llm-native-workflows.md` (stakeholder-confirmed, "Ready for
 > design"). **Builds on:** M3 Slice 1 (K-020 def model + K-021 snapshot materialization) —
-> DELIVERED; `docs/plans/m3-workflow-engine.md` (Part A decomposition), `m3-workflow-engine-coordination.md`.
+> DELIVERED; `docs/archive/plans/m3-workflow-engine.md` (Part A decomposition), `m3-workflow-engine-coordination.md`.
 > **Baselines before this work:** `test_queries.sh` 193/193, pytest 196/196, both green. FalkorDB up.
-> **Companion method note (see §10) — DELIVERED:** `docs/plans/m3-executor-ml.md` (data-scientist) —
+> **Companion method note (see §10) — DELIVERED:** `docs/archive/plans/m3-executor-ml.md` (data-scientist) —
 > LLM-as-judge guard reliability + research-node retrieval grounding + tool-calling approach + safety
 > defaults. Folded into this plan (§2.2/§4/§7/§10); consumed at Phase 2.
-> **Review folded in:** `docs/reviews/m3-executor.md` (analyst, *approve w/ suggestions*) — M1–M4
+> **Review folded in:** `docs/archive/reviews/m3-executor.md` (analyst, *approve w/ suggestions*) — M1–M4
 > majors + M5–M8 minors closed in this revision (2026-07-10 plan-patch); D5 locked (research→answer
 > unconditional). See the changelog at the end.
 
@@ -549,8 +549,8 @@ anything not in that script is called out inline as *proposed*, never left impli
 > `server/tests/eval/golden_guards.jsonl`. That rationale still stands, but the instruction was
 > **deliberately reverted** from `scripts/seed_workflows.sh`: measured live on the shipped chat model
 > (Qwen3-4B) it regressed intake advancement **10/10 → 3/10**, so Landing 2 ships the guard on the
-> fallback tier instead (D14 in `docs/plans/m3-executor-coordination.md`; the land-the-seam-first
-> sequencing is `docs/plans/m3-guard-thread-context.md` §6.3). Re-landing it is gated on a
+> fallback tier instead (D14 in `docs/archive/plans/m3-executor-coordination.md`; the land-the-seam-first
+> sequencing is `docs/archive/plans/m3-guard-thread-context.md` §6.3). Re-landing it is gated on a
 > model-robust (fence/prose-tolerant) parse **and** a calibrated judge — a K-023 follow-up.
 >
 > **⇒ Consequence for QA (read this before taking AC-2 from the table above):** in the **shipped**
@@ -632,10 +632,10 @@ anything not in that script is called out inline as *proposed*, never left impli
 
 ---
 
-## 10. Data-scientist method note — `docs/plans/m3-executor-ml.md` (DELIVERED)
+## 10. Data-scientist method note — `docs/archive/plans/m3-executor-ml.md` (DELIVERED)
 
 The ML-methodology core of this feature is answered by the **data-scientist** method note at
-**`docs/plans/m3-executor-ml.md`** (delivered 2026-07-10; builds on `docs/plans/graphrag-eval-ml.md`).
+**`docs/archive/plans/m3-executor-ml.md`** (delivered 2026-07-10; builds on `docs/plans/graphrag-eval-ml.md`).
 It folds into the build at **Phase 2** and gates units U6–U8. **Do not re-derive the method here** —
 the note is the source of truth for the numbers and prompt designs; this section only names the seams
 that consume it and the decisions already folded into the plan above:
@@ -667,7 +667,7 @@ unconditional) → resolved **unconditional** by the user as **D5**.
 
 ## Ready to implement — summary
 
-**Plan:** `falkor-chat/docs/plans/m3-executor.md`
+**Plan:** `falkor-chat/docs/archive/plans/m3-executor.md`
 
 **What it is.** The M3 LLM-native workflow executor (K-022, reframed to the stakeholder-confirmed
 `llm-native-workflows` requirements): a run/step-run engine where an LLM-native node (`type:'agent'`)
@@ -707,7 +707,7 @@ network-free (trigger config-gated).
 
 ---
 
-## Changelog — 2026-07-10 plan-patch (closing the analyst review `docs/reviews/m3-executor.md`)
+## Changelog — 2026-07-10 plan-patch (closing the analyst review `docs/archive/reviews/m3-executor.md`)
 
 Targeted revision, no redesign. Sections touched and how each finding is resolved:
 

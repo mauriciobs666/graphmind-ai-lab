@@ -92,7 +92,7 @@ The review gate is non-negotiable — it was the pattern that caught both K-022 
 
 - **2026-07-19 · teco** — Entry state verified, gaps 1–3 established from source, ledger opened.
   `architect` briefed to design the slice and **surface** D-A…D-E as options rather than settle
-  them. Deliverable: `docs/plans/m3-process-flow.md`.
+  them. Deliverable: `docs/archive/plans/m3-process-flow.md`.
 - **2026-07-19 · architect** — Plan delivered (`m3-process-flow.md`, 608 lines). Central design
   choice: **park-and-branch, so `_drive_loop` is never touched** — a `human` step is just a step
   whose outgoing guard reads a `ctx` key that does not exist yet (existing OUTCOME B parks it);
@@ -104,14 +104,14 @@ The review gate is non-negotiable — it was the pattern that caught both K-022 
   (`repository.py:1067`); **F-3** the `agent`-without-LLM silent stub is load-bearing for the
   350-test baseline and must be preserved verbatim.
 - **2026-07-19 · teco** — `analyst` dispatched for the **plan gate** (deliverable
-  `docs/reviews/m3-process-flow.md`), briefed to verify the park-and-branch claim against the real
+  `docs/archive/reviews/m3-process-flow.md`), briefed to verify the park-and-branch claim against the real
   loop, the `cmp` guard's totality/injection-safety, the two queries' additivity, the ctx-merge
   concurrency posture, the F-1/F-2/F-3 findings independently, and whether D-A…D-E are well-posed.
 - **2026-07-19 · user** — **D-A, D-B, D-C settled as recommended** (see the Decisions table).
   D-D/D-E taken as recommended pending the gate. Implementation is **held until the analyst gate
   returns** — no implementer dispatched yet.
 - **2026-07-19 · analyst (plan gate)** — **REQUEST CHANGES**: 2 blocker · 6 major · 10 minor ·
-  5 nit → `docs/reviews/m3-process-flow.md`. The central mechanism is **verified sound** (see
+  5 nit → `docs/archive/reviews/m3-process-flow.md`. The central mechanism is **verified sound** (see
   below); both blockers are the same class of error — the plan under-measured its blast radius on
   the **existing test estate** — and both are cheap plan-level fixes, not design rethinks.
 - **2026-07-19 · teco** — Day-end stop at the user's request. **No implementer dispatched; U0–U5
@@ -331,7 +331,7 @@ four ops** (implementation-gate verified against `proof_defs.py`), and the D-D r
 **All units done: U0, U1, U2, U3, U4, U4b, U5.** Three analyst gates run (plan gate v1
 *request changes* → v2.1 *approved*; implementation gate U0–U4 *approve with suggestions*;
 re-gate U4b *approve with suggestions, no blockers*) — all three in
-`docs/reviews/m3-process-flow.md`.
+`docs/archive/reviews/m3-process-flow.md`.
 
 **Committed:** `788e5bf` (U0+U1) · `efdeeb3` (U2) · `670474a` (U3).
 **Uncommitted in the working tree:** U4 + U4b + U5 (`proof_defs.py`, `test_process_flow.py`,

@@ -15,7 +15,7 @@
 > **K-031** (new — no black-box read of a def's/snapshot's structure, making the create-only
 > split-brain undetectable; plus a one-step budget overshoot nit) and an addendum on **K-027** (the
 > prose-tool-call failure is not terminal-node-specific and has a cheap parse-layer mitigation).
-> Artifacts: `docs/test-plans/m3-workflow-engine.md` + `docs/test-reports/m3-workflow-engine-report.md`;
+> Artifacts: `docs/archive/test-plans/m3-workflow-engine.md` + `docs/archive/test-reports/m3-workflow-engine-report.md`;
 > see HISTORY.md 2026-07-21. Prior review 2026-07-21: **K-024 delivered ✅ + analyst-gated twice** — the LLM-free
 > `kind:'process'` proof flow (`access-request@v1`) closes M3's last **build** item, so **K-025 (QA
 > acceptance) is unblocked** and is now all that stands between the component and **M3 ✅**. Units
@@ -25,12 +25,12 @@
 > (SHA `71055f756280` throughout). New baselines: server pytest **523 → 533 passed / 1 deselected**;
 > query suite **241 → 256**. Gates: plan gate (request-changes → v2.1 approved), implementation gate
 > U0–U4 and re-gate U4b (both *approve with suggestions*, no blockers) →
-> `docs/reviews/m3-process-flow.md`. Three items filed out of it: **K-028** (workflow timers),
+> `docs/archive/reviews/m3-process-flow.md`. Three items filed out of it: **K-028** (workflow timers),
 > **K-029** (converge the seed def sources), **K-030** (allow zero-transition defs). See
 > HISTORY.md 2026-07-21. Prior review 2026-07-19 (**K-022 Landing 2 delivered ✅ + analyst-gated** — trigger + triage proof
 > flow (U11–U14), the Defect-A guard thread-context seam fix, Defect-B tool-error survival, the U13
 > workflow seed; gate `approve with suggestions`, 0 blocker / 2 major (both closed) / 3 minor / 3 nit
-> → `docs/reviews/m3-guard-thread-context-impl.md`. New server baseline **pytest 350 passed, 0
+> → `docs/archive/reviews/m3-guard-thread-context-impl.md`. New server baseline **pytest 350 passed, 0
 > skipped**; query suite unchanged **241/241**. **U15 (qa-engineer acceptance = K-025) was NOT run** —
 > per decision D12-B the executor *mechanism* is proven and live-triage *reliability* is descoped to
 > the new **K-027**, which also carries the gate's minors/nits. K-023 (chat linkage) closed by the U11
@@ -42,7 +42,7 @@
 > delivered ✅** — K-020 (def
 > model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
 > see HISTORY.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
-> decomposition (K-020…K-025) in `docs/plans/m3-workflow-engine.md` Part A — canonical item text
+> decomposition (K-020…K-025) in `docs/archive/plans/m3-workflow-engine.md` Part A — canonical item text
 > lives there; compact copies below. **K-022 Landing 1 (offline executor + capabilities, U1–U10)
 > delivered ✅ + analyst-approved 2026-07-12** (§13 guard-language decision resolved; suites
 > 241/283 green; see HISTORY.md). Next on the critical path: **Landing 2 — the trigger + triage
@@ -56,7 +56,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) and K-031 (filed out of K-025) are follow-ups, **not** M3-green gates. |
+| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024) and K-031 (filed out of K-025) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -112,7 +112,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > Remaining to M3 ✅: **K-025 (QA acceptance = U15) — unblocked, not yet run**. **K-027**
 > (live-triage reliability) is a parallel follow-up track, explicitly *not* an M3-green gate per
 > decision D12-B; so are **K-028/K-029/K-030**, filed out of the K-024 gates.
-> Canonical item text + slice-1 implementation plan: `docs/plans/m3-workflow-engine.md`
+> Canonical item text + slice-1 implementation plan: `docs/archive/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
 
 ### — Milestone M3 (Workflow engine) — ✅ DELIVERED (K-020…K-025 → HISTORY.md 2026-07-21) —
@@ -137,21 +137,21 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   Defect-C prompt mitigations ⇒ the shipped guard runs only on the **degraded RECENT-TURNS tier**.
   Baselines: **pytest 283 → 350 passed, 0 skipped**; query suite **241/241** (zero graph/DDL/QUERIES
   surface in the whole landing). Analyst gate = **approve with suggestions, 0 blocker / 2 major / 3
-  minor / 3 nit** (`docs/reviews/m3-guard-thread-context-impl.md`); both majors closed before the commit.
+  minor / 3 nit** (`docs/archive/reviews/m3-guard-thread-context-impl.md`); both majors closed before the commit.
   **Not accepted:** U15 was not run — mechanism proven, live-triage reliability descoped to **K-027**.
-  See HISTORY.md 2026-07-19, `docs/plans/m3-executor-landing2.md`, `docs/plans/m3-guard-thread-context.md`,
-  and the coordination log `docs/plans/m3-executor-coordination.md`.
+  See HISTORY.md 2026-07-19, `docs/archive/plans/m3-executor-landing2.md`, `docs/archive/plans/m3-guard-thread-context.md`,
+  and the coordination log `docs/archive/plans/m3-executor-coordination.md`.
 
 - **Delivered (Landing 1, U1–U10) ✅ 2026-07-12:** the offline LLM-native executor + node
   capabilities (Phases 0–3) — schema/DDL + DESIGN reconciliation + QUERIES §12, `executor.py`
   (§2.1 A/B/C loop) / `guards.py` / `tools.py`, repository/services wiring. Suites raised to
   **query 241/241, pytest 283**, both green. Analyst gate = **approve-with-suggestions, 0
   blockers** (1 major M-1 + 3 minor + 3 nit; two seams deferred to Landing 2). Reframed as an
-  offline-first landing under `docs/plans/m3-executor.md`; teco-coordinated
+  offline-first landing under `docs/archive/plans/m3-executor.md`; teco-coordinated
   graph-dba → tdd-engineer → coder with a mandatory analyst review gate — the team's first
   fully-gated run. See `docs/HISTORY.md` (2026-07-12), the review at
-  `docs/reviews/m3-executor-impl.md`, and the coordination log
-  `docs/plans/m3-executor-coordination.md`. Landing 2 (U11–U14) landed 2026-07-19 — see the bullet
+  `docs/archive/reviews/m3-executor-impl.md`, and the coordination log
+  `docs/archive/plans/m3-executor-coordination.md`. Landing 2 (U11–U14) landed 2026-07-19 — see the bullet
   above; U15 remains open as K-025.
 
 - **Owner:** **`architect`** design pass first — engine-loop semantics **+ resolve DESIGN §13
@@ -160,14 +160,14 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   write/read queries; `WorkflowRun`/`StepRun` DDL already exists) → **`tdd-engineer`** →
   **`analyst` post-implementation review** (added 2026-07-12; see review-gate note below).
 - **Inputs/prereqs:** K-021 ✅ (materialized snapshots to walk); the §13 decision. Plan doc:
-  `docs/plans/m3-executor.md`. Also lock the `start_key` contract here (slice-1 residual).
+  `docs/archive/plans/m3-executor.md`. Also lock the `start_key` contract here (slice-1 residual).
 - **Scope (DESIGN §6.2):** `WorkflowRun {runId,defKey,defVersion,status,startedAt,ctx}` with
   `OF_DEF`/`AT_STEP`/`HAS_STEP_RUN`; `StepRun {stepRunId,stepKey,status,…,input,output}` with
   `RAN` + `NEXT` audit trail. Engine loop: read `AT_STEP` → evaluate `TRANSITION` guards against
   `ctx` → create next `StepRun` → execute → append `NEXT` → move `AT_STEP`.
 - **Done-condition:** both suites green at the new enumerated gate baseline; a run walks a
   materialized def deterministically; guards evaluated per the §13 decision; audit trail complete;
-  **analyst review of the delivered diff at `docs/reviews/m3-executor-impl.md` with verdict
+  **analyst review of the delivered diff at `docs/archive/reviews/m3-executor-impl.md` with verdict
   approve / approve-with-suggestions** (a "needs changes" loops back to the implementer, then
   re-review — the gate is part of done, not optional).
 - **Review-gate note (process addition 2026-07-12, not in the frozen plan text):** K-022 is
@@ -197,7 +197,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Owner:** **`graph-dba`** gate (`TRIGGERED_BY` / StepRun-`EMITTED` writes/reads) →
   **`tdd-engineer`**/`coder`.
 - **Inputs/carried from K-022 Landing 1** (this slice = U11, the trigger wiring; see
-  `docs/reviews/m3-executor-impl.md` findings + the coordination doc's "Carried to Landing 2"
+  `docs/archive/reviews/m3-executor-impl.md` findings + the coordination doc's "Carried to Landing 2"
   section):
   1. **M-1 (analyst major)** — add a top-level `try/except` in `executor._drive` that `fail_run`s
      on an unexpected exception (today a mid-drive fault leaves the run stuck at `status='running'`,
@@ -239,9 +239,9 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > the def in `server/falkorchat/proof_defs.py`, its seeding, and the fully offline acceptance test
 > `server/tests/test_process_flow.py`, **U5** closeout. The central bet held: **`_drive_loop` was
 > never modified** — SHA `71055f756280` before, during and after. Baselines: server pytest
-> **523 → 533 passed / 1 deselected**, query suite **256/256**. Plan `docs/plans/m3-process-flow.md`
-> (v2.1); coordination `docs/plans/m3-process-flow-coordination.md`; gates (plan, implementation
-> U0–U4, re-gate U4b) in `docs/reviews/m3-process-flow.md`. Follow-ups filed rather than folded in:
+> **523 → 533 passed / 1 deselected**, query suite **256/256**. Plan `docs/archive/plans/m3-process-flow.md`
+> (v2.1); coordination `docs/archive/plans/m3-process-flow-coordination.md`; gates (plan, implementation
+> U0–U4, re-gate U4b) in `docs/archive/reviews/m3-process-flow.md`. Follow-ups filed rather than folded in:
 > **K-028**, **K-029**, **K-030**.
 
 - **Owner:** **`coder`**/`tdd-engineer` + `scripts/seed_workflows.sh` (mirrors `seed_demo.sh`).
@@ -258,8 +258,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 > **Run and closed.** `qa-engineer` executed the pass against commit `98a3cc8` on green baselines
 > (server pytest **533 passed / 1 deselected**; query suite **256/256**, both re-confirmed after the
-> pass). Artifacts: test plan `docs/test-plans/m3-workflow-engine.md` (v1.0, written before
-> execution) + test report `docs/test-reports/m3-workflow-engine-report.md`.
+> pass). Artifacts: test plan `docs/archive/test-plans/m3-workflow-engine.md` (v1.0, written before
+> execution) + test report `docs/archive/test-reports/m3-workflow-engine-report.md`.
 > **Verdict: PASS with parked, model-gated limitations ⇒ M3 → ✅.** Zero blocking defects.
 > - **AC-1 / AC-5 / AC-6 — VERIFIED by execution.** `@mention` → `WorkflowRun-[:TRIGGERED_BY]->Message`
 >   read back from the graph; a debug run recorded **18 `TraceEvent`s** (`node_rationale` ×8,
@@ -338,7 +338,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
      a strengthened prompt, then 2/3 in the probe replay). A second measured mechanism: the folded
      `"{displayName}: {text}"` thread context leaks a display name into `mentions` → the §4 write
      rejects → the model "recovers" by dropping the tool. Needs an engine-level guarantee, not a prompt.
-  3. **Judge calibration (D9/D10)** — run the protocol in `docs/plans/m3-guard-calibration.md` §4:
+  3. **Judge calibration (D9/D10)** — run the protocol in `docs/archive/plans/m3-guard-calibration.md` §4:
      **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ is a **reported diagnostic**, not a
      gate (an always-suspend judge scores a perfect 0% FAR, so the original κ-based gate could be
      passed by a judge that never advances). Gate failure ⇒ **block the wiring** — no override, no
@@ -355,7 +355,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   5. **Ministral re-probe (D13 finding 2)** — Ministral-3B is *better* at the terminal tool call
      (native `post_message` 3/3 in replay where Qwen emitted prose 3/3) but far worse at judging
      (fence-fixed advance-recall 0.364 vs Qwen 0.818). Worth re-probing **only if** the judge is made
-     model-robust (item 1). Notes: `docs/plans/m3-capability-probe-ml.md`,
+     model-robust (item 1). Notes: `docs/archive/plans/m3-capability-probe-ml.md`,
      `docs/plans/local-model-ram-budget-ml.md` (the ~4–5GB fits-16GB chat-model budget).
   6. **Exit** — these outcomes are what would let the **K-025 / U15 acceptance** move AC-2b/AC-3/AC-4
      from *model-gated, structurally demonstrated* to *verified*. K-025 can run before this item; it
@@ -375,8 +375,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   offline-testable mitigation that would have converted the observed run — **do it before the engine
   surgery, then re-measure.** Also recorded: `pytest -m live` is **RED deterministically (2/2)** on
   the AC-4 answer-post assertion — a known, filed limitation (D12-B), not an unknown regression.
-  Evidence: `docs/test-reports/m3-workflow-engine-report.md` §3.9 / DEF-K027-A / DEF-K027-B.
-- **Carried findings from the analyst gate** (`docs/reviews/m3-guard-thread-context-impl.md`, minors +
+  Evidence: `docs/archive/test-reports/m3-workflow-engine-report.md` §3.9 / DEF-K027-A / DEF-K027-B.
+- **Carried findings from the analyst gate** (`docs/archive/reviews/m3-guard-thread-context-impl.md`, minors +
   nits — recorded here so they cannot rot):
   - **m-1 · `guards.py` negator window leaks across clause boundaries.** The 12-char window misses
     e.g. `"The user did not say; more info is needed."`, and a missed contradiction is a
@@ -702,14 +702,14 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 
 | Path | Scope |
 |---|---|
-| `docs/test-plans/m3-workflow-engine.md` + `docs/test-reports/m3-workflow-engine-report.md` | **Created ✅ 2026-07-21** — the K-025 M3 acceptance pass: risk-based plan (written before execution) + report (verdict **PASS with parked, model-gated limitations** ⇒ M3 ✅). |
-| `docs/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
-| `docs/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
-| `docs/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
-| `docs/plans/m3-process-flow.md` | **Created ✅ 2026-07-19, v2.1 approved 2026-07-20** — K-024's second half: the LLM-free `kind:'process'` proof flow (park-and-branch, the `cmp` guard family, typed step handlers, start-without-trigger + the input endpoint, the `access-request@v1` def in §4). Coordination log: `m3-process-flow-coordination.md`; gates: `docs/reviews/m3-process-flow.md`. |
-| `docs/plans/m3-guard-thread-context.md` | **Created ✅ 2026-07-15** — the Defect-A design (guard thread-context seam; ~40 lines, zero graph change, `_drive_loop` untouched by construction). |
-| `docs/plans/m3-guard-calibration.md` | **Created ✅ 2026-07-16** — K-027 item 3: the judge-calibration protocol (D9 gate = false-advance ≤ 10% ∧ advance-recall ≥ 0.80; D10 small-n caveat mandatory). |
-| `docs/plans/m3-capability-probe-ml.md` | **Created ✅ 2026-07-19** — the D13 fits-16GB Qwen3-4B-vs-Ministral-3B comparison + its run results (no model swap). |
+| `docs/archive/test-plans/m3-workflow-engine.md` + `docs/archive/test-reports/m3-workflow-engine-report.md` | **Created ✅ 2026-07-21** — the K-025 M3 acceptance pass: risk-based plan (written before execution) + report (verdict **PASS with parked, model-gated limitations** ⇒ M3 ✅). |
+| `docs/archive/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
+| `docs/archive/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
+| `docs/archive/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
+| `docs/archive/plans/m3-process-flow.md` | **Created ✅ 2026-07-19, v2.1 approved 2026-07-20** — K-024's second half: the LLM-free `kind:'process'` proof flow (park-and-branch, the `cmp` guard family, typed step handlers, start-without-trigger + the input endpoint, the `access-request@v1` def in §4). Coordination log: `m3-process-flow-coordination.md`; gates: `docs/archive/reviews/m3-process-flow.md`. |
+| `docs/archive/plans/m3-guard-thread-context.md` | **Created ✅ 2026-07-15** — the Defect-A design (guard thread-context seam; ~40 lines, zero graph change, `_drive_loop` untouched by construction). |
+| `docs/archive/plans/m3-guard-calibration.md` | **Created ✅ 2026-07-16** — K-027 item 3: the judge-calibration protocol (D9 gate = false-advance ≤ 10% ∧ advance-recall ≥ 0.80; D10 small-n caveat mandatory). |
+| `docs/archive/plans/m3-capability-probe-ml.md` | **Created ✅ 2026-07-19** — the D13 fits-16GB Qwen3-4B-vs-Ministral-3B comparison + its run results (no model swap). |
 | `docs/plans/local-model-ram-budget-ml.md` | **Created ✅ 2026-07-18** — local-model RAM budget for the downgraded 16GB host (what fits alongside FalkorDB + the co-resident embedder). |
 | `docs/archive/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
 | `docs/archive/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |

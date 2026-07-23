@@ -240,7 +240,7 @@ Slice 2+ (executor & proof) — each builds on the prior; largely linear
 - **Inputs/prereqs:** K-020…K-024 landed.
 - **Scope:** black-box acceptance pass on the workflow engine — publish → materialize → run →
   step-run trace → chat linkage — for both proof flows. Versioned test plan + report per repo
-  convention (`docs/test-plans/m3-workflow-engine.md`, `docs/test-reports/…-report.md`), isolated
+  convention (`docs/archive/test-plans/m3-workflow-engine.md`, `docs/test-reports/…-report.md`), isolated
   `ws:qa` (create + delete), `reference`/`ws:acme` untouched (or additive-only).
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 - **Risks/RAM:** transient `ws:qa`; no code under test changed. **Test strategy:** the pass itself
@@ -250,9 +250,9 @@ Slice 2+ (executor & proof) — each builds on the prior; largely linear
 
 | Path | Scope |
 |---|---|
-| `docs/plans/m3-workflow-engine.md` (this doc) | K-020 + K-021 full plan; K-022–K-025 as items. |
+| `docs/archive/plans/m3-workflow-engine.md` (this doc) | K-020 + K-021 full plan; K-022–K-025 as items. |
 | `docs/plans/m3-workflow-def-queries.md` | graph-dba verified-query deliverable for K-020+K-021 (mirror `m2-groundwork-queries.md`). |
-| `docs/plans/m3-executor.md` | K-022: run/step-run executor + the §13 guard-language decision. |
+| `docs/archive/plans/m3-executor.md` | K-022: run/step-run executor + the §13 guard-language decision. |
 
 ---
 
@@ -548,7 +548,7 @@ TestClient). No live LLM needed (Slice 1 is definition + materialization only).
 
 ## Ready to implement — summary
 
-**Plan:** `falkor-chat/docs/plans/m3-workflow-engine.md` (repo-relative)
+**Plan:** `falkor-chat/docs/archive/plans/m3-workflow-engine.md` (repo-relative)
 
 **Part A (M3 decomposition):** K-020 def model in `reference` → K-021 snapshot materialization into
 `ws:{id}` (**Slice 1**) → K-022 run/step-run executor + guard eval (§13 decision here) → K-023 chat

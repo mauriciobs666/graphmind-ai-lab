@@ -7,7 +7,7 @@
 > Windows + WSL2/Docker + FalkorDB + LM Studio, with headroom, before resuming K-022 (the LLM-native
 > workflow executor) — which leans harder on the chat model (tool-calling, multi-step instruction
 > following) than plain chat did.
-> **Consumes:** `docs/plans/m3-executor.md` (executor demands), `docs/plans/m3-executor-ml.md`
+> **Consumes:** `docs/archive/plans/m3-executor.md` (executor demands), `docs/archive/plans/m3-executor-ml.md`
 > (guard/tool-calling method), `server/falkorchat/config.py` + `server/.env.example` (current config).
 
 ---

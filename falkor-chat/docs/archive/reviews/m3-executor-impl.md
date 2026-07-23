@@ -4,8 +4,8 @@
 > Baseline reviewed: the delivered Landing-1 diff on `main` (working tree) vs. `HEAD` (059b418) —
 > `git diff` for tracked files + the three untracked new modules (`executor.py`, `guards.py`,
 > `tools.py`) and their tests, read in full.
-> Specs judged against: `docs/plans/m3-executor.md`, `docs/plans/m3-executor-ml.md`,
-> `docs/plans/m3-executor-coordination.md` (units + D1–D5 + "Carried to Landing 2"), `AGENTS.md`.
+> Specs judged against: `docs/archive/plans/m3-executor.md`, `docs/archive/plans/m3-executor-ml.md`,
+> `docs/archive/plans/m3-executor-coordination.md` (units + D1–D5 + "Carried to Landing 2"), `AGENTS.md`.
 > Scope boundary respected: **Landing 1 = Phases 0–3 only.** U11–U15 (trigger + proof + acceptance)
 > are out of scope and are **not** faulted below.
 
