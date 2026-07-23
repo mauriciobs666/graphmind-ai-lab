@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-07-23 — Tico may commit its own deliverable
+- **What:** The Bash guardrail no longer bans all tree mutation — it now carves out `git add`/`git commit`, scoped to exactly the paths the Write/Edit guard already allows (the requirements doc(s), the kaizen inbox), staged by explicit path only (`git add -A`/`.`/`commit -a` still forbidden). Added a "Commit as you go" bullet alongside "Write as you go" and a note in the Handoff section to commit the doc's final state before closing.
+- **Why:** User ruling: they treat requirements docs as code and want tico to version its own files as part of authoring them, not leave commits to a human or downstream agent. This is a deliberate narrowing of the prior full Bash-mutation ban (see the 2026-07-09 creation entry and `guard-doc-writes.sh`'s design note on architect K-003) — not a hook change: Bash mutation stays prompt-guarded by convention, only the *scope* of what's permitted moved. No push/reset/rebase/amend; no bulk-staging flags.
+- **Plan items:** none.
+
 ## 2026-07-12 — Learning-capture loop: kaizen inbox + closing protocol + guard allowlist
 - **What:** Added `kaizen/inbox.md` (append-only learnings inbox, seeded empty) and a "Learning capture" closing-protocol section to the prompt; the doc-scoped write guard's allowlist gained exactly the agent's own inbox path (`<name>/kaizen/inbox.md`), with the escalation message updated to match.
 - **Why:** Team-wide self-improvement loop (agent-maintenance skill §5, added the same day): capture is cheap and unreviewed during runs, promotion is curated — cobb periodically verifies each entry and routes it to the prompt, an on-demand knowledge base, or project docs. Requested by the user.
