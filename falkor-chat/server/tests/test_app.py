@@ -228,6 +228,145 @@ def test_build_llm_judge_parses_a_json_verdict():
     assert llm.calls  # the llm was actually driven
 
 
+class _ReplyLLM:
+    """Stub LLM returning one canned judge reply."""
+
+    def __init__(self, text):
+        self._text = text
+
+    def complete(self, messages):
+        return self._text
+
+
+def _judge_verdict(reply: str) -> dict:
+    from falkorchat.app import _build_llm_judge
+
+    return _build_llm_judge(_ReplyLLM(reply))(
+        "enough info?", understanding={}, recent_turns=[], ctx={}, step_output=""
+    )
+
+
+def test_build_llm_judge_parses_a_fenced_json_verdict():
+    # K-027 item 1: the D13 Ministral shape — a correct verdict wrapped in a
+    # ```json fence used to be destroyed by the bare json.loads (26/26 unparseable).
+    verdict = _judge_verdict(
+        '```json\n{"decision": true, "rationale": "the user named the service"}\n```'
+    )
+
+    assert verdict["decision"] is True
+    assert "named the service" in verdict["rationale"]
+
+
+def test_build_llm_judge_parses_an_unlabelled_fenced_verdict():
+    verdict = _judge_verdict('```\n{"decision": true, "rationale": "all fields given"}\n```')
+
+    assert verdict["decision"] is True
+
+
+def test_build_llm_judge_parses_a_prose_wrapped_verdict():
+    verdict = _judge_verdict(
+        'Here is my verdict:\n{"decision": true, "rationale": "the user gave repro steps"}\n'
+        "Let me know if you need more."
+    )
+
+    assert verdict["decision"] is True
+    assert "repro steps" in verdict["rationale"]
+
+
+def test_build_llm_judge_still_suspends_on_a_json_reply_that_is_not_a_verdict():
+    # JSON that carries no verdict object must not advance — the bias-to-suspend
+    # default (and guards._coerce_verdict downstream) still holds.
+    assert _judge_verdict("[1, 2, 3]")["decision"] is False
+    assert _judge_verdict('"just a string"')["decision"] is False
+
+
+def test_build_llm_judge_does_not_invent_a_verdict_from_prose():
+    # The tolerant parse must not turn an English answer into a decision.
+    verdict = _judge_verdict("Yes, the condition is clearly satisfied.")
+
+    assert verdict["decision"] is False
+
+
+def test_build_llm_judge_does_not_advance_on_a_hypothetical_inline_verdict():
+    # gate B-1: the judge narrates a counterfactual and then answers false. Reading
+    # the *quoted* object out of the sentence advances a guard that HEAD suspended —
+    # the dangerous direction, and `guards._coerce_verdict` cannot catch it because
+    # the quoted rationale is clean.
+    verdict = _judge_verdict(
+        "If the user had named the service I would answer "
+        '{"decision": true, "rationale": "named"} but they did not, so I answer false.'
+    )
+
+    assert verdict["decision"] is False
+
+
+def test_build_llm_judge_does_not_advance_on_an_inline_schema_echo():
+    verdict = _judge_verdict(
+        'The expected reply shape is {"decision": true, "rationale": "..."} — '
+        "in this case the condition is not met."
+    )
+
+    assert verdict["decision"] is False
+
+
+def test_build_llm_judge_advances_on_an_own_line_schema_echo():
+    # gate N-2 — characterisation of a *declared* residual, not an endorsement.
+    # The inline twin above suspends; this one owns its lines, so the conservative
+    # parse accepts it and the guard advances. Closing it needs the model's intent,
+    # not a parser (see `llm.extract_own_line_json_object`). Pinned so the boundary
+    # is visible: if K-027 item 3's calibration counts this in the false-advance
+    # rate, *this* test is what changes.
+    verdict = _judge_verdict(
+        "The reply shape is:\n"
+        '{"decision": true, "rationale": "..."}\n'
+        "In this case the condition is not met."
+    )
+
+    assert verdict["decision"] is True
+
+
+def test_build_llm_judge_suspends_on_a_single_line_array_wrapped_verdict():
+    # gate B-1's second shape: at HEAD a non-dict ⇒ suspend; the permissive
+    # extractor lifted the inner object out and advanced. Still suspends.
+    assert (
+        _judge_verdict('[{"decision": true, "rationale": "named"}]')["decision"]
+        is False
+    )
+
+
+def test_build_llm_judge_advances_on_a_multiline_array_wrapped_verdict():
+    # gate N-6 — characterisation. The object owns its lines, so it is *asserted*
+    # rather than quoted, and the own-line rule accepts it. Asymmetric with the
+    # single-line form above purely because of line ownership; pinned so a future
+    # narrowing is deliberate.
+    verdict = _judge_verdict('[\n{"decision": true, "rationale": "named"}\n]')
+
+    assert verdict["decision"] is True
+
+
+def test_build_llm_judge_suspends_when_two_candidate_verdicts_disagree():
+    # Two own-line objects: which one is the verdict is a guess, and a guess in the
+    # advance direction is exactly what the bias-to-suspend design forbids.
+    verdict = _judge_verdict(
+        "Example of advancing:\n"
+        '{"decision": true, "rationale": "all fields given"}\n'
+        "My actual answer:\n"
+        '{"decision": false, "rationale": "service not named"}'
+    )
+
+    assert verdict["decision"] is False
+
+
+def test_build_llm_judge_ignores_an_own_line_object_without_a_decision_key():
+    verdict = _judge_verdict(
+        "Here is the evidence I considered:\n"
+        '{"request": "access", "known": ["service"]}\n'
+        "I cannot decide."
+    )
+
+    assert verdict["decision"] is False
+
+
 def test_build_llm_judge_biases_to_suspend_on_unparseable_output():
     from falkorchat.app import _build_llm_judge
 

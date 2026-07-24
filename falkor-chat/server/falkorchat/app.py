@@ -15,6 +15,7 @@ Run:  uvicorn falkorchat.app:app   (agents connect at /mcp; REST under /)
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -27,6 +28,7 @@ from . import api, config, db
 from . import mcp as mcp_mod
 from .config import CallContext
 from .guards import WorkflowConfigError
+from .llm import extract_own_line_json_object
 from .repository import Repository
 from .services import (
     ChannelNotFoundError,
@@ -309,11 +311,9 @@ def _render_judge_user(
     `JUDGE_USER_MAX_CHARS` by dropping **oldest** turns first, so the newest turn — the one
     the condition is usually about — always survives; a hard truncation backstops the rest.
     """
-    import json as _json
-
     blocks = [f"CONDITION: {condition}"]
     if understanding:
-        state = _json.dumps(understanding, indent=2, sort_keys=True, default=str)
+        state = json.dumps(understanding, indent=2, sort_keys=True, default=str)
         blocks.append(f"CURRENT STATE:\n{state}")
 
     turns = list(recent_turns) if isinstance(recent_turns, list) else []
@@ -343,8 +343,31 @@ def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
     judge never falsely advances. Calibration (κ / false-advance) is a U14/U15 concern; the
     wired judge must simply exist so an `llm` guard never hits the m-3 "no judge" path in
     the served flow.
+
+    The reply is parsed with `llm.extract_own_line_json_object(..., require_key="decision")`,
+    **not** a bare `json.loads` (K-027 item 1) and **not** the permissive
+    `extract_json_object` the tool-call path uses (K-027 gate B-1). A model that wraps its
+    verdict in a ```json fence or a sentence of prose used to break *every* verdict silently —
+    the D13 probe scored Ministral 26/26 "unparseable judge output", one of them a correct
+    `decision:true`. What the parse now accepts, precisely: a reply that is entirely one JSON
+    object (bare or fenced), or **exactly one** `decision`-carrying object that owns its lines.
+
+    Everything else — prose with no object, a verdict quoted mid-sentence
+    (*"I would answer {"decision": true …} but they did not"*), two candidate objects that
+    disagree — resolves to `decision=False`. That asymmetry is the point: a *missed* advance
+    costs the run one more turn, a *false* advance passes a gate the workflow relies on, and
+    `guards._coerce_verdict` cannot catch a quoted verdict downstream because its rationale
+    reads perfectly clean. Tolerance is therefore only ever applied to how a verdict is
+    *wrapped*, never to whether one was *asserted*.
+
+    **Residual, declared:** a *hypothetical* or *schema-echo* verdict the model writes on
+    its **own line**, with no second object to disambiguate it, is still accepted and
+    still advances (pinned in `test_app.py`). Line ownership is the only signal a parser
+    has; separating "here is the shape of a verdict" from "here is my verdict" needs the
+    model's intent. K-027 item 3 owns the false-advance metric — if calibration finds
+    this shape in the count, the stricter rule (accept only a reply that is *entirely*
+    one object after fence-stripping) is the documented next narrowing.
     """
-    import json as _json
 
     def judge(condition, *, understanding, recent_turns, ctx, step_output):  # noqa: ANN001
         user = _render_judge_user(condition, understanding, recent_turns)
@@ -352,12 +375,9 @@ def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
             {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": user},
         ])
-        try:
-            parsed = _json.loads(text)
-        except (ValueError, TypeError):
+        parsed = extract_own_line_json_object(text, require_key="decision")
+        if parsed is None:
             return {"decision": False, "rationale": "unparseable judge output"}
-        if not isinstance(parsed, dict):
-            return {"decision": False, "rationale": "non-object judge output"}
         return parsed
 
     return judge
