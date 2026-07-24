@@ -15,6 +15,7 @@ from redis.exceptions import ResponseError
 
 from falkorchat.config import CallContext
 from falkorchat.repository import MessageWriteStatus
+from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
     ChannelNotFoundError,
     InvalidSearchQueryError,
@@ -24,6 +25,7 @@ from falkorchat.services import (
     UnknownActorError,
     UnknownMemberError,
     WorkflowRunNotFoundError,
+    _diff_structures,
 )
 
 CTX = CallContext(ws="test", actor="u1")
@@ -56,6 +58,9 @@ class FakeRepo:
         self.materialized: list[dict] = []     # materialize_snapshot kwargs, in order
         self.defs: dict[tuple, dict] = {}      # (key, version) -> def subgraph/meta
         self.snapshots: dict[tuple, dict] = {}  # (key, version) -> snapshot subgraph/meta
+        # K-031 structure reads — repository shape `{name,kind,start_keys,steps,transitions}`
+        self.def_structures: dict[tuple, dict] = {}
+        self.snapshot_structures: dict[tuple, dict] = {}
         # §12 workflow-run state
         self.messages: dict[str, dict] = {}    # msgId -> message (for get_message)
         self.started_runs: list[dict] = []     # start_run kwargs, in order
@@ -191,9 +196,17 @@ class FakeRepo:
             "stepCount": len(steps), "transitionCount": len(transitions),
         }
 
+    def read_def_structure(self, *, key, version):
+        self.calls.append(("read_def_structure", key, version))
+        return self.def_structures.get((key, version))
+
     def get_snapshot(self, ws, *, key, version):
         self.calls.append(("get_snapshot", ws, key, version))
         return self.snapshots.get((key, version))
+
+    def read_snapshot_structure(self, ws, *, key, version):
+        self.calls.append(("read_snapshot_structure", ws, key, version))
+        return self.snapshot_structures.get((key, version))
 
     def list_snapshots(self, ws, *, limit=50):
         self.calls.append(("list_snapshots", ws, limit))
@@ -989,6 +1002,209 @@ def test_list_snapshots_passthrough_uses_ctx_ws():
 
     assert out and out[0]["key"] == "a"
     assert ("list_snapshots", "test", 50) in repo.calls
+
+
+# ── §11 def/snapshot structure reads + diff (K-031) ─────────────────────────────
+#
+# Canonical ordering, camelCase renaming and the comparator are pure service
+# logic (the repository stays a 1:1 mirror of QUERIES.md and returns steps and
+# transitions unordered by design, F6), so they are pinned here against FakeRepo.
+
+
+def _raw_structure(*, name="A", kind="process", start_keys=("s",), steps=None,
+                   transitions=None):
+    """A repository-shaped structure read (pre-canonicalization)."""
+    return {
+        "name": name,
+        "kind": kind,
+        "start_keys": list(start_keys),
+        "steps": list(steps if steps is not None else [
+            {"key": "s", "type": "human", "config": '{"waitsForHuman":true}'},
+        ]),
+        "transitions": list(transitions if transitions is not None else []),
+    }
+
+
+def test_def_structure_canonical_ordering_is_deterministic():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    # deliberately shuffled at the source — the graph returns no order (F6)
+    repo.def_structures[("a", "1")] = _raw_structure(
+        steps=[
+            {"key": "zeta", "type": "message", "config": ""},
+            {"key": "alpha", "type": "human", "config": "{}"},
+            {"key": "mid", "type": "decision", "config": ""},
+        ],
+        transitions=[
+            {"from": "mid", "to": "zeta", "on": "b", "order": 1, "guard": ""},
+            {"from": "alpha", "to": "mid", "on": "go", "order": 0, "guard": "g"},
+            {"from": "mid", "to": "alpha", "on": "a", "order": 0, "guard": ""},
+        ],
+    )
+
+    out = svc.get_workflow_def_structure(CTX, key="a", version="1")
+
+    assert [s["key"] for s in out["steps"]] == ["alpha", "mid", "zeta"]
+    assert [(t["from"], t["order"], t["to"]) for t in out["transitions"]] == [
+        ("alpha", 0, "mid"), ("mid", 0, "alpha"), ("mid", 1, "zeta"),
+    ]
+    assert out["stepCount"] == 3
+    assert out["transitionCount"] == 3
+    assert out["source"] == "reference"
+
+
+def test_def_structure_start_keys_omitted_for_one_present_for_two():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.def_structures[("one", "1")] = _raw_structure(start_keys=("s",))
+    # unsorted at the source — canonicalization sorts, so `startKey` is stable
+    repo.def_structures[("two", "1")] = _raw_structure(start_keys=("z", "a"))
+
+    one = svc.get_workflow_def_structure(CTX, key="one", version="1")
+    two = svc.get_workflow_def_structure(CTX, key="two", version="1")
+
+    assert one["startKey"] == "s"
+    assert "startKeys" not in one
+    assert two["startKeys"] == ["a", "z"]
+    assert two["startKey"] == "a"
+
+
+def test_structure_reads_use_the_ctx_ws_seam_only_for_the_snapshot():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.def_structures[("a", "1")] = _raw_structure()
+    repo.snapshot_structures[("a", "1")] = _raw_structure()
+
+    svc.get_workflow_def_structure(CTX, key="a", version="1")
+    snap = svc.get_snapshot_structure(CTX, key="a", version="1")
+
+    # the def read is global — no workspace argument at all
+    assert ("read_def_structure", "a", "1") in repo.calls
+    assert ("read_snapshot_structure", "test", "a", "1") in repo.calls
+    assert snap["source"] == "workspace"
+
+
+def test_snapshot_structure_absent_returns_none():
+    svc = make_service(FakeRepo())
+
+    assert svc.get_snapshot_structure(CTX, key="ghost", version="1") is None
+
+
+def test_def_structure_absent_raises_not_found():
+    svc = make_service(FakeRepo())
+
+    with pytest.raises(WorkflowDefNotFoundError):
+        svc.get_workflow_def_structure(CTX, key="ghost", version="1")
+
+
+def _canon(**kwargs):
+    from falkorchat.services import _canonical_structure
+
+    return _canonical_structure(
+        _raw_structure(**kwargs), source="reference", key="a", version="1"
+    )
+
+
+def test_diff_structures_identical_is_empty():
+    assert _diff_structures(_canon(), _canon()) == []
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "path", "def_v", "snap_v"),
+    [
+        # meta fields
+        (dict(name="A"), dict(name="B"), "meta.name", "A", "B"),
+        (dict(kind="process"), dict(kind="conversation"),
+         "meta.kind", "process", "conversation"),
+        (dict(start_keys=("s",)), dict(start_keys=("t",)), "meta.startKey", "s", "t"),
+        (dict(start_keys=("s",)), dict(start_keys=("s", "t")),
+         "meta.startKeys", None, "s,t"),
+        # step presence, both directions
+        (dict(steps=[{"key": "x", "type": "message", "config": ""}]),
+         dict(steps=[]), "steps[x]", "present", "absent"),
+        (dict(steps=[]),
+         dict(steps=[{"key": "x", "type": "message", "config": ""}]),
+         "steps[x]", "absent", "present"),
+        # step payload
+        (dict(steps=[{"key": "x", "type": "message", "config": ""}]),
+         dict(steps=[{"key": "x", "type": "decision", "config": ""}]),
+         "steps[x].type", "message", "decision"),
+        (dict(steps=[{"key": "x", "type": "message", "config": "{}"}]),
+         dict(steps=[{"key": "x", "type": "message", "config": '{"a":1}'}]),
+         "steps[x].config", "{}", '{"a":1}'),
+        # transition presence (identity = from,to,on,order) and payload
+        (dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": ""}]),
+         dict(transitions=[]),
+         "transitions[s->x@go#0]", "present", "absent"),
+        (dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": "g1"}]),
+         dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": "g2"}]),
+         "transitions[s->x@go#0].guard", "g1", "g2"),
+    ],
+)
+def test_diff_structures_one_class_at_a_time(left, right, path, def_v, snap_v):
+    diffs = _diff_structures(_canon(**left), _canon(**right))
+
+    assert len(diffs) == 1, diffs
+    assert diffs[0] == {"path": path, "def": def_v, "snapshot": snap_v}
+
+
+def test_diff_structures_changed_transition_endpoint_reads_as_two_presences():
+    # `_PUBLISH_CYPHER` MERGEs on (on, order) with the endpoints in the pattern,
+    # so a changed `to` is a *different* transition — two presence rows, never a
+    # single "modified" row (which is what a naive (from,to) keying would report).
+    diffs = _diff_structures(
+        _canon(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                             "guard": ""}]),
+        _canon(transitions=[{"from": "s", "to": "y", "on": "go", "order": 0,
+                             "guard": ""}]),
+    )
+
+    assert [(d["path"], d["def"], d["snapshot"]) for d in diffs] == [
+        ("transitions[s->x@go#0]", "present", "absent"),
+        ("transitions[s->y@go#0]", "absent", "present"),
+    ]
+
+
+def test_diff_preview_truncates_long_opaque_values():
+    long_a, long_b = "a" * 500, "b" * 500
+
+    diffs = _diff_structures(
+        _canon(steps=[{"key": "x", "type": "message", "config": long_a}]),
+        _canon(steps=[{"key": "x", "type": "message", "config": long_b}]),
+    )
+
+    assert diffs[0]["def"] == "a" * MAX_DIFF_PREVIEW + "…"
+    assert diffs[0]["snapshot"] == "b" * MAX_DIFF_PREVIEW + "…"
+
+
+def test_diff_def_snapshot_in_sync_and_one_sided():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.def_structures[("a", "1")] = _raw_structure()
+    repo.snapshot_structures[("a", "1")] = _raw_structure()
+
+    same = svc.diff_def_snapshot(CTX, key="a", version="1")
+    assert same["inSync"] is True
+    assert same["differences"] == []
+    assert same["differenceCount"] == 0
+
+    # the documented post-`pytest` trap: `reference` wiped, snapshot survives
+    del repo.def_structures[("a", "1")]
+    one_sided = svc.diff_def_snapshot(CTX, key="a", version="1")
+    assert one_sided["defPresent"] is False
+    assert one_sided["snapshotPresent"] is True
+    assert one_sided["inSync"] is False
+    assert one_sided["differences"] == []
+
+
+def test_diff_def_snapshot_both_absent_raises_not_found():
+    svc = make_service(FakeRepo())
+
+    with pytest.raises(WorkflowDefNotFoundError):
+        svc.diff_def_snapshot(CTX, key="ghost", version="1")
 
 
 # ── §12 workflow-run orchestration (U5) ─────────────────────────────────────────

@@ -490,6 +490,263 @@ def test_materialize_missing_def_is_404(wf_client):
     assert r.json()["error"] == "WorkflowDefNotFoundError"
 
 
+# ── §11 def/snapshot STRUCTURE reads + diff (K-031 observability) ───────────────
+#
+# Black-box answers to "is what I think is published actually published", "is the
+# workspace running the same thing", and "have `reference` and `ws:{id}` gone
+# stale independently". Read-only: this surface makes the current publish
+# semantics observable, it never changes them.
+
+_STRUCTURE_KEYS = {
+    "source", "key", "version", "name", "kind", "startKey",
+    "stepCount", "transitionCount", "steps", "transitions",
+}
+# The same anti-drift guard for the third route: `response_model=` FILTERS
+# undeclared fields, so a field added to the service dict but not to
+# `WorkflowDiffOut` — or dropped from it — is invisible to field-by-field
+# assertions.
+_DIFF_KEYS = {
+    "key", "version", "defPresent", "snapshotPresent", "inSync",
+    "differences", "differenceCount",
+}
+_DIFF_ENTRY_KEYS = {"path", "def", "snapshot"}
+
+
+def _wipe_reference(conn):
+    """Wipe the global `reference` graph mid-test — the documented live trap.
+
+    A plain helper, deliberately **not** a fixture: it must only ever run inside
+    a test that already owns `reference` (i.e. under `wf_repo`/`wf_client`, whose
+    fixture wipes it at setup anyway), never autouse or session-scoped.
+    """
+    db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
+
+
+def test_def_structure_read_returns_the_published_spec_exactly(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    r = wf_client.get("/workflow-defs/onboarding/versions/1")
+
+    assert r.status_code == 200
+    body = r.json()
+    # The anti-drift assertion: exact key set, no `startKeys` for one START edge.
+    assert set(body) == _STRUCTURE_KEYS
+    assert body["source"] == "reference"
+    assert (body["key"], body["version"]) == ("onboarding", "1")
+    assert (body["name"], body["kind"]) == ("Onboarding", "process")
+    assert body["startKey"] == "start"
+    assert body["stepCount"] == 2
+    assert body["transitionCount"] == 1
+    # `config` comes back byte-identical to what was published (rule 8).
+    assert body["steps"] == [
+        {"key": "done", "type": "message", "config": ""},
+        {"key": "start", "type": "human", "config": '{"waitsForHuman": true}'},
+    ]
+    assert body["transitions"] == [
+        {"from": "start", "to": "done", "on": "submitted", "order": 0, "guard": ""},
+    ]
+
+
+def test_republish_is_create_only_on_properties_structure_read_unchanged(wf_client):
+    # Pins a **decision**, not a bug: publish is `MERGE … ON CREATE SET`, so an
+    # edited re-publish of the same (key, version) leaves stored properties
+    # alone. K-031 deliberately does not change that — it makes it observable.
+    # The *structural* (additive) half of re-publish is **K-034's**, not tested
+    # here.
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    before = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+
+    edited = {
+        **DEF_BODY,
+        "name": "Onboarding EDITED",
+        # must stay inside WORKFLOW_KINDS or the re-publish 400s and the test
+        # would pin the wrong thing
+        "kind": "conversation",
+        "steps": [
+            # the edited config must keep `waitsForHuman` on the `human` step —
+            # dropping it makes the re-publish a 400 (`_validate_def_spec`)
+            {"key": "start", "type": "human",
+             "config": '{"waitsForHuman": true, "note": "edited"}', "start": True},
+            {"key": "done", "type": "message"},
+        ],
+        "transitions": DEF_BODY["transitions"],
+    }
+    r = wf_client.post("/workflow-defs", json=edited)
+    assert r.status_code == 201
+
+    after = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+    assert after == before
+
+
+def test_snapshot_structure_route_404_before_and_200_after_materialize(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    missing = wf_client.get("/workspaces/test/snapshots/onboarding/versions/1")
+    assert missing.status_code == 404
+
+    wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+    r = wf_client.get("/workspaces/test/snapshots/onboarding/versions/1")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == _STRUCTURE_KEYS
+    assert body["source"] == "workspace"
+    # identical to the def body apart from `source` — hand-diffable with `jq`
+    def_body = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+    assert {**body, "source": "reference"} == def_body
+
+
+def test_def_structure_404_for_unknown_key_and_unknown_version(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    assert wf_client.get("/workflow-defs/ghost/versions/1").status_code == 404
+    r = wf_client.get("/workflow-defs/onboarding/versions/99")
+    assert r.status_code == 404
+    assert r.json()["error"] == "WorkflowDefNotFoundError"
+
+
+def test_structure_response_model_serializes_from_not_from_underscore(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    tr = wf_client.get("/workflow-defs/onboarding/versions/1").json()["transitions"][0]
+
+    assert set(tr) == {"from", "to", "on", "order", "guard"}
+    assert tr["from"] == "start"
+
+
+def test_structure_response_model_start_keys_omission_all_three_directions():
+    # Pins the `response_model_exclude_unset=True` decision (K-031). `exclude_none`
+    # would be the obvious mechanism and is WRONG here: `startKey` is itself
+    # nullable, so `exclude_none` would silently drop it for a root with no `START`
+    # edge — an observability endpoint hiding exactly the anomaly it exists to show.
+    # `exclude_unset` keys off which fields the service actually put in the dict,
+    # so "absent" and "explicitly null" stay distinguishable. No graph needed, and
+    # deliberately no dependency on how a two-`START` root arises (that is K-034's).
+    from fastapi import FastAPI
+
+    from falkorchat.schemas import WorkflowDefStructureOut
+
+    base = {
+        "source": "reference", "key": "a", "version": "1", "name": "A",
+        "kind": "process", "stepCount": 1, "transitionCount": 1,
+        "steps": [{"key": "s", "type": "human", "config": "{}"}],
+        "transitions": [
+            {"from": "s", "to": "s", "on": "go", "order": 0, "guard": ""}
+        ],
+    }
+    app = FastAPI()
+
+    def route(payload):
+        return lambda: payload
+
+    for path, payload in (
+        ("/one", {**base, "startKey": "s"}),
+        ("/two", {**base, "startKey": "a", "startKeys": ["a", "b"]}),
+        ("/none", {**base, "startKey": None}),
+    ):
+        app.get(
+            path,
+            response_model=WorkflowDefStructureOut,
+            response_model_exclude_unset=True,
+        )(route(payload))
+    c = TestClient(app)
+
+    one = c.get("/one").json()
+    assert "startKeys" not in one and one["startKey"] == "s"
+
+    two = c.get("/two").json()
+    assert two["startKeys"] == ["a", "b"] and two["startKey"] == "a"
+
+    # the anomaly case: a root with no START edge keeps an explicit null `startKey`
+    no_start = c.get("/none").json()
+    assert "startKey" in no_start and no_start["startKey"] is None
+    assert "startKeys" not in no_start
+
+
+def test_diff_identical_def_and_snapshot_is_in_sync(wf_client):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+
+    body = wf_client.get(
+        "/workspaces/test/snapshots/onboarding/versions/1/diff"
+    ).json()
+
+    assert set(body) == _DIFF_KEYS
+    assert body["inSync"] is True
+    assert body["differenceCount"] == 0
+    assert body["differences"] == []
+    assert (body["defPresent"], body["snapshotPresent"]) == (True, True)
+
+
+def test_diff_reports_divergence_after_the_documented_reseed_trap(wf_client, conn):
+    # Reproduce the live trap exactly: publish + materialize, then a `pytest` /
+    # `test_queries.sh` run wipes `reference` while `ws:{id}` survives, and a
+    # naive re-seed republishes an *edited* def into the now-empty `reference`.
+    # Every edit lands because that re-publish is a fresh CREATE — this fixture
+    # depends on create semantics only, never on K-034's additive semantics.
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+    _wipe_reference(conn)
+
+    edited = {
+        **DEF_BODY,
+        "name": "Onboarding v2",
+        "steps": [
+            {"key": "start", "type": "human",
+             "config": '{"waitsForHuman": true, "note": "edited"}', "start": True},
+            {"key": "done", "type": "message"},
+            {"key": "escalate", "type": "message"},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "submitted", "order": 0,
+             "guard": '{"kind":"cmp","op":"eq","path":"ctx.status","value":"ok"}'},
+        ],
+    }
+    assert wf_client.post("/workflow-defs", json=edited).status_code == 201
+
+    body = wf_client.get(
+        "/workspaces/test/snapshots/onboarding/versions/1/diff"
+    ).json()
+
+    assert body["inSync"] is False
+    # entry-level anti-drift: `def_` must serialize under its `def` alias, and no
+    # entry field may appear or vanish unnoticed.
+    assert set(body["differences"][0]) == _DIFF_ENTRY_KEYS
+    seen = {d["path"]: (d["def"], d["snapshot"]) for d in body["differences"]}
+    assert seen["meta.name"] == ("Onboarding v2", "Onboarding")
+    assert seen["steps[escalate]"] == ("present", "absent")
+    assert seen["steps[start].config"] == (
+        '{"waitsForHuman": true, "note": "edited"}', '{"waitsForHuman": true}'
+    )
+    assert seen["transitions[start->done@submitted#0].guard"] == (
+        '{"kind":"cmp","op":"eq","path":"ctx.status","value":"ok"}', ""
+    )
+    assert body["differenceCount"] == len(body["differences"]) == 4
+
+
+def test_diff_def_missing_snapshot_present_is_200_with_presence_flags(
+    wf_client, conn
+):
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+    _wipe_reference(conn)
+
+    r = wf_client.get("/workspaces/test/snapshots/onboarding/versions/1/diff")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["defPresent"], body["snapshotPresent"]) == (False, True)
+    assert body["inSync"] is False
+    assert body["differences"] == []
+
+
+def test_diff_both_absent_is_404(wf_client):
+    r = wf_client.get("/workspaces/test/snapshots/ghost/versions/1/diff")
+
+    assert r.status_code == 404
+    assert r.json()["error"] == "WorkflowDefNotFoundError"
+
+
 # ── U12 run-inspection REST reads (AC-5 observability seam) ─────────────────────
 
 

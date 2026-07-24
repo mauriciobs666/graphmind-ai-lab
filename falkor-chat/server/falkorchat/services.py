@@ -45,7 +45,7 @@ from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
 # enforce — the size of the **merged** run ctx (plan m-5). `schemas.py` is a leaf
 # module (pydantic only), so this import adds no cycle and no layering inversion:
 # the constant flows boundary → service, never logic service → boundary.
-from .schemas import MAX_CONFIG_LEN
+from .schemas import MAX_CONFIG_LEN, MAX_DIFF_PREVIEW
 
 # ── §11 workflow spec whitelists (plan §B5 / DESIGN §6.1) ───────────────────────
 WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
@@ -194,6 +194,154 @@ def _normalize_opaque(value: Any) -> Any:
         except (ValueError, TypeError):
             return value
     return value
+
+
+# ── §11 def/snapshot structure canonicalization + diff (K-031) ──────────────────
+# Ordering and comparison live HERE, not in `repository.py`: the repository stays
+# a 1:1 mirror of QUERIES.md, and §11.2's steps/transitions are unordered at the
+# source by design (F6 — "the app reconstructs order"). Deterministic ordering is
+# also what makes the structure endpoints diffable by hand (`curl … | jq`).
+
+
+def _canonical_structure(
+    raw: dict[str, Any], *, source: str, key: str, version: str
+) -> dict[str, Any]:
+    """Canonical, camelCase view of a repository structure read.
+
+    Steps sorted by `key`; transitions by `(from, order, to, on)`; `startKeys`
+    lexicographically, with `startKey` = `startKeys[0]` **after** sorting — the
+    meta query has no `ORDER BY`, so an unsorted list would make `startKey`
+    nondeterministic between two calls and could report a false divergence on
+    list order alone (the exact failure the server-side diff exists to prevent).
+
+    `stepCount`/`transitionCount` count what is **stored**. The identically-named
+    fields on the publish/materialize receipt count what was **submitted**
+    (`_PUBLISH_CYPHER`'s `count(st)`/`count(rel)` sit immediately after the
+    `UNWIND`s). A divergence between the two is a **signal, not a bug** — see
+    K-034.
+
+    `config`/`guard` pass through verbatim (rule 8).
+    """
+    steps = sorted(
+        (
+            {"key": s["key"], "type": s["type"], "config": s["config"]}
+            for s in raw["steps"]
+        ),
+        key=lambda s: s["key"],
+    )
+    transitions = sorted(
+        (
+            {
+                "from": t["from"], "to": t["to"], "on": t["on"],
+                "order": t["order"], "guard": t["guard"],
+            }
+            for t in raw["transitions"]
+        ),
+        key=lambda t: (t["from"], t["order"], t["to"], t["on"]),
+    )
+    start_keys = sorted(raw.get("start_keys") or [])
+    out: dict[str, Any] = {
+        "source": source, "key": key, "version": version,
+        "name": raw["name"], "kind": raw["kind"],
+        "startKey": start_keys[0] if start_keys else None,
+    }
+    # Omitted entirely for the ordinary single-`START` case; the routes declare
+    # `response_model_exclude_unset=True` so "absent" survives serialization.
+    if len(start_keys) > 1:
+        out["startKeys"] = start_keys
+    out["stepCount"] = len(steps)
+    out["transitionCount"] = len(transitions)
+    out["steps"] = steps
+    out["transitions"] = transitions
+    return out
+
+
+def _diff_preview(value: Any) -> str | None:
+    """A bounded preview of a difference value (never the payload)."""
+    if value is None:
+        return None
+    text = ",".join(value) if isinstance(value, list) else str(value)
+    if len(text) > MAX_DIFF_PREVIEW:
+        return text[:MAX_DIFF_PREVIEW] + "…"
+    return text
+
+
+def _transition_path(tr: dict[str, Any]) -> str:
+    return f"transitions[{tr['from']}->{tr['to']}@{tr['on']}#{tr['order']}]"
+
+
+def _diff_structures(
+    def_s: dict[str, Any], snap_s: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Enumerate the differences between two canonical structures.
+
+    Pure function. Identity rules come from `_PUBLISH_CYPHER`'s `MERGE` keys, not
+    from intuition: a **step**'s identity is its `key`; a **transition**'s is the
+    4-tuple `(from, to, on, order)` and its only comparable payload is `guard`.
+    (A client keying on `(from, to)` would mis-report an added parallel edge as a
+    modified one — which is why this comparator is server-side.)
+
+    `config`/`guard` are compared by **exact string equality**, never normalized
+    JSON (rule 8 — the bytes in the graph are the contract).
+
+    Path grammar: `meta.<field>` · `steps[<key>]` (presence) ·
+    `steps[<key>].<type|config>` · `transitions[<from>-><to>@<on>#<order>]`
+    (presence) · `transitions[…].guard`. Presence uses `"present"`/`"absent"`.
+    """
+    diffs: list[dict[str, Any]] = []
+
+    for field in ("name", "kind", "startKey", "startKeys"):
+        left, right = def_s.get(field), snap_s.get(field)
+        if left != right:
+            diffs.append({
+                "path": f"meta.{field}",
+                "def": _diff_preview(left),
+                "snapshot": _diff_preview(right),
+            })
+
+    def_steps = {s["key"]: s for s in def_s["steps"]}
+    snap_steps = {s["key"]: s for s in snap_s["steps"]}
+    for step_key in sorted(set(def_steps) | set(snap_steps)):
+        left, right = def_steps.get(step_key), snap_steps.get(step_key)
+        if left is None or right is None:
+            diffs.append({
+                "path": f"steps[{step_key}]",
+                "def": "present" if left is not None else "absent",
+                "snapshot": "present" if right is not None else "absent",
+            })
+            continue
+        for field in ("type", "config"):
+            if left[field] != right[field]:
+                diffs.append({
+                    "path": f"steps[{step_key}].{field}",
+                    "def": _diff_preview(left[field]),
+                    "snapshot": _diff_preview(right[field]),
+                })
+
+    def _identity(tr: dict[str, Any]) -> tuple[str, str, str, int]:
+        return (tr["from"], tr["to"], tr["on"], tr["order"])
+
+    def_trs = {_identity(t): t for t in def_s["transitions"]}
+    snap_trs = {_identity(t): t for t in snap_s["transitions"]}
+    for ident in sorted(
+        set(def_trs) | set(snap_trs), key=lambda i: (i[0], i[3], i[1], i[2])
+    ):
+        left, right = def_trs.get(ident), snap_trs.get(ident)
+        if left is None or right is None:
+            diffs.append({
+                "path": _transition_path(left or right),
+                "def": "present" if left is not None else "absent",
+                "snapshot": "present" if right is not None else "absent",
+            })
+            continue
+        if left["guard"] != right["guard"]:
+            diffs.append({
+                "path": f"{_transition_path(left)}.guard",
+                "def": _diff_preview(left["guard"]),
+                "snapshot": _diff_preview(right["guard"]),
+            })
+
+    return diffs
 
 
 class Services:
@@ -695,6 +843,94 @@ class Services:
     ) -> list[dict[str, Any]]:
         """List the workspace's materialized snapshots. §11.6."""
         return self._repo.list_snapshots(ctx.ws, limit=limit)
+
+    # ── §11 structure reads + def↔snapshot diff (K-031 observability) ────────
+    # Black-box answers to three questions that otherwise need raw Cypher: is
+    # what I think is published actually published; is the workspace running the
+    # same thing; have `reference` and `ws:{id}` gone stale independently.
+    # Read-only — this surface makes the current publish semantics *observable*,
+    # it never changes or repairs them.
+
+    def get_workflow_def_structure(
+        self, ctx: CallContext, *, key: str, version: str
+    ) -> dict[str, Any]:
+        """Read a published def's full structure. Global read (no `ctx.ws`). §11.2.
+
+        Raises `WorkflowDefNotFoundError` when the version was never published,
+        consistent with `materialize_def`.
+        """
+        raw = self._repo.read_def_structure(key=key, version=version)
+        if raw is None:
+            raise WorkflowDefNotFoundError(
+                f"workflow def {key!r} version {version!r} not found in `reference` "
+                f"— publish it with POST /workflow-defs"
+            )
+        return _canonical_structure(
+            raw, source="reference", key=key, version=version
+        )
+
+    def get_snapshot_structure(
+        self, ctx: CallContext, *, key: str, version: str
+    ) -> dict[str, Any] | None:
+        """Read a materialized snapshot's full structure from `ctx.ws`. §11.5.
+
+        `None` when absent (the route 404s), matching `get_workflow_def`'s
+        passthrough style.
+        """
+        raw = self._repo.read_snapshot_structure(ctx.ws, key=key, version=version)
+        if raw is None:
+            return None
+        return _canonical_structure(
+            raw, source="workspace", key=key, version=version
+        )
+
+    def diff_def_snapshot(
+        self, ctx: CallContext, *, key: str, version: str
+    ) -> dict[str, Any]:
+        """Compare `reference`'s def against `ctx.ws`'s snapshot at one version.
+
+        `def` = `reference` (the *intended* truth), `snapshot` = `ws:{id}` (the
+        **operational** truth — the snapshot is what the executor drives).
+
+        One side missing is a first-class **200** carrying the presence flags: it
+        is the documented trap after a `pytest`/`test_queries.sh` run wipes
+        `reference` while `ws:{id}` survives, and a 404 there would push the
+        operator straight back to raw Cypher. Both sides missing → 404.
+
+        **Version-qualified**: this answers "same version, different content",
+        never "wrong version". To detect a stale *version*, compare
+        `GET /workflow-defs` against `GET /workspaces/{ws}/snapshots` first.
+        """
+        def_s = None
+        raw_def = self._repo.read_def_structure(key=key, version=version)
+        if raw_def is not None:
+            def_s = _canonical_structure(
+                raw_def, source="reference", key=key, version=version
+            )
+        snap_s = None
+        raw_snap = self._repo.read_snapshot_structure(
+            ctx.ws, key=key, version=version
+        )
+        if raw_snap is not None:
+            snap_s = _canonical_structure(
+                raw_snap, source="workspace", key=key, version=version
+            )
+        if def_s is None and snap_s is None:
+            raise WorkflowDefNotFoundError(
+                f"workflow def {key!r} version {version!r} is present neither in "
+                f"`reference` nor in this workspace"
+            )
+        both = def_s is not None and snap_s is not None
+        differences = _diff_structures(def_s, snap_s) if both else []
+        return {
+            "key": key,
+            "version": version,
+            "defPresent": def_s is not None,
+            "snapshotPresent": snap_s is not None,
+            "inSync": both and not differences,
+            "differences": differences,
+            "differenceCount": len(differences),
+        }
 
     # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
     #

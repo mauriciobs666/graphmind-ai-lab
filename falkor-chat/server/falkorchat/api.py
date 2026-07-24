@@ -16,12 +16,15 @@ from .config import CallContext
 from .config import get_context as _resolve_context
 from .schemas import (
     MAX_ID_LEN,
+    MAX_KEY_LEN,
     CreateChannelIn,
     CreateThreadIn,
     PostMessageIn,
     PublishWorkflowDefIn,
     StartWorkflowRunIn,
     SubmitWorkflowInputIn,
+    WorkflowDefStructureOut,
+    WorkflowDiffOut,
 )
 from .services import Services
 
@@ -236,6 +239,32 @@ def build_router(
             raise HTTPException(status_code=404, detail="workflow def not found")
         return got
 
+    # ── §11 def/snapshot STRUCTURE reads + diff (K-031 observability) ─────────
+    # The version-qualified def is its own resource, so it gets its own path
+    # rather than an `?expand=` on `GET /workflow-defs/{key}` — that route
+    # resolves **latest** when no version is given, and structure-reading a
+    # version the caller never named is the worst possible affordance in a tool
+    # whose purpose is confirming *which* version is live. There is deliberately
+    # no `latest` alias here for the same reason.
+    #
+    # These three routes are the only ones in the surface that declare a
+    # `response_model` — see the `schemas.py` module docstring for why the rest
+    # are not retrofitted.
+
+    @router.get(
+        "/workflow-defs/{key}/versions/{version}",
+        response_model=WorkflowDefStructureOut,
+        # Keeps `startKeys` **absent** (not `null`) in the ordinary single-START
+        # case, without `exclude_none` also swallowing a null `startKey`.
+        response_model_exclude_unset=True,
+    )
+    def get_workflow_def_structure(
+        key: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        version: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.get_workflow_def_structure(ctx, key=key, version=version)
+
     @router.post("/workflow-defs/{key}/versions/{version}/materialize", status_code=201)
     def materialize_def(
         key: str, version: str, ctx: CallContext = Depends(get_context)
@@ -311,5 +340,45 @@ def build_router(
         # (the M1 single-tenant seam), mirroring how MCP ignores a client-supplied
         # `from`. When real multi-tenant auth lands, the seam authorizes the path.
         return services.list_snapshots(ctx, limit=limit)
+
+    @router.get(
+        "/workspaces/{ws}/snapshots/{key}/versions/{version}",
+        response_model=WorkflowDefStructureOut,
+        response_model_exclude_unset=True,
+    )
+    def get_snapshot_structure(
+        ws: str,
+        key: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        version: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        # `ws` is descriptive here too — tenancy comes from `get_context`.
+        # Same response shape as the def route apart from `source`, so a human
+        # or `jq` can diff the two bodies directly.
+        got = services.get_snapshot_structure(ctx, key=key, version=version)
+        if got is None:
+            raise HTTPException(status_code=404, detail="workflow snapshot not found")
+        return got
+
+    @router.get(
+        "/workspaces/{ws}/snapshots/{key}/versions/{version}/diff",
+        response_model=WorkflowDiffOut,
+    )
+    def diff_def_snapshot(
+        ws: str,
+        key: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        version: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        # Lives under `/workspaces/…` because the comparison is inherently
+        # workspace-scoped (the snapshot side is the workspace's).
+        #
+        # ⚠️ **Version-qualified**: this compares *content within one named
+        # version*. It cannot detect "`reference` now has v2, the workspace only
+        # ever materialized v1" — the shape a `key`/`version` bump produces. To
+        # detect a stale *version*, compare `GET /workflow-defs` against
+        # `GET /workspaces/{ws}/snapshots` first, or run
+        # `./scripts/verify_workflows.sh <wsId>` which checks both defs at once.
+        return services.diff_def_snapshot(ctx, key=key, version=version)
 
     return router

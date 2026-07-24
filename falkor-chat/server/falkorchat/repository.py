@@ -996,6 +996,65 @@ class Repository:
             "steps": list(steps), "transitions": list(transitions),
         }
 
+    @staticmethod
+    def _read_structure(graph, *, label: str, key: str, version: str):
+        """Observability read of a def/snapshot subgraph — **all** meta rows (K-031).
+
+        Runs the *same* `_READ_META_CYPHER`/`_READ_TRANSITIONS_CYPHER` constants
+        as `_read_subgraph` (§11.2 / §11.5) — no new or modified Cypher.
+
+        **Why this duplicates `_read_subgraph`** (~12 lines, deliberate): that
+        helper feeds `materialize_def` and the SHA-locked executor
+        (`get_snapshot` → `executor._drive_loop`) and must not move. This one
+        serves the read-only structure/diff endpoints, which need a different
+        shape and a different row discipline.
+
+        **Why it reads every row, not `result_set[0]`.** `_READ_META_CYPHER`
+        returns `start.key` as a non-aggregated grouping key beside
+        `collect(DISTINCT …)`, so the one-row collapse QUERIES.md §11.2 documents
+        holds only *because* `start.key` is constant across the fan-out. A root
+        carrying more than one `START` edge breaks that premise and yields **one
+        row per start key** (verified live, K-031 V-1: two `START` edges → two
+        meta rows), of which `_read_subgraph` takes an arbitrary one. How a root
+        acquires a second `START` edge is **K-034**'s (a re-publish is create-only
+        on properties but *additive* on structure); detecting it is this method's.
+
+        **Why the returned shape differs from §11.2's documented contract.**
+        §11.2 documents a scalar `startKey`; this returns `start_keys:
+        list[str]` — a deliberate, documented stretch of the "`repository.py` is
+        a 1:1 mirror of QUERIES.md" rule (DESIGN §14.2), recorded from the query
+        side in the **QUERIES.md §11.2 multi-`START` note** (mirrored at §11.5).
+
+        `None` when the root node is absent. Otherwise
+        `{name, kind, start_keys, steps, transitions}`.
+        """
+        meta = graph.ro_query(
+            Repository._READ_META_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        if not meta.result_set:
+            return None
+        name, kind = meta.result_set[0][0], meta.result_set[0][1]
+        start_keys: list[str] = []
+        steps: list[dict[str, Any]] = []
+        seen_steps: set[str] = set()
+        for row in meta.result_set:
+            if row[2] is not None and row[2] not in start_keys:
+                start_keys.append(row[2])
+            for step in row[3]:
+                if step["key"] is not None and step["key"] not in seen_steps:
+                    seen_steps.add(step["key"])
+                    steps.append(dict(step))
+        trs = graph.ro_query(
+            Repository._READ_TRANSITIONS_CYPHER.format(label=label),
+            {"key": key, "version": version},
+        )
+        transitions = trs.result_set[0][0] if trs.result_set else []
+        return {
+            "name": name, "kind": kind, "start_keys": start_keys,
+            "steps": steps, "transitions": [dict(t) for t in transitions],
+        }
+
     def publish_def(
         self, *, key: str, version: str, name: str, kind: str, start_key: str,
         steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
@@ -1029,6 +1088,17 @@ class Repository:
         transitions}`; `steps`/`transitions` are unordered (F6). Read path.
         """
         return self._read_subgraph(
+            self._reference(), label="WorkflowDef", key=key, version=version
+        )
+
+    def read_def_structure(self, *, key: str, version: str) -> dict[str, Any] | None:
+        """Read a def's full structure from `reference` for observability. §11.2.
+
+        Same query constants as `read_def_subgraph`, multi-`START`-aware shape
+        (`start_keys: list[str]`) — see `_read_structure`. `None` when absent.
+        Read path.
+        """
+        return self._read_structure(
             self._reference(), label="WorkflowDef", key=key, version=version
         )
 
@@ -1502,6 +1572,19 @@ class Repository:
         when absent. `{name, kind, start_key, steps, transitions}`. Read path.
         """
         return self._read_subgraph(
+            self._graph(ws), label="WorkflowDefSnapshot", key=key, version=version
+        )
+
+    def read_snapshot_structure(
+        self, ws: str, *, key: str, version: str
+    ) -> dict[str, Any] | None:
+        """Read a snapshot's full structure from `ws:{id}` for observability. §11.5.
+
+        Mirror of `read_def_structure` with the `WorkflowDefSnapshot` root; same
+        multi-`START`-aware shape (`start_keys: list[str]`) — see
+        `_read_structure`. `None` when absent. Read path.
+        """
+        return self._read_structure(
             self._graph(ws), label="WorkflowDefSnapshot", key=key, version=version
         )
 

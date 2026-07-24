@@ -348,8 +348,8 @@ One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; ver
 
 **Run-model additions (M3 executor, K-022):**
 - **`trace`/`maxSteps`/`stepCount`** on `WorkflowRun` — the debug-instance flag (§5 gates all trace
-  writes), the run-level step budget (§7, DS default 12), and the executed-step counter the atomic
-  advance bumps. **`waitingThreadId`** denorms the parked run's thread so resume is an index-anchored
+  writes), the run-level step budget (§7, DS default 12 — a **tripwire**, see the note below), and
+  the executed-step counter the atomic advance bumps. **`waitingThreadId`** denorms the parked run's thread so resume is an index-anchored
   lookup (rides the existing `status` index — no new index; QUERIES §12.9). `endedAt` stamps terminal.
 - **`LAST_STEP_RUN` — the tail pointer (M4).** Mirrors the locked `Thread` HEAD/TAIL pattern (§5.2):
   `record_step_and_advance` reads it to find the previous `StepRun`, hangs `NEXT`, and moves the tail —
@@ -390,6 +390,15 @@ step declares `waitsForHuman` and no guard fired, **or** terminate (`done`/`fail
 bounded by `maxSteps` (run budget) + per-node `maxIterations` (§7). The whole walk is local to the
 workspace graph (fast, isolated, fully auditable). **Verified Cypher: `QUERIES.md` §12** — this section
 is the *why*, not a query copy.
+
+> **What `maxSteps` actually means (K-031, documented — not changed).** `maxSteps` is a **runaway
+> tripwire checked *after* each recorded step**, not a hard cap: a run executes at most
+> **`maxSteps + 1`** steps before failing with `"step budget exceeded"`. The check runs only on the
+> two driving outcomes — a guard fired (OUTCOME A, `executor.py:410`) and a legitimate self-loop
+> (OUTCOME C, `:427`), both `rec["stepCount"] > max_steps`. It is **deliberately not applied on the
+> park path** (OUTCOME B — a parked run cannot self-drive; see the comment at `executor.py:415-421`)
+> **or on the terminal path**. Treat it as a safety bound, not an SLA or a cost budget. Making it an
+> exact cap (`>` → `>=`) lands inside the SHA-locked `_drive_loop` and is filed as proposed **K-033**.
 
 > **`status` as a property, not a label**, so a run's state changes in place without
 > re-labeling churn; index it for "all running workflows" and the `waiting`-run resume lookup (§12.9).
@@ -804,9 +813,42 @@ changes** — everything below is untouched.
 | `GET /search?q=` | `search_messages` | §5 full-text keyword search |
 
 **Workflow-run drive surface (M3 / K-024 U3)** — the non-chat front door for a `kind:'process'`
-run. (The §11 def-authoring routes `POST/GET /workflow-defs…` and the §12 inspection routes
+run. (The §11 def-authoring routes `POST/GET /workflow-defs…`, the §11 **def/snapshot structure
+reads** `GET /workflow-defs/{key}/versions/{version}` and
+`GET /workspaces/{ws}/snapshots/{key}/versions/{version}` plus their `…/diff` sibling —
+QUERIES.md §11.2 / §11.5 — and the §12 inspection routes
 `GET /workflow-runs/{id}[/step-runs|/trace]` are also mounted; they are read/publish paths and are
 described at their own sections.)
+
+**The structure/diff reads (K-031), four operator-facing facts.** They answer *"is what I think is
+published actually published"*, *"is the workspace running the same thing"*, and *"have `reference`
+and `ws:{id}` gone stale independently"* without dropping to raw Cypher. (1) Both structure reads
+are **whole-object and unpaginated** — there is no `?limit=`, deliberately: a truncated subgraph is
+a *wrong* answer, not a partial one (an operator who gets 50 of 60 steps concludes ten are
+missing). They are bounded upstream by the publish-time caps (`MAX_STEPS`, `MAX_TRANSITIONS`,
+`MAX_CONFIG_LEN`), matching the unpaginated §12 run reads; service-layer publishers bypass Pydantic,
+so those caps are not universal — an accepted, documented residual. (2) The **diff** is bounded
+instead by preview truncation (`MAX_DIFF_PREVIEW = 200`): its response is O(differences), never
+O(def). (3) **The snapshot is what the executor drives** (`executor._drive_loop` → `get_snapshot`),
+so `snapshot` is the operational truth and `def` (`reference`) is the intended truth. (4) The diff
+is **version-qualified** — it answers "same version, different content", never "wrong version"; to
+detect a stale *version*, compare `GET /workflow-defs` against `GET /workspaces/{ws}/snapshots`
+first, or run `./scripts/verify_workflows.sh <wsId>`, which checks both seeded defs at their
+expected versions in one command. There is no `latest` alias on the structure route: an operator
+investigating a version mismatch must name the version.
+
+> The publish/materialize receipt counts what was **submitted**; the structure read counts what is
+> **stored**. **A divergence between the two is a signal, not an endpoint bug** — see K-034.
+
+`config`/`guard` come back **verbatim** as opaque strings (rule 8) — never parsed, re-serialized or
+pretty-printed, so a whitespace-only divergence is still visible. The two structure bodies are the
+same shape apart from `source` (so `jq`-diffing them by hand works) — **but that parity is the 200
+body only**: the def route 404s through `WorkflowDefNotFoundError` (`{"error": …}`) while the
+snapshot route raises a plain `HTTPException` (`{"detail": …}`), each mirroring its sibling
+non-structure route's established style. A client must not assume one error shape. These three routes are the only
+ones in the surface that declare a `response_model`; the rest are deliberately not retrofitted
+(FastAPI's `response_model` *filters* undeclared fields), leaving a mixed convention recorded on the
+standing response-schema backlog entry.
 
 | Endpoint | Service method | `QUERIES.md` |
 |---|---|---|

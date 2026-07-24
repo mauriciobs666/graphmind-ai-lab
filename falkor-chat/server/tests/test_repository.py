@@ -3,7 +3,10 @@
 Each test wraps one repository method 1:1 with a verified `QUERIES.md` query.
 A few structural regression tests probe the graph directly (`_probe`) — the
 write-path defects they pin (NEXT self-loops, duplicate HEADs) are invisible
-through the public read methods by design.
+through the public read methods by design. Two tests take no fixture at all and
+drive `Repository._read_structure` (a `@staticmethod`) over a `_FakeGraph`: the
+graph states they pin cannot be produced without depending on publish semantics
+K-034 is chartered to change.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from falkorchat import db
-from falkorchat.repository import MemberIdCollisionError
+from falkorchat.repository import MemberIdCollisionError, Repository
 
 
 def _probe(conn, cypher: str):
@@ -878,6 +881,126 @@ def test_materialize_snapshot_is_idempotent_on_rematerialize(wf_repo):
     assert _sorted_transitions(after["transitions"]) == _sorted_transitions(
         before["transitions"]
     )
+
+
+def test_read_def_structure_returns_full_structure(wf_repo):
+    _publish_sample(wf_repo)
+
+    st = wf_repo.read_def_structure(key="onboarding", version="1")
+
+    assert st["name"] == "Onboarding"
+    assert st["kind"] == "process"
+    assert st["start_keys"] == ["start"]
+    assert _sorted_steps(st["steps"]) == _sorted_steps(DEF_STEPS)
+    assert _sorted_transitions(st["transitions"]) == _sorted_transitions(
+        DEF_TRANSITIONS
+    )
+
+
+def test_read_snapshot_structure_mirrors_the_def_structure(wf_repo):
+    _publish_sample(wf_repo)
+    _materialize_sample(wf_repo)
+
+    ref = wf_repo.read_def_structure(key="onboarding", version="1")
+    snap = wf_repo.read_snapshot_structure("test", key="onboarding", version="1")
+
+    # Same query constants, different root label. Steps/transitions come back
+    # unordered from the graph (F6) — canonical ordering lives in `services.py`.
+    assert (snap["name"], snap["kind"], snap["start_keys"]) == (
+        ref["name"], ref["kind"], ref["start_keys"]
+    )
+    assert _sorted_steps(snap["steps"]) == _sorted_steps(ref["steps"])
+    assert _sorted_transitions(snap["transitions"]) == _sorted_transitions(
+        ref["transitions"]
+    )
+
+
+def test_read_structure_none_when_absent(wf_repo):
+    assert wf_repo.read_def_structure(key="ghost", version="1") is None
+    assert wf_repo.read_snapshot_structure("test", key="ghost", version="1") is None
+
+
+class _FakeRes:
+    def __init__(self, rows):
+        self.result_set = rows
+
+
+class _FakeGraph:
+    """Minimal stand-in for a FalkorDB graph handle, replaying canned result sets.
+
+    `_read_structure` is a `@staticmethod` whose only collaborator is the injected
+    `graph` (two positional `ro_query` calls), so its row handling is reachable
+    with **no publish, no Cypher and no FalkorDB** — which is what lets the
+    multi-`START` branch below be pinned without asserting publish-additivity
+    (that is K-034's to change).
+    """
+
+    def __init__(self, *result_sets):
+        self._queued = [_FakeRes(rows) for rows in result_sets]
+        self.calls: list[tuple[str, dict]] = []
+
+    def ro_query(self, cypher, params):
+        self.calls.append((cypher, params))
+        return self._queued.pop(0)
+
+
+def test_read_structure_unions_multi_start_meta_rows_pinning_v1s_live_shape():
+    # Pins the exact shape K-031 V-1 observed live (falkordb v4.18.11, throwaway
+    # `ws:k031probe`) and QUERIES.md §11.2's multi-`START` note records: two
+    # `START` edges on one root ⇒ 11.2a returns **two rows, one per distinct
+    # `startKey`, each carrying the full `steps` collection**. This is the only
+    # coverage of `_read_structure`'s union loop — every graph-backed structure
+    # test feeds it a single meta row, so a refactor back to `result_set[0]`
+    # would otherwise leave the suite green while silently un-wiring `startKeys`
+    # and `scripts/verify_workflows.sh`'s finding-3 tripwire.
+    steps = [
+        {"key": "b", "type": "decision", "config": ""},
+        {"key": "a", "type": "human", "config": '{"waitsForHuman": true}'},
+    ]
+    graph = _FakeGraph(
+        [["Probe", "process", "a", steps], ["Probe", "process", "b", steps]],
+        [[[{"from": "a", "to": "b", "on": "go", "guard": "", "order": 0}]]],
+    )
+
+    st = Repository._read_structure(
+        graph, label="WorkflowDefSnapshot", key="probe", version="v1"
+    )
+
+    # Both start keys survive; `_read_structure` preserves first-seen order and
+    # `services._canonical_structure` is what sorts them for the REST boundary.
+    assert st["start_keys"] == ["a", "b"]
+    # The `steps` collection repeated on every row is UNIONED, not duplicated.
+    assert [s["key"] for s in st["steps"]] == ["b", "a"]
+    assert (st["name"], st["kind"]) == ("Probe", "process")
+    assert st["transitions"] == [
+        {"from": "a", "to": "b", "on": "go", "guard": "", "order": 0}
+    ]
+    # Both reads ran the UNMODIFIED §11.2 constants — no new/edited Cypher.
+    assert [c[0] for c in graph.calls] == [
+        Repository._READ_META_CYPHER.format(label="WorkflowDefSnapshot"),
+        Repository._READ_TRANSITIONS_CYPHER.format(label="WorkflowDefSnapshot"),
+    ]
+    assert all(c[1] == {"key": "probe", "version": "v1"} for c in graph.calls)
+
+
+def test_read_structure_tolerates_a_root_with_no_start_edge_and_no_steps():
+    # The other branch of the same loop: both `OPTIONAL MATCH`es miss, so 11.2a
+    # returns ONE row whose `startKey` is null and whose `collect(DISTINCT …)`
+    # holds a single all-null map. Neither may leak into the structure — an empty
+    # `start_keys` becomes an explicit `startKey: null` at the REST boundary,
+    # which is the anomaly the observability surface exists to show.
+    graph = _FakeGraph(
+        [["Orphan", "process", None, [{"key": None, "type": None, "config": None}]]],
+        [],
+    )
+
+    st = Repository._read_structure(
+        graph, label="WorkflowDef", key="orphan", version="1"
+    )
+
+    assert st["start_keys"] == []
+    assert st["steps"] == []
+    assert st["transitions"] == []
 
 
 def test_snapshot_structurally_matches_reference_def(wf_repo):

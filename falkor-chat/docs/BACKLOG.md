@@ -56,7 +56,7 @@
 |---|---|---|
 | **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), K-031 (filed out of K-025) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
+| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
@@ -312,7 +312,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 
-### K-027 — Live triage reliability + carried gate findings (🔵 proposed — the D12-B descope from K-022 Landing 2)
+### K-027 — Live triage reliability + carried gate findings (🟡 in-progress — the D12-B descope from K-022 Landing 2)
 
 > **Numbering note:** the coordination log calls these "**K-023 follow-ups**", but K-023 is already
 > taken (workflow ↔ chat linkage, now ✅). They are collected here as **K-027**, the next free number.
@@ -326,12 +326,33 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `tdd-engineer`**; **`data-scientist`** owns calibration method + golden-set expansion (advisory,
   never implements) with **`tdd-engineer`** running the harness.
 - **Scope:**
-  1. **Judge-parse robustness** — `app._build_llm_judge` uses `complete()` + a **bare `json.loads`**.
-     A model that wraps its JSON in a ```` ```json ```` fence breaks *every* verdict silently: in the
-     D13 probe Ministral scored **26/26 "unparseable judge output"**, including one correct
-     `decision:true` destroyed by the fence. The shipped Qwen path is unaffected (its JSON is
-     unfenced), which is exactly why this can rot unnoticed. Fix = fence/prose-tolerant parsing or
-     structured output.
+  1. ✅ **Judge-parse robustness** (**delivered 2026-07-24, slice A** — see
+     [`HISTORY.md`](./HISTORY.md)) — `app._build_llm_judge` used `complete()` + a **bare
+     `json.loads`**. A model that wraps its JSON in a ```` ```json ```` fence broke *every* verdict
+     silently: in the D13 probe Ministral scored **26/26 "unparseable judge output"**, including one
+     correct `decision:true` destroyed by the fence. The shipped Qwen path is unaffected (its JSON is
+     unfenced), which is exactly why this could rot unnoticed. **Fixed** by parsing the reply with
+     `llm.extract_own_line_json_object(…, require_key="decision")`. **The first draft of this slice
+     used the permissive `llm.extract_json_object` and claimed "tolerance runs in the safe direction
+     only"; the analyst gate proved that claim false** (blocker **B-1**) — being order-blind, that
+     extractor lifts a *quoted* verdict straight out of prose, so *"I would answer
+     `{"decision": true, …}` but they did not, so I answer false"* **advanced** a guard the old bare
+     `json.loads` correctly suspended, and `guards._coerce_verdict` cannot catch it because the
+     quoted rationale reads clean. The seam is now split: `extract_json_object` stays permissive and
+     keeps the tool-call path (where the agent loop re-validates name + schema);
+     `extract_own_line_json_object` is conservative and takes the judge — it accepts a reply that is
+     entirely one JSON object (bare or fenced), or **exactly one** `decision`-carrying object that
+     owns its lines, and returns None otherwise. **The accurate statement of the property**: prose
+     containing no object, an object quoted mid-sentence, and two disagreeing candidates all resolve
+     to `decision=False`; tolerance is applied to how a verdict is *wrapped*, never to whether one
+     was *asserted*. Residual, accepted (pinned as a characterisation test, gate **N-2**, and named
+     in `app._build_llm_judge`'s docstring): a hypothetical or schema-echo verdict on its own line,
+     with no second object to disambiguate it, is still read and still **advances**. Note the rationale string for a JSON-but-not-object reply
+     changed from `"non-object judge output"` to `"unparseable judge output"` (same verdict,
+     different trace text). Structured output remains an option if a future model still misbehaves.
+     **Item 3 (calibration) is unaffected and still open** — this fixes the transport of a verdict,
+     not its quality, and its false-advance metric (D9) is only meaningful against this settled
+     parse.
   2. **Terminal-node-must-post engine contract** — the structural fix for **Defect C**. Today's
      mitigation is prompt-level and **does not hold on a 4B**: the `answer` node emits a good grounded
      answer as plain text with no tool call, so no `PRODUCED` edge (AC-4 measured ~2/8, then 0/3 after
@@ -355,7 +376,9 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   5. **Ministral re-probe (D13 finding 2)** — Ministral-3B is *better* at the terminal tool call
      (native `post_message` 3/3 in replay where Qwen emitted prose 3/3) but far worse at judging
      (fence-fixed advance-recall 0.364 vs Qwen 0.818). Worth re-probing **only if** the judge is made
-     model-robust (item 1). Notes: `docs/archive/plans/m3-capability-probe-ml.md`,
+     model-robust (item 1) — **that precondition is now met (slice A, 2026-07-24), so this is
+     unblocked**; the re-probe should run against the widened parse layer, not the old one. Notes:
+     `docs/archive/plans/m3-capability-probe-ml.md`,
      `docs/plans/local-model-ram-budget-ml.md` (the ~4–5GB fits-16GB chat-model budget).
   6. **Exit** — these outcomes are what would let the **K-025 / U15 acceptance** move AC-2b/AC-3/AC-4
      from *model-gated, structurally demonstrated* to *verified*. K-025 can run before this item; it
@@ -369,11 +392,41 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   reached the thread while the run parked correctly and looked healthy from the outside — a worse
   user-visible symptom than the terminal case, because nobody was ever shown the question the run is
   waiting on. Two consequences for this item: **(a)** item 2's terminal-node scope is too narrow —
-  the engine-level guarantee must cover any node whose contract is "post"; **(b)** this is the exact
-  structural twin of **item 1** (a parse layer intolerant of the shapes small local models actually
-  emit), so widening `_parse_content_tool_calls` to recognise `name({json})` is a cheap,
-  offline-testable mitigation that would have converted the observed run — **do it before the engine
-  surgery, then re-measure.** Also recorded: `pytest -m live` is **RED deterministically (2/2)** on
+  the engine-level guarantee must cover any node whose contract is "post" — **still open, and now
+  the *only* remaining part of (a): the parse-layer half is delivered** (below); **(b)** ✅
+  **delivered 2026-07-24, slice A** — this is the exact structural twin of **item 1** (a parse layer
+  intolerant of the shapes small local models actually emit), so `_parse_content_tool_calls` now
+  recovers bare `name({json})` / `name()` call syntax as a second probe *after* the JSON probe
+  (`llm._parse_bare_call_syntax`; `_parse_chat_message`'s native-over-content precedence unchanged).
+  Recognition is deliberately narrow, and the analyst gate tightened it twice after finding the
+  first draft's rule materially wider than its docstring: three rules, **all** enforced — the call
+  opens a line (indentation and a space before the paren allowed), its argument is empty or a JSON
+  **object**, and **from the first accepted call onward the message holds nothing but calls and
+  whitespace** (no prose *between* two calls, nothing after the last one). That third rule is the
+  fix: without it a call the model was merely *quoting* inside a fenced example fired and dispatched
+  a real thread write, while `text=None` discarded the model's actual answer. Gate **M-1** anchored
+  it on the *last* call only, which gate **N-1** re-opened — `executor._run_agent_node` dispatches
+  **every** returned call, so *"I considered handing off:\n```\nhuman_handoff()\n```\nBut instead I
+  will ask:\npost_message({…})"* dispatched both, and the whole M-1 family came back whenever the
+  model ended on a genuine call (the common shape). The current rule is the N-1 form. Inline
+  mid-sentence calls, trailing prose on the call's line **or any later line**, prose *between* two
+  call-shaped expressions, and keyword/positional arguments
+  stay text, because a dispatched call the model never made is worse than the miss. Identical
+  repeated calls collapse to one dispatch (gate **m-5**). **Residuals, accepted** (position alone
+  cannot separate either from an intended call; both pinned as characterisation tests, and closing
+  them needs the granted tool names as a recognition filter — remedy 3 of **K-035**): a message
+  whose final line happens to be an illustrative call still fires, and a *contiguous catalogue* of
+  own-line calls with no prose between them still fires. This **would have converted the observed
+  shape as reconstructed (de-wrapped)** — the shape *as recorded* in the report is line-wrapped and
+  a raw newline inside the JSON string still leaves it unparseable (bullet 4 below), and the
+  stronger "would have converted the observed run" is *not* established
+  and should not be relied on (gate **m-4**): the only surviving record is the report's
+  line-wrapped, `…`-elided quotation, the run's real `StepRun.output` is no longer in any live graph
+  (checked: zero matches across `ws:acme`, `ws:test`, `reference`), and bullet 4 below records that a
+  raw newline inside the JSON string argument would have left it unparseable. Item 5's re-probe
+  should not treat the claim as a proven precondition. The **engine-level guarantee (item 2)
+  is still owed, and item 5's re-probe should now re-measure against this parse layer.** Also
+  recorded: `pytest -m live` is **RED deterministically (2/2)** on
   the AC-4 answer-post assertion — a known, filed limitation (D12-B), not an unknown regression.
   Evidence: `docs/archive/test-reports/m3-workflow-engine-report.md` §3.9 / DEF-K027-A / DEF-K027-B.
 - **Carried findings from the analyst gate** (`docs/archive/reviews/m3-guard-thread-context-impl.md`, minors +
@@ -407,10 +460,33 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **Risks/RAM (rule 6):** none new — no node type, index, or vector dimension changes. The terminal-node
   contract touches the executor loop, whose §2.1 A/B/C block is byte-identity-locked: any change there
   is a deliberate, reviewed act, not a refactor.
+- **Discovered during slice A, deliberately not fixed** (candidate follow-ups, small):
+  - **Loose-JSON shadowing of a bare call → promoted to its own item, K-035 (gate M-2).**
+    It stays deferred, but it is no longer a bullet: the failure manufactures a call named after a
+    **user-supplied value**, which is not a "small" shape even at low likelihood.
+  - **Namespaced call names** (`functions.post_message({…})`) are not recognised — the identifier
+    pattern is deliberately un-dotted. No evidence any local model emits this shape here.
+    (Re-verified at the gate: still accurate.)
+  - ~~**Fences with a non-`json` language tag** (```` ```tool_code ````) are not stripped~~ —
+    **withdrawn at the gate (m-3): true of the tag text, but the stated consequence does not hold, so
+    the bullet sent the next author at a non-issue.** The backticks *are* stripped; the leftover tag
+    line is harmless to both consumers. Re-verified directly: ```` ```tool_code\npost_message({"text":
+    "hi"})\n``` ```` → **recovered as a call**, and ```` ```tool_code\n{"decision": true,…}\n``` ````
+    → **recovered as a verdict**. Nothing to fix here.
+  - **Raw newlines inside a JSON string argument** make the argument unparseable ⇒ the call stays
+    text. Tolerating them would mean a lenient JSON reader, not a parse-order change. (Re-verified at
+    the gate: still accurate — and it is why the "would have converted the observed run" claim above
+    could not be substantiated.)
 - **Test strategy:** offline pins for the parse-robustness + negator fixes (fenced-JSON and
-  clause-boundary cases as fixtures); a `live`-marked reliability run for the terminal-post contract
-  with an explicit n and no cherry-picking; the calibration harness reading `golden_guards.jsonl` per
-  the §4/§7 protocol, reporting both arms with the D10 caveat attached.
+  clause-boundary cases as fixtures) — **the parse half is delivered** (30 pins in
+  `server/tests/test_llm.py` + `test_app.py`; 19 in the first draft, 11 added at the analyst gate,
+  **19 of the 30 red before their fix**). **17 of the 30 now guard the false-positive direction**,
+  and the gate's own lesson is recorded here for the next author: the first draft's 6 negative pins
+  were *all single-line*, which is precisely why three multi-line false positives shipped
+  undetected — **a negative pin corpus for a line-anchored rule must include multi-line shapes.**
+  The negator (m-1) half is not delivered; a `live`-marked reliability run for the terminal-post
+  contract with an explicit n and no cherry-picking; the calibration harness reading
+  `golden_guards.jsonl` per the §4/§7 protocol, reporting both arms with the D10 caveat attached.
 
 ### K-028 — Workflow timers / scheduled wakeups (🔵 proposed — filed out of K-024, decision D-C)
 
@@ -511,7 +587,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   asserted to succeed *and* to leave a complete subgraph (steps + `START` + the returned row); the
   existing ordering pins for the other publish invariants must stay green.
 
-### K-031 — Def/snapshot **structure** read surface (make the create-only split-brain detectable) (🔵 proposed — filed out of the K-025 QA pass, DEF-1)
+### K-031 — Def/snapshot **structure** read surface (make the create-only split-brain detectable) (✅ **delivered 2026-07-24** — plan v2 + analyst re-gate → HISTORY.md)
 
 > **Why it exists.** `GET /workflow-defs/{key}` and `GET /workspaces/{ws}/snapshots` return
 > **metadata only** (`{key, version, name, kind}` — `repository.get_def`, QUERIES §11.3). There is
@@ -545,6 +621,31 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   transitions and guards; a test that a def edited-and-re-published reads back **unchanged** (pinning
   the create-only semantics rather than hiding them); a def-vs-snapshot divergence fixture asserting
   the read makes the divergence visible.
+
+**Delivered 2026-07-24** — plan `docs/plans/workflow-def-structure-read.md` **v2** (analyst re-gate:
+*approve with suggestions*, all 15 round-1 findings closed), review
+`docs/reviews/workflow-def-structure-read.md`. Three read-only REST routes
+(`GET /workflow-defs/{key}/versions/{version}`, `GET /workspaces/{ws}/snapshots/{key}/versions/{version}`,
+and `…/diff`) over the **existing** `_READ_META_CYPHER`/`_READ_TRANSITIONS_CYPHER` constants — **zero new or
+modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new-Cypher tripwire) — plus
+`scripts/verify_workflows.sh <wsId>`, the read-only one-command form of the re-seed discipline.
+- **`maxSteps` off-by-one → DOCUMENTED, not fixed** (binding stakeholder decision). `executor.py:410`/`:427`
+  are untouched, the `_drive_loop` SHA lock (`71055f756280`) is intact, `tests/test_executor.py:158` keeps its
+  assertion. The semantics ("a tripwire checked *after* each recorded step ⇒ at most `maxSteps + 1`; not
+  checked on the park or terminal paths") are now stated at DESIGN §6, QUERIES §12.5 + the two `$maxSteps`
+  comments, `schemas.py` and `AGENTS.md`'s executor-invariants block. The real fix is filed as **K-033**.
+- **Cross-reference: this read surface is the *detection* mechanism for K-034**, not its fix. K-031 makes the
+  current publish semantics **observable** and deliberately changes nothing about them; the additive-`MERGE`
+  finding and the **thirteen** doc assertions it falsifies are **K-034's** (its table below carries all
+  thirteen — three were added at the K-031 implementation gate so its done-condition covers them).
+- **Multi-`START` finding, verified live (V-1):** two `START` edges on one root make QUERIES §11.2's one-row
+  collapse fail — the meta query returns **one row per distinct start key** (falkordb/falkordb:v4.18.11), so
+  `_read_subgraph`'s `result_set[0]` is arbitrary. The new `repository._read_structure` reads **all** rows and
+  surfaces `startKeys`; `verify_workflows.sh` treats a `startKeys` list as a failure. Recorded in QUERIES §11.2/§11.5,
+  and **pinned in the suite** by a fake-graph unit test replaying V-1's two-row `result_set` — no publish, no
+  Cypher, no FalkorDB, so no coupling to K-034's publish semantics (gate finding M-1).
+- **Live state (R-1):** `verify_workflows.sh acme` reports **both** `triage@v1` and `access-request@v1`
+  **in sync** with one start key each — no live divergence found, nothing repaired.
 
 ### K-032 — Materialize the workflow def's **data-dependence overlay** (CPG-style READS/WRITES) for publish-time static analysis (🔵 proposed — from a design conversation, 2026-07-22)
 
@@ -607,6 +708,221 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   overlay for its guards/`expects`; a def with a guard reading an unwritten key is **rejected at
   publish**; an unreachable step is **rejected at publish**; a step whose reads can't be derived
   carries `READS_UNKNOWN` rather than silently claiming zero reads.
+
+### K-033 — Make `maxSteps` an exact cap (`>` → `>=` in `_drive_loop`) (🔵 proposed — filed out of K-031, stakeholder decision OQ-1 "document now, fix later", 2026-07-24)
+
+> **Why it exists.** `maxSteps` does not mean what its name says. `executor._drive_loop` records a
+> step and *then* checks `rec["stepCount"] > max_steps` — at `executor.py:410` (OUTCOME A, a guard
+> fired) and `:427` (OUTCOME C, a legitimate self-loop). With `maxSteps: 2`: step 1 → `1 > 2` false;
+> step 2 → `2 > 2` false; **step 3 runs**, `3 > 2` → fail. So the budget means *"at least N, then one
+> more"*, and a run executes at most **`maxSteps + 1`** steps. Confirmed by reading and **pinned by a
+> passing test** — `tests/test_executor.py:158`, `assert len(trail) == 4  # maxSteps=3 → the 4th
+> advance trips the guard`. Harmless for the two proof defs (8/6/6 steps against `maxSteps: 24`), but
+> it makes `maxSteps` unusable as an SLA or a cost budget, which is exactly what a caller reaches for
+> it for. K-031 shipped the **documentation** of the real semantics at six sites (DESIGN §6,
+> QUERIES §12.5 + the two `$maxSteps` comments, `schemas.py`, `AGENTS.md`'s executor-invariants
+> block) per the binding stakeholder decision; this item is the **fix**.
+- **The change is two characters, in two places** — `>` → `>=` at `executor.py:410` and `:427`.
+  Everything else about this item is ceremony, and the ceremony is the reason it was deferred out of
+  an observability slice rather than the difficulty of the edit.
+- **Both sites are *inside* the SHA-locked `_drive_loop`** (`71055f756280`,
+  `docs/archive/plans/m3-process-flow.md` §3.1). Landing it therefore costs:
+  - a lock break + **re-lock ceremony**: recompute the SHA, then re-quote it in `falkor-chat/AGENTS.md`,
+    `docs/BACKLOG.md` (×2), `docs/HISTORY.md` (×2) — grep `71055f756280`, the line numbers drift;
+  - **frozen archive documents that must not be rewritten** — `docs/archive/plans/m3-process-flow.md`
+    (×4), `docs/archive/reviews/m3-process-flow.md` (×5),
+    `docs/archive/plans/m3-executor-coordination.md` (×3), `m3-process-flow-coordination.md`. These
+    are *historical records* asserting the SHA was unchanged throughout K-024. The re-lock has to be
+    expressed as *"as of K-033 the lock is `<new>`; archived records quote the pre-K-033 value"* —
+    i.e. the lock stops being a single grep-able constant. **Decide that framing before editing.**
+  - **test edits**: `tests/test_executor.py:142-158` (the pinned count 4 → 3, and its explanatory
+    comment), plus a sweep of `tests/test_process_flow.py`'s step accounting and the
+    `access-request@v1` `maxSteps: 24` headroom;
+  - **behavioural blast radius**: every existing run's effective budget shrinks by one.
+- **Bundling is a PREFERENCE, not a precondition — and its premise is UNVERIFIED.** It would be
+  pleasant to land this alongside the next item that legitimately breaks the `_drive_loop` lock,
+  plausibly **K-027 item 2** (the terminal-node-must-post engine contract): one re-lock ceremony,
+  two fixes. But *"K-027 item 2 must break the lock anyway"* is an **assumption, never established**
+  — the lock covers `_drive_loop` **only**, and `_execute_step`, `_select_transition`, `_trace_step`
+  and `resume` sit **outside** it (`AGENTS.md`, executor-invariants block), so a terminal-post
+  guarantee might well be implementable at one of those seams. K-027 is itself **🟡 in-progress**
+  — slice A delivered 2026-07-24; items 2–5, **item 2 included**, remain open and unscheduled.
+  **K-033 therefore does not depend on K-027**: if no such item arrives, K-033 breaks
+  the lock on its own — the ceremony is the cost either way, and waiting only leaves the honest
+  `maxSteps + 1` prose sitting in six documents indefinitely, which is the cheap half of a permanent
+  divergence.
+- **Also decide (part of the item, not a separate one):** whether the *park* path (OUTCOME B,
+  `executor.py:415-421`) and the terminal path stay deliberately unchecked. They are unchecked today
+  by design — a parked run cannot self-drive — and K-031's documentation says so explicitly, so
+  changing that is a second semantic decision, not a consequence of `>=`.
+- **Owner:** **`tdd-engineer`** (a behaviour change pinned by an existing passing test is the
+  test-first shape: flip the assertion red, then the operator) — with an **`architect`** call first
+  **only** on the re-lock framing above, if the coordinator wants the archive-document question
+  settled before code moves. No `graph-dba` gate: no Cypher, no DDL, no index.
+- **Risks/RAM:** **none** — no new node type, label, property, index or vector dimension; no query
+  changes. The risk is purely behavioural (every run's budget shrinks by one) and procedural (the
+  lock/archive framing).
+- **Test strategy:** flip `tests/test_executor.py:142-158` to assert exactly `maxSteps` advances
+  (3, not 4) and watch it go red before the fix; add the boundary case at `maxSteps = 1`; assert the
+  park path is still **not** budget-checked (a parked run at `stepCount == maxSteps` must stay
+  `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
+  flow to confirm the `maxSteps: 24` headroom still covers it.
+
+### K-034 — Create-only re-publish is *additive*, not a silent no-op — duplicate `TRANSITION`/`START` edges, and the thirteen doc sites that say otherwise (🔵 proposed — discovered by `architect` while designing K-031, confirmed by `analyst` at the K-031 plan gate, 2026-07-24)
+
+> **Why it exists.** The whole component is documented on the claim that re-publishing the same
+> `key@version` is a **structural no-op** — "immutability per version comes for free from `MERGE`".
+> That claim is **false**, and the shipped docs, docstrings and `AGENTS.md` all assert it.
+> `repository._PUBLISH_CYPHER` (`server/falkorchat/repository.py:937-956`) is `MERGE … ON CREATE SET`,
+> which is create-only on **properties** but whose `MERGE` **patterns still create structure**: a new
+> step key mints a `Step` + `HAS_STEP`; a changed `to`/`on`/`order` mints a **parallel `TRANSITION`**
+> edge beside the old one (the MERGE key is `{on, order}` *plus* the `(from)→(to)` endpoints, so a
+> retargeted transition is a *different* edge, not an update); a changed start step mints a **second
+> `START`** edge. Only `guard`, `d.name`, `d.kind` and `st.type`/`st.config` are genuinely create-only.
+> `materialize_snapshot` (`repository.py:1540-1566`) formats the **same constant** at `:1555` against
+> the workspace graph, so the snapshot side is additive too — and the snapshot is what the executor
+> drives. **Full evidence, do not re-derive it:**
+> [`docs/reviews/workflow-def-structure-read.md`](../reviews/workflow-def-structure-read.md) **finding
+> B-2** (and its closure in the re-gate section, R2 · B-2); formally handed off to this item by
+> [`docs/plans/workflow-def-structure-read.md`](../plans/workflow-def-structure-read.md) **§0.2** and
+> **§1.2**.
+- **Two live consequences — this is a defect, not a curiosity.**
+  1. **Nondeterministic branching.** `executor._select_transition` orders by
+     `sorted(transitions, key=lambda t: (t["guard"] == "", t["order"]))`
+     (`server/falkorchat/executor.py:758`) and takes the first firing guard. Two `TRANSITION` edges
+     with the same `on`/`order` but different `to` **sort equal**; Python's sort is stable, so the
+     branch a live run takes is whatever edge order FalkorDB happened to return. Silent, and it can
+     differ between two runs of the same def.
+  2. **Run start breaks outright.** `repository.start_run` (`repository.py:1158-1195`) is
+     `MATCH (snap:WorkflowDefSnapshot …)-[:START]->(start:Step) … CREATE (r:WorkflowRun {runId: …})`.
+     Two `START` edges ⇒ two rows ⇒ the `CREATE` executes twice against
+     `UNIQUE NODE WorkflowRun PROPERTIES 1 runId` (`scripts/bootstrap_schema.sh:180`) — the start
+     errors. `start_run_untriggered` (`:1197-1239`, the REST/`kind:'process'` start path) carries the
+     identical shape, so **both** start paths are affected, `access-request@v1` included.
+  Both are reachable by the operation `AGENTS.md` actively instructs ("re-run `seed_workflows.sh`
+  after `test_queries.sh` or a pytest run") combined with a def edit.
+- **Blast radius — thirteen shipped assertions are falsified.** Verified against the tree on
+  2026-07-24 (line numbers drift; grep the quoted text):
+
+  | # | Site | The falsified claim |
+  |---|---|---|
+  | 1 | `docs/QUERIES.md:782-784` (§11 preamble) | "re-running the same `key@version` is a structural no-op (0 nodes/rels created). Immutability per version comes for free from `MERGE`" |
+  | 2 | `docs/QUERIES.md:829` (§11.1 footnote) | "run 2 → 0 created (idempotent), same row" |
+  | 3 | `docs/QUERIES.md:947-948` (§11.4 footnote) | "Snapshots are **immutable** per `(workspace, key, version)`; re-materialize is a no-op" |
+  | 4 | `docs/DESIGN.md:544` (§ write paths table) | "Immutable per version; bump version, never mutate in place" |
+  | 5 | `docs/DESIGN.md:102` (topology diagram) | "Canonical WorkflowDef templates (versioned, immutable)" |
+  | 6 | `docs/DESIGN.md:144` + `:146-149` | "(immutable, versioned)" / "immutable once published" / "the snapshot is immutable so it never drifts" |
+  | 7 | `server/falkorchat/repository.py:1065` (`publish_def` docstring) | "re-publishing the same `key@version` is a structural no-op (immutability per version)" |
+  | 8 | `server/falkorchat/repository.py:1551-1552` (`materialize_snapshot` docstring) | "Re-materialize is a no-op." |
+  | 9 | `server/falkorchat/services.py:808-809` (`materialize_def` docstring) | "Idempotent (the workspace MERGE no-ops on re-materialize)." |
+  | 10 | `falkor-chat/AGENTS.md:149` (`seed_workflows.sh` row) | "⚠️ Published defs are effectively IMMUTABLE … re-running changes nothing live" |
+  | 11 | `docs/requirements/agent-import.md:81` | "Published workflow defs are effectively **immutable** (`MERGE … ON CREATE SET`); a re-import of a changed def cannot update in place" — **the dangerous direction**: a changed re-import does not *fail to update*, it **additively mutates**. **Load-bearing** — it is the stated collision with that document's **FR-2** idempotence requirement, so an architect designing agent-import off it would design against the wrong hazard. Correct it *and* re-check FR-2's collision handling. |
+  | 12 | `docs/requirements/workflow-dependence-overlay.md:21`, `:44`, `:54`, `:160` | "published defs are effectively immutable" / "create-only + immutable (K-031): a def edit costs a version bump" / "before I edit an (immutable) published def" / "by immutable, create-only published defs" — motivational framing, same class as the weaker sites below (`:44` and `:160` found while adding this row; the K-031 report named `:21`/`:54` only) |
+  | 13 | `docs/BACKLOG.md:670` (K-032's "why it exists" premise) | "This matters **specifically because published defs are create-only + immutable** (K-031)" — K-032's own premise, so correcting it may shift that item's motivation |
+
+  Sites 11–13 were surfaced by K-031's R-8 classification sweep (11 and 12 reported by `coder`, 13
+  by `analyst` at the K-031 implementation gate, `docs/reviews/k031-structure-read-impl.md` **m-3**).
+  Deliberately **left uncorrected in place** — correcting them is this item's deliverable, forbidden
+  to K-031 by its plan §1.2, and would pre-commit wording before this item decides what publish
+  semantics become.
+
+  **Five further sites found while verifying the first ten** (weaker framings of the same claim, cheap to
+  fix in the same pass): `docs/QUERIES.md:744` ("versioned, immutable `WorkflowDef` templates"),
+  the §11.1/§11.4 headings `docs/QUERIES.md:799` and `:918` ("— idempotent"),
+  `server/falkorchat/repository.py:925` (§11 block comment, "versioned, immutable"), `:933`
+  ("Publish/materialize share the same idempotent MERGE shape") and `:1549` (the same phrase in
+  `materialize_snapshot`'s docstring, one line above site 8).
+  **Do *not* "correct" `docs/QUERIES.md:826-827`** — *"The `TRANSITION` MERGE-key is
+  `(from, on, order, to)` so distinct outcomes/orders between the same two steps are distinct edges"*
+  is **true**, and is the mechanism; it already contradicts the preamble two paragraphs above it.
+  Suggested replacement framing throughout: *"create-only on **properties**, additive on
+  **structure** — a re-publish never updates, but it does add."*
+- **It undermines K-029's core premise — re-read K-029 before picking it up.** K-029 ("converge the
+  seed def sources") declines the `triage@v1` move-during-K-024 on the belief that "a byte-diff
+  introduced while relocating a **live** def is **silently swallowed**". Under this finding a typo'd
+  step key or a retargeted transition is **additive**, not swallowed — which makes K-029's proposed
+  relocation *more* dangerous than K-029 currently believes, and promotes its "before/after equality
+  check on the published def subgraph" acceptance criterion from a nicety to the item's load-bearing
+  safeguard. K-029's own text is deliberately left unedited by this filing; correcting it is part of
+  K-034's deliverable (or K-029's own re-scoping, whichever lands first).
+- **Owner:** **`architect`** first — changing publish semantics is a **decision**, not a bug fix, and
+  the candidate remedies differ in kind: `ON MATCH SET` (mutable versions — reopens a locked
+  decision), a pre-publish structural-equality check that **rejects** a differing re-publish
+  (preserves immutability, needs an error contract + a repair story), or an explicit
+  delete-and-republish affordance. → **`graph-dba`** gate **if and only if** `_PUBLISH_CYPHER`
+  changes (a query-shape change needs a re-`GRAPH.PROFILE` and must keep every `MERGE` backed by a
+  uniqueness constraint — `AGENTS.md` schema conventions) → **`coder`**/**`tdd-engineer`** for the
+  implementation and the eighteen doc/docstring corrections.
+- **Scope:** (1) decide and implement the publish/materialize semantics (the `architect` pass above);
+  (2) correct the thirteen falsified sites + the five weaker ones listed here, and fix K-029's premise
+  paragraph; (3) whatever detection K-031 has by then shipped becomes the acceptance instrument — do
+  not build a second one.
+- **Explicitly not in scope:** K-031's read surface (it makes this state **detectable** and
+  deliberately neither fixes nor documents it — see its §1.2); K-030's empty-`UNWIND` publish hazard
+  (same query, different defect — sequence the two so the second one to land re-PROFILEs); repairing
+  whatever live `reference`/`ws:acme` divergence already exists (a destructive shared-state op,
+  stakeholder-gated, see K-031 §6 R-1).
+- **Risks/RAM:** no new node type, label, property, index or vector dimension ⇒ **zero graph RAM
+  impact** (rule 6). The risk is entirely in the publish query: a change there needs a re-`GRAPH.PROFILE`
+  to confirm the plan stays index-anchored on `Step.stepUid`/`WorkflowDef {key,version}` and does not
+  degrade to a scan (rule 3), and `./scripts/test_queries.sh` must stay green. A reject-on-difference
+  remedy also changes a **live REST contract** (`POST /workflow-defs` today returns `201` for an
+  edited re-publish), so it needs an API-contract decision, not just a validator.
+- **Test strategy:** the missing tests are exactly the ones K-031 was forbidden to write. Offline
+  contract tests that (a) a re-publish with a **changed transition `to`** leaves the def with the
+  *intended* transition count — not two edges; (b) a re-publish with a **changed start step** leaves
+  exactly one `START`; (c) a re-publish with a **new step key** behaves per the chosen decision;
+  (d) the same three on `materialize_snapshot` (shared constant ⇒ shared defect); (e) an executor
+  test pinning that a def with duplicate outgoing transitions is either impossible or deterministic —
+  today `_select_transition`'s tie is unpinned in either direction. Plus a grep-verified done-condition
+  over the doc surface: from `falkor-chat/`, `grep -rn -i "immutab\|no-op" docs/ server/falkorchat/ AGENTS.md`
+  classifies every hit as corrected / correct-as-is / unrelated.
+
+### K-035 — An argument key named `name`/`action`/`tool` shadows the bare call's own name (🔵 proposed — filed out of the K-027 slice A analyst gate, finding M-2, 2026-07-24)
+
+> **Why it exists.** In `llm._parse_content_tool_calls` the **JSON probe runs before** the bare-call
+> probe, and `_normalize_tool_call` maps `name` / `action` / `tool` loosely. So for a bare call whose
+> *argument object* happens to carry one of those keys, the argument is mistaken for the call
+> envelope and the real call name is never seen:
+>
+> | model emits | parsed as |
+> |---|---|
+> | `create_user({"name": "bob"})` | `ToolCall(name='bob', arguments={})` |
+> | `run_tool({"action": "delete"})` | `ToolCall(name='delete', arguments={})` |
+> | `x({"tool": "y", "args": {"a": 1}})` | `ToolCall(name='y', arguments={"a": 1})` |
+>
+> Reproduced by `analyst` at the K-027 slice A gate; the three rows above are verbatim from
+> [`docs/reviews/k027-parse-robustness.md`](../reviews/k027-parse-robustness.md) **M-2**.
+- **Not currently reachable, and that is the whole risk.** No registered tool declares such a
+  parameter — `post_message` takes `text`/`mentions`, `graphrag_retrieve` takes `query`,
+  `human_handoff` takes `reason` (`server/falkorchat/tools.py`). The premise was verified at the
+  gate and **deferring the fix was judged correct** for a slice whose point was not to widen
+  precedence. It is filed as its own item because the *shape* of the failure is bad, not because the
+  likelihood is high: it manufactures a tool call **named after a user-supplied value**, so it fails
+  **silently and misleadingly** — `executor._handle_tool_call`'s AC-6 check rejects `'bob'` as an
+  ungranted tool, burns a re-prompt iteration, and tells the model its own argument is not a tool.
+  That trace is close to undebuggable, and a bullet under "candidate follow-ups, small" would not
+  have surfaced at the moment someone registers `create_user(name)`.
+- **Tripwire in place (do not remove).** `server/falkorchat/llm.py` carries a comment at the
+  probe-order site naming this item, because that is where the next author will be looking. **Read
+  this item before registering any tool with a `name`, `action` or `tool` parameter.**
+- **Owner:** **`architect`** to pick the remedy (it is a precedence decision, not a bug fix), then
+  **`tdd-engineer`**. Candidates, cheapest first: (1) in `_normalize_tool_call`, skip the loose
+  `name`/`action`/`tool` mapping when the surrounding content also matches `_BARE_CALL_OPEN` — a
+  partial hardening available today; (2) run the bare-call probe **first**, which reorders the
+  content fallback and needs its own regression pass over the JSON shapes; (3) pass the granted tool
+  names down as a **recognition filter** — this also closes most of M-1's residual and the
+  `Summary ({"a": 1})` class, but it is a real layering decision (`llm.py`'s note that name
+  validation belongs to the agent loop is deliberate, and worth keeping unless consciously reversed).
+  Open question 3 of the K-027 gate review is exactly this choice.
+- **Risks/RAM (rule 6):** none — parse layer only, no node type, index, property or vector dimension.
+  No Cypher, no schema, no script.
+- **Test strategy:** offline pins in `server/tests/test_llm.py` driving the public `llm.chat(...)`
+  seam (never the private probes). Pin all three rows in the table above to the **call's own**
+  identifier; pin that a genuine `{"name": …, "arguments": …}` envelope with no surrounding call
+  expression still parses as a call (the shape this must not regress); and pin the negative
+  direction — an argument object carrying `name` must not resurrect a call the M-1 final-content rule
+  rejected.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
@@ -792,7 +1108,11 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   memory; one-shot instant-timeout anomaly after a long override run.
 - Per-endpoint response schemas (QA, recommended three times now): full-thread / since-reads / search each carry a
   different field subset (all documented/intentional) — a declared schema per endpoint would make the contract testable
-  and stop accretion.
+  and stop accretion. **Status update (K-031, 2026-07-24):** the three new §11 structure/diff routes **do** declare
+  `response_model=` (`WorkflowDefStructureOut` / `WorkflowDiffOut`, `schemas.py`) with exact-key-set contract tests; every
+  pre-existing route still does not. That is a **deliberate** non-retrofit — FastAPI's `response_model` *filters*
+  undeclared fields, so a wrong model silently drops a field the web client reads — and it leaves the repo with a **mixed
+  convention**. This entry stays open; the new routes are the worked precedent for the eventual retrofit, not the retrofit.
 - DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard expression language (M3),
   real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
   for the gateway (K-018).

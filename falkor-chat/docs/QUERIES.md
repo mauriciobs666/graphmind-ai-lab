@@ -870,6 +870,24 @@ RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: t
 returns `transitions: []` (11.2b yields zero rows → the app treats absence as empty). Route via
 `GRAPH.RO_QUERY`.*
 
+> **⚠️ The one-row collapse is CONDITIONAL — it holds only while the root has exactly one `START`
+> edge (K-031).** `start.key` is a **non-aggregated grouping key** beside `collect(DISTINCT …)`, so
+> "constant across the fan-out" above is a *premise*, not a guarantee. **Verified live on
+> falkordb/falkordb:v4.18.11 (K-031 V-1, snapshot side, throwaway `ws:k031probe`):** two `START`
+> edges on one root ⇒ **11.2a returns two rows**, one per distinct `startKey`, each carrying the
+> full `steps` collection. Consumers that take `result_set[0]` therefore pick an **arbitrary** start
+> key. `repository._read_subgraph` (the materialize + executor input) still does exactly that —
+> unchanged, because it is on locked paths; the K-031 observability reader
+> `repository._read_structure` consumes **all** rows for precisely this reason.
+>
+> Two consequences worth stating plainly. First, `_read_structure` returns `start_keys: list[str]`
+> where this section documents a scalar `startKey` — a **deliberate, documented shape divergence**
+> from the "`repository.py` is a 1:1 mirror of QUERIES.md" rule (DESIGN §14.2); the query text is
+> untouched, only the Python row handling above it. The service layer renames it to
+> `startKey`/`startKeys` at the REST boundary. Second, **how a root acquires a second `START` edge
+> is not this section's subject — it is K-034's** (a re-publish is create-only on *properties* but
+> additive on *structure*).
+
 ### 11.3 List defs / get a def (reference)
 
 ```cypher
@@ -947,6 +965,9 @@ RETURN snap.name AS name, snap.kind AS kind, start.key AS startKey,
 MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step)
 RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: tr.order}) AS transitions
 ```
+
+> Same conditional one-row collapse as §11.2 — this is the label the K-031 V-1 probe actually ran
+> against: **two `START` edges ⇒ two meta rows**. See the §11.2 note.
 
 ### 11.6 List / get snapshots (workspace)
 
@@ -1031,7 +1052,9 @@ A returned row = the move committed.
 ```cypher
 // $runId,$defKey,$defVersion,$startedAt,$triggerMsgId server-minted / caller-supplied
 // $ctx = opaque serialized state ("{}" at start); $trace = bool (debug instance?);
-// $maxSteps = run-level step budget (DS default 12, §7)
+// $maxSteps = run-level step budget (DS default 12, §7). A tripwire checked AFTER each
+//             recorded step, not a hard cap: a run executes at most maxSteps + 1 steps
+//             (see the §12.5 note).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
 MATCH (trigger:Message {msgId: $triggerMsgId})
 CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
@@ -1140,6 +1163,14 @@ RETURN r.runId AS runId, r.status AS status
 no `AT_STEP` does not error). **Step-budget fail (§7):** the executor compares `stepCount` (returned by
 §12.2) to `maxSteps` app-side; on `stepCount > maxSteps` it calls `fail_run` — verified `failed` +
 `AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).*
+
+> **`maxSteps` is a tripwire checked *after* each recorded step, not a hard cap (K-031).** Because
+> the comparison is `stepCount > maxSteps`, a run executes at most **`maxSteps + 1`** steps before
+> failing with `"step budget exceeded"`. The check runs only on the two driving outcomes — a guard
+> fired (OUTCOME A, `executor.py:410`) and a legitimate self-loop (OUTCOME C, `:427`) — and is
+> **deliberately not applied on the park path** (OUTCOME B; a parked run cannot self-drive) **or on
+> the terminal path**. Treat it as a safety bound, not an SLA or a cost budget. Making it exact
+> (`>` → `>=`) lands inside the SHA-locked `_drive_loop`; filed as proposed **K-033**.
 
 ### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message` (D2)
 
@@ -1251,7 +1282,8 @@ empty-row-collapse class of bug entirely.
 // $runId,$defKey,$defVersion,$startedAt server-minted / caller-supplied
 // $ctx = opaque serialized state ("{}" or the caller's initial run ctx — reserved keys
 //        threadId/error are rejected service-side, see plan §3.4 M-2)
-// $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24)
+// $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24).
+//                A tripwire checked AFTER each step ⇒ at most maxSteps + 1 (§12.5 note).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
 CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
                        status: 'running', startedAt: $startedAt, ctx: $ctx,
