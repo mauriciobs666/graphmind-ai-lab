@@ -13,8 +13,8 @@ latency or failure short-circuits before anything is posted (failure isolation).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 import urllib.request
+from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from . import config

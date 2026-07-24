@@ -176,6 +176,26 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
   **`ws:test` vector indexes are dim 4** (`conftest.TEST_EMBEDDING_DIM`) — never use it for a
   real-embedder test: a wrong-dim `vecf32` write is silently accepted and then drops out of ANN,
   so the retrieval passes while finding nothing.
+- **⚠️ A plain `pytest -q` run is destructive to the global `reference` graph — same hazard as
+  `test_queries.sh`, different mechanism.** The `wf_repo` fixture (`tests/conftest.py`) runs
+  `MATCH (n) DETACH DELETE n` on `reference` at fixture **setup**, once per workflow test, and
+  `_schema` `.delete()`s all of `ws:test` once per session. So a pytest baseline wipes any published
+  def (`triage@v1`, `access-request@v1`) while leaving each `ws:<id>` snapshot intact — and, because
+  the wipe is setup and never teardown, it *leaves the last workflow test's defs behind*. See the
+  `seed_workflows.sh` row above for the full split-brain consequence and why `already present —
+  no-op` after a pytest run is an untrustworthy signal. **Re-seed after a pytest run**, exactly as
+  after `test_queries.sh`.
+- **A green pytest line is not evidence the graph-backed half ran — read the skip count.** With
+  FalkorDB unreachable, `conftest._falkordb_reachable()` turns the whole integration suite into
+  `pytest.skip` (conftest.py:54) rather than failures, so the run still exits 0 with roughly half the
+  tests silently skipped. Always report/read `N passed, M skipped`, never just the absence of
+  failures.
+- **`ruff check .` in `server/` is clean but still not a wired gate.** `pyproject.toml` configures
+  ruff and ships it as a dev dep, but no script or hook runs it — a clean `ruff check .` is not
+  evidence of anything beyond that one manual run. The real gates here are `pytest` and
+  (coordinator-run) `scripts/test_queries.sh`. *(The one pre-existing `I001` import-order error in
+  `llm.py` was fixed 2026-07-24; if ruff ever goes red again on a clean tree, treat it as a real
+  regression, not baseline noise.)*
 - MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.
 - **The `live` pytest marker (K-022 U14):** tests needing a **real LM Studio** are marked
   `@pytest.mark.live` and **deselected by default** (`addopts = -ra -m "not live"` in

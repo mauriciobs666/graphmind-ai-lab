@@ -5,6 +5,21 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-24 — Fixed pre-existing ruff error in `llm.py`; `ruff check .` now clean
+
+**What:** Reordered two import lines in `server/falkorchat/llm.py` (`from dataclasses import …`
+now sorted before `import urllib.request`) via `ruff check --fix .`, clearing the one pre-existing
+`I001` error. `server/` now passes `ruff check .` with zero errors. `AGENTS.md`'s ruff bullet
+updated to describe the clean baseline (no gate is wired to run ruff automatically; a future red
+result is a real regression, not known noise).
+
+**Why:** Flagged during the 2026-07-24 `coder` kaizen-inbox distillation as a trivial one-line
+follow-up outside that pass's remit; landed as its own change per the module convention (small,
+independent, reviewable).
+
+**Verified:** `ruff check .` → `All checks passed!`; `pytest -q -k llm` → 18 passed, 2 skipped
+(FalkorDB-down guard, expected), 514 deselected.
+
 ## 2026-07-22 — M3-close documentation-archival sweep (doc-only)
 
 Housekeeping pass following **milestone M3 — Workflows ✅ (delivered 2026-07-21)**: its completed

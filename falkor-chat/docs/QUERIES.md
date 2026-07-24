@@ -828,6 +828,24 @@ steps are distinct edges; `guard` is set-on-create only (may be empty, never a m
 on `_probe`: run 1 → 5 nodes / 9 rels (4 `HAS_STEP` + 1 `START` + 4 `TRANSITION`) / 32 props, returns
 one row `{key, version, stepCount:4, transitionCount:4}`; run 2 → 0 created (idempotent), same row.*
 
+> **⚠️ `$transitions = []` poisons the version — this query is deliberately *un*guarded.** Unlike the
+> §4 mention block (which wraps its list in `UNWIND (CASE WHEN $x = [] THEN [null] ELSE $x END)`), the
+> trailing `UNWIND $transitions` here collapses the row stream to zero rows **after** the `WorkflowDef`,
+> its `Step`s and the `START` edge have already been MERGEd. The `RETURN` then yields nothing, so
+> `repository.publish_def` / `materialize_snapshot` index `result_set[0]` → `IndexError` (a 500, not a
+> named error) on a **half-written** def — and because publish is `MERGE … ON CREATE SET`, re-publishing
+> the corrected spec on the same `(key, version)` is a silent no-op: the version is permanently wrong and
+> unrepairable without deleting the subgraph. The guard is therefore **at the service layer**, not here:
+> `services._validate_def_spec` rejects a zero-transition spec with `WorkflowDefSpecError` → 400, nothing
+> written (K-024 U4b, O-6). Model a terminal outcome as a step with **no outgoing transition**, never as
+> a def with no transitions. Any *new* caller reaching `_PUBLISH_CYPHER` without going through
+> `services.publish_workflow_def` must re-do that validation itself — including `materialize_snapshot`
+> (`repository.py:1397`), which reuses this same query shape unguarded (see **K-030**,
+> `docs/BACKLOG.md`, for the proposed Cypher-level `CASE`-guard fix that would close this gap for both
+> callers). *(Verified 2026-07-24; discovered 2026-07-20 while writing `tests/test_executor_process.py`
+> — every pre-existing publish test carried ≥1 transition, so no test reached the real query with an
+> empty list.)*
+
 ### 11.2 Read a def subgraph (reference — the materialize input, F6-safe)
 
 Two focused, index-anchored reads (no `length(path)` ordering — unsupported on this build, F6; the app
