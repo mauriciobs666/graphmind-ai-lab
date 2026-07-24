@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-07-24 — Learnings inbox distilled (first pass; 6 entries, inbox cleared)
+- **What:** Ran the `agent-maintenance` §5 distillation over `kaizen/inbox.md` — 6 entries accumulated
+  2026-07-16 → 2026-07-21, all falkor-chat environment facts from K-022/K-024 work, never before
+  distilled. All 6 verified against the live repo; **none routed to the coder's prompt** (every one is a
+  fact about *falkor-chat*, not about how the coder should behave), so the prompt is unchanged.
+  Routing:
+  - **Already documented → discarded (3).** (1) *Published defs are immutable per version; re-seeding
+    an edited prompt silently keeps the old config, and `reference`/`ws:<id>` go stale independently* —
+    now covered exhaustively by the `seed_workflows.sh` row in `falkor-chat/AGENTS.md`, consistent with
+    `docs/DESIGN.md` §144/§147/§544. Re-verified the mechanism still holds (`repository.py`
+    `_PUBLISH_CYPHER` is still `MERGE … ON CREATE SET`). (5) *pytest wipes `reference` at setup, so the
+    last test's defs survive and masquerade as a seeded def* — same AGENTS.md row already spells out the
+    false `already present — no-op` signal. (3) *the `_drive_loop` byte-identity lock's quoted byte count
+    is wrong (SHA `71055f756280` right, 2844 ≠ actual 2860)* — already an open **Doc-drift** item at
+    `falkor-chat/docs/BACKLOG.md:399` with the same diagnosis, and the surviving plan docs
+    (`docs/archive/plans/m3-process-flow.md:396`, `…-coordination.md:38`) now say "verify by SHA only;
+    every byte count quoted is wrong". Nothing to add.
+  - **Promoted to project docs (3).** (4) *zero-transition publish → bare `IndexError` on a half-written
+    def* — the **service-layer guard has since landed** (`services.py` `_validate_def_spec`, K-024 U4b
+    O-6, rejects with `WorkflowDefSpecError` → 400), but `docs/QUERIES.md` §11.1 documented neither the
+    trap nor why this query is deliberately unguarded while §4's mention block is; added a ⚠️ note there
+    stating the collapse mechanism, the unrepairable-poisoning consequence, where the guard actually
+    lives, and that any new caller bypassing the service layer must re-validate. (2) *pytest is
+    destructive to `reference`, and a green pytest line hides ~half the suite skipping when FalkorDB is
+    down* — the `seed_workflows.sh` row carried this from the seeding side, but the **M1 server pytest
+    bullet**, where someone running pytest actually looks, did not; added two bullets to
+    `falkor-chat/AGENTS.md` (destructive-at-setup + re-seed, and read the skip count — verified
+    `conftest.py:54` `pytest.skip` guard). (6) *`ruff check .` baseline is already red* — verified still
+    red today, exactly one pre-existing `I001` at `falkorchat/llm.py:13`; documented as a known baseline
+    in the same AGENTS.md section so an implementer doesn't misread it as their own regression.
+- **Why:** §5 — capture is cheap and unreviewed, promotion is curated; facts about *a project* belong in
+  project docs where every agent sees them, never hoarded in one agent's private files. Half the inbox
+  had already been absorbed into project docs by the K-024/M3-close doc sweeps, which is the loop
+  working as intended.
+- **Deliberately NOT done (flagged as follow-up, not landed silently):** the one-line `llm.py` import
+  reorder that would make ruff green, and any repository-level guard on `_PUBLISH_CYPHER`. Both are code
+  changes to falkor-chat, outside a distillation pass's remit.
+- **Plan items:** none closed; K-002 evidence noted in `plan.md`.
+
 ## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
 - **What:** Added `permissionMode: acceptEdits` to the frontmatter. File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so the user kept having to re-grant write permission to `coder` across sessions even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`. `acceptEdits` auto-accepts file edits and common filesystem commands for paths in the working directory/`additionalDirectories`, independent of session-level grants.
 - **Why:** User asked why they always had to give write permission to `coder`; root cause confirmed against current Claude Code docs (`sub-agents.md`, `permissions.md`) rather than assumed.
