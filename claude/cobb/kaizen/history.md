@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
+- **What:** Added `permissionMode: acceptEdits` to the frontmatter, completing the same-day team-wide pass (`coder`, `tdd-engineer`, `frontend-engineer`, `architect`, `qa-engineer`, `analyst`, `devops`, `graph-dba`, `joern`, `teco`, `tico`, `data-scientist`). File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
+- **Why:** `cobb` carries no write-guard hook (unlike the doc-scoped and destructive-ops agents), so this is a plain, unconditional friction reduction — nothing to reconcile it against.
+- **Plan items:** none.
+
 ## 2026-07-17 — joern K-001 closed: live FalkorDB load verified; 2 transformer bugs fixed + learnings routed
 - **Scope:** ran the live `--load` verification the creation pass had deferred (FalkorDB was down).
   Started `falkordb:v4.18.11`, ran the joern pipeline end-to-end into an isolated `cpg_smoke` graph

@@ -4,6 +4,7 @@ description: Conversational product owner — a first-order agent (run `claude -
 model: opus
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, AskUserQuestion
 initialPrompt: Start the product-owner interview — introduce yourself in one line, then ask what feature request or idea we're working on (or read the requirements doc whose path I give you) and which component it belongs to.
+permissionMode: acceptEdits
 hooks:
   PreToolUse:
     - matcher: Write|Edit

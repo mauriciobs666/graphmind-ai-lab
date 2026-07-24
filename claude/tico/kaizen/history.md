@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
+- **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change across the team (`coder`, `tdd-engineer`, `frontend-engineer`, `architect`, `qa-engineer`, `analyst`, `devops`, `graph-dba`, `joern`, `teco`). File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
+- **Why:** Verified against current Claude Code docs (`hooks-guide.md` "Hooks and permission modes") that this is safe: `PreToolUse` hooks fire *before* any permission-mode check, and a hook's `"ask"` decision still forces the prompt even under `acceptEdits`/`bypassPermissions`. `tico`'s `guard-requirements-doc-writes.sh` hook (escalates to ask on any Write/Edit outside the allowed requirements-doc paths) keeps working exactly as before; only writes it would already let through silently stop re-prompting every session.
+- **Plan items:** none.
+
 ## 2026-07-23 — Tico may commit its own deliverable
 - **What:** The Bash guardrail no longer bans all tree mutation — it now carves out `git add`/`git commit`, scoped to exactly the paths the Write/Edit guard already allows (the requirements doc(s), the kaizen inbox), staged by explicit path only (`git add -A`/`.`/`commit -a` still forbidden). Added a "Commit as you go" bullet alongside "Write as you go" and a note in the Handoff section to commit the doc's final state before closing.
 - **Why:** User ruling: they treat requirements docs as code and want tico to version its own files as part of authoring them, not leave commits to a human or downstream agent. This is a deliberate narrowing of the prior full Bash-mutation ban (see the 2026-07-09 creation entry and `guard-doc-writes.sh`'s design note on architect K-003) — not a hook change: Bash mutation stays prompt-guarded by convention, only the *scope* of what's permitted moved. No push/reset/rebase/amend; no bulk-staging flags.

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
+- **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change to `coder`/`tdd-engineer`/`frontend-engineer`/`architect`. File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
+- **Why:** Verified against current Claude Code docs (`hooks-guide.md` "Hooks and permission modes") that this doesn't weaken `qa-engineer`'s own guard: its `guard-destructive-ops.sh` hook matches Bash command patterns (`GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`), unrelated to `acceptEdits` (which only covers Edit/Write and common filesystem commands) — and `PreToolUse` hooks fire before any permission-mode check regardless, so a hook `"ask"` decision would survive even if the two overlapped.
+- **Plan items:** none.
+
 ## 2026-07-19 — CPG test-gap capability wired into the routing description (M2 / C-207)
 - **What:** Frontmatter `description` gained one clause: for test-gap analysis over a loaded Joern CPG in FalkorDB, the qa-engineer uses the `cpg-analysis` skill (graph-dba-owned) to find production code no test structurally reaches. `claude/README.md` catalog entry updated to match. No body change (skill is progressively disclosed).
 - **Why:** M2 delivered the `cpg-analysis` skill; `qa-engineer` is the named consumer of the test-gap recipe (FR-13, structural reachability — not runtime coverage). C-207 makes the routing contract advertise it. Wired by cobb as part of Gate-2b (skill passed the standards vet).
