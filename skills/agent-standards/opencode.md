@@ -1,7 +1,9 @@
 # OpenCode — reference
 
 > **Verified: 2026-06-20** against `opencode.ai/docs/agents`, `opencode.ai/docs/permissions`,
-> `opencode.ai/docs/rules`. Re-verify before relying on an exact key — OpenCode's
+> `opencode.ai/docs/rules`. **Skills + MCP servers verified 2026-07-25** against
+> `opencode.ai/docs/skills` and `opencode.ai/docs/mcp-servers` (own sections below).
+> Re-verify before relying on an exact key — OpenCode's
 > field set moves (note the `tools`→`permission` deprecation below).
 
 ## Agents
@@ -92,8 +94,76 @@ context implicitly *or* on isolation. The rules doc **does not state** whether
 
 OpenCode supports **commands** (custom slash commands) and **Skills** (the open
 Agent Skills `SKILL.md` standard). Skill tool-gating is governed by the `skill`
-permission key above. *(Skills section last verified 2026-06-07 — lighter touch
-this pass.)*
+permission key above. *(Commands last verified 2026-06-07; the skill specifics
+below re-verified 2026-07-25 against `opencode.ai/docs/skills`.)*
+
+### Skills — what OpenCode reads (verified 2026-07-25)
+
+- **Search paths**, project first (walking up to the git worktree root) then
+  global: `.opencode/skills/<name>/`, `.claude/skills/<name>/`,
+  `.agents/skills/<name>/`; `~/.config/opencode/skills/<name>/`,
+  `~/.claude/skills/<name>/`, `~/.agents/skills/<name>/`. So a Claude-Code skills
+  tree is picked up without any porting step.
+- **Recognized frontmatter:** `name` (required, 1–64, lowercase/hyphens),
+  `description` (required, 1–1024), `license`, `compatibility`, `metadata`.
+  **Unknown frontmatter fields are ignored, not rejected** — which is why a
+  Claude-specific `allowed-tools:` (including an `mcp__*` tool name) is safe to
+  leave in a shared `SKILL.md`. It simply has **no effect** here; gating is
+  `permission.skill` patterns (`{"*": "allow", "internal-*": "deny"}`), global or
+  per-agent.
+- Invocation is an explicit native tool: `skill({ name: "<skill-name>" })`.
+- ⚠ **Observed 2026-07-25 in this repo:** repeated `opencode debug skill` runs
+  over a whole-directory skills symlink returned **different subsets** of the same
+  9 skills, with no error or warning. Treat a skill missing from one enumeration
+  as noise, not as a broken skill — and don't build a portability conclusion on a
+  single run.
+
+## MCP servers (verified 2026-07-25 against `opencode.ai/docs/mcp-servers`)
+
+**MCP config does not port between harnesses even though `SKILL.md` does.**
+OpenCode reads neither Claude Code's `.mcp.json` nor Kiro's
+`~/.kiro/settings/mcp.json`; it configures servers under the top-level **`"mcp"`**
+key of `opencode.json` / `opencode.jsonc`:
+
+```json
+{
+  "mcp": {
+    "<server-name>": {
+      "type": "local",
+      "command": ["npx", "-y", "some-server"],
+      "cwd": "optional-working-dir",
+      "environment": { "VAR": "value" },
+      "enabled": true,
+      "timeout": 5000
+    },
+    "<remote-name>": {
+      "type": "remote",
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer …" },
+      "oauth": false,
+      "enabled": true,
+      "timeout": 5000
+    }
+  }
+}
+```
+
+Note the divergences from Claude Code, each a real porting trap:
+
+| | Claude Code | OpenCode |
+|---|---|---|
+| Config home | `.mcp.json` (project) / `~/.claude.json` | `opencode.json` → `"mcp"` key |
+| stdio command | `"command"` string + `"args"` array | **`"command"` is a single array** (`["npx","-y","x"]`) |
+| Server env | `"env"` | **`"environment"`** |
+| Local vs remote | inferred / `"type": "http"\|"sse"\|"ws"` | explicit **`"type": "local"\|"remote"`** |
+| Tool name | `mcp__<server>__<tool>` | **`<server>_<tool>`** — prefix is the server name; disable with patterns like `"<server>_*": false`, or enable per-agent in its tool settings |
+
+Consequence for shared skills: a `SKILL.md` deployed to all three harnesses that
+routes work through an MCP tool must keep a non-MCP fallback documented, because
+the wiring reaches only the harness it was written for. In this repo the `cpg`
+server is wired for Claude Code only (repo-root `.mcp.json`); `cpg-analysis` keeps
+`redis-cli GRAPH.QUERY` for exactly that reason, and OpenCode/Kiro wiring is
+tracked as backlog **C-310**.
 
 ## Severino gotchas (local LM-Studio agent in this repo)
 

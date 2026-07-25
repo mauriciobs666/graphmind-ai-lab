@@ -17,13 +17,18 @@ and OpenCode artifacts).
 - `opencode/` — Personal OpenCode configuration: custom agents.
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
+- `cpg/` — Code-Property-Graph component code home. `cpg/mcp/` is the **`cpg` MCP server** (stdio,
+  Python) exposing the single read-only tool `mcp__cpg__query(graph, cypher)` over FalkorDB; build
+  artifacts (`.cpg-artifacts/`) and its `.venv/` are gitignored. See `cpg/mcp/README.md`. The
+  repo-root `.mcp.json` that wires it is the repo's **first MCP wiring, and it is Claude-Code-only**
+  — OpenCode and Kiro configure MCP through their own files and neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history + learnings inbox the agent appends to during runs; `cobb` distills the inboxes). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
   `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives the `joern` agent's Joern
-  CPG→FalkorDB pipeline), and `python-coding`, `write-tutorial`,
+  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), and `python-coding`, `write-tutorial`,
   `comparison-driver`, `skill-builder`, `user-preferences` (OpenCode-authored). See
   `skills/README.md`. Format ports across Claude Code/OpenCode/Kiro; tool-gating &
   activation behavior do not — verify per tool.
@@ -35,6 +40,7 @@ and OpenCode artifacts).
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` |
+| `cpg/` | `cpg/mcp/README.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 
@@ -72,13 +78,18 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
 - `joern-cpg` — drives the `joern` agent (producer): parse → export (neo4jcsv) → transform →
   FalkorDB load scripts for turning a repo into a Code Property Graph and ingesting it as Cypher.
 - `cpg-analysis` — the consumer side (graph-dba-owned): queries a loaded CPG in FalkorDB with
-  Cypher for impact-analysis, RCA data-flow, code-review taint, and test-gap analysis.
+  Cypher for impact-analysis, RCA data-flow, code-review taint, and test-gap analysis. The read
+  path is the **`mcp__cpg__query`** MCP tool (`cpg/mcp/`, one tool, two parameters); `redis-cli
+  GRAPH.QUERY` stays as the documented fallback and is the *only* path under OpenCode/Kiro, which
+  the MCP wiring does not reach.
 - `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
   OpenCode-authored skills.
 
-> **Deployment:** all three harnesses point at this home via whole-dir symlinks (all 9 skills
-> visible to each): `~/.claude/skills`, `~/.config/opencode/skills`, and `~/.kiro/skills` →
-> `skills/`. See `skills/README.md` to recreate on a new machine.
+> **Deployment:** all three harnesses point at this home via whole-dir symlinks:
+> `~/.claude/skills`, `~/.config/opencode/skills`, and `~/.kiro/skills` → `skills/`. See
+> `skills/README.md` to recreate on a new machine — and its **portability notes** for what each
+> harness actually sees (Claude-only frontmatter is ignored, not rejected; OpenCode's discovery
+> returns a non-deterministic subset).
 
 ## User-preferences skill (shared memory pattern)
 
@@ -110,6 +121,14 @@ python visualize_agent_graph.py
 opencode --agent severino      # requires LM Studio server running at :1234
 ```
 
+**cpg/mcp** (the `cpg` MCP server; run from the repo root, after `cpg/mcp/setup.sh`):
+```bash
+cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q          # smoke: contract + formatting + errors (offline)
+cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q -m live  # same, against a running FalkorDB
+```
+This is the component's only regression signal — there is no root-level test runner, so without
+it a break surfaces only as an agent's failed query.
+
 ## Working in this repo
 
 - **Chatbot tasks** → `salesperson/`, follow `salesperson/AGENTS.md`. No pytest/lint scripts; manual checks.
@@ -133,5 +152,3 @@ opencode --agent severino      # requires LM Studio server running at :1234
   use `kaizen/` dirs — that convention exists only for agent folders (`claude/<agent>/kaizen/`).
 - The root `CLAUDE.md` contains only `@AGENTS.md` — this file is the single source of truth for
   root-level context; per-component context files carry the detail.
-</content>
-</invoke>

@@ -8,9 +8,10 @@
 to it could transitively break. **Change one parameter** — the target's short
 `NAME` (and `FILENAME` to disambiguate) or its `FULL_NAME`.
 
-Set the graph key once (caller-supplied; never hardcode):
-`GRAPH=<graph>; PORT=${FALKORDB_PORT:-6379}`, then
-`redis-cli -p "$PORT" GRAPH.QUERY "$GRAPH" "<cypher>" --no-raw`.
+Pass the graph key (caller-supplied; never hardcode) and the Cypher below as the
+two parameters of `mcp__cpg__query` — `graph` and `cypher`. Outside Claude Code,
+or if the tool is unavailable, use the `redis-cli` fallback in
+[`../SKILL.md`](../SKILL.md) §1.
 
 ## Q1 — Direct callers (AC-2)
 

@@ -1,6 +1,6 @@
 # Joern CPG Component — Feature Requirements
 > Status: M1 (producer pipeline) **delivered ✅** · M2 (CPG consumer skill) **specified, in progress** ·
-> Last updated: 2026-07-18
+> Last updated: 2026-07-25
 
 ## Intent
 The stakeholder wants to run **Joern** to extract a **Code Property Graph (CPG)** from source code,
@@ -74,8 +74,12 @@ built in `falkor-chat`.
 
 ### M2 — CPG consumer skill (`cpg-analysis`)
 - **FR-9** — Agents access the loaded CPG through a **`cpg-analysis` skill** (a lean core plus
-  per-task recipes), querying FalkorDB with Cypher (`redis-cli GRAPH.QUERY`). *(Resolves former OQ1;
-  chosen over MCP tool / raw Cypher.)*
+  per-task recipes), querying FalkorDB with Cypher through the **`mcp__cpg__query` MCP tool**;
+  `redis-cli GRAPH.QUERY` is retained as a documented fallback and remains the only path outside
+  Claude Code. *(Resolves former OQ1. The original wording chose `redis-cli GRAPH.QUERY` "over MCP
+  tool / raw Cypher"; that choice was **deliberately reversed on 2026-07-25** and is superseded by
+  [`./cpg-query-access.md`](./cpg-query-access.md) FR-1/FR-2. The **skill** remains the access
+  route — only the transport changed.)*
 - **FR-10** — An **impact-analysis** recipe packages FR-2/FR-3 for `analyst` and `architect`
   (callers/callees + transitive up/downstream reach over `CALL`).
 - **FR-11** — An **RCA** recipe packages FR-4/FR-5 for `analyst` (data-flow back from a symptom over
@@ -146,3 +150,9 @@ and RCA (FR-11) were already covered by FR-2..FR-5; **code-review (FR-12) and te
 previously flagged as scope extensions under OQ4, are now approved** — `qa-engineer` added as a named
 consumer, runtime coverage explicitly excluded. Tracked as **M2 / C-201…C-208** in
 [`../BACKLOG.md`](../BACKLOG.md); the blocking requirements pass (C-200) is thereby resolved.
+2026-07-25 — **Access mechanism reversed (FR-9)** → agents query the loaded CPG through the
+**`mcp__cpg__query` MCP tool** instead of hand-assembling a `redis-cli GRAPH.QUERY` command line;
+`redis-cli` stays as the documented fallback and as the only path outside Claude Code. This
+supersedes the 2026-07-18 clause "chosen over MCP tool / raw Cypher" — the skill is still the
+access route, only the transport changed. Ruled by the stakeholder in
+[`./cpg-query-access.md`](./cpg-query-access.md) (FR-1/FR-2/FR-6, AC-4).

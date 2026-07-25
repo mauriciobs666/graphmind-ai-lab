@@ -2,6 +2,53 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-25 — M3 / CPG query access: skill surface, agent wiring, and MCP knowledge capture (C-303/C-304/C-307)
+- **What:** Implemented steps S4, S5 and S7 of `docs/plans/cpg-query-access.md` (re-gated
+  "approve with suggestions", 0 blockers).
+  - **S4 (C-303):** `skills/cpg-analysis/SKILL.md` re-pointed at the `mcp__cpg__query` MCP tool —
+    `description`, `allowed-tools: mcp__cpg__query, Bash, Read`, §1 rewritten (two parameters, no
+    shell; read-only `GRAPH.RO_QUERY`; graph discovery without a `list_graphs` tool; `EXPLAIN`-only
+    with the `PROFILE` refusal and its reason; display-only truncation; a labelled `redis-cli`
+    fallback block), §3's parameter note generalised to "neither path binds Cypher parameters".
+    Preamble of `references/impact-analysis.md` moved to the tool; `skills/README.md` row updated.
+  - **S5 (C-304):** `mcp__cpg__query` added to the `tools:` allowlists of `analyst` and `architect`
+    (`qa-engineer` inherits), `claude/README.md` rows 9/16/17, root `AGENTS.md` (`cpg/` structure
+    entry, component-docs row, `cpg-analysis` bullet, smoke command), the three agents' kaizen
+    histories, and a status annotation closing out `claude/tico/kaizen/inbox.md:19`.
+  - **S7 (C-307):** `skills/agent-standards/claude-code.md`'s three-line `## MCP` stub replaced by a
+    verified reference section; a new **MCP servers** section plus re-verified **Skills** specifics
+    added to `opencode.md`; the cross-tool "MCP wiring does not port" rule added to the skill's
+    `SKILL.md`.
+- **Why:** The plan's own §2.4 collected the most perishable and most reusable content it had, and
+  archiving the plan would have taken it with it (review finding M-5). The `tools:`-allowlist fact
+  is the load-bearing one: `analyst` and `architect` declare allowlists, so without S5 the feature
+  would have been silently inert for two of its three consumers.
+- **Verified live against `code.claude.com/docs/en/mcp` and `opencode.ai/docs/{skills,mcp-servers}`
+  (2026-07-25)** rather than copied from the plan — which caught material the plan predates:
+  **tool search is on by default** (MCP tools are deferred; a `ToolSearch` event is expected in a
+  transcript, and *server* `instructions` — not just the tool description — are the routing signal,
+  truncated at 2 KB), **`alwaysLoad`**, and the **output-limit behaviour** (warn >10k tokens, cap
+  25k via `MAX_MCP_OUTPUT_TOKENS`; above the threshold a result is **persisted to disk and replaced
+  by a file reference**, so a trailing truncation notice is the first thing lost — the per-tool
+  escape is `_meta["anthropic/maxResultSizeChars"]`, ceiling 500k chars). Also corrected the plan's
+  "no per-server tool filtering" claim into its precise form: whole-server toggles exist
+  (`disabledMcpServers`/`enabledMcpServers`), per-*tool* subsetting does not.
+- **Portability spot-check (review finding m-3), resolved:** `opencode debug skill` — a cheap,
+  offline way to test `SKILL.md` portability — shows OpenCode parsing `cpg-analysis` with the
+  Claude-only `mcp__cpg__query` in `allowed-tools`, description intact, no warning; its docs
+  confirm unknown frontmatter is ignored. **New quirk found and promoted, not inboxed:** repeated
+  runs return *different subsets* of the same 9 skills with no error — recorded in
+  `agent-standards/opencode.md` and `skills/README.md`, and the root `AGENTS.md` "all 9 skills
+  visible to each" claim qualified. An actual OpenCode *invocation* remains unexercised (C-310).
+- **Also fixed:** root `AGENTS.md` ended with a committed `</content>\n</invoke>` XML trailer from
+  an earlier tool-assisted edit — removed. It sat in an always-loaded context file (imported by the
+  root `CLAUDE.md`), i.e. in every session's prompt.
+- **Not done, deliberately:** the server (`cpg/mcp/`, S2 · coder), `.mcp.json` + settings (S3 ·
+  devops) and `docs/requirements/` (S6 · coder) — other owners; and the `instructions=` /
+  `alwaysLoad` *implementation* those two steps now have the facts for.
+- **Plan items:** advances K-001 (Claude Code MCP moves off the 2026-05-31 baseline; Skills/Memory/
+  Hooks/SDK remain).
+
 ## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
 - **What:** Frontmatter `description` compressed 519 → 448 chars (-13%): tightened phrasing, dropped restated detail. `cobb` has no boundary pairs in `claude/scripts/audit-team.sh`; full audit re-verified green regardless. No body/catalog change.
 - **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.

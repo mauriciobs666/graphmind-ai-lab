@@ -1,3 +1,6 @@
 # Durable CPG reload artifacts (cpg.bin + 37MB load.cypher + loader) — kept locally
 # so FalkorDB can be reloaded if it restarts; not source, do not commit.
 .cpg-artifacts/
+
+# mcp/.venv (created by mcp/setup.sh) is untracked too — already covered by the
+# repo-root .gitignore's `.venv` rule, so no rule is repeated here.

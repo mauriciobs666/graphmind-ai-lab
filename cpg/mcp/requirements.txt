@@ -1,0 +1,11 @@
+# Runtime dependencies for the `cpg` MCP server (cpg/mcp/server.py).
+#
+# Bounds mirror the live-verified pins in falkor-chat/server/pyproject.toml —
+# the in-repo precedent for this exact stack:
+#   - mcp 1.28.x — the FastMCP surface this server depends on
+#     (`@mcp.tool(..., structured_output=False)` producing `outputSchema: None`)
+#     is an implementation detail verified on 1.28; a minor bump may change it.
+#   - falkordb 1.6.x — the line `Graph.ro_query(q, params, timeout)` /
+#     `Graph.explain(query, params)` signatures were verified against.
+mcp>=1.28,<1.29
+falkordb>=1.6,<1.7

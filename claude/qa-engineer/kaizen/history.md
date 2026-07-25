@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-25 — CPG read path moves to `mcp__cpg__query`; catalog row updated (M3 / C-304)
+- **What:** `claude/README.md` row 16 now records that the `cpg-analysis` test-gap work queries the graph through the **`mcp__cpg__query`** MCP tool, and that this agent inherits the tool automatically because it declares no `tools:` allowlist. **No frontmatter change** — deliberately: adding an allowlist here to "declare" the MCP tool would newly restrict every other tool the agent inherits.
+- **Why:** M3 replaces the CPG read path with a single MCP tool (`docs/plans/cpg-query-access.md` S5). Recording the *reason* this agent needed no edit, while `analyst` and `architect` did, is the point of the entry — the asymmetry is a property of their allowlists, not of their capabilities. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
+- **Plan items:** none.
+
 ## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
 - **What:** Frontmatter `description` compressed 798 → 663 chars (-16%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (qa-engineer↔analyst, qa-engineer↔tdd-engineer) re-verified green. No body/catalog change.
 - **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.

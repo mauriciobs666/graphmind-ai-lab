@@ -29,3 +29,13 @@
 - **Evidence:** `falkor-chat/server/tests/conftest.py:54` (`_falkordb_reachable()`) turns the entire graph-backed half of the suite into `pytest.skip(...)` when the DB is unreachable, rather than failing. `pytest -q` still exits 0 with roughly half the tests silently skipped in that case — the exit code alone cannot distinguish "everything passed" from "half the suite never ran."
 - **Context:** falkor-chat AGENTS.md doc-restructure audit — found the project's own docs had to warn "always report/read `N passed, M skipped`, never just the absence of failures" because this is easy to miss when reporting a run as green.
 - **Suggested home:** prompt (the "Verify and report" step should say to check skip counts, not just exit status, whenever a suite has an environment-reachability gate)
+
+## 2026-07-25 — A FastMCP stdio server drops the response to the LAST request when the client closes stdin immediately — a smoke-test artifact, not a server bug
+- **Evidence:** driving `cpg/mcp/run.sh` with `subprocess.run(input=<newline-delimited JSON-RPC>)` on `mcp 1.28.1`: stderr logged `Processing request of type CallToolRequest` for every call, but the final request's response never appeared on stdout (reproduced twice — first with `tools/call` last, then with a different `tools/call` last). Adding a trailing throwaway message (`{"method":"ping"}`) made the previously-lost response appear. EOF on stdin tears the anyio session down before the last write flushes. Handshake required for any of it to work: `initialize` → `notifications/initialized` → real calls.
+- **Context:** S2 of the CPG query-access plan — the step's done-condition is a manual `initialize` + `tools/list` + `tools/call` stdio round trip, which silently "loses" the very result it is meant to prove.
+- **Suggested home:** knowledge base (MCP/agent-standards: how to smoke-test a stdio MCP server from a script)
+
+## 2026-07-25 — FalkorDB has no string-repetition operator: `CREATE (:T {code: 'x' * 400})` fails with a type error, so bulk test fixtures must pass long strings as parameters
+- **Evidence:** `UNWIND range(1,500) AS i CREATE (:Big {i:i, code:'x' * 400})` → `redis.exceptions.ResponseError: Type mismatch: expected Integer, Float, or Null but was String` (FalkorDB v4.18.11 via falkordb-py 1.6.2). `... {code: $c}` with `params={"c": "x"*400}` works. Second-order gotcha: the failed `GRAPH.QUERY` still **materialised the graph key**, leaving a junk graph behind that had to be deleted by hand — the same empty-key quirk that makes `GRAPH.RO_QUERY` the safe read path.
+- **Context:** building a wide result set to demonstrate the MCP query tool's char-cap truncation against a live FalkorDB.
+- **Suggested home:** knowledge base (`claude/graph-dba/falkordb-quirks.md`)

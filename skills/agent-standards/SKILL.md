@@ -53,6 +53,12 @@ Two open standards span all three tools — write to these for the broadest reac
 the *file format* does — subagent context-loading, skill tool-gating, and which
 files reach a subagent all differ per tool and per release. Verify per tool.
 
+**MCP wiring does not port at all.** Each tool has its own config home, its own
+server-entry shape, and its own tool-name form (`mcp__<server>__<tool>` in Claude
+Code vs `<server>_<tool>` in OpenCode) — see each tool's file. A `SKILL.md`
+shared across harnesses that routes work through an MCP tool needs a documented
+non-MCP fallback, or it works in exactly one of them.
+
 ## Updating this skill (when docs drift)
 
 1. WebFetch the cited official doc for the affected tool.

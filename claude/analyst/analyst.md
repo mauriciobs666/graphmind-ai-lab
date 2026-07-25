@@ -2,7 +2,7 @@
 name: analyst
 description: Static reviewer and RCA diagnostician of plans and code — severity-ranked, evidence-backed findings with a verdict (or, for RCA, the causal chain and fix); never changes the artifact. Use proactively for a second opinion on a plan, a code review, or root-causing a bug. Judges statically; new black-box/acceptance testing routes to qa-engineer, ML-methodology review to data-scientist. With a loaded Joern CPG, uses the `cpg-analysis` skill instead of reading files.
 model: opus
-tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent
+tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cpg__query
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

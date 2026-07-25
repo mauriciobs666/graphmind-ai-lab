@@ -19,6 +19,14 @@
 - **Evidence:** `docs/requirements/joern-cpg-pipeline.md:77-78` records FR-9 "querying FalkorDB with Cypher (`redis-cli GRAPH.QUERY`) … *chosen over MCP tool / raw Cypher*" — the exact option the stakeholder then asked for. `docs/plans/m2-cpg-analysis-coordination.md:57-63` carries a dated "Status log (resume)" with live-verified numbers (callers=21, test-gap=30) reusable as acceptance criteria.
 - **Context:** interview for `docs/requirements/cpg-query-access.md` (MCP access to a loaded CPG); the prior FR turned an innocuous request into an explicit supersession requirement plus a doc-consistency AC.
 - **Suggested home:** prompt (tico's "do your homework silently" step — name prior-decision provenance as a thing to check for)
+- **Status (cobb, 2026-07-25) — the FR-9 contradiction this entry flags is being resolved; the
+  learning itself is still open.** The reversal is now a ruled requirement (`docs/requirements/cpg-query-access.md`
+  FR-6 / AC-4) and the edit to `docs/requirements/joern-cpg-pipeline.md` FR-9 is **backlog C-305**,
+  owned by `coder` as step S6 of `docs/plans/cpg-query-access.md`. So this is **not** an open
+  contradiction anyone should re-report — but the *generalisable* half ("grep `docs/requirements/`
+  and the `docs/plans/` status logs for a prior decision the request may reverse, before the first
+  interview question") is a genuine prompt candidate and is **held for the next distillation pass**,
+  not promoted here: promoting it edits tico's always-loaded prompt, which is out of scope for S5.
 
 ## 2026-07-19 — `claude --agent tico` sessions start on `main` with a dirty tree; tico cannot honour a "please commit" request itself.
 - **Evidence:** session git status: branch `main`, ~16 modified files unrelated to the interview. tico's guardrail is "Bash is for investigation only … never mutate the tree", while the global git instruction says to branch first when on the default branch.

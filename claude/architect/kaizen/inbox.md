@@ -75,3 +75,96 @@
 - **Suggested home:** project docs (`falkor-chat/AGENTS.md`, near the `seed_workflows.sh` row that
   already warns about `reference` vs `ws:<id>` staleness) — plus, as a general architect habit, "check
   that a planned live probe has a graph/tenancy seam before scheduling it".
+
+## 2026-07-24 — FalkorDB **silently ignores** an `EXPLAIN`/`PROFILE` prefix inside `GRAPH.QUERY` and executes the query for real
+
+- **Evidence:** `redis-cli -p 6379 GRAPH.QUERY cpg_falkorchat "EXPLAIN MATCH (m:METHOD) RETURN count(m)" --no-raw`
+  → returns `747` (the result), not a plan; same for `PROFILE`. Plans come only from the separate
+  `GRAPH.EXPLAIN` / `GRAPH.PROFILE` commands (or `falkordb-py`'s `Graph.explain()` / `Graph.profile()`).
+  So the Neo4j habit of prefixing is a footgun here: "let me just explain this" runs the heavy traversal.
+  `skills/cpg-analysis/SKILL.md:56-57` correctly says *prepend the command*, not the keyword — worth
+  keeping that wording exact.
+- **Context:** designing the one-tool MCP query surface for the CPG read path (`docs/plans/cpg-query-access.md`),
+  where any Cypher pass-through has to decide what to do with a leading `EXPLAIN`.
+- **Suggested home:** project docs (`skills/joern-cpg/references/cpg-model.md` consumer-query facts, or
+  `skills/cpg-analysis/SKILL.md` §1)
+
+## 2026-07-24 — Two of this team's agents (`analyst`, `architect`) declare an explicit `tools:` allowlist, so **any new MCP tool is invisible to them until their frontmatter is edited**
+
+- **Evidence:** `claude/analyst/analyst.md` and `claude/architect/architect.md` both carry
+  `tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent`; `qa-engineer`, `graph-dba`,
+  `joern`, `cobb` omit `tools:` and inherit everything (incl. MCP tools). Claude Code's MCP docs
+  (`code.claude.com/docs/en/mcp`, fetched 2026-07-24) confirm the callable name `mcp__<server>__<tool>`
+  is what must appear in a subagent's `tools` field, a skill's `allowed-tools`, permission rules and
+  hook matchers. Related: a `SKILL.md` `allowed-tools` list **pre-approves** for the invoking turn —
+  it does **not** restrict (`code.claude.com/docs/en/skills`), so `allowed-tools: Bash, Read` is a
+  permission grant, not a sandbox.
+- **Context:** planning the CPG MCP tool rollout — this is the cheapest way to ship a feature that
+  silently fails for two of its three named consumers.
+- **Suggested home:** prompt (architect/cobb checklist) or project docs (`claude/AGENTS.md`)
+
+## 2026-07-25 — In this repo, "`claude/scripts/audit-team.sh` passes" is an unusable plan done-condition: it already returns `RESULT: FAIL` on pre-existing leaks
+
+- **Evidence:** teco ran it 2026-07-25 → `RESULT: FAIL` from check 7 (personal-info leak), which
+  `git grep`s **every tracked file** for `$HOME`, `id -un`, git user.name/email and hostname
+  (`claude/scripts/audit-team.sh:116-137`). Current hits: `.claude/settings.json:4-5`,
+  `claude/devops/kaizen/inbox.md:24`, `claude/joern/kaizen/inbox.md:19`,
+  `docs/plans/m2-cpg-analysis-skill.md:327`. Usable form instead: capture the output before and
+  after the change and assert **no new FAIL lines** in the diff.
+- **Context:** reworking `docs/plans/cpg-query-access.md`, whose v1 used "audit passes" as a step's
+  done-condition — unachievable regardless of the change.
+- **Suggested home:** prompt (architect done-condition checklist) or project docs (`claude/AGENTS.md`)
+
+## 2026-07-25 — Check 7 also means a plan document itself must never contain an absolute home path — and `.mcp.json` has a portable form that avoids one
+
+- **Evidence:** the audit greps tracked files indiscriminately, so a `docs/plans/*.md` that quotes
+  `/home/<user>/…` adds its own audit hits the moment it is committed (v1 of the plan carried two).
+  For MCP config the portable substitute is `{"command": "bash", "args": ["-c", "exec
+  \"$CLAUDE_PROJECT_DIR/<path>\""]}`: Claude Code expands only `${VAR}` / `${VAR:-default}`, so the
+  unbraced `$CLAUDE_PROJECT_DIR` passes through and **bash** expands it from the spawned server's
+  env, where Claude Code does set it (`code.claude.com/docs/en/mcp`, verified 2026-07-24). The
+  per-machine escape hatch is `claude mcp add --scope local` → `~/.claude.json`, untracked.
+- **Context:** same rework; the review's Blocker 2 was a checked-in absolute path in `.mcp.json`.
+- **Suggested home:** project docs (`skills/agent-standards/claude-code.md` §MCP) + prompt
+
+## 2026-07-25 — `teco` cannot own any plan step that edits files outside `docs/plans/` — its Write/Edit is harness-restricted
+
+- **Evidence:** teco's own course correction, 2026-07-25: "my `Write`/`Edit` is harness-restricted
+  to `docs/plans/`; any edit outside it escalates to the human." A v1 plan had assigned it the
+  `docs/requirements/` reversal and the `docs/BACKLOG.md`/`HISTORY.md` updates. Working assignment
+  in this team: `cobb` for agent/skill/prompt surfaces (`skills/`, `claude/`, agent frontmatter,
+  catalogs, `kaizen/history.md`), `cobb` or `coder` for module docs (`docs/requirements/`,
+  `docs/BACKLOG.md`, `docs/HISTORY.md`).
+- **Context:** reassigning owners during the `cpg-query-access` plan rework.
+- **Suggested home:** prompt (architect ownership rules when writing step tables)
+
+## 2026-07-25 — `guard-destructive-ops.sh` matches the Bash *command string*, so a destructive op wrapped in a script bypasses the approval prompt entirely
+
+- **Evidence:** `claude/scripts/guard-destructive-ops.sh:34-58` extracts `.tool_input.command` from
+  the PreToolUse payload and greps it for `FLUSHALL|FLUSHDB|GRAPH\.DELETE`. It never inspects what
+  a script does. `skills/joern-cpg/scripts/pipeline.sh --reset` runs `redis-cli … GRAPH.DELETE`
+  internally (its lines 66-72), so the token never appears in the command the hook sees: no prompt,
+  the wipe runs unattended. Same blind spot for any future wrapper. Workaround a plan can specify:
+  run the destructive command as its own Bash call first (which *does* trip the guard, and puts the
+  target name in the text the human approves), then invoke the wrapper without its reset flag.
+- **Context:** re-gate fix N-1 on `docs/plans/cpg-query-access.md` — S8 told `joern` to expect an
+  approval prompt that could not fire.
+- **Suggested home:** prompt (architect: never treat a hook prompt as a gate without checking what
+  the hook matches on) + project docs (`claude/scripts/` README or the joern-cpg skill)
+
+## 2026-07-25 — Claude Code silently persists over-threshold MCP results to disk; a trailing truncation notice is exactly what gets lost, and `_meta["anthropic/maxResultSizeChars"]` is settable on the pinned SDK
+
+- **Evidence:** `code.claude.com/docs/en/mcp` §"MCP output limits and warnings" (fetched
+  2026-07-25): warning above 10,000 tokens, default limit 25,000 (`MAX_MCP_OUTPUT_TOKENS`), and
+  *"Without the annotation, results that exceed the default threshold are persisted to disk and
+  replaced with a file reference in the conversation."* Tools declaring
+  `_meta["anthropic/maxResultSizeChars"]` use that char value for text content *regardless of*
+  `MAX_MCP_OUTPUT_TOKENS`, hard ceiling 500,000. Design consequence: any truncation or caveat notice a
+  server emits must be at the **head** of the payload, not only the tail. Verified live in
+  `falkor-chat/server/.venv` (`mcp 1.28.1`): `FastMCP.tool()` takes `meta: dict[str, Any] | None`,
+  `mcp.types.Tool` has a `meta` field, and a probe registration emitted
+  `"_meta": {"anthropic/maxResultSizeChars": 60000}` in the `tools/list` entry with
+  `outputSchema` absent under `structured_output=False`.
+- **Context:** re-gate fix N-2 on `docs/plans/cpg-query-access.md` — a 60,000-char result cap
+  collided with the harness limit and could swallow its own truncation notice.
+- **Suggested home:** project docs (`skills/agent-standards/claude-code.md` §MCP)
