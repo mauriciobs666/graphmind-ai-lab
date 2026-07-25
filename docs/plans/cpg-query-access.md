@@ -5,10 +5,13 @@
 > Coordination: [`cpg-query-access-coordination.md`](./cpg-query-access-coordination.md).
 > Review that gated this document: [`../reviews/cpg-query-access.md`](../reviews/cpg-query-access.md).
 > Author: `architect`. v1 2026-07-24 · v2 2026-07-25 (rework against the analyst review +
-> stakeholder decisions D1–D4) · **v2.1 2026-07-25 (re-gate follow-up: N-1, N-2, n-3 — §10)**.
+> stakeholder decisions D1–D4) · v2.1 2026-07-25 (re-gate follow-up: N-1, N-2, n-3 — §10) ·
+> **v2.2 2026-07-25 (audit-trail correction: re-gate finding n-4 recorded as accepted and
+> implemented — §4.4, S2, §10; no design change)**.
 > Status: **approved (re-gate 2026-07-25: approve with suggestions, 0 blockers) → in implementation**.
-> **S8 and S2 must be read at v2.1**: S8's destructive procedure and §4.4's truncation/directive
-> spec changed after the re-gate.
+> **S8 must be read at v2.1 and S2 at v2.2**: S8's destructive procedure and §4.4's
+> truncation/directive spec changed after the re-gate, and §4.4/S2 gained the server-level
+> `instructions=` string (n-4) at v2.2.
 
 **Reading order for an implementer:** §4 (the frozen contract) → §5 (your step) → §7 (how it is
 verified). §10 is the rework log for the reviewer, not for you.
@@ -395,6 +398,15 @@ at ~2× its budgeted size — defeating the very caps below. `structured_output=
 `GRAPH.RO_QUERY`, the `EXPLAIN` path is plan-only, and `PROFILE` is refused (below). No code path
 can mutate a graph.
 
+**Server instructions** (n-4, added v2.2 to match what shipped): the server is constructed as
+`FastMCP(name="cpg", instructions=SERVER_INSTRUCTIONS)`. This is a *different* string from the tool
+description below and does a different job: Claude Code's **tool search is on by default and MCP
+tools are deferred**, so in a cold session — AC-1's exact scenario — the server `instructions` is
+what the model reads to decide whether to search for this server's tools at all; it is returned by
+the `initialize` handshake and truncated at **2 KB**. Keep it short, and keep it about *when to
+reach for the tool* (call-graph / data-flow / impact-analysis / test-gap questions answered without
+reading files), not about the tool's mechanics — those belong to the description.
+
 **Tool description** (the model's routing contract — `cobb` finalises wording in S5, ~350 chars):
 run a read-only OpenCypher query against a named FalkorDB graph, typically a loaded Joern CPG;
 `graph` is the graph key, `cypher` is the query text; prefix `EXPLAIN` for a query plan (`PROFILE`
@@ -726,7 +738,8 @@ mcp.server.fastmcp, falkordb"` exits 0; no new `audit-team.sh` failures.
 ### S2 — the server · `coder`
 
 Implement `cpg/mcp/server.py` to the contract in §4.4 — **exactly** as specified, including
-`structured_output=False`, the `PROFILE` refusal, and the `GRAPH.LIST` pre-check on the `EXPLAIN`
+`structured_output=False`, the server-level `instructions=` string (n-4, §4.4), the `PROFILE`
+refusal, and the `GRAPH.LIST` pre-check on the `EXPLAIN`
 path — plus `cpg/mcp/run.sh`. Keep the pure logic in importable, side-effect-free functions so it
 is unit-testable without FalkorDB:
 
@@ -779,7 +792,14 @@ syntax error, a write rejection, an `EXPLAIN` returning plan text.
 **Done when:** `cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q` is green; `-m live` is green against the
 live FalkorDB; and a manual stdio smoke test (`initialize` + `tools/list` + `tools/call` round
 trip) lists **exactly one tool** named `query` with **exactly two** required parameters and **no**
-`outputSchema`.
+`outputSchema`, and the `initialize` response carries a **non-empty `instructions`** string under
+2 KB (n-4).
+
+> **Delivered 2026-07-25 (v2.2 audit correction).** All of the above is implemented in
+> `cpg/mcp/server.py`, including `instructions=` — `SERVER_INSTRUCTIONS` (408 chars) at
+> `server.py:103`, passed at `server.py:399`. Verified live by `architect`: an `initialize`
+> handshake over `cpg/mcp/run.sh` returns it verbatim, and Claude Code surfaces it in-session as
+> the "MCP Server Instructions" block. See §10 v2.1 → v2.2.
 
 ### S3 — wire it into Claude Code · `devops` (needs one human approval)
 
@@ -1277,6 +1297,24 @@ dropped.
 | **N-1** | Major | **2026-07-25 — Fixed in S8.** `--reset` dropped: the `guard-destructive-ops.sh` prompt S8 leaned on **cannot fire**, because the guard matches the Bash *command string* and `pipeline.sh` runs `GRAPH.DELETE` internally (re-verified in the script: guard lines 34–58, `pipeline.sh` lines 66–72). S8 now runs a `GRAPH.LIST` snapshot, an explicit `redis-cli GRAPH.DELETE cpg_falkorchat` (which does trip the guard, with the graph name in the text the human approves), then `pipeline.sh … --load` **without** `--reset`; the rationale is written into the step with a ⚠ "do not simplify this back" warning. Also recorded: the property this forfeits (`pipeline.sh` deletes only *after* the export-non-empty assertion), why D1 makes that acceptable, and the parse-first variant that keeps both. The generalisation — the guard is blind to any destructive command wrapped in a script — is filed as new backlog item **C-311** in S10. |
 | **N-2** | Major | **2026-07-25 — Fixed in §4.4 (Truncation) + the frozen decorator + S2 tests + §7.3; all three remedies adopted, each with a distinct job.** Claude Code warns above 10 k tokens, defaults to a 25 k-token limit, and **persists over-threshold results to disk, replacing them with a file reference** — so v2's 60 000-char payload (~17–24 k tokens) risked losing its truncation notice, which was the payload's *last* line, on exactly the runs that were truncated. (1) The notice is now emitted **first and last**, byte-identical — the only harness-independent remedy, and the one that survives a future limit change or a different harness. (2) `CPG_MCP_MAX_CHARS` default **60 000 → 30 000** — removes the collision at the source (≤ 15 k tokens even at 2 chars/token) and is nearly free, since the 200-row cap binds first for the recipes' typical projections. (3) `_meta["anthropic/maxResultSizeChars"] = min(2 × CPG_MCP_MAX_CHARS, 500 000)` — pins the persist-to-disk threshold in **chars**, the same unit as our cap, independent of `MAX_MCP_OUTPUT_TOKENS`; verified live on the pinned `mcp 1.28.1` that `@mcp.tool(meta=…)` serialises as `_meta` in `tools/list` with `outputSchema` still `None`. *Rejected:* remedy 1 alone (keeps shipping a file-reference-sized payload, defeating the token economy) and remedy 3 alone (it *raises* a ceiling we do not want to reach, and is the most version-sensitive of the three). New §7.3 row asserts a char-cap-binding result arrives with its notice intact and is **not** replaced by a file reference. |
 | **n-3** | Minor | **2026-07-25 — Fixed as §4.4 D5a.** The directive sniff is now specified as a comment-blind prefix scan — loop over leading whitespace, `//`-to-EOL and `/* … */` blocks (unterminated `/*` ⇒ classify plain and let FalkorDB error), then `^(EXPLAIN\|PROFILE)\b` case-insensitively — with the two rules about what is *sent*: the plain path transmits the caller's string **byte-for-byte** (classification only, FR-3), the `EXPLAIN` path sends the text after the keyword. Six named cases added to S2's test 2/3 (both comment forms, the `\b` boundary, the unterminated block, the string-literal decoy) and one §7.3 live row, since the analyst verified that raw `GRAPH.RO_QUERY` executes `/* hi */ PROFILE …` and returns rows. |
+
+### v2.1 → v2.2 — audit-trail correction (`architect`, 2026-07-25)
+
+No design change. The v2.1 log above closed **N-1, N-2, n-3** and left the re-gate's remaining
+minor findings unrecorded; `coder` nevertheless implemented **n-4** in S2, so the plan's own audit
+trail disagreed with the shipped code (flagged by `teco` and `devops`). This entry closes that gap
+for n-4 only.
+
+| ID | Sev | Resolution |
+|---|---|---|
+| **n-4** | Minor | **2026-07-25 — Accepted and implemented (was: unrecorded).** The `instructions=` half of the finding shipped in S2 and is **live**: `FastMCP(name="cpg", instructions=SERVER_INSTRUCTIONS)` at `cpg/mcp/server.py:399`, the 408-char string at `server.py:103`. Verified by `architect` 2026-07-25 by driving an `initialize` handshake over `cpg/mcp/run.sh` — the response carries the string verbatim (408 chars, well under the 2 KB truncation) — and independently by observing Claude Code inject it in-session as the **"MCP Server Instructions"** block; `teco` and `devops` verified it separately. Judged **adequate**: it names the tool, the graph-key convention (`cpg_<component>`), the four question classes tool search must match on (call-graph / data-flow / impact-analysis / test-gap), the discriminator that matters in a cold session (*"without reading files"*), and the FR-4 caller-supplies-the-graph rule plus the not-found discovery affordance — and it does **not** duplicate the tool description's mechanics (EXPLAIN/PROFILE/no-APOC), which is the right split, since the description is only loaded once the tool is. Frozen into §4.4 and S2 retroactively. **The `"alwaysLoad": true` half is deliberately not adopted:** it loads the tool set upfront at the cost of **blocking session startup until the server connects** (cobb, docs-verified 2026-07-25), which is a bad trade for a one-tool server whose discovery path is now demonstrably working. Reversal trigger: if S9's AC-1 shows a cold session failing to find the tool, add `"alwaysLoad": true` to `.mcp.json` — a one-key change. **Two loose ends, owned elsewhere, not fixed here:** (a) the finding's third knock-on — `ToolSearch` must join §7.2 AC-1's permitted-extras list (`Skill`, `Read`) or a *good* run fails the criterion — is already carried to `qa-engineer` in the coordination doc and stays S9's to land; (b) *recommended*, not required: no test pins the string, so `cpg/mcp/tests/test_server.py` should gain a one-line guard that `mcp.instructions` is non-empty and ≤ 2000 chars, next to the existing tool-contract assertions — cheap insurance for the one string a cold session depends on and the only part of the tool contract currently unguarded. |
+
+**Still unrecorded by design, not by oversight:** re-gate findings **n-5** (headless permission for
+`mcp__cpg__query`), **n-6** (AC-3 compares two renderings) and **n-7** (S6 decision-log entry) plus
+nits **nn-1/nn-2** are all owned by S3/S6/S9, not by this document's design. n-7 is already
+delivered (U5, `teco`-verified). n-5 and n-6 remain the review's suggested fixes for S3 and S9
+respectively and were **not** re-checked in this pass. They are listed here only so a reader can
+tell "handled elsewhere" from "dropped".
 
 **Unchanged from v1 and endorsed by the review** (kept deliberately, not by inertia): the
 build-vs-buy decision and its reversal trigger (§3); §2.4's Claude Code mechanics — now also

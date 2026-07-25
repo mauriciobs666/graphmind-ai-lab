@@ -1,4 +1,5 @@
 {
+  "enabledMcpjsonServers": ["cpg"],
   "permissions": {
     "allow": [
       "Bash(/home/mauricio/prg/graphmind-ai-lab/claude/scripts/audit-team.sh)",

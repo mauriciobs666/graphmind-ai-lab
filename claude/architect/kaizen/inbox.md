@@ -168,3 +168,21 @@
 - **Context:** re-gate fix N-2 on `docs/plans/cpg-query-access.md` — a 60,000-char result cap
   collided with the harness limit and could swallow its own truncation notice.
 - **Suggested home:** project docs (`skills/agent-standards/claude-code.md` §MCP)
+
+## 2026-07-25 — An MCP server's `instructions=` string is injected into every Claude Code session as an "MCP Server Instructions" block, so an agent can verify it is live from its own context
+
+- **Evidence:** `cpg/mcp/server.py:399` constructs `FastMCP(name="cpg", instructions=SERVER_INSTRUCTIONS)`
+  (the 408-char string at `server.py:103`). That exact string appears verbatim in this session's
+  context under a `## cpg` heading inside a **"# MCP Server Instructions"** block — no tool call
+  needed to observe it. Confirmed independently by driving the handshake read-only:
+  `initialize` over `bash -c 'exec ./cpg/mcp/run.sh'` (one JSON-RPC line on stdin, read one line of
+  stdout) returns `result.instructions` = the same 408 chars. Two consequences: (1) the string is
+  *always* loaded, not only when tool search fires — it is session-prompt real estate, so keep it
+  short and about *when to reach for the tool*, distinct from the tool `description`, which loads
+  only with the tool; (2) it is truncated at 2 KB, and the one-shot `initialize` probe is a
+  side-effect-free way to verify any stdio MCP server's advertised strings without a running backend
+  (the `cpg` server does not connect to FalkorDB at import).
+- **Context:** closing the n-4 plan-vs-code audit gap on `docs/plans/cpg-query-access.md` — the plan's
+  rework log had no record of a finding the implementer had shipped.
+- **Suggested home:** project docs (`skills/agent-standards/claude-code.md` §MCP) + prompt (architect:
+  a shipped MCP server's strings can be audited from the session context / a one-line `initialize` probe)

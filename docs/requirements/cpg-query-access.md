@@ -1,5 +1,6 @@
 # CPG query access — Feature Requirements
-> Status: Design approved — in implementation · Last updated: 2026-07-25
+> Status: **Delivered ✅** — AC-1…AC-4 met and accepted (M3, 2026-07-25); follow-ups tracked in
+> [`../BACKLOG.md`](../BACKLOG.md) · Last updated: 2026-07-25
 
 ## Intent
 Agents that read a loaded Joern CPG in FalkorDB should be able to ask the graph a
@@ -73,15 +74,26 @@ wrapped, or left as a fallback is a design decision.
 - **AC-2** — A **multi-line** Cypher query is accepted verbatim and returns the same
   result as its single-line equivalent.
 - **AC-3** — The M2 acceptance queries, re-run through the tool against a **freshly built**
-  `cpg_falkorchat`, return **byte-identical value sets** to the same queries run through
-  `redis-cli GRAPH.QUERY` on the same graph; the resulting counts are recorded as the new
-  baseline. *(Amended 2026-07-25 per stakeholder rulings **D1** + **D2**. The figures this
+  `cpg_falkorchat`, return the **same values, the same row counts and the same row ordering** as
+  the same queries run through `redis-cli GRAPH.QUERY` on the same graph; the resulting counts are
+  recorded as the new baseline. The **display rendering of non-scalar (list/map) cells is excluded**
+  from this equivalence: how a cell is rendered is governed by
+  [`../plans/cpg-query-access.md`](../plans/cpg-query-access.md) **§4.4**, which is the authority
+  (list/map → Python `repr`), so the same list may read `['CpgNode', 'IDENTIFIER']` through the tool
+  and `[CpgNode, IDENTIFIER]` through `redis-cli` while carrying identical values in identical
+  order. *(Amended 2026-07-25 per stakeholder rulings **D1** + **D2**. The figures this
   criterion originally cited were **AC-2 callers = 21** and **AC-8 test-gap = 39 rows / 32
   distinct method names** — the test-gap figure recorded here was **30**, which was wrong
   (source: `docs/plans/m2-cpg-analysis-coordination.md`, 2026-07-19). Both are now
   **superseded**: D1 authorised a full CPG rebuild, the source they were measured on has
   moved on, and `joern` records a **fresh baseline** on the rebuilt graph. The equivalence
   proof above is what AC-3 is met by — it tests this feature and is graph-independent.)*
+  *(Further amended 2026-07-25 per stakeholder ruling **D5**, backlog item **C-313** — a
+  **specification reconciliation**, not a loosening to accommodate a bug. The original wording
+  demanded "byte-identical value sets", which no implementation could satisfy alongside plan §4.4;
+  the acceptance run measured 5 of 6 equivalence pairs byte-identical and the sixth — the RCA
+  data-flow slice — returning the **same 44 rows in the same order with the same values**, differing
+  only in list syntax. Values, counts and ordering are what this criterion protects, and they held.)*
 - **AC-4** — `joern-cpg-pipeline.md` FR-9 is updated to point at this document; no reader
   can find the two documents disagreeing about the access mechanism.
 
@@ -115,6 +127,18 @@ wrapped, or left as a fallback is a design decision.
   transmitted, not how powerful Cypher is. **AC-1 is amended** accordingly; the bounded
   transitive upward-closure query is **deferred to backlog item C-308** (owner `graph-dba`),
   not discarded.
+- 2026-07-25 — AC-3's *"byte-identical value sets"* vs plan §4.4 (stakeholder ruling **D5**,
+  raised as defect **DEF-1** in
+  [`../test-reports/cpg-query-access-report.md`](../test-reports/cpg-query-access-report.md) and
+  carried as backlog item **C-313**) → the two approved specs could not both hold: AC-3 demanded
+  byte-identical values while plan §4.4 mandates Python `repr` for list/map cells, so no
+  implementation could satisfy both for any query projecting a non-scalar. **Option A chosen: AC-3
+  is narrowed to values + row counts + ordering**, with non-scalar *rendering* excluded and plan
+  §4.4 named as its authority. Option B — changing the server to render lists `redis-cli`-style —
+  was **rejected**; **no source change**, the server is correct as built. This is a reconciliation
+  of the specification, not a concession to a defect: the tool returned the same 44 rows in the
+  same order with the same `line`/`code` values, differing only in how a `labels()` list is printed
+  (case **TP-010**). **AC-3 passes** under the reconciled wording and C-313 is closed.
 - 2026-07-25 — AC-4 executed → `joern-cpg-pipeline.md` FR-9 rewritten to point here, with a
   matching dated entry in that document's decision log. The two documents now agree: the MCP
   tool is the access mechanism, `redis-cli GRAPH.QUERY` the documented fallback.

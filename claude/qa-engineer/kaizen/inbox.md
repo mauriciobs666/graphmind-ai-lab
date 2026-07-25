@@ -25,3 +25,18 @@
 - **Context:** K-025 M3 acceptance pass — sequencing suite runs against the documented `reference`-wipe trap.
 - **Suggested home:** project docs (`falkor-chat/AGENTS.md`, the `seed_workflows.sh` scripts-table row, which currently says "after a `server` pytest run" without the marker distinction).
 
+
+## 2026-07-25 — `redis-cli GRAPH.QUERY … --no-raw` returns a FLAT one-scalar-per-line stream, and filtering blank lines silently corrupts null/empty cells
+- **Evidence:** against FalkorDB v4.18.11, `redis-cli -p 6379 GRAPH.QUERY cpg_falkorchat '<3-col query>' --no-raw` produced exactly `3 header names + (21 rows × 3 cells) + 2 trailing lines` = 68 lines — **no** `1) 1)` RESP nesting, no per-row grouping. Parsing recipe that worked: drop the first N lines (N = column count), drop the last 2 (`Cached execution:` / `Query internal execution time:`), regroup the remainder into N-tuples. **The trap:** a `null` cell and an empty-string cell both render as an *empty line*, so a `[l for l in out if l != ""]` filter (the obvious first attempt) drops cells and silently shifts every subsequent row into the wrong column — my first harness reported false divergences for `null`/`""` until I stopped filtering. Also: `redis-cli` renders `null` **indistinguishably from `''`**, which is precisely why the `cpg` MCP tool renders `None` as the literal `null`.
+- **Context:** S9 live acceptance of the `cpg` MCP server — AC-3 required diffing tool output against the `redis-cli` fallback path, which needs a parser for both formats.
+- **Suggested home:** project docs (`skills/cpg-analysis/SKILL.md` §1 fallback block, or `cpg/mcp/README.md` next to its "tools diffing this output against redis-cli" note)
+
+## 2026-07-25 — FalkorDB accepts Cypher boolean literals case-insensitively (`False` ≡ `false`), so Python-style boolean rendering round-trips fine
+- **Evidence:** `MATCH (m:METHOD) WHERE m.NAME='post_message' AND m.IS_EXTERNAL = false RETURN count(m)` → `2`; the same query with `= False` → also `2`, no error. Worth knowing because `skills/cpg-analysis/SKILL.md` gotcha #2 (*"Booleans are real booleans: `= false` not `'false'`"*) reads as if capitalisation matters — it does not; **quoting** is what breaks (`'false'` is a string). I nearly filed a Medium "broken round-trip" defect against the MCP tool's `True`/`False` rendering before testing the claim; it downgraded to cosmetic.
+- **Context:** S9 acceptance — characterising tool-vs-`redis-cli` cell-rendering divergences by value type.
+- **Suggested home:** project docs (`skills/cpg-analysis/SKILL.md` gotcha #2 — clarify that the hazard is quoting, not case)
+
+## 2026-07-25 — In a `pysrc2cpg` CPG, `METHOD.CODE` holds only short signatures; the wide text lives on `LITERAL`/`BLOCK`/`CALL`
+- **Evidence:** `MATCH (n) WHERE n.CODE IS NOT NULL RETURN labels(n)[1], max(size(n.CODE)), count(n) ORDER BY 2 DESC` on `cpg_falkorchat` → `LITERAL 4314 (12,223 nodes)` · `BLOCK 2715` · `CALL 2552` · `RETURN 958` · `METHOD` not in the top 8. Consequence for payload-size testing: the intuitive "wide projection" `MATCH (m:METHOD) RETURN m.CODE` yields only **1,951 chars** across all 1,968 methods, so a row cap binds long before any char/size cap — a test written that way exercises the wrong branch and passes vacuously. A genuine binder is `MATCH (n:LITERAL) WHERE size(n.CODE) > 400 RETURN size(n.CODE), n.CODE` (29,890 chars). Docstrings are `LITERAL` nodes, which is why they dominate.
+- **Context:** S9 acceptance — plan §7.3 named the METHOD/CODE query as the char-cap probe; it does not bind the char cap, so the case was re-derived (filed as a test-design defect).
+- **Suggested home:** knowledge base (`skills/joern-cpg/references/cpg-model.md` consumer-query facts — where `CODE` is actually wide)

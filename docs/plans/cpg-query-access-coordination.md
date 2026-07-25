@@ -106,12 +106,14 @@ section** (a gap if OpenCode must be wired). `kiro/DESIGN.md:203-213` has an *il
 | U2d | Plan patch: N-1 (S8 guard), N-2 (truncation), n-3 (comment-blind sniff) | architect | ✅ plan now **v2.1** — read S8/S2 at v2.1 |
 | U3a | S1 venv/deps/`setup.sh` + smoke | devops | ✅ **teco-verified**: `cpg/mcp/.venv` imports mcp 1.28.1 + falkordb 1.6.2; PII grep clean |
 | U3b | S2 `server.py` + `run.sh` + tests | coder | ✅ **teco-verified** (suite re-run + behaviour probed, see below) |
-| U3c | S3 `.mcp.json` + settings + live connect (1 human approval) | devops | ⏸ blocked on S2 |
+| U3c | S3 `.mcp.json` + settings + live connect (1 human approval) | devops | ✅ **teco-verified on disk**; harness-side checks pending a user session restart (see S3 section below) |
 | U4 | S4/S5/S7 skill + agent + agent-standards surfaces | cobb | ✅ **teco-verified** (see below) |
 | U5 | S6 requirements edits (FR-9 reversal, AC-1/AC-3 + n-7 decision log) | coder | ✅ **teco-verified** (see below) |
 | U6 | S8 CPG rebuild + fresh baseline | joern | ✅ **teco-verified**: 110,048 nodes / 1,019 test methods / callers=21; all 5 graphs intact |
-| U7 | S9 live acceptance AC-1…AC-4 + test plan/report | qa-engineer | ⏸ blocked on U3–U6 |
-| U8 | S10 BACKLOG M3 (C-301…C-307 + C-308/309/310) + HISTORY | coder | ⏸ blocked on U7 |
+| U7 | S9 live acceptance AC-1…AC-4 + test plan/report | qa-engineer | ✅ **PASS WITH DEFECTS** — 22/23 cases; DEF-1 (Medium) open |
+| U8 | S10 BACKLOG M3 (C-301…C-307 + follow-ups) + HISTORY | coder | ✅ **teco-verified** — C-301…C-319 + M3 HISTORY entry |
+| U9 | n-4 audit-trail closure in the plan | architect | ✅ plan now **v2.2**; `instructions=` judged adequate |
+| U10 | m-4 empirical close: allowlisted agent really calls the tool | analyst | ✅ **PASS** — 1968 / 21 via `mcp__cpg__query`, no quoting |
 
 ## ✅ Decisions RULED by the stakeholder (2026-07-25)
 
@@ -265,6 +267,73 @@ one-liner, config value, rename); the hook still escalates every such write for 
 and anything needing design judgment, spanning files, or touching security/data-model/tests still
 routes to a specialist.
 
+## Session 2026-07-25 (resumed) — S3 delivered
+
+**Correction to the pause note above:** it says "Nothing is committed". That is now **stale** — the
+whole feature (S1, S2, S4–S8) was committed as **`f2d55f7`** at the end of that session. The
+working tree was clean when this session started.
+
+**Environment fact found at resume (teco, read-only):** FalkorDB was **down** — `docker ps -a`
+returned **no containers at all**, and a bare `redis-cli PING` hung until the timeout. The named
+volume `falkordb-data` and the reload artifacts (`cpg/.cpg-artifacts/load.cypher`, 52 MB, plus
+`cpg.bin` and `MANIFEST.txt`) had survived, so no rebuild was needed. `devops` restarted it with
+`./falkor-chat/scripts/start_falkordb.sh -d` (up in ~1 s) and **all five graphs came back**;
+`MATCH (m:METHOD) RETURN count(m)` on `cpg_falkorchat` → **1968**, matching the S8 baseline exactly.
+*Implication for any future session: the S8 baseline lives only in a Docker volume — treat "is
+FalkorDB even up?" as the first check before any CPG acceptance work.*
+
+### S3 — teco integration check (read on disk, not on the producer's word)
+
+- ✅ **`.mcp.json` exists at the repo root** with the `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'`
+  form per plan §4.3 — **no absolute path**, `env` pins `FALKORDB_HOST=127.0.0.1` / `PORT=6379`,
+  `timeout: 60000`.
+- ✅ **`.claude/settings.json`** gained `"enabledMcpjsonServers": ["cpg"]`; the pre-existing
+  `permissions.allow` block is intact (4 entries, unchanged).
+- ✅ **`cpg/mcp/README.md`** completed: 77 → **251 lines**; every S3-listed topic present
+  (two parameters, env-var table + defaults, `setup.sh`, smoke command, restart guidance,
+  read-only / display-only-truncation / `EXPLAIN`-only semantics with the `redis-cli GRAPH.PROFILE`
+  pointer, local-scope fallback with a `<repo-root>` placeholder, "wiring it elsewhere" note).
+- ✅ **Suites re-run by devops:** 53 passed / 7 deselected offline; **7 passed** live.
+- ✅ **Audit: no new failures** — before ≡ after, 104 PASS / 2 FAIL, both the pre-existing check-7
+  leaks (**C-309**), same five files. teco's own `grep -n "/home/<user>"` over the new/changed
+  files found **one** hit, at `claude/devops/kaizen/inbox.md:24` — confirmed **pre-existing** via
+  `git diff` (devops's newly appended lines use `<repo-root>`).
+- ✅ **`claude mcp list`** from the repo root → `cpg: … - ✔ Connected`.
+- ✅ **Server-side contract proven without a restart** (devops's method, a genuinely reusable one):
+  spawn `.mcp.json`'s `command` + `args` verbatim with `CLAUDE_PROJECT_DIR` injected and `cwd=/tmp`,
+  then speak raw JSON-RPC over the pipes. Result: `serverInfo {'name': 'cpg'}`, **tool count 1**,
+  `required: ['graph','cypher']`, `annotations {'readOnlyHint': True}`,
+  `_meta {'anthropic/maxResultSizeChars': 60000}`, a real call → `rows=1 · count(m)=1968`,
+  multi-line Cypher → `rows=3`, `EXPLAIN` → plan only, `/* c */ PROFILE …` → refused, typo'd graph →
+  curated not-found and **no key materialised**. Launching from `/tmp` also proves the
+  `$CLAUDE_PROJECT_DIR` form is cwd-independent.
+
+### ⏸ S3's remaining done-conditions are **user-only** actions
+
+An `.mcp.json`-wired stdio server materialises only when a Claude Code session **starts** with it
+present. The session that delivered S3 began before the file existed, so:
+
+1. `/mcp` shows tool count **1** — needs a restart at the repo root.
+2. A real in-session `mcp__cpg__query(graph="cpg_falkorchat", cypher="MATCH (m:METHOD) RETURN count(m)")`
+   → expect `1968`.
+3. **The subdirectory check** (the one that validates the `$CLAUDE_PROJECT_DIR` form): a session
+   started in `falkor-chat/`. devops verified the mechanism and found a **real, documented
+   asymmetry** — `.mcp.json` *discovery* walks up to the git root, but `enabledMcpjsonServers`
+   pre-approval is keyed on the **session's cwd**, so `claude mcp list` from `falkor-chat/` reports
+   `⏸ Pending approval` where the root reports `✔ Connected`. Expect **one extra approval prompt
+   per subdirectory**; that is approval scoping, not path expansion. Filed to
+   `claude/devops/kaizen/inbox.md` with `skills/agent-standards/claude-code.md` §MCP as its
+   suggested home (a C-307 follow-on, candidate for S10).
+
+**S9 cannot run until (1)–(2) hold**, because `qa-engineer` reaches `mcp__cpg__query` only by
+inheriting it from a session that has the server connected.
+
+### Still open (unchanged, re-confirmed by devops at S3)
+
+- **n-4 plan-vs-code gap:** `coder`'s `FastMCP(instructions=…)` is **live** (`initialize` returns a
+  non-empty `instructions` string, which is what tool search reads), but plan v2.1's rework log
+  records n-4 as **neither fixed nor rejected**. Close it at the next architect/analyst touch.
+
 ## ⚠ Carry-forward risks (teco)
 
 - **nn-2 forward reference:** both requirements docs now cite backlog item **C-308**, which **S10
@@ -310,3 +379,70 @@ routes to a specialist.
   into a *separate* graph key (FR-4 makes that free) — no `GRAPH.DELETE` at all.
   Also validated: the build-vs-buy call, the `tools:`-allowlist trap, the EXPLAIN-prefix finding.
   Corrected teco's `claude/README.md` error (see above).
+
+## Session 2026-07-25 (resumed again) — S9 · S10 · n-4 · m-4 all closed
+
+**S3's user-only blockers cleared themselves:** this session *started* with `.mcp.json` on disk, so
+the `cpg` server materialised — its `instructions` block is in the session prompt and
+`claude mcp list` → `✔ Connected`. That unblocked S9, which had been waiting on exactly this.
+
+**Environment at resume (teco, read-only):** FalkorDB up (`falkordb-dev`, v4.18.11), all five graphs
+present, `cpg_falkorchat` → **1968** METHODs — S8 baseline intact, no drift.
+
+### Units closed this session
+
+- **U7 / S9** (`qa-engineer`) — **PASS WITH DEFECTS**, 23 cases / 22 pass / 1 fail. AC-1 ✅ (21 direct
+  callers, one tool call, zero quoting; `ToolSearch` fired as predicted and is permitted), AC-2 ✅
+  (multi-line ≡ single-line; `"`, `'`, `$HOME`, `$(whoami)` survived verbatim), AC-3 ⚠️ (5 of 6
+  equivalence pairs byte-identical; **DEF-1**), AC-4 ✅. Baseline re-measured, **matches S8 exactly**.
+  Deliverables: `docs/test-plans/cpg-query-access.md` · `docs/test-reports/cpg-query-access-report.md`.
+  Load-bearing proof: raw `GRAPH.RO_QUERY` with `/* c */ PROFILE …` returns 1968 rows — **the tool
+  refuses it**. Typo'd graph → no key materialised (`GRAPH.LIST` 5 → 5). A 29,890-char payload
+  arrived **inline, not as a file reference** (closes risk N-2).
+- **U8 / S10** (`coder`) — `docs/BACKLOG.md` M3 (**C-301…C-307** delivered; **C-308…C-319**
+  follow-ups) + a dated M3 entry in `docs/HISTORY.md`. **nn-2 carry-forward closed**: `C-308` now
+  resolves to a real item (`BACKLOG.md:206`), so both requirements citations stop dangling.
+- **U9 / n-4** (`architect`) — plan → **v2.2**; `FastMCP(instructions=…)` recorded as *accepted and
+  implemented* (408 chars, verified live via an `initialize` handshake). `alwaysLoad` **deliberately
+  not adopted** (it blocks session startup until the server connects), with a reversal trigger.
+- **U10 / m-4** (`analyst`) — the gate S9 could not close itself: an agent whose definition carries
+  an explicit `tools:` allowlist **actually called** `mcp__cpg__query` → 1968 and 21, multi-line
+  verbatim, no shell quoting. The R-3 inertness failure mode is closed **empirically**, not by
+  allowlist inspection.
+
+### teco integration checks (read on disk, not on the producers' word)
+
+- ✅ Both suites re-run by teco: **53 passed / 7 deselected** offline, **7 passed** live.
+- ✅ `grep -rn "C-308" docs/` resolves to `BACKLOG.md:206`; HISTORY is most-recent-first with M3 on
+  top and M1/M2 unrewritten.
+- ✅ Plan v2.2 header, §4.4 *Server instructions*, S2 done-condition and §10's v2.1→v2.2 log all present.
+- ⚠️ **Regression teco caught in its own doc, then fixed:** the audit gate had gained a **new**
+  home-path leak at `cpg-query-access-coordination.md:296` — teco's own S3 prose quoting a literal
+  `grep -n` for the developer's literal home path. Zero such hits in commit `f2d55f7`, one in the working tree → genuinely
+  new, and authored by teco. Genericized to `/home/<user>`; audit re-run is back to the **2
+  pre-existing** check-7 failures (**C-309**) with the coordination doc no longer among the hits.
+  *Lesson: a doc that reports on a PII audit can fail that audit by quoting it.*
+
+### ✅ RULED — DEF-1 / C-313 closed by stakeholder ruling **D5** (2026-07-25)
+
+**User: "option A".** AC-3 is narrowed to **values + row counts + ordering**, explicitly excluding
+the display rendering of non-scalar (list/map) cells — plan **§4.4** stands as the rendering
+authority. Option B (reshaping the server's output to `redis-cli` syntax) **rejected**; **no source
+change**. A *specification reconciliation*, not a loosening: the tool returned the same 44 rows in
+the same order with the same values, differing only in how a `labels()` list prints.
+Applied by `coder` across four docs — requirements (AC-3 + decision log + status → **Delivered ✅**),
+`BACKLOG.md` (C-313 ✅, M3 row, ruled-decisions block), `HISTORY.md` (the `(1 defect open)`
+qualifier dropped), and a dated **addendum** to the test report that leaves the original recorded
+results and verdict intact. **AC-1…AC-4 are now all met.**
+*Gate note: this amendment was verified by teco reading all four files on disk, but did **not** get
+an independent re-gate from `qa-engineer`, who raised the defect — judged proportionate for a
+wording reconciliation dictated verbatim by the stakeholder.*
+
+### ⛔ Original framing of the decision (raised 2026-07-25, resolved above)
+
+AC-3 demands **"byte-identical value sets"** between the tool and `redis-cli`, but plan §4.4 mandates
+Python `repr` for list/map cells — so the two approved specs **contradict each other by construction**.
+Only *non-scalar rendering* differs (`['CpgNode','IDENTIFIER']` vs `[CpgNode, IDENTIFIER]`); the RCA
+slice returns the same 44 rows, same order, same values. **A spec conflict, not a code bug.**
+Recommendation: narrow AC-3 to *values + counts + ordering*, since that is what the criterion is
+actually protecting. Not resolved by any agent; recorded as pending in `C-313`.
