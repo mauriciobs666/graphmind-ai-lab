@@ -228,7 +228,13 @@ Both bump `Thread.updatedAt`. The service picks the variant by checking whether 
 already has a `HEAD` (§14 keeps this dispatch inside `post_message`), then re-dispatches on the
 v2 **status row** each write returns (K-007): a lost first-post race (`hadHead`) retries as
 subsequent, a TAIL-less subsequent retries as first, and a replayed `msgId` (`dupMsg`) is
-idempotent success — see the §9 table and QUERIES.md §4.
+idempotent success — see the §9 table and QUERIES.md §4. The re-dispatch loop is bounded at 4
+attempts — a tripwire, not a real retry budget: ping-pong between the two paths is impossible by
+contract (a headed thread always has a TAIL), so hitting the bound means the invariant broke.
+`createdAt` comes from the service's lock-guarded monotonic per-process clock
+(`max(clock, last+1)`), never the raw wall clock — same-millisecond ties across writes on one
+process are impossible at the source, which is what makes the §9 `(createdAt, msgId)` composite
+order well-defined.
 
 > **Canonical Cypher: `docs/QUERIES.md` §4.** The exact, live-verified queries live there and
 > nowhere else — this section describes their *shape* only, so the two never drift. Every message
@@ -281,6 +287,12 @@ A definition is a directed graph of steps; a run is an execution trace that walk
     `GET /workflow-runs/{id}/step-runs` with no new query.
   - **`decision`** — **no side effect at all**: its semantics are entirely its outgoing guards. With
     no outgoing transition it is a terminal outcome node (the run ends `done`).
+    > ⚠️ **Not enforced (residual).** A `decision` step whose outgoing transitions are *all*
+    > conditional, and which does not declare `waitsForHuman`, self-loops to budget exhaustion if
+    > none ever fires — there is no symmetric check forcing either an unconditional default arm or
+    > a park declaration. The equivalent check for `human`/`wait` steps *is* enforced (above); doing
+    > the same here would retro-reject existing fixtures, so it is a deliberate gap, not an oversight
+    > (K-029).
   - **`wait`** — **signal-driven, not timer-driven.** This system has **no scheduler** (decision
     D-C); a `wait` step parks exactly as `human` does and is released by an **external signal**
     delivered through `POST /workflow-runs/{id}/input`. Mechanically it *is* `human` to the engine —
@@ -390,6 +402,11 @@ step declares `waitsForHuman` and no guard fired, **or** terminate (`done`/`fail
 bounded by `maxSteps` (run budget) + per-node `maxIterations` (§7). The whole walk is local to the
 workspace graph (fast, isolated, fully auditable). **Verified Cypher: `QUERIES.md` §12** — this section
 is the *why*, not a query copy.
+
+> **`_drive_loop` is SHA-locked** (`71055f756280`, see `docs/archive/plans/m3-process-flow.md`
+> §3.1) — do not edit its body without deliberately re-opening that lock. `_execute_step`,
+> `_select_transition`, `_trace_step`, and `resume` sit **outside** the lock and may be changed
+> freely.
 
 > **What `maxSteps` actually means (K-031, documented — not changed).** `maxSteps` is a **runaway
 > tripwire checked *after* each recorded step**, not a hard cap: a run executes at most
@@ -941,6 +958,31 @@ already uses:
 
 > When this code lands, update `AGENTS.md` (key scripts/commands, working-context rules) and the
 > README repo-layout/roadmap in the same change, per the repo's documentation rule.
+
+### 14.7 Testing hazards specific to `server/`
+
+Four gotchas that a green `pytest` run does not surface, distinct from the `test_queries.sh`
+teardown hazard already documented at the `AGENTS.md` "Key scripts" table:
+
+- **`pytest -q` is destructive to the global `reference` graph too — a different mechanism than
+  `test_queries.sh`'s teardown wipe.** The `wf_repo` fixture (`tests/conftest.py`) runs
+  `MATCH (n) DETACH DELETE n` on `reference` at fixture **setup**, once per workflow test, to
+  isolate it from earlier tests. Because the wipe never runs at teardown, a finished pytest
+  session leaves the *last* workflow test's own published defs sitting in `reference` — so
+  `already present — no-op` after a pytest run may be reporting a **test's** publish, not a real
+  seed, while each `ws:<id>` snapshot still holds whatever it held before. Re-run
+  `scripts/seed_workflows.sh <wsId>` after any pytest run, exactly as after `test_queries.sh`.
+- **A green exit code is not evidence the graph-backed half of the suite ran.** With FalkorDB
+  unreachable, `conftest._falkordb_reachable()` turns the whole integration suite into
+  `pytest.skip` rather than failures, so the run still exits 0 with roughly half the tests
+  silently skipped. Always read `N passed, M skipped`, never just the absence of failures.
+- **`ruff check .` is clean but is not a wired gate.** `pyproject.toml` configures ruff and ships
+  it as a dev dependency, but no script or hook runs it — a clean manual run is evidence of that
+  one run only. The real gates here are `pytest` and (coordinator-run) `scripts/test_queries.sh`.
+- **`ws:test`'s vector indexes are dim 4** (`conftest.TEST_EMBEDDING_DIM`), fixed at bootstrap and
+  unrelated to the served workspaces' real dimension (1024/1536). Never point a real-embedder test
+  at it: a wrong-dimension `vecf32` write is silently accepted (§2/§7.1) and then drops out of ANN
+  — the write "succeeds" and retrieval finds nothing, with no error anywhere in the chain.
 
 ---
 

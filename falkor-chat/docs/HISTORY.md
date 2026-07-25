@@ -5,6 +5,43 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-24 — Docs: `AGENTS.md` de-bloat — moved restated content to its canonical home, kept only pointers
+
+**What:** `AGENTS.md` had grown to 312 lines, much of it near-verbatim restatement of content that
+already lived (often in more detail) in `docs/DESIGN.md`, `docs/QUERIES.md`, or the `server/`
+code's own docstrings. Trimmed to 129 lines by replacing four bloated sections with short pointers:
+"Decisions locked in" (the 19-row table duplicated `DESIGN.md` §1.2, which is already the stated
+authoritative register), "Live-verified FalkorDB facts" (project corollaries already annotated
+inline in `QUERIES.md` §2/§4/§9.1 and `DESIGN.md` §10), "Message write paths" (already in
+`QUERIES.md` §4 and `services.py`/`repository.py` docstrings), and "M1 server" (architecture
+already in `DESIGN.md` §14; K-027 parse-tolerance and executor/workflow-def invariants already in
+`llm.py`/`services.py`/`executor.py` docstrings, near-verbatim).
+
+**Genuinely new content surfaced during the audit, given a real home instead of staying in
+`AGENTS.md`:**
+- `DESIGN.md` §5.3 — the dispatch-loop's 4-attempt tripwire bound and the service's lock-guarded
+  monotonic per-process clock for `createdAt` (previously undocumented outside code).
+- `DESIGN.md` §6.2 — `_drive_loop`'s SHA-lock (`71055f756280`) and which functions sit outside it.
+- `DESIGN.md` §6.1 — the unenforced residual: a `decision` step with all-conditional transitions
+  and no `waitsForHuman` self-loops to budget exhaustion (K-029).
+- `DESIGN.md` §14.7 (new) — the four `server/` pytest-specific hazards (destructive `reference`-graph
+  wipe via the `wf_repo` fixture's *setup-time* `DETACH DELETE`, skip-count-hides-integration-suite,
+  `ruff` not being a wired gate, `ws:test`'s fixed dim-4 vector index).
+- `claude/graph-dba/falkordb-quirks.md` — two facts generalized from project-specific corollaries:
+  an empty-`UNWIND` guard can silently drop an unrelated *required* write downstream, not just the
+  guarded list's own edges; and a composite keyset-pagination predicate over one indexed column
+  still plans as a bare index scan with no residual filter.
+- `claude/coder/kaizen/inbox.md` + `claude/tdd-engineer/kaizen/inbox.md` — two testing-hygiene
+  lessons distilled from the same pytest hazards (read skip counts, not just exit code; a fixture
+  that wipes shared/global state at setup-not-teardown leaves the last test's leftovers behind),
+  routed to the agents' inboxes per the `agent-maintenance` distillation convention rather than
+  into their blueprints directly.
+
+Confirmed via `claude/graph-dba/falkordb-quirks.md`'s own stated convention (generic engine facts
+belong there; project-specific corollaries stay in the project, pointing back) that most of the
+"Live-verified FalkorDB facts" bullets were correctly project-scoped already — the fix was
+de-duplicating against `QUERIES.md`/`DESIGN.md`, not relocating them into the agent's knowledge base.
+
 ## 2026-07-24 — K-031: def/snapshot **structure** read surface — the create-only split-brain is now detectable
 
 **What:** Three read-only REST routes plus a read-only script, turning the component's most

@@ -76,7 +76,12 @@ to the general fact here.
 - **Empty `UNWIND` collapses the row stream.** `WITH x UNWIND [] AS y …` drops
   every row that reached it, even ones written earlier in the same query. Guard
   with `UNWIND (CASE WHEN $list = [] THEN [null] ELSE $list END) AS item` + a
-  `FOREACH` that never filters.
+  `FOREACH` that never filters. **This can silently drop an unrelated required
+  write downstream in the same query, not just the guarded list's own effects**
+  — an empty optional-list parameter (e.g. no mentions/tags on this write) can
+  collapse a mandatory `CREATE` that has nothing to do with that list. Always
+  test the zero-length-list case end-to-end (does the *required* write still
+  happen?), not just that the optional edges are correctly absent.
 - **`FOREACH (x IN CASE WHEN … THEN [1] ELSE [] END | CREATE …)`** is the working
   idiom for conditional writes without dropping rows. Nested `FOREACH`, and
   `DELETE` inside a `FOREACH`, both work.
@@ -130,6 +135,13 @@ to the general fact here.
   both properties are indexed. Use two separate `OPTIONAL MATCH`es (one indexed
   lookup per label) + `coalesce()` instead. The `OR` form is fine once `n` is
   already bound by an indexed/traversal anchor — it's only a scan-anchor problem.
+
+- **A composite keyset-pagination predicate over ONE indexed column still plans as a bare
+  `Node By Index Scan`, no residual `Filter`** — `WHERE col > $x OR (col = $x AND tiebreak >
+  $y)` (the standard `(col, tiebreak)` keyset-cursor shape) anchors cleanly on `col`'s index
+  even though the predicate is a compound OR. Verified on an edge build; re-profile this
+  specific shape on engine upgrades before trusting it as a settled fact — it is exactly the
+  kind of planner behavior that moves between releases.
 
 - **A guarded-CAS `WHERE` on a *second* indexed property folds INTO the `Node By Index Scan` —
   no residual `Filter` operator** (verified 2026-07-20 on v4.18.11 / `ws:test`).

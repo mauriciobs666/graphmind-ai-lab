@@ -9,58 +9,21 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ## Decisions locked in — do not reopen without strong cause
 
-> Rationale lives once, in `docs/DESIGN.md` §1 (the authoritative register). This is the quick
-> do-not-reopen index — follow the link for the *why*.
-
-| Decision | Home |
-|---|---|
-| FalkorDB is the single store (no secondary store) | DESIGN §1.2 → §2 |
-| One graph per workspace (`ws:{id}`) | DESIGN §1.1 (Tenancy) / §3 |
-| Thread-scoped `NEXT` linked list | DESIGN §1.2 → §5.2 |
-| No DayBucket | DESIGN §1.2 |
-| `Thread` owns `HEAD`+`TAIL` pointers | DESIGN §1.2 → §5.2 |
-| `Message.role` inline + derived server-side | DESIGN §1.2 → §5.1 |
-| `coalesce` member identity | DESIGN §1.2 → QUERIES §2 |
-| Vector indexes via DDL, not a procedure | DESIGN §1.2 → §7.1 |
-| Index before constraint, always | DESIGN §1.2 → §7.1 |
-| `Message.embedding` inline `vecf32` | DESIGN §1.2 → §5.2 |
-| Vector score is cosine distance (ASC) | DESIGN §1.2 → §8 |
-| `status` as property, not label | DESIGN §1.2 → §6.2 |
-| Flat `ctx`/`input`/`output` | DESIGN §1.2 → §6.2 |
-| `Message.threadId` denorm, unindexed | DESIGN §1.2 → §5.1 |
-| Guarded-CREATE write paths + status row | DESIGN §1.2 → §5.3/§9 |
-| Composite `(createdAt, msgId)` keyset cursor | DESIGN §1.2 → QUERIES §9 |
-| Member ids namespace-unique across `User`/`Agent` | DESIGN §1.2 → QUERIES §2/§7 |
-| Identity graph is authoritative (standalone) | DESIGN §1.2 → §3 |
+The single authoritative decision register is `docs/DESIGN.md` §1 (§1.1 top-level axes, §1.2
+detailed register, §1.3 M2 stack) — do not reopen any row there without strong cause. This file
+carries no copy of it; follow the link.
 
 ---
 
-## Live-verified FalkorDB facts (falkordb/falkordb:v4.18.11, Redis 8.6.3, module 41811)
+## Live-verified FalkorDB facts
 
-General engine/dialect quirks verified against this build (vector index DDL, index-before-constraint
-ordering, the `exists()` pattern bug, empty-`UNWIND` row collapse, `TIMEOUT` behavior, `OR`-as-scan-anchor,
-etc.) now live in the `graph-dba` agent's knowledge base, **`claude/graph-dba/falkordb-quirks.md`** —
-check there first. What's below is specific to this project's schema/queries:
-
-- **`repository.thread_has_head`/`thread_exists`** exist specifically to route around graph-dba's
-  `exists()`-pattern-bug finding — they use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`,
-  never a pattern-`exists()` check.
-- **The mention write-block's empty-`UNWIND` guard is load-bearing for the write itself**, not just
-  the mentions (see `QUERIES.md` §4 mentions note): `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE
-  $mentions END) AS mid` + a `FOREACH` that never filters. A bare `UNWIND []` would collapse the whole
-  row stream before that `FOREACH`, silently dropping the message write, not just the
-  `MENTIONS_MEMBER` edges.
-- **Member resolution (`userId`/`agentId`) is the concrete case of graph-dba's `OR`-scan-anchor
-  quirk** — two `OPTIONAL MATCH (u:User {userId:mid})` / `(a:Agent {agentId:mid})` + `coalesce(u,a)`
-  for anchored lookups (`labels(coalesce(u,a))[0]` gives the member kind). The `OR` form is fine only
-  in mention-flag and cursor reads, where `n` is already bound by a traversal/indexed anchor.
-- **Formulation-A composite keyset predicate** (`m.createdAt > $since OR (m.createdAt = $since
-  AND m.msgId > $sinceMsgId)`) still plans as a bare `Node By Index Scan` on `Message.createdAt`
-  with no residual Filter — **re-profile on engine upgrades** (edge build; formulation B in
-  QUERIES.md §9.1 is the documented fallback).
-- **`TIMEOUT` default (1000ms) was reviewed for M2 (K-007) and kept as the deployment default** —
-  writes ignore it entirely regardless (graph-dba finding); GraphRAG reads pass a per-query client
-  `timeout=` override instead (DESIGN §10 posture).
+General engine/dialect quirks (vector index DDL, index-before-constraint ordering, the `exists()`
+pattern bug, empty-`UNWIND` row collapse, `TIMEOUT` behavior, `OR`-as-scan-anchor, composite
+keyset-predicate planning, etc.) live in the `graph-dba` agent's knowledge base,
+**`claude/graph-dba/falkordb-quirks.md`**. This project's specific applications of those facts
+(member resolution, the mention write-block guard, keyset formulation, TIMEOUT posture) are
+annotated inline at the relevant query in `docs/QUERIES.md` (§2, §4, §9.1) and `docs/DESIGN.md`
+§10 — not restated here.
 
 ---
 
@@ -90,49 +53,11 @@ Edges cannot cross graphs. Cross-graph references use property keys or materiali
 ## Message write paths (two variants — keep them separate)
 
 The exact, verified Cypher lives in **one place — `docs/QUERIES.md` §4** (single source of
-truth). Do not copy query bodies here or into `DESIGN.md`; link to QUERIES.md instead — the
-duplication is what lets the copies drift. The invariants that govern those queries (v2, K-007):
-
-- **Two separate write paths, never a conditional MERGE:** *first message in a thread*
-  (creates `HEAD` + `TAIL`) vs. *subsequent message* (moves `TAIL` forward via `NEXT`). Each is
-  **self-guarding**: the write happens inside a `FOREACH (… IN CASE WHEN ok THEN [1] ELSE []
-  END | …)` guard *per path* — a guarded `CREATE`, **no MERGE on Message** (the constraint
-  stays as the concurrency backstop). The service picks the initial variant by checking for a
-  `HEAD`, then dispatches on the returned status row.
-- **Status-row contract:** both paths always return `(written, hadHead, dupMsg, authorFound)`
-  when their anchor matches. **Zero rows = the anchor missed only** (first: thread missing →
-  404; subsequent: no TAIL → retry as first). `dupMsg=true` = **idempotent success** (a retry
-  replay of our own server-minted msgId — trusted without a payload check; add a checksum if
-  msgIds ever become client-supplied). `hadHead=true` = lost the first-post race → re-dispatch
-  as subsequent. `authorFound=false` = unknown member, nothing written. The dispatch loop is
-  bounded at 4 attempts (tripwire — ping-pong is impossible by contract).
-- **Each write is a single `GRAPH.QUERY`** — atomicity is per-query; the HEAD/TAIL relink must
-  not be split across queries.
-- **`role` is derived, never trusted:** the service resolves the author's label
-  (`User → user`, `Agent → assistant`) via the §2 member-kind lookup — Agents author
-  first-class. Author resolution in the write is label-specific (two indexed `OPTIONAL
-  MATCH`es + `coalesce`), closing the old `All Node Scan`/silent-Agent-no-op defect.
-- **Every message records its author** with `(m)-[:POSTED_BY]->(author)`. The canonical
-  thread-read path (`QUERIES.md` §4) *requires* that edge — a message written without it is
-  invisible to thread reads.
-- **Participant mentions ride inside the same write query.** Mention resolution runs before the
-  guard; the nested `FOREACH` creates `(m)-[:MENTIONS_MEMBER]->(member)` edges *inside* it —
-  never a follow-up query (atomicity rule). The empty-`UNWIND` `CASE` guard is now
-  **load-bearing for the write itself** (a bare `UNWIND []` collapses the stream before the
-  FOREACH). `MENTIONS_MEMBER` (participants) is **distinct from** `MENTIONS`→`Entity` (GraphRAG
-  co-occurrence, §6) — do not conflate them. `$mentions = []` is a verified no-op.
-- **Every `MERGE` is backed by a uniqueness constraint** (`ReadCursor.cursorId`; `ensure_user`/
-  `ensure_agent`). Channel/thread creates are plain `CREATE` (server-minted ids —
-  **non-idempotent**, a retried create mints a new id).
-- **The service owns the timestamps:** message `createdAt` comes from a lock-guarded monotonic
-  per-process clock (`max(clock, last+1)`) — same-ms ties are impossible at the source.
-- **Since-reads (§9.1/§9.2) are chronological in the `(createdAt, msgId)` total order; cursors
-  advance to what was delivered.** Reader mentions are carried by the `isMention` flag, never a
-  mention-first sort — a resorted page + `LIMIT` breaks the contiguous-prefix invariant.
-  Cursor-driven reads use the composite keyset + the composite `ReadCursor` pair (advanced to
-  the newest *returned* `(createdAt, msgId)`, never the server clock) and never skip or
-  re-deliver, even across millisecond ties. Explicit-`since` reads keep plain `>` semantics
-  (may re-deliver/skip within that exact millisecond — documented, OQ3).
+truth); the invariants that govern it live in **`docs/DESIGN.md` §5.3/§9** and the `services.py`/
+`repository.py` docstrings — do not copy either into this file. Two things to hold onto: *first
+message in a thread* and *subsequent message* are separate self-guarding write paths, never a
+conditional MERGE, and every write returns a status row the service dispatches on (`dupMsg` =
+idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for the rest.
 
 ---
 
@@ -141,6 +66,7 @@ duplication is what lets the copies drift. The invariants that govern those quer
 | Script | Purpose |
 |---|---|
 | `./scripts/start_falkordb.sh` | Start FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data in `falkordb-data` volume. |
+| `./scripts/start_server.sh` | One-shot: start FalkorDB, bootstrap schema, seed demo agent + workflows, start uvicorn. Every runtime env var (`FALKORCHAT_ENABLE_AGENT`, `EMBEDDING_DIM`, `FALKORCHAT_WORKFLOW_ENABLED`, etc.) is documented in the script's own header comment — read there, not here. |
 | `./scripts/bootstrap_schema.sh <wsId> …` | Create all indexes + constraints for `reference` + workspace(s). Idempotent. |
 | `./scripts/test_queries.sh` | End-to-end test suite against the live instance. Must pass before any schema change is committed. **⚠️ Deletes the global `reference` graph at teardown** — that wipes **both** published defs, `triage@v1` and `access-request@v1` (the `ws:<id>` snapshots survive), so `@mention`-to-start silently no-ops afterwards. **Re-run `./scripts/seed_workflows.sh <wsId>` after this suite** before exercising a workflow flow. (`start_server.sh` self-heals — it seeds on every start.) **To check rather than assume, run `./scripts/verify_workflows.sh <wsId>`** — it exits 1 and names the missing def. |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamp `Message.threadId` on pre-K-007 messages (QUERIES.md §4.x). Idempotent; run once per existing workspace after deploying the v2 write paths. |
@@ -165,123 +91,13 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
-- **Layering (locked):** `api.py` (REST) and `mcp.py` (MCP) are thin adapters over `services.py`;
-  all Cypher lives in `repository.py` (1:1 with `QUERIES.md`); the tenant seam is `config.get_context`.
-- **Front doors on one process:** `app.py` mounts REST + MCP, and serves the repo-root `web/`
-  (`index.html` + `app.js`) as static files at `/`. The static mount is registered **last** — `/`
-  is a catch-all that must sit behind the REST routes and the `/mcp` mount. Same-origin ⇒ no CORS.
-- **Full-text search:** `GET /search?q=` → `services.search_messages` → `repository.search_messages`
-  (`QUERIES.md` §5, workspace-wide — the channel-scoping MATCH is omitted).
-- Repository/services tests run against the isolated `ws:test` graph (same approach as
-  `test_queries.sh`); the `conftest` fixture bootstraps schema + wipes node data per test.
-  **`ws:test` vector indexes are dim 4** (`conftest.TEST_EMBEDDING_DIM`) — never use it for a
-  real-embedder test: a wrong-dim `vecf32` write is silently accepted and then drops out of ANN,
-  so the retrieval passes while finding nothing.
-- **⚠️ A plain `pytest -q` run is destructive to the global `reference` graph — same hazard as
-  `test_queries.sh`, different mechanism.** The `wf_repo` fixture (`tests/conftest.py`) runs
-  `MATCH (n) DETACH DELETE n` on `reference` at fixture **setup**, once per workflow test, and
-  `_schema` `.delete()`s all of `ws:test` once per session. So a pytest baseline wipes any published
-  def (`triage@v1`, `access-request@v1`) while leaving each `ws:<id>` snapshot intact — and, because
-  the wipe is setup and never teardown, it *leaves the last workflow test's defs behind*. See the
-  `seed_workflows.sh` row above for the full split-brain consequence and why `already present —
-  no-op` after a pytest run is an untrustworthy signal. **Re-seed after a pytest run**, exactly as
-  after `test_queries.sh`.
-- **A green pytest line is not evidence the graph-backed half ran — read the skip count.** With
-  FalkorDB unreachable, `conftest._falkordb_reachable()` turns the whole integration suite into
-  `pytest.skip` (conftest.py:54) rather than failures, so the run still exits 0 with roughly half the
-  tests silently skipped. Always report/read `N passed, M skipped`, never just the absence of
-  failures.
-- **`ruff check .` in `server/` is clean but still not a wired gate.** `pyproject.toml` configures
-  ruff and ships it as a dev dep, but no script or hook runs it — a clean `ruff check .` is not
-  evidence of anything beyond that one manual run. The real gates here are `pytest` and
-  (coordinator-run) `scripts/test_queries.sh`. *(The one pre-existing `I001` import-order error in
-  `llm.py` was fixed 2026-07-24; if ruff ever goes red again on a clean tree, treat it as a real
-  regression, not baseline noise.)*
-- MCP is tested in-memory (`mcp.call_tool` / `list_tools`) — no HTTP server needed.
-- **The `live` pytest marker (K-022 U14):** tests needing a **real LM Studio** are marked
-  `@pytest.mark.live` and **deselected by default** (`addopts = -ra -m "not live"` in
-  `server/pyproject.toml`), so the standard `pytest` baseline stays network-free and fast *even
-  when LM Studio is running* — a reachability-skip alone would not do that. Opt in with
-  `pytest -m live` (a command-line `-m` overrides the addopts one). Live tests still skip with a
-  reason when a dep is unreachable, so they never fail for environmental reasons.
-  `tests/test_workflow_live.py` is the triage-flow e2e (AC-1…AC-4): it needs FalkorDB **and** LM
-  Studio (chat + embedding model) at `:1234`, and builds its own throwaway **`ws:live`** graph
-  bootstrapped at the **probed** live embedding dim (never hardcoded 1024 — the loaded model
-  decides), seeding the real def via `scripts/seed_workflows.sh` rather than a copy that could
-  drift. `KEEP_WS=1` keeps the graph for post-mortem inspection.
-- **Live AI agent loop (K-014, gated):** `app.py` builds the module-level `app` via
-  `_build_default_app()`, which wires the real `LMStudioEmbedder` + `EmbeddingWorker` +
-  `LMStudioLLM` + `AgentResponder` **only when `FALKORCHAT_ENABLE_AGENT` is truthy** — off by
-  default so imports and the pytest baseline stay network-free. The served app must also run at
-  the workspace's embedding dimension (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`) or embeddings
-  silently drop out of ANN. `scripts/start_server.sh` sets both, seeds the demo, and starts uvicorn;
-  `server/.env.example` documents every runtime env var. `@mention`-ing `FALKORCHAT_AGENT_ID` (default
-  `assistant`) triggers a retrieval-grounded reply posted as the Agent (role `assistant`) with an
-  `EMITTED` provenance edge. **Channel scoping is workspace-wide for M2-green** (`responder` passes
-  `channel_id=None`; a thread→channel read isn't in QUERIES.md yet) — K-015 follow-up.
-- **Since-read `displayName` (K-014):** `read_thread_since`/`read_ws_since` (QUERIES.md §9.1/§9.2)
-  carry `author.displayName` so the polling web client shows member names, not raw ids; clients
-  tolerate `null`.
-- **Model-output parse tolerance is two seams in `llm.py`, not one (K-027 slice A) —
-  picking the wrong one is a safety bug.** `extract_json_object` is **permissive** and
-  order-blind: it lifts the first-`{`…last-`}` span out of prose, so an object the model is
-  merely *quoting* is extracted too. That is fine on the **tool-call** path
-  (`_parse_content_tool_calls`), where `executor._handle_tool_call` re-validates the name
-  against the granted set and the args against the schema. `extract_own_line_json_object(…,
-  require_key=…)` is **conservative**: only a reply that is entirely one object, or **exactly
-  one** key-carrying object that owns its lines. The **guard judge**
-  (`app._build_llm_judge`) must use that one — it acts on the object directly, and
-  `guards._coerce_verdict` cannot catch a quoted verdict downstream (the quoted rationale reads
-  clean, so no contradiction cue fires). Same asymmetry governs `_parse_bare_call_syntax`: from
-  the first recovered `name({json})` onward the message must hold **nothing but calls and
-  whitespace** — no prose *between* calls, nothing after the last one — because
-  `executor._run_agent_node` dispatches **every** returned call, so a single position anchor on
-  the last one still lets an illustrated call become a real thread write. **Accepted residuals:**
-  an illustrative call on the *final* line, and a contiguous catalogue of own-line calls with no
-  prose between them, both still fire — position cannot separate them from an intended call.
-- **Executor / workflow-def invariants (K-024 U2, `docs/archive/plans/m3-process-flow.md` §3.3):**
-  - A `human` or `wait` step **must** declare `config.waitsForHuman: true` — enforced at
-    **publish** (`services._validate_def_spec`, `WorkflowDefSpecError`). Without it the step never
-    reaches the executor's OUTCOME B park and self-loops until the step budget fails the run.
-  - A `cmp`-family transition guard (`kind` ∈ `cmp|all|any|not`) is **structurally validated at
-    publish** (`guards.validate_cmp` → `WorkflowConfigError`): a typo'd `op` is an authoring error
-    at seed time, not a live run that parks forever. Path roots are **strict at publish and total
-    at drive** (an unwhitelisted root is rejected on publish, but only "missing" ⇒ `False` when a
-    run evaluates it). A guard with **no `kind`** (e.g. `{"expr":"x>0"}`) or one that does not
-    normalize to a dict is *not a declaration this validator owns* and publishes unchanged.
-  - A def **must declare ≥ 1 transition** — enforced at publish (K-024 U4b, O-6). `_PUBLISH_CYPHER`
-    ends in `UNWIND $transitions`, which collapses the row stream *after* the def, its `Step`s and
-    the `START` edge are MERGEd; `publish_def` then indexes `result_set[0]` ⇒ `IndexError` ⇒ 500,
-    and because publish is `MERGE … ON CREATE SET` the corrected retry on the same `(key, version)`
-    is a silent no-op on the half-written def — that version is **unrepairable**. A terminal
-    outcome is a step with no *outgoing* transition, never a def with none.
-  - All three run **last** in `_validate_def_spec`, after the key-uniqueness / start-count /
-    dangling-endpoint checks, so an older check keeps failing for its own reason. `config`/`guard`
-    are **normalized first** (`_normalize_opaque`): the REST front door types them `str` while
-    service/MCP callers pass dicts, and a validator that skipped strings would let every
-    REST-published def escape both invariants silently.
-  - A `decision` step has **no side effect** — its semantics are entirely its outgoing guards; with
-    no outgoing transitions it is a terminal outcome node (run ends `done`).
-  - `wait` is **signal-driven, not timer-driven** (there is no scheduler — proposed K-028), and is
-    mechanically identical to `human` to the engine; only the `awaiting.kind` string differs.
-  - ⚠️ **Not enforced (n-3):** a `decision` step whose outgoing transitions are *all* conditional
-    and which does not declare `waitsForHuman` **self-loops to budget exhaustion**. The symmetric
-    invariant would retro-reject existing fixtures; filed as a proposed hardening with K-029.
-  - `prompt` / `tool` / `message` (and any unknown type) **raise** `NotImplementedError` from
-    `executor._execute_step` — the documented typed-handler seam (D-E). The M-1 fault net stamps
-    `fail_run` and re-raises. `agent` **without a wired LLM** deliberately keeps returning the empty
-    stub: it is the affordance the whole offline executor test estate rests on.
-  - `_drive_loop` is **SHA-locked** (`71055f756280`, see `docs/archive/plans/m3-process-flow.md` §3.1) —
-    `_execute_step`, `_select_transition`, `_trace_step` and `resume` sit **outside** the lock.
-  - **`maxSteps` is a runaway tripwire checked *after* each recorded step, not a hard cap** (K-031,
-    documented — deliberately *not* changed): the comparison is `rec["stepCount"] > max_steps`, so a
-    run executes at most **`maxSteps + 1`** steps before failing with `"step budget exceeded"`. It is
-    checked only on the two driving outcomes — a guard fired (OUTCOME A, `executor.py:410`) and a
-    legitimate self-loop (OUTCOME C, `:427`) — and **deliberately not on the park path** (OUTCOME B;
-    a parked run cannot self-drive, see the comment at `executor.py:415-421`) **or the terminal
-    path**. Treat it as a safety bound, not an SLA or a cost budget. Making it exact (`>` → `>=`)
-    lands *inside* the SHA lock and is pinned by a passing test (`tests/test_executor.py:158`) —
-    filed as proposed **K-033**, self-standing.
+Application architecture (layering, front doors, REST/MCP surface, layout) is `docs/DESIGN.md`
+§14–§15 — not restated here. **Testing hazards specific to this suite** (the pytest-side
+destructive-reference-graph gotcha, skip-count reading, `ws:test`'s fixed dim-4 vector index,
+ruff not being a wired gate) are `docs/DESIGN.md` §14.7. Model-output parse tolerance (`llm.py`)
+and the executor/workflow-def invariants are documented at their own definitions
+(`llm.py` docstrings; `services._validate_def_spec`, `executor.py`) and in `docs/DESIGN.md` §6 —
+read the code, don't look for a copy here.
 
 ---
 
@@ -295,6 +111,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 | `docs/HISTORY.md` | Dated change log, most recent first — every delivered change gets an entry (formerly `kaizen/history.md`) |
 | `docs/archive/` | Frozen plans/test-plans/test-reports of closed milestones (same subdir names as the active dirs); a doc moves here when its milestone closes, inbound links fixed in the same change |
 | `scripts/bootstrap_schema.sh` | Source of truth for **executable DDL** (indexes + constraints + full-text/vector); DESIGN §7 describes it, doesn't duplicate it |
+| `claude/graph-dba/falkordb-quirks.md` | General FalkorDB engine/dialect facts verified against this lab's pinned build — not project-specific; this project's applications of those facts live inline in QUERIES.md/DESIGN.md |
 | `docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors |
 | `docs/archive/plans/m2-groundwork.md` · `docs/archive/plans/m2-groundwork-queries.md` | K-007 plan + graph-dba verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings |
 

@@ -121,3 +121,29 @@
   can occupy — first, middle, last — and check what the *consumer* does with the whole list. An
   anchor on the last element says nothing about the others; if the consumer iterates, a rule that
   binds one element is not a safety property, and any doc asserting it as one is false.
+
+## 2026-07-24 — A green pytest exit code is not evidence an integration suite actually ran — read the skip count
+
+- **Evidence:** `falkor-chat/server/tests/conftest.py:54` (`_falkordb_reachable()`) turns the entire
+  graph-backed half of the suite into `pytest.skip(...)` when FalkorDB is unreachable, rather than
+  failing. `pytest -q` still exits 0 with roughly half the tests silently skipped — the exit code
+  alone cannot distinguish "everything passed" from "half the suite never ran."
+- **Context:** falkor-chat AGENTS.md doc-restructure audit — the project's own AGENTS.md had a
+  standing warning to "always report/read `N passed, M skipped`, never just the absence of
+  failures," which is exactly the kind of durable verification habit this inbox exists for.
+- **Suggested home:** prompt ("Verify honestly" step: check skip counts, not just exit status,
+  whenever a suite has an environment-reachability gate)
+
+## 2026-07-24 — A fixture that wipes shared/global state at *setup* rather than *teardown* leaves that state dirty after the last test in the session
+
+- **Evidence:** `falkor-chat/server/tests/conftest.py`'s `wf_repo` fixture runs
+  `MATCH (n) DETACH DELETE n` on the **global** `reference` graph at fixture **setup**, once per
+  workflow test (isolating that test from prior ones). Because the wipe never runs at teardown, the
+  *last* workflow test to execute in a session leaves its own published defs sitting in `reference`
+  afterward — so a subsequent "re-seed" script can print a false "already present — no-op",
+  reporting a test's publish as if it were a real seed.
+- **Context:** same audit — falkor-chat's docs had to carry a standing warning about this because
+  the asymmetry (isolate-via-setup-wipe, no teardown-wipe) is invisible from a passing test run.
+- **Suggested home:** prompt (a general fixture-design check: a fixture that wipes/mutates
+  **shared/global** state to isolate itself from prior tests should also tear that state down,
+  or the last test's leftovers get mistaken for real seeded state by whatever runs next)
