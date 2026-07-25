@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 682 → 574 chars (-15%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (frontend-engineer↔coder) re-verified green. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
 - **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change to `coder`. File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission on every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`. `acceptEdits` auto-accepts file edits and common filesystem commands for paths in the working directory/`additionalDirectories`, independent of session-level grants.
 - **Why:** Same root cause as `coder` (see its 2026-07-24 kaizen entry) — applied to the other implementer agents for consistency, at user request.

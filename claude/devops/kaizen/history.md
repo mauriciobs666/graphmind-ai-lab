@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 654 → 572 chars (-12%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (devops↔graph-dba) re-verified green. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
 - **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change across the team (`coder`, `tdd-engineer`, `frontend-engineer`, `architect`, `qa-engineer`, `analyst`). File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
 - **Why:** Verified against current Claude Code docs (`hooks-guide.md` "Hooks and permission modes") that this doesn't weaken `devops`'s own guard: its `guard-destructive-ops.sh` hook matches Bash command patterns (volume wipes, `docker rm -f`, etc.), unrelated to `acceptEdits` (which only covers Edit/Write and common filesystem commands) — and `PreToolUse` hooks fire before any permission-mode check regardless, so a hook `"ask"` decision would survive even if the two overlapped.

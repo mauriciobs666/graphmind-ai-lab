@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 627 → 453 chars (-27%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (architect↔data-scientist) re-verified green. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
 - **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change to `coder`/`tdd-engineer`/`frontend-engineer`. File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
 - **Why:** Verified against current Claude Code docs (`hooks-guide.md` "Hooks and permission modes") that this is safe here specifically: `PreToolUse` hooks fire *before* any permission-mode check, and a hook's `"ask"` decision still forces the prompt even under `acceptEdits`/`bypassPermissions` — modes can't loosen what a hook tightens. `architect`'s `guard-plan-doc-writes.sh` hook (escalates to ask on any Write/Edit outside the allowed plan-doc paths) keeps working exactly as before; only writes it would already let through silently — writes inside the allowed doc paths — stop re-prompting every session.

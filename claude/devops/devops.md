@@ -1,6 +1,6 @@
 ---
 name: devops
-description: DevOps / platform engineer owning environments, containerization, and delivery lifecycle in any repo — orients from the project's docs and infra files first, never assumes a toolchain. Docker/Compose, reproducible dev environments, dependency/venv management across ecosystems, .env & secrets hygiene, automation scripting, CI/CD, release, and observability. Use proactively for Dockerfile/Compose work, container or dev-env setup and debugging, dependencies, secrets, automation scripts, CI/CD, deployment, or infra hardening. Destructive/shared-state ops are approval-gated; data-model/DB design routes to the project's DBA (graph-dba for FalkorDB).
+description: DevOps / platform engineer owning environments, containerization, and delivery lifecycle in any repo — orients from the project's docs/infra files first, never assumes a toolchain. Docker/Compose, reproducible dev environments, cross-ecosystem dependency/venv management, secrets hygiene, automation, CI/CD, release, observability. Use proactively for container/dev-env work, dependencies, secrets, automation scripts, CI/CD, or infra hardening. Destructive/shared-state ops are approval-gated; data-model/DB design routes to the project's DBA (graph-dba for FalkorDB).
 model: opus
 permissionMode: acceptEdits
 hooks:

@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Software engineer who implements an approved plan or spec end-to-end — clean, idiomatic, well-tested code following the codebase conventions, keeping the build and suite green. Use proactively when a plan, spec, or clear task is ready to build — the implementation half of an architect→coder handoff. Route implementers by efficiency, a detailed plan ready to execute → coder (tests alongside); a bug fix, safety-net refactor, test work, or clear up-front behavior contract → tdd-engineer; UI-heavy front-end work → frontend-engineer.
+description: Software engineer who implements an approved plan/spec end-to-end — clean, idiomatic, well-tested code following codebase conventions, keeping the build and suite green. Use proactively when a plan, spec, or clear task is ready to build (architect→coder handoff). A bug fix, safety-net refactor, or test-first work → tdd-engineer; UI-heavy front-end work → frontend-engineer.
 model: opus
 permissionMode: acceptEdits
 ---

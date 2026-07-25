@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 547 → 384 chars (-29%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (coder↔tdd-engineer, coder↔frontend-engineer) re-verified green. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — Learnings inbox distilled (first pass; 6 entries, inbox cleared)
 - **What:** Ran the `agent-maintenance` §5 distillation over `kaizen/inbox.md` — 6 entries accumulated
   2026-07-16 → 2026-07-21, all falkor-chat environment facts from K-022/K-024 work, never before

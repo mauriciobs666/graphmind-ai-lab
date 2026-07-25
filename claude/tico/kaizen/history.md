@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 593 → 538 chars (-9%): tightened phrasing, dropped restated detail. `tico` has no boundary pairs in `claude/scripts/audit-team.sh`; full audit re-verified green regardless. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — Frontmatter: `permissionMode: acceptEdits`
 - **What:** Added `permissionMode: acceptEdits` to the frontmatter, matching the same-day change across the team (`coder`, `tdd-engineer`, `frontend-engineer`, `architect`, `qa-engineer`, `analyst`, `devops`, `graph-dba`, `joern`, `teco`). File-edit/write approvals are session-scoped in Claude Code (unlike Bash approvals, which persist permanently per repo+command), so users otherwise have to re-grant write permission every session even with a global `Edit`/`Write` allow rule in `~/.claude/settings.json`.
 - **Why:** Verified against current Claude Code docs (`hooks-guide.md` "Hooks and permission modes") that this is safe: `PreToolUse` hooks fire *before* any permission-mode check, and a hook's `"ask"` decision still forces the prompt even under `acceptEdits`/`bypassPermissions`. `tico`'s `guard-requirements-doc-writes.sh` hook (escalates to ask on any Write/Edit outside the allowed requirements-doc paths) keeps working exactly as before; only writes it would already let through silently stop re-prompting every session.

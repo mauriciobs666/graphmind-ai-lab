@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
+- **What:** Frontmatter `description` compressed 661 → 568 chars (-14%): tightened phrasing, dropped restated detail. `teco` has no boundary pairs in `claude/scripts/audit-team.sh`; full audit re-verified green regardless. No body/catalog change.
+- **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.
+- **Plan items:** none.
+
 ## 2026-07-24 — K-002 ✅: agent-teams evaluation closed — reject team-lead reframe; SendMessage sub-case spun to K-007
 - **What:** Read `code.claude.com/docs/en/agent-teams` and `/en/agent-view` (the concrete step K-002 asked for) and closed with disposition: **reject** reframing teco as an agent-teams lead. Agent teams are experimental (opt-in `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`), built for teammates that talk directly to each other on independent, discussion-benefiting work (parallel review lenses, competing-hypothesis debugging, cross-layer ownership) — the docs are explicit that "for sequential tasks... or work with many dependencies, a single session or subagents are more effective." Teco's actual loop (decompose → sequence on dependencies → delegate → independently-reviewed gate) is exactly that latter shape; teams would add token overhead for no matching benefit. The 2026-07-12 sub-case (defect→fix→re-run re-spawning cold agents) turned out not to be an agent-teams question at all — it's answered by `SendMessage` continuation of the original delegate (confirmed available for `Agent`-tool subagents per the harness's own tool description), independent of the experimental teams flag. Spun off as **K-007**.
 - **Why:** User asked to follow through on K-002's own proposed next step (read the docs, assess fit) rather than leave the plan item open indefinitely.
