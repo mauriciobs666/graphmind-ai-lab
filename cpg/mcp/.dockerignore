@@ -1,0 +1,20 @@
+# Context is cpg/mcp/. Patterns are relative to it, and are `filepath.Match`-based:
+# a bare `__pycache__` matches ONLY at the context root, so the `**/` prefix is load-
+# bearing for anything nested. Measured: bare patterns shipped tests/__pycache__ into
+# the image; these do not. (§3.8, m-3.)
+#
+# image-tag.sh's directory walk applies the same exclusions when it enumerates tests/ —
+# hashing a file the build tar never receives would change the tag without changing the
+# image. Keep the two in step (§4.3, M-4).
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+.venv
+README.md
+Dockerfile
+.dockerignore
+build.sh
+docker-run.sh
+image-tag.sh
+run.sh
+setup.sh

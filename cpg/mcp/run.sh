@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# run.sh — launch the `cpg` MCP server over stdio.
+# run.sh — launch the `cpg` MCP server over stdio, from the host venv.
 #
-# This is the only path that appears in a harness config (.mcp.json): everything
-# else is resolved from this script's own location, so the working directory the
-# harness happens to start in does not matter.
+# This is the Docker-less variant. The repo-root .mcp.json names docker-run.sh
+# (the container path); this script stays as the test loop, the fallback when the
+# image or the Docker daemon is broken, and what ports to a Docker-less host —
+# see the container section of cpg/mcp/README.md. Everything is resolved from this
+# script's own location, so the working directory the harness happens to start in
+# does not matter.
 #
 # Usage: cpg/mcp/run.sh          (speaks MCP on stdin/stdout — not interactive)
 #

@@ -233,7 +233,13 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   the MCP path in exactly one harness and `redis-cli GRAPH.QUERY` remains the **only** path under
   OpenCode/Kiro. Includes the `allowed-tools` portability result from S4 (an unknown entry is
   ignored, not rejected — spot-checked, not exercised by a real OpenCode invocation).
-  Owner: `cobb` / `devops`.
+  **Updated 2026-07-26 (C-320):** the launch command is now `cpg/mcp/docker-run.sh` rather than
+  `cpg/mcp/run.sh`. The property this item depends on is preserved exactly — the launch surface is
+  still *a single command*, and a script ports where a JSON `args` array does not; it also replaces
+  the per-host question "is there a working Python 3.12 venv there" with "is there a Docker daemon".
+  Two new obligations for this item: Docker becomes a prerequisite on any harness host (`run.sh` is
+  what ports to a Docker-less one), and **`MCP_TIMEOUT` is a Claude-Code knob** — OpenCode's and
+  Kiro's own startup budgets must be established here. Owner: `cobb` / `devops`.
 - **C-311 — `guard-destructive-ops.sh` is blind to destructive commands wrapped in scripts.** 🔵
   The guard matches the Bash *command string*, so `pipeline.sh --reset` deletes a graph with **no
   prompt** — the approval S8 originally leaned on could not fire (S8 was restructured to run an
@@ -290,6 +296,26 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   path expansion, and the `$CLAUDE_PROJECT_DIR` form is otherwise cwd-independent. Documentation
   home: `skills/agent-standards/claude-code.md` §MCP. Already filed in
   `claude/devops/kaizen/inbox.md`. Owner: `cobb` / `devops`.
+- **C-320 — Containerize the `cpg` MCP server.** ✅ **Delivered 2026-07-26.** The server runs as a
+  container instead of a host venv, so a clone needs **Docker** rather than a correctly built local
+  Python 3.12 venv to answer CPG queries. The tool contract is unchanged (one tool, two parameters,
+  read-only, same output). Shipped: `cpg/mcp/{Dockerfile,.dockerignore,image-tag.sh,build.sh,
+  docker-run.sh}` plus a two-line `.mcp.json` edit. The launch tag is a **content hash of the build
+  inputs** gated by `docker image inspect`, so the launch path makes **no registry contact** and a
+  stale image is unrepresentable; a miss builds. The host venv path is **retained** as the test loop
+  and the fallback. Design, measurements and rejected alternatives:
+  `docs/plans/cpg-mcp-containerization.md` (v3); review:
+  `docs/reviews/cpg-mcp-containerization.md`. Owner: `devops`.
+- **C-321 — Make the live suite's scratch-graph name unique inside a container.** 🔵
+  `cpg/mcp/tests/test_server.py:472` derives the scratch graph from `os.getpid()`, which is **`1`**
+  in a container's PID namespace — so every containerized `-m live` run uses the same key
+  `_cpg_mcp_selftest_1` on the **shared** FalkorDB. The suite is still self-contained with respect to
+  `cpg_*`/`ws:*`/`reference`, but the uniqueness that made it safe *against itself* is gone: two
+  concurrent container live runs corrupt each other, and an interrupted one leaves residue on a
+  shared instance. Fix: `uuid4().hex[:8]` instead of `os.getpid()`. Worked around meanwhile by
+  documenting "do not run the live gate concurrently" plus a `GRAPH.LIST` residue check
+  (`cpg/mcp/README.md`). Found during C-320; out of that change's scope because it is test code.
+  Owner: `tdd-engineer` / `coder`.
 
 ## Follow-ups (post-M2)
 

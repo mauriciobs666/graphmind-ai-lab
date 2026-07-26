@@ -19,9 +19,15 @@ and OpenCode artifacts).
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
 - `cpg/` — Code-Property-Graph component code home. `cpg/mcp/` is the **`cpg` MCP server** (stdio,
   Python) exposing the single read-only tool `mcp__cpg__query(graph, cypher)` over FalkorDB; build
-  artifacts (`.cpg-artifacts/`) and its `.venv/` are gitignored. See `cpg/mcp/README.md`. The
-  repo-root `.mcp.json` that wires it is the repo's **first MCP wiring, and it is Claude-Code-only**
-  — OpenCode and Kiro configure MCP through their own files and neither is wired (backlog C-310).
+  artifacts (`.cpg-artifacts/`) and its `.venv/` are gitignored. It **runs containerized** — the
+  launch surface is `cpg/mcp/docker-run.sh`, whose image tag is a **content hash of the build
+  inputs**, so a stale image is unrepresentable rather than merely unlikely; `cpg/mcp/build.sh` is
+  the supported build step. The container reaches FalkorDB over the host's published port via
+  `--add-host=host.docker.internal:host-gateway`, so it does **not** touch the shared `falkordb-dev`
+  container. The **host venv is retained** (`setup.sh`/`run.sh`) as the fast test loop and the
+  fallback. See `cpg/mcp/README.md`. The repo-root `.mcp.json` that wires it is the repo's **first MCP
+  wiring, and it is Claude-Code-only** — OpenCode and Kiro configure MCP through their own files and
+  neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history + learnings inbox the agent appends to during runs; `cobb` distills the inboxes). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
@@ -121,13 +127,19 @@ python visualize_agent_graph.py
 opencode --agent severino      # requires LM Studio server running at :1234
 ```
 
-**cpg/mcp** (the `cpg` MCP server; run from the repo root, after `cpg/mcp/setup.sh`):
+**cpg/mcp** (the `cpg` MCP server; run from the repo root. `cpg/mcp/build.sh` builds the container
+images — the launch path; `cpg/mcp/setup.sh` creates the host venv — the test loop and fallback):
 ```bash
+cpg/mcp/build.sh                                   # build/refresh the container images (content-hash tag)
 cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q          # smoke: contract + formatting + errors (offline)
 cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q -m live  # same, against a running FalkorDB
+docker run --rm cpg-mcp:test python -m pytest tests -q   # the same suite INSIDE the image (the gate
+                                                         # that keeps the two paths from drifting)
 ```
-This is the component's only regression signal — there is no root-level test runner, so without
-it a break surfaces only as an agent's failed query.
+The two `.venv` pytest lines are the component's only regression signal — there is no root-level
+test runner, so without them a break surfaces only as an agent's failed query. They stay **host-side
+and Docker-free** on purpose; the in-container run is a separate gate for Dockerfile/dependency
+changes, not a replacement.
 
 ## Working in this repo
 

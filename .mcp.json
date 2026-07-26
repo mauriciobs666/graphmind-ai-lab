@@ -2,9 +2,9 @@
   "mcpServers": {
     "cpg": {
       "command": "bash",
-      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh\""],
+      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cpg/mcp/docker-run.sh\""],
       "env": {
-        "FALKORDB_HOST": "127.0.0.1",
+        "FALKORDB_HOST": "host.docker.internal",
         "FALKORDB_PORT": "6379"
       },
       "timeout": 60000

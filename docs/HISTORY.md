@@ -5,6 +5,65 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-07-26 — The `cpg` MCP server is containerized (C-320) ✅
+
+A clone now needs **Docker**, not a correctly built local Python 3.12 venv, to answer CPG queries.
+The tool contract did not change — one tool, two parameters, read-only, same output format — and
+`server.py` was not touched. `.mcp.json` changed by exactly two lines.
+
+- **What shipped** — `cpg/mcp/Dockerfile` (multi-stage: `runtime` carries `server.py` and runtime
+  deps only, `test` adds pytest and the suite; non-root `appuser`; `python:3.12-slim` following
+  `falkor-chat/Dockerfile`; **no `EXPOSE` and no `HEALTHCHECK`** because this is a one-shot stdio
+  process, not a service, and for the same reason **no Compose service** — `falkor-chat/compose.yaml`
+  already defines a `falkordb` service that would bind a *second* engine on `:6379` over the same
+  volume). Plus `.dockerignore`, `image-tag.sh` (sourced), `build.sh`, `docker-run.sh`.
+- **The launch gate is a content hash, and that is the load-bearing decision.** `cpg-mcp:<hash12>` is
+  a SHA-256 over every build input; `docker-run.sh` does one `docker image inspect` (~0.05 s, purely
+  local) and builds **only on a miss**. The first design had the wrapper run a cached `docker build`
+  on every launch; measurement killed it — **a warm, fully-cached BuildKit build still makes a Docker
+  Hub `load metadata` round trip every single time** (0.5 s, essentially the whole build cost) unless
+  the base image is in the local **image store**, which a BuildKit build does *not* populate. That
+  would have made every session start depend on Hub reachability, a straight regression against the
+  venv path, which needs no network at all. Verified end-to-end: in a network namespace with no
+  connectivity and no DNS, the full handshake still returned real rows. Because the tag *is* the
+  bytes, "missing" and "stale" become the same question, and two concurrent sessions can never
+  clobber each other's image.
+- **Networking** — default bridge + `--add-host=host.docker.internal:host-gateway`, riding the host
+  port `falkordb-dev` already publishes. **The shared FalkorDB container and the `falkordb-data`
+  volume were not touched, restarted or reconfigured** (`StartedAt` and `RestartCount 0` unchanged
+  throughout). `--network host` was rejected as maximal privilege for one outbound connection, and
+  behaves differently under Docker Desktop; a shared user-defined network was rejected because it
+  needs either re-creating the shared container (`falkor-chat` + `salesperson` depend on it) or a
+  manual, non-persistent `docker network connect`.
+- **Lifecycle, measured** — `--init` is *required*, not defensive: PID-1 `python` **ignores
+  `SIGTERM`** (still running a minute later), so without tini the harness's shutdown sequence cannot
+  stop it. `--label cpg-mcp=1` makes any leak findable, `--rm` reaps, and **no `--name`** because a
+  fixed name would collide across the concurrent sessions this repo encourages. `--read-only
+  --tmpfs /tmp` was adopted only after probing every tool-body path under it.
+- **Two implementation-time finds, both fixed here.** Docker's bare `-e VAR` form does **not** fall
+  through to the image's `ENV` when the variable is unset in the caller's environment — it **deletes**
+  it in the container, which silently left `server.py` on its `127.0.0.1` default, i.e. the container
+  talking to itself. Env vars are now forwarded only when actually set. And `CPG_MCP_IMAGE`, which is
+  documented to *bypass* the hash gate, still fell into the autobuild branch on a miss and then failed
+  with docker's bare `No such image`; it now short-circuits with a curated message.
+- **The host venv path is retained** (`setup.sh`, `run.sh`, `.venv`) and re-documented as (a) the fast
+  regression loop and (b) the fallback. Both regression commands are unchanged and still green:
+  `cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q` → **53 passed, 7 deselected**; `-q -m live` → **7
+  passed, 53 deselected**. The same suite **inside the image** gives byte-identical counts, which is
+  the control against the two paths drifting. Rollback is those two `.mcp.json` lines plus a restart.
+- **Measured** — connect through the wrapper, spawn → `initialize` + `tools/list`: **median 1.47 s**
+  over 7 runs (1.40–1.58), i.e. **4.9 % of the 30 s startup budget**. That budget was *verified*, not
+  assumed, closing an ambiguity between the official env-var table and its prose: `MCP_TIMEOUT=1
+  claude mcp list` → *"connection timed out after 1ms"*, while `MCP_CONNECT_TIMEOUT_MS=1` still
+  connected. **`MCP_TIMEOUT` is the startup knob**; `.mcp.json`'s `"timeout": 60000` is the
+  per-tool-call wall.
+- **Design & review** — `docs/plans/cpg-mcp-containerization.md` (v3) and
+  `docs/reviews/cpg-mcp-containerization.md` (two `analyst` passes: *needs changes* on v1, then
+  *approve with suggestions* on v2). Backlog: **C-320** ✅, new **C-321** (the live suite's
+  `os.getpid()`-derived scratch-graph name collapses to the constant `_cpg_mcp_selftest_1` inside a
+  container — test code, so out of scope here and worked around by documentation plus a residue
+  check). **C-310 is not absorbed**; no OpenCode/Kiro config was written.
+
 ## 2026-07-25 — M3: CPG query access — the MCP read path ✅
 
 Asking the code graph a question is now **one tool call**, not a hand-assembled shell command.
