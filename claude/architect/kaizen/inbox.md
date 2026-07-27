@@ -186,3 +186,42 @@
   rework log had no record of a finding the implementer had shipped.
 - **Suggested home:** project docs (`skills/agent-standards/claude-code.md` §MCP) + prompt (architect:
   a shipped MCP server's strings can be audited from the session context / a one-line `initialize` probe)
+
+## 2026-07-26 — Root-relative markdown links (`/docs/x.md`) are **not** agent-followable: a leading `/` is filesystem-absolute to `Read`, even though GitHub and VS Code both resolve it to the repo/workspace root
+
+- **Evidence:** `Read("/docs/BACKLOG.md")` in this repo returns *"File does not exist. Note: your
+  current working directory is /home/mauricio/prg/graphmind-ai-lab"*, while `Read("docs/BACKLOG.md")`
+  succeeds. Contrast with the documented renderer behavior: GitHub Docs (*Basic writing and formatting
+  syntax*) states *"Links starting with `/` will be relative to the repository root"*, and VS Code
+  resolves a leading `/` to the **workspace-folder** root (as-designed; with an open validation wart
+  for `SKILL.md`-language-mode files, microsoft/vscode#299488). So there is **no single spelling that
+  both a file-read tool and a markdown renderer treat as repo-root-anchored**: `/docs/x.md` is
+  renderer-correct + agent-broken; bare `docs/x.md` is agent-correct + renderer-broken (renderers
+  resolve it relative to the citing file). The only form serving both is a *composed* one —
+  ``[`repo/root/path.md`](../relative.md)`` — backtick label for agents/grep, relative target for the
+  renderer.
+- **Context:** designing the repo-wide cross-document reference convention
+  (`docs/plans/doc-reference-convention.md`), where "use a shorter root-anchored path" was the
+  stakeholder's proposed fix and `/docs/...` was the obvious candidate.
+- **Suggested home:** project docs (root `AGENTS.md`, stated **with the reason** so it isn't
+  re-proposed) + prompt (architect/analyst: never recommend `/`-anchored markdown links in an
+  agent-read repo)
+
+## 2026-07-26 — This repo cites documents with **backticked path strings, not markdown links** (92% / 2,322 of 2,525), so a markdown link-checker validates 8% of references and misses ~97% of the defects
+
+- **Evidence:** Read-only census of all 179 tracked/untracked `*.md` (fenced code masked; every
+  reference resolved three ways — citing-file-relative, repo-root, module-root). Spellings: 2,179 bare
+  backticked path strings + 143 backticked-inside-a-link-label + 185 explicit relative links + 18 bare
+  relative links + **0** leading-slash links. Defects: **3** broken relative markdown links (all
+  pre-existing, `falkor-chat/docs/BACKLOG.md:785,787,895`) vs. **87** dead path-bearing backticked
+  `.md` citations. Of those 87, **15 point at a pre-archival path whose `docs/archive/…` twin exists**
+  — and **all 15 are backticked, zero are links** (13 in `claude/*/kaizen/`, i.e. the cross-module rot
+  the analyst predicted in `falkor-chat/docs/reviews/m3-archive-sweep.md` O-2). Corollary: the repo runs
+  **two silently competing anchoring conventions** — 652 backticked refs resolve only from the repo
+  root, **408 only from their module root** (63 in `falkor-chat/docs/HISTORY.md`, 58 in its
+  `BACKLOG.md`), so 408 citations fail verbatim for an agent reading from the repo root.
+- **Context:** quantifying why archiving two documents cost 22 path-string edits across 8 files
+  (`9bbfbb5`); the answer was that the cost lives in the un-checkable spelling.
+- **Suggested home:** project docs (root `AGENTS.md` citation convention) + prompt (architect/analyst:
+  when auditing doc-link health in this repo, grep backticked path strings — a link-checker is nearly
+  blind here)
