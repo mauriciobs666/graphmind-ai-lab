@@ -1,9 +1,9 @@
 # CPG query access — test report
 
 > **Run 1 · 2026-07-25 · executed by `qa-engineer` · step S9** of
-> [`../plans/cpg-query-access.md`](../plans/cpg-query-access.md).
+> [`../../plans/cpg-query-access.md`](../../plans/cpg-query-access.md).
 > Plan executed: [`../test-plans/cpg-query-access.md`](../test-plans/cpg-query-access.md) v1.0.
-> Requirements: [`../requirements/cpg-query-access.md`](../requirements/cpg-query-access.md)
+> Requirements: [`../../requirements/cpg-query-access.md`](../../requirements/cpg-query-access.md)
 > (AC-1…AC-4 as amended 2026-07-25, decisions D1–D3).
 
 ---
@@ -272,8 +272,8 @@ both component suites; shared-state integrity (graph inventory + no key material
 
 ## 7. Artifacts & state
 
-- Test plan: `docs/test-plans/cpg-query-access.md` (new, v1.0)
-- This report: `docs/test-reports/cpg-query-access-report.md` (new)
+- Test plan: `docs/archive/test-plans/cpg-query-access.md` (new, v1.0)
+- This report: `docs/archive/test-reports/cpg-query-access-report.md` (new)
 - Harnesses (scratchpad, not committed): `equiv.py` (AC-3 equivalence), `celltypes.py` (DEF-1…3 characterisation)
 
 **No source, plan, requirement or skill file was modified by this run.** No graph was created,
@@ -288,9 +288,9 @@ written to or deleted. `GRAPH.LIST` at exit = the same five keys as at entry. No
 
 The stakeholder ruled on **DEF-1** (backlog **C-313**) the same day, taking **Option A**:
 
-- **`requirements/cpg-query-access.md` AC-3 is narrowed** to *values + row counts + ordering*,
+- **`docs/requirements/cpg-query-access.md` AC-3 is narrowed** to *values + row counts + ordering*,
   explicitly excluding the display rendering of non-scalar (list/map) cells, for which
-  [`../plans/cpg-query-access.md`](../plans/cpg-query-access.md) **§4.4** is the authority. The
+  [`../../plans/cpg-query-access.md`](../../plans/cpg-query-access.md) **§4.4** is the authority. The
   amendment and the ruling are recorded in that document's AC-3 and decision log.
 - **Option B — changing the server to render lists `redis-cli`-style — was rejected. No source
   changed**; the server is correct as built.

@@ -994,8 +994,8 @@ a ghost.
 
 ### S9 — live acceptance · `qa-engineer`
 
-Execute §7 and write `docs/test-reports/cpg-query-access-report.md`, test plan first per the
-agent's own convention (`docs/test-plans/cpg-query-access.md`). The test plan carries S8's B1–B4
+Execute §7 and write `docs/archive/test-reports/cpg-query-access-report.md`, test plan first per the
+agent's own convention (`docs/archive/test-plans/cpg-query-access.md`). The test plan carries S8's B1–B4
 numbers as **the recorded baseline**.
 
 **Done when:** AC-1…AC-4 each have a recorded pass/fail with evidence; the S5 allowlist edit is
@@ -1060,7 +1060,7 @@ new `audit-team.sh` failures.
 | `.mcp.json`, `.claude/settings.json` | **new / edited** — no absolute paths | S3 · `devops` |
 | `docs/BACKLOG.md` | M3 + C-301…C-307, follow-ups C-308/C-309/C-310/**C-311** | S10 · `coder` |
 | `docs/HISTORY.md` | dated delivery entry incl. the superseded-M2-figures note | S10 · `coder` |
-| `docs/test-plans/cpg-query-access.md`, `docs/test-reports/cpg-query-access-report.md` | **new** — plan (carries the fresh baseline) + report | S9 · `qa-engineer` |
+| `docs/archive/test-plans/cpg-query-access.md`, `docs/archive/test-reports/cpg-query-access-report.md` | **new** — plan (carries the fresh baseline) + report | S9 · `qa-engineer` |
 | `docs/plans/cpg-query-access-coordination.md` | unit table / log kept current | `teco`, continuous (plans dir — within teco's write scope) |
 
 ---

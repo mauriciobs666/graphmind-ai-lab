@@ -108,7 +108,7 @@ MCP tool, `mcp__cpg__query(graph, cypher)`. Requirements:
 [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md) (FR-1…FR-6 / AC-1…AC-4, as
 amended 2026-07-25) · plan: [`plans/cpg-query-access.md`](./plans/cpg-query-access.md) v2.2
 (steps S1–S10) · reviews: [`reviews/cpg-query-access.md`](./reviews/cpg-query-access.md) ·
-acceptance: [`test-reports/cpg-query-access-report.md`](./test-reports/cpg-query-access-report.md)
+acceptance: [`archive/test-reports/cpg-query-access-report.md`](./archive/test-reports/cpg-query-access-report.md)
 (**PASS WITH DEFECTS**) · coordination log:
 [`plans/cpg-query-access-coordination.md`](./plans/cpg-query-access-coordination.md).
 

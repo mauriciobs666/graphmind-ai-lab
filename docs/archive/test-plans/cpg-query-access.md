@@ -1,10 +1,10 @@
 # CPG query access — test plan
 
 > **Version 1.0 · 2026-07-25 · author `qa-engineer` · step S9 of
-> [`../plans/cpg-query-access.md`](../plans/cpg-query-access.md) (v2.1).**
-> Requirements under test: [`../requirements/cpg-query-access.md`](../requirements/cpg-query-access.md)
+> [`../../plans/cpg-query-access.md`](../../plans/cpg-query-access.md) (v2.1).**
+> Requirements under test: [`../../requirements/cpg-query-access.md`](../../requirements/cpg-query-access.md)
 > (AC-1…AC-4 **as amended 2026-07-25**, decisions D1–D3).
-> Coordination: [`../plans/cpg-query-access-coordination.md`](../plans/cpg-query-access-coordination.md).
+> Coordination: [`../../plans/cpg-query-access-coordination.md`](../../plans/cpg-query-access-coordination.md).
 > Results: [`../test-reports/cpg-query-access-report.md`](../test-reports/cpg-query-access-report.md).
 
 ---

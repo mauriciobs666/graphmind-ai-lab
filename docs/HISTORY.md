@@ -5,6 +5,55 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-07-26 — M3-close documentation-archival sweep (doc-only)
+
+Housekeeping pass following **milestone M3 — CPG query access via MCP ✅ (delivered 2026-07-25)**:
+its completed acceptance artifacts move to `docs/archive/` per the module documentation convention
+([root `AGENTS.md`](../AGENTS.md) → "Module documentation convention"). This creates the
+component's **first `docs/archive/`**; `falkor-chat/docs/archive/` is the shape followed — bare
+`archive/<same-subdir>/` trees, no index file, no status banner stamped into the moved documents.
+**Doc-only — no source, test, script, image or container touched** (every path in the diff ends
+in `.md`; git shows two renames plus link edits and this entry).
+
+**Moved (via `git mv`, history preserved) — 2 files:**
+
+- **1 test-plan** `docs/test-plans/ → docs/archive/test-plans/`: `cpg-query-access.md`.
+- **1 test-report** `docs/test-reports/ → docs/archive/test-reports/`: `cpg-query-access-report.md`.
+
+This also closes review finding **m-26** in `docs/reviews/cpg-mcp-containerization.md`, which
+proposed exactly this ("archive the M3 test-plan/test-report pair now that M3 has closed, fixing
+inbound links in the same change") as the cleaner of its two options.
+
+**Links fixed in the same change — 22 path strings, both directions:**
+
+- **9 outbound, inside the moved pair.** Both files sit one level deeper, so their `../plans/`,
+  `../requirements/` and `../reviews/` links became `../../`. Their links *to each other*
+  (`../test-plans/`, `../test-reports/`) are correct **unchanged**, because both moved together —
+  those were verified, not assumed. The report's §7 "Artifacts" self-citations were repathed to
+  `docs/archive/…`, and one prose citation lacking a `docs/` prefix (`requirements/cpg-query-access.md`
+  in the addendum) was normalised to the full repo-root form.
+- **13 inbound, across 6 live documents**: `docs/BACKLOG.md` 1 (the M3 acceptance link),
+  this file 2, `docs/plans/cpg-query-access.md` 4, `docs/plans/cpg-query-access-coordination.md` 2,
+  `docs/requirements/cpg-query-access.md` 1, `docs/reviews/cpg-mcp-containerization.md` 3.
+  Several are **prose citations, not markdown links** (`§7` artifact lists, S9 step text, m-26's
+  evidence lines) — repathed too, since a reader follows a bare path exactly as far as a link.
+
+**Verified, not eyeballed.** A resolution script walked every relative markdown link and every
+backticked repo-root `*.md` path in all tracked `*.md`: **19 references involve the archived pair,
+0 unresolved**. Repo-wide totals are **identical to `HEAD`** (3 pre-existing broken links, all in
+`falkor-chat/docs/BACKLOG.md`, unrelated; 442 unresolved backticked strings before **and** after),
+so the pass introduced no new dangling path. `claude/scripts/audit-team.sh` unchanged at the known
+C-309a baseline (2 FAILs: username + home path in tracked files).
+
+**Deliberately left active (not archived).** `docs/requirements/cpg-query-access.md` — still `cpg/`'s
+entry doc in the root `AGENTS.md` component table, and the standing contract for the read path;
+`docs/plans/cpg-query-access.md`, `docs/reviews/cpg-query-access.md` and
+`docs/plans/cpg-query-access-coordination.md` — the M3 design/review/coordination set, whose §4.4 is
+still cited as the live rendering authority (C-313) and which the open C-314…C-316 cleanups reference;
+and the whole C-320 containerization set (`docs/plans/cpg-mcp-containerization.md` and
+`docs/reviews/cpg-mcp-containerization.md`), which is current work, not a closed milestone. `docs/test-plans/` and `docs/test-reports/` remain as empty
+active directories, matching `falkor-chat/docs/`.
+
 ## 2026-07-26 — `--verify-inputs` no longer answers "OK" for a line-continued `COPY` (C-320 review follow-up) ✅
 
 The `analyst` review of the delivered C-320 change (Part III of
@@ -39,7 +88,7 @@ This is that fix plus the doc corrections; no design decision moved.
   as a diff. Host: **62 passed, 7 deselected** / **7 passed, 62 deselected**. In-image, unchanged:
   **53 passed, 7 deselected** / **7 passed, 53 deselected**.
 - **Doc corrections** — `docs/BACKLOG.md`'s C-320 entry claimed "no registry contact" unqualified
-  (true on a hit; a miss builds and does pull); `docs/test-plans/cpg-query-access.md`'s environment
+  (true on a hit; a miss builds and does pull); `docs/archive/test-plans/cpg-query-access.md`'s environment
   table still recorded the wiring as `run.sh`; and the plan's §12 M-4 row claimed the hash walk applies
   `.dockerignore`'s exclusions when it applies two of the three (`.pytest_cache` is not excluded —
   safe direction, filed on C-321).
@@ -163,7 +212,7 @@ the graph key and the Cypher text are parameters, so nothing has to survive a sh
   have landed in `falkor-chat/server` since — not a property of the access mechanism. They are not
   a target and must not be iterated toward.
   The M2 entry stays as written; it was true when written.
-- **Acceptance: PASS WITH DEFECTS** (`docs/test-reports/cpg-query-access-report.md`, 23 cases,
+- **Acceptance: PASS WITH DEFECTS** (`docs/archive/test-reports/cpg-query-access-report.md`, 23 cases,
   22 pass / 1 fail). **AC-1** (one tool call, zero shell quoting; 1 tool / 2 parameters at protocol
   level), **AC-2** (multi-line ≡ single-line, byte-identical row bodies) and **AC-4** pass.
   The one failing case (TP-010) was **DEF-1**, a conflict between two approved specs — AC-3's

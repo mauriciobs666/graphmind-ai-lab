@@ -129,7 +129,7 @@ wrapped, or left as a fallback is a design decision.
   not discarded.
 - 2026-07-25 — AC-3's *"byte-identical value sets"* vs plan §4.4 (stakeholder ruling **D5**,
   raised as defect **DEF-1** in
-  [`../test-reports/cpg-query-access-report.md`](../test-reports/cpg-query-access-report.md) and
+  [`../archive/test-reports/cpg-query-access-report.md`](../archive/test-reports/cpg-query-access-report.md) and
   carried as backlog item **C-313**) → the two approved specs could not both hold: AC-3 demanded
   byte-identical values while plan §4.4 mandates Python `repr` for list/map cells, so no
   implementation could satisfy both for any query projecting a non-scalar. **Option A chosen: AC-3

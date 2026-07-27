@@ -395,7 +395,7 @@ present, `cpg_falkorchat` → **1968** METHODs — S8 baseline intact, no drift.
   callers, one tool call, zero quoting; `ToolSearch` fired as predicted and is permitted), AC-2 ✅
   (multi-line ≡ single-line; `"`, `'`, `$HOME`, `$(whoami)` survived verbatim), AC-3 ⚠️ (5 of 6
   equivalence pairs byte-identical; **DEF-1**), AC-4 ✅. Baseline re-measured, **matches S8 exactly**.
-  Deliverables: `docs/test-plans/cpg-query-access.md` · `docs/test-reports/cpg-query-access-report.md`.
+  Deliverables: `docs/archive/test-plans/cpg-query-access.md` · `docs/archive/test-reports/cpg-query-access-report.md`.
   Load-bearing proof: raw `GRAPH.RO_QUERY` with `/* c */ PROFILE …` returns 1968 rows — **the tool
   refuses it**. Typo'd graph → no key materialised (`GRAPH.LIST` 5 → 5). A 29,890-char payload
   arrived **inline, not as a file reference** (closes risk N-2).

@@ -1184,15 +1184,21 @@ clauses contradict each other for anyone who thinks about it, and misleads anyon
 **Suggested improvement.** *"…so the launch path makes no registry contact **on a hit**, and a stale
 image is unrepresentable; a miss builds, which does need the network."*
 
-### m-26 — `docs/test-plans/cpg-query-access.md` still records the wiring as `run.sh`
+### m-26 — the M3 test plan still records the wiring as `run.sh`
 
-**Evidence.** `docs/test-plans/cpg-query-access.md:78` — the environment table row: *"MCP wiring |
+> **Resolved 2026-07-26** by the M3-close archival pass (the second option below): the pair now lives
+> at `docs/archive/test-plans/cpg-query-access.md` / `docs/archive/test-reports/cpg-query-access-report.md`,
+> and the plan's environment row carries a C-320 supersession note. The citations below are repathed
+> to the archive; the finding's reasoning is the dated pre-move record and stands as written.
+
+**Evidence.** `docs/archive/test-plans/cpg-query-access.md:78` — the environment table row: *"MCP wiring |
 repo-root `.mcp.json`, project scope, `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'`…"*. The
 plan's §9 documentation-impact table enumerates every other doc and does not mention `docs/test-plans/`.
 
 **Why it matters.** Per the repo's module-doc convention (root `AGENTS.md`), `docs/test-plans/` holds
-**active** documents; `docs/archive/` does not exist yet. So a QA engineer re-running this plan would
-set up an environment that no longer exists. The companion `docs/test-reports/cpg-query-access-report.md:49`
+**active** documents; `docs/archive/` did not exist when this review was written. So a QA engineer
+re-running this plan would set up an environment that no longer exists. The companion
+`docs/archive/test-reports/cpg-query-access-report.md:49`
 records the same string, but a *report* is a dated record of a past run and is correct as written —
 only the plan is the problem. `docs/HISTORY.md:83` is likewise a dated entry and correctly left alone.
 
