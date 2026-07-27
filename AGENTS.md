@@ -131,9 +131,11 @@ opencode --agent severino      # requires LM Studio server running at :1234
 images — the launch path; `cpg/mcp/setup.sh` creates the host venv — the test loop and fallback):
 ```bash
 cpg/mcp/build.sh                                   # build/refresh the container images (content-hash tag)
-cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q          # smoke: contract + formatting + errors (offline)
+cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q          # smoke: contract + formatting + errors, plus the
+                                                   # build.sh --verify-inputs regression (offline)
 cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q -m live  # same, against a running FalkorDB
-docker run --rm cpg-mcp:test python -m pytest tests -q   # the same suite INSIDE the image (the gate
+docker run --rm cpg-mcp:test python -m pytest tests -q   # the same suite INSIDE the image, minus the
+                                                         # host-only build-tooling module (the gate
                                                          # that keeps the two paths from drifting)
 ```
 The two `.venv` pytest lines are the component's only regression signal — there is no root-level

@@ -124,8 +124,25 @@ verify_inputs() {
       echo "build.sh --verify-inputs: Dockerfile COPYs '$src', which does not exist in the build context." >&2
       gaps=$((gaps + 1))
     fi
+  # The Dockerfile parse. Continuations are JOINED before any rule looks at a COPY:
+  # a line-oriented parse is blind to `COPY a \` <newline> `    b /app/` and answers
+  # "--verify-inputs OK" for it — a FALSE PASS on the only check that enforces
+  # "the hash covers every COPY", which is the one failure direction that costs
+  # correctness (the file lands in the image, the tag does not move, the launch path
+  # serves an image without the change). Regression: tests/test_build_inputs.py.
   done < <(awk '
+      # A comment line is never a COPY, and Docker also allows one INSIDE a
+      # continuation — dropping it before accumulation handles both cases.
+      /^[[:space:]]*#/                { next }
+      { line = line $0 }
+      /\\[[:space:]]*$/               { sub(/\\[[:space:]]*$/, " ", line); next }
+      { $0 = line; line = "" }        # re-splits fields: the rules below see the join
       toupper($1) == "COPY" {
+        # `COPY --from=<stage>` reads from another BUILD STAGE, not from the build
+        # context, so its sources are not hash inputs at all. Without this, a perfectly
+        # legitimate multi-stage COPY is rejected with "does not exist in the build
+        # context", which sends the reader hunting for a file that was never missing.
+        for (i = 2; i <= NF; i++) if ($i ~ /^--from=/) next
         n = 0; delete f
         for (i = 2; i <= NF; i++) if ($i !~ /^--/) { n++; f[n] = $i }
         for (i = 1; i < n; i++) print f[i]      # every operand but the last (the dest)

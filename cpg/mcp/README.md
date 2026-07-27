@@ -83,6 +83,14 @@ The `-m live` run needs FalkorDB up; the default run is offline and stays green 
 (`pytest.ini` **deselects** the `live` marker rather than skipping on reachability, so a running
 database cannot silently change what the default command covers).
 
+`tests/test_build_inputs.py` is the one **host-only** module: it exercises
+`build.sh --verify-inputs` against a throwaway copy of `cpg/mcp/` in `tmp_path` (no Docker, no image
+built, the tracked tree never touched), because that check is the only thing enforcing
+"[the hash covers every `COPY`](#the-image-tag-is-a-content-hash)" and a false
+*pass* there is silent. It is **not collected inside the image** — `conftest.py` drops it when
+`build.sh` is absent, because `.dockerignore` deliberately keeps the build tooling out of the build
+context — so the in-container gate's expected counts are unchanged by it.
+
 ## The tool
 
 Server name `cpg` · tool name `query` · callable name **`mcp__cpg__query`**. Exactly one tool,
@@ -317,7 +325,11 @@ identical on every machine and no absolute path can leak into a tracked file. On
 
 Adding a file under `tests/` — of any extension — changes the hash automatically, because the
 enumeration *walks* the directory rather than globbing `*.py`. `build.sh --verify-inputs` fails the
-build if the Dockerfile ever `COPY`s something the hash does not cover, so the two cannot drift.
+build if the Dockerfile ever `COPY`s something the hash does not cover, so the two cannot drift — it
+runs implicitly before every build, it joins `\`-continued `COPY` lines before parsing (a
+line-oriented parse answered "OK" for those, which is a false pass in the one direction that costs
+correctness), and it is itself regression-tested by `tests/test_build_inputs.py`. `COPY --from=<stage>`
+is skipped: those sources come from another build stage, not from the build context.
 
 > **"Immutable" means with respect to the repo bytes only.** The base image (`python:3.12-slim`, a
 > moving tag) and pip's resolution of the version *ranges* in `requirements.txt` are deliberately
@@ -403,6 +415,9 @@ session restarts (stdio servers are not auto-reconnected).
 
 The host venv suite stays the primary regression signal — it is ~0.5 s and needs no Docker. The
 container gate proves *the image*: its interpreter, its resolved dependencies and its network path.
+It runs the same suite **minus `tests/test_build_inputs.py`**, which tests the build tooling the image
+deliberately does not contain and is therefore not collected there — so the counts below are the
+host counts minus that module, not a different suite.
 
 ```bash
 cpg/mcp/build.sh                                    # precondition: both targets, immediately first

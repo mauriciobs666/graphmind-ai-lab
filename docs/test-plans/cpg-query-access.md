@@ -75,7 +75,7 @@ Prioritisation: **P1** = an AC cannot be signed off without it, or the risk is H
 | FalkorDB | container `falkordb-dev`, image `falkordb/falkordb:v4.18.11`, `redis_version 8.6.3`, `127.0.0.1:6379`, no auth |
 | Graphs loaded (must stay exactly these five) | `cpg_falkorchat`, `cpg_salesperson`, `ws:acme`, `ws:test`, `reference` |
 | Server venv | `cpg/mcp/.venv` — Python 3.12.3, `mcp 1.28.1`, `FalkorDB 1.6.2`, `redis 8.0.1`, `pytest 9.1.1` |
-| MCP wiring | repo-root `.mcp.json`, project scope, `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'`, `timeout 60000`; `.claude/settings.json` → `enabledMcpjsonServers: ["cpg"]` |
+| MCP wiring | repo-root `.mcp.json`, project scope, `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/docker-run.sh"'`, `timeout 60000`; `.claude/settings.json` → `enabledMcpjsonServers: ["cpg"]`. **Superseded since this plan was written (C-320):** the wiring named `run.sh` (host venv) when the run below was executed; the launch surface is now the container wrapper `docker-run.sh`, and `run.sh` remains only as the fast test loop and the Docker-less fallback. Re-running this plan means building the image first (`cpg/mcp/build.sh`) — see `cpg/mcp/README.md` §Running in a container. |
 | Tool caps in force | `CPG_MCP_MAX_ROWS=200`, `CPG_MCP_MAX_CELL=300`, `CPG_MCP_MAX_CHARS=30000`, `CPG_MCP_TIMEOUT_MS=30000` (defaults; `.mcp.json` sets only host/port) |
 | Fallback path | `redis-cli -p 6379 GRAPH.QUERY <graph> '<cypher>' --no-raw` |
 | Query source | `skills/cpg-analysis/SKILL.md` §3 idioms and `skills/cpg-analysis/references/{impact-analysis,rca,code-review,test-gap}.md` |

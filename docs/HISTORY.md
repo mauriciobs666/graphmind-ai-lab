@@ -5,6 +5,63 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-07-26 — `--verify-inputs` no longer answers "OK" for a line-continued `COPY` (C-320 review follow-up) ✅
+
+The `analyst` review of the delivered C-320 change (Part III of
+`docs/reviews/cpg-mcp-containerization.md`, *approve with suggestions*, no blocker) found one must-fix.
+This is that fix plus the doc corrections; no design decision moved.
+
+- **The defect (M-7).** `build.sh --verify-inputs` parsed the Dockerfile **line by line**, so a
+  `\`-continued `COPY` was invisible to it and the check answered *"--verify-inputs OK"*. Reproduced
+  against the shipped script: appending `COPY requirements.txt \` / `     setup.sh /app/` to the
+  Dockerfile passed with exit 0, while the single-line control `COPY setup.sh setup.sh` correctly
+  failed. That is the **one direction that costs correctness**: the file lands in the image, the
+  content hash does not move, `docker image inspect` hits, and the launch path serves an image without
+  the change — the exact failure the hash exists to make unrepresentable. `--verify-inputs` is the only
+  mechanism enforcing that invariant, which `Dockerfile`, `image-tag.sh` and `README.md` all state as
+  absolute. Nothing was wrong in the committed tree (no continued `COPY` in it); it was a trap for the
+  next editor.
+- **The fix** — the `awk` parse now joins continuations (and drops comment lines, which Docker also
+  permits *inside* a continuation) before any rule looks at a `COPY`. Same pass: `COPY --from=<stage>`
+  is skipped, because its sources come from another build stage and were being misreported as missing
+  build-context files — a wrong diagnostic on the natural next edit to a multi-stage Dockerfile.
+- **The regression is checked in, because a silent false pass is undetectable without one.**
+  `cpg/mcp/tests/test_build_inputs.py` (9 cases) runs `--verify-inputs` against a throwaway copy of
+  `cpg/mcp/` in pytest's `tmp_path`: the unmodified tree passes and writes nothing to stdout; the two
+  continued-`COPY` forms and the single-line control all fail with the offending operand named; a
+  *covered* continued `COPY` still passes; `COPY --from=` is accepted; and the directory rule (M-4)
+  keeps its cover. Proven to catch the bug: run against the pre-fix `build.sh`, exactly the two M-7
+  cases and the `--from=` case fail. It needs no Docker and never touches the tracked tree.
+  It lives in `tests/` — the component's only automatically-run signal — but is the one **host-only**
+  module: `.dockerignore` deliberately keeps the build tooling out of the build context, so
+  `conftest.py` does not collect it when `build.sh` is absent. Not collecting (rather than skipping)
+  keeps the in-image gate's counts **exactly** what they were, so a real regression there still shows
+  as a diff. Host: **62 passed, 7 deselected** / **7 passed, 62 deselected**. In-image, unchanged:
+  **53 passed, 7 deselected** / **7 passed, 53 deselected**.
+- **Doc corrections** — `docs/BACKLOG.md`'s C-320 entry claimed "no registry contact" unqualified
+  (true on a hit; a miss builds and does pull); `docs/test-plans/cpg-query-access.md`'s environment
+  table still recorded the wiring as `run.sh`; and the plan's §12 M-4 row claimed the hash walk applies
+  `.dockerignore`'s exclusions when it applies two of the three (`.pytest_cache` is not excluded —
+  safe direction, filed on C-321).
+- **Deferred by stakeholder decision, recorded on C-321 (M-8).** The autobuild calls
+  `build.sh --runtime-only` without `CPG_MCP_NO_PULL`, so a hash miss puts an unbounded Docker Hub
+  pull inside the 30 s MCP startup budget — and because the hash covers `tests/`, `pytest.ini` and
+  `requirements-dev.txt` while the *runtime* stage COPYs none of them, a test-only edit forces a
+  rebuild of a byte-identical runtime image. C-321 already edits `tests/test_server.py`, so it will
+  trigger exactly this; the finding, the reason it belongs there and the cheapest fix
+  (`CPG_MCP_NO_PULL=1` on the autobuild call) are now on that entry, together with the review's other
+  one-line `image-tag.sh` minors. **Not implemented here.**
+- **Verified** — the images were rebuilt at the new hash (`ba910c48571d` → `3f825c8afe4f`; the tag
+  moves only because of the two `tests/` changes — `build.sh` is not a hash input), so the wired path
+  does not pay for a build at the next session start. Full protocol handshake through
+  `cpg/mcp/docker-run.sh`: ids 1–3 answered, `MATCH (m:METHOD) RETURN count(m)` on `cpg_falkorchat` →
+  **1968**, stdout pure JSON. `docker ps -a --filter label=cpg-mcp=1` shows one `Up` container (this
+  session's own server, on the pre-change tag) and **no `Exited`/`Created`** entry, i.e. no orphan.
+  `GRAPH.LIST` still the same five graphs, no `_cpg_mcp_selftest_*` residue; `falkordb-dev` and
+  `falkordb-data` untouched. `claude/scripts/audit-team.sh`: **no new failures** — the same two
+  pre-existing C-309a leaks, in none of the files this change touches (the new file is untracked, so
+  it was grepped directly for all five personal identifiers: clean).
+
 ## 2026-07-26 — The `cpg` MCP server is containerized (C-320) ✅
 
 A clone now needs **Docker**, not a correctly built local Python 3.12 venv, to answer CPG queries.

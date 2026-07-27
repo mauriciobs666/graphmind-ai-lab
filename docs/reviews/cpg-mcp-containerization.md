@@ -6,10 +6,13 @@
 > Baseline: working tree at `583e132` + the untracked plan.
 > Findings route back to `devops`. This document changes nothing.
 >
-> **This file has two parts.** **Part I** (§1–§5) is the v1 review — verdict *needs changes* —
+> **This file has three parts.** **Part I** (§1–§5) is the v1 review — verdict *needs changes* —
 > kept verbatim as the audit trail. **[Part II](#part-ii--v2-re-review)** (§6–§14, 2026-07-26) is
-> the re-review of the amended v2 plan — verdict **approve with suggestions**. Read Part II first
-> if you only need the current position; Part I is what its findings are numbered against.
+> the re-review of the amended v2 plan — verdict **approve with suggestions**.
+> **[Part III](#part-iii--delivered-change-review-c38f7dc)** (§15–§22, 2026-07-26) is the review of
+> the **delivered code** at commit `c38f7dc` — verdict **approve with suggestions**. Read Part III
+> first if you only need the current position; Parts I and II are what its findings are numbered
+> against and are kept verbatim.
 
 ---
 
@@ -874,3 +877,440 @@ part 1 (the launch path must work offline) is the property that actually needs p
    image identity, at the cost of a manual bump and a divergence from `falkor-chat/Dockerfile`. Not
    blocking; worth one sentence in §3.7 acknowledging that the reasoning changed even if the answer
    does not.
+
+---
+
+# Part III — delivered-change review (`c38f7dc`)
+
+> Reviewer: `analyst`. 2026-07-26. Review of the **implemented and committed** change, not the plan.
+> Artifact: commit `c38f7dc` ("feat(cpg): containerize the MCP server — content-hash image, host
+> venv retained"), 15 files. Author `devops`, who verified its own work; this is the independent pass.
+> Findings route back to `devops`. This document changes nothing.
+
+## 15. Scope & verdict (Part III)
+
+**Reviewed, as code:** `cpg/mcp/Dockerfile`, `cpg/mcp/.dockerignore`, `cpg/mcp/image-tag.sh`,
+`cpg/mcp/build.sh`, `cpg/mcp/docker-run.sh`, `.mcp.json`, `cpg/mcp/run.sh` (header).
+**Reviewed, as documentation, against the code rather than on its word:** `cpg/mcp/README.md`
+(the whole container section), root `AGENTS.md` (the `cpg/` bullet + "Key commands"),
+`docs/HISTORY.md`, `docs/BACKLOG.md` (C-310 amendment, C-320, C-321), and
+`docs/plans/cpg-mcp-containerization.md` §12 against what was actually committed.
+**Also swept for staleness:** every tracked file naming `cpg/mcp/run.sh` or the MCP wiring.
+
+**Explicitly out of scope, because `teco` executed it directly after the commit and I treat it as
+established:** the MCP handshake through the wired command, `tools/list` = 1 tool with
+`readOnlyHint`, a live `tools/call`, orphan-container check, `claude mcp list`, the `falkordb-dev`
+untouched-shared-state check, the host suite (53/7), the live suite (7), the in-image suite (53/7),
+`audit-team.sh`, and the personal-identifier grep. I did not re-run any of these.
+
+**What I ran myself** (all read-only; the repo working tree is unchanged — `git status` clean at
+finish). Adversarial probes of `image-tag.sh` and `build.sh --verify-inputs` against a **copy** of
+`cpg/mcp/` in the session scratchpad, never the tracked tree; live confirmation of the three
+implementation-time defect fixes; `build.sh` stdout/stdin purity; `docker image ls`.
+
+**Verdict: approve with suggestions.** No blocker. The change does what it says, the three defects
+`devops` reports fixing are genuinely fixed in the committed code (I reproduced all three), and the
+documentation is unusually accurate — I went looking for prose the code does not back and found
+three small instances in ~600 lines of new docs. The two majors below are both about the *guard*
+around the load-bearing safety property rather than the property itself: **M-7** is a hole in
+`--verify-inputs` that a normal Dockerfile edit walks straight through, and **M-8** is an unbounded
+network call that the miss branch puts inside the MCP startup budget. Neither breaks anything as
+shipped.
+
+Numbering continues from Part I/II (majors `M-`, minors `m-`, nits `n-`).
+
+## 16. Verification of the three implementation-time defect fixes
+
+All three were reproduced end-to-end. Each is real, and each fix is correct.
+
+| Defect | Premise re-measured | Fix in the committed code | Verdict |
+|---|---|---|---|
+| **(a)** bare `-e VAR` unsets the image `ENV` | `env -u FALKORDB_HOST docker run --rm -e FALKORDB_HOST cpg-mcp:ba910c48571d python -c "…os.environ.get('FALKORDB_HOST')"` → **`None`**. Same run with **no** `-e` flag → **`'host.docker.internal'`**. Docker server 29.6.1. | `docker-run.sh:104-110` — `ENV_ARGS` built only for variables that pass `[ -n "${!_v+set}" ]`, then expanded with the `${arr[@]+…}` empty-array guard at `:131`. | **Correct.** The `+set` test (rather than `-n "${!_v}"`) also preserves a deliberately-empty value, which the inline comment claims and which the semantics do deliver. |
+| **(b)** `CPG_MCP_IMAGE` fell into the autobuild branch | `CPG_MCP_IMAGE=cpg-mcp:definitely-not-here ./cpg/mcp/docker-run.sh </dev/null` → the four curated lines, **exit 1**, nothing built. | `docker-run.sh:48-51` sets `PINNED=1`; `:66-75` short-circuits before both the `CPG_MCP_NO_AUTOBUILD` test and the build. | **Correct**, and the ordering is right: pinned beats no-autobuild, which is the only sensible precedence. Also confirmed `CPG_MCP_IMAGE_REPO=cpg-mcp-nope CPG_MCP_NO_AUTOBUILD=1 …` → the *other* curated message, exit 1. |
+| **(c)** early exit skipped the `:dev`/`:test` re-tag | `bash cpg/mcp/build.sh </dev/null` on a warm tree → *"already built … nothing to build"* + *"Aliases re-pointed: cpg-mcp:dev -> ba910c48571d, cpg-mcp:test -> test-ba910c48571d"*, **0 bytes on stdout**, exit 0. | `build.sh:167-181`. The `RUNTIME_ONLY` guard on the `:test` re-tag is correct — `have_image "$TEST_TAG"` is a precondition of reaching that line when `RUNTIME_ONLY=0`. | **Correct**, and the reported message honestly says only `:dev` was re-pointed under `--runtime-only`. |
+
+The `pipefail`+early-`return` bug `devops` reports finding in its own first `build.sh` is fixed and,
+more usefully, **documented at the site** (`build.sh:83-93`) with the reason process substitution is
+used instead of a pipeline. I audited every other early-returning loop for the same shape:
+`cpg_mcp_image_tag`'s missing-input loop (`image-tag.sh:54-61`) is also fed by process substitution
+and is safe; there is no second instance of the bug.
+
+I also confirmed **invariant 2** (nothing before `exec` reads stdin) holds by inspection of every
+forking call: `docker info … </dev/null` (`:42`), `docker image inspect … </dev/null` (`:65`),
+`build.sh … </dev/null` (`:84`) *plus* `build.sh`'s own `exec </dev/null` (`:3`), and inside
+`cpg_mcp_image_tag` every loop is `< <(…)` and every digest is `sha256sum < "$f"`. The one call
+without a redirect is named in the header comment and genuinely forks nothing. **Invariant 1**
+(stdout purity) I checked at the two places a plan reader would not expect it to hold:
+`build.sh` warm early-exit → **0 stdout bytes**; `build.sh --help` → **0 stdout bytes**.
+
+## 17. Findings — Major
+
+### M-7 — `--verify-inputs` is blind to line-continued `COPY`, and answers "OK" — must fix
+
+**Evidence.** `build.sh:127-132` parses the Dockerfile with
+
+```awk
+toupper($1) == "COPY" { … for (i = 2; i <= NF; i++) if ($i !~ /^--/) { n++; f[n] = $i }
+                        for (i = 1; i < n; i++) print f[i] }
+```
+
+This is line-oriented, so a `\`-continued `COPY` is invisible to it. Demonstrated on a scratchpad
+copy of `cpg/mcp/`, appending to the Dockerfile and running the shipped `build.sh --verify-inputs`:
+
+| Appended to the Dockerfile | `--verify-inputs` says |
+|---|---|
+| `COPY requirements.txt \`⏎`     setup.sh /app/` | `--verify-inputs OK` (`setup.sh` **not** covered by the hash) |
+| `COPY \`⏎`     setup.sh \`⏎`     run.sh /app/` | `--verify-inputs OK` (**neither** covered) |
+| `COPY setup.sh setup.sh` (single line — the control) | correctly **fails**: *"COPYs the FILE 'setup.sh', which is not in image-tag.sh's input list"* |
+
+**Why it matters.** `--verify-inputs` is the *only* mechanism enforcing the invariant that three
+separate files state as absolute — `Dockerfile:10-13`, `image-tag.sh:13-16`, `README.md:319-320`
+("fails the build if the Dockerfile ever `COPY`s something the hash does not cover, so the two
+cannot drift"). A false **pass** is the one direction that costs correctness: the file lands in the
+image, the hash does not move, `docker image inspect` hits, and the launch path serves an image that
+does not contain the change — precisely the failure the content hash exists to make unrepresentable.
+Multi-line `COPY` is an ordinary Dockerfile idiom, so this fires on the first Dockerfile edit that
+uses it, silently, with an "OK" line in the log. Nothing is wrong *today* (the committed Dockerfile
+has no continued `COPY`, and I confirmed `--verify-inputs` passes on it) — this is a trap laid for
+the next editor.
+
+**Suggested improvement.** Join continuations before parsing. A three-line `awk` prelude is enough
+and keeps the current structure:
+
+```awk
+{ line = line $0 }
+/\\[[:space:]]*$/ { sub(/\\[[:space:]]*$/, " ", line); next }
+{ $0 = line; line = "" }        # then the existing toupper($1)=="COPY" rule
+```
+
+Add a regression case to whatever S3 becomes: a `\`-continued `COPY` of an uncovered file **must**
+make `--verify-inputs` exit non-zero. Given how much of the design rests on this one check, that
+case is worth having as a checked-in probe rather than a remembered manual step.
+
+### M-8 — the miss branch puts an unbounded `docker pull` inside the 30 s startup budget, and is triggered by inputs that cannot change the runtime image — worth doing
+
+**Evidence, two halves that compound.**
+
+1. `docker-run.sh:84` calls `"$HERE/build.sh" --runtime-only` on a hash miss. With the runtime tag
+   absent, `build.sh` falls past the early exit and reaches `:191-196`:
+   `if [ "${CPG_MCP_NO_PULL:-0}" != "1" ]; then docker pull -q "$BASE_IMAGE" …`. `docker-run.sh`
+   does not set `CPG_MCP_NO_PULL`, so **every autobuild performs a Docker Hub pull with no
+   timeout**, followed by a `docker build` that also resolves `FROM` metadata over the network if
+   the base is not in the local store.
+2. The hash covers `requirements-dev.txt`, `pytest.ini` and every file under `tests/`
+   (`image-tag.sh:30`, `:38`; confirmed by running `cpg_mcp_input_files` — 8 operands), but the
+   **runtime** stage COPYs none of them (`Dockerfile:51-53` = `FROM base` + `USER` + `CMD`; `base`
+   carries only `requirements.txt` and `server.py`). So editing a single line of
+   `tests/test_server.py` invalidates the launch image and forces the miss branch, to produce a
+   byte-identical runtime image.
+
+That is not hypothetical: **C-321, the very next queued item, edits `tests/test_server.py:472`.** The
+first session start after it lands will pull and build.
+
+**Why it matters.** The design's headline property — and the reason M-2 was reversed in Part II — is
+that the launch path is offline and local. It is, on a **hit**. On a **miss** it is neither, and the
+miss is reachable by a change that provably cannot affect the artifact being launched. The blast
+radius is bounded (non-blocking MCP startup since 2.1.142, a curated fallback message at
+`docker-run.sh:85-89`, `MCP_TIMEOUT=60000`), so this is a degradation, not a break — but it is a
+degradation on the exact axis the design was chosen for, and `README.md:376-381` is the only place a
+reader learns a build needs the network.
+
+**Suggested improvement**, cheapest first:
+
+- **(a)** Have `docker-run.sh:84` invoke the build as
+  `CPG_MCP_NO_PULL=1 "$HERE/build.sh" --runtime-only …`. In the steady state the base *is* in the
+  local store (`build.sh` put it there on the last interactive build), so this makes the common
+  miss fully local and leaves the explicit `cpg/mcp/build.sh` as the thing that refreshes the store.
+  Pair it with one added line in the existing curated failure message: "…or run
+  `cpg/mcp/build.sh` once with a network connection."
+- **(b)** Say the consequence out loud where it bites. `README.md:16-17` currently reads "once per
+  clone (or after any code change)"; make it explicit that a **test** edit also invalidates the
+  launch image, and that `cpg/mcp/build.sh` before restarting the session is how you avoid paying
+  for it at session start.
+- **(c)** The deeper fix, only if (a)+(b) prove insufficient: split the digest — a runtime-input
+  hash (`Dockerfile`, `.dockerignore`, `requirements.txt`, `server.py`) for `cpg-mcp:<hash>`, the
+  full hash for `cpg-mcp:test-<hash>`. This costs the elegant "same hash on both tags" property that
+  closed Part I's m-7, so I would not reach for it first.
+
+## 18. Findings — Minor
+
+The hash is the load-bearing safety property, so I probed it adversarially. Five gaps; all of them
+are narrow, and I record each with the exact probe so `devops` can judge rather than take my word.
+`m-18`, `m-19` and `m-22` are **staleness** direction (a changed tree can hit an old tag); `m-20` and
+`m-21` are the safe direction.
+
+### m-18 — a file-mode change does not move the hash, but does change the image
+
+**Evidence.** Scratchpad copy: `cpg_mcp_image_tag` → `ba910c48571d`; `chmod +x server.py`;
+`cpg_mcp_image_tag` → **`ba910c48571d`**, unchanged. `image-tag.sh:63-68` digests `sha256sum < "$f"`
+plus the relative path, and nothing else. Docker `COPY` **preserves** the executable bit, so the two
+trees produce different images under the same tag.
+
+**Why it matters.** It falsifies `README.md:314-315` ("a hit *proves* the image was built from
+exactly the code on disk. Staleness is not merely unlikely, it is unrepresentable") as an absolute.
+Git tracks the mode bit, so a committed `chmod +x` is a change a colleague can pull. The practical
+blast radius here is nil — nothing in the image is invoked by its mode (`CMD` is
+`python server.py`) — which is why this is minor and not major.
+
+**Suggested improvement.** One line in the digest stream, e.g. contribute `x` or `-` per file:
+`if [ -x "$CPG_MCP_DIR/$f" ]; then printf 'x\0'; else printf -- '-\0'; fi` next to the existing
+`printf '%s\0' "$f"`. Avoid `stat -c %a` — it is GNU-only and would break the machine-independence
+the header explicitly claims. Alternatively, weaken the README sentence to "the *contents* of the
+code on disk".
+
+### m-19 — a symlink under a walked directory is invisible to the hash
+
+**Evidence.** Scratchpad: `ln -s <outside-target> tests/linked.py` → `cpg_mcp_image_tag` returns
+**`ba910c48571d`**, identical to the tree without it. `image-tag.sh:44` walks with `find … -type f`,
+which excludes `-type l`. Docker's build context tars symlinks *as symlinks*, so `COPY tests tests`
+does put an entry in the image that the hash never saw.
+
+**Why it matters.** Same class as m-18: a tracked change that alters the image without moving the
+tag. No symlinks exist under `cpg/mcp/tests/` today, so likelihood is low.
+
+**Suggested improvement.** `find "$d" \( -type f -o -type l \) …` and contribute the link target for
+a symlink (`printf '%s\0' "$(readlink "$f")"` in place of the digest), or — if symlinks under a
+walked directory are simply not wanted — make the walk **fail** on encountering one, matching the
+"hard error rather than a silent skip" stance the file takes for missing files.
+
+### m-20 — a missing walked directory is silently skipped, where a missing file is a hard error; two different trees collide
+
+**Evidence.** `image-tag.sh:42` — `[ -d "$CPG_MCP_DIR/$d" ] || continue`, versus `:55-60` which
+`return 3`s with a curated message for an absent file. Demonstrated collision on a scratchpad copy:
+
+```
+tests/ moved away entirely  -> cpg_mcp_image_tag rc=0, tag=f06da2a82b7f
+tests/ present but empty    -> cpg_mcp_image_tag rc=0, tag=f06da2a82b7f   # same tag, different tree
+```
+
+**Why it matters.** `image-tag.sh:49-50` states the rule this violates in its own words: *"Returns
+non-zero … rather than hashing an absent input: silently skipping one would let two different trees
+collide on a tag."* The directory operand does exactly the silent skip the comment forbids. In
+practice the harm is small — `--verify-inputs` correctly refuses to *build* the missing-`tests/`
+state (verified: *"COPYs 'tests', which does not exist in the build context"*, exit 1), and the two
+colliding states produce identical **runtime** images anyway. It is the stated invariant that is
+broken, not the system.
+
+**Suggested improvement.** Replace the `continue` with the same treatment the file gives a missing
+file — an error naming the directory and pointing at `cpg_mcp_input_dirs` and the Dockerfile's
+`COPY` list.
+
+### m-21 — the walk's exclusions do not match `.dockerignore`, contradicting three places that say they do
+
+**Evidence.** `.dockerignore:9-11` excludes `**/__pycache__`, `**/*.pyc` **and `**/.pytest_cache`**;
+`image-tag.sh:44` excludes only `! -path '*/__pycache__/*' ! -name '*.pyc'`. Demonstrated: creating
+`tests/.pytest_cache/CACHEDIR.TAG` on a scratchpad copy moves the tag `ba910c48571d` →
+`2bdb7b923951`, although that file can never reach the image. The claim that they agree is asserted
+in `.dockerignore:5-8` ("image-tag.sh's directory walk applies the same exclusions … Keep the two in
+step"), in `image-tag.sh:15-16`, and in plan §12's M-4 row ("walks each with `.dockerignore`'s
+exclusions").
+
+**Why it matters.** Failure direction is safe (a spurious rebuild, never a stale image), and
+`.pytest_cache` normally lands at the rootdir `cpg/mcp/` rather than under `tests/` — so the live
+likelihood is low. What is not low-value is the comment: a future maintainer adding a pattern to
+`.dockerignore` will read three files telling them the walk already mirrors it, and will not add it
+to `image-tag.sh`. The *next* pattern may not be safe-direction.
+
+**Suggested improvement.** Add `! -path '*/.pytest_cache/*'` to `image-tag.sh:44` to make the claim
+true today, and put the two exclusion sets adjacent in one comment so drift is visible in a single
+diff hunk.
+
+### m-22 — a failed `find` is unobserved, so a partially-readable tree hashes as a smaller one
+
+**Evidence.** `image-tag.sh:43-45` runs `( cd … && find … | sort -z )` inside a function consumed
+via `< <(…)`; a process-substitution exit status is never examined, and the outer digest pipeline's
+`pipefail` does not see it either. Scratchpad probe: `mkdir tests/sub; echo x > tests/sub/f.py;
+chmod 000 tests/sub` → `find` prints *"Permission denied"* to stderr, `cpg_mcp_image_tag` returns
+**0** with tag **`ba910c48571d`** — identical to the tree that never had `tests/sub` at all.
+
+**Why it matters.** Same "two trees, one tag" class as m-20. Bounded by the fact that a *build* of
+that tree would fail when Docker tars the context, so the collision is only reachable as a **hit** on
+an image built earlier; and the `find` error is on stderr, which the harness logs. Low likelihood on
+a single-developer box.
+
+**Suggested improvement.** Capture the enumeration into a variable and check the status, e.g.
+`files="$(cpg_mcp_input_files)" || return 3` before the digest loop, so a truncated enumeration is a
+hard error like an absent file.
+
+### m-23 — `--no-cache` can make `cpg-mcp:test-<hash>` and `cpg-mcp:<hash>` carry different resolved dependencies
+
+**Evidence.** `build.sh:202-209` issues **two independent `docker build` invocations**, each
+inheriting `CACHE_FLAG`. `requirements.txt` pins **ranges** (`mcp>=1.28,<1.29`, `falkordb>=1.6,<1.7`)
+and `requirements-dev.txt` starts with `-r requirements.txt`, so under `--no-cache` the base stage's
+`pip install` runs twice and a patch release landing between the two resolves differently.
+
+**Why it matters.** `AGENTS.md:137` calls the in-image run "the gate that keeps the two paths from
+drifting" and `README.md:405` says the container gate proves "its resolved dependencies". Under
+`--no-cache` — which is exactly the command documented for a base-image refresh
+(`README.md:387`) — the gate can be testing a dependency set the launch image does not have. Narrow
+window, real mechanism.
+
+**Suggested improvement.** Under `--no-cache`, build the `test` target **first** with `--no-cache`
+and then build `runtime` **without** it, so the runtime image reuses the base layers the test image
+was just validated on. Two swapped lines, and it makes the "same base" property true by
+construction rather than by timing.
+
+### m-24 — no `--cap-drop=ALL --security-opt no-new-privileges`, and it was never considered
+
+**Evidence.** `docker-run.sh:126-132` — the flag set is `-i --rm --init --label --pull=never
+--read-only --tmpfs /tmp --add-host`. Grepping the plan and Parts I/II for `cap-drop`,
+`no-new-privileges`, `security-opt` and `capabilit` returns nothing on the design axis, so this is an
+omission rather than a rejected option (unlike `--memory`/`--cpus`, which Part I's n-1…n-4 argued
+down well).
+
+**Why it matters.** The container is non-root under `--read-only` and makes exactly one outbound TCP
+connection; every default capability is dead weight. `--cap-drop=ALL --security-opt
+no-new-privileges` costs nothing measurable and cannot break this workload (no `bind`, no `chown`,
+no `setuid`). It is the cheapest remaining hardening and fits the "least privilege" framing the
+launch-flags table already uses.
+
+**Suggested improvement.** Add both flags, and add a row to `README.md:347-354`'s table — including
+that they are the *second* thing to drop, after `--read-only --tmpfs /tmp`, if the server ever fails
+at session start.
+
+### m-25 — `docs/BACKLOG.md` C-320 claims the launch path makes no registry contact, unqualified
+
+**Evidence.** `docs/BACKLOG.md:304` — *"…gated by `docker image inspect`, so the launch path makes
+**no registry contact** and a stale image is unrepresentable; a miss builds."* The miss branch pulls
+(`build.sh:191-196`) and builds, both of which contact a registry — see M-8. `README.md:312` scopes
+the same claim correctly (it is attached to the `docker image inspect` call and is qualified at
+`:376-381`), and `docs/HISTORY.md` is likewise careful. BACKLOG is the one place the claim is stated
+without its scope.
+
+**Why it matters.** C-320 is a closed backlog entry — the thing a reader consults a year from now to
+learn what the property actually is. Stating it unqualified next to "a miss builds" makes the two
+clauses contradict each other for anyone who thinks about it, and misleads anyone who does not.
+
+**Suggested improvement.** *"…so the launch path makes no registry contact **on a hit**, and a stale
+image is unrepresentable; a miss builds, which does need the network."*
+
+### m-26 — `docs/test-plans/cpg-query-access.md` still records the wiring as `run.sh`
+
+**Evidence.** `docs/test-plans/cpg-query-access.md:78` — the environment table row: *"MCP wiring |
+repo-root `.mcp.json`, project scope, `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'`…"*. The
+plan's §9 documentation-impact table enumerates every other doc and does not mention `docs/test-plans/`.
+
+**Why it matters.** Per the repo's module-doc convention (root `AGENTS.md`), `docs/test-plans/` holds
+**active** documents; `docs/archive/` does not exist yet. So a QA engineer re-running this plan would
+set up an environment that no longer exists. The companion `docs/test-reports/cpg-query-access-report.md:49`
+records the same string, but a *report* is a dated record of a past run and is correct as written —
+only the plan is the problem. `docs/HISTORY.md:83` is likewise a dated entry and correctly left alone.
+
+**Suggested improvement.** Either add a one-line "superseded by C-320: the wiring is now
+`docker-run.sh`" note to that row, or (cleaner, and the convention's own answer) archive the M3
+test-plan/test-report pair now that M3 has closed, fixing inbound links in the same change. The
+second is arguably `teco`'s call rather than `devops`'s.
+
+### m-27 — `--verify-inputs` mis-parses `COPY --from=` and the JSON-array form (safe direction, bad diagnostics)
+
+**Evidence.** Same scratchpad harness as M-7, appending to the Dockerfile:
+
+| Appended | `--verify-inputs` says |
+|---|---|
+| `COPY --from=base /app/server.py /app/server2.py` | *"COPYs '/app/server.py', which does not exist in the build context"* → refuses to build |
+| `COPY ["setup.sh", "/app/setup.sh"]` | *"COPYs '\[\"setup.sh\",', which does not exist in the build context"* → refuses to build |
+
+**Why it matters.** Both fail closed, so no correctness cost — the opposite of M-7. But this is a
+**multi-stage** Dockerfile, where `COPY --from=<stage>` is the natural next edit (e.g. copying a
+built artifact from `base` into `runtime`), and it will be rejected with a message that sends the
+reader hunting for a missing file in the build context. A wrong diagnostic on a legitimate pattern
+costs debugging time and invites someone to weaken the check.
+
+**Suggested improvement.** Skip `COPY` instructions carrying a `--from=` flag entirely (their sources
+are stage-internal, not build-context paths) and say so in the awk comment; and either handle the
+JSON-array form or make the error text name the form it could not parse instead of claiming the file
+is missing.
+
+## 19. Findings — Nits
+
+- **n-9** — `build.sh:42`'s usage text says `--verify-inputs` is *"Run implicitly before every
+  build"*. True (`:184`), but the warm early exit at `:167-181` returns before it, which reads as an
+  exception to an absolute. One clause — "before every build; the early exit performs none" — would
+  settle it. Zero behavioural consequence, since a Dockerfile edit necessarily moves the hash and so
+  cannot reach the early exit.
+- **n-10** — `docker-run.sh:64`'s comment, *"~0.05 s, purely local — no registry contact in any
+  circumstance"*, sits three lines above the branch that pulls and builds. It is scoped to the
+  `inspect`, and a careful reader will see that; "no registry contact **on a hit**" would remove the
+  need for care. Same wording as m-25's fix.
+- **n-11** *(environment note, not a finding against the change)* — on this box `find` is shadowed
+  by a shell function dispatching to `bfs`, which traverses breadth-first. `image-tag.sh` is immune
+  because `LC_ALL=C sort -z` normalises order afterwards — that line is doing more work than its
+  comment claims, and is worth keeping for that reason too. Filed to the analyst learnings inbox.
+
+## 20. Conformance — does plan §12 match what was committed?
+
+I checked every §12 row against the code rather than against its own prose. **All settle-items and
+all taken minors are genuinely in the committed artefacts.** One row overstates.
+
+| §12 row | In the code? |
+|---|---|
+| **M-4** — directory-driven enumeration + one `--verify-inputs` rule per operand kind | **Yes**, `image-tag.sh:29-47` and `build.sh:95-141`. I re-ran the S3 done-condition myself: passes on the real tree; fails on an uncovered file operand *and* on an uncovered directory operand. **One overstatement:** the row says the walk applies *"`.dockerignore`'s exclusions"*; it applies two of the three — **m-21**. And the check itself has the M-7 hole. |
+| **M-5** — V-11 split by status and liveness, orphan defined, `docker stop` warned against | **Yes**, `README.md:395-400`, including the boxed prohibition. |
+| **M-6** — ids 1–3 asserted, id 4 expected absent, in all three places | **Yes**, `README.md:436-451` says it twice (prose + the comment under the probe). The choice of option (a) over my preferred (b) is justified by a measurement I could not have had — the loss is a race, not a fixed rule — and option (a) is the correct response to that. |
+| **m-11** — base image + pip resolution outside the hash | **Yes, and well placed.** `image-tag.sh:18-23` (the file a maintainer edits), the boxed note at `README.md:322-327` (the section a reader lands on), and the housekeeping command at `README.md:387`. This answers the "is it stated where a reader will actually hit it?" question affirmatively for both audiences. It is *not* in `build.sh --help`, which I consider fine. |
+| **m-13** — curated build-failure message | **Yes**, `docker-run.sh:84-90`, four lines naming the offline cause, `run.sh`, and `MCP_TIMEOUT=60000`. |
+| **m-14** — `run.sh` no longer claims to be the only harness path | **Yes**, `cpg/mcp/run.sh:4-11`, and `docker-run.sh:5-7` states the complementary fact. Nothing executable in `run.sh` changed (`git show c38f7dc -- cpg/mcp/run.sh` is header-only), so §3.5's "retained, unchanged" holds. |
+| **m-12** — one idempotence rule, plus the alias re-tag refinement | **Yes**, `build.sh:167-181`, verified live (§16 defect (c)). |
+| **m-17** — V-2b part 2 not run | **Consistent.** `python:3.12-slim` is intact and `falkordb-dev` untouched per `teco`'s checks. |
+| **n-5 / n-6 / n-7** | **Yes** — `docker-run.sh:20-22` names the `cpg_mcp_image_tag` exception; §9 cites `AGENTS.md` lines 20–24; V-7 uses `'"id":1,'`. |
+| **n-8 declined** | **Reasonable, and I accept it.** The stated reason — E-16's v1 claim is still present inline, so restructuring buys nothing but diff noise on a row nothing depends on — is the correct trade for a cosmetic nit. Declining a nit with a reason is the behaviour I want; a reviewer who expects 100 % uptake is not reviewing. |
+
+**Did anything the plan promised quietly not ship?** No. I walked §9's documentation-impact table
+row by row: the README quick start leads with `build.sh` as *the* supported step (`:16-17`), the
+container section exists with the tag scheme, the gate, both escape hatches and `MCP_TIMEOUT`
+(`:282-424`), the `.mcp.json` block quoted at `:226-237` matches the committed file byte for byte,
+the env-var table carries the two-correct-values note (`:180-190`), the `claude mcp add --scope
+local` recipe names `docker-run.sh` (`:521`) with the m-10 caveat, housekeeping and base-refresh are
+present (`:385-388`), `AGENTS.md`'s two locations both landed with the two pytest lines untouched,
+HISTORY has its dated entry, BACKLOG has C-320/C-321 with C-310 amended and nothing renumbered, and
+`skills/cpg-analysis/SKILL.md` correctly needed no change (its only `cpg/mcp` reference is
+`:80`, pointing at the README for env defaults). The only §9 gap is a doc §9 never listed — **m-26**.
+
+## 21. What's solid
+
+Short, because the list is long and the point is only to keep it from being churned.
+
+- **The three defect fixes are real fixes to real defects**, each found by `devops` during
+  implementation and each reproducible. Defect (a) in particular — bare `-e VAR` *deleting* an
+  image `ENV` — is a genuinely surprising Docker behaviour that the plan would have shipped, and the
+  fix is the right shape (`+set` rather than `-n`, so an explicit empty value survives).
+- **Quoting and word-splitting discipline throughout.** NUL separation end to end (`printf '%s\0'`,
+  `find -print0`, `read -r -d ''`, `sort -z`), the `${arr[@]+"${arr[@]}"}` empty-array guard in both
+  scripts, every expansion quoted, `HERE`/`CPG_MCP_DIR` resolved from `BASH_SOURCE` so cwd never
+  matters. I probed filenames with spaces — the tag computes cleanly. Under `set -euo pipefail` I
+  found no `set -e`-swallowing construct: every function that can fail is either called under `if !`
+  or intended to abort.
+- **The digest is injective over what it does cover.** Contributing the NUL-terminated relative path
+  *and* the content digest means two files swapping contents move the tag (probed: `860df103f445`
+  → `178564481863`) — a real hazard that path-free or content-free schemes both miss.
+- **`--pull=never`, `--init`, no `--name`, the label, `--read-only --tmpfs /tmp`** — each measured
+  rather than assumed, each with a one-line reason at the call site, and the read-only pair
+  correctly flagged as the first thing to drop.
+- **The Dockerfile's layer ordering is right**: `useradd` before the COPYs, `requirements.txt` +
+  `pip install` before `server.py`, dev deps and the suite only in the `test` stage. The
+  `RUN chown appuser:appuser /app` (`:46`) is the correct fix for Part I's m-1 — it preserves V-3's
+  strong byte-identical claim instead of weakening the assertion.
+- **The documentation is the best part of this change.** I read it *against* the code specifically
+  looking for prose the implementation does not back, and found three small instances (m-21, m-25,
+  m-26) in roughly 600 lines of new README/AGENTS/HISTORY/BACKLOG text. The `FALKORDB_HOST`
+  "two different correct values" box, the `MCP_TIMEOUT` vs per-tool `"timeout"` distinction (settled
+  by live measurement, with the commands shown), the troubleshooting table's DROP-vs-REJECT and
+  `0.0.0.0`-bind rows, and the `docker stop` prohibition are all things a reader will need and
+  would not have derived.
+- **§12 is an honest implementation record**, including the two things that reflect badly on the
+  first attempt (the `pipefail` bug, the alias re-tag miss) and the one item declined with a reason.
+
+## 22. Open questions
+
+1. **Does C-321 want to grow a second clause?** It currently fixes `os.getpid()` → `uuid4()`. Because
+   the hash covers `tests/`, landing it will also force the M-8 rebuild-on-session-start path. If
+   M-8(a)+(b) are taken first, C-321 lands quietly; if not, whoever takes C-321 should expect the
+   first session start afterwards to build. Sequencing call for `teco`.
+2. **Should the M3 `cpg-query-access` test-plan/test-report pair be archived now?** m-26 is a symptom
+   of a milestone-close step the repo's own convention prescribes but that has not happened (there is
+   no `docs/archive/` yet). Fixing the one line is `devops`-sized; deciding to archive the pair is
+   not.
+3. **Part II's open question 3 (digest-pin the base) is still open and is now cheaper to answer.**
+   m-18/m-19 show the hash is not quite a full image identity even over the repo bytes; a digest pin
+   would close the base half of m-11. Still a stakeholder preference, not a defect — recorded here
+   only so it does not get lost now that the plan is closed.

@@ -301,9 +301,10 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   Python 3.12 venv to answer CPG queries. The tool contract is unchanged (one tool, two parameters,
   read-only, same output). Shipped: `cpg/mcp/{Dockerfile,.dockerignore,image-tag.sh,build.sh,
   docker-run.sh}` plus a two-line `.mcp.json` edit. The launch tag is a **content hash of the build
-  inputs** gated by `docker image inspect`, so the launch path makes **no registry contact** and a
-  stale image is unrepresentable; a miss builds. The host venv path is **retained** as the test loop
-  and the fallback. Design, measurements and rejected alternatives:
+  inputs** gated by `docker image inspect`, so **on a hit** the launch path makes **no registry
+  contact** and a stale image is unrepresentable. A **miss builds**, and a build does need the
+  network (base-image pull + BuildKit's `FROM` metadata resolution) — see C-321. The host venv path
+  is **retained** as the test loop and the fallback. Design, measurements and rejected alternatives:
   `docs/plans/cpg-mcp-containerization.md` (v3); review:
   `docs/reviews/cpg-mcp-containerization.md`. Owner: `devops`.
 - **C-321 — Make the live suite's scratch-graph name unique inside a container.** 🔵
@@ -316,6 +317,32 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   documenting "do not run the live gate concurrently" plus a `GRAPH.LIST` residue check
   (`cpg/mcp/README.md`). Found during C-320; out of that change's scope because it is test code.
   Owner: `tdd-engineer` / `coder`.
+  - **Also do this here (deferred from the C-320 review, M-8): make the autobuild not pull.**
+    `cpg/mcp/docker-run.sh:84` calls `build.sh --runtime-only` on a hash miss without setting
+    `CPG_MCP_NO_PULL`, so **every autobuild performs an unbounded Docker Hub `docker pull` inside
+    Claude Code's 30 s MCP startup budget** (`build.sh:191-196`), followed by a build that also
+    resolves `FROM` metadata over the network when the base is not in the local image store. That is
+    a degradation on the exact axis the design was chosen for — the launch path being local and
+    offline — and it is bounded (non-blocking MCP startup, a curated fallback message, `MCP_TIMEOUT`)
+    rather than a break, which is why it was not fixed in C-320.
+    **Why it belongs with this item specifically:** the content hash covers every file under
+    `cpg/mcp/tests/` (plus `pytest.ini` and `requirements-dev.txt`), none of which the **runtime**
+    stage COPYs — so this item's one-line edit to `tests/test_server.py` invalidates the launch image
+    and forces the miss branch to rebuild a **byte-identical** runtime image. The first session start
+    after it lands pays for a pull and a build unless `cpg/mcp/build.sh` is run first.
+    **Cheapest known fix:** `CPG_MCP_NO_PULL=1 "$HERE/build.sh" --runtime-only …` at
+    `docker-run.sh:84` (the base is already in the local store in the steady state, and the explicit
+    `cpg/mcp/build.sh` stays the thing that refreshes it), plus one line in the existing curated
+    build-failure message: "…or run `cpg/mcp/build.sh` once with a network connection". Rejected as
+    over-reach for now: splitting the digest into runtime-inputs and test-inputs halves, which would
+    cost the "same hash on both tags" property that makes a stale gate image unreachable.
+    Also worth folding in while in this file, from the same review (all safe-direction, all one-line):
+    `image-tag.sh`'s walk excludes `**/__pycache__` and `*.pyc` but **not** `.pytest_cache`, which
+    three places claim it mirrors from `.dockerignore` (m-21); a file-mode change (m-18) and a symlink
+    under a walked directory (m-19) do not move the hash; a missing walked directory is silently
+    skipped where a missing file is a hard error (m-20); a failed `find` is unobserved (m-22); and
+    under `--no-cache` the two `docker build` invocations can resolve different dependency versions
+    (m-23). Full evidence and suggested fixes: `docs/reviews/cpg-mcp-containerization.md` §17–§18.
 
 ## Follow-ups (post-M2)
 
