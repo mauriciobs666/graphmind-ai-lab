@@ -42,3 +42,23 @@
 - **Suggested home:** prompt — on a gate that is already red, "no new failures" must be verified by
   diffing hit *paths* against the base commit, never by re-reading the verdict. Corollary: prose about
   a PII audit can fail that PII audit; write the pattern generically the first time.
+
+## 2026-07-27 — A brief that fences off `claude/` silently disables the delegate's own learnings inbox
+
+- **Evidence:** briefing `coder` for parallel steps 4+6 I wrote *"do not touch anything under
+  `claude/`"* to avoid a collision with `cobb` working in `claude/*/kaizen/` on step 5. `coder`
+  returned a genuine durable finding (a `HISTORY` entry that quotes a census regex's own match
+  syntax increments that census by one, so a recorded count must be re-measured *after* the entry
+  recording it is written) and reported it could **not** file it: *"`$HOME/.claude/agents/coder`
+  symlinks straight into the repo's `claude/`, which was off-limits this run."* The learning
+  survived only because it appeared in the agent's final report and I relayed it into a commit
+  message. In the same run, a `coder` step *without* that fence filed its learning normally, and the
+  inbox showed up as an extra file in `git diff --stat` (25 documents + 1 inbox = 26).
+- **Context:** parallelising two delegations over disjoint file sets during the C-322 documentation
+  convention rollout; the fence was correct for collision-avoidance and wrong for kaizen capture.
+- **Suggested home:** prompt — every agent's kaizen inbox resolves *into* the repo's `claude/` tree
+  via the `~/.claude/agents/<name>` deployment symlink, so any brief that fences off `claude/` (or
+  a subtree of it) must carve out `claude/<agent>/kaizen/inbox.md` explicitly, or state that the
+  delegate should return the learning in its report for the coordinator to route. Also worth noting
+  for the step-4 integration check: a delegate's inbox legitimately appears in `git diff --stat`, so
+  an exact expected file count in a brief should say whether it includes the inbox.
