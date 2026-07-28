@@ -225,3 +225,18 @@
 - **Suggested home:** project docs (root `AGENTS.md` citation convention) + prompt (architect/analyst:
   when auditing doc-link health in this repo, grep backticked path strings — a link-checker is nearly
   blind here)
+
+## 2026-07-27 — Root `AGENTS.md` reaches **subagents** too (via root `CLAUDE.md`'s `@AGENTS.md`), so "point at the convention" and "inline the convention in each prompt" do not differ in reachability — only in drift risk
+
+- **Evidence:** Root `CLAUDE.md` is exactly one line, `@AGENTS.md`. Observed directly in this run:
+  as an `architect` **subagent** in an isolated context, the full text of root `AGENTS.md` arrived in
+  the injected `claudeMd` context block before any tool call — i.e. the import is resolved for
+  subagent sessions, not just the primary session. Consequence for design: a prompt line that says
+  *"use the header block from root `AGENTS.md`"* costs the agent **no** extra lookup, because the
+  target text is already in context; the only real trade-off against inlining the block in each of
+  N prompts is **copy drift** (N+2 copies to keep in sync vs. 2).
+- **Context:** ruling `analyst` finding M20 on `docs/plans/doc-reference-convention.md` — inline the
+  header template in six agent prompts, or keep the single normative copy and fix the check.
+- **Suggested home:** knowledge base (agent-design trade-offs) or prompt (architect/cobb: when
+  deciding "duplicate the rule into prompts vs. point at root `AGENTS.md`" in this repo, the pointer
+  is already resolved for every Claude Code agent, subagents included)

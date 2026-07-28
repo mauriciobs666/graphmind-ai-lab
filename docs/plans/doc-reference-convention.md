@@ -2,9 +2,24 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-322 (repo-wide convention)
 >
-> **Version 1.3 · 2026-07-27 · author `architect` · design-only, nothing implemented.**
+> **Version 1.4 · 2026-07-27 · author `architect` · design-only, nothing implemented.**
 > **This is the final design pass. §12 is the execution contract — implementers read §12 and §9.6,
 > not this changelog.**
+>
+> **v1.4 changelog — patch pass answering the `analyst` spot-check** (Part III of
+> `docs/reviews/doc-reference-convention.md`, verdict *approve with suggestions*: **no blockers**,
+> all six Part II findings verified closed, **3 majors**). **Verification text only — no design
+> change, and no decision reopened (D1, D4, D6 and rename-nothing stand).** Three edits:
+> **M20** — step 2's M9 coverage check asserted `**Status:**` in six prompts that the plan tells to
+> carry a *pointer*, so a correct execution scored 1, not 7. **The indirection is kept and the check
+> is fixed** (ruling and reasons in §11.3); the pointer becomes one canonical sentence, byte-identical
+> in all six prompts, and the check greps for that sentence. **M21** — step 1's `git diff --stat`
+> is corrected to **8 files** (`claude/README.md` is re-checked, not edited), and the *"zero `*.md`
+> path-string edits"* invariant is now **defined** — a repath of an **existing** citation — with a
+> command that implements the definition instead of one that cannot measure it. **M22** — the
+> surviving *"completed plan documents move to `archive/`"* preamble at
+> `falkor-chat/docs/BACKLOG.md`:5 is added to **step 4**, which already opens that file. Full
+> dispositions in **§11.3**.
 >
 > **v1.3 changelog — stakeholder rulings + response to the `analyst` re-review** (Part II of
 > `docs/reviews/doc-reference-convention.md`, verdict *needs changes*: 2 blockers · 4 majors ·
@@ -1835,6 +1850,27 @@ and widened to six**, with the cost delta stated in §3.2 and §10.5 rather than
 
 ---
 
+### 11.3 Part III (targeted spot-check of v1.3) — answered in v1.4
+
+Answering `docs/reviews/doc-reference-convention.md` **Part III** (verdict *approve with
+suggestions*: **0 blockers** · 3 majors · 0 minors; the six Part II findings B4, B5 and M6–M9 were
+re-verified against the repo and confirmed closed, and §12 step 1 was confirmed executable as
+written). All three majors are in **verification text, not design** — no decision is reopened.
+**Fixed as recommended: 2. Fixed with a variation (the reviewer's own alternative reading taken): 1.
+Rejected: 0.**
+
+| ID | Finding | Disposition | Where |
+|---|---|---|---|
+| **M20** | Step 2's M9 coverage check `grep -lE '\*\*Status:\*\*' … # → 7` cannot pass: the plan tells six of those seven prompts to carry a **pointer** (*"Open the document with the header block from root `AGENTS.md`."*), which contains no `**Status:**`. A correct execution scores **1**, not 7 | ⚠️ **Fixed with a variation — the check was wrong, not the design.** The reviewer's suggestion was to inline the header template in all six prompts so the existing grep passes; I **keep the indirection and fix the check**. Two reasons, both verifiable: (1) root `AGENTS.md` is imported by the root `CLAUDE.md` (`@AGENTS.md`) and is therefore **already in every Claude Code agent's context, subagents included** — the "second hop" M20 prices is a lookup that has already happened, so the inline copy buys nothing an agent doesn't already have; (2) §9.6's governing rule is *"the one place the header block is stated … implementers copy, they do not paraphrase"* — inlining makes **eight** copies (§9.6, root `AGENTS.md`, six prompts) of a line whose fields are still settling, and the drift it invites is the failure mode B4 already cost this plan one round. What the reviewer is right about is the **instruction/gate contradiction**, and that is removed: the pointer is promoted to **one canonical M9 sentence, byte-identical wherever it lands** (stated once, in step 1), step 2's four rows are marked as *placement, not wording*, and the check becomes ``grep -lF 'the header block from root `AGENTS.md`' … # → 6`` plus `grep -c '\*\*Status:\*\*' claude/tico/tico.md # → 1`. Both measured at **0** today, so both are clean signals. Step 1 gains its own two-file version of the same grep | §12 steps 1 & 2 |
+| **M21** | Step 1's done-condition is wrong twice: `git diff --stat # 9 files` (the 9th path, `claude/README.md`, is *"expected: no edit"*), and *"zero `*.md` path-string edits"* is violated by step 1 itself, which must write the filename grammar, its examples and the census one-liner into root `AGENTS.md` | ✅ **Fixed as recommended, both halves, and the invariant is defined rather than weakened.** The count is **8 files changed, 9 paths** — stated in the files-touched heading *and* in the check. The invariant now carries the reviewer's definition, promoted to §12's global-invariant block so every step inherits it: **a path-string edit is a change to an *existing* citation's target path**; newly authored grammar, examples and prohibitions are new text, and a line deleted whole is not a repath. Because no `grep -c` can decide that on its own, the plan now says so out loud and splits the checks by kind: steps with no new `.md`-bearing text keep an exact count; steps 1 and 4 get `git diff -U0 … \| grep -E '^[-+].*\.md'` **plus a stated inspection** — *no `-`/`+` pair is the same citation with a different path*. Steps 4 and 6 keep their exact numbers. The invariant §11.2/m19 called *"the plan's single strongest verification"* is therefore stronger, not looser: it now says what it means | §12 global invariants, §12 step 1 |
+| **M22** | `falkor-chat/docs/BACKLOG.md`:5's **preamble** still says *"completed plan documents move to `archive/`"* — D4's abolished rule, in a living document, reachable by no step's file list (pre-existing; not introduced by v1.3) | ✅ **Fixed as recommended.** Added to **step 4**, which already opens that file, as item 4(c) with the replacement sentence written out. Two things verified before relying on the reviewer's note rather than after: (1) `:5` itself carries **no** `.md` string, and the sentence starts with *"completed"* at the end of `:4`, so `:4`'s ``[`HISTORY.md`](./HISTORY.md)`` citation need not move — **but the replacement text cites root `AGENTS.md`**, so step 4's `grep -c '^[-+].*\.md'` would have gone from 6 to 7. The check is therefore **split by side** — `-` → **3** (exact, the three `../` citations) and `+` → **4** (the same three plus the one `AGENTS.md` pointer, robust to however the new sentence wraps) — and a `grep -cE 'move[sd]? (to\|into) .{0,3}archive' falkor-chat/docs/BACKLOG.md # → 0` is added, measured at **1** today. (2) The reviewer's repo-wide sweep is reproduced in the step, so the implementer can see this is the last such sentence outside dated records | §12 step 4 |
+
+**Part III's open questions:** none were raised, and none is opened here. D1, D4, D6 and
+rename-nothing are untouched by v1.4, and **step 1 may be executed as written** now that its two
+check lines are correct.
+
+---
+
 ## 12. Execution — the final ordered step list
 
 > **This section is the implementation contract.** Every decision is ruled (§6); nothing waits on
@@ -1862,8 +1898,19 @@ git diff HEAD -- claude/tico/tico.md | grep -E '^[-+].*Ready for design'   # →
 git diff HEAD -- claude/README.md          # → empty, unless a catalog row genuinely changed
 ```
 
-Every step's diff must contain **zero** `*.md` path-string edits **except** step 4 (exactly 3
-deletions) and step 6 (exactly 16 prefix insertions).
+**The path-string invariant, defined (v1.4, M21).** A **`*.md` path-string edit** is a change to an
+**existing** citation's target path — a repath. Text that merely *contains* a `.md` string but is
+**newly authored** — the filename grammar, its examples, a prohibition, the census one-liner — is
+**not** one; nor is deleting a line whole. Under that definition, **every step's diff must contain
+zero path-string edits except step 4** (exactly 3 `../` repaths) **and step 6** (exactly 16 prefix
+insertions).
+
+No single `grep -c` implements that definition, because it turns on whether a `-`/`+` pair is *the
+same citation with a different path*. So: where a step's diff contains no new `.md`-bearing text,
+the count is the check; where it does (steps 1 and 4), the check is `git diff -U0 -- <files> | grep
+-vE '^(--- |\+\+\+ )' | grep -E '^[-+].*\.md'` — the filter drops the `--- a/…` / `+++ b/…` file
+headers, which match `.md` and are not edits — **plus the stated inspection**: *no `-`/`+` pair
+differs only in a path*. Steps 4 and 6 keep their exact numeric checks.
 
 ---
 
@@ -1875,7 +1922,8 @@ them together. **The two `AGENTS.md` files and `qa-engineer.md` must flip in the
 otherwise `qa-engineer` keeps writing *"never into `archive/`"* against a rule with no `archive/`
 destination (§4.2).
 
-**Files touched (9):**
+**Files touched — 9 paths, of which 8 are edited** (v1.4, M21: `claude/README.md` is a re-check with
+an expected empty diff, so a correct execution reports **8 files changed**)**:**
 
 | File | Edit |
 |---|---|
@@ -1883,11 +1931,22 @@ destination (§4.2).
 | `falkor-chat/AGENTS.md`:112 | Reword the `docs/archive/` key-doc row: **frozen history from the previous convention, not a destination.** Lines 115–116 unchanged |
 | `claude/qa-engineer/qa-engineer.md`:28 | **Rewrite** (M1): delete the `archive/` sentence **and** the `/milestone` clause; subordinate *"follow **that**"* → *"…follow that — **except the filename grammar, which is repo-wide (root `AGENTS.md`) and not component-negotiable**."* |
 | `claude/qa-engineer/qa-engineer.md`:54 | **(m17)** Subordinate *"…and **doc conventions**…"* the same way, or the rewritten `:28` is contradicted 26 lines below |
-| `claude/qa-engineer/qa-engineer.md`:29, :41 | **(M9)** +1 line in each of the test-plan and test-report structures: *"Open the document with the header block from root `AGENTS.md`."* |
+| `claude/qa-engineer/qa-engineer.md`:29, :41 | **(M9)** +1 line in each of the test-plan and test-report structures: **the canonical M9 sentence** below |
 | `claude/analyst/analyst.md`:51 | **+1 sentence** naming `-impl` as the implementation-review role (§9.4) |
 | `claude/analyst/analyst.md`:53–61 | **(M9)** +1 line in the review skeleton: same header instruction |
 | `claude/{qa-engineer,analyst}/kaizen/{plan,history}.md` (4 files) | Log the prompt edit, per `claude/AGENTS.md`'s same-change rule |
 | `claude/README.md` | Re-check the `qa-engineer` and `analyst` rows — **expected: no edit** (they cite write paths, not the archive rule) |
+
+**The canonical M9 sentence (v1.4, M20) — one string, byte-identical wherever it is added** (here,
+and in step 2's four prompts). Copy it; do not paraphrase it, or step 2's coverage check will not
+find it:
+
+> Open the document with the header block from root `AGENTS.md`.
+
+**Why a pointer and not an inlined template:** root `AGENTS.md` is imported by the root `CLAUDE.md`
+(`@AGENTS.md`) and is therefore already in every Claude Code agent's context, subagents included —
+the "second hop" costs nothing to resolve — and §9.6's *"one place the header block is stated"* rule
+survives with two copies (§9.6, root `AGENTS.md`) instead of eight. Reasoning in full: §11.3, M20.
 
 **The eight items root `AGENTS.md` must state** (each traced to its section):
 
@@ -1917,12 +1976,28 @@ destination (§4.2).
 
 **Done when:** all eight items are present in the one bullet; `qa-engineer.md` contains no filename
 clause licensing a milestone and does contain the "not component-negotiable" clause; `analyst.md`
-documents `-impl`.
+documents `-impl`; the canonical M9 sentence appears verbatim in `qa-engineer.md` (twice) and
+`analyst.md` (once); and **8 files changed**, with **zero path-string edits** as §12's global
+invariant defines the term.
 
 **Self-verifying checks:**
 
 ```bash
-git diff --stat                                   # 9 files; ZERO *.md path-string edits
+git diff --stat                                   # → 8 files changed (9th path, claude/README.md,
+                                                  #   is re-checked and must show NO diff)
+# The path-string invariant (defined above): a repath of an EXISTING citation. Newly authored
+# grammar, examples and prohibitions contain '.md' and are exempt, so this one is inspected, not
+# counted:
+git diff -U0 -- AGENTS.md falkor-chat/AGENTS.md \
+        claude/qa-engineer/qa-engineer.md claude/analyst/analyst.md \
+  | grep -vE '^(--- |\+\+\+ )' | grep -E '^[-+].*\.md'     # ('--- a/…'/'+++ b/…' headers filtered:
+                                                           #  they match '\.md' but are not edits)
+   # inspect: every '+' hit is NEW normative text (the grammar, its two examples, the census
+   # one-liner, the M9 sentence); every '-' hit is text removed outright (qa-engineer.md:28's
+   # archive sentence, root AGENTS.md's old bullet). NO -/+ pair may be the SAME citation
+   # carrying a different path — that, and only that, is the invariant.
+grep -cF 'the header block from root `AGENTS.md`' claude/qa-engineer/qa-engineer.md   # → 2  (:29, :41)
+grep -cF 'the header block from root `AGENTS.md`' claude/analyst/analyst.md           # → 1
 grep -n 'milestone' claude/qa-engineer/qa-engineer.md      # no filename/naming clause remains
 grep -c 'not component-negotiable' claude/qa-engineer/qa-engineer.md   # ≥ 1
 grep -c -- '-impl' claude/analyst/analyst.md      # ≥ 1  (verified 0 today — a clean signal)
@@ -1950,14 +2025,19 @@ canonical form) and **B5** (who performs the flip).
 | `claude/{tico,teco,architect,data-scientist,graph-dba}/kaizen/{plan,history}.md` (10 files) | Log each prompt edit | — |
 | `claude/README.md` | Re-check the 5 rows — **expected: no edit** | — |
 
+**The four M9 rows above add the canonical M9 sentence from step 1 — verbatim, byte-identical**
+(*"Open the document with the header block from root `AGENTS.md`."*). The rows say **where** the
+line goes; they are not the wording. `tico`'s row is the exception: it edits `tico`'s own template,
+which carries `**Status:**` literally. (v1.4, M20.)
+
 **Explicitly NOT touched, and this is the step's proof obligation:** `claude/tico/tico.md`:71 (the
 stakeholder-gated *"Ready for design"* transition) and `claude/README.md`:8 (its user-facing
 promise). **Bolding a label at `:37` is a form change, not a value change.** No hook file is edited
 anywhere in this plan.
 
 **Done when:** `tico.md`:37 matches §9.6's block; `teco.md`:65 names both the trigger (milestone
-close) and the routing (each document's owner performs); all six producing prompts carry the header
-instruction.
+close) and the routing (each document's owner performs); all six producing prompts carry the
+canonical M9 sentence verbatim (two of them landed in step 1).
 
 **Self-verifying checks:**
 
@@ -1967,8 +2047,12 @@ git diff HEAD -- claude/tico/tico.md | grep -E '^[-+].*Ready for design'   # →
 git diff HEAD -- claude/README.md                                          # → EMPTY
 # The B5 proof — no hook was touched:
 git diff --stat -- 'claude/*/hooks/*' 'claude/scripts/guard-doc-writes.sh' # → EMPTY
-# M9 coverage — all six producing prompts now carry a header contract (today: 1):
-grep -lE '\*\*Status:\*\*' claude/{architect,analyst,qa-engineer,teco,data-scientist,graph-dba,tico}/*.md | wc -l   # → 7
+# M9 coverage (v1.4, M20) — the six producing prompts carry the canonical M9 SENTENCE, not a
+# '**Status:**' template: the header block stays stated in one normative place. Measured today: 0.
+grep -lF 'the header block from root `AGENTS.md`' \
+     claude/{architect,analyst,qa-engineer,teco,data-scientist,graph-dba}/*.md | wc -l    # → 6
+# tico is the seventh producer and the one file that carries the block literally (B4). Today: 0.
+grep -c '\*\*Status:\*\*' claude/tico/tico.md                              # → 1
 bash claude/scripts/audit-team.sh                                          # FAIL, 2 (unchanged)
 ```
 
@@ -2080,7 +2164,18 @@ prompts.
 4. **`falkor-chat/docs/BACKLOG.md`** — (a) **delete three extra `../` tokens** at **:785, :787, :895**
    (all three targets exist; the fix has no judgement content); (b) file the `k031-structure-read-impl.md`
    → `workflow-def-structure-read-impl.md` re-slug as an **opportunistic nit** (4 occurrences, 3
-   files), **not scheduled work**.
+   files), **not scheduled work**; (c) **(v1.4, M22)** reword the **preamble blockquote at `:5`**,
+   which still states the rule D4 abolishes — *"completed plan documents move to
+   [`archive/`](./archive/)"*. This is a **living** document every agent working in the component
+   reads, not a dated record, so O-2's "correct as written" protection does not apply, and after
+   step 1 it would contradict root `AGENTS.md` in the same repo. Write:
+   *"completed plan documents stay in place and are marked `Status: archived` (root `AGENTS.md`);
+   `archive/` holds frozen documents from the previous convention."* **Line `:4` is not touched** —
+   the sentence begins with the word *"completed"* at the end of `:4`, and `:4`'s
+   ``[`HISTORY.md`](./HISTORY.md)`` citation stays exactly as it is. This is the only such surviving
+   sentence outside dated records: a repo-wide `git grep -iE 'moves? (to|here|into) .?archive'`
+   returns root `AGENTS.md`:163 and `falkor-chat/AGENTS.md`:112 (both step 1), `docs/HISTORY.md`:9
+   and `falkor-chat/docs/HISTORY.md`:331, :697 (dated records, left alone), and this one.
 5. **`docs/BACKLOG.md`** — two entries. (a) **`C-322` — documentation reference & naming convention**,
    recorded as **delivered** by steps 1–3 and citing this plan (`docs/plans/doc-reference-convention.md`)
    and its review. (b) **`C-323` — bulk repath to full root-anchoring (S5), deliberately deferred**,
@@ -2090,7 +2185,14 @@ prompts.
 **Self-verifying checks:**
 
 ```bash
-git diff -- falkor-chat/docs/BACKLOG.md | grep -c '^[-+].*\.md'   # exactly 3 -/+ pairs (deletions of '../')
+# The path-string count, split by side (v1.4, M22): the ':5' reword deletes a line carrying no
+# '.md' and adds one citing root `AGENTS.md`, so the two sides are no longer symmetric. The
+# '--- a/…' / '+++ b/…' file headers also match '\.md' and are filtered out — they are not edits.
+D() { git diff -U0 -- falkor-chat/docs/BACKLOG.md | grep -vE '^(--- |\+\+\+ )'; }
+D | grep -cE '^-.*\.md'      # → 3  — the three '../' citations, and nothing else
+D | grep -cE '^\+.*\.md'     # → 4  — the same 3, corrected, + the ':5' reword's 'root `AGENTS.md`'
+                             #        pointer (1 occurrence, however the new sentence wraps)
+grep -cE 'move[sd]? (to|into) .{0,3}archive' falkor-chat/docs/BACKLOG.md   # → 0  (was 1: the ':5' preamble)
 ls falkor-chat/docs/reviews/workflow-def-structure-read.md \
    falkor-chat/docs/plans/workflow-def-structure-read.md \
    falkor-chat/docs/reviews/k027-parse-robustness.md              # all three resolve from the fixed links

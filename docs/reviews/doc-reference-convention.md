@@ -1036,3 +1036,202 @@ M9 (three template sentences or a §7 row), and the minors.
 
 *Part II routes to `architect` for a v1.3 amendment. Nothing was fixed in place; the plan document
 is unmodified, and Part I is preserved verbatim as the audit trail.*
+
+---
+
+# Part III — targeted spot-check of v1.3
+
+*Third pass, 2026-07-27, `analyst`. **Not** a full review — a scoped verification of three things
+only. Parts I and II above are untouched.*
+
+## 15. Scope & verdict
+
+**Reviewed:** `docs/plans/doc-reference-convention.md` **v1.3** (2180 lines), against Part II's
+disposition claims in the plan's own §11.2 (lines 1803–1834), and against the repo at `583e132`
+(working tree clean).
+
+**Three checks only**, as briefed: (1) are **B4, B5, M6–M9** actually closed; (2) is **§12 step 1**
+executable exactly as written by an implementer reading only §12 and §9.6; (3) any **new** defect
+introduced by v1.3's own edits. Out of scope and not re-examined: Part I's findings, m10–m19, steps
+2–7 except where they contradict step 1 or the new §9.x text. Minors were not collected.
+D1 / D4 / D6 / rename-nothing are treated as settled and are not re-litigated.
+
+**Verdict: approve with suggestions.**
+
+**All six findings are closed** — verified against the plan text and, where the finding was about
+repo facts, against the repo (B4's `tico` spelling, B5's nine hook allowlists, M9's per-prompt line
+anchors). **§12 step 1 is executable**: every file and line it names exists and still says what the
+plan says it says, and the `audit-team.sh` baseline is exactly what the plan claims. **No blockers.**
+
+Three **majors** remain, all in verification text rather than design, all one-line edits to the plan:
+two are self-verifying checks that a *correct* execution will fail (**M20**, **M21**), and one is a
+live "documents move to `archive/`" sentence the plan's file list misses (**M22**, pre-existing, not
+introduced by v1.3). None of them stops step 1 from producing the right diff; they should be patched
+in flight rather than triggering a fourth round.
+
+## 16. Check 1 — are B4, B5 and M6–M9 closed?
+
+| ID | Verdict | Evidence |
+|---|---|---|
+| **B4** | ✅ **closed** | §9.6 lines 1394–1447 state the canonical block verbatim with five rules — bold labels, ` · ` separator, token-first, one `head -6` window, and the conformance regex. Rule 1 states *"bolding a label is a form change, not a value change"*. §12 step 2 bolds `tico.md`:37; §12 step 3 rows 6–8 mark the three requirements documents **FORM ONLY**. Repo-verified: `claude/tico/tico.md`:37 is still `> Status: Interviewing \| Ready for design · Last updated: YYYY-MM-DD` (unbolded) and the three documents' line 2 still carry the exact values and dates the plan quotes (`agent-import` 2026-07-22, `summary-nodes` 2026-07-12, `workflow-dependence-overlay` 2026-07-23). The bolded template still satisfies §9.6 rule 5's regex (`Interviewing` is the first token; the ` \| Ready for design` alternation follows the `\b`). The instruction/gate contradiction Part II found is gone. |
+| **B5** | ✅ **closed** | §9.6 lines 1466–1483 carry the routing table; the blockquote states *"`teco` coordinates; it does not perform"*. **Independently verified against all nine `claude/*/hooks/` scripts** — `analyst` `docs/reviews/*`, `architect` `docs/plans/*`, `data-scientist` `docs/plans/*`+`docs/reviews/*`, `tico` `docs/requirements/*`, `teco` `docs/plans/*` **only**; `graph-dba`, `qa-engineer`, `joern`, `devops` carry `guard-destructive-ops.sh` and **no** doc guard; `coder` has no hooks directory. Every row of the plan's table matches. §12 step 4 also re-owns S2/N4 from `teco` to `coder` (the extension §11.2 claims), and the "no hook is edited" proof is in step 2's checks and in §12 *Not scheduled*. |
+| **M6** | ✅ **closed** | §9.5 rule 5 lines 1300–1322 replace the token read with an event test — *"Has the earlier document been approved, gated, or executed against?"* — and state the Yes branch applies *"even if its milestone is still open and its `Status:` is still `active`"*. §9.6's `active` row (line 1462) is amended to match. The `landing2` example is now routed to the successor branch by the same sentence that decides it. |
+| **M7** | ✅ **closed** | Both halves. The two pointer pairs are a table at lines 1339–1342 (`Supersedes:` ⇄ `Superseded by:`, earlier flips to `superseded`; `Extends:` ⇄ **`Extended by:`**, earlier's `Status:` unchanged); *"adding or updating a header pointer is metadata, not an amendment"* appears at line 1344 **and** in §9.6's `archived` row (line 1464), and `superseded`'s row explicitly excludes the `Extends:` case. `Extended by:` is added to the optional-field list (line 1505). |
+| **M8** | ✅ **closed** | §9.4 lines 1227–1255: the token goes inside the slug, never as a prefix (`followups-m4-coordination.md`); *"never the filename"* is restated as *"never as a prefix, and never as a lifecycle claim"*; rule 3 is shown satisfied rather than bent; and the anti-loophole test (*the topic has no name without the token*) is stated. The rule reaches root `AGENTS.md` via §12 step 1's item 5, spelled out in the step rather than only cross-referenced. |
+| **M9** | ✅ **closed in substance** (its *check* is broken — see **M20**) | Six producing prompts get the template line: `qa-engineer`:29/:41 and `analyst`:53–61 in step 1, `teco`:56, `architect`:40, `data-scientist`:71–72, `graph-dba`:51 in step 2. **All six line anchors verified on disk** — each is the document-structure/write-path line the plan says it is (e.g. `architect.md`:40 is the "Write the plan … `<component>/docs/plans/<slug>.md`" step; `graph-dba.md`:51 is the `-graph.md` handoff). §7 gains the residual-risk row per §11.2. Repo-verified detail: today **0** prompts contain `**Status:**` (step 2's check comments *"today: 1"* — the one existing contract, `tico.md`:37, is unbolded), which is what M20 turns on. |
+
+## 17. Check 2 — is §12 step 1 executable exactly as written?
+
+**Yes — the content is executable; two of its four verification lines are not.** Everything the step
+names was verified on disk:
+
+- `AGENTS.md` (root) — the *"Module documentation convention"* bullet is **exactly lines 159–166**,
+  and line 163 is the `archive/` move sentence the step replaces. ✅
+- `falkor-chat/AGENTS.md`:112 — the `docs/archive/` key-doc row, *"a doc moves here when its
+  milestone closes"*. Lines 115–116 are the two `docs/archive/plans/…` citation rows the step says to
+  leave alone. ✅
+- `claude/qa-engineer/qa-engineer.md`:28 — carries **all three** clauses the rewrite targets
+  (`named for the feature/milestone`, the `docs/archive/<same-subdir>/` sentence, *"follow **that**"*).
+  `:54` is *"**Match the project.** … naming, and doc conventions …"*. `:29` is the test-plan
+  structure; `:41` is the test-report write line. ✅
+- `claude/analyst/analyst.md`:51 is the review write-path line; `:53–61` is the four-part review
+  skeleton (`:60` is the `-rca` line §9.4 cites). ✅
+- The four kaizen files exist (`claude/{qa-engineer,analyst}/kaizen/{plan,history}.md`). ✅
+- The three grep gates are sound and were re-measured today:
+  `grep -c 'archive/' claude/qa-engineer/qa-engineer.md` → **1** (all of it inside `:28`, so the
+  rewrite drives it to 0); `grep -n 'milestone' …` → **1 hit, line 28** only; `grep -c -- '-impl'
+  claude/analyst/analyst.md` → **0**, exactly as the plan claims. ✅
+- `bash claude/scripts/audit-team.sh` → **`RESULT: FAIL`, exactly 2 `FAIL` lines**, both check 7
+  (username / home-path leakage into tracked files). The C-309a baseline is real and the assertion
+  is verifiable as written. The script is read-only (`git grep`-based; `git status` clean after two
+  runs). ✅
+
+**Not a finding, but worth one word to the author:** step 1's item 7 tells the implementer to write
+*"Collision rules 1–5 (§9.5)"* into root `AGENTS.md`, and the text of rules 1 and 3 lives only in
+§9.5 — so the plan's stated handoff (*"implementers read §12 and §9.6"*, line 6) is one section
+short. The pointer is explicit and in the same file, so nothing is blocked; changing the header line
+to *"§12, §9.4–§9.6"* makes the claim true.
+
+The two defective checks are **M20** and **M21** below.
+
+## 18. Findings
+
+### M20 (major) — step 2's M9 coverage check cannot pass, because the template line the plan specifies contains no `**Status:**`
+
+**Evidence.** Step 2's self-verifying block (line 1971):
+
+```bash
+grep -lE '\*\*Status:\*\*' claude/{architect,analyst,qa-engineer,teco,data-scientist,graph-dba,tico}/*.md | wc -l   # → 7
+```
+
+But the edit the plan specifies for six of those seven files is a **pointer**, not a template — step
+1: *"Open the document with the header block from root `AGENTS.md`."*; step 2 rows: *"+1 line: plans
+open with the header block"*, *"+1 line: coordination docs open with the header block"*, etc. None of
+those strings contains `**Status:**`. After steps 1 and 2 as written, the grep returns **1**
+(`tico.md`:37, newly bolded), not 7. Measured today: the same grep returns **0**.
+
+**Why it matters.** It is step 2's only mechanical proof that M9 is actually fixed, and a correct
+execution fails it — the implementer must then either invent the missing text or weaken the check,
+which is the same class of instruction/gate contradiction B4 was. It also hides a real design choice:
+a pointer costs the producing agent a second hop into root `AGENTS.md` *while it is following a
+skeleton in its own prompt* — precisely the failure mode M9 named — whereas Part II's suggestion was
+an inline template.
+
+**Suggested improvement.** State the template line literally in all six prompts, e.g. *"Open the
+document with the §9.6 header block: `> **Status:** active · **Owner:** \`<agent>\` · **Tracks:**
+<id(s)> (<M<n>>)`"* (`tico` keeps its own two values). The grep then passes at 7 unchanged, and the
+instruction is a template rather than a cross-reference. Cost: the six lines already being added get
+longer by one backticked example.
+
+### M21 (major) — step 1's done-condition asserts a file count and a "zero `*.md` path-string edits" invariant that a correct execution will not satisfy
+
+**Evidence.** Two separate defects in one four-line block (lines 1925, 1865–1866):
+
+1. **The count.** The step is headed *"Files touched (9)"* and checks `git diff --stat  # 9 files`.
+   The table's nine rows cover only **eight** files that change — root `AGENTS.md`,
+   `falkor-chat/AGENTS.md`, `qa-engineer.md`, `analyst.md`, four kaizen files — because the ninth row,
+   `claude/README.md`, is explicitly *"**expected: no edit**"*. A correct execution produces
+   `8 files changed`.
+2. **The invariant.** Line 1865: *"Every step's diff must contain **zero** `*.md` path-string edits
+   **except** step 4 … and step 6"*. Step 1 necessarily emits many: root `AGENTS.md`'s new bullet must
+   state the grammar `<component>/docs/<kind>/<topic-slug>[-<role>].md`, the examples
+   `followups-m4-coordination.md` and `executor2.md`, and the one-liner `grep -m1 -H 'Status:'
+   docs/plans/*.md` (items 4, 5, 7, 8), and the `qa-engineer.md`:28 rewrite removes a line containing
+   three `.md` paths. Under the only mechanical reading the plan itself uses — step 4's
+   `git diff -- <file> | grep -c '^[-+].*\.md'` — step 1 scores well above zero, and `git diff --stat`
+   (the command actually given) cannot measure it at all.
+
+**Why it matters.** The plan treats this invariant as load-bearing — §11.2's m19 disposition declines
+to fold S6 into S1 specifically to protect *"S1's 'the diff contains zero `*.md` path-string edits'
+proof, the plan's single strongest verification"*. An implementer who takes it literally has two bad
+options: omit the concrete grammar examples from root `AGENTS.md` (gutting items 4–7, the part M1 and
+M8 exist to land) or conclude the step is broken and stop. Combined with the 9-vs-8 count, step 1's
+done-condition reads as failing when the work is right.
+
+**Suggested improvement.** Two edits, both one line:
+
+- `git diff --stat` → **`# 8 files changed`**, with the note *"`claude/README.md` is re-checked, not
+  edited — 9th path, 8 diffs"*.
+- Define the invariant, then give a command that implements it: *"a **path-string edit** is a change
+  to an **existing** citation's path; newly authored grammar, examples and prohibitions are exempt"*,
+  checked by `git diff -U0 -- AGENTS.md falkor-chat/AGENTS.md claude/qa-engineer/qa-engineer.md
+  claude/analyst/analyst.md | grep -E '^[-+].*\.md'` → *inspect: every hit is new normative text; no
+  existing citation is repathed.* Steps 4 and 6 keep their exact numeric checks.
+
+### M22 (major, pre-existing — not introduced by v1.3) — a live "plan documents move to `archive/`" sentence survives every step
+
+**Evidence.** `falkor-chat/docs/BACKLOG.md`:5, in the file's **preamble blockquote** (not a dated
+entry):
+
+```
+> Forward-looking backlog for the `falkor-chat` component … Delivered work is logged in
+> [`HISTORY.md`](./HISTORY.md); completed plan documents move to [`archive/`](./archive/).
+```
+
+A repo-wide grep for normative move statements (`git grep -iE 'moves? (to|here|into) .?archive'`,
+excluding this plan and its review) returns exactly five hits: root `AGENTS.md`:163 (step 1),
+`falkor-chat/AGENTS.md`:112 (step 1), `docs/HISTORY.md`:9 and `falkor-chat/docs/HISTORY.md`:331,
+697 (dated records — correctly left alone under O-2), **and this one**, which is neither. It is
+absent from §3.1's encoding inventory and from every step's file list; `docs/BACKLOG.md` (root)
+carries no equivalent sentence — verified.
+
+**Why it matters.** This is the M1 argument again: `falkor-chat/docs/BACKLOG.md` is a living document
+every agent working in that component reads, and after step 1 it will state the rule D4 abolishes,
+in the same repository as the new rule. §4.2's reason for landing the two `AGENTS.md` files and
+`qa-engineer.md` in one commit — *"otherwise agents keep writing against a rule with no `archive/`
+destination"* — applies to this line verbatim.
+
+**Suggested improvement.** Add it to **step 4**, which already opens that exact file: reword `:5` to
+*"completed plan documents stay in place and are marked `Status: archived` (root `AGENTS.md`);
+`archive/` holds frozen documents from the previous convention"*. Step 4's numeric check is
+unaffected — line 5 contains no `.md` path string, so `grep -c '^[-+].*\.md'` still returns the
+three `../` fixes. (Putting it in step 1 instead would need M21's invariant reworded first.)
+
+## 19. What's solid in v1.3 — verified, not assumed
+
+- **The B5 routing table is accurate against the live guard topology** — all nine hook scripts
+  checked, including the two "no doc guard" rows. This was the finding most likely to be answered
+  with a plausible-sounding table; it wasn't.
+- **Step 3's arithmetic survives independent re-derivation.** All 26 active feature documents exist
+  at the stated paths, all 25 to be touched have their H1 on **line 1** (so `head -6` is a safe
+  window for every one of them), and the four rich `Status:` lines the step must fold or preserve
+  are where it says — `docs/plans/cpg-query-access.md`:11, `docs/requirements/cpg-query-access.md`:2–3
+  (a wrapped two-line value), and the three `tico` documents' line 2.
+- **The plan is conformant with its own header rule** — `head -6 docs/plans/doc-reference-convention.md`
+  passes §9.6 rule 5's regex plus the `Owner:`/`Tracks:` greps, so step 3's "1 already conformant"
+  row is true rather than aspirational.
+- **The disposition table is honest.** Every §11.2 row I probed matched the plan's actual text,
+  including the ones that claim to go beyond the finding (M9's six prompts, B5's S2/N4 re-ownership).
+  Nothing was marked fixed that wasn't.
+
+## 20. Open questions
+
+None that block. The three majors are the author's to patch; none needs a stakeholder call, and
+none reopens D1, D4, D6 or rename-nothing.
+
+---
+
+*Part III routes to `architect` for a v1.3.1 patch (three one-line edits: M20's template string,
+M21's two check lines, M22's addition to step 4). **Step 1 may be executed as written** once M21's
+check lines are corrected — its content is verified sound. The plan document remains unmodified by
+this review; Parts I and II are preserved verbatim.*
