@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `qa-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-19
+> Last reviewed: 2026-07-27
 
 ## Active
 
@@ -21,7 +21,7 @@
 - **Notes:** keep it lean; progressive-disclosure skill is the natural home if it grows.
 
 ### K-002 — Pin the artifact-location convention in component docs
-- **Status:** ✅ done 2026-07-11 — the repo-wide docs unification defined the module documentation convention (active `docs/test-plans/`+`docs/test-reports/` vs. frozen `docs/archive/`) in the root `AGENTS.md` and the `falkor-chat/AGENTS.md` key-docs table; the agent's PLAN bullet was updated to match (see history 2026-07-11).
+- **Status:** ✅ done 2026-07-11 — the repo-wide docs unification defined the module documentation convention (active `docs/test-plans/`+`docs/test-reports/` vs. frozen `docs/archive/`) in the root `AGENTS.md` and the `falkor-chat/AGENTS.md` key-docs table; the agent's PLAN bullet was updated to match (see history 2026-07-11). **Superseded in part, 2026-07-27:** the active-vs-`archive/` *move* half of that convention is gone (D4 — a frozen document stays put and gets `Status: archived`), and the convention now also fixes a repo-wide filename grammar the agent may not renegotiate per component. Still done; the current statement is the root `AGENTS.md` bullet.
 - **Priority:** medium
 - **Rationale:** the agent currently *detects* where to write plans/reports. Writing the convention into `falkor-chat/AGENTS.md` (and other components as they gain QA needs) removes ambiguity and drift.
 - **Proposed change:** add a short "Test plans & reports live in `docs/test-plans/` and `docs/test-reports/`, kebab-case per feature" note to the relevant component `AGENTS.md`.

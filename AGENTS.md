@@ -159,10 +159,72 @@ changes, not a replacement.
 - **Module documentation convention** — all of a module's engineering docs live under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
   change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
-  `reviews/`, `test-plans/`, `test-reports/` for **active** documents and
-  `archive/<same-subdir>/` for frozen ones — a doc moves to `archive/` when its milestone
-  closes, with inbound links fixed in the same change. `falkor-chat/` is the reference
+  `reviews/`, `test-plans/`, `test-reports/`. `falkor-chat/` is the reference
   implementation; other modules adopt the structure when they first need it. Modules do **not**
   use `kaizen/` dirs — that convention exists only for agent folders (`claude/<agent>/kaizen/`).
+  - **A document that freezes does not move.** It gets `Status: archived` in its own header
+    block and stays exactly where it is. The status marker replaces the old "move it to
+    `archive/` when the milestone closes" rule — and with it the inbound-link repair that move
+    required.
+  - **The existing `archive/` trees are read-only history of the previous convention.** Nothing
+    is ever moved into them again, and nothing is un-archived.
+  - **Citing another document:** write a **backticked path from the repo root** —
+    `docs/plans/cpg-query-access.md`. A markdown link is **permitted and never required**; if
+    you write one, its target must be **relative**, never `/docs/…`: a leading slash resolves
+    against the filesystem root, so agents cannot follow it.
+  - **Filename grammar:** `<component>/docs/<kind>/<topic-slug>[-<role>].md`.
+  - **The prohibition:** a new document's basename **never begins with `m<digit>`, `k<digit>`,
+    or a date.** The one exception — when a topic genuinely *is* a milestone or a recurring
+    per-milestone activity, the milestone token goes **inside the slug, never as a prefix**
+    (`followups-m4-coordination.md`); the test is *the topic has no name without it*.
+  - **The closed role set:** *(none)* · `-coordination` · `-ml` · `-graph` · `-rca` · `-impl` ·
+    `-report`. Everything else is part of the topic slug, not a role.
+  - **Collision rules.** (1) The primary key is `(component, kind, topic-slug, role)`. (2) The
+    **same slug across several kinds is the family** — required, not merely tolerated:
+    `requirements/x.md` → `plans/x.md` → `plans/x-coordination.md` → `reviews/x.md` →
+    `test-plans/x.md` → `test-reports/x-report.md`; a downstream document that invents a new
+    slug is a defect. (3) A topic slug is never reused for a different topic. (4) The same
+    basename in two directories is safe **because every citation carries a directory** — rules
+    2 and 4 are a matched pair: adopt both or neither. (5) For a second document of the same
+    kind and topic, the selector is one question — **has the earlier document been approved,
+    gated, or executed against?** **No** → revise it in place (bump the optional `Version:` and
+    add a dated revision note; a review gets a dated `## Pass N` section). **Yes** → it stays
+    intact and you write a successor with the **ordinal on the slug** (`executor2.md`,
+    `executor2-coordination.md`), *even while the earlier one is still `active`*. Two pointer
+    pairs, never mixed: a successor that **replaces** carries `Supersedes:` and the earlier
+    document gains `Superseded by:` and flips to `superseded`; a successor that **adds to** an
+    earlier document that stays authoritative carries `Extends:` and the earlier one gains
+    `Extended by:` with its `Status:` unchanged. **A header pointer is metadata, not an
+    amendment** — it is the one edit permitted on an `archived` document.
+  - **The header block** — one line, **immediately under the H1** (a blank line between them is
+    permitted; nothing else may precede it), bolded labels, ` · ` separator:
+
+    ```markdown
+    # <Document title>
+
+    > **Status:** <token> · **Owner:** `<agent>` · **Tracks:** <id(s)> (<M<n>>)
+    ```
+
+    `Owner:` is the producing agent, backticked; `Tracks:` is the backlog ID(s) plus milestone
+    (`K-022 (M3)`), or `—`. **The canonical `Status:` token is the first thing after
+    `Status:`**; free text is preserved *after* the token, never before it. Optional fields
+    take the same bolded form and follow the three: `Version:`, `Supersedes:` /
+    `Superseded by:` / `Extends:` / `Extended by:`, `Last updated:` (`tico` keeps it; nobody
+    else needs it), `Reviews:`.
+  - **The closed `Status:` set — five values, and who flips each:** `Interviewing` and
+    `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
+    stakeholder confirmation) · `active` (the producing agent, at creation; amendable in place
+    until the document has been approved, gated, or executed against) · `superseded` (whoever
+    writes the successor) · `archived` (**the document's own owner, at milestone close, on
+    `teco`'s coordination**). The owner who performs the `archived` flip, by kind:
+    `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
+    `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
+    `reviews/*` → `analyst` · `requirements/*` → `tico` · `test-plans/*` and `test-reports/*` →
+    `qa-engineer`. **`teco` coordinates the close; it does not perform the flips** — its write
+    guard reaches `docs/plans/*` only, so any other kind would raise a human approval prompt
+    per file.
+  - **The whole lifecycle, one line:** `grep -m1 -H 'Status:' docs/plans/*.md`.
+  - **An existing `m<n>-` filename prefix is part of a name, not a lifecycle claim** — nobody
+    should read meaning into it, and nobody should "fix" it.
 - The root `CLAUDE.md` contains only `@AGENTS.md` — this file is the single source of truth for
   root-level context; per-component context files carry the detail.

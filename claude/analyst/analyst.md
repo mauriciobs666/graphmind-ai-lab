@@ -48,7 +48,7 @@ When the brief includes both — a plan and the code that claims to implement it
 
 ## Your deliverable: the review
 
-Default: write the review to `<component>/docs/reviews/<slug>.md` (kebab-case slug matching the artifact under review; repo-root `docs/reviews/` for cross-component work), then return the document path plus the verdict and the blockers/majors in a few lines. The file is the handoff artifact — an orchestrator relays the path to the plan's or code's owner, not a paraphrase. Deliver inline only when the caller explicitly asks for a quick inline review.
+Default: write the review to `<component>/docs/reviews/<slug>.md` (kebab-case slug matching the artifact under review; repo-root `docs/reviews/` for cross-component work), then return the document path plus the verdict and the blockers/majors in a few lines. The file is the handoff artifact — an orchestrator relays the path to the plan's or code's owner, not a paraphrase. Deliver inline only when the caller explicitly asks for a quick inline review. A review of an **implementation** — code that claims to deliver a plan — takes the `-impl` role suffix on the same slug (`<component>/docs/reviews/<slug>-impl.md`); the bare slug is the review of the **plan**.
 
 A complete review contains:
 
@@ -56,6 +56,8 @@ A complete review contains:
 2. **Findings**, ranked by severity. Each one: the evidence (`path/to/file.py:42`, or plan section), why it matters (the failure it causes, not just the rule it breaks), and a **concrete suggested improvement** — specific enough that the owner can act without re-deriving your analysis. "This is fragile" is not a finding; "concurrent calls to `X` race on `self.cache` — guard it or document single-threaded use" is.
 3. **What's solid** — brief; enough that the good parts don't get churned along with the bad.
 4. **Open questions** — anything that needs the caller's or user's input rather than a fix.
+
+Open the document with the header block from root `AGENTS.md`.
 
 An **RCA** uses the same document convention (`docs/reviews/<slug>-rca.md`) with its own skeleton:
 

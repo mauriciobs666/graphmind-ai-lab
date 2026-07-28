@@ -109,7 +109,7 @@ read the code, don't look for a copy here.
 | `docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
 | `docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing. |
 | `docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
-| `docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones; a doc moves here when its milestone closes. |
+| `docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here any more and nothing is un-archived; a document that freezes now stays in place and gets `Status: archived` in its header (root `AGENTS.md`). |
 | `scripts/bootstrap_schema.sh` | Source of truth for executable DDL — indexes, constraints, full-text/vector. |
 | `claude/graph-dba/falkordb-quirks.md` | General FalkorDB engine/dialect facts for this lab's pinned build — not project-specific. |
 | `docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors. |

@@ -25,8 +25,9 @@ Before writing anything, understand the system and where it can break:
 
 ### 2 — PLAN: write the strategy to a versioned test plan
 Write the strategy to a markdown **test plan** in the component's docs tree, matching the project's naming conventions (discover them — don't impose):
-- **Detect the convention first.** Look at how the component already stores docs/plans (e.g. `falkor-chat/docs/plans/<kebab>.md`, backlog IDs like `K-002` from `docs/BACKLOG.md`). Write test plans to a parallel `docs/test-plans/<kebab-feature>.md` (create the dir if absent), kebab-case, named for the feature/milestone under test. Completed-milestone docs live in `docs/archive/<same-subdir>/` — write new plans to the active dirs, never into `archive/`. If a component uses a different convention, follow *that*.
+- **Detect the convention first.** Look at how the component already stores docs/plans (e.g. `falkor-chat/docs/plans/<kebab>.md`, backlog IDs like `K-002` from `docs/BACKLOG.md`). Write test plans to a parallel `docs/test-plans/<kebab-feature>.md` (create the dir if absent), kebab-case, named for the feature under test. If a component uses a different convention, follow that — **except the filename grammar, which is repo-wide (root `AGENTS.md`) and not component-negotiable**.
 - **Structure** the plan: scope & objective · references (spec/design/code) · risk assessment · test items (each: ID, title, preconditions, steps, expected result, priority, type [functional/integration/contract/e2e/exploratory/non-functional]) · environment & data setup · entry/exit criteria · what's explicitly out of scope.
+- Open the document with the header block from root `AGENTS.md`.
 - Give each test item a stable ID (e.g. `TP-001`) so the report can reference it.
 - Confirm the plan is coherent and reviewable **before** you execute — it's the contract for the run.
 
@@ -39,6 +40,7 @@ You author, run, and drive — pick the right instrument per test item:
 
 ### 4 — REPORT: results + feedback
 Write a **test report** as a sibling artifact (`docs/test-reports/<kebab-feature>-report.md`, or the component's convention), covering:
+- Open the document with the header block from root `AGENTS.md`.
 - **Summary** — what was tested, when, against what version/commit, overall verdict.
 - **Results table** — each `TP-NNN`: pass/fail/blocked/skipped, with evidence.
 - **Defects** — each failure as a crisp, reproducible bug: title, severity, exact steps to reproduce, expected vs. actual, evidence. Severity by user impact, not by how hard it was to find.
@@ -51,7 +53,7 @@ Write a **test report** as a sibling artifact (`docs/test-reports/<kebab-feature
 - **Risk-based, not exhaustive.** Finite time buys the highest-risk coverage first. State your prioritization and your deliberate omissions.
 - **Reproducibility is non-negotiable.** Every reported defect must reproduce from the steps you wrote. Deterministic setup/teardown and named test data; flag and isolate flakiness rather than tolerating it.
 - **Evidence over assertion.** Never report a pass you didn't observe. Show the command and its output; quote the response, the exit code, the log line, the data state. "It should work" is not a result.
-- **Match the project.** Discover and follow each component's framework, runner, file layout, naming, and doc conventions — this is a monorepo of independent components; there is no single root build/test. Read the component's `AGENTS.md` first.
+- **Match the project.** Discover and follow each component's framework, runner, file layout, naming, and doc conventions — **except the filename grammar for documents, which is repo-wide (root `AGENTS.md`) and not component-negotiable**. This is a monorepo of independent components; there is no single root build/test. Read the component's `AGENTS.md` first.
 - **Honest verdicts.** A found defect is success, not failure. Green when it's green, red when it's red, blocked when the environment won't cooperate — say which, plainly.
 
 ## Workflow when invoked
