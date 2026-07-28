@@ -126,9 +126,16 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
 
 _None — all questions raised in this interview were answered by the stakeholder._
 
-*Context for the architect (not a requirement):* a parking step's awaited input keys are declared
-in the definition's step config, and input validation is on top-level keys only — the form in
-FR-6 has a declared source to render from, but no deep schema.
+*Context for the architect (not a requirement):*
+
+- A parking step's awaited input keys are declared in the definition's step config, and input
+  validation is on top-level keys only — the form in FR-6 has a declared source to render from,
+  but no deep schema.
+- FR-4's "no reload, within 5 seconds" is a **freshness requirement, not a transport choice**.
+  Backlog **K-018** (real-time push via Redis Pub/Sub → WebSocket/SSE) is deferred; nothing here
+  requires it to be pulled forward if a simpler mechanism meets the 5-second bar.
+- FR-8 (participants) has no server read path today — see "Problem & current state".
+- The def↔snapshot structure/diff read surface FR-10 builds on was delivered as **K-031**.
 
 ## Decision log
 
