@@ -81,14 +81,18 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
 - **FR-9** The chat surface keeps its current minimalist visual language: the new surfaces are
   secondary (collapsed / opened on demand), and a user who ignores workflows sees a page no
   busier than today's.
+- **FR-10** The page reports whether the workspace is **ready to demo**: whether the expected
+  workflow definitions are present and whether the definition and its workspace snapshot agree —
+  the drift the `verify_workflows.sh` check exists to catch — and, when they disagree, says what
+  is wrong rather than only that something is.
 
 **Listed, not committed — remaining API coverage** *(nice-to-have; a later iteration)*
 
-- **FR-10** Publish a workflow definition and materialize a version into a workspace.
-- **FR-11** Snapshots: list a workspace's snapshots, view a snapshot's structure, and diff a
-  definition against its workspace snapshot (the drift check that `verify_workflows.sh` does).
-- **FR-12** Start a workflow run explicitly (without going through a chat mention).
-- **FR-13** Server health and fetch-a-single-message-by-id.
+- **FR-11** Publish a workflow definition and materialize a version into a workspace.
+- **FR-12** Browse snapshots in depth: list a workspace's snapshots and view a snapshot's
+  structure (beyond the ready-to-demo verdict of FR-10).
+- **FR-13** Start a workflow run explicitly (without going through a chat mention).
+- **FR-14** Server health and fetch-a-single-message-by-id.
 
 ## Out of scope
 
@@ -114,11 +118,13 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
   listed and agents are distinguishable from humans.
 - **AC-5** A user who never opens a workflow surface sees a chat page whose default layout is no
   more crowded than today's.
+- **AC-6** Given a workspace whose seeded definitions are missing or out of sync with their
+  workspace snapshot, When the user checks readiness in the page, Then it reports *not ready* and
+  names the offending definition — and reports *ready* when the workspace is in sync.
 
 ## Open questions
 
-1. Is the def↔snapshot **drift check** (FR-11) part of demo *prep*, i.e. should it move into the
-   committed set?
+_None — all questions raised in this interview were answered by the stakeholder._
 
 *Context for the architect (not a requirement):* a parking step's awaited input keys are declared
 in the definition's step config, and input validation is on top-level keys only — the form in
@@ -140,3 +146,5 @@ plus a detail panel (steps, trace) opened on demand.
 2026-07-27 — How does a human answer a structured step? → A **form in the run panel** rendering
 the awaited inputs; plain chat replies keep working for simple parking steps.
 2026-07-27 — How fresh must run progress be? → Visible **within ~5 seconds**, no page reload.
+2026-07-27 — Is the def↔snapshot drift check part of the demo path? → **Yes, committed** (FR-10):
+the page must say whether the workspace is ready to demo, and what is wrong when it is not.
