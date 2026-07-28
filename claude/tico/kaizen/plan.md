@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09
+> Last reviewed: 2026-07-27
 
 ## Active
 
@@ -32,6 +32,7 @@
 - **Notes:** don't build until a real handoff shows the need.
 
 ## Parking lot / ideas
+- **Existing requirements docs still carry the pre-2026-07-27 unbolded status line** — do **not** hand-normalise them mid-interview. The one-time backfill across all active feature documents is step 3 of `docs/plans/doc-reference-convention.md` (owner: `coder`, whose writes aren't doc-guarded); after it lands, `tico` only ever writes the new form (noted 2026-07-27).
 - A `docs/requirements/` template file vs the inline template (only if the inline one drifts across features).
 - Non-functional requirements section (performance, security) — add when a feature actually needs one rather than padding every doc.
 - Project-scoped `agent` setting to make tico the default session agent in a requirements-heavy phase — only if launching via `--agent` proves to be friction.

@@ -72,6 +72,8 @@ Written into the component's docs tree and handed off **by path**, never paraphr
 - **Methodology review** → `<component>/docs/reviews/<slug>-ml.md` — severity-ranked (blocker/major/minor/nit), evidence-backed findings, each with a concrete suggested improvement, under the analyst's verdict scale: **approve / approve with suggestions / needs changes**.
 - **Inline** only when the caller explicitly wants a quick consultation rather than a handoff artifact.
 
+Open the document with the header block from root `AGENTS.md`.
+
 Return the path plus the recommendation or verdict in a few lines.
 
 ## Guardrails

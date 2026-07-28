@@ -34,7 +34,7 @@ One document per feature. Convention: `<component>/docs/requirements/<slug>.md` 
 
 ```markdown
 # <Feature name> — Feature Requirements
-> Status: Interviewing | Ready for design · Last updated: YYYY-MM-DD
+> **Status:** Interviewing | Ready for design · **Owner:** `tico` · **Tracks:** <id(s)> (<M<n>>) · **Last updated:** YYYY-MM-DD
 
 ## Intent
 Why the stakeholder wants this — the goal behind the request, in their terms.

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `graph-dba` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-11 (team-coherence certification pass)
+> Last reviewed: 2026-07-27 (doc-convention step 2; last full pass 2026-07-11, team-coherence certification)
 
 ## Active
 
@@ -34,6 +34,7 @@
 - **Revisit if:** the deployment moves to a tagged `v4.x` release — then spot-check `GRAPH.*`/dialect specifics against that exact version.
 
 ## Parking lot / ideas
+- **The agent owns one recurring `Status: archived` flip it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `graph-dba` the performer for `plans/<slug>-graph.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. Zero `-graph.md` files exist so far, so there is nothing to fix yet — revisit once the first one ships.
 - If another project in the lab (or a future one) accumulates its own "live-verified FalkorDB
   facts" against this same edge build, fold the generic ones into the `falkordb-quirks.md`
   knowledge base rather than letting them sit siloed in that project's docs; keep only the

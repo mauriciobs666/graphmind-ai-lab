@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-27 — Design notes open with the canonical header block (step 2 of `docs/plans/doc-reference-convention.md`)
+- **What:** One line added to *How you work* item 7 (design work hands off by path): *"Open the document with the header block from root `AGENTS.md`."* It sits inside the item, so it binds to `<component>/docs/plans/<slug>-graph.md` and not to the inline consults the same item excludes. No frontmatter, hook, `description` or catalog change.
+- **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6 makes a three-field header (`Status:` · `Owner:` · `Tracks:`) the repo's lifecycle signal, replacing the milestone filename prefix and the move-to-`archive/` rule. `-graph` is in the closed role set and the design note is co-located with the architect's plan, so it needs the same header as its neighbours — and `graph-dba` is the only agent that writes one (zero exist today, which makes this the cheapest possible moment to fix the form). The line is a **pointer, not an inlined template** (v1.4 M20) — root `AGENTS.md` already reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import — and byte-identical across the six producing prompts, because the convention's coverage check greps for it literally. `claude/README.md` row 12 re-checked — it cites the design-note path and the destructive-ops hook, not document structure; no edit needed.
+- **Plan items:** none.
+
 ## 2026-07-24 — Description slimmed further (second team-wide token-cost pass)
 - **What:** Frontmatter `description` compressed 919 → 832 chars (-9%): tightened phrasing, dropped restated detail, kept every routing/boundary clause. `claude/scripts/audit-team.sh` boundary-pair symmetry (graph-dba↔devops, graph-dba↔data-scientist, graph-dba↔joern) re-verified green. No body/catalog change.
 - **Why:** All 13 agents' descriptions are auto-injected into every session and subagent spawn; the roster grew to 13 (graph-dba, joern added) since the first pass on 2026-07-11, and per-agent `/context` output showed room to cut further. User-requested via a `/context` token audit.

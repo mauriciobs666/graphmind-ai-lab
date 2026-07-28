@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `data-scientist` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09
+> Last reviewed: 2026-07-27
 
 ## Active
 
@@ -24,5 +24,6 @@
 - **Proposed change:** If model-selection questions recur, add `data-scientist/model-landscape.md` (dated entries, re-verify stamps) and point the prompt at it — kept out of the always-on prompt.
 
 ## Parking lot / ideas
+- **The agent owns two recurring `Status: archived` flips it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `data-scientist` the performer for `plans/<slug>-ml.md` and `reviews/<slug>-ml.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. One prompt line if closes start leaving `-ml` documents `active`.
 - Revisit the advisory-only shape if the lab starts wanting evals *executed* rather than designed — either grant hands-on eval-execution powers (graph-dba-style) or define a standing data-scientist→qa-engineer handoff for eval execution (2026-07-09, creation decision: user chose advisory).
 - A worked example of a good method note (once one exists) linked from the prompt, if note quality proves inconsistent.
