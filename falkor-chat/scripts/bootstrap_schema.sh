@@ -145,6 +145,16 @@ bootstrap_workspace() {
   echo "[index] WorkflowRun.status"
   gquery "$g" "CREATE INDEX FOR (n:WorkflowRun) ON (n.status)"
 
+  # WorkflowRun.startedAt (K-036 / U1): NOT sufficient on its own to anchor
+  # find_runs_for_thread's plan (a WHERE-filtered ORDER BY-only property does not
+  # pull the label-scan anchor by itself — live-verified, QUERIES.md §12.14) but
+  # becomes a real Node By Index Scan once paired with that query's supporting
+  # `r.startedAt >= 0` predicate. WorkflowRun cardinality is tiny per workspace
+  # (same argument §12.9 already accepted for the status index) — RAM cost is
+  # negligible.
+  echo "[index] WorkflowRun.startedAt"
+  gquery "$g" "CREATE INDEX FOR (n:WorkflowRun) ON (n.startedAt)"
+
   echo "[index] StepRun.status"
   gquery "$g" "CREATE INDEX FOR (n:StepRun) ON (n.status)"
 

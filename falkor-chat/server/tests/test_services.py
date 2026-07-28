@@ -17,6 +17,7 @@ from falkorchat.config import CallContext
 from falkorchat.repository import MessageWriteStatus
 from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
+    DEMO_EXPECTED_DEFS,
     ChannelNotFoundError,
     InvalidSearchQueryError,
     MemberIdCollisionError,
@@ -1205,6 +1206,149 @@ def test_diff_def_snapshot_both_absent_raises_not_found():
 
     with pytest.raises(WorkflowDefNotFoundError):
         svc.diff_def_snapshot(CTX, key="ghost", version="1")
+
+
+# ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ────────────────
+#
+# `check_demo_readiness` is the HTTP form of `scripts/verify_workflows.sh`:
+# same `DEMO_EXPECTED_DEFS` pair, same presence/sync/startKeys checks, same
+# problem-string wording. These tests mirror the script's own fixture pattern
+# (an `ABSENT`-shaped read for a def/snapshot that was never even attempted).
+
+
+def _seed_pair(repo, key, version, *, def_start=("s",), snap_start=("s",)):
+    """Populate both `def_structures`/`snapshot_structures` for one demo pair,
+    identical apart from `startKey`(s), so the two sides stay `inSync` unless
+    the caller deliberately diverges them."""
+    repo.def_structures[(key, version)] = _raw_structure(start_keys=def_start)
+    repo.snapshot_structures[(key, version)] = _raw_structure(start_keys=snap_start)
+
+
+def test_check_demo_readiness_all_present_and_synced_is_ready():
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is True
+    assert [d["key"] for d in out["defs"]] == [k for k, _ in DEMO_EXPECTED_DEFS]
+    for d in out["defs"]:
+        assert d["defPresent"] is True
+        assert d["snapshotPresent"] is True
+        assert d["inSync"] is True
+        assert d["problems"] == []
+
+
+def test_check_demo_readiness_missing_def_names_the_offender():
+    key, version = DEMO_EXPECTED_DEFS[0]
+    other_key, other_version = DEMO_EXPECTED_DEFS[1]
+    repo = FakeRepo()
+    # only the snapshot side exists for the first pair
+    repo.snapshot_structures[(key, version)] = _raw_structure()
+    _seed_pair(repo, other_key, other_version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is False
+    entry = out["defs"][0]
+    assert entry["defPresent"] is False
+    assert entry["snapshotPresent"] is True
+    assert entry["inSync"] is False
+    assert entry["problems"] == [
+        f"{key}@{version}: not published in `reference` at this version"
+    ]
+
+
+def test_check_demo_readiness_missing_snapshot_names_the_offender():
+    key, version = DEMO_EXPECTED_DEFS[0]
+    other_key, other_version = DEMO_EXPECTED_DEFS[1]
+    repo = FakeRepo()
+    # only the reference def exists for the first pair
+    repo.def_structures[(key, version)] = _raw_structure()
+    _seed_pair(repo, other_key, other_version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is False
+    entry = out["defs"][0]
+    assert entry["defPresent"] is True
+    assert entry["snapshotPresent"] is False
+    assert entry["inSync"] is False
+    assert entry["problems"] == [
+        f"{key}@{version}: not materialized into ws:{CTX.ws} at this version"
+    ]
+
+
+def test_check_demo_readiness_both_absent_is_not_ready_not_an_error():
+    # both sides absent (the def was never even published) mirrors the
+    # script's `read()` ABSENT substitution: `diff_def_snapshot` would raise
+    # `WorkflowDefNotFoundError` here — `check_demo_readiness` must catch it,
+    # never let it escape as a 500.
+    key, version = DEMO_EXPECTED_DEFS[0]
+    other_key, other_version = DEMO_EXPECTED_DEFS[1]
+    repo = FakeRepo()
+    _seed_pair(repo, other_key, other_version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is False
+    entry = out["defs"][0]
+    assert (entry["defPresent"], entry["snapshotPresent"], entry["inSync"]) == (
+        False, False, False,
+    )
+    assert entry["problems"] == [
+        f"{key}@{version}: not published in `reference` at this version",
+        f"{key}@{version}: not materialized into ws:{CTX.ws} at this version",
+    ]
+
+
+def test_check_demo_readiness_diverging_names_the_offender_with_count():
+    key, version = DEMO_EXPECTED_DEFS[0]
+    other_key, other_version = DEMO_EXPECTED_DEFS[1]
+    repo = FakeRepo()
+    repo.def_structures[(key, version)] = _raw_structure(name="A")
+    repo.snapshot_structures[(key, version)] = _raw_structure(name="B")
+    _seed_pair(repo, other_key, other_version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is False
+    entry = out["defs"][0]
+    assert entry["defPresent"] is True
+    assert entry["snapshotPresent"] is True
+    assert entry["inSync"] is False
+    assert entry["problems"] == [
+        f"{key}@{version}: reference def and ws:{CTX.ws} snapshot diverge "
+        f"(1 differences)"
+    ]
+
+
+def test_check_demo_readiness_flags_multi_start_tripwire():
+    # Finding-3: `startKeys` present means more than one `START` edge (K-034).
+    # Kept identical on both sides so the pair stays otherwise `inSync` — this
+    # isolates the tripwire from the ordinary divergence check.
+    key, version = DEMO_EXPECTED_DEFS[0]
+    other_key, other_version = DEMO_EXPECTED_DEFS[1]
+    repo = FakeRepo()
+    _seed_pair(repo, key, version, def_start=("a", "b"), snap_start=("a", "b"))
+    _seed_pair(repo, other_key, other_version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is False
+    entry = out["defs"][0]
+    assert entry["inSync"] is True
+    assert entry["problems"] == [
+        f"{key}@{version}: reference def has 2 START edges (a, b) — see K-034",
+        f"{key}@{version}: ws:{CTX.ws} snapshot has 2 START edges (a, b) — see K-034",
+    ]
 
 
 # ── §12 workflow-run orchestration (U5) ─────────────────────────────────────────

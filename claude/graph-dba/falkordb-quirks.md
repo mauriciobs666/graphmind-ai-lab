@@ -143,6 +143,25 @@ to the general fact here.
   specific shape on engine upgrades before trusting it as a settled fact — it is exactly the
   kind of planner behavior that moves between releases.
 
+- **A `WHERE` predicate on ANY pattern variable can pull the label-scan anchor onto that
+  variable's label — even when a much smaller, filter-free label sits elsewhere in the same
+  pattern** (verified 2026-07-28 on v4.18.11 / module `41811`). `MATCH (r:Small)-[:REL]->(m:Big)
+  WHERE m.someUnindexedProp = $x` anchors on `Node By Label Scan | (m:Big)` — scanning the
+  **entire** `Big` label — even with `Small` at 3 rows and `Big` at 20,000. Relative cardinality
+  does not drive the anchor choice here; "which variable carries a `WHERE` predicate" does.
+  Confirmed independent of `MATCH` clause order/split (single vs. two-`MATCH`) and of pattern
+  direction. **The identical pattern with NO `WHERE` at all correctly anchors on the smaller
+  label** — so the trap is specifically "one side filtered, the other not," not something
+  inherent to two-hop patterns generally. **Fix:** add a second, even functionally-vacuous,
+  predicate on the variable you want as anchor (e.g. `WHERE r.someProp >= 0 AND m.filter = $x`)
+  — this alone, with **no index required**, redirects the anchor to that variable's (smaller)
+  label scan. A supporting range index on top upgrades that label scan to an index scan, but
+  **an index alone, with no predicate change, is a confirmed no-op for this shape** — tested
+  explicitly (index present, no extra predicate → anchor unchanged, index unused). Surfaced
+  building falkor-chat's `find_runs_for_thread`
+  (`(WorkflowRun)-[:TRIGGERED_BY]->(Message)`, filtered on `Message.threadId`, unindexed) —
+  full write-up with PROFILE output in `falkor-chat/docs/QUERIES.md` §12.14.
+
 - **A guarded-CAS `WHERE` on a *second* indexed property folds INTO the `Node By Index Scan` —
   no residual `Filter` operator** (verified 2026-07-20 on v4.18.11 / `ws:test`).
   `MATCH (r:Run {runId:$id}) WHERE r.status = 'waiting' SET …` with RANGE indexes on both

@@ -52,7 +52,13 @@ assert_not_contains() {
 assert_index_scan() {
   local label="$1" profile="$2"
   assert_contains "$label" "Node By Index Scan" "$profile"
-  assert_not_contains "$label (no label scan)" "NodeByLabelScan" "$profile"
+  # Bug fix (K-036/U1, 2026-07-28): FalkorDB's PROFILE text is "Node By Label Scan"
+  # (spaced) — the un-spaced "NodeByLabelScan" this previously checked for can never
+  # match, so this half of the helper was a silent no-op across every existing call
+  # site. Fixed here; re-ran the full 256-case baseline with the corrected string and
+  # every case still passed (no query was secretly hiding a label scan), so this is a
+  # pure correctness fix, not a behavior change to any query.
+  assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
 }
 
 # ── setup ────────────────────────────────────────────────────────────────────
@@ -434,6 +440,27 @@ assert_contains "channel members: Alice" "u1" "$out"
 assert_contains "channel members: Bob" "u2" "$out"
 assert_contains "channel members: bot1" "bot1" "$out"
 assert_contains "channel members: Agent label visible" "Agent" "$out"
+
+# ── §2 (new, K-036/U1): thread participants — extends "List channel members" by ──
+#    one leading hop: Thread -> HAS_THREAD (backward) -> Channel -> MEMBER_OF -> member.
+#    th1 is HAS_THREAD-linked to ch1 (§3 setup), whose roster is u1/u2/bot1 above.
+out=$(gq "$WS" "CYPHER threadId='th1' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName AS displayName, labels(u) AS type ORDER BY u.displayName")
+assert_contains "thread participants (th1): Alice" "u1" "$out"
+assert_contains "thread participants (th1): Bob" "u2" "$out"
+assert_contains "thread participants (th1): bot1" "bot1" "$out"
+assert_contains "thread participants (th1): Agent label visible" "Agent" "$out"
+
+prof=$(gp "$WS" "CYPHER threadId='th1' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName AS displayName, labels(u) AS type ORDER BY u.displayName")
+assert_index_scan "thread participants anchors on Thread.threadId index" "$prof"
+
+# a thread whose channel has zero members — empty list, not an error (plan §5.2 edge case,
+# possible via the demo seed script's timing)
+out=$(gq "$WS" "CREATE (c:Channel {channelId:'ch3', name:'ghost-channel', createdAt:1002}) RETURN c.channelId")
+assert_contains "create channel ch3 (zero members, for empty-roster test)" "ch3" "$out"
+out=$(gq "$WS" "MATCH (c:Channel {channelId:'ch3'}) CREATE (t:Thread {threadId:'th4', title:'orphan roster', createdAt:1002, updatedAt:1002}) CREATE (c)-[:HAS_THREAD]->(t) RETURN t.threadId")
+assert_contains "create thread th4 under ch3" "th4" "$out"
+out=$(gq "$WS" "CYPHER threadId='th4' MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: \$threadId}) MATCH (u)-[:MEMBER_OF]->(c) RETURN count(u) AS n")
+assert_contains "thread participants (th4, zero-member channel): empty result" "0" "$out"
 
 # agent posts a message (assistant role) — v2 path resolves Agent authors via agentId index
 out=$(gq "$WS" "CYPHER mentions=[] MATCH (t:Thread {threadId:'th1'})-[tailRel:TAIL]->(prev:Message) OPTIONAL MATCH (dup:Message {msgId:'m5'}) OPTIONAL MATCH (ua:User {userId:'bot1'}) OPTIONAL MATCH (aa:Agent {agentId:'bot1'}) WITH t, tailRel, prev, dup, coalesce(ua, aa) AS author UNWIND (CASE WHEN \$mentions = [] THEN [null] ELSE \$mentions END) AS mid OPTIONAL MATCH (mu:User {userId: mid}) OPTIONAL MATCH (ma:Agent {agentId: mid}) WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems WITH t, tailRel, prev, dup, author, mems, (dup IS NULL AND author IS NOT NULL) AS ok FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | CREATE (m:Message {msgId:'m5', text:'I am the AI assistant', role:'assistant', createdAt:3000, threadId:'th1'}) CREATE (prev)-[:NEXT]->(m) DELETE tailRel CREATE (t)-[:TAIL]->(m) CREATE (m)-[:POSTED_BY]->(author) SET t.updatedAt=3000 FOREACH (mem IN mems | CREATE (m)-[:MENTIONS_MEMBER]->(mem))) RETURN 'w='+toString(ok)+' auth='+toString(author IS NOT NULL) AS status")
@@ -1051,6 +1078,56 @@ assert_contains "§12.5 re-complete with null AT_STEP is a no-op (no error)" "st
 # terminal-move on a missing run -> zero rows (WorkflowRunNotFound)
 out=$(gq "$WS" 'CYPHER runId="ghost" endedAt=1 MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[atRel:AT_STEP]->() DELETE atRel SET r.status="done" RETURN "status="+r.status AS s')
 assert_not_contains "§12.5 complete of a missing run is zero rows" "status=done" "$out"
+
+echo ""
+echo "▶ §12.14 find_runs_for_thread (FR-2, K-036) — every run a thread has ever had"
+
+# Dedicated runs with distinct startedAt (for a clean DESC-order + LIMIT test), triggered
+# by messages already in th1 (m1/m2/m3). wr1 (done) and wr3 (failed), both startedAt=7000
+# and both TRIGGERED_BY m1, are still live from earlier in §12 — they surface too, older
+# than all three of these.
+gq "$WS" 'MATCH (m:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"rft1", defKey:"triage", defVersion:"v1", status:"done", startedAt:8000, endedAt:8100, ctx:"{}", trace:false, maxSteps:12, stepCount:2, waitingThreadId:""}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"m2"}) CREATE (r:WorkflowRun {runId:"rft2", defKey:"triage", defVersion:"v1", status:"waiting", startedAt:8050, endedAt:0, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:"th1"}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"m3"}) CREATE (r:WorkflowRun {runId:"rft3", defKey:"triage", defVersion:"v1", status:"failed", startedAt:8025, endedAt:8060, ctx:"{}", trace:false, maxSteps:12, stepCount:3, waitingThreadId:""}) CREATE (r)-[:TRIGGERED_BY]->(m)' > /dev/null
+
+# The `r.startedAt >= 0` conjunct is functionally a no-op (startedAt is always a
+# non-negative epoch-ms timestamp) but is load-bearing for the PLAN — see QUERIES.md
+# §12.14's PROFILE note: without it the anchor lands on Node By Label Scan (m:Message),
+# scanning every Message in the workspace, not the tiny WorkflowRun set.
+FRFT='CYPHER threadId="th1" limit=10 MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN r.runId AS runId, r.status AS status, r.defKey AS defKey, r.defVersion AS defVersion, r.startedAt AS startedAt, r.endedAt AS endedAt ORDER BY r.startedAt DESC LIMIT $limit'
+out=$(gq "$WS" "$FRFT")
+assert_contains "find_runs_for_thread(th1): rft1 present" "rft1" "$out"
+assert_contains "find_runs_for_thread(th1): rft2 present" "rft2" "$out"
+assert_contains "find_runs_for_thread(th1): rft3 present" "rft3" "$out"
+assert_contains "find_runs_for_thread(th1): earlier wr1 also present" "wr1" "$out"
+assert_contains "find_runs_for_thread(th1): earlier wr3 also present" "wr3" "$out"
+
+# newest-first: rft2 (8050) before rft3 (8025) before rft1 (8000)
+rft2_line=$(echo "$out" | grep -n "rft2" | head -1 | cut -d: -f1)
+rft3_line=$(echo "$out" | grep -n "rft3" | head -1 | cut -d: -f1)
+rft1_line=$(echo "$out" | grep -n "rft1" | head -1 | cut -d: -f1)
+if [ -n "$rft2_line" ] && [ -n "$rft3_line" ] && [ -n "$rft1_line" ] \
+   && [ "$rft2_line" -lt "$rft3_line" ] && [ "$rft3_line" -lt "$rft1_line" ]; then
+  echo "  ✓ find_runs_for_thread(th1): newest-first order (rft2 > rft3 > rft1 by startedAt)"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ find_runs_for_thread(th1): wrong order"
+  echo "    got: ${out}"
+  FAIL=$((FAIL+1))
+fi
+
+# LIMIT truncates to the newest N
+out=$(gq "$WS" 'CYPHER threadId="th1" limit=1 MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN r.runId AS runId ORDER BY r.startedAt DESC LIMIT $limit')
+assert_contains "find_runs_for_thread(th1) LIMIT 1: returns only the newest (rft2)" "rft2" "$out"
+assert_not_contains "find_runs_for_thread(th1) LIMIT 1: excludes rft3" "rft3" "$out"
+
+# a thread with zero triggered runs (th2 has messages mn1-mn3, none of them trigger a run)
+out=$(gq "$WS" 'CYPHER threadId="th2" MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId = $threadId RETURN count(r) AS n')
+assert_contains "find_runs_for_thread(th2): zero runs (empty, not an error)" "0" "$out"
+
+# PROFILE: anchors on WorkflowRun.startedAt index, no label scan anywhere
+prof=$(gp "$WS" "$FRFT")
+assert_index_scan "find_runs_for_thread anchors on WorkflowRun.startedAt index" "$prof"
 
 # ── teardown ─────────────────────────────────────────────────────────────────
 

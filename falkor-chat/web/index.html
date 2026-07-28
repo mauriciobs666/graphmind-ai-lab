@@ -56,11 +56,20 @@
     .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
     .composer input[type=text] { flex: 1; }
     .empty { color: var(--muted); padding: 16px; }
-    #results { position: absolute; right: 16px; top: 52px; width: 380px; max-height: 60vh;
+    #results, #defs-panel { position: absolute; right: 16px; top: 52px; width: 380px; max-height: 60vh;
       overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
       border-radius: 8px; box-shadow: 0 8px 30px #0008; z-index: 10; display: none; }
-    #results header { position: sticky; top: 0; }
-    #results .item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #results header, #defs-panel header { position: sticky; top: 0; }
+    #results .item .sub, #defs-panel .item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #defs-panel { width: 460px; }
+    #defs-detail-view { padding: 4px 12px 12px; }
+    #defs-detail-view h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--muted); margin: 14px 0 6px; }
+    #defs-detail-view table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    #defs-detail-view th, #defs-detail-view td { text-align: left; padding: 4px 8px;
+      border-bottom: 1px solid #1b1f28; vertical-align: top; }
+    #defs-detail-view td.config { color: var(--muted); font-family: ui-monospace, monospace;
+      font-size: 11px; overflow-wrap: anywhere; }
     #toast {
       position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
       max-width: 520px; padding: 10px 14px; border-radius: 8px; z-index: 50;
@@ -75,6 +84,7 @@
   <header>
     <h1>falkor-chat</h1>
     <span class="tenant" id="tenant"></span>
+    <button type="button" id="defs-btn">Workflow defs</button>
     <form id="search-form">
       <input type="text" id="search-q" placeholder="Search messages…" autocomplete="off" />
       <button type="submit">Search</button>
@@ -115,6 +125,17 @@
   <div id="results">
     <header><h1>Search results</h1><button type="button" id="results-close" style="margin-left:auto">✕</button></header>
     <div class="list" id="results-list"></div>
+  </div>
+
+  <div id="defs-panel">
+    <header><h1>Workflow defs</h1><button type="button" id="defs-close" style="margin-left:auto">✕</button></header>
+    <div id="defs-list-view">
+      <div class="list" id="defs-list"></div>
+    </div>
+    <div id="defs-detail-view" hidden>
+      <button type="button" id="defs-back">&larr; Back to list</button>
+      <div id="defs-detail-content"></div>
+    </div>
   </div>
 
   <div id="toast" role="status" aria-live="polite" hidden></div>

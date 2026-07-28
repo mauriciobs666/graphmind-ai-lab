@@ -22,6 +22,7 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
+from . import config, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 
@@ -342,6 +343,44 @@ def _diff_structures(
             })
 
     return diffs
+
+
+# ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ────────────────
+# `check_demo_readiness` is the HTTP form of `scripts/verify_workflows.sh`: same
+# expected pairs, same `diff_def_snapshot` + structure-read composition, same
+# "cold graph key / absent def" tolerance, same problem-string wording — so the
+# script and the endpoint can never disagree about what "ready" means.
+
+# The exact pair `scripts/seed_workflows.sh` publishes/materializes, and the pair
+# `verify_workflows.sh` checks. Importing it here (rather than each declaring its
+# own list) is what keeps the two checks from drifting apart silently.
+DEMO_EXPECTED_DEFS: tuple[tuple[str, str], ...] = (
+    (config.TRIGGER_DEF_KEY, config.TRIGGER_DEF_VERSION),
+    (proof_defs.ACCESS_REQUEST_DEF["key"], proof_defs.ACCESS_REQUEST_DEF["version"]),
+)
+
+_ABSENT_DIFF: dict[str, Any] = {
+    "defPresent": False, "snapshotPresent": False, "inSync": False,
+    "differences": [], "differenceCount": 0,
+}
+
+
+def _read_or_absent(fn: Callable[[], Any], absent: Any = None) -> Any:
+    """Read-only probe: a cold graph key or an absent def is 'nothing there'.
+
+    Mirrors `scripts/verify_workflows.sh`'s own `read()` helper byte-for-byte —
+    a `WorkflowDefNotFoundError` (both sides absent) or a FalkorDB "empty key"
+    `ResponseError` (the `reference`/`ws:{id}` graph key was never created) both
+    mean "nothing there yet", not a fault worth a 500.
+    """
+    try:
+        return fn()
+    except WorkflowDefNotFoundError:
+        return absent
+    except ResponseError as exc:
+        if "empty key" in str(exc):
+            return absent
+        raise
 
 
 class Services:
@@ -931,6 +970,76 @@ class Services:
             "differences": differences,
             "differenceCount": len(differences),
         }
+
+    def check_demo_readiness(self, ctx: CallContext) -> dict[str, Any]:
+        """Is `ctx.ws` ready to demo? The HTTP form of `verify_workflows.sh` (FR-10).
+
+        For each `DEMO_EXPECTED_DEFS` pair: `diff_def_snapshot` gives presence +
+        sync; `get_workflow_def_structure`/`get_snapshot_structure` add the
+        Finding-3 multi-`START` tripwire (`"startKeys" in structure` — see
+        K-034). Every read is wrapped in `_read_or_absent`, exactly like the
+        script's `read()` helper, so a cold graph key reads as "absent", not as
+        a 500. `ready` is `True` only when every def is fully present, in sync,
+        and problem-free. `problems` reuses the script's own wording verbatim —
+        this endpoint and the script must never disagree about what "ready"
+        means.
+        """
+        results: list[dict[str, Any]] = []
+        ready = True
+        for key, version in DEMO_EXPECTED_DEFS:
+            label = f"{key}@{version}"
+            diff = _read_or_absent(
+                lambda k=key, v=version: self.diff_def_snapshot(ctx, key=k, version=v),
+                absent=_ABSENT_DIFF,
+            )
+            def_present = diff["defPresent"]
+            snap_present = diff["snapshotPresent"]
+            in_sync = diff["inSync"]
+
+            problems: list[str] = []
+            if not def_present:
+                problems.append(
+                    f"{label}: not published in `reference` at this version"
+                )
+            if not snap_present:
+                problems.append(
+                    f"{label}: not materialized into ws:{ctx.ws} at this version"
+                )
+            if def_present and snap_present and not in_sync:
+                problems.append(
+                    f"{label}: reference def and ws:{ctx.ws} snapshot diverge "
+                    f"({diff['differenceCount']} differences)"
+                )
+
+            sides = (
+                ("reference def",
+                 lambda k=key, v=version:
+                     self.get_workflow_def_structure(ctx, key=k, version=v)),
+                (f"ws:{ctx.ws} snapshot",
+                 lambda k=key, v=version:
+                     self.get_snapshot_structure(ctx, key=k, version=v)),
+            )
+            for side, reader in sides:
+                structure = _read_or_absent(reader)
+                if structure and "startKeys" in structure:
+                    starts = structure["startKeys"]
+                    problems.append(
+                        f"{label}: {side} has {len(starts)} START edges "
+                        f"({', '.join(starts)}) — see K-034"
+                    )
+
+            this_ready = def_present and snap_present and in_sync and not problems
+            ready = ready and this_ready
+            results.append({
+                "key": key,
+                "version": version,
+                "defPresent": def_present,
+                "snapshotPresent": snap_present,
+                "inSync": in_sync,
+                "problems": problems,
+            })
+
+        return {"ready": ready, "defs": results}
 
     # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
     #

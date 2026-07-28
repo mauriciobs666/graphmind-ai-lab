@@ -16,7 +16,7 @@ from falkorchat import db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
 from falkorchat.repository import Repository
-from falkorchat.services import Services
+from falkorchat.services import DEMO_EXPECTED_DEFS, Services
 
 
 @pytest.fixture()
@@ -745,6 +745,56 @@ def test_diff_both_absent_is_404(wf_client):
 
     assert r.status_code == 404
     assert r.json()["error"] == "WorkflowDefNotFoundError"
+
+
+# ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ────────────────
+#
+# The HTTP form of `scripts/verify_workflows.sh`. Always 200 — readiness is a
+# report, never a 404/error condition. The service layer (`test_services.py`)
+# exhaustively covers the presence/sync/tripwire logic against a fake repo;
+# this is the contract test that the route is wired and shaped correctly.
+
+_READINESS_KEYS = {"ready", "defs"}
+_READINESS_ENTRY_KEYS = {
+    "key", "version", "defPresent", "snapshotPresent", "inSync", "problems",
+}
+
+
+def test_readiness_route_not_ready_when_nothing_seeded(wf_client):
+    r = wf_client.get("/workspaces/test/readiness")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == _READINESS_KEYS
+    assert body["ready"] is False
+    assert [(d["key"], d["version"]) for d in body["defs"]] == list(DEMO_EXPECTED_DEFS)
+    for entry in body["defs"]:
+        assert set(entry) == _READINESS_ENTRY_KEYS
+        assert (entry["defPresent"], entry["snapshotPresent"]) == (False, False)
+        label = f"{entry['key']}@{entry['version']}"
+        assert entry["problems"] == [
+            f"{label}: not published in `reference` at this version",
+            f"{label}: not materialized into ws:test at this version",
+        ]
+
+
+def test_readiness_route_ready_when_both_demo_defs_published_and_synced(wf_client):
+    for key, version in DEMO_EXPECTED_DEFS:
+        body = {**DEF_BODY, "key": key, "version": version}
+        assert wf_client.post("/workflow-defs", json=body).status_code == 201
+        r = wf_client.post(f"/workflow-defs/{key}/versions/{version}/materialize")
+        assert r.status_code == 201
+
+    r = wf_client.get("/workspaces/test/readiness")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ready"] is True
+    for entry in body["defs"]:
+        assert (entry["defPresent"], entry["snapshotPresent"], entry["inSync"]) == (
+            True, True, True,
+        )
+        assert entry["problems"] == []
 
 
 # ── U12 run-inspection REST reads (AC-5 observability seam) ─────────────────────

@@ -925,6 +925,53 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   direction — an argument object carrying `name` must not resurrect a call the M-1 final-content rule
   rejected.
 
+### K-036 — Web API Coverage — drive the M3 agent/workflow story + a workspace ready-to-demo check from `web/` (🟡 in-progress — Wave 1 of 5 landing; plan `docs/plans/web-api-coverage.md` v3, analyst-approved Pass 3; milestone M3.5)
+
+> **Why it exists.** M3 delivered the def/executor/chat-linkage engine end to end (K-020…K-025 ✅)
+> and K-031 added the def/snapshot structure+diff read surface, but none of it is reachable from
+> `falkor-chat/web/` — there is no in-thread run cue, no run detail panel (status/steps/trace/
+> failure), no structured-input form for a parked step, no thread participants list, and no
+> workspace ready-to-demo check. `docs/requirements/web-api-coverage.md` (FR-1..FR-14,
+> AC-1..AC-6, committed scope FR-1..FR-10/AC-1..AC-6) captures the ask; the plan cross-checked it
+> against the current REST surface (`server/falkorchat/api.py`) and found most of the committed
+> path is pure UI wiring — **FR-2** (inline run cue) and **FR-8** (thread participants) are the
+> genuine server-side read gaps, and **FR-10** (ready-to-demo) needs one new aggregation endpoint
+> composing existing service methods. Relates to **K-018** (real-time push — explicitly NOT pulled
+> forward; FR-4's 5s freshness bar is met by polling, §3.2) and **K-031** (FR-10 reuses
+> `diff_def_snapshot`/the structure reads K-031 shipped).
+> **Id/milestone assigned by the plan itself** (`docs/plans/web-api-coverage.md` header — "K-036
+> by inspection, next free id after K-035"; milestone M3.5 recommended, not gating M3 or M4).
+- **Owner:** `architect` (plan authored + analyst-gated, Pass 3 approved) → per-unit: `graph-dba`
+  (U1, queries) → `coder`/`tdd-engineer` (U2/U4/U5, backend) → `frontend-engineer` (U3/U6/U7/U8/U9,
+  web UI) → `qa-engineer` (U10, black-box AC pass). Ten units across 5 waves — see the plan §4 for
+  the full dependency graph.
+- **Scope (committed):** FR-1..FR-10/AC-1..AC-6 — defs viewer, inline run cue, run detail panel
+  (status/steps/trace/failure/structured-input resume), thread participants list, ready-to-demo
+  banner. **Out of scope:** FR-11..FR-14 (publish/materialize UI, deep snapshot browsing, explicit
+  "start a run" UI, health/get-message UI), end-user UX polish, MCP parity, chat layout/theming
+  migration, auth, in-browser def authoring, and pulling K-018 forward.
+- **New server-side surface (plan §3.1):** `GET /threads/{id}/workflow-runs` (FR-2, backed by new
+  query `find_runs_for_thread`, QUERIES.md §12.14), `GET /threads/{id}/participants` (FR-8, backed
+  by new query "List thread participants", QUERIES.md §2), `GET /workspaces/{ws}/readiness`
+  (FR-10, no new Cypher — pure service-layer composition).
+- **Risks/RAM (rule 6):** one new index, `WorkflowRun.startedAt` (K-036/U1) — `WorkflowRun`
+  cardinality is tiny per workspace, RAM cost negligible. No new label, edge type, or vector
+  dimension; no row in DESIGN §1's decision register reopened (plan §3.4).
+- **Test strategy:** `docs/plans/web-api-coverage.md` §5 — server: repository/service/API
+  three-layer tests per new unit + `./scripts/test_queries.sh`; web: no new JS harness (thin
+  client, server owns the logic), except the FR-2 "most relevant run" tie-break, which must be a
+  dependency-free pure function with bare-`node` assertions (U6); acceptance: `qa-engineer`
+  two-pass black-box session (U10, plan §5.2) driving the real seeded demo workspace, since
+  `TRIGGER_DEF_KEY` is a single process-wide env var and AC-1 (`triage`) / AC-2 (`access-request`)
+  need different server configs.
+- **Progress:** **U1 (graph-dba) delivered 2026-07-28** — both queries authored, `GRAPH.PROFILE`-
+  verified, and landed (QUERIES.md §2 "List thread participants" + §12.14 `find_runs_for_thread`;
+  `scripts/test_queries.sh` 256/256 → **276/276**). U1 also surfaced and documented a
+  previously-unknown FalkorDB planner quirk (a `WHERE` predicate on one pattern variable can pull
+  the label-scan anchor onto that variable's label even when a much smaller label sits elsewhere
+  in the same pattern — `claude/graph-dba/falkordb-quirks.md`, "Query tuning"). Remaining: U2..U10
+  not started.
+
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
 > QA-accepted** (HISTORY.md). Baselines: pytest 156 / query suite 149/149.

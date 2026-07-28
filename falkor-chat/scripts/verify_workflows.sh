@@ -69,18 +69,17 @@ import sys
 from redis.exceptions import ResponseError
 
 from falkorchat import config, db
-from falkorchat.proof_defs import ACCESS_REQUEST_DEF
 from falkorchat.repository import Repository
-from falkorchat.services import Services, WorkflowDefNotFoundError
+from falkorchat.services import DEMO_EXPECTED_DEFS, Services, WorkflowDefNotFoundError
 
-# The expected (key, version) pairs come from the SAME sources `seed_workflows.sh`
-# publishes from, so this check cannot drift from the seed. Check 1 — "published at
-# the EXPECTED version" — is exactly this pairing: the /diff route is version-
+# The expected (key, version) pairs come from `services.DEMO_EXPECTED_DEFS` — the
+# SAME constant `GET /workspaces/{ws}/readiness` (K-036 FR-10) checks, itself
+# built from the SAME sources `seed_workflows.sh` publishes from. One shared
+# constant, not two hand-kept lists, is what keeps this script and the HTTP
+# readiness endpoint from silently drifting apart. Check 1 — "published at the
+# EXPECTED version" — is exactly this pairing: the /diff route is version-
 # qualified and can never answer it on its own.
-DEFS = [
-    (config.TRIGGER_DEF_KEY, config.TRIGGER_DEF_VERSION),
-    (ACCESS_REQUEST_DEF["key"], ACCESS_REQUEST_DEF["version"]),
-]
+DEFS = list(DEMO_EXPECTED_DEFS)
 
 services = Services(Repository(db.connect()))
 ctx = config.get_context()

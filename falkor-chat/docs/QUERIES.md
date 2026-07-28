@@ -1,7 +1,8 @@
 # falkor-chat — Canonical Query Library
 
 Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
-**256/256, 2026-07-20** (`./scripts/test_queries.sh`; 241/241 before the K-024 §12.12/§12.13 gate).
+**276/276, 2026-07-28** (`./scripts/test_queries.sh`; 256/256 before the K-036 §2/§12.14 gate;
+241/241 before that, before the K-024 §12.12/§12.13 gate).
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
 In `falkordb-py`: `g.query(cypher, params={"key": value})`.
@@ -95,6 +96,48 @@ ORDER BY u.displayName
 ```
 *Returns both `User` and `Agent` members. `coalesce(u.userId, u.agentId)` gives a single
 stable identifier regardless of node type; `labels(u)` lets the caller distinguish.*
+
+### List thread participants (K-036 — web-api-coverage FR-8)
+
+```cypher
+// $threadId — a thread's participants = its parent channel's roster (design decision:
+// docs/plans/web-api-coverage.md §2.3 — MEMBER_OF is modeled only at Channel granularity;
+// there is no Thread-level membership edge, and this is a UI/visibility choice, not a
+// technically-derived "who can be @mentioned here" set — see that section's "Known,
+// accepted gap")
+MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: $threadId})
+MATCH (u)-[:MEMBER_OF]->(c)
+RETURN coalesce(u.userId, u.agentId) AS memberId,
+       u.displayName                 AS displayName,
+       labels(u)                     AS type
+ORDER BY u.displayName
+```
+
+*Extends "List channel members" (above) by one leading hop: `Thread` ← `HAS_THREAD` (backward)
+← `Channel` → `MEMBER_OF` (forward) → member. Same `coalesce`/`labels()` shape, and the same
+pre-existing gap that query already has: `Agent` nodes carry `.name`, not `.displayName` —
+`displayName` comes back `null` for an `Agent` row (`labels(u)` still correctly reads
+`["Agent"]`, which is all the caller needs to derive `kind`). Not a new gap introduced here;
+not fixed here either — out of this query's scope.*
+
+**`GRAPH.PROFILE` (2026-07-28, v4.18.11 / module `41811`, isolated `ws:gdbtest`, 3-member
+roster — 2 `User` + 1 `Agent`)** — anchors on `Node By Index Scan | (t:Thread)`
+(`Thread.threadId`), then two forward `Conditional Traverse` hops (`HAS_THREAD` backward to
+`Channel`, `MEMBER_OF` forward to each member) — **no label scan anywhere**:
+
+```
+Results | Records produced: 3
+    Sort | Records produced: 3
+        Project | Records produced: 3
+            Conditional Traverse | Records produced: 3
+                Node By Index Scan | (t:Thread) | Records produced: 1
+```
+
+Also verified: a thread whose channel has zero members returns an empty result (not an error)
+— the demo-seed-timing edge case the plan's §5.2 calls out. No new index/constraint/RAM —
+reuses `Thread.threadId`, `Channel.channelId` is not even needed as an anchor (the traversal
+starts from `t`), and `MEMBER_OF` carries no index of its own (traversal-only, per the
+existing "List channel members" query).
 
 ### Member-kind lookup (author/mention validation + role derivation)
 ```cypher
@@ -1372,3 +1415,87 @@ against an isolated `ws:gdbtest`):
   suspend/resume without a lock — per-query atomicity serializes the read-modify-write.
 - **`waitingThreadId` on `WorkflowRun` rides the `status` index** (§12.9) — a value-point index scan on
   `status:'waiting'` + a residual property filter, no dedicated `waitingThreadId` index.
+
+### 12.14 `find_runs_for_thread` — every run this thread has ever had (K-036 — web-api-coverage FR-2)
+
+```cypher
+// $threadId, $limit
+MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message)
+WHERE r.startedAt >= 0 AND m.threadId = $threadId
+RETURN r.runId AS runId, r.status AS status, r.defKey AS defKey,
+       r.defVersion AS defVersion, r.startedAt AS startedAt, r.endedAt AS endedAt
+ORDER BY r.startedAt DESC
+LIMIT $limit
+```
+
+*The `r.startedAt >= 0` conjunct is functionally a no-op — `startedAt` is always a non-negative
+epoch-ms timestamp (§12.1/§12.12) — but it is **load-bearing for the query plan**, not decoration.
+See the PROFILE findings below.*
+
+**PROFILE finding — a genuinely new, previously-undocumented planner fact (verified 2026-07-28,
+v4.18.11 / module `41811`, isolated `ws:gdbtest`, 3 `WorkflowRun` vs up to 20,003 `Message`).**
+The plan's originally-proposed query shape (`docs/plans/web-api-coverage.md` §3.1a — no predicate
+on `r`, only `WHERE m.threadId = $threadId`) does **not** anchor on
+`Node By Label Scan | (r:WorkflowRun)` as that section expected. It anchors on
+`Node By Label Scan | (m:Message)` instead — scanning **every `Message` in the workspace**, not
+just the thread's, before filtering the unindexed `threadId` property and traversing back to `r`:
+
+```
+Conditional Traverse | (r)->(m) | Records produced: 3
+    Filter | Records produced: 3
+        Node By Label Scan | (m:Message) | Records produced: 20003
+```
+
+This holds regardless of `MATCH` clause shape — tested single-`MATCH`, split two-`MATCH`
+(`MATCH (r:WorkflowRun) MATCH (r)-[:TRIGGERED_BY]->(m:Message) WHERE …`), and reversed direction
+(`MATCH (m:Message)<-[:TRIGGERED_BY]-(r:WorkflowRun) WHERE …`) — all four anchor on `m`. The
+mechanism: **a `WHERE` predicate on a pattern variable pulls the label-scan anchor onto that
+variable's label, even when a much smaller, filter-free label sits elsewhere in the same
+pattern** — relative cardinality does not decide the anchor here, "which variable carries a
+`WHERE` predicate" does. Confirmed the inverse too: the identical pattern with **no** `WHERE` at
+all correctly anchors on the smaller `WorkflowRun` label
+(`Node By Label Scan | (r:WorkflowRun) | Records produced: 3`). Promoted to the general quirks KB
+(`claude/graph-dba/falkordb-quirks.md`, "Query tuning" — this is an engine fact, not specific to
+this schema).
+
+**The plan's own proposed fallback — a bare `WorkflowRun.startedAt` range index, added with no
+query change — is confirmed a no-op**, exactly as the plan's v2 caveat (§3.1a) warned might
+happen: adding the index alone did not move the anchor off `Message` at all (identical profile,
+label scan still on `m`, index unused).
+
+**What actually redirects the anchor: a second, functionally-vacuous predicate on `r` —
+`WHERE r.startedAt >= 0`.** Verified in three configurations:
+- No index + the predicate → `Node By Label Scan | (r:WorkflowRun)` (small-label scan, 3
+  records, not the 20,003-record `Message` scan) → `Conditional Traverse` → `Filter` on
+  `threadId`.
+- `WorkflowRun.startedAt` range index present + the predicate →
+  **`Node By Index Scan | (r:WorkflowRun)`** — genuinely used, not a no-op once paired with the
+  predicate.
+- Predicate order in `WHERE` doesn't matter (`m.threadId = … AND r.startedAt >= 0` profiles
+  identically to the reverse order).
+
+**Decision (this gate): ship both** — the `WHERE r.startedAt >= 0` predicate (does the real work:
+moves the anchor off the workspace-wide `Message` scan) **and** the `WorkflowRun.startedAt` range
+index (upgrades that small-label scan to a small-label **index** scan, keeping this query
+consistent with this file's own "every read anchors on an index, no label scan" convention,
+line 1007). Full PROFILE with the index in place:
+
+```
+Results | Records produced: 3
+    Limit | Records produced: 3
+        Sort | Records produced: 3
+            Project | Records produced: 3
+                Filter | Records produced: 3
+                    Conditional Traverse | (r)->(m:Message) | Records produced: 3
+                        Node By Index Scan | (r:WorkflowRun) | Records produced: 3
+```
+
+**RAM (rule 6): one new range index, `WorkflowRun.startedAt`, added to `bootstrap_schema.sh`.**
+`WorkflowRun` cardinality is tiny per workspace (same argument §12.9 already accepted for the
+`status` index) — cost is a few bytes per run, negligible next to `Message`-scale RAM.
+
+**General engine fact, not project-specific:** any FalkorDB two-hop pattern where one side is a
+small, unfiltered label and the other is a much larger label filtered by an **unindexed**
+property in `WHERE` can hit this same anchor trap — the fix (an extra, even-if-vacuous predicate
+on the variable you want as anchor) generalizes. See `claude/graph-dba/falkordb-quirks.md` for the
+schema-independent write-up.

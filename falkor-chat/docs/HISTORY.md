@@ -5,6 +5,45 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-28 — K-036 U2: `GET /workspaces/{ws}/readiness` — "is this workspace ready to demo" over HTTP
+
+**What:** the HTTP form of `scripts/verify_workflows.sh` (FR-10, `docs/plans/web-api-coverage.md`
+§3.1c, Wave-1 unit U2 — independent of the plan's other units). New
+`services.check_demo_readiness(ctx) -> dict` composes three already-existing service methods —
+`diff_def_snapshot`, `get_workflow_def_structure`, `get_snapshot_structure` — over
+`DEMO_EXPECTED_DEFS` (`(config.TRIGGER_DEF_KEY, config.TRIGGER_DEF_VERSION)` +
+`(proof_defs.ACCESS_REQUEST_DEF["key"/"version"])`, the same pair `seed_workflows.sh` seeds and
+`verify_workflows.sh` already checked). **Zero new Cypher, zero repository change.**
+
+Per def: presence + sync from `diff_def_snapshot` (a cold `reference`/`ws:{id}` graph key or an
+absent def reads as "nothing there", not a 500 — `_read_or_absent` mirrors the script's own
+`read()` helper, including its `WorkflowDefNotFoundError`/`ResponseError("empty key")` catch and
+`ABSENT`-shape substitution byte-for-byte), plus the Finding-3 multi-`START` tripwire
+(`"startKeys" in structure`, K-034) from the two structure reads. `problems` reuses the script's
+exact wording (`"{label}: not published in \`reference\` at this version"`, `"... not
+materialized into ws:{ws} at this version"`, `"... diverge (N differences)"`, `"... has N START
+edges (...) — see K-034"`) so the endpoint and the script can never disagree about what "ready"
+means. `ready` = every def fully present, in sync, and problem-free.
+
+New route `GET /workspaces/{ws}/readiness` → **always 200** (readiness is a report, never a
+404/error condition), mirroring `list_snapshots`'/`diff_def_snapshot`'s `ws`-path/tenancy
+convention (`ws` is descriptive; tenancy comes from `get_context`).
+
+**Bundled cleanup (plan §3.1c, "should-do"):** `verify_workflows.sh` now imports
+`DEMO_EXPECTED_DEFS` from `falkorchat.services` instead of declaring its own inline `DEFS` list —
+the two lists would otherwise be a second, silent copy of exactly the kind of drift this feature
+exists to catch. Re-verified against a live server after the change: still `RESULT: OK — 2 defs
+in sync between \`reference\` and ws:acme`, unchanged in behavior (the pytest run in between, as
+documented in DESIGN §14.7, wiped `reference` mid-verification — re-seeding with
+`seed_workflows.sh acme` was needed before the final check, not a regression).
+
+**Tests:** `server/tests/test_services.py` — six new cases against a fake repo (all-present/synced,
+missing-def, missing-snapshot, both-absent via the `WorkflowDefNotFoundError` catch, diverging,
+and the multi-`START` tripwire), all naming the exact offending def/problem string.
+`server/tests/test_api.py` — two contract tests against the live `ws:test`/`reference` graphs (200
+shape with nothing seeded; `ready: true` once both demo defs are published + materialized under
+their real keys). Full suite: `614 passed, 1 deselected`.
+
 ## 2026-07-27 — Docs: the repo-wide reference & naming convention applies here — **forward-only**
 
 **What:** the documentation reference and naming convention landed repo-wide

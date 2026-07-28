@@ -222,6 +222,93 @@ function openThreadFromSearch(threadId) {
   guard(() => selectThread(threadId, threadId));
 }
 
+// ── workflow defs viewer (FR-1) ─────────────────────────────────────────────────
+// Static content: defs are immutable once published, so there is no polling here
+// (§3.2). The header button is always visible; the panel and its content are
+// fetched/rendered only once clicked (§3.3's AC-5 reading).
+
+function toggleDefsPanel() {
+  if ($("defs-panel").style.display === "block") {
+    closeDefsPanel();
+  } else {
+    guard(openDefsPanel);
+  }
+}
+
+async function openDefsPanel() {
+  showDefsList();
+  await loadDefsList();
+  $("defs-panel").style.display = "block";
+}
+
+function closeDefsPanel() {
+  $("defs-panel").style.display = "none";
+}
+
+function showDefsList() {
+  $("defs-list-view").hidden = false;
+  $("defs-detail-view").hidden = true;
+}
+
+function showDefsDetailView() {
+  $("defs-list-view").hidden = true;
+  $("defs-detail-view").hidden = false;
+}
+
+async function loadDefsList() {
+  const defs = await api("/workflow-defs");
+  const box = $("defs-list");
+  box.innerHTML = "";
+  if (defs.length === 0) {
+    box.innerHTML = '<div class="empty">No workflow definitions published.</div>';
+  }
+  for (const d of defs) {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `<div>${escapeHtml(d.key)} <span class="sub">${escapeHtml(d.version)}</span></div>
+      <div class="sub">${escapeHtml(d.name || "")}</div>`;
+    el.onclick = () => guard(() => selectDef(d.key, d.version));
+    box.appendChild(el);
+  }
+}
+
+// Fetch one def's full structure and render its steps + transitions as plain
+// tables (FR-1: text is sufficient, no graph-drawing library, FR-9 minimalism).
+async function selectDef(key, version) {
+  const structure = await api(
+    `/workflow-defs/${encodeURIComponent(key)}/versions/${encodeURIComponent(version)}`,
+  );
+  renderDefDetail(structure);
+  showDefsDetailView();
+}
+
+function renderDefDetail(s) {
+  const startKeys = s.startKeys || (s.startKey ? [s.startKey] : []);
+  const stepRows = s.steps.map((step) => `
+    <tr>
+      <td>${escapeHtml(step.key)}${startKeys.includes(step.key) ? " <em>(start)</em>" : ""}</td>
+      <td>${escapeHtml(step.type)}</td>
+      <td class="config">${escapeHtml(step.config)}</td>
+    </tr>`).join("");
+  const transitionRows = s.transitions.map((t) => `
+    <tr>
+      <td>${escapeHtml(t.from)}</td>
+      <td>${escapeHtml(t.to)}</td>
+      <td>${escapeHtml(t.on)}</td>
+      <td class="config">${escapeHtml(t.guard)}</td>
+    </tr>`).join("");
+  $("defs-detail-content").innerHTML = `
+    <div><strong>${escapeHtml(s.name)}</strong>
+      <div class="sub">${escapeHtml(s.key)} ${escapeHtml(s.version)} · ${escapeHtml(s.kind)}</div>
+    </div>
+    <h3>Steps (${s.stepCount})</h3>
+    <table><thead><tr><th>Key</th><th>Type</th><th>Config</th></tr></thead>
+      <tbody>${stepRows || '<tr><td colspan="3" class="empty">No steps.</td></tr>'}</tbody></table>
+    <h3>Transitions (${s.transitionCount})</h3>
+    <table><thead><tr><th>From</th><th>To</th><th>On</th><th>Guard</th></tr></thead>
+      <tbody>${transitionRows || '<tr><td colspan="4" class="empty">No transitions.</td></tr>'}</tbody></table>`;
+}
+
 // ── helpers & wiring ────────────────────────────────────────────────────────────
 
 function escapeHtml(s) {
@@ -316,6 +403,10 @@ $("search-form").addEventListener("submit", (e) => {
 $("results-close").addEventListener("click", () => {
   $("results").style.display = "none";
 });
+
+$("defs-btn").addEventListener("click", toggleDefsPanel);
+$("defs-close").addEventListener("click", closeDefsPanel);
+$("defs-back").addEventListener("click", showDefsList);
 
 // initial load
 guard(loadChannels);

@@ -381,4 +381,15 @@ def build_router(
         # `./scripts/verify_workflows.sh <wsId>` which checks both defs at once.
         return services.diff_def_snapshot(ctx, key=key, version=version)
 
+    # ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ──────────
+    # The HTTP form of `scripts/verify_workflows.sh` — same expected defs, same
+    # checks, reachable without a shell + venv. Always 200: readiness is a
+    # *report*, never a 404/error condition, so a caller (or the web UI) never
+    # has to special-case a not-ready workspace as a failed request.
+    @router.get("/workspaces/{ws}/readiness")
+    def check_demo_readiness(ws: str, ctx: CallContext = Depends(get_context)):
+        # `ws` is descriptive here too — tenancy comes from `get_context`, same
+        # convention as `list_snapshots`/`diff_def_snapshot` above.
+        return services.check_demo_readiness(ctx)
+
     return router
