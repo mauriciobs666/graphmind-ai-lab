@@ -5,6 +5,41 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-27 — Docs: the repo-wide reference & naming convention applies here — **forward-only**
+
+**What:** the documentation reference and naming convention landed repo-wide
+(`docs/plans/doc-reference-convention.md` v1.4, twice reviewed; full entry in `docs/HISTORY.md`
+under 2026-07-27). Two consequences for this component, both **forward-only**:
+
+- **A document that freezes no longer moves.** `falkor-chat/docs/archive/` is now **read-only history
+  of the previous convention, not a destination** — nothing moves into it again and nothing is
+  un-archived. A document that freezes gets `Status: archived` in its own header block and stays
+  exactly where it is, which also removes the inbound-link repair the move used to require. The
+  `falkor-chat/docs/BACKLOG.md` preamble and the `docs/archive/` row of `falkor-chat/AGENTS.md` were
+  corrected to say so. **The dated entries below that describe the old rule are left exactly as
+  written** — they were correct when written.
+- **Every active plan, review and requirements document here now opens with the canonical header
+  block** (`> **Status:** … · **Owner:** … · **Tracks:** …`), so
+  `grep -m1 -H 'Status:' falkor-chat/docs/plans/*.md` is a complete lifecycle listing. `Tracks:` is
+  where the milestone lives now.
+
+**The naming convention is forward-only, and renames were explicitly declined.** The grammar
+`<component>/docs/<kind>/<topic-slug>[-<role>].md` — with its closed role set and its prohibition on
+an `m<digit>`/`k<digit>`/date **prefix** — governs **new** documents only. This component's existing
+`m1-`/`m2-`/`m3-` names stay. **An existing `m<n>-` prefix is part of a name, not a lifecycle
+claim:** nobody should read meaning into it, and nobody should "fix" it.
+
+**Why the rename was declined — recorded so it is not re-litigated.** Renaming the 6 mis-named
+documents was measured at **39 occurrences across 15 files** of inbound-citation repair, against
+**22 edits across 8 files** for the *entire* M3-close archival sweep that triggered the assessment.
+The tidy-up costs nearly twice the whole problem it would tidy, and it buys nothing a reader cannot
+already get from the header's `Tracks:` field, from `falkor-chat/docs/BACKLOG.md`, or from this
+file — the three maintained places the milestone already lives.
+
+**Also in the same change:** the three broken relative links in `falkor-chat/docs/BACKLOG.md` (an
+extra `../` in each — every target existed) are fixed, and the backlog's parking lot records one
+opportunistic re-slug nit, deliberately unscheduled.
+
 ## 2026-07-24 — Docs: `AGENTS.md` de-bloat — moved restated content to its canonical home, kept only pointers
 
 **What:** `AGENTS.md` had grown to 312 lines, much of it near-verbatim restatement of content that

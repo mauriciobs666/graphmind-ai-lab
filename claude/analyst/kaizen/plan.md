@@ -17,8 +17,8 @@
 - **Rationale:** The prompt is untested against a live run. The likely weak spots: verdict calibration (does it rubber-stamp or nitpick-flood?), whether it actually runs suites for evidence, and whether the review doc lands at `docs/reviews/<slug>.md` with the hook staying silent. Two of the three review modes have now cleared these on real artifacts; the RCA mode has not run.
 - **Proposed change:** Run an **RCA of a real (or seeded) failing test** end-to-end — assess whether it delivers a clean causal chain + suggested fix at `docs/reviews/<slug>-rca.md`, hook silent; fold any verdict/structure findings back into the prompt. Then close K-001.
 - **Progress:**
-  - **Plan-review ✅ 2026-07-11** — `falkor-chat/docs/reviews/m3-executor.md` (K-022 design review; majors M1–M4 raised and closed into the approved plan; right path, hook silent).
-  - **Code-review ✅ 2026-07-12** — `falkor-chat/docs/reviews/m3-executor-impl.md` (K-022 impl review; approve-with-suggestions, 0 blockers / 1 major / 3 minor / 3 nit; calibration healthy). Counterpart to teco K-003 (now closed). See history.md.
+  - **Plan-review ✅ 2026-07-11** — `falkor-chat/docs/archive/reviews/m3-executor.md` (K-022 design review; majors M1–M4 raised and closed into the approved plan; right path, hook silent).
+  - **Code-review ✅ 2026-07-12** — `falkor-chat/docs/archive/reviews/m3-executor-impl.md` (K-022 impl review; approve-with-suggestions, 0 blockers / 1 major / 3 minor / 3 nit; calibration healthy). Counterpart to teco K-003 (now closed). See history.md.
   - **RCA ⬜ open** — no RCA run yet; this is the sole remaining piece of the shakedown.
 
 ### K-002 — Reciprocal mentions in producer prompts (architect/coder)

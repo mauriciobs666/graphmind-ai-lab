@@ -2,7 +2,8 @@
 
 > Forward-looking backlog for the `falkor-chat` component (formerly `kaizen/plan.md`; item IDs
 > keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
-> plan documents move to [`archive/`](./archive/).
+> plan documents stay in place and are marked `Status: archived` (root `AGENTS.md`);
+> `archive/` holds frozen documents from the previous convention.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
 > Last reviewed: 2026-07-21 (**K-025 delivered ✅ ⇒ MILESTONE M3 ✅** — the `qa-engineer`
 > acceptance pass ran against commit `98a3cc8` on green baselines (server pytest **533 passed / 1
@@ -782,9 +783,9 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 > `materialize_snapshot` (`repository.py:1540-1566`) formats the **same constant** at `:1555` against
 > the workspace graph, so the snapshot side is additive too — and the snapshot is what the executor
 > drives. **Full evidence, do not re-derive it:**
-> [`docs/reviews/workflow-def-structure-read.md`](../reviews/workflow-def-structure-read.md) **finding
+> [`docs/reviews/workflow-def-structure-read.md`](reviews/workflow-def-structure-read.md) **finding
 > B-2** (and its closure in the re-gate section, R2 · B-2); formally handed off to this item by
-> [`docs/plans/workflow-def-structure-read.md`](../plans/workflow-def-structure-read.md) **§0.2** and
+> [`docs/plans/workflow-def-structure-read.md`](plans/workflow-def-structure-read.md) **§0.2** and
 > **§1.2**.
 - **Two live consequences — this is a defect, not a curiosity.**
   1. **Nondeterministic branching.** `executor._select_transition` orders by
@@ -892,7 +893,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 > | `x({"tool": "y", "args": {"a": 1}})` | `ToolCall(name='y', arguments={"a": 1})` |
 >
 > Reproduced by `analyst` at the K-027 slice A gate; the three rows above are verbatim from
-> [`docs/reviews/k027-parse-robustness.md`](../reviews/k027-parse-robustness.md) **M-2**.
+> [`docs/reviews/k027-parse-robustness.md`](reviews/k027-parse-robustness.md) **M-2**.
 - **Not currently reachable, and that is the whole risk.** No registered tool declares such a
   parameter — `post_message` takes `text`/`mentions`, `graphrag_retrieve` takes `query`,
   `human_handoff` takes `reason` (`server/falkorchat/tools.py`). The premise was verified at the
@@ -1113,6 +1114,14 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   pre-existing route still does not. That is a **deliberate** non-retrofit — FastAPI's `response_model` *filters*
   undeclared fields, so a wrong model silently drops a field the web client reads — and it leaves the repo with a **mixed
   convention**. This entry stays open; the new routes are the worked precedent for the eventual retrofit, not the retrofit.
+- **Opportunistic nit — re-slug the K-031 implementation review** (recorded, **not** scheduled work).
+  It is filed under the slug `k031-structure-read-impl`, while the rest of its family — the plan and
+  the plan review — uses `workflow-def-structure-read`. The filename grammar's family rule (*the same
+  slug across several kinds **is** the family; a downstream document inventing a new slug is a
+  defect*) is therefore broken by one member. Correcting it to `workflow-def-structure-read-impl`
+  costs **4 occurrences across 3 files** (this backlog, the component change log, and the M3
+  follow-ups coordination plan). Fold it into a change that already opens all three; it does not earn
+  a change of its own, and renames in this repo are forward-only by ruling.
 - DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard expression language (M3),
   real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
   for the gateway (K-018).

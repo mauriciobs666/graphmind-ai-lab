@@ -344,6 +344,33 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
     under `--no-cache` the two `docker build` invocations can resolve different dependency versions
     (m-23). Full evidence and suggested fixes: `docs/reviews/cpg-mcp-containerization.md` §17–§18.
 
+- **C-322 — Documentation reference & naming convention.** ✅ **Delivered 2026-07-27.** The repo had
+  **two silently competing anchoring conventions** for citing a document and **no stated rule** for
+  naming one. Ruled and landed: a citation is a **backticked path from the repo root** (a markdown
+  link is permitted, never required, and never `/docs/…` — a leading slash is unresolvable for an
+  agent); a document that freezes **stays in place** and gets `Status: archived` in a three-field
+  header block (`Status:` · `Owner:` · `Tracks:`) instead of moving to `archive/`, which also
+  abolishes the inbound-link repair that move required; and a new document follows the grammar
+  `<component>/docs/<kind>/<topic-slug>[-<role>].md` with a closed role set and no `m<digit>`/
+  `k<digit>`/date **prefix**. Applied **forward-only — zero renames, zero hook edits, no CI gate**.
+  Shipped in three commits: the convention into root `AGENTS.md`, `falkor-chat/AGENTS.md`,
+  `qa-engineer` and `analyst`; the header contract into the producing prompts; and the `Status:`
+  backfill across 25 active documents (25 → 0 nonconforming). Design, measurements and rejected
+  alternatives: `docs/plans/doc-reference-convention.md` (v1.4); review:
+  `docs/reviews/doc-reference-convention.md`; entry: `docs/HISTORY.md` 2026-07-27.
+  Owner: `architect` (design) / `coder` + `cobb` (execution).
+- **C-323 — Bulk repath of the remaining module-anchored references to full root-anchoring (S5).**
+  ⚪ **Deliberately deferred — recorded, not scheduled.** C-322 normalised the **live guidance**
+  files and left the module-anchored `` `docs/…` `` citations that sit inside **dated records and
+  per-item ledgers**, where the module-relative spelling is arguably correct as written;
+  `falkor-chat/docs/HISTORY.md` and `falkor-chat/docs/BACKLOG.md` account for most of them. A full
+  conversion is a **~60-file, judgement-heavy sweep** — each citation must be resolved against its
+  citing file before it can be rewritten — and the plan's cost decomposition puts the return at
+  **≤4.5% of future archival churn**, a churn D4 has *already* removed by keeping frozen documents
+  in place. **Do not schedule this.** Un-defer only on a measured, repeated failure to resolve one
+  of these citations. Cost analysis: `docs/plans/doc-reference-convention.md` §1.2, §2.1 and §12
+  *"Not scheduled"*. Owner: unassigned.
+
 ## Follow-ups (post-M2)
 
 - **C-101 — Fix `joern-cpg` loader `MAX_ARG_STRLEN` failure + masked exit code.** 🔵 The M1

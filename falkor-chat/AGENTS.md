@@ -9,7 +9,7 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ## Decisions locked in — do not reopen without strong cause
 
-The single authoritative decision register is `docs/DESIGN.md` §1 (§1.1 top-level axes, §1.2
+The single authoritative decision register is `falkor-chat/docs/DESIGN.md` §1 (§1.1 top-level axes, §1.2
 detailed register, §1.3 M2 stack) — do not reopen any row there without strong cause. This file
 carries no copy of it; follow the link.
 
@@ -22,7 +22,7 @@ pattern bug, empty-`UNWIND` row collapse, `TIMEOUT` behavior, `OR`-as-scan-ancho
 keyset-predicate planning, etc.) live in the `graph-dba` agent's knowledge base,
 **`claude/graph-dba/falkordb-quirks.md`**. This project's specific applications of those facts
 (member resolution, the mention write-block guard, keyset formulation, TIMEOUT posture) are
-annotated inline at the relevant query in `docs/QUERIES.md` (§2, §4, §9.1) and `docs/DESIGN.md`
+annotated inline at the relevant query in `falkor-chat/docs/QUERIES.md` (§2, §4, §9.1) and `falkor-chat/docs/DESIGN.md`
 §10 — not restated here.
 
 ---
@@ -52,8 +52,8 @@ Edges cannot cross graphs. Cross-graph references use property keys or materiali
 
 ## Message write paths (two variants — keep them separate)
 
-The exact, verified Cypher lives in **one place — `docs/QUERIES.md` §4** (single source of
-truth); the invariants that govern it live in **`docs/DESIGN.md` §5.3/§9** and the `services.py`/
+The exact, verified Cypher lives in **one place — `falkor-chat/docs/QUERIES.md` §4** (single source of
+truth); the invariants that govern it live in **`falkor-chat/docs/DESIGN.md` §5.3/§9** and the `services.py`/
 `repository.py` docstrings — do not copy either into this file. Two things to hold onto: *first
 message in a thread* and *subsequent message* are separate self-guarding write paths, never a
 conditional MERGE, and every write returns a status row the service dispatches on (`dupMsg` =
@@ -91,12 +91,12 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'   # first time
 .venv/bin/uvicorn falkorchat.app:app                         # web UI + REST under /, MCP at /mcp
 ```
 
-Application architecture (layering, front doors, REST/MCP surface, layout) is `docs/DESIGN.md`
+Application architecture (layering, front doors, REST/MCP surface, layout) is `falkor-chat/docs/DESIGN.md`
 §14–§15 — not restated here. **Testing hazards specific to this suite** (the pytest-side
 destructive-reference-graph gotcha, skip-count reading, `ws:test`'s fixed dim-4 vector index,
-ruff not being a wired gate) are `docs/DESIGN.md` §14.7. Model-output parse tolerance (`llm.py`)
+ruff not being a wired gate) are `falkor-chat/docs/DESIGN.md` §14.7. Model-output parse tolerance (`llm.py`)
 and the executor/workflow-def invariants are documented at their own definitions
-(`llm.py` docstrings; `services._validate_def_spec`, `executor.py`) and in `docs/DESIGN.md` §6 —
+(`llm.py` docstrings; `services._validate_def_spec`, `executor.py`) and in `falkor-chat/docs/DESIGN.md` §6 —
 read the code, don't look for a copy here.
 
 ---
@@ -105,15 +105,15 @@ read the code, don't look for a copy here.
 
 | File | Contents |
 |---|---|
-| `docs/DESIGN.md` | Full blueprint — graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP. The *why*; queries live in QUERIES.md, DDL in `bootstrap_schema.sh`. |
-| `docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
-| `docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing. |
-| `docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
-| `docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here any more and nothing is un-archived; a document that freezes now stays in place and gets `Status: archived` in its header (root `AGENTS.md`). |
+| `falkor-chat/docs/DESIGN.md` | Full blueprint — graph topology, data model, indexes, ops, roadmap, §14–§15 M1 app + MCP. The *why*; queries live in QUERIES.md, DDL in `bootstrap_schema.sh`. |
+| `falkor-chat/docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
+| `falkor-chat/docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing. |
+| `falkor-chat/docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
+| `falkor-chat/docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here any more and nothing is un-archived; a document that freezes now stays in place and gets `Status: archived` in its header (root `AGENTS.md`). |
 | `scripts/bootstrap_schema.sh` | Source of truth for executable DDL — indexes, constraints, full-text/vector. |
 | `claude/graph-dba/falkordb-quirks.md` | General FalkorDB engine/dialect facts for this lab's pinned build — not project-specific. |
-| `docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors. |
-| `docs/archive/plans/m2-groundwork.md` · `docs/archive/plans/m2-groundwork-queries.md` | K-007 plan + verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings. |
+| `falkor-chat/docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors. |
+| `falkor-chat/docs/archive/plans/m2-groundwork.md` · `falkor-chat/docs/archive/plans/m2-groundwork-queries.md` | K-007 plan + verified-query deliverable: v2 write paths, keyset cursors, threadId denorm, TIMEOUT/RAM findings. |
 
 ---
 
