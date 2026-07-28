@@ -67,11 +67,14 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
   **inline cue** naming the definition that started and giving access to the run's detail.
 - **FR-3** The inline cue opens a **run detail panel** showing, for the selected run: its current
   status, the steps executed so far with their outcome and time, and the run's trace.
-- **FR-4** The run detail reflects a run's progress **without the user reloading the page**.
+- **FR-4** The run detail reflects a run's progress **without the user reloading the page**, and
+  a change in a run's state is visible within **5 seconds** of it happening.
 - **FR-5** When a run parks waiting on a human step, the page makes visible that it is waiting
   and *what* it is waiting for (the step's prompt).
-- **FR-6** The user can supply a parked run's awaited human input from the page and observe the
-  run resume.
+- **FR-6** The user can supply a parked run's awaited **structured** input from the run panel —
+  the panel presents the awaited step's inputs as fields to fill and submit — and observe the run
+  resume. Answering a parking step by plain chat reply keeps working as it does today; the panel
+  is the path for steps whose continuation depends on structured values.
 - **FR-7** A run that fails surfaces the failure and its reason in the run detail.
 - **FR-8** The page shows a thread's **participants** — humans and agents — with the two kinds
   visually distinguishable.
@@ -102,8 +105,9 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
   M3 story in the browser alone — see the available defs, post the `@mention` that starts a run,
   watch the run appear and progress, answer the human step, and see the run reach a terminal
   state — **without a terminal, curl, or a page reload**.
-- **AC-2** Given a run parked on a human step, When the awaited input is supplied from the page,
-  Then the run's state visibly changes from waiting to running/next-step.
+- **AC-2** Given a run parked on a human step, When the awaited structured input is filled in and
+  submitted from the run panel, Then the run's state visibly changes from waiting to
+  running/next-step **within 5 seconds**, with no page reload.
 - **AC-3** Given a failing run, When the user opens its detail, Then the failure and its reason
   are readable in the page.
 - **AC-4** Given an open thread, When the user looks at it, Then the thread's participants are
@@ -113,12 +117,12 @@ validates IDs supplied by a caller — so this need is not pure UI wiring.
 
 ## Open questions
 
-1. How does the demo human answer a step that needs **structured** input (e.g. `access-request`'s
-   `request` object with a `role`) — a form in the page, or a plain chat reply?
-2. How fresh must run progress be (FR-4) — what delay between a step advancing and the page
-   showing it is still acceptable for a demo?
-3. Is the def↔snapshot **drift check** (FR-11) actually part of the demo prep, i.e. should it be
-   promoted into the committed set?
+1. Is the def↔snapshot **drift check** (FR-11) part of demo *prep*, i.e. should it move into the
+   committed set?
+
+*Context for the architect (not a requirement):* a parking step's awaited input keys are declared
+in the definition's step config, and input validation is on top-level keys only — the form in
+FR-6 has a declared source to render from, but no deep schema.
 
 ## Decision log
 
@@ -133,3 +137,6 @@ agents). No server read path exists for it today.
 the agent+workflow demo needs is committed; the rest is listed as nice-to-have (FR-10..13).
 2026-07-27 — Where is a running workflow visible? → **Both** — a light inline cue in the thread
 plus a detail panel (steps, trace) opened on demand.
+2026-07-27 — How does a human answer a structured step? → A **form in the run panel** rendering
+the awaited inputs; plain chat replies keep working for simple parking steps.
+2026-07-27 — How fresh must run progress be? → Visible **within ~5 seconds**, no page reload.
