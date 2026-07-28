@@ -1,6 +1,7 @@
 # GraphRAG retrieval + generation evaluation harness — method note (data-scientist)
 
-> **Status:** proposed method note (M2.5-quality track). Advisory deliverable — implementation
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (M2.5 quality track) ·
+> proposed method note (M2.5-quality track). Advisory deliverable — implementation
 > routes to `coder`/`tdd-engineer`; any in-graph query change routes to `graph-dba`.
 > **Author:** data-scientist · **Date:** 2026-07-10
 > **Slots into:** `docs/BACKLOG.md` as a tracked **M2.5-quality** item (draft at the bottom of this doc),

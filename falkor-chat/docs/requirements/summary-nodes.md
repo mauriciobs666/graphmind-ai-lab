@@ -1,5 +1,5 @@
 # Summary Nodes — Feature Requirements
-> Status: Interviewing · Last updated: 2026-07-12
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-07-12
 
 ## Intent
 The stakeholder wants the graph to hold **summary nodes**: nodes that carry a condensed summary

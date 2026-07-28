@@ -1,6 +1,7 @@
 # CPG query access — Feature Requirements
-> Status: **Delivered ✅** — AC-1…AC-4 met and accepted (M3, 2026-07-25); follow-ups tracked in
-> [`../BACKLOG.md`](../BACKLOG.md) · Last updated: 2026-07-25
+> **Status:** archived · **Owner:** `tico` · **Tracks:** C-301…C-307 (M3) ·
+> **Delivered ✅** — AC-1…AC-4 met and accepted (M3, 2026-07-25); follow-ups tracked in
+> [`../BACKLOG.md`](../BACKLOG.md) · **Last updated:** 2026-07-25
 
 ## Intent
 Agents that read a loaded Joern CPG in FalkorDB should be able to ask the graph a

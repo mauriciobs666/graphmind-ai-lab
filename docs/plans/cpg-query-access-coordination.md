@@ -1,5 +1,7 @@
 # CPG query access — coordination log
 
+> **Status:** archived · **Owner:** `teco` · **Tracks:** C-301…C-307 (M3)
+>
 > `teco` coordination doc for the **CPG query access** feature (MCP tool replaces
 > `redis-cli GRAPH.QUERY` on the CPG **read** path).
 > Requirements: [`../requirements/cpg-query-access.md`](../requirements/cpg-query-access.md) (Ready for design, no open questions).

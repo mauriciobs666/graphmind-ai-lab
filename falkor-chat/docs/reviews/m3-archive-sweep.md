@@ -1,5 +1,7 @@
 # Review — M3-close documentation-archival sweep (doc-only)
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-025 (M3)
+
 - **Reviewer:** analyst
 - **Date:** 2026-07-22
 - **Artifact under review:** staged/working (uncommitted) doc-archival change in `falkor-chat/`

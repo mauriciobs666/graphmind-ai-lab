@@ -1,5 +1,7 @@
 # Local model + embedding selection under a 16 GB RAM budget — method note
 
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-022 (M3)
+>
 > **Type:** data-scientist method note (advisory — no code/config changed here).
 > **Author:** data-scientist · **Date:** 2026-07-18
 > **Decision it serves:** the user's machine was downgraded **32 GB → 16 GB** (it was crashing under

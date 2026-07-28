@@ -1,6 +1,7 @@
 # Joern CPG Component — Feature Requirements
-> Status: M1 (producer pipeline) **delivered ✅** · M2 (CPG consumer skill) **specified, in progress** ·
-> Last updated: 2026-07-25
+> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208 · C-301…C-307 (M1–M3) ·
+> M1 (producer pipeline) **delivered ✅** · M2 (CPG consumer skill) **specified, in progress** ·
+> **Last updated:** 2026-07-25
 
 ## Intent
 The stakeholder wants to run **Joern** to extract a **Code Property Graph (CPG)** from source code,

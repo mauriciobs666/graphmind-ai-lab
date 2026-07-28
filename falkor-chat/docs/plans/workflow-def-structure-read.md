@@ -1,9 +1,11 @@
 # K-031 — Def/snapshot **structure** read surface (make the create-only split-brain detectable)
 
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-031 (M3 follow-ups) ·
+> v2 2026-07-24; re-gated and delivered
+>
 > **Version:** **v2 — 2026-07-24** (revision pass after the `analyst` U2-G1 gate returned
 > *needs changes*: 2 blocker · 3 major · 6 minor · 4 nit). v1 = 2026-07-24, design complete.
 > Every finding's disposition is recorded in **§11**.
-> **Status:** revised, **awaiting re-gate** (U2-G1, `docs/plans/m3-followups-coordination.md`).
 > Planning-only artifact — no code, DDL or doc was changed by writing it.
 > **Review:** `docs/reviews/workflow-def-structure-read.md`.
 > **Closes:** **K-031** (`docs/BACKLOG.md`), filed out of the K-025 QA pass as **DEF-1** +

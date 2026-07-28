@@ -1,5 +1,7 @@
 # Review — K-031 implementation: def/snapshot structure read surface
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-031 (M3 follow-ups)
+>
 > **Reviewer:** `analyst` · **Date:** 2026-07-24 · **Artifact:** uncommitted working tree
 > **Baseline:** `docs/plans/workflow-def-structure-read.md` **v2** + its two gates
 > (`docs/reviews/workflow-def-structure-read.md`, round 1 + re-gate RG-m1…RG-m5 / RG-n1…RG-n5)

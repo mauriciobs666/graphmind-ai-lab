@@ -1,5 +1,5 @@
 # Workflow Def Data-Dependence Overlay (CPG-style) — Feature Requirements
-> Status: Interviewing · Last updated: 2026-07-23
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** K-032 (M3 follow-ups) · **Last updated:** 2026-07-23
 > Source: design conversation with the stakeholder (Mauricio), 2026-07-22. Backlog companion: **K-032** (`docs/BACKLOG.md`). This doc is the WHAT/WHY; K-032 carries the framing sketch and pointers to owners.
 
 ## Intent

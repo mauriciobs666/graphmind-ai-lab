@@ -1,5 +1,7 @@
 # Plan review — K-031 def/snapshot **structure** read surface
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-031 (M3 follow-ups)
+>
 > **Reviewer:** `analyst` · **Date:** 2026-07-24 · **Artifact:**
 > `docs/plans/workflow-def-structure-read.md` (architect, design complete, awaiting this gate).
 > **Baseline tree:** `2ee6eba`, working tree carrying the concurrent K-027 slice A churn

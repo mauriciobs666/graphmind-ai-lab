@@ -1,5 +1,7 @@
 # M2 — `cpg-analysis` skill: implementation plan
 
+> **Status:** archived · **Owner:** `architect` · **Tracks:** C-201…C-208 (M2)
+>
 > Component: repo-root CPG / code-graph (Joern → FalkorDB). Milestone **M2** (consumer skill).
 > Requirements: [`../requirements/joern-cpg-pipeline.md`](../requirements/joern-cpg-pipeline.md) (FR-9…FR-14, AC-6…AC-8).
 > Backlog: [`../BACKLOG.md`](../BACKLOG.md) C-201…C-208.

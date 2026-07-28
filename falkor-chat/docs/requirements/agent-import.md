@@ -1,5 +1,5 @@
 # Agent Import (Claude Code) — Feature Requirements
-> Status: Ready for design · Last updated: 2026-07-22
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-07-22
 
 ## Intent
 The stakeholder has already built an agent team outside falkor-chat — the Claude Code subagents

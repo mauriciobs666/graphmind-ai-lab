@@ -1,5 +1,7 @@
 # Review — CPG query access implementation plan
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** C-301…C-307 (M3)
+>
 > Reviewer: `analyst`, 2026-07-24. Artifact: [`../plans/cpg-query-access.md`](../plans/cpg-query-access.md)
 > (723 lines, author `architect`). Baseline: [`../requirements/cpg-query-access.md`](../requirements/cpg-query-access.md)
 > (FR-1…FR-6, AC-1…AC-4 + decision log), [`../plans/cpg-query-access-coordination.md`](../plans/cpg-query-access-coordination.md)

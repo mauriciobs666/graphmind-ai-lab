@@ -1,5 +1,7 @@
 # Review — M2 `cpg-analysis` skill (Gate-2a: correctness + cold AC-6 invocation)
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** C-201…C-208 (M2)
+>
 > Artifact: [`../../skills/cpg-analysis/`](../../skills/cpg-analysis/) — `SKILL.md` + `references/{impact-analysis,rca,code-review,test-gap}.md`
 > (graph-dba, delivered 2026-07-19), plus the additive C-201 "Consumer-query facts" section in
 > [`../../skills/joern-cpg/references/cpg-model.md`](../../skills/joern-cpg/references/cpg-model.md).

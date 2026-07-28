@@ -1,5 +1,7 @@
 # Demo environment bring-up — reusable runbook
 
+> **Status:** active · **Owner:** `devops` · **Tracks:** —
+
 **Component:** `falkor-chat/` · **Owner altitude:** devops (execution) + qa-engineer (acceptance)
 **Goal:** stand up the falkor-chat demo (web UI + REST + MCP + live AI responder) from scratch, verified green.
 **Reuse:** this is a repeatable checklist — run it top to bottom any time you need the demo. Idempotent by design; safe to re-run.

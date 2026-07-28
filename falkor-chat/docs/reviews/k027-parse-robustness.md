@@ -1,5 +1,7 @@
 # Review — K-027 slice A: parse-layer robustness (implementation gate)
 
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-027 (M3 follow-ups)
+>
 > Reviewer: `analyst` · Date: 2026-07-24 · Type: static code review + executed behavioural probing
 > **Baseline reviewed:** the uncommitted working-tree diff vs `HEAD` (`2ee6eba`), restricted to
 > `git diff -- falkor-chat/server falkor-chat/docs/BACKLOG.md falkor-chat/docs/HISTORY.md` —

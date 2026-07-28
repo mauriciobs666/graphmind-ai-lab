@@ -1,5 +1,7 @@
 # M2 — `cpg-analysis` skill · teco coordination doc
 
+> **Status:** archived · **Owner:** `teco` · **Tracks:** C-201…C-208 (M2)
+>
 > Live orchestration record for M2 (CPG consumer skill). teco drives; edited as units complete.
 > Entry points: [`../BACKLOG.md`](../BACKLOG.md) (C-201…C-208), [`../requirements/joern-cpg-pipeline.md`](../requirements/joern-cpg-pipeline.md) (FR-9…FR-14, AC-6…AC-8).
 > Started 2026-07-18.

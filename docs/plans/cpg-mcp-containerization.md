@@ -1,5 +1,7 @@
 # Containerizing the `cpg` MCP server — design note
 
+> **Status:** archived · **Owner:** `devops` · **Tracks:** C-320 (M3)
+>
 > Design for running the `cpg` MCP server (`cpg/mcp/`) as a **container** instead of a host venv.
 > Stakeholder request, verbatim: *"i want the mcp to be containerized"* — no further constraints,
 > so every default below is chosen and justified here.

@@ -1,5 +1,8 @@
 # CPG query access — implementation plan
 
+> **Status:** archived · **Owner:** `architect` · **Tracks:** C-301…C-307 (M3) ·
+> **approved (re-gate 2026-07-25: approve with suggestions, 0 blockers) → in implementation**.
+>
 > Design for **CPG query access** (MCP tool replaces `redis-cli GRAPH.QUERY` on the CPG **read**
 > path). Requirements: [`../requirements/cpg-query-access.md`](../requirements/cpg-query-access.md).
 > Coordination: [`cpg-query-access-coordination.md`](./cpg-query-access-coordination.md).
@@ -8,7 +11,6 @@
 > stakeholder decisions D1–D4) · v2.1 2026-07-25 (re-gate follow-up: N-1, N-2, n-3 — §10) ·
 > **v2.2 2026-07-25 (audit-trail correction: re-gate finding n-4 recorded as accepted and
 > implemented — §4.4, S2, §10; no design change)**.
-> Status: **approved (re-gate 2026-07-25: approve with suggestions, 0 blockers) → in implementation**.
 > **S8 must be read at v2.1 and S2 at v2.2**: S8's destructive procedure and §4.4's
 > truncation/directive spec changed after the re-gate, and §4.4/S2 gained the server-level
 > `instructions=` string (n-4) at v2.2.

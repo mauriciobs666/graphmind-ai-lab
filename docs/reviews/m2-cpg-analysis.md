@@ -1,5 +1,7 @@
 # Review — M2 `cpg-analysis` skill implementation plan
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** C-201…C-208 (M2)
+>
 > Artifact: [`../plans/m2-cpg-analysis-skill.md`](../plans/m2-cpg-analysis-skill.md) (architect, 2026-07-18)
 > Baseline: requirements [`../requirements/joern-cpg-pipeline.md`](../requirements/joern-cpg-pipeline.md) (FR-9…FR-14, AC-2…AC-8),
 > backlog [`../BACKLOG.md`](../BACKLOG.md) (C-201…C-208), schema contract

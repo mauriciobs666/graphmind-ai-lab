@@ -1,5 +1,7 @@
 # M3 follow-ups — coordination log (option A: K-027 slice A + K-031)
 
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-027 · K-031 (M3 follow-ups)
+>
 > Coordinator: `teco`. Started 2026-07-24. Scope decided by the user: run **K-027 slice A**
 > (parse-layer robustness) and **K-031** (def/snapshot structure read surface) **in parallel** —
 > the two cheapest, highest-leverage items on the post-M3 debt path.

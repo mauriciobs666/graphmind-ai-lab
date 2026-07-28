@@ -1,5 +1,7 @@
 # WSL2 Memory Diagnostic — 16GB host, WSL2 + Docker/FalkorDB + Windows-side LM Studio
 
+> **Status:** archived · **Owner:** `devops` · **Tracks:** —
+
 **Date:** 2026-07-18
 **Author:** devops (read-only diagnostic run — no config changed, no restart, no fix applied)
 **Companion doc:** `local-model-ram-budget-ml.md` (data-scientist RAM budget that raised the ballooning hypothesis)

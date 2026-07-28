@@ -1,5 +1,7 @@
 # Review — `docs/plans/cpg-mcp-containerization.md` (containerizing the `cpg` MCP server)
 
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** C-320 (M3)
+>
 > Reviewer: `analyst`. 2026-07-25. Static pre-implementation review of the **plan only** —
 > nothing is implemented yet, so nothing was reviewed as code.
 > Artifact: [`../plans/cpg-mcp-containerization.md`](../plans/cpg-mcp-containerization.md) (632 lines, untracked, author `devops`).

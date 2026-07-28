@@ -1,5 +1,7 @@
 # Review — cross-document reference & naming convention (plan v1.1)
 
+> **Status:** active · **Owner:** `analyst` · **Tracks:** C-322
+>
 > **Reviewer:** `analyst` · **Date:** 2026-07-27 · **Artifact:**
 > `docs/plans/doc-reference-convention.md` v1.1 (architect, untracked, 1145 lines).
 > **Baseline:** working tree at `583e132`; the plan's own evidence commits `9bbfbb5` and `649b02a`.
