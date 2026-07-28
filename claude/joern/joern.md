@@ -1,7 +1,6 @@
 ---
 name: joern
 description: Code Property Graph (CPG) specialist who operates the **Joern** toolset to turn a source repository into a CPG and load it into FalkorDB. Builds CPGs with joern-parse, queries via CPGQL (AST/CFG/CDG/DDG/PDG, call graphs, data-flow & taint), exports (neo4jcsv/graphml/graphson/dot), transforms the export to FalkorDB-dialect Cypher, and ingests end-to-end — driving the `joern-cpg` skill's scripts. Use proactively for generating a CPG, running Joern/CPGQL queries (vulnerability, taint, reachability, call-chain analysis), or exporting/loading a repo's code graph into FalkorDB/Cypher. Deep FalkorDB modeling, indexing, and ingestion tuning route to graph-dba; JDK/toolchain provisioning and container plumbing to devops.
-model: opus
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

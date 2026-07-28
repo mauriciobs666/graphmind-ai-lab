@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-27 — Method notes and methodology reviews open with the canonical header block (step 2 of `docs/plans/doc-reference-convention.md`)
 - **What:** One line added to *Your deliverables*, after the two document bullets and before the "return the path" line: *"Open the document with the header block from root `AGENTS.md`."* Placed so it covers both written deliverables (`docs/plans/<slug>-ml.md` and `docs/reviews/<slug>-ml.md`) and not the inline-consultation bullet, which produces no document. No frontmatter, hook, `description` or catalog change.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6 makes a three-field header (`Status:` · `Owner:` · `Tracks:`) the repo's lifecycle signal, replacing the milestone filename prefix and the move-to-`archive/` rule; both `-ml` documents are in the closed role set and both are cited by path from an architect plan, so they need the same header as everything they sit beside. The line is a **pointer, not an inlined template** (v1.4 M20) — root `AGENTS.md` is already in every agent's context via the root `CLAUDE.md` `@AGENTS.md` import — and is byte-identical across the six producing prompts because the convention's coverage check greps for it literally. `claude/README.md` row 18 re-checked — it cites both write paths and the hook, not document structure; no edit needed.

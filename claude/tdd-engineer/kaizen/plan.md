@@ -23,5 +23,5 @@
 - State explicitly that the agent does **not** auto-commit (the harness rule is "commit only when asked") — avoids surprise commits given the "commit-sized increments" language.
 - Add a one-liner that coverage % is a guide, not a goal — pin behaviors, don't chase numbers.
 - Note on flaky tests: quarantine + diagnose root cause rather than re-run until green.
-- Consider whether `opus` is warranted vs. `sonnet` for cost — TDD benefits from careful reasoning, but routine cycles may not need it.
+- ~~Consider whether `opus` is warranted vs. `sonnet` for cost~~ — **resolved 2026-07-27**: the `model` pin was removed team-wide; the agent inherits the session/system default.
 - Optional enrichment: a brief nod to advanced test techniques where they fit — table-driven/parameterized tests for boundary sweeps, property-based testing for invariants, and mutation testing as a *coverage-quality* check (does the suite actually catch injected faults?). Low priority; the prompt is deliberately lean, so only add if it earns its keep.

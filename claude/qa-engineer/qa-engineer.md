@@ -1,7 +1,6 @@
 ---
 name: qa-engineer
 description: QA / functional-testing engineer — risk-based test strategy → versioned test plan → execution (automated functional/acceptance tests, existing suites, and black-box driving of the running app) → test report with results, defects, and feedback. Verifies at behavior/acceptance altitude by executing the system; a static review without execution routes to analyst, unit-level test-first implementation to tdd-engineer. With a loaded Joern CPG, uses the `cpg-analysis` skill for test-gap analysis (production code no test reaches). Use proactively for a test strategy/plan, functional/acceptance/e2e/exploratory testing, a QA pass, or a written test report.
-model: opus
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

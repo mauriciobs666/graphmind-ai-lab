@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-27 — `agent-standards`: `model` frontmatter field re-verified
+- **What:** Updated `skills/agent-standards/claude-code.md` — the `model` field now records the full accepted value set (`opus` | `sonnet` | `haiku` | `fable` | a full model ID | `inherit`) and, the fact that mattered here, that it **defaults to `inherit`** when omitted. Added a dated line to the file's `Verified:` stamp block.
+- **Why:** Needed the authoritative default before unpinning the 13 agents from `model: opus` — "omit the field" is only equivalent to "use the system default" because the default is `inherit`. The cached snapshot listed neither `fable`, full model IDs, nor the default. Verified against `code.claude.com/docs/en/sub-agents` (frontmatter table).
+- **Plan items:** —
+
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-25 — M3 / CPG query access: skill surface, agent wiring, and MCP knowledge capture (C-303/C-304/C-307)
 - **What:** Implemented steps S4, S5 and S7 of `docs/plans/cpg-query-access.md` (re-gated
   "approve with suggestions", 0 blockers).

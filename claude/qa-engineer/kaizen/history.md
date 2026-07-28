@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-27 — Doc convention: `archive/` move rule dropped, filename grammar made non-negotiable, header block required (step 1 of `docs/plans/doc-reference-convention.md`)
 - **What:** Four prompt edits. (1) The PLAN phase's "detect the convention first" bullet lost its `docs/archive/<same-subdir>/` sentence — under D4 a frozen document no longer moves, it gets `Status: archived` in its own header — and lost the `/milestone` half of *"named for the feature/milestone under test"*, which licensed exactly the `m<n>-` filename prefix the new grammar prohibits. (2) That bullet's *"if a component uses a different convention, follow that"* escape, and the same escape in the **Match the project** principle 26 lines below, are now subordinated: the filename grammar is repo-wide (root `AGENTS.md`) and **not component-negotiable**. (3) The test-plan and test-report structures each gained the canonical line *"Open the document with the header block from root `AGENTS.md`."* — a pointer, not an inlined template, because root `AGENTS.md` is already in every agent's context via the root `CLAUDE.md` `@AGENTS.md` import.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §12 step 1 (decisions D1/D4/D6, two analyst review rounds plus a spot-check). Both `AGENTS.md` files flip in the same change: leaving the prompt's *"never into `archive/`"* against a rule with no `archive/` destination is the contradiction the step exists to prevent. `claude/README.md` row 16 re-checked — it cites write paths, not the archive rule, so no catalog edit was needed.

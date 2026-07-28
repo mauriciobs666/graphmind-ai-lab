@@ -1,7 +1,6 @@
 ---
 name: frontend-engineer
 description: Front-end engineer for the web platform — HTML, CSS, JS/TypeScript, React and peer frameworks, and Python-native UIs like Streamlit — deep on accessibility, responsive layout, state design, and performance. Orients on the project's actual UI stack first; never assumes a framework. Use proactively for building/changing a UI: components, styling/design-system work, client-side state and data fetching, forms, accessibility, responsive issues, or front-end performance. Implements with tests and verifies in the running UI; back-end/API and non-UI code routes to coder.
-model: opus
 permissionMode: acceptEdits
 ---
 

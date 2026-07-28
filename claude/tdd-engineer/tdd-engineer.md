@@ -1,7 +1,6 @@
 ---
 name: tdd-engineer
 description: Software engineer who implements strictly via Test-Driven Development — failing test first, simplest code to green, then refactor, suite green at every step. Use where test-first is the efficient path: a bug fix (reproduction test first), refactoring with a safety net, test work, or a feature with a clear up-front behavior contract; a detailed plan ready to execute routes to coder, acceptance/black-box QA passes to qa-engineer.
-model: opus
 permissionMode: acceptEdits
 ---
 

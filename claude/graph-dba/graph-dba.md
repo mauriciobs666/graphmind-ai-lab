@@ -1,7 +1,6 @@
 ---
 name: graph-dba
 description: Graph DBA and data architect specialized in FalkorDB — the Redis-module, GraphBLAS graph database for GraphRAG/knowledge graphs (OpenCypher dialect; no APOC/GDS). Deep on graph data modeling, vector/full-text indexing, constraints, multi-graph tenancy, in-memory sizing, replication/clustering, and tuning via GRAPH.PROFILE. Use proactively for graph data modeling, Cypher authoring/tuning, indexes/constraints, deployment design, slow traversals, bulk ingestion/migration, GraphRAG layers, or FalkorDB operations. Container/Compose plumbing routes to devops; the ML method above a GraphRAG layer (embeddings, chunking, retrieval evaluation) to data-scientist; generating a repo's Code Property Graph via Joern routes to joern (which owns CPG generation and load, while you own the loaded code graph's FalkorDB model and tuning).
-model: opus
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-27 — Requirements-doc template adopts the canonical bolded header block (step 2 of `docs/plans/doc-reference-convention.md`)
 - **What:** One line changed — the status line inside the `Structure:` template of the deliverable section. `> Status: Interviewing | Ready for design · Last updated: YYYY-MM-DD` becomes `> **Status:** Interviewing | Ready for design · **Owner:** \`tico\` · **Tracks:** <id(s)> (<M<n>>) · **Last updated:** YYYY-MM-DD`. Nothing else in the prompt moved: no frontmatter, no hook, and — the step's explicit proof obligation — the readback bullet that flips `Status` to **Ready for design** only on the stakeholder's explicit confirmation is untouched, as is `claude/README.md`'s user-facing statement of that promise (catalog row re-checked, no edit needed: it cites the write guard and the gated flip, not the template's form).
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6, blocker **B4**. The repo-wide header block is now normative in root `AGENTS.md` and its canonical form is **bolded labels**; `tico`'s template was the unbolded dialect, and every requirements document written from it inherited that form, so the convention's own conformance regex could not have passed the three files it was told not to change. The convention absorbs `tico`'s two `Status` **values** verbatim rather than renaming them to lowercase tokens (§9.6, blocker B3) — the gated transition is product behaviour, not the architect's to change — so only the label's asterisks change, plus the two new fields (`Owner:`, `Tracks:`) the block requires. **Bolding a label is a form change, not a value change.**

@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** closes the standing "is opus warranted vs. sonnet?" revisit item — model tier is no longer this agent's decision.
+
 ## 2026-07-27 — Design notes open with the canonical header block (step 2 of `docs/plans/doc-reference-convention.md`)
 - **What:** One line added to *How you work* item 7 (design work hands off by path): *"Open the document with the header block from root `AGENTS.md`."* It sits inside the item, so it binds to `<component>/docs/plans/<slug>-graph.md` and not to the inline consults the same item excludes. No frontmatter, hook, `description` or catalog change.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6 makes a three-field header (`Status:` · `Owner:` · `Tracks:`) the repo's lifecycle signal, replacing the milestone filename prefix and the move-to-`archive/` rule. `-graph` is in the closed role set and the design note is co-located with the architect's plan, so it needs the same header as its neighbours — and `graph-dba` is the only agent that writes one (zero exist today, which makes this the cheapest possible moment to fix the form). The line is a **pointer, not an inlined template** (v1.4 M20) — root `AGENTS.md` already reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import — and byte-identical across the six producing prompts, because the convention's coverage check greps for it literally. `claude/README.md` row 12 re-checked — it cites the design-note path and the destructive-ops hook, not document structure; no edit needed.

@@ -43,6 +43,6 @@
   `falkordb-quirks.md` against the live instance and re-stamp its `Verified:` date; retire any
   quirk the new build fixes (2026-07-05).
 - Add a concrete `GRAPH.PROFILE` operator cheat-sheet (label scan vs. index scan, cartesian product, dense expansion → matrix-density reasoning) — possibly as a skill rather than bloating the always-loaded prompt.
-- Consider whether `opus` is warranted vs. `sonnet` for routine query help (matches the collection's opus default for now).
+- ~~Consider whether `opus` is warranted vs. `sonnet` for routine query help~~ — **resolved 2026-07-27**: the `model` pin was removed team-wide; the agent inherits the session/system default.
 - Neo4j/openCypher/GQL portability is currently kept for *porting models into FalkorDB*; deepen only if the lab targets multiple engines.
 - RedisGraph migration note: FalkorDB is the drop-in successor — could add explicit migration guidance if any legacy RedisGraph data is in play.

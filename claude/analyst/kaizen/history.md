@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-27 — `-impl` review role documented; header block required on review docs (step 1 of `docs/plans/doc-reference-convention.md`)
 - **What:** Two body edits, no frontmatter change. (1) The deliverable paragraph now names the `-impl` role: a review of an **implementation** is `<component>/docs/reviews/<slug>-impl.md`, the bare slug being the review of the **plan**. (2) One line added between the review skeleton and the RCA skeleton: *"Open the document with the header block from root `AGENTS.md`."*
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.4 found `-impl` **used 4× and documented nowhere** — the only member of the closed role set (`(none)` · `-coordination` · `-ml` · `-graph` · `-rca` · `-impl` · `-report`) missing from the prompt that produces it, and the absence had already broken a document family. The header line is the canonical M9 sentence, byte-identical across the prompts that get it, and is a pointer rather than an inlined template because root `AGENTS.md` reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import. `claude/README.md` row 17 re-checked — it cites the review write paths, not the naming rule, so no catalog edit was needed.

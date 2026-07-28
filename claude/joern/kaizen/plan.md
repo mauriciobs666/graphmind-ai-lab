@@ -41,4 +41,4 @@
 - Alternative export path via `graphml` (single file) for tools that prefer it over neo4jcsv.
 - Incremental re-CPG: only re-parse changed files and patch the FalkorDB graph.
 - `--repr` presets in the skill (e.g. `--profile callgraph` → `cfg`+`call` only) to shrink loads.
-- Model choice (opus) is a revisit point — much of the pipeline is mechanical; sonnet may suffice once the model/queries stabilize.
+- ~~Model choice (opus) is a revisit point~~ — **resolved 2026-07-27**: the `model` pin was removed team-wide; the agent now inherits the session/system default, so tier is the user's session-level call, not this agent's.

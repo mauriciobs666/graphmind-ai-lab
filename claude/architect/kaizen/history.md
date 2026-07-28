@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-27 — Unpinned from `model: opus` (team-wide)
+- **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
+- **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
+- **Plan items:** —
+
 ## 2026-07-27 — Plans open with the canonical header block (step 2 of `docs/plans/doc-reference-convention.md`)
 - **What:** One line added to *How you work* step 5, immediately after the plan-document convention: *"Open the document with the header block from root `AGENTS.md`."* No frontmatter, hook, `description` or catalog change.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6 makes a three-field header (`Status:` · `Owner:` · `Tracks:`) the lifecycle signal that replaces the milestone filename prefix and the move-to-`archive/` rule; a plan is the most-cited document kind in the repo, and `architect` is the agent that creates it, so the field is only ever present if this prompt asks for it. The line is a **pointer, not an inlined template** (v1.4 M20): root `AGENTS.md` reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import, so the second hop costs nothing, while eight copies of a still-settling block would drift — §9.6 stays the one place the block is stated. The sentence is byte-identical across all six producing prompts on purpose; the convention's coverage check greps for it literally. `claude/README.md` row 9 re-checked — it cites the plan write path and the hook, not the document's internal structure; no edit needed.

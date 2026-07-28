@@ -7,6 +7,9 @@
 > (experimental, env-var-gated; see the multi-agent-primitives section).
 > **MCP re-verified 2026-07-25** against `code.claude.com/docs/en/mcp` (whole page) — see the
 > `## MCP` section, which carries its own stamp.
+> **`model` frontmatter field re-verified 2026-07-27** against
+> `code.claude.com/docs/en/sub-agents` (accepts `fable` and full model IDs; **defaults to
+> `inherit`**).
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -29,8 +32,11 @@
   - `name` — unique identifier.
   - `description` — **required**; drives auto-delegation. Say *what it does and
     precisely when to invoke*, third person, with trigger keywords. The routing signal.
-  - `model` — `opus` | `sonnet` | `haiku` | `inherit` (Claude can also pass a
-    per-invocation model override).
+  - `model` — `opus` | `sonnet` | `haiku` | `fable` | a **full model ID**
+    (e.g. `claude-opus-5`) | `inherit`. **Defaults to `inherit`** — omitting the
+    field is the idiomatic way to say "use whatever model the session/system
+    default selects" (verified 2026-07-27). Claude can also pass a
+    per-invocation model override.
   - `tools` — allowlist (omit to inherit all). · `disallowedTools` — denylist.
   - `permissionMode` — `default` | `acceptEdits` | `auto` | `dontAsk` |
     `bypassPermissions` | `plan`.
