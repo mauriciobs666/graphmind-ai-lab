@@ -14,8 +14,11 @@ and OpenCode artifacts).
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified; M0 complete. See `falkor-chat/README.md` and
   `falkor-chat/AGENTS.md`.
-- `opencode/` — Personal OpenCode configuration: custom agents.
+- `opencode/` — Personal OpenCode configuration: custom agents and OpenCode-only skills.
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
+  - `skills/` — OpenCode-authored `SKILL.md` packages (`comparison-driver`, `python-coding`,
+    `skill-builder`, `user-preferences`, `write-tutorial`); OpenCode's global config symlinks here,
+    not to the repo's shared `skills/`. See `opencode/skills/README.md`.
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
 - `cpg/` — Code-Property-Graph component code home. `cpg/mcp/` is the **`cpg` MCP server** (stdio,
   Python) exposing the single read-only tool `mcp__cpg__query(graph, cypher)` over FalkorDB; build
@@ -31,13 +34,13 @@ and OpenCode artifacts).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history + learnings inbox the agent appends to during runs; `cobb` distills the inboxes). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
-- `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
-  `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
+- `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
+  for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
-  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), and `python-coding`, `write-tutorial`,
-  `comparison-driver`, `skill-builder`, `user-preferences` (OpenCode-authored). See
-  `skills/README.md`. Format ports across Claude Code/OpenCode/Kiro; tool-gating &
-  activation behavior do not — verify per tool.
+  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side). OpenCode-authored skills used only
+  by OpenCode agents live separately, in `opencode/skills/`. See `skills/README.md`. Format
+  ports across Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per
+  tool.
 
 ## Component docs (read before working in a component)
 
@@ -45,7 +48,7 @@ and OpenCode artifacts).
 |---|---|
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
-| `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` |
+| `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
 | `cpg/` | `cpg/mcp/README.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
@@ -71,13 +74,13 @@ the live routing contract, and **the full catalog lives once, in
   Gotchas: top-level key is `agent` (singular), no `name` field on the agent, LM Studio context
   ≥16K. See `opencode/agents/severino/AGENTS.md` (with a `CLAUDE.md` = `@AGENTS.md` stub).
 
-## Skills (`skills/`)
+## Skills (`skills/` and `opencode/skills/`)
 
-Unified Agent Skills home — one `SKILL.md` package per folder, the open `agentskills.io`
-standard. Shared across the repo's tools; the **format** ports (Claude Code, OpenCode, Kiro all
-read `SKILL.md`), but **tool-gating and activation behavior do not** — verify per tool. See
-`skills/README.md` for the catalog.
+Agent Skills packages — `SKILL.md` per folder, the open `agentskills.io` standard — split across
+two homes by consumer, not merged. The **format** ports (Claude Code, OpenCode, Kiro all read
+`SKILL.md`), but **tool-gating and activation behavior do not** — verify per tool.
 
+`skills/` (cross-tool / Claude-Code-oriented; see `skills/README.md` for the catalog):
 - `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
   procedures + single-artifact prompt-quality lint; perishable per-tool reference specifics).
   Loaded on demand so cobb's prompt stays lean.
@@ -89,18 +92,20 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
   path is the **`mcp__cpg__query`** MCP tool (`cpg/mcp/`, one tool, two parameters); `redis-cli
   GRAPH.QUERY` stays as the documented fallback and is the *only* path under OpenCode/Kiro, which
   the MCP wiring does not reach.
-- `python-coding`, `write-tutorial`, `comparison-driver`, `skill-builder`, `user-preferences` —
-  OpenCode-authored skills.
 
-> **Deployment:** all three harnesses point at this home via whole-dir symlinks:
-> `~/.claude/skills`, `~/.config/opencode/skills`, and `~/.kiro/skills` → `skills/`. See
-> `skills/README.md` to recreate on a new machine — and its **portability notes** for what each
-> harness actually sees (Claude-only frontmatter is ignored, not rejected; OpenCode's discovery
-> returns a non-deterministic subset).
+`opencode/skills/` (OpenCode-authored, used only by OpenCode agents; see
+`opencode/skills/README.md` for the catalog): `python-coding`, `write-tutorial`,
+`comparison-driver`, `skill-builder`, `user-preferences`.
+
+> **Deployment:** Claude Code and Kiro point at `skills/` via whole-dir symlinks; OpenCode points
+> at `opencode/skills/` instead — `~/.claude/skills` → `skills/`, `~/.kiro/skills` → `skills/`,
+> `~/.config/opencode/skills` → `opencode/skills/`. See each directory's README to recreate on a
+> new machine — and `skills/README.md`'s **portability notes** for what Claude Code/Kiro actually
+> see (Claude-only frontmatter is ignored, not rejected).
 
 ## User-preferences skill (shared memory pattern)
 
-`skills/user-preferences/` gives conversational agents persistent memory:
+`opencode/skills/user-preferences/` gives conversational agents persistent memory:
 - Storage: `storage/{work,hobbies,communication,general}.md`
 - Protocol: read preference files at conversation start, grep to search, write new prefs to the
   right category file.
@@ -152,7 +157,8 @@ changes, not a replacement.
   OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
   query suite green (`./scripts/test_queries.sh`).
 - **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
-- **Skill tasks** (any tool) → `skills/`, follow each `skills/<name>/SKILL.md` and `skills/README.md`.
+- **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills, `opencode/skills/` for
+  OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history,inbox}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
