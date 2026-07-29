@@ -128,6 +128,9 @@ convention) if an implementer will build on it.
   usually empty `CODE`-level file context). To get the file of any such node,
   hop to its enclosing method: `(owner:METHOD)-[:CONTAINS]->(n)` and read
   `owner.FILENAME`. `LINE_NUMBER` **is** present on most nodes (including `CALL`).
+  Also note **`FILENAME` is relative to whatever parse root built the CPG**, not
+  the repo root — if a `STARTS WITH` prefix filter matches nothing, that's the
+  first thing to check (`joern-cpg/SKILL.md` Gotchas has the producer-side fix).
 - **`METHOD` structural children attach via `AST`, not `CONTAINS`.** Params
   (`METHOD_PARAMETER_IN`), the `BLOCK`, `METHOD_RETURN`, and `MODIFIER` are `AST`
   children. `CONTAINS` from a `METHOD` reaches its nested **`CALL` sites** (used
@@ -140,4 +143,5 @@ convention) if an implementer will build on it.
   reconstructed by bridging over the `CALL` edge (call-site → callee → matching
   `METHOD_PARAMETER_IN` by `INDEX`), which is only as complete as the sparse call
   resolution above. For high-fidelity interprocedural taint, run Joern's
-  `reachableBy` in the REPL (the `joern` agent) rather than pure Cypher.
+  `reachableBy` in the REPL (`graph-dba`, driving the `joern-cpg` skill) rather
+  than pure Cypher.

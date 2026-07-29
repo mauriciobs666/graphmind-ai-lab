@@ -184,7 +184,11 @@ to the general fact here.
   "absent/empty"; never scan the whole `redis-cli` reply for digits (the
   `Query internal execution time: 0.179153 milliseconds` line makes everything
   look non-empty — parse the count from the lone pure-integer output line).
-  (Verified 2026-07-17 on v4.18.11; surfaced building the `joern` CPG loader.)
+  Concrete extraction that works: `redis-cli ... GRAPH.QUERY ... --no-raw | awk
+  '/^[0-9]+$/{last=$0} END{print last}'`; a naive `grep -oE '[0-9]+' | tail -1`
+  instead grabs digits from the stats line and reports a phantom huge count
+  (one run misread a real 29,447 as 273,336).
+  (Verified 2026-07-17 on v4.18.11; surfaced building the CPG loader, `joern-cpg` skill.)
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely**; a write runs to
   completion regardless of clause or default. Reads enforce it batch-granularly

@@ -1,6 +1,6 @@
 ---
 name: joern-cpg
-description: Operate the Joern toolset to turn a source repository into a Code Property Graph (CPG) and export/load it into FalkorDB as Cypher. Use when building a CPG for a codebase, querying it with CPGQL (AST/CFG/DDG, call graphs, data-flow & taint), or exporting/ingesting a repo's code graph into FalkorDB. Carries scripts that pin JOERN_HOME/JAVA_HOME and run parse → export (neo4jcsv) → transform → FalkorDB load, plus the CPG→FalkorDB model and a CPGQL cheat-sheet. Primarily driven by the `joern` agent.
+description: Operate the Joern toolset to turn a source repository into a Code Property Graph (CPG) and export/load it into FalkorDB as Cypher. Use when building a CPG for a codebase, querying it with CPGQL (AST/CFG/DDG, call graphs, data-flow & taint), or exporting/ingesting a repo's code graph into FalkorDB. Carries scripts that pin JOERN_HOME/JAVA_HOME and run parse → export (neo4jcsv) → transform → FalkorDB load, plus the CPG→FalkorDB model and a CPGQL cheat-sheet. Primarily driven by `graph-dba`, on demand — CPG generation is a rare task, not a routine one.
 ---
 
 # Joern CPG → FalkorDB
@@ -13,7 +13,11 @@ them rather than hand-running `joern-*` from memory.
 ## Prerequisites (the scripts check these)
 
 - **Joern** under `$HOME/joern/joern-cli` (override with `JOERN_HOME`). Verified
-  build here: **v4.0.579**.
+  build here: **v4.0.579**. **Don't assume it's installed** — the distribution has
+  been observed missing on this box even after a prior session verified it (disk
+  pressure, a wiped scratch dir). Run `scripts/joern-env.sh` (or `joern --version`)
+  first and treat a missing binary as a blocker to report, not something to
+  reinstall ad hoc — provisioning the toolchain is `devops`'s job.
 - **JDK 21** (`java -version` → 21). `scripts/joern-env.sh` resolves `JAVA_HOME`
   from `java` on PATH, falling back to the system JVM — no shell config assumed.
 - **FalkorDB** reachable at `localhost:6379` (override `FALKORDB_HOST`/`FALKORDB_PORT`),
@@ -101,7 +105,7 @@ either the explicit command, or `pipeline.sh --reset` (which runs it for you,
 only if the graph exists):
 
 ```bash
-redis-cli GRAPH.DELETE cpg_myrepo   # destructive, shared-state — escalates via joern's guard
+redis-cli GRAPH.DELETE cpg_myrepo   # destructive, shared-state — escalates via graph-dba's guard
 ```
 
 This keeps the reset an explicit, guard-visible command rather than a hidden
@@ -150,8 +154,29 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
 - **Overlays matter:** taint/data-flow queries need the default overlays (call
   graph, control/data flow) that `joern-parse` applies — don't pass `--nooverlays`
   if you'll query flow.
+- **`FILENAME` is relative to the parse root you hand `joern-parse`, not the repo
+  root.** A CPG built from `<repo>/app` emits bare basenames like `services.py`,
+  so any query filtering `FILENAME STARTS WITH 'app/'` silently matches nothing —
+  no error, no empty-graph signal, just a wrong answer that looks like missing
+  code. Check `MATCH (m:METHOD) RETURN DISTINCT m.FILENAME LIMIT 10` right after
+  any load; if the prefix you expect isn't there, rebuild from a parse root that
+  includes it.
+- **No `--exclude`/ignore flag exists.** `build-cpg.sh`/`pipeline.sh` parse
+  whatever directory they're pointed at verbatim — pointing at a real project
+  directory also parses its `.venv`/`node_modules`/build caches. To scope a
+  parse, stage the wanted subtrees into a scratch copy first (pruning
+  `__pycache__`/similar) rather than expecting the tooling to filter for you.
+  This is the same lever as the `FILENAME`-prefix gotcha above: the parse root
+  and what's inside it are one decision.
+- **`cpg-to-falkordb.py --load` always re-transforms the export** — there's no
+  "replay this `.cypher`" mode. Re-running `--load` re-reads every export CSV
+  and rewrites `load.cypher` before streaming it; cheap (seconds, no re-parse)
+  but not free, and there's no built-in way to just replay a saved artifact.
 - **Scale:** deduped in memory by the transformer — fine for moderate repos; for
-  very large codebases this is a streaming-loader concern (tracked in the `joern`
-  agent's kaizen). Prefer a narrower `--repr` (e.g. `ast` or `cpg14`) when you
-  don't need every edge layer.
+  very large codebases this is a streaming-loader concern (tracked in
+  `graph-dba`'s kaizen plan, K-005). Rule of thumb from a real run: ~2,700 nodes
+  / ~18,000 edges per Python source file with default overlays (41 files → 110k
+  nodes / 735k edges) — a repo 10× that size projects into multi-million-edge
+  territory, worth a `graph-dba` sizing conversation before a full load. Prefer
+  a narrower `--repr` (e.g. `ast` or `cpg14`) when you don't need every edge layer.
 - **Deeper schema & model notes:** see [`references/cpg-model.md`](./references/cpg-model.md).

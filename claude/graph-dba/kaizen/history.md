@@ -2,6 +2,88 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-07-28 — `joern` agent retired; CPG generation folded in as an on-demand capability
+- **What:** The standalone `joern` subagent (CPG specialist) was retired at the user's
+  request — CPG generation work is genuinely rare, not frequent enough to justify a
+  dedicated standing agent/persona. `claude/joern/` (agent, hooks, kaizen) was deleted
+  entirely and its `~/.claude/agents/joern` deployment symlink removed. Its capability
+  — driving the `joern-cpg` skill's parse → export → transform → load pipeline — folds
+  into `graph-dba` as a small, explicitly on-demand addition:
+  - **Frontmatter `description`:** the old "routes to joern" clause replaced with a
+    direct capability clause — graph-dba drives Joern itself via the `joern-cpg` skill,
+    stated as rare/on-demand so routing agents (and this agent itself) don't start
+    suggesting CPG generation proactively. JDK/Joern-toolchain provisioning still routes
+    to `devops` (added to that boundary bullet).
+  - **Body:** a short "CPG generation (rare, on-demand)" paragraph after the knowledge-base
+    bullets — a pointer to `skills/joern-cpg/SKILL.md`, not a restatement of its pipeline
+    (joern's own prompt detail lived almost entirely in the skill already). No new hook —
+    graph-dba's existing `guard-destructive-ops.sh` already covers `GRAPH.DELETE` for a
+    CPG reload, so the destructive-ops step just gained a one-clause example.
+  - **`joern:graph-dba` removed from `claude/scripts/audit-team.sh` `BOUNDARY_PAIRS`**
+    (the pair no longer exists — folded into one agent, not two bordering ones).
+- **Learnings distilled from `joern/kaizen/inbox.md` before deletion** (agent-maintenance
+  skill §5 — verify → route → log; no "clear" step since the source is gone):
+  - Three 2026-07-17 entries (Python frontend token `pythonsrc`, `pipeline.sh` masking a
+    frontend failure as exit 0, per-statement `redis-cli` failing at scale) were already
+    fixed in-skill and documented in `skills/joern-cpg/SKILL.md` Gotchas — verified current,
+    discarded as duplicates, no new home needed.
+  - Two 2026-07-19 entries (pysrc2cpg call-graph sparseness/asymmetry;
+    framework-invoked entrypoints needing transitive test-gap reachability) were already
+    folded into `skills/joern-cpg/references/cpg-model.md` "Consumer-query facts" and
+    `skills/cpg-analysis/references/test-gap.md` respectively — verified current, discarded
+    as duplicates.
+  - The count-extraction gotcha (`redis-cli --no-raw` output must be parsed with
+    `awk '/^[0-9]+$/{last=$0} END{print last}'`, not `grep -oE '[0-9]+' | tail -1`, which
+    reads the stats line as data) → **added to `falkordb-quirks.md`** (the existing
+    "read via `GRAPH.QUERY` materializes an empty key" entry), the concrete command the
+    entry's prose was missing.
+  - `FILENAME` being relative to the **parse root** (not the repo root) — a CPG can look
+    correct by node/edge counts yet be silently useless to every `STARTS WITH` filter —
+    → **added to `skills/joern-cpg/SKILL.md` Gotchas** (producer-side, actionable at build
+    time) with a short cross-reference from `cpg-model.md`.
+  - No `--exclude`/ignore mechanism in `build-cpg.sh`/`pipeline.sh` (scoping a parse means
+    staging a copy of the wanted subtrees first) → **added to `SKILL.md` Gotchas**.
+  - `cpg-to-falkordb.py --load` always re-transforms the export (no "replay this
+    `.cypher`" mode) → **added to `SKILL.md` Gotchas**.
+  - Sizing data point (~2,700 nodes / ~18,000 edges per Python source file with default
+    overlays, from a real 41-file run) → **folded into `SKILL.md`'s existing "Scale"
+    Gotchas bullet**, which now also points the streaming-loader concern at this agent's
+    own kaizen plan instead of the retired agent's.
+  - "Joern distribution not installed on this box despite the pinned-path assumption"
+    (observed missing after a prior session had verified it — disk pressure or a wiped
+    scratch dir) → **added as a caution to `SKILL.md` Prerequisites**: verify before
+    running, treat a missing binary as a `devops` blocker, don't reinstall ad hoc.
+  - The FalkorDB-start-script / v4.18.11 confirmation entry was already fully covered by
+    this agent's own "This deployment" pin — discarded as a duplicate.
+- **Plan items carried forward from `joern/kaizen/plan.md`** (opened as K-005, K-006 below;
+  the four remaining parking-lot ideas — int-array columns stored as strings, a `graphml`
+  export alternative, incremental re-CPG, `--repr` presets — were reviewed and **not**
+  promoted: each is a speculative, low-value script-level idea already preserved verbatim
+  in `joern/kaizen/history.md`'s final "Created" entry, which this repo's git history keeps).
+- **Cross-references updated in the same change:** `claude/README.md` (dropped the `joern`
+  row, updated the `graph-dba` row and the Kaizen/Hooks sections), `claude/AGENTS.md`
+  (roster line, hook-machinery four-guards → three-guards), root `AGENTS.md` (roster line,
+  `skills/` bullet and catalog entry), `claude/teco/teco.md` (routing table row + handoff
+  contract), `skills/joern-cpg/SKILL.md` (description + guard reference + Gotchas above),
+  `skills/joern-cpg/references/cpg-model.md` (the one "(the `joern` agent)" mention →
+  `graph-dba`), `skills/cpg-analysis/SKILL.md` and its four `references/*.md` recipes (every
+  "routes to the `joern` agent" / "(the `joern` agent)" phrase → `graph-dba`), and
+  `skills/README.md` (both skill rows' "used by" column).
+- **Team-coherence certification run after the change** (agent-maintenance skill §4):
+  `claude/scripts/audit-team.sh` green (12 agents, no FAIL; `joern` folder absence is
+  expected — the script discovers agents from disk, so it needed no code change beyond
+  the `BOUNDARY_PAIRS` edit above). Judgment checklist: roster accuracy, handoff symmetry,
+  and boundary reciprocity re-checked against the files listed above; no dangling `joern`
+  agent references found in a repo-wide grep after the edits (see cobb's own kaizen history
+  for the full certificate).
+- **Why:** User decision after a short design discussion — CPG generation is rare enough
+  that a dedicated standing persona isn't warranted; `graph-dba` already bordered the
+  capability (it owned the loaded graph's FalkorDB model) and the retired agent's own
+  procedural detail already lived almost entirely in the `joern-cpg` skill, so the merge
+  is a small, mostly-pointer addition, not a restatement.
+- **Plan items:** opens K-005 (streaming loader for large-repo CPGs) and K-006 (CPGQL
+  script library) — see plan.md.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.

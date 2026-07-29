@@ -92,7 +92,7 @@ taint engine, and this frontend's call resolution is sparse:
   reaches a `query` sink over the resolved call graph.
 - Consequently Pattern B **under-reports** cross-object taint. A clean Pattern-B
   result across a cross-object boundary is **inconclusive**, not proof of safety.
-- **For deep or cross-object taint, escalate to `joern`/CPGQL** (`reachableBy`) in
+- **For deep or cross-object taint, escalate to CPGQL** (`reachableBy`, via `graph-dba`) in
   the REPL — that is the recipe's failure path, not a bigger Cypher query.
 
 Report both the positive findings (Pattern A paths, with lines) **and** the

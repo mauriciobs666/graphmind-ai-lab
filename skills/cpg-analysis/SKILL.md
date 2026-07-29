@@ -11,15 +11,15 @@ description: >-
   over a codebase. Each task is a copy-adaptable recipe under references/ — change
   one parameter (the target FULL_NAME or NAME) and run. The single CPG schema lives
   in skills/joern-cpg/references/cpg-model.md; this skill does not restate it.
-  Requires a CPG already built and loaded by the joern pipeline; building or
-  loading one routes to the joern agent.
+  Requires a CPG already built and loaded by the joern-cpg pipeline; building or
+  loading one routes to graph-dba (an on-demand capability, not routine).
 allowed-tools: mcp__cpg__query, Bash, Read
 ---
 
 # cpg-analysis — query a loaded CPG in FalkorDB
 
-You are reading an **already-loaded** Code Property Graph (produced by the `joern`
-pipeline, ingested into FalkorDB as Cypher). This skill teaches the query surface
+You are reading an **already-loaded** Code Property Graph (produced by the
+`joern-cpg` pipeline, ingested into FalkorDB as Cypher). This skill teaches the query surface
 and the shared traversal idioms; each of the four analyses is a self-contained
 recipe you open on demand and adapt by changing **one parameter**.
 
@@ -58,9 +58,9 @@ mcp__cpg__query(
   lists the graphs currently loaded.
 - **No graph listed, or FalkorDB is down?** This skill only *queries* an
   already-loaded CPG — it does not build or load one. Building a CPG from source
-  and loading it into FalkorDB is the **`joern` agent's** job (the `joern-cpg`
-  pipeline). Route the "there is no CPG yet" case there; do not attempt to
-  parse/export/load here. The tool's error text says the same thing.
+  and loading it into FalkorDB is **`graph-dba`'s** job, on demand, via the
+  `joern-cpg` pipeline. Route the "there is no CPG yet" case there; do not
+  attempt to parse/export/load here. The tool's error text says the same thing.
 
 **Plans: `EXPLAIN` yes, `PROFILE` no.**
 
@@ -209,8 +209,9 @@ matching the call-site argument's `ARGUMENT_INDEX` to the param's `INDEX`, then
 continue `REACHING_DEF` inside the callee. This is only as complete as the sparse
 call resolution: **same-object `self.x()` calls resolve; cross-object dispatch
 (e.g. a service calling a repository it holds) does not.** For high-fidelity
-interprocedural taint, escalate to Joern's `reachableBy` in the REPL (the `joern`
-agent) — pure Cypher here is a documented approximation.
+interprocedural taint, escalate to Joern's `reachableBy` in the REPL
+(`graph-dba`, driving the `joern-cpg` skill) — pure Cypher here is a documented
+approximation.
 
 ## 4. Navigation — open the recipe for your task
 

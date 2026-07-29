@@ -103,18 +103,6 @@
   silently fails for two of its three named consumers.
 - **Suggested home:** prompt (architect/cobb checklist) or project docs (`claude/AGENTS.md`)
 
-## 2026-07-25 — In this repo, "`claude/scripts/audit-team.sh` passes" is an unusable plan done-condition: it already returns `RESULT: FAIL` on pre-existing leaks
-
-- **Evidence:** teco ran it 2026-07-25 → `RESULT: FAIL` from check 7 (personal-info leak), which
-  `git grep`s **every tracked file** for `$HOME`, `id -un`, git user.name/email and hostname
-  (`claude/scripts/audit-team.sh:116-137`). Current hits: `.claude/settings.json:4-5`,
-  `claude/devops/kaizen/inbox.md:24`, `claude/joern/kaizen/inbox.md:19`,
-  `docs/plans/m2-cpg-analysis-skill.md:327`. Usable form instead: capture the output before and
-  after the change and assert **no new FAIL lines** in the diff.
-- **Context:** reworking `docs/plans/cpg-query-access.md`, whose v1 used "audit passes" as a step's
-  done-condition — unachievable regardless of the change.
-- **Suggested home:** prompt (architect done-condition checklist) or project docs (`claude/AGENTS.md`)
-
 ## 2026-07-25 — Check 7 also means a plan document itself must never contain an absolute home path — and `.mcp.json` has a portable form that avoids one
 
 - **Evidence:** the audit greps tracked files indiscriminately, so a `docs/plans/*.md` that quotes
@@ -190,7 +178,7 @@
 ## 2026-07-26 — Root-relative markdown links (`/docs/x.md`) are **not** agent-followable: a leading `/` is filesystem-absolute to `Read`, even though GitHub and VS Code both resolve it to the repo/workspace root
 
 - **Evidence:** `Read("/docs/BACKLOG.md")` in this repo returns *"File does not exist. Note: your
-  current working directory is /home/mauricio/prg/graphmind-ai-lab"*, while `Read("docs/BACKLOG.md")`
+  current working directory is /home/<user>/prg/graphmind-ai-lab"*, while `Read("docs/BACKLOG.md")`
   succeeds. Contrast with the documented renderer behavior: GitHub Docs (*Basic writing and formatting
   syntax*) states *"Links starting with `/` will be relative to the repository root"*, and VS Code
   resolves a leading `/` to the **workspace-folder** root (as-designed; with an open validation wart

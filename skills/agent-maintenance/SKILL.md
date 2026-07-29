@@ -258,6 +258,15 @@ anywhere in the repo contains the maintainer's personal identifiers —
 home path, username, git name/email, hostname, derived at runtime (the
 personal-info rule, §2). Fix any FAIL before judging the rest.
 
+> **Not a bare pass/fail plan done-condition.** Because check 7 greps *every*
+> tracked file in the repo, a plan step written as "assert `audit-team.sh`
+> passes" can be permanently unsatisfiable the moment any unrelated
+> pre-existing leak exists elsewhere in the repo — unrelated to the change the
+> step is actually gating. Write such a done-condition as a diff instead:
+> capture the script's output before the change and assert **no new FAIL
+> line** appears after it. (Origin: 2026-07-25, reworking
+> `docs/plans/cpg-query-access.md`, whose v1 used the bare form.)
+
 **Judgment half — checklist (what the script can't see):**
 
 1. **Roster accuracy** — the orchestrator's roster describes each specialist's

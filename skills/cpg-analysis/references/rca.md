@@ -49,7 +49,7 @@ argument `ARGUMENT_INDEX` to param `INDEX`) and resume `REACHING_DEF` there. Tha
 bridge is only as complete as call resolution: **same-object `self.x()` resolves;
 cross-object dispatch does not** (see cpg-model.md). When an RCA needs to cross a
 cross-object boundary, say so and escalate the interprocedural slice to Joern's
-`reachableBy` (the `joern` agent) — do not present an intraprocedural slice as if
+`reachableBy` (via `graph-dba`) — do not present an intraprocedural slice as if
 it were the whole path.
 
 ## B. Cross-file symbol definition & references (AC-5)

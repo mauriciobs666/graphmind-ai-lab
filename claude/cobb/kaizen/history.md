@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-28 — Retired the `joern` agent into `graph-dba`; team-coherence certification
+- **What:** Executed the user's decision to retire the standalone `joern` subagent
+  (CPG generation is genuinely rare — doesn't justify a dedicated standing
+  persona) and fold its capability into `graph-dba` as a small, explicitly
+  on-demand addition. Full change set: `claude/joern/` deleted (agent, hooks,
+  kaizen) plus its `~/.claude/agents/joern` deployment symlink; `graph-dba.md`
+  gained a capability clause in `description` and a short pointer paragraph +
+  boundary edit in the body (no restatement — the `joern-cpg` skill already
+  carried the procedural detail); `joern`'s inbox distilled before deletion
+  (see `graph-dba/kaizen/history.md` 2026-07-28 for the full routing table —
+  three genuinely new facts landed in `skills/joern-cpg/SKILL.md` Gotchas/
+  Prerequisites, one in `falkordb-quirks.md`, one cross-reference fix in
+  `cpg-model.md`; the rest were already fixed/documented, discarded as
+  duplicates); `joern:graph-dba` dropped from `audit-team.sh` `BOUNDARY_PAIRS`;
+  every "routes to the `joern` agent" / "(the `joern` agent)" reference across
+  `skills/joern-cpg/`, `skills/cpg-analysis/` (SKILL.md + all four
+  `references/*.md` recipes), `skills/README.md`, `claude/README.md`,
+  `claude/AGENTS.md` (roster + hook-machinery four→three guards), root
+  `AGENTS.md`, and `claude/teco/teco.md` (routing table + handoff contract)
+  updated to `graph-dba`.
+- **§7 prompt-quality lint** (folded into this certification) over the changed
+  artifacts — `graph-dba.md`, `skills/joern-cpg/SKILL.md`,
+  `skills/cpg-analysis/SKILL.md`: **clean** on all six dimensions. Notably no
+  contradiction between the new "on-demand, not proactive" capability clause and
+  the description's existing "Use proactively for…" list (CPG generation was
+  deliberately kept out of it), and the body addition is a pointer to the skill
+  rather than a restatement, per the user's explicit "keep it lean" constraint.
+- **§4 certification — deterministic half:** `claude/scripts/audit-team.sh` run
+  post-change: 12 agents (was 13), **95 PASS**, 0 joern-related FAIL (kaizen
+  triples, deployment symlinks, hook existence, teco-roster mentions, all three
+  catalogs, and boundary-pair symmetry all green). Two pre-existing FAILs
+  (personal home-path/username leaks in `.claude/settings.json`,
+  `claude/architect/kaizen/inbox.md`, `claude/devops/kaizen/inbox.md`,
+  `docs/plans/m2-cpg-analysis-skill.md`) are **unrelated drift this task didn't
+  touch** — none of those files are in this change's diff; flagged as a
+  follow-up, not fixed here (out of the requested scope).
+- **§4 certification — judgment half:** roster accuracy (graph-dba's roster
+  line and catalog entries describe the actual new capability, not just a name
+  change); handoff symmetry (teco's routing table + handoff contract updated in
+  the same change as the capability move); boundary reciprocity (the
+  graph-dba↔joern pair is gone because the border dissolved into one agent, not
+  two — correctly removed rather than left dangling); no new subagent-awareness
+  or enforcement-parity gaps introduced (graph-dba's existing destructive-ops
+  guard already covered `GRAPH.DELETE` for a CPG reload, so no new hook needed).
+  Repo-wide grep swept for remaining `joern`-agent references after all edits:
+  none outside historical kaizen-history prose (correctly left untouched — kaizen
+  history is a dated record, not live routing) and one dangling citation path in
+  `claude/architect/kaizen/inbox.md:111` (an unprocessed inbox entry citing
+  `claude/joern/kaizen/inbox.md:19`, now deleted) — left alone as an
+  append-only raw-capture file outside this task's scope; noted for the next
+  general inbox distillation pass.
+- **Why:** User decision after a short design discussion (see conversation).
+- **Plan items:** —
+
 ## 2026-07-27 — `agent-standards`: `model` frontmatter field re-verified
 - **What:** Updated `skills/agent-standards/claude-code.md` — the `model` field now records the full accepted value set (`opus` | `sonnet` | `haiku` | `fable` | a full model ID | `inherit`) and, the fact that mattered here, that it **defaults to `inherit`** when omitted. Added a dated line to the file's `Verified:` stamp block.
 - **Why:** Needed the authoritative default before unpinning the 13 agents from `model: opus` — "omit the field" is only equivalent to "use the system default" because the default is `inherit`. The cached snapshot listed neither `fable`, full model IDs, nor the default. Verified against `code.claude.com/docs/en/sub-agents` (frontmatter table).

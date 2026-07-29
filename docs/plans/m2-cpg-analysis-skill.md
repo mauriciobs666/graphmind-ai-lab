@@ -326,7 +326,7 @@ language(s) are known.
 
 ## 10. Ready to implement
 
-Plan: **`/home/mauricio/prg/graphmind-ai-lab/docs/plans/m2-cpg-analysis-skill.md`**
+Plan: **`docs/plans/m2-cpg-analysis-skill.md`**
 
 - **OQ2 decided:** no `code-graph/` code dir — M2 is skill + docs only; it lives as
   `skills/cpg-analysis/` + the `joern`/`graph-dba` agents + the existing repo-root `docs/`. A

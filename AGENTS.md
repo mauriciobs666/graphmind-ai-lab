@@ -33,7 +33,7 @@ and OpenCode artifacts).
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `skills/` — **Unified Agent Skills home** (`SKILL.md` packages, the open
   `agentskills.io` standard) shared across the repo's tools. `agent-maintenance` +
-  `agent-standards` (cobb's machinery), `joern-cpg` (drives the `joern` agent's Joern
+  `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
   CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), and `python-coding`, `write-tutorial`,
   `comparison-driver`, `skill-builder`, `user-preferences` (OpenCode-authored). See
   `skills/README.md`. Format ports across Claude Code/OpenCode/Kiro; tool-gating &
@@ -57,7 +57,7 @@ Every agent's frontmatter `description` is auto-injected into each session — t
 the live routing contract, and **the full catalog lives once, in
 [`claude/README.md`](claude/README.md)**; this is just the roster: `teco` (coordinator) ·
 `tico` (product owner, first-order) · `architect` · `coder` · `tdd-engineer` ·
-`frontend-engineer` · `qa-engineer` · `analyst` · `data-scientist` · `graph-dba` · `joern` ·
+`frontend-engineer` · `qa-engineer` · `analyst` · `data-scientist` · `graph-dba` ·
 `devops` · `cobb`.
 
 ## OpenCode agents (`opencode/agents/`)
@@ -81,8 +81,9 @@ read `SKILL.md`), but **tool-gating and activation behavior do not** — verify 
 - `agent-maintenance`, `agent-standards` — cobb's machinery (kaizen/doc/drift/team-certification
   procedures + single-artifact prompt-quality lint; perishable per-tool reference specifics).
   Loaded on demand so cobb's prompt stays lean.
-- `joern-cpg` — drives the `joern` agent (producer): parse → export (neo4jcsv) → transform →
-  FalkorDB load scripts for turning a repo into a Code Property Graph and ingesting it as Cypher.
+- `joern-cpg` — drives `graph-dba` (producer, on-demand — CPG generation is rare): parse →
+  export (neo4jcsv) → transform → FalkorDB load scripts for turning a repo into a Code
+  Property Graph and ingesting it as Cypher.
 - `cpg-analysis` — the consumer side (graph-dba-owned): queries a loaded CPG in FalkorDB with
   Cypher for impact-analysis, RCA data-flow, code-review taint, and test-gap analysis. The read
   path is the **`mcp__cpg__query`** MCP tool (`cpg/mcp/`, one tool, two parameters); `redis-cli

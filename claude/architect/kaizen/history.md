@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-07-28 — Inbox entry distilled: `audit-team.sh` is not a usable bare pass/fail done-condition
+- **What:** Processed the 2026-07-25 inbox entry *"`audit-team.sh` passes is an unusable plan
+  done-condition"* (agent-maintenance skill §5). **Verified still true:** re-ran
+  `claude/scripts/audit-team.sh` — check 7 still greps every tracked file in the repo for
+  personal identifiers, so a plan step worded as a bare "assert it passes" is unsatisfiable
+  the moment any unrelated leak exists anywhere in the repo. **Routed to project docs**, not
+  this agent's always-loaded prompt (the fact only bites when a plan step references this one
+  script — too narrow to pay for on every session): added a callout to
+  `skills/agent-maintenance/SKILL.md` §4, right after the deterministic-half paragraph the
+  entry was actually about, stating the fix (assert "no new FAIL line" against a captured
+  before-state, not a bare pass). The entry's own personal-path fragment (`claude/joern/…`,
+  `docs/plans/m2-cpg-analysis-skill.md:327`) was stale bookkeeping only — the `joern` agent it
+  cited was retired 2026-07-28 (see `claude/graph-dba/kaizen/history.md`) and the four leak
+  sources it listed were fixed the same day (this task) — so nothing else needed carrying
+  forward. Entry removed from `claude/architect/kaizen/inbox.md`.
+- **Why:** Standing distillation duty (agent-maintenance skill §5) — cobb processed this entry
+  on the coordinator's explicit request, tied to the same-day joern-agent cleanup that had
+  left `claude/joern/kaizen/inbox.md:19` (cited by this entry) a dangling path.
+- **Plan items:** —
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.

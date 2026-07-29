@@ -94,6 +94,6 @@ only synthetic module/adapter nodes, confirming the inbound-resolution limit.
   object, a dispatch table, or `getattr` (here: `_dispatch_write` → `write`) have
   no resolved `CALL` edge, so downstream reach stops early. Treat Q3 as a *lower
   bound* on reach. For a fuller call graph, escalate to Joern's CPGQL
-  (`.caller` / `.callee` / `.reachableBy`) in the REPL via the `joern` agent.
+  (`.caller` / `.callee` / `.reachableBy`) in the REPL via `graph-dba`.
 - **Scope:** AC-3 is call-graph reach over the `CALL` relationship only. Type /
   import / inheritance dependency reach is out of scope for this recipe.
