@@ -70,6 +70,8 @@ class FakeRepo:
         self.step_runs: dict[str, list] = {}   # runId -> step-run trail
         self.trace: dict[str, list] = {}       # runId -> trace events
         self.waiting_runs: dict[str, dict] = {}  # threadId -> waiting run (resume lookup)
+        self.runs_by_thread: dict[str, list[dict]] = {}  # threadId -> run history (§12.14)
+        self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -248,6 +250,14 @@ class FakeRepo:
         self.calls.append(("find_waiting_run_for_thread", ws, thread_id))
         return self.waiting_runs.get(thread_id)
 
+    def find_runs_for_thread(self, ws, *, thread_id, limit=10):
+        self.calls.append(("find_runs_for_thread", ws, thread_id, limit))
+        return self.runs_by_thread.get(thread_id, [])[:limit]
+
+    def list_thread_participants(self, ws, *, thread_id):
+        self.calls.append(("list_thread_participants", ws, thread_id))
+        return self.participants.get(thread_id, [])
+
 
 _UNSET = object()
 
@@ -352,6 +362,43 @@ def test_ensure_actor_propagates_member_id_collision():
 
     with pytest.raises(MemberIdCollisionError):
         svc.ensure_actor(CTX)
+
+
+# ── list_thread_participants (K-036 — web-api-coverage U5/FR-8) ─────────────
+
+
+def test_list_thread_participants_normalizes_kind_from_type_list():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.threads.add("t1")
+    repo.participants["t1"] = [
+        {"memberId": "u1", "displayName": "Alice", "type": ["User"]},
+        {"memberId": "a1", "displayName": None, "type": ["Agent"]},
+    ]
+
+    got = svc.list_thread_participants(CTX, thread_id="t1")
+
+    assert got == [
+        {"memberId": "u1", "displayName": "Alice", "kind": "User"},
+        {"memberId": "a1", "displayName": None, "kind": "Agent"},
+    ]
+    assert ("list_thread_participants", "test", "t1") in repo.calls
+
+
+def test_list_thread_participants_missing_thread_errors():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(ThreadNotFoundError):
+        svc.list_thread_participants(CTX, thread_id="ghost")
+
+
+def test_list_thread_participants_empty_when_no_members():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.threads.add("t1")
+
+    assert svc.list_thread_participants(CTX, thread_id="t1") == []
 
 
 def test_post_message_first_uses_first_write_path():
@@ -1465,6 +1512,52 @@ def test_find_waiting_run_for_thread_returns_none_when_nothing_parked():
     repo = FakeRepo()
     svc = make_service(repo)
     assert svc.find_waiting_run_for_thread(CTX, thread_id="t1") is None
+
+
+# ── list_workflow_runs_for_thread (K-036 — web-api-coverage U4/FR-2) ────────
+
+
+def test_list_workflow_runs_for_thread_passthrough_uses_ctx_ws():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.threads.add("t1")
+    repo.runs_by_thread["t1"] = [
+        {"runId": "r2", "status": "running", "defKey": "triage", "defVersion": "1",
+         "startedAt": 2000, "endedAt": None},
+        {"runId": "r1", "status": "done", "defKey": "triage", "defVersion": "1",
+         "startedAt": 1000, "endedAt": 1500},
+    ]
+
+    got = svc.list_workflow_runs_for_thread(CTX, thread_id="t1")
+
+    assert [r["runId"] for r in got] == ["r2", "r1"]
+    assert ("find_runs_for_thread", "test", "t1", 10) in repo.calls
+
+
+def test_list_workflow_runs_for_thread_missing_thread_errors():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(ThreadNotFoundError):
+        svc.list_workflow_runs_for_thread(CTX, thread_id="ghost")
+
+
+def test_list_workflow_runs_for_thread_empty_when_no_runs():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.threads.add("t1")
+
+    assert svc.list_workflow_runs_for_thread(CTX, thread_id="t1") == []
+
+
+def test_list_workflow_runs_for_thread_passes_limit_through():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.threads.add("t1")
+
+    svc.list_workflow_runs_for_thread(CTX, thread_id="t1", limit=5)
+
+    assert ("find_runs_for_thread", "test", "t1", 5) in repo.calls
 
 
 def test_agent_step_type_is_accepted_by_publish_validation():

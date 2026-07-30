@@ -59,6 +59,7 @@
 | **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
 | **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
+| **M3.5 — Web API Coverage** ✅ | **Reached (2026-07-29)** — FR-1..FR-10/AC-1..AC-6 wired into `web/` (defs viewer, inline run cue + detail panel, structured-input resume, participants list, ready-to-demo banner), **QA-accepted**: K-036 verdict **PASS with parked/non-blocking limitations**, zero blocking defects (`docs/test-reports/web-api-coverage-report.md`) | **K-036 ✅** (5 waves, 2026-07-28→2026-07-29) ⇒ **M3.5 ✅**. K-037 (`TRIGGER_DEF_KEY` graft bug + banner cosmetic) and K-038 (`refreshRunPanel` overlapping-poll-tick race) are follow-ups, **not** M3.5-green gates. |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
 > narrow §12 roadmap DoD: embeddings + vector index + hybrid retrieval + agent participant +
@@ -925,7 +926,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   direction — an argument object carrying `name` must not resurrect a call the M-1 final-content rule
   rejected.
 
-### K-036 — Web API Coverage — drive the M3 agent/workflow story + a workspace ready-to-demo check from `web/` (🟡 in-progress — Wave 1 of 5 landing; plan `docs/plans/web-api-coverage.md` v3, analyst-approved Pass 3; milestone M3.5)
+### K-036 — Web API Coverage — drive the M3 agent/workflow story + a workspace ready-to-demo check from `web/` (✅ delivered 2026-07-29 — verdict PASS with parked/non-blocking limitations ⇒ M3.5 ✅; plan `docs/plans/web-api-coverage.md` v3, analyst-approved Pass 3)
 
 > **Why it exists.** M3 delivered the def/executor/chat-linkage engine end to end (K-020…K-025 ✅)
 > and K-031 added the def/snapshot structure+diff read surface, but none of it is reachable from
@@ -964,13 +965,154 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   two-pass black-box session (U10, plan §5.2) driving the real seeded demo workspace, since
   `TRIGGER_DEF_KEY` is a single process-wide env var and AC-1 (`triage`) / AC-2 (`access-request`)
   need different server configs.
-- **Progress:** **U1 (graph-dba) delivered 2026-07-28** — both queries authored, `GRAPH.PROFILE`-
-  verified, and landed (QUERIES.md §2 "List thread participants" + §12.14 `find_runs_for_thread`;
-  `scripts/test_queries.sh` 256/256 → **276/276**). U1 also surfaced and documented a
+- **Progress:** **Wave 1 (U1 graph-dba, U2 readiness endpoint, U3 defs-viewer UI) delivered
+  2026-07-28** (`3d2234c`). U1: both queries authored, `GRAPH.PROFILE`-verified, and landed
+  (QUERIES.md §2 "List thread participants" + §12.14 `find_runs_for_thread`;
+  `scripts/test_queries.sh` 256/256 → **276/276**); U1 also surfaced and documented a
   previously-unknown FalkorDB planner quirk (a `WHERE` predicate on one pattern variable can pull
   the label-scan anchor onto that variable's label even when a much smaller label sits elsewhere
-  in the same pattern — `claude/graph-dba/falkordb-quirks.md`, "Query tuning"). Remaining: U2..U10
-  not started.
+  in the same pattern — `claude/graph-dba/falkordb-quirks.md`, "Query tuning"). U2:
+  `GET /workspaces/{ws}/readiness` (FR-10/AC-6). U3: the defs-viewer web UI.
+  **Wave 2 (U4 `GET /threads/{id}/workflow-runs`, U5 `GET /threads/{id}/participants`) delivered
+  2026-07-29** — both wire repository/service/API layers on the two Wave-1 queries, no new
+  Cypher (HISTORY.md 2026-07-29 "K-036 U4+U5 (Wave 2)"). 27 new tests (10 repository + 7 service +
+  10 API); full suite **641 passed, 1 deselected** (up from the 614 baseline);
+  `./scripts/test_queries.sh` unaffected, still **276/276**.
+  **Waves 3-4 (U6 run cue + run detail panel, U7 participants toggle, U8 readiness banner, U9
+  waiting-form/structured-input/failure display) delivered 2026-07-29** — all web-only, no
+  server-side change (HISTORY.md 2026-07-29 "K-036 U6+U7+U8+U9 (Waves 3-4)"). U6's "most relevant
+  run" tie-break shipped as the required dependency-free pure function
+  (`web/run-select.js`/`web/tests/run-select.test.js`, 12/12 `node`-run assertions passing, §5.2
+  finding m3). Manually verified end to end against a live server (no headless-browser driver
+  available in this sandbox, so API-level rather than click-level): `@mention` → cue → panel →
+  parked-step form → submit → re-poll → terminal `done`; a rejected submit's 400 toast path; a
+  forced budget-exhaustion `failed` run's reason display; the participants chip row (both kinds);
+  and the readiness banner's not-ready path, which surfaced a **genuine, pre-existing** `reference`
+  `access-request@v1` drift (2 `START` edges, diverges from the `ws:acme` snapshot) in this dev
+  environment — unrelated to this change, not touched, flagged as K-034-territory cleanup.
+  Also fixed in passing: a latent CSS scoping bug (`.badge` was `.msg`-only, didn't style the
+  reused agent badge inside a participant chip) and a missing `#run-panel` join to the shared
+  overlay `display:none`/positioning rule.
+  **Wave 5 (U10, qa-engineer two-pass black-box AC-1..AC-6 session, plan §5.2) delivered
+  2026-07-29 — verdict PASS with parked/non-blocking limitations.** All six ACs (AC-1..AC-6)
+  satisfied against the delivered `web/` + `server/` code; no defect found in K-036's own diff.
+  Session tooling constraint: no browser-automation tool was available, so the pass drove the
+  exact REST calls `web/app.js` makes, cross-checked against a direct reading of the render logic
+  that consumes each response (documented as a substitution, not treated as a real browser
+  session). Two non-blocking findings, both filed as follow-ups rather than reopening this item:
+  a **major** operational finding that the plan's own sanctioned Pass-B restart
+  (`FALKORCHAT_TRIGGER_DEF_KEY=access-request`) causes `scripts/start_server.sh`'s unconditional
+  `seed_workflows.sh` re-seed to silently graft `triage`'s steps onto `access-request@v1` in the
+  `reference` graph — **K-037**; a minor cosmetic finding that `start_server.sh`'s startup banner
+  hardcodes "triage def triage@v1" regardless of an active env override, wiring itself unaffected
+  — folded into K-037. A testability gap (not a defect) was also recorded: forcing a
+  *chat-triggered, thread-linked* budget-exhaustion run for AC-3 isn't achievable with either
+  seeded demo def (parked steps are budget-exempt by design and neither def contains a self-loop);
+  AC-3 was validated at the REST/rendering-contract level via a directly-started run instead. This
+  mirrors K-025/M3's own close (QA PASS with parked, model-gated limitations, follow-ups filed
+  rather than blocking). Also carried out of the Wave 3+4 analyst re-review gate (Pass 3, findings
+  m6/m7): `refreshRunPanel` (`web/app.js`) has no mutex against overlapping poll-tick/submit-
+  response invocations, so a stale response can transiently overwrite a fresher one (m6), and an
+  external same-step waiting→running→waiting round-trip between two poll ticks could leave the
+  form stale (m7) — both self-heal within one `POLL_MS` (≤3s) tick, no data loss, filed as
+  **K-038** rather than chased at gate time. **All five waves now delivered; K-036 done.**
+  Artifacts: `docs/test-plans/web-api-coverage.md` (v1, written before execution),
+  `docs/test-reports/web-api-coverage-report.md` (verdict + findings), all three
+  `docs/reviews/web-api-coverage-impl.md` passes (Pass 1 Wave 1+2 gate, Pass 2 Wave 3+4 gate ⛔
+  needs-changes → fix, Pass 3 re-review ✅), `docs/plans/web-api-coverage-coordination.md` (teco's
+  full run ledger, all 5 waves + both review gates).
+
+### K-037 — `FALKORCHAT_TRIGGER_DEF_KEY` override during a restart grafts `triage`'s steps onto `access-request@v1` in `reference` (🔵 proposed — filed out of K-036's Wave 5 QA pass, Finding 1 (major) + Finding 2 (minor), 2026-07-29)
+
+> **Why it exists.** `docs/test-reports/web-api-coverage-report.md` Finding 1 (major, confirmed
+> reproducible): the plan's own sanctioned Pass-B demo/QA procedure — restart with
+> `FALKORCHAT_TRIGGER_DEF_KEY=access-request FALKORCHAT_TRIGGER_DEF_VERSION=v1
+> ./scripts/start_server.sh` — silently and irreversibly corrupts the `reference` graph.
+> `start_server.sh` unconditionally re-runs `seed_workflows.sh` on every start (stage 5/6,
+> including a restart). `seed_workflows.sh` reads the **same** `FALKORCHAT_TRIGGER_DEF_KEY`/
+> `_VERSION` pair to identify its **first, inline `triage`-literal** def entry
+> (`DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"`). With the override active it publishes the
+> triage-shaped step literal (`intake`/`research`/`answer`) **under the key `access-request@v1`**:
+> the `WorkflowDef` node itself reports "already present — no-op" (it already existed), but the
+> per-step `MERGE` underneath is keyed by `stepUid`, so `"access-request:v1:intake"` (never seen
+> before) gets created and `HAS_STEP`/`START`-linked into the *existing*, unrelated
+> `access-request@v1` def. Confirmed via Cypher against `reference`: **9** `Step`s (the correct 6
+> plus 3 spurious `triage` ones) and **2** `START` edges (`submit` — correct — and `intake` —
+> spurious) where there should be 6/1. Every restart with this override further corrupts
+> `reference`, additively and irreversibly (publish/materialize are append-only). No impact on any
+> run exercised so far — the executor drives off the `ws:acme` snapshot, and the spurious steps
+> are unreachable dead nodes — but the corruption is real, silent, and compounds on repeat use of a
+> procedure the plan itself endorses (§7 risk #1) and that this session's own QA pass had to use.
+- **Distinct from K-034.** Same *symptom* class (duplicate `START`/`TRANSITION` edges from a
+  create-only re-publish; the readiness endpoint's own message cites K-034 verbatim when it
+  detects this). But the **trigger mechanism is different**: K-034 is about re-publishing an
+  *edited* version of the *same* def; this is a **generic env-var name collision** between an
+  operational override meant for the chat-trigger wiring (`config.TRIGGER_DEF_KEY`) and
+  `seed_workflows.sh`'s reuse of that same variable name for its unrelated inline `triage`-literal
+  def's identity — two different defs, sharing one env var, for two different purposes.
+- **Owner:** **`devops`**/**`coder`** — this is repo automation-script territory (`scripts/
+  seed_workflows.sh`), not application code. Candidate fix: give the triage-literal's key/version
+  their own dedicated env var, independent of `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION`, so
+  overriding the trigger for a demo/QA session can never feed back into what `seed_workflows.sh`
+  publishes under a different def's key. Route to **`graph-dba`** only for the `ws:acme` /
+  `reference` cleanup hand (deleting and republishing the now-doubly-contaminated
+  `access-request@v1` def+snapshot subgraphs is a destructive shared-state op on live data, the
+  same class of stakeholder-gated cleanup K-031 §6 R-1 already declined to do inline) — the script
+  fix itself needs no graph-dba gate (no query-shape or DDL change).
+- **Also fold in (same script, same owner, trivial to land together) — Finding 2 (minor,
+  cosmetic).** `scripts/start_server.sh:136` prints a hardcoded `"Workflow:  enabled=… (triage def
+  triage@v1)"` banner regardless of an active `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` override —
+  confirmed the actual wiring is correct (`/proc/<pid>/environ` + a live functional test), only
+  the printed text is stale. One-line fix: interpolate the actual configured key/version into the
+  banner instead of the literal.
+- **Risks/RAM:** none — no new node type, label, property, index or vector dimension; the fix is a
+  script-level identity/naming change, not a schema or query-shape change.
+- **Test strategy:** offline — a script-level check (or a `verify_workflows.sh`-style assertion)
+  that seeding with `FALKORCHAT_TRIGGER_DEF_KEY=access-request` set does **not** add any `Step`/
+  `START` edge to `access-request@v1` beyond its canonical 6/1 shape; a manual restart-with-override
+  smoke test against a throwaway workspace, reusing the exact repro sequence from the QA report.
+  The `ws:acme`/`reference` cleanup (if done) needs its own before/after Cypher verification
+  (step/`START`-edge counts back to 6/1), same discipline as K-034's acceptance instrument.
+
+### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations (🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29)
+
+> **Why it exists.** Pass 3 fixed M1 (the destructive every-tick `renderWaitingForm` rebuild) and,
+> while deep-tracing the fix per the task's own request, found two narrower, non-blocking races in
+> the same run-panel poll/submit machinery — recorded there rather than chased at gate time, and
+> filed here as this item per the K-036 close-out plan.
+- **m6 — unordered concurrent `refreshRunPanel` calls; a stale response can transiently overwrite
+  a fresher one.** `refreshRunPanel` (`web/app.js`) is not mutex-protected against overlapping
+  invocations, and both `startRunPolling`'s periodic tick and `submitRunInput`'s post-submit call
+  invoke it independently. If a tick's `refreshRunPanel` is still in flight
+  (`Promise.all([GET run, GET step-runs])` awaiting) at the moment a submit resolves and triggers
+  its own `refreshRunPanel`, both fetches race against the same `runId`, and whichever's
+  `Promise.all` resolves *last* wins the render — regardless of which is fresher. A stale
+  (pre-submit) response landing after the fresh one briefly shows an already-superseded step.
+- **m7 — the same-step-key rebuild guard can't distinguish "still the same wait" from "revisited
+  after an externally-driven round-trip this session's poll never observed."** The
+  `state.runWaitingKey` guard (M1's fix) only resets when *this session's own* render observes a
+  non-`waiting` status. If some other actor completes a full `waiting → running → waiting`
+  round-trip on the *same* `atStepKey` entirely between two of this session's poll ticks, the key
+  still matches on the next tick and the box stays hidden behind the early-return guard even
+  though it's a genuinely new visit to that step.
+- **Non-blocking, self-healing — carry this framing accurately.** Both require timing conditions
+  well outside normal single-operator, human-typing-speed form use (a sub-`POLL_MS`, i.e. <3s,
+  window for m6; an external actor plus a round-trip faster than one `POLL_MS` for m7), and both
+  self-heal within one more `POLL_MS` (≤3s) tick — the next poll fetches true current state again
+  and forces a correct rebuild either way. Neither loses user-entered input (unlike M1); neither is
+  a permanent inconsistency.
+- **Owner:** **`frontend-engineer`**, `web/app.js`.
+- **Scope sketch (to be designed, not decided here):** m6 — a request-sequence token (stamp each
+  `refreshRunPanel` call with an incrementing counter, ignore a response whose stamp is behind the
+  latest issued) would close it; m7 — needs a server-supplied, monotonically-changing identifier
+  per wait-instance (not just `atStepKey`) to distinguish "unchanged wait" from "revisited wait",
+  which is a server-side surface change, not JS-only.
+- **Risks/RAM:** none — web-only, no server/graph surface touched by m6; m7's full fix would need a
+  new/changed field on the run-detail response, scoped by whoever picks this up, not decided here.
+- **Test strategy:** a DOM-stub harness (the same shape Pass 2's fix verification used) driving two
+  overlapping `refreshRunPanel` promises resolving out of order, asserting the later-issued one
+  always wins regardless of resolution order (m6); an injected-clock or mocked-response test
+  simulating an external round-trip between two ticks, asserting the panel still rebuilds (m7).
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,

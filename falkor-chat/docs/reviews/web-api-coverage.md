@@ -1,6 +1,8 @@
 # Plan review — Web API coverage
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-036 (M3.5, per the plan's own header)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-036 (M3.5, per the plan's own header)
+
+archived 2026-07-29 — K-036 delivered, M3.5 reached; see `docs/plans/web-api-coverage-coordination.md`.
 
 - **Reviewer:** `analyst` · **Date:** 2026-07-28
 - **Artifact reviewed:** `falkor-chat/docs/plans/web-api-coverage.md` (Status: active, Owner: `architect`)

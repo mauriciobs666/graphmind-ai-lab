@@ -49,17 +49,17 @@
     .msg.assistant.mention { background: var(--mention); border: 1px solid var(--mention-line);
       border-left: 2px solid var(--agent); }
     .msg .who { font-weight: 600; }
-    .msg .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    .msg .badge, .chip .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em;
       color: #0f1115; background: var(--agent); border-radius: 4px; padding: 1px 5px;
       margin-left: 4px; vertical-align: middle; }
     .msg .meta { color: var(--muted); font-size: 12px; margin-left: 8px; }
     .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
     .composer input[type=text] { flex: 1; }
     .empty { color: var(--muted); padding: 16px; }
-    #results, #defs-panel { position: absolute; right: 16px; top: 52px; width: 380px; max-height: 60vh;
-      overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
+    #results, #defs-panel, #run-panel { position: absolute; right: 16px; top: 52px; width: 380px;
+      max-height: 60vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
       border-radius: 8px; box-shadow: 0 8px 30px #0008; z-index: 10; display: none; }
-    #results header, #defs-panel header { position: sticky; top: 0; }
+    #results header, #defs-panel header, #run-panel header { position: sticky; top: 0; }
     #results .item .sub, #defs-panel .item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #defs-panel { width: 460px; }
     #defs-detail-view { padding: 4px 12px 12px; }
@@ -70,6 +70,37 @@
       border-bottom: 1px solid #1b1f28; vertical-align: top; }
     #defs-detail-view td.config { color: var(--muted); font-family: ui-monospace, monospace;
       font-size: 11px; overflow-wrap: anywhere; }
+    #run-panel { width: 420px; }
+    #run-panel-content { padding: 4px 12px 12px; }
+    #run-panel-content h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--muted); margin: 14px 0 6px; }
+    .run-step-row { display: flex; justify-content: space-between; gap: 8px;
+      padding: 4px 0; border-bottom: 1px solid #1b1f28; font-size: 12px; }
+    .run-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+    .run-field label { font-size: 12px; color: var(--muted); }
+    #run-failure { background: #3a1418; border: 1px solid #7a2530; color: #ffd7d7;
+      padding: 8px 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+    #run-trace { font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap;
+      background: #10131a; padding: 8px; border-radius: 6px; margin-top: 8px;
+      max-height: 200px; overflow-y: auto; }
+    .run-cue { display: flex; align-items: center; gap: 8px; padding: 6px 16px;
+      border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    .mini-btn { font-size: 12px; padding: 3px 9px; }
+    .thread-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; }
+    .thread-head h2 { padding: 0; margin: 0; }
+    .participants-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px;
+      border-bottom: 1px solid var(--line); }
+    .participants-row .chip { font-size: 12px; padding: 2px 9px; border-radius: 10px;
+      background: #1b202a; border: 1px solid var(--line); }
+    .readiness { font-size: 12px; padding: 2px 9px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--line); }
+    .readiness--unknown { background: #1d2430; color: var(--muted); }
+    .readiness--ready { background: #10291d; color: #7be3ab; border-color: #1f5c3d; }
+    .readiness--not-ready { background: #3a1418; color: #ffb3b3; border-color: #7a2530; }
+    #readiness-panel { position: absolute; left: 16px; top: 52px; width: 320px;
+      max-height: 50vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 8px; box-shadow: 0 8px 30px #0008; z-index: 10; display: none; padding: 10px 12px; }
+    #readiness-panel ul { margin: 6px 0; padding-left: 18px; }
     #toast {
       position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
       max-width: 520px; padding: 10px 14px; border-radius: 8px; z-index: 50;
@@ -84,6 +115,8 @@
   <header>
     <h1>falkor-chat</h1>
     <span class="tenant" id="tenant"></span>
+    <span class="readiness readiness--unknown" id="readiness-badge" role="button" tabindex="0"
+      title="Workspace demo-readiness">Checking…</span>
     <button type="button" id="defs-btn">Workflow defs</button>
     <form id="search-form">
       <input type="text" id="search-q" placeholder="Search messages…" autocomplete="off" />
@@ -111,10 +144,15 @@
     </section>
 
     <section class="col thread">
-      <h2 id="thread-heading">Messages</h2>
+      <div class="thread-head">
+        <h2 id="thread-heading">Messages</h2>
+        <button type="button" class="mini-btn" id="participants-toggle" disabled>Participants</button>
+      </div>
+      <div class="participants-row" id="participants-row" style="display:none"></div>
       <div class="messages" id="messages">
         <div class="empty">Select a thread to read its messages.</div>
       </div>
+      <div class="run-cue" id="run-cue" style="display:none"></div>
       <form class="composer" id="composer" hidden>
         <input type="text" id="message-text" placeholder="Write a message… (@id @id to mention)" autocomplete="off" />
         <button type="submit">Send</button>
@@ -138,8 +176,27 @@
     </div>
   </div>
 
+  <div id="run-panel">
+    <header><h1>Workflow run</h1><button type="button" id="run-close" style="margin-left:auto">✕</button></header>
+    <div id="run-panel-content">
+      <div id="run-summary"></div>
+      <div id="run-failure" hidden></div>
+      <div id="run-waiting-form" hidden></div>
+      <h3>Steps</h3>
+      <div id="run-steps"></div>
+      <button type="button" class="mini-btn" id="run-trace-toggle">Show trace</button>
+      <div id="run-trace" hidden></div>
+    </div>
+  </div>
+
+  <div id="readiness-panel">
+    <div id="readiness-content"></div>
+    <button type="button" class="mini-btn" id="readiness-recheck">Recheck</button>
+  </div>
+
   <div id="toast" role="status" aria-live="polite" hidden></div>
 
+  <script src="run-select.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

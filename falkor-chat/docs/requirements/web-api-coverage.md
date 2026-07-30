@@ -1,6 +1,10 @@
 # Web API Coverage — Feature Requirements
 
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-07-27
+> **Status:** archived (skipped "Ready for design" — a plan was already built and
+> analyst-approved from this document without this header being updated at the time; archived
+> 2026-07-29 — K-036 delivered, M3.5 reached, PASS with parked/non-blocking limitations; see
+> `docs/plans/web-api-coverage-coordination.md`) · **Owner:** `tico` · **Tracks:** K-036 (M3.5) ·
+> **Last updated:** 2026-07-29
 
 ## Intent
 

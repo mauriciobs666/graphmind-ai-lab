@@ -847,3 +847,151 @@ def test_get_workflow_trace(client, conn):
     assert r.status_code == 200
     events = r.json()
     assert events and events[0]["kind"] == "node_rationale"
+
+
+# ── K-036 web-api-coverage: thread-scoped reads (FR-2/FR-8, Wave 2) ──────────
+
+
+def _seed_run_for_thread(
+    conn, *, thread_id, run_id, started_at, status="running",
+    ended_at=None, def_key="triage", def_version="1",
+):
+    """Seed a minimal WorkflowRun -[:TRIGGERED_BY]-> Message directly in ws:test.
+
+    The trigger message need not sit on the thread's actual HEAD/TAIL chain —
+    `find_runs_for_thread` only needs `Message.threadId`, not thread structure.
+    """
+    g = db.workspace_graph(conn, "test")
+    g.query(
+        "CREATE (m:Message {msgId: $msgId, text: 'trigger', role: 'user', "
+        "                    createdAt: $startedAt, threadId: $threadId}) "
+        "CREATE (r:WorkflowRun {runId: $runId, status: $status, defKey: $defKey, "
+        "                       defVersion: $defVersion, startedAt: $startedAt, "
+        "                       endedAt: $endedAt, stepCount: 0, maxSteps: 12, "
+        "                       trace: false, ctx: '{}', waitingThreadId: ''}) "
+        "CREATE (r)-[:TRIGGERED_BY]->(m)",
+        {
+            "msgId": f"trig-{run_id}", "runId": run_id, "status": status,
+            "defKey": def_key, "defVersion": def_version, "startedAt": started_at,
+            "endedAt": ended_at, "threadId": thread_id,
+        },
+    )
+
+
+def _add_to_channel(conn, *, member_id, channel_id):
+    """Raw MEMBER_OF write — no repository method exists yet (test_repository.py's
+    `_add_to_channel` docstring explains the gap); anchors label-agnostically on
+    `userId OR agentId`, same pattern `advance_cursor` uses in production."""
+    db.workspace_graph(conn, "test").query(
+        "MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId "
+        "MATCH (c:Channel {channelId: $channelId}) "
+        "MERGE (mem)-[:MEMBER_OF]->(c)",
+        {"memberId": member_id, "channelId": channel_id},
+    )
+
+
+def test_thread_workflow_runs_empty_when_none(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.get(f"/threads/{tid}/workflow-runs")
+
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_thread_workflow_runs_populated_newest_first(client, conn):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    _seed_run_for_thread(conn, thread_id=tid, run_id="r1", started_at=1000)
+    _seed_run_for_thread(conn, thread_id=tid, run_id="r2", started_at=2000)
+
+    r = client.get(f"/threads/{tid}/workflow-runs")
+
+    assert r.status_code == 200
+    assert [x["runId"] for x in r.json()] == ["r2", "r1"]
+
+
+def test_thread_workflow_runs_respects_limit_query_param(client, conn):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    _seed_run_for_thread(conn, thread_id=tid, run_id="r1", started_at=1000)
+    _seed_run_for_thread(conn, thread_id=tid, run_id="r2", started_at=2000)
+
+    r = client.get(f"/threads/{tid}/workflow-runs", params={"limit": 1})
+
+    assert r.status_code == 200
+    assert [x["runId"] for x in r.json()] == ["r2"]
+
+
+def test_thread_workflow_runs_limit_bounds_are_422(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    assert (
+        client.get(f"/threads/{tid}/workflow-runs", params={"limit": 0}).status_code
+        == 422
+    )
+    assert (
+        client.get(f"/threads/{tid}/workflow-runs", params={"limit": 51}).status_code
+        == 422
+    )
+
+
+def test_thread_workflow_runs_unknown_thread_404(client):
+    r = client.get("/threads/ghost/workflow-runs")
+    assert r.status_code == 404
+
+
+def test_thread_participants_both_kinds(client, conn):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    Repository(conn).ensure_agent("test", agent_id="a1", name="Bot")
+    _add_to_channel(conn, member_id="u1", channel_id=cid)  # u1: seeded by `client`
+    _add_to_channel(conn, member_id="a1", channel_id=cid)
+
+    r = client.get(f"/threads/{tid}/participants")
+
+    assert r.status_code == 200
+    rows = r.json()
+    assert {(row["memberId"], row["kind"]) for row in rows} == {
+        ("u1", "User"), ("a1", "Agent"),
+    }
+
+
+def test_thread_participants_only_human(client, conn):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    _add_to_channel(conn, member_id="u1", channel_id=cid)
+
+    r = client.get(f"/threads/{tid}/participants")
+
+    assert r.status_code == 200
+    assert [row["kind"] for row in r.json()] == ["User"]
+
+
+def test_thread_participants_only_agent(client, conn):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+    Repository(conn).ensure_agent("test", agent_id="a1", name="Bot")
+    _add_to_channel(conn, member_id="a1", channel_id=cid)
+
+    r = client.get(f"/threads/{tid}/participants")
+
+    assert r.status_code == 200
+    assert [row["kind"] for row in r.json()] == ["Agent"]
+
+
+def test_thread_participants_empty_when_channel_has_no_members(client):
+    cid = _new_channel(client)
+    tid = _new_thread(client, cid)
+
+    r = client.get(f"/threads/{tid}/participants")
+
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_thread_participants_unknown_thread_404(client):
+    r = client.get("/threads/ghost/participants")
+    assert r.status_code == 404

@@ -919,6 +919,35 @@ class Repository:
         )
         return {row[0]: row[1] for row in res.result_set}
 
+    def list_thread_participants(
+        self, ws: str, *, thread_id: str
+    ) -> list[dict[str, Any]]:
+        """A thread's participants = its parent channel's roster (RO). QUERIES.md
+        §2 "List thread participants" (K-036 — web-api-coverage FR-8).
+
+        Anchors on `Node By Index Scan | (t:Thread)` (`Thread.threadId`), one
+        backward `HAS_THREAD` hop to the channel, one forward `MEMBER_OF` hop
+        per member — no label scan (live-verified `GRAPH.PROFILE`, QUERIES.md
+        §2). `type` is `labels(u)` (mirrors `read_thread`'s `authorType`
+        convention — the kind-string derivation is the caller's job, same as
+        everywhere else this repository returns raw `labels()`). Empty list
+        when the thread's channel has zero members — not an error (the
+        demo-seed-timing edge case QUERIES.md §2 calls out).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: $threadId}) "
+            "MATCH (u)-[:MEMBER_OF]->(c) "
+            "RETURN coalesce(u.userId, u.agentId) AS memberId, "
+            "       u.displayName                 AS displayName, "
+            "       labels(u)                     AS type "
+            "ORDER BY u.displayName",
+            {"threadId": thread_id},
+        )
+        return [
+            {"memberId": row[0], "displayName": row[1], "type": row[2]}
+            for row in res.result_set
+        ]
+
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
     #
     # Definitions live canonically in the GLOBAL `reference` graph as versioned,
@@ -1478,6 +1507,41 @@ class Repository:
             {"threadId": thread_id},
         )
         return self._status_row(res)
+
+    def find_runs_for_thread(
+        self, ws: str, *, thread_id: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Every run this thread has ever had, newest-first (RO). QUERIES.md
+        §12.14 `find_runs_for_thread` (K-036 — web-api-coverage FR-2).
+
+        The `r.startedAt >= 0` conjunct is functionally a no-op (`startedAt` is
+        always non-negative) but is **load-bearing for the query plan** — see
+        QUERIES.md §12.14's PROFILE finding: without it the anchor lands on
+        `Node By Label Scan (m:Message)` (a workspace-wide scan) instead of the
+        small `WorkflowRun` scan, because a `WHERE` predicate on one pattern
+        variable pulls the label-scan anchor onto that variable regardless of
+        relative cardinality. Paired with the `WorkflowRun.startedAt` range
+        index (`bootstrap_schema.sh`), this anchors on
+        `Node By Index Scan (r:WorkflowRun)`. Empty list for a thread with no
+        runs (not an error).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) "
+            "WHERE r.startedAt >= 0 AND m.threadId = $threadId "
+            "RETURN r.runId AS runId, r.status AS status, r.defKey AS defKey, "
+            "       r.defVersion AS defVersion, r.startedAt AS startedAt, "
+            "       r.endedAt AS endedAt "
+            "ORDER BY r.startedAt DESC "
+            "LIMIT $limit",
+            {"threadId": thread_id, "limit": limit},
+        )
+        return [
+            {
+                "runId": row[0], "status": row[1], "defKey": row[2],
+                "defVersion": row[3], "startedAt": row[4], "endedAt": row[5],
+            }
+            for row in res.result_set
+        ]
 
     def append_trace_event(
         self, ws: str, *, step_run_id: str, trace_id: str, seq: int, kind: str,

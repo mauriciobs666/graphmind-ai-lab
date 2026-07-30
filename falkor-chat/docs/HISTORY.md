@@ -5,6 +5,259 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-29 — K-036 doc gap-fill: missing HISTORY entries for U1 (graph-dba) and U3 (frontend-engineer), Wave 1
+
+**What this entry is:** written today, at K-036's documentation close-out, to record work that
+**actually shipped 2026-07-28** in commit `3d2234c` (the same commit as the already-dated
+"2026-07-28 — K-036 U2" entry below). U1 and U3 landed in that same commit but never got their own
+dated entry — flagged as a known gap at Gate 1 (`docs/reviews/web-api-coverage-impl.md`, finding
+m1) and confirmed still open at every check since (the coordination ledger,
+`docs/plans/web-api-coverage-coordination.md`, notes it under "Entry state" and again at Gate 1,
+and never closes it). This entry closes it now, retroactively and explicitly labeled as such —
+content is grounded in `git show 3d2234c --stat`, `git log -1 3d2234c`, `docs/QUERIES.md` §2/§12.14,
+and the shipped `web/index.html`/`web/app.js` defs-viewer code, not invented after the fact.
+
+**U1 (`graph-dba`) — two new read queries + one new index, backing FR-2 and FR-8.**
+- **`docs/QUERIES.md` §12.14, `find_runs_for_thread`** — every `WorkflowRun` a thread has ever had
+  (`MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message) WHERE r.startedAt >= 0 AND m.threadId =
+  $threadId ...`), backing `GET /threads/{id}/workflow-runs` (FR-2, landed as U4 in Wave 2). Ships
+  with a genuinely new, previously-undocumented FalkorDB planner fact: a `WHERE` predicate on one
+  pattern variable pulls the label-scan anchor onto *that* variable's label even when a much
+  smaller, filter-free label sits elsewhere in the same pattern — the plan's originally-proposed
+  shape (no predicate on `r`) anchored on `Node By Label Scan | (m:Message)` (20,003 records in the
+  profiled dataset) instead of the much smaller `WorkflowRun` label, and a bare `WorkflowRun.startedAt`
+  index alone did **not** move the anchor. The functionally-vacuous `r.startedAt >= 0` conjunct is
+  what redirects the anchor back onto `Node By Label Scan | (r:WorkflowRun)` — load-bearing for the
+  query plan, not decoration. New `WorkflowRun.startedAt` range index added alongside (small
+  cardinality per workspace, negligible RAM). Promoted to the general FalkorDB quirks KB
+  (`claude/graph-dba/falkordb-quirks.md`, "Query tuning").
+- **`docs/QUERIES.md` §2, "List thread participants"** — a thread's participants, defined as its
+  parent channel's roster (`MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: $threadId})
+  MATCH (u)-[:MEMBER_OF]->(c) RETURN coalesce(u.userId, u.agentId) AS memberId, u.displayName,
+  labels(u) AS type ...`), backing `GET /threads/{id}/participants` (FR-8, landed as U5 in Wave 2).
+  `PROFILE`-verified: anchors on `Node By Index Scan | (t:Thread)`, no label scan anywhere. Carries
+  forward the pre-existing, documented gap that `Agent` nodes have no `.displayName` (comes back
+  `null`; `labels(u)` still correctly reads `["Agent"]`).
+- `scripts/test_queries.sh` assertions for both: suite went **256 → 276/276**. Also fixed in
+  passing: `test_queries.sh`'s `assert_index_scan` helper had a wrong `PROFILE` string match that
+  was silently no-op-ing the "no label scan" half of every prior assertion in the suite.
+
+**U3 (`frontend-engineer`) — workflow-defs viewer in `web/`, backing FR-1.** A `#defs-btn` button
+in the header (always visible, shares the generic `button` styling with the pre-existing header
+buttons — no new visual weight) opens `#defs-panel`, a right-side overlay
+(`position:absolute`/`display:none` until opened, same pattern as the existing `#results` panel)
+listing every published workflow def (`loadDefsList`, `GET /workflow-defs`). Selecting a def loads
+its structure (`GET /workflow-defs/{key}/versions/{version}`) and renders step/transition detail
+via `renderDefDetail`. Zero DOM/fetch footprint until the button is clicked — no unconditional
+call added to the page's load sequence.
+
+**Baseline at this commit:** server pytest **614 passed**; query suite **276/276** (up from the
+256/256 baseline going in). Commit: `3d2234c` (2026-07-28), same commit as U2's already-dated
+entry below.
+
+## 2026-07-29 — K-036 U10 (Wave 5): black-box acceptance pass on the Web API Coverage feature
+
+**What:** `qa-engineer`'s black-box acceptance pass against `docs/requirements/web-api-coverage.md`
+AC-1..AC-6, per `docs/plans/web-api-coverage.md` §5.2's two-pass session shape — Pass A (default
+`triage`/`v1` config: AC-1, AC-4, AC-5, AC-6) → server restart (`FALKORCHAT_TRIGGER_DEF_KEY=
+access-request`, `_VERSION=v1`) → Pass B (AC-2, AC-3) → restart back to the default config. No
+browser-automation tool was available in this environment; the pass drove the exact REST endpoints
+`web/app.js` calls (same sequence/payloads a UI session would trigger), cross-checked against a
+direct reading of the corresponding render logic — recorded explicitly as a tooling-constraint
+substitution in both artifacts below, not silently treated as a real browser session.
+
+**Result: PASS with parked/non-blocking limitations.** All six ACs satisfied against the delivered
+code; no defect found in K-036's own diff (Waves 1-4). Two new, non-blocking observations: (1) a
+**Major** operational finding — the plan's own sanctioned Pass-B restart procedure
+(`FALKORCHAT_TRIGGER_DEF_KEY=access-request`) causes `scripts/start_server.sh`'s unconditional
+`seed_workflows.sh` re-seed to graft `triage`'s steps onto `access-request@v1` in the `reference`
+graph (env-var name collision between the chat-trigger override and the seed script's own
+triage-literal identity — same duplicate-`START`-edge symptom class as backlog K-034, but a
+distinct, previously-undocumented trigger mechanism); confirmed the workspace's readiness endpoint
+(FR-10/AC-6) correctly detected and named the resulting drift. Left the graph as-is (QA does not
+remediate); recommend a `devops`/`graph-dba`-routed fix + cleanup. (2) A **Minor** cosmetic
+finding — `start_server.sh:136`'s startup banner hardcodes "triage def triage@v1" regardless of an
+active `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` override (the actual wiring was confirmed correct
+via `/proc/<pid>/environ` and a live functional test; only the printed text is stale). Also
+recorded: forcing a *chat-triggered* failing run for AC-3 isn't achievable with either seeded demo
+def (parked steps are budget-exempt by design, D-C, and neither def contains a self-loop) — AC-3
+was validated at the REST/rendering-contract level via a directly-started run instead, a
+testability gap rather than a defect.
+
+The pre-existing `reference`/`access-request@v1` drift disclosed ahead of this session (matching
+K-034-territory) was confirmed present at pre-flight exactly as described, and used as AC-6's
+naturally-occurring negative case rather than re-filed.
+
+**Why:** Wave 5 (U10) of the plan's build sequence — the only unit not yet executed, and the gate
+before K-036's milestone close-out.
+
+**Artifacts:** `docs/test-plans/web-api-coverage.md` (v1, written before execution),
+`docs/test-reports/web-api-coverage-report.md` (full findings + verdict). Server left running,
+restored to the default `triage`/`v1` config (no env override), consistent with what every other
+environment (pytest, future manual checks) assumes.
+
+**Plan items:** K-036 Wave 5 (U10) done — all five waves of the build sequence now delivered.
+Milestone close-out (BACKLOG.md/plan/review `Status:` flips) is `teco`'s coordination call, not
+done here.
+
+## 2026-07-29 — K-036 U6+U7+U8+U9 (Waves 3-4): run cue, run detail panel, participants toggle, readiness banner in the web UI
+
+**What:** the frontend units from `docs/plans/web-api-coverage.md` §4 Waves 3-4, wired entirely
+against endpoints already delivered in Waves 1-2 (`3d2234c` U1-U3, the U4+U5 entry directly below)
+— no server-side change in this unit.
+
+**U6 — inline run cue + run detail panel shell (FR-2/FR-3/FR-4).** The cue (`#run-cue`, above the
+composer) piggybacks on the existing per-thread message poll (`startPolling`, `app.js`) — one more
+`GET /threads/{id}/workflow-runs` fetch per tick, zero-footprint when the thread has no runs. Its
+"most relevant run" tie-break is `web/run-select.js`'s `selectMostRelevantRun`/
+`isTerminalRunStatus` — extracted as a dependency-free pure function per §5.2/review finding m3,
+covered by 12 plain-assertion cases in `web/tests/run-select.test.js` (`node
+web/tests/run-select.test.js` — 12/12 passing). The run detail panel (`#run-panel`, opened from
+the cue's "View" button) polls `GET /workflow-runs/{id}` + `.../step-runs` on its own start/stop
+lifecycle (started on open, stopped on close) and renders status, timestamps, and the step-run
+list; a "Show trace" toggle lazily fetches `.../trace` only when opened.
+
+**U7 — thread participants toggle (FR-8/AC-4).** `#participants-toggle` next to
+`#thread-heading` is always present (disabled until a thread is open, per §3.3's AC-5 reading);
+expanding fetches `GET /threads/{id}/participants` and renders a chip row, reusing the existing
+`.badge`/`--agent` kind token for `kind === "Agent"`. Collapses on thread switch. **Fixed a latent
+CSS scoping bug found while wiring this in:** the `.badge` "AI" pill rule was scoped `.msg .badge`
+(only styled inside a chat message); broadened to `.msg .badge, .chip .badge` so the reused token
+actually renders inside a participant chip too (`web/index.html`).
+
+**U8 — ready-to-demo banner (FR-10/AC-6).** `#readiness-badge` next to the header `tenant` span
+fetches `GET /workspaces/{ws}/readiness` once on load (`DEMO_WS = "acme"` — the `ws` path segment
+is descriptive-only per `api.py`'s own comments at that route, tenancy comes from `get_context`;
+kept in sync with the demo default). Clicking it toggles a small panel listing `problems` per
+offending def; a "Recheck" button re-fetches.
+
+**U9 — waiting-step prompt, structured-input form, failure display (FR-5/FR-6/FR-7).** When a run
+is `waiting`, the panel fetches the run's snapshot (`GET
+/workspaces/{ws}/snapshots/{defKey}/versions/{defVersion}`) to resolve the parked step's `config`
+(an opaque JSON string, parsed client-side) and renders `config.prompt` plus a form built from
+`config.fields` (one text input per top-level key; a `config.expects[field]` list renders as a
+`<select>`). Submitting `POST`s to `/workflow-runs/{id}/input`; on success the panel **immediately
+re-polls** (`refreshRunPanel()`, mirroring the composer's existing `postMessage()` →
+`pollMessages()` idiom — plan §3.3.3/review m2) instead of waiting for the next tick; a rejected
+submit (400 `WorkflowInputRejectedError`) surfaces via the existing `showError` toast and leaves
+the form untouched. When a run is `failed`, `JSON.parse(run.ctx).error` renders as the failure
+reason.
+
+**Also fixed:** `#run-panel` was added to `index.html`'s CSS in an earlier session but never
+joined the shared `#results, #defs-panel { position:absolute; ...; display:none; }` overlay rule
+— it had a width override but no default hidden/positioned state. Folded into the same shared
+selector.
+
+**Manual verification (live server, no automated JS test harness — §5.2's own call, since the
+front end is thin pass-through UI with no business rules of its own):** started FalkorDB (already
+running, `falkordb-dev`) + `./scripts/start_server.sh` with `FALKORCHAT_TRIGGER_DEF_KEY=access-request`,
+`FALKORCHAT_TRIGGER_DEF_VERSION=v1` (the plan §7 risk #1 workaround, so `@mention` reaches a
+structured-input step rather than `triage`'s plain-chat-reply park) against the seeded `ws:acme`.
+Drove every new endpoint with the exact requests the browser code issues (no headless-browser
+driver was available in this sandbox — no `chromium`/`playwright` binary and no root to install
+one — so this is API-level, not click-level, verification; a follow-on `qa-engineer` black-box
+pass, U10, is the plan's own separate Wave-5 unit and was not attempted here):
+  - `GET /threads/demo-welcome/participants` → both `Agent` and `User` members, correctly
+    `kind`-labeled (U7's exact render inputs);
+  - `@assistant …` mention → `GET /threads/demo-welcome/workflow-runs` showed the run within one
+    poll tick, `status: "waiting"`, `atStepKey: "submit"` (U6's cue/panel render inputs);
+  - `GET /workspaces/acme/snapshots/access-request/versions/v1` confirmed the `submit` step's
+    `config` (`prompt`, `fields: ["request"]`) matches what `renderWaitingForm` parses;
+  - `POST /workflow-runs/{id}/input` with an undeclared field → `400
+    {"error":"WorkflowInputRejectedError", ...}` (U9's toast path); with the declared field →
+    `200`, run advanced `submit → route → provision` (still `waiting`, new `atStepKey`);
+  - submitted the `provision` step's signal → run reached terminal `status: "done"`;
+  - started a second run with `maxSteps: 1` to force budget exhaustion → `status: "failed"`,
+    `ctx.error: "step budget exceeded"` (U9's exact FR-7 parse target);
+  - `GET /workspaces/acme/readiness` → **surfaced a genuine, pre-existing `ready: false` state**
+    in this dev environment (the `reference` `access-request@v1` def has drifted to 2 `START`
+    edges and diverges from the `ws:acme` snapshot — unrelated to this change, not touched here;
+    flagged for a separate K-034-territory cleanup, not fixed as part of this UI unit) — a
+    convenient real fixture for U8's "not ready, names the offending def" rendering path, which
+    rendered correctly;
+  - static file check: `index.html`/`app.js`/`run-select.js` all served `200` with every new
+    element id present in the rendered page; server log showed zero tracebacks across the whole
+    session.
+
+**Scope note:** U10 (qa-engineer black-box AC-1..AC-6 pass, two-pass session per §5.2) is
+unstarted — the plan's own separate Wave-5 unit, not part of this frontend delivery.
+
+**Addendum (same day) — fixed a poll-driven form-wipe defect (`analyst` review Pass 2, finding
+M1) before it reached U10.** `refreshRunPanel()`'s `POLL_MS`-interval tick unconditionally called
+`renderWaitingForm()`, which unconditionally did `box.innerHTML = ...` on `#run-waiting-form` —
+destroying and rebuilding the live `<form id="run-input-form">` on every tick while the panel was
+open and the run stayed parked, silently wiping any text typed but not yet submitted (a real risk
+on `access-request@v1`'s free-text `request` field, which plausibly takes longer than the 3s poll
+interval to compose). Fixed in `app.js` by tracking the last-rendered `(runId, atStepKey)` as
+`state.runWaitingKey` and skipping the rebuild in `renderWaitingForm` when the parked step is
+unchanged since the last render; `submitRunInput` clears `runWaitingKey` on a successful submit so
+the very next `refreshRunPanel()` always re-renders, keeping the plan §3.3.3 "submit reflects new
+state immediately" behavior intact. As a side effect this also resolved review finding m4 (the
+waiting-step snapshot was being re-fetched on every tick) for free, since the fetch now only
+happens on an actual render. m5 (readiness panel can briefly open empty before the first
+`loadReadiness()` response lands) was left as-is — cosmetic, not worth the added complexity.
+
+Verified by extracting the exact, unmodified `refreshRunPanel`/`renderRunPanel`/`renderWaitingForm`/
+`submitRunInput` source into a small DOM-stub harness and driving it against a live
+`./scripts/start_server.sh` instance (workflow engine + `access-request@v1` parked on `submit`):
+across one open + 3 simulated poll ticks with the step unchanged, `run-waiting-form`'s `innerHTML`
+was set exactly once and the snapshot endpoint fetched exactly once, and a field value set
+mid-"typing" survived unchanged across all 3 ticks; a real successful submit still advanced the run
+and re-rendered the panel immediately. Re-running the identical harness against the pre-fix source
+reproduced the defect exactly (rebuilt + re-fetched + wiped the typed value on the very first
+tick), confirming the harness actually detects the bug rather than passing vacuously. Regression
+gates: `node --check web/app.js` clean, `web/tests/run-select.test.js` still 12/12 (untouched by
+this fix), and the server suite unaffected (`.venv/bin/python -m pytest -q` → 641 passed, 1
+deselected — identical to the review's baseline, no server-side files touched).
+
+## 2026-07-29 — K-036 U4+U5 (Wave 2): thread workflow-run history + thread participants over HTTP
+
+**What:** the two Wave-2 backend units from `docs/plans/web-api-coverage.md` §4, landed together
+(same files) — both wire repository/service/API layers on top of the two queries `graph-dba`
+authored and `GRAPH.PROFILE`-verified in Wave 1 (U1, `3d2234c`: `docs/QUERIES.md` §12.14
+`find_runs_for_thread`, and the new §2 "List thread participants"). No new Cypher.
+
+**U4 — FR-2, the inline run cue's data source.** `repository.find_runs_for_thread(ws, *,
+thread_id, limit=10)` is a 1:1 wrapper over §12.14 (carries forward the query's load-bearing
+`WHERE r.startedAt >= 0` predicate — the anchor-trap fix U1 found — verbatim).
+`services.list_workflow_runs_for_thread(ctx, *, thread_id, limit=10)` validates `thread_exists`
+first and raises `ThreadNotFoundError`, reusing the exact guard idiom
+`_validate_and_derive_role` already uses rather than inventing a second one. New route
+`GET /threads/{thread_id}/workflow-runs?limit=` (1-50, default 10) → 200 list (possibly empty,
+newest-first by `startedAt`), 404 via the generic `ServiceError` handler when the thread doesn't
+exist. No `response_model` — matches the surface's convention (only the three K-031
+structure/diff routes declare one).
+
+**U5 — FR-8, the participants list.** `repository.list_thread_participants(ws, *, thread_id)` is
+a 1:1 wrapper over the new §2 query and returns the query's raw columns
+(`memberId`/`displayName`/`type`, `type` = `labels(u)` — mirrors `read_thread`'s `authorType`
+convention rather than resolving the label in Cypher). `services.list_thread_participants(ctx,
+*, thread_id)` applies the same `thread_exists`/`ThreadNotFoundError` guard as U4, then
+normalizes `type[0]` down to a single `kind` string (`"User"`/`"Agent"`) — the same derivation
+`resolve_member_kinds` already does in Cypher for its own case, done here in Python since this
+read's repository method stays a literal query mirror. New route
+`GET /threads/{thread_id}/participants` → 200 `[{"memberId", "displayName", "kind"}]`
+(empty list, not an error, when the thread's channel has no members — the documented
+demo-seed-timing edge case), 404 for an unknown thread.
+
+**Tests:** `server/tests/test_repository.py` — 10 new integration cases against `ws:test` (5 per
+method: empty/populated/ordering/limit/other-thread-excluded for `find_runs_for_thread`;
+both-kinds/only-human/only-agent/no-members/unknown-thread for `list_thread_participants` — the
+latter needed a test-only raw-Cypher `_add_to_channel` helper since no repository method for
+`MEMBER_OF` writes exists yet, same gap `seed_demo.sh` fills with raw Cypher today).
+`server/tests/test_services.py` — 7 new unit cases against `FakeRepo` (passthrough, missing-thread
+error, empty, limit-passthrough for U4; kind-normalization, missing-thread error, empty for U5).
+`server/tests/test_api.py` — 10 new `TestClient` contract cases (empty/populated-newest-first/limit
+query-param/limit-bounds-422/404-unknown for the runs route; both-kinds/only-human/only-agent/
+empty-no-members/404-unknown for the participants route). Full suite: **641 passed, 1 deselected**
+(614 baseline + 27 new). `./scripts/test_queries.sh` unaffected (no Cypher/schema change) — still
+**276/276**; re-ran `seed_workflows.sh acme` afterward per the documented pytest/`test_queries.sh`
+`reference`-graph-wipe interaction (DESIGN §14.7), confirmed back in sync with
+`verify_workflows.sh`.
+
+**Scope note:** `web/` (frontend wiring, U6/U7) is explicitly out of scope for this change —
+next wave.
+
 ## 2026-07-28 — K-036 U2: `GET /workspaces/{ws}/readiness` — "is this workspace ready to demo" over HTTP
 
 **What:** the HTTP form of `scripts/verify_workflows.sh` (FR-10, `docs/plans/web-api-coverage.md`

@@ -205,6 +205,30 @@ def build_router(
             raise HTTPException(status_code=404, detail="message not found")
         return msg
 
+    # ── K-036 web-api-coverage: thread-scoped reads (FR-2/FR-8, Wave 2) ──────
+    # New read paths for the web UI's inline run cue + participants list; both
+    # wrap GRAPH.PROFILE-verified queries (QUERIES.md §12.14, §2 "List thread
+    # participants") — see docs/plans/web-api-coverage.md §3.1a/§3.1b. Neither
+    # declares a `response_model` (matches the surface's convention — see the
+    # note at the K-031 structure routes below, the one place that does).
+    # `ThreadNotFoundError` maps to 404 via the generic `ServiceError` handler.
+
+    @router.get("/threads/{thread_id}/workflow-runs")
+    def list_workflow_runs_for_thread(
+        thread_id: str,
+        limit: int = Query(10, ge=1, le=50),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_workflow_runs_for_thread(
+            ctx, thread_id=thread_id, limit=limit
+        )
+
+    @router.get("/threads/{thread_id}/participants")
+    def list_thread_participants(
+        thread_id: str, ctx: CallContext = Depends(get_context)
+    ):
+        return services.list_thread_participants(ctx, thread_id=thread_id)
+
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────
     # Def authoring/reading is GLOBAL (the `reference` graph); only materialize +
     # snapshot list consume the tenant workspace via `get_context`. Spec/​not-found

@@ -1,6 +1,8 @@
 # Web API Coverage — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-036 (new — recommend `teco` add to
+> **Status:** archived — archived 2026-07-29 — K-036 delivered, M3.5 reached; see
+> `docs/plans/web-api-coverage-coordination.md` for the full run · **Owner:** `architect` ·
+> **Tracks:** K-036 (new — recommend `teco` add to
 > `BACKLOG.md`, milestone M3.5) · relates to K-018 (real-time push, explicitly NOT pulled forward)
 > and K-031 (def/snapshot structure reads, delivered 2026-07-24, which FR-10 builds on)
 >

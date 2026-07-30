@@ -21,6 +21,21 @@ def _probe(conn, cypher: str):
     """Raw structural read against ws:test (test-only; app Cypher stays in repository.py)."""
     return db.workspace_graph(conn, "test").ro_query(cypher).result_set
 
+
+def _add_to_channel(conn, *, member_id: str, channel_id: str):
+    """Raw MEMBER_OF write (test-only; no repository method exists yet — QUERIES.md
+    §2 "Add user to channel" is a documented, verified query but not yet wrapped
+    by a repository method, same gap `seed_demo.sh` fills with raw Cypher). Anchors
+    on `mem` via the same label-agnostic `userId OR agentId` pattern
+    `advance_cursor` already uses, so one helper covers both User and Agent members.
+    """
+    db.workspace_graph(conn, "test").query(
+        "MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId "
+        "MATCH (c:Channel {channelId: $channelId}) "
+        "MERGE (mem)-[:MEMBER_OF]->(c)",
+        {"memberId": member_id, "channelId": channel_id},
+    )
+
 # ── §3 Channels ────────────────────────────────────────────────────────────────
 
 
@@ -725,6 +740,58 @@ def test_thread_exists(repo):
     assert repo.thread_exists("test", thread_id="t1") is True
 
 
+# ── §2 list_thread_participants (K-036 — web-api-coverage FR-8) ────────────────
+
+
+def test_list_thread_participants_returns_both_kinds(repo, conn):
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.ensure_agent("test", agent_id="a1", name="Bot")
+    _add_to_channel(conn, member_id="u1", channel_id="c1")
+    _add_to_channel(conn, member_id="a1", channel_id="c1")
+
+    rows = repo.list_thread_participants("test", thread_id="t1")
+
+    assert {(r["memberId"], r["displayName"], tuple(r["type"])) for r in rows} == {
+        ("u1", "Alice", ("User",)),
+        ("a1", None, ("Agent",)),
+    }
+
+
+def test_list_thread_participants_only_human(repo, conn):
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _add_to_channel(conn, member_id="u1", channel_id="c1")
+
+    rows = repo.list_thread_participants("test", thread_id="t1")
+
+    assert [(r["memberId"], r["type"]) for r in rows] == [("u1", ["User"])]
+
+
+def test_list_thread_participants_only_agent(repo, conn):
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
+    repo.ensure_agent("test", agent_id="a1", name="Bot")
+    _add_to_channel(conn, member_id="a1", channel_id="c1")
+
+    rows = repo.list_thread_participants("test", thread_id="t1")
+
+    assert [(r["memberId"], r["type"]) for r in rows] == [("a1", ["Agent"])]
+
+
+def test_list_thread_participants_empty_when_channel_has_no_members(repo):
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    repo.create_thread("test", channel_id="c1", thread_id="t1", title="x", created_at=110)
+
+    assert repo.list_thread_participants("test", thread_id="t1") == []
+
+
+def test_list_thread_participants_empty_when_thread_unknown(repo):
+    assert repo.list_thread_participants("test", thread_id="ghost") == []
+
+
 # ── §11 Workflow definitions & snapshots (M3 Slice 1) ───────────────────────────
 #
 # Reference-scoped methods take NO `ws` (defs are global, plan F3); workspace-
@@ -1341,6 +1408,71 @@ def test_find_waiting_run_none_for_other_thread(wf_repo):
     _start(wf_repo)
     wf_repo.suspend_run("test", run_id="r1", thread_id="t1")
     assert wf_repo.find_waiting_run_for_thread("test", thread_id="other") is None
+
+
+# ── §12.14 find_runs_for_thread ──────────────────────────────────────────────
+
+def _start_at(repo, *, run_id, trigger, started_at):
+    return repo.start_run(
+        "test", run_id=run_id, def_key="triage", def_version="1",
+        started_at=started_at, trigger_msg_id=trigger,
+        ctx='{"threadId":"t1"}', trace=False, max_steps=12,
+    )
+
+
+def test_find_runs_for_thread_empty_when_none(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    assert wf_repo.find_runs_for_thread("test", thread_id="t1") == []
+
+
+def test_find_runs_for_thread_returns_run_fields(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+
+    runs = wf_repo.find_runs_for_thread("test", thread_id="t1")
+
+    assert len(runs) == 1
+    run = runs[0]
+    assert run["runId"] == "r1"
+    assert run["status"] == "running"
+    assert run["defKey"] == "triage"
+    assert run["defVersion"] == "1"
+    assert run["startedAt"] == 1000
+    assert run["endedAt"] is None
+
+
+def test_find_runs_for_thread_orders_newest_first(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    wf_repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="trig2", author_id="u1",
+        text="another", role="user", created_at=130,
+    )
+    _start_at(wf_repo, run_id="r1", trigger="trig1", started_at=1000)
+    _start_at(wf_repo, run_id="r2", trigger="trig2", started_at=2000)
+
+    runs = wf_repo.find_runs_for_thread("test", thread_id="t1")
+
+    assert [r["runId"] for r in runs] == ["r2", "r1"]
+
+
+def test_find_runs_for_thread_respects_limit(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    wf_repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id="trig2", author_id="u1",
+        text="another", role="user", created_at=130,
+    )
+    _start_at(wf_repo, run_id="r1", trigger="trig1", started_at=1000)
+    _start_at(wf_repo, run_id="r2", trigger="trig2", started_at=2000)
+
+    runs = wf_repo.find_runs_for_thread("test", thread_id="t1", limit=1)
+
+    assert [r["runId"] for r in runs] == ["r2"]
+
+
+def test_find_runs_for_thread_ignores_other_threads(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    assert wf_repo.find_runs_for_thread("test", thread_id="other") == []
 
 
 # ── §12.10 / §12.11 trace write & read ───────────────────────────────────────

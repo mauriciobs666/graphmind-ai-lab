@@ -436,6 +436,33 @@ class Services:
         """
         self._repo.ensure_user(ctx.ws, user_id=ctx.actor)
 
+    def list_thread_participants(
+        self, ctx: CallContext, *, thread_id: str
+    ) -> list[dict[str, Any]]:
+        """A thread's participants = its parent channel's roster (RO). QUERIES.md
+        §2 "List thread participants" (K-036 — web-api-coverage FR-8).
+
+        Validates the thread exists first, raising `ThreadNotFoundError`
+        exactly like `_validate_and_derive_role` does before a §4 write —
+        reused here rather than inventing a second idiom. Normalizes the
+        repository's raw `type` (`labels(u)`, a list) down to a single `kind`
+        string (`type[0]`) — the same `User`/`Agent` derivation
+        `resolve_member_kinds` already does in Cypher for its own case
+        (QUERIES.md §2), done here in Python because this read's repository
+        method stays a literal mirror of its query's column names.
+        """
+        if not self._repo.thread_exists(ctx.ws, thread_id=thread_id):
+            raise ThreadNotFoundError(thread_id)
+        rows = self._repo.list_thread_participants(ctx.ws, thread_id=thread_id)
+        return [
+            {
+                "memberId": row["memberId"],
+                "displayName": row["displayName"],
+                "kind": row["type"][0] if row["type"] else None,
+            }
+            for row in rows
+        ]
+
     # ── channels ────────────────────────────────────────────────────────────────
 
     def create_channel(self, ctx: CallContext, *, name: str) -> dict[str, Any]:
@@ -1415,3 +1442,22 @@ class Services:
         if not thread_id:
             return None
         return self._repo.find_waiting_run_for_thread(ctx.ws, thread_id=thread_id)
+
+    def list_workflow_runs_for_thread(
+        self, ctx: CallContext, *, thread_id: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Every run this thread has ever had, newest-first (RO). QUERIES.md
+        §12.14 (K-036 — web-api-coverage FR-2).
+
+        Validates the thread exists first, raising `ThreadNotFoundError`
+        exactly like `_validate_and_derive_role` does before a §4 write —
+        reused here rather than inventing a second idiom. Drives the browser's
+        inline run cue (polled alongside the existing message catch-up loop,
+        plan §3.2) — unlike `find_waiting_run_for_thread` (the resume lookup,
+        one *parked* run at most), this returns the thread's full run history.
+        """
+        if not self._repo.thread_exists(ctx.ws, thread_id=thread_id):
+            raise ThreadNotFoundError(thread_id)
+        return self._repo.find_runs_for_thread(
+            ctx.ws, thread_id=thread_id, limit=limit
+        )
