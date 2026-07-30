@@ -2,15 +2,21 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-27
+> Last reviewed: 2026-07-29
 
 ## Active
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-006 | 2026-07-16 | low | 🔵 | The review-default list assigns no independent reviewer for **agent-engineering (cobb) deliverables**; graph-dba design notes are only implicitly covered by "plans → analyst". |
-| K-007 | 2026-07-24 | medium | 🔵 | Adopt `SendMessage` continuation of the original implementer in the defect→fix→re-run loop (step 4), instead of respawning a cold agent each cycle. |
 
+> **K-007 — SendMessage continuation instead of cold respawn — ✅ done 2026-07-29** (moved to
+> history.md). Step 3 now has teco note each delegate's returned name/id when a follow-up round
+> is likely; step 4's two re-brief paths (review "needs changes"/defects, and a deficient result)
+> both `SendMessage` the original delegate by that identifier instead of a fresh `Agent` call,
+> falling back to cold respawn only when the identifier no longer resolves. `tools:` gained
+> `SendMessage` (was missing — K-007 was otherwise unshippable).
+>
 > **K-004 — deficient/failed-delegate-result path — ✅ done 2026-07-16** (moved to history.md).
 > Step 4 now handles a deficient result (errored / out of turns / off-brief / empty): re-brief the
 > same owner once with the gap explicit, pause to the user if it recurs or the unit is mis-scoped —
@@ -44,13 +50,6 @@
 - **Rationale:** The "work ships independently reviewed" invariant names defaults for plans/code (`analyst`), ML methodology (`data-scientist`), and behavior/acceptance (`qa-engineer`). A **cobb** agent/skill deliverable has no assigned independent reviewer, and a **graph-dba** design note is only implicitly a "plan → analyst". So the invariant ("every significant deliverable checked by someone other than its producer") has a coverage hole for the team's own agent-engineering work.
 - **Proposed change:** Decide and state the reviewer for agent/skill deliverables (analyst on the prompt-as-artifact? a second cobb pass? explicitly out-of-gate for trivial agent edits) and confirm graph-dba design notes route to analyst review. Low priority — agent edits are infrequent and cobb self-lints via the §7 pass.
 - **Notes:** Surfaced by cobb's §7 prompt-lint (semantic-coverage dimension), 2026-07-16.
-
-### K-007 — Continue the original implementer via SendMessage instead of respawning cold
-- **Status:** 🔵 proposed
-- **Priority:** medium
-- **Rationale:** Step 4's deficient-result path (K-004, done 2026-07-16) re-briefs "the same owner" on a deficient result, but today that means a fresh `Agent` call each cycle — the new instance has no memory of what it built or why, so teco re-explains context every iteration. `SendMessage` can resume a previously spawned agent with its context intact, which fits this loop directly.
-- **Proposed change:** Update step 4 so the defect→fix→re-run re-brief uses `SendMessage` to the original delegate rather than a fresh `Agent` call, reserving a cold re-spawn for cases where the original agent errored out entirely or exhausted its turn budget.
-- **Notes:** Spun off from K-002 (agent-teams evaluation, closed 2026-07-24). `SendMessage` continuation of `Agent`-tool subagents is confirmed available per the harness's own tool description, but the two docs read (`agent-teams`, `agent-view`) describe two different continuation mechanisms (teammate mailbox messaging vs. background-session resume/respawn) for a different primitive — verify `SendMessage`'s actual behavior on a real re-brief cycle before locking the step-4 wording.
 
 ## Parking lot / ideas
 - **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
