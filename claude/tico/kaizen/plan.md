@@ -37,7 +37,7 @@
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** Modes 2 (didactic explanation) and 3 (user manuals) are unexercised — same validate-by-running discipline as K-001, which only covers Mode 1.
-- **Proposed change:** run `claude --agent tico` once asking it to explain a real project aspect (verify: grounded in actual docs/code, plain-language, light-suggestion framing, inline Mermaid when it fits) and once asking it to write a first real manual end-to-end (verify: `docs/manuals/<slug>.md` created with the header block, Mermaid used only where it earns its keep, guard hook passes the write silently, commit-as-you-go holds). Also worth one delegated (subagent) invocation of the Mode 3 fallback to see it complete in one pass from a self-contained brief.
+- **Proposed change:** run `claude --agent tico` once asking it to explain a real project aspect (verify: grounded in actual docs/code, plain-language, light-suggestion framing, inline Mermaid when it fits) and once asking it to write a first real manual end-to-end (verify: `docs/manuals/<slug>.md` created with the header block, Mermaid used only where it earns its keep, guard hook passes the write silently, commit-as-you-go holds, **the offered verification-pass bullet actually fires and correctly spawns `qa-engineer`/`analyst` via `Agent` on acceptance**). Also worth one delegated (subagent) invocation of the Mode 3 fallback to see it complete in one pass from a self-contained brief.
 - **Notes:** added when Modes 2/3 were introduced (2026-07-29); do the interview e2e (K-001) and this one independently — different mode, different failure surface.
 
 ### K-005 — Formal doc-reference-convention update for `manuals/`

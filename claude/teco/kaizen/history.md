@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-29 — Manuals join the routing table, handoff contracts, doc scan, and review-gate defaults
+- **What:** Four small additions reflecting tico's new Mode 2/3 (didactic explanation + user-manual maintenance, same day): (1) a new routing-table row — live explanations stay pause→user (tico isn't a delegation target), but a self-contained manual write/update is delegable to tico like any other subagent deliverable; (2) the tico handoff-contract line now names `docs/manuals/<slug>.md` alongside the requirements doc; (3) the documentation-impact scan bullet now lists user manuals (flag, don't write — `tico` owns them); (4) the "Work ships independently reviewed" guardrail gained a manuals entry: split by claim — `qa-engineer` verifies walkthroughs against the running app, `analyst` checks architectural/factual claims and clarity. The manuals-delegable routing row also notes the review gate still applies when teco routes a manual update this way.
+- **Why:** user ruling following the 2026-07-29 team certification, which flagged manuals as the one doc kind with no independent-review gate; user chose the qa-engineer/analyst split (behavioral vs. everything else) and "mandatory in teco + offered in tico's first-order sessions" for how forced the gate should be.
+- **Plan items:** none.
+
 ## 2026-07-29 — PII leak fixed in this file (found by the team certification pass)
 - **What:** The K-009 entry below (added earlier the same day) had embedded the literal
   flattened `~/.claude/projects/...` transcript-directory path, which leaks the OS username —

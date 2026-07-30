@@ -2,6 +2,73 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-30 — Committed the manuals-review-gate rollout; caught a missed catalog update
+- **What:** The 2026-07-29 rollout below (certification #2's resolution) had been sitting **staged in the git index, uncommitted**, for one day — routed to cobb for review-and-commit judgment since `tico`'s own write/commit access doesn't reach these files. Read every staged diff end to end (`tico.md`, `analyst.md`, `qa-engineer.md`, `teco.md`, and all five kaizen `history.md`/`plan.md` files) plus the one unstaged file sitting alongside it (`teco/kaizen/inbox.md`). Confirmed the 10 staged files are one coherent unit — cross-checked the description character counts the entry below claims (563/762) against the actual staged frontmatter and they match exactly, cross-checked `tico/kaizen/plan.md`'s K-005 pointer and `cobb/kaizen/plan.md`'s current (entry-free) parking lot against the "added then resolved same day" story, and re-ran `audit-team.sh` clean. Caught one real gap the "implemented across five files" line below didn't cover: `README.md`'s catalog rows for `teco`, `qa-engineer`, and `analyst` still didn't mention the new manuals-review duty, breaking the "catalog updated in the same change" rule (`claude/AGENTS.md` Maintenance rules). Fixed by adding one clause to each of the three rows (teco's independent-review default, qa-engineer's execution list, analyst's review-target list) and folded that fix into this same commit. The unstaged `teco/kaizen/inbox.md` change turned out to be unrelated — two new learnings entries from the same-day K-036 (falkor-chat) delivery, not part of the manuals rollout — so it was left out of this commit and handled separately.
+- **Why:** a stale git index is a real risk (work sitting unreviewed, uncommitted, and un-backed-up); routed here rather than committed unread per the user's explicit instruction not to skip the review step.
+- **Plan items:** none.
+
+## 2026-07-29 — Resolved the manuals review-gate open question (from certification #2)
+- **What:** Certification #2 (below) surfaced that `docs/manuals/` had no independent-review gate. Asked the user which agent should review and how mandatory it should be, rather than picking unilaterally — a genuine product/process call, not a mechanical fix. Decision: **split by claim type** (`qa-engineer` verifies walkthroughs against the running app — behavioral claims; `analyst` checks architectural/factual claims and clarity) and **mandatory via teco coordination, offered (not forced) in tico's own first-order sessions**. Implemented across five files: `teco.md` (review-gate defaults, routing-table row, handoff contract), `tico.md` (Mode 3 offered-verification bullet + a Guardrails bullet scoping `Agent` tool use), `analyst.md` (new reviewed-artifact category + description), `qa-engineer.md` (new verification-target section + description). Re-ran `audit-team.sh` clean after each file; confirmed description lengths stayed within the team's existing range (analyst 563, qa-engineer 762 chars — below graph-dba's 915).
+- **Why:** direct follow-up to certification #2's logged observation; closes it rather than leaving it open indefinitely.
+- **Plan items:** removed the parking-lot entry (resolved, not just noted).
+
+## 2026-07-29 — Team-coherence certification #2 (post tico Mode 2/3 addition) — clean
+- **Scope:** user-requested certification following the same-day `tico` change (commit `8582c49`):
+  tico gained two new modes (didactic project explanation; user-manual maintenance at a new
+  `docs/manuals/` doc kind), with matching edits to its write-guard hook (renamed
+  `guard-requirements-doc-writes.sh` → `guard-tico-doc-writes.sh`, allowlist extended), root
+  `AGENTS.md`'s documentation convention (new kind registered), and `teco.md`'s routing
+  table/handoff contracts/doc-impact scan. This certification's baseline is the prior pass
+  (below, commit `0bdc9f7`, same day) — the diff between them is exactly these 9 files.
+- **Deterministic audit (`audit-team.sh`):** full **PASS** on the first run — all 12 agents × 5
+  per-agent checks (kaizen triple, deployment symlink, hook exists+executable, teco roster,
+  both catalogs), collection check 5b, all 16 boundary-pair directions, personal-info check.
+  Confirms the hook rename didn't break check 3 (frontmatter `command:` re-resolves to the new
+  filename and the file is executable) and that renaming didn't silently orphan the old path
+  anywhere live (grepped separately — the only surviving `guard-requirements-doc-writes.sh`
+  mentions are dated history entries, which is correct: they describe what was true at the time).
+- **§4 judgment checklist:**
+  - **Roster accuracy ✓** — `teco.md`'s tico rows (routing table + handoff contracts) now name
+    the manuals path and the delegable/non-delegable split accurately against tico.md's actual
+    Mode 2/3 text; re-read both side by side to confirm.
+  - **Handoff symmetry ✓** — manuals ownership is stated on both sides (tico.md Mode 3; teco.md
+    routing table + handoff contracts; root `AGENTS.md` owner-by-kind table). No third party
+    needs to reference manuals for symmetry — unlike requirements→architect, nothing downstream
+    consumes a manual to do further engineering work, so there's no missing counterpart to add.
+  - **Subagent-awareness ✓** — tico's "If you are invoked as a subagent anyway" section is now
+    split by mode: Mode 1 keeps the one-round-per-invocation degrade; Modes 2/3 explicitly
+    support one-pass completion from a self-contained brief (no live back-and-forth needed),
+    matching teco's new "delegable to tico for a self-contained manual write/update" claim
+    exactly — checked both sides state the same contract, not just that both mention delegation.
+  - **Enforcement parity ✓** — read `guard-tico-doc-writes.sh` directly (not just the prompt's
+    claim): it allowlists `docs/requirements/*`, `docs/manuals/*`, and the kaizen inbox, matching
+    tico.md's Guardrails section prose exactly; re-tested allowed (manuals, requirements) and
+    denied (source file) paths through the actual script.
+  - **Boundary reciprocity ✓** — tico isn't a `BOUNDARY_PAIRS` party (checked script-side, still
+    true); teco's "pause → user for live Q&A, delegable for self-contained manual work" is the
+    only new cross-agent claim, and it's reciprocated on tico's side per subagent-awareness above.
+- **§7 lint fold-in (every artifact changed since the prior cert):** `tico.md` — full six-dimension
+  lint already run at authoring time (see `tico/kaizen/history.md` 2026-07-29 entry and
+  `tico/kaizen/plan.md`'s parking lot for the two minors logged there — cognitive load headroom,
+  two unaddressed edge-cases). `teco.md`'s new row + handoff-contract sentence + doc-impact-scan
+  clause — clean: the "not a delegation target" / "delegable for manuals" split reads as a
+  deliberate, clearly-flagged exception on both mentions, not an unintended contradiction; no
+  ambiguity in "self-contained brief" (defined inline: states the facts, no conversation needed).
+  Root `AGENTS.md`'s new `manuals/` bullets — clean: fixed the one seam that would have been a
+  contradiction pre-emptively (softened "all of a module's *engineering* docs" to "*documentation*"
+  before committing, since `manuals/` is explicitly the non-engineering kind); the "five `Status:`
+  values" count stays accurate (manuals reuse `active`/`superseded`/`archived`, no new value
+  needed); the "family rule below" cross-reference resolves correctly.
+- **One observation, not a blocker — logged to `cobb/kaizen/plan.md` parking lot:** every other
+  doc kind in the taxonomy has an independent-review gate of some form (`Ready for design` needs
+  explicit stakeholder confirmation; plans/code get `analyst`; ML notes get `data-scientist`;
+  behavior gets `qa-engineer`) — `manuals/` currently has none; tico both writes and self-certifies
+  its own manuals' accuracy. Not acted on without a decision (would mean routing tico's manual
+  drafts through another agent, which the user didn't ask for and may not want given tico's
+  first-order/live-conversation design) — recorded as an open question, not fixed unilaterally.
+- **Certificate:** PASS, no fixes required this pass (the deterministic run was clean on the first
+  try, unlike the prior cert which needed a PII fix + script relaxation).
+
 ## 2026-07-29 — Team-coherence certification (full 12-agent pass) — script fixed, one PII leak found and fixed
 - **Scope:** user-requested certification, following the same-day teco kaizen-backlog work
   (K-006/008/009/010/011 closure + inbox distillation). Ran the §4 pass over the whole `claude/`

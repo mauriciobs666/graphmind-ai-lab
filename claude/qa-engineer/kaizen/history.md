@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-07-29 — New verification target: a tico-authored user manual's walkthroughs
+- **What:** `tico` gained a new doc kind, user manuals (`<component>/docs/manuals/<slug>.md`), and the team certification pass flagged manuals as the one doc kind with no independent-review gate. User decision: split the review — `qa-engineer` drives the running app through the manual's walkthroughs (the behavioral half), `analyst` checks the rest. Added a short section after the intro paragraph: the manual's own walkthroughs *are* the spec, each step is a test item, scale the test plan/report to the manual's size (not full feature-QA ceremony), same topic slug as the manual. Explicitly excludes the manual's factual/architectural claims — `analyst`'s half, don't duplicate. Frontmatter `description` updated to name the new target and the analyst/qa-engineer split.
+- **Why:** user ruling following the 2026-07-29 team certification's open observation (logged in `cobb/kaizen/plan.md`, now resolved). Routed through `teco`'s existing "independent review" default (its own kaizen carries the matching entry).
+- **Plan items:** none — no prior plan item covered this; not adding one since it's already implemented.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
