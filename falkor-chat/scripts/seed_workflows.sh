@@ -45,9 +45,10 @@
 # republishes the NEW def while the workspace keeps the OLD snapshot, a silent split-brain,
 # and the snapshot is what the executor drives. Landing a def edit therefore requires an
 # explicit act: delete the def + snapshot subgraphs and republish, or bump `key`/`version`
-# (for triage, kept in sync with config.TRIGGER_DEF_KEY/TRIGGER_DEF_VERSION — note
-# start_server.sh neither forwards nor exports those two vars). Deleting a snapshot breaks
-# live WorkflowRuns that point at it via OF_DEF/AT_STEP — a destructive shared-state op.
+# (for triage, kept in sync with config.TRIGGER_DEF_KEY/TRIGGER_DEF_VERSION via matching
+# DEFAULTS on FALKORCHAT_TRIAGE_DEF_KEY/_VERSION below — see K-037 for why these are two
+# separate env-var pairs, not one shared pair). Deleting a snapshot breaks live WorkflowRuns
+# that point at it via OF_DEF/AT_STEP — a destructive shared-state op.
 #
 # ORDERING — run this AFTER:
 #   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws)
@@ -62,18 +63,37 @@
 #     (The acceptance test publishes `access-request@v1-test`, deliberately not the production
 #     version, so it cannot be the def you find here.)
 #
-# The TRIAGE def key/version MUST match the trigger config (config.TRIGGER_DEF_KEY /
-# TRIGGER_DEF_VERSION, defaults triage/v1) or the @mention-to-start step never resolves
-# the def. Flip the trigger on with FALKORCHAT_WORKFLOW_ENABLED=1 (start_server.sh does this).
-# `access-request@v1` needs no config var at all: it is started over REST, so nothing in
-# config.py / .env.example / start_server.sh refers to it.
+# K-037: this script's own FALKORCHAT_TRIAGE_DEF_KEY/_VERSION pair (below) is DELIBERATELY
+# NOT FALKORCHAT_TRIGGER_DEF_KEY/_VERSION. That pair is the app's real, sanctioned override
+# of which def an `@mention` resolves to (config.py) — e.g. pointing it at
+# `access-request@v1` for a demo. Reusing the same var names here to pick this script's own
+# triage-literal publish key used to mean overriding the trigger ALSO silently redirected
+# this script to publish the triage-shaped steps under the OTHER def's key, grafting 3
+# spurious `Step`s + 1 spurious `START` edge onto it (the def-level `MERGE` reports "already
+# present" and no-ops, but the per-step `MERGE` beneath it is keyed by `stepUid`, which is
+# unseen for the wrong def and gets created). Keep these two pairs decoupled — never make
+# the triage-literal's publish identity read from FALKORCHAT_TRIGGER_DEF_KEY/_VERSION again.
+#
+# Read the next paragraph in light of the above: the TRIAGE def key/version MUST MATCH the
+# trigger config (config.TRIGGER_DEF_KEY / TRIGGER_DEF_VERSION, defaults triage/v1) or the
+# @mention-to-start step never resolves the def — but that's a match of DEFAULTS between
+# two independent pairs, never a shared variable to keep manually in sync (the exact wrong
+# assumption K-037 fixes). Flip the trigger on with FALKORCHAT_WORKFLOW_ENABLED=1
+# (start_server.sh does this). `access-request@v1` needs no config var at all: it is
+# started over REST, so nothing in config.py / .env.example / start_server.sh refers to it.
 #
 # Env vars (all optional):
 #   FALKORDB_HOST          (default: 127.0.0.1)
 #   FALKORDB_PORT          (default: 6379)
 #   FALKORCHAT_WS_ID       (default: acme)     — workspace id (graph key ws:<id>)
-#   FALKORCHAT_TRIGGER_DEF_KEY     (default: triage)  — must match config.TRIGGER_DEF_KEY
-#   FALKORCHAT_TRIGGER_DEF_VERSION (default: v1)      — must match config.TRIGGER_DEF_VERSION
+#   FALKORCHAT_TRIAGE_DEF_KEY      (default: triage) — LOCAL to this script (K-037): the
+#   FALKORCHAT_TRIAGE_DEF_VERSION  (default: v1)       publish identity of the inline
+#                                  triage-literal def below. Defaults match
+#                                  config.TRIGGER_DEF_KEY/_VERSION so an unoverridden run
+#                                  seeds exactly what the @mention trigger resolves to — but
+#                                  it is never read from FALKORCHAT_TRIGGER_DEF_KEY/_VERSION;
+#                                  override THIS pair, not the trigger pair, to publish the
+#                                  triage literal under a different key/version.
 #   FALKORCHAT_PROCESS_DEF_KEY     (default: access-request) — LOCAL to this script; no
 #   FALKORCHAT_PROCESS_DEF_VERSION (default: v1)              config var reads these two,
 #                                  and `test_process_flow.py` drives the defaults, so an
@@ -84,8 +104,11 @@ set -euo pipefail
 HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
-DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
-DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
+# K-037: dedicated to THIS script's inline triage literal — never read from
+# FALKORCHAT_TRIGGER_DEF_KEY/_VERSION (the app's real @mention-trigger override). See the
+# header comment above for the full rationale.
+TRIAGE_DEF_KEY="${FALKORCHAT_TRIAGE_DEF_KEY:-triage}"
+TRIAGE_DEF_VERSION="${FALKORCHAT_TRIAGE_DEF_VERSION:-v1}"
 # ⚠️ These two defaults DUPLICATE `ACCESS_REQUEST_DEF["key"]` / `["version"]` (re-gate r-5).
 # The splat below (`{**ACCESS_REQUEST_DEF, "key": …, "version": …}`) *overrides* both, so the
 # seed never reads the constant's own pair — the duplication is kept in sync by hand. It is
@@ -111,7 +134,7 @@ redis-cli -h "$HOST" -p "$PORT" PING | grep -q PONG || {
   exit 1
 }
 
-echo "── seeding workflow defs '${DEF_KEY}@${DEF_VERSION}' + '${PROCESS_DEF_KEY}@${PROCESS_DEF_VERSION}' into reference + ws:${WS_ID} ──"
+echo "── seeding workflow defs '${TRIAGE_DEF_KEY}@${TRIAGE_DEF_VERSION}' + '${PROCESS_DEF_KEY}@${PROCESS_DEF_VERSION}' into reference + ws:${WS_ID} ──"
 
 # The triage def content lives in the service-layer payload below (the access-request def is
 # imported from `falkorchat.proof_defs`); the def spec (start-key derivation, opaque-JSON
@@ -120,7 +143,7 @@ echo "── seeding workflow defs '${DEF_KEY}@${DEF_VERSION}' + '${PROCESS_DEF_
 # interpolated into the payload — so the shell quoting never touches the def content.
 FALKORCHAT_WS_ID="$WS_ID" \
 FALKORDB_HOST="$HOST" FALKORDB_PORT="$PORT" \
-FALKORCHAT_TRIGGER_DEF_KEY="$DEF_KEY" FALKORCHAT_TRIGGER_DEF_VERSION="$DEF_VERSION" \
+FALKORCHAT_TRIAGE_DEF_KEY="$TRIAGE_DEF_KEY" FALKORCHAT_TRIAGE_DEF_VERSION="$TRIAGE_DEF_VERSION" \
 FALKORCHAT_PROCESS_DEF_KEY="$PROCESS_DEF_KEY" \
 FALKORCHAT_PROCESS_DEF_VERSION="$PROCESS_DEF_VERSION" \
 "$VENV_PY" - <<'PY'
@@ -134,8 +157,8 @@ from falkorchat.proof_defs import ACCESS_REQUEST_DEF
 from falkorchat.repository import Repository
 from falkorchat.services import Services
 
-KEY = os.environ["FALKORCHAT_TRIGGER_DEF_KEY"]
-VERSION = os.environ["FALKORCHAT_TRIGGER_DEF_VERSION"]
+KEY = os.environ["FALKORCHAT_TRIAGE_DEF_KEY"]
+VERSION = os.environ["FALKORCHAT_TRIAGE_DEF_VERSION"]
 
 # The triage proof flow (docs/plans/m3-executor.md §8): kind `conversation`, three
 # `type:'agent'` steps. `config` is opaque JSON app-side (rule 8 — never filtered in
@@ -315,7 +338,7 @@ PY
 
 echo ""
 echo "Both workflow defs seeded (idempotent, create-only)."
-echo "  ${DEF_KEY}@${DEF_VERSION}: trigger it by turning the workflow engine on"
+echo "  ${TRIAGE_DEF_KEY}@${TRIAGE_DEF_VERSION}: trigger it by turning the workflow engine on"
 echo "    (FALKORCHAT_WORKFLOW_ENABLED=1, done by start_server.sh) and @mentioning the agent."
 echo "  ${PROCESS_DEF_KEY}@${PROCESS_DEF_VERSION}: start it over REST —"
 echo "    POST /workflow-runs {\"defKey\":\"${PROCESS_DEF_KEY}\",\"version\":\"${PROCESS_DEF_VERSION}\",\"maxSteps\":24}"

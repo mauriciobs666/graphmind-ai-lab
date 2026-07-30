@@ -5,6 +5,199 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-30 — K-037 follow-up: surgical cleanup of `ws:acme`'s contaminated `access-request@v1` snapshot
+
+**What:** Removed the 3 spurious `Step` nodes the historical K-037 env-var-collision bug had
+grafted onto `ws:acme`'s `access-request@v1` `WorkflowDefSnapshot` — the `ws:acme`-side
+contamination the same-day K-037 entry above left open ("the `ws:acme` snapshot side remains
+divergent and untouched... scoped narrowly to repairing the `ws:acme` snapshot"). Confirmed via
+Cypher against `ws:acme` (not assumed) that the 9 `Step`s under the snapshot were the canonical 6
+(`submit`, `route`, `approval`, `provision`, `activate`, `rejected` — cross-checked against
+`server/falkorchat/proof_defs.py`'s `ACCESS_REQUEST_DEF`) plus exactly 3 spurious ones with
+`stepUid`s `access-request:v1:intake`, `access-request:v1:research`, `access-request:v1:answer`
+(the `triage`-shaped literal's step keys). Full edge inventory on the 3 spurious nodes found only
+one `HAS_STEP` edge each (inbound, from the snapshot root) plus a `TRANSITION` chain among
+themselves (`intake→research→answer`) — no edge connected any spurious node to a real/reachable
+step in either direction, matching the 1-`START`-edge-at-`submit` topology. Safety check: zero
+`WorkflowRun` in `ws:acme`, live or historical, had an `AT_STEP` edge pointing at any of the 3
+spurious step nodes (the only `AT_STEP` edges present target `submit` and `provision` — real
+steps) — the "unreachable dead node" assumption from the original QA finding held. Deleted the 3
+`Step` nodes with a single atomic, parameterized `DETACH DELETE` (stepUids passed via `CYPHER
+spurious=[...]`, never string-interpolated) rather than a full delete+republish of the snapshot
+subgraph, since a republish would need to also correctly re-tie any live `WorkflowRun`s already
+pointing at this snapshot — unnecessary blast radius for the same surgical outcome.
+
+**Verified — before/after Cypher counts:**
+- Before: **9 `Step`s**, **1 `START` edge** (`submit`) under `ws:acme`'s `access-request@v1`
+  snapshot.
+- Delete query result: `Nodes deleted: 3`, `Relationships deleted: 5` (3 `HAS_STEP` + 2
+  `TRANSITION`, exactly matching the edge inventory taken beforehand).
+- After: **6 `Step`s** (`activate`, `approval`, `provision`, `rejected`, `route`, `submit` — the
+  canonical set, confirmed by key), **1 `START` edge** (`submit`, unchanged). The 3 pre-existing
+  `WorkflowRun`→`AT_STEP` edges (targeting `submit`×2 and `provision`×1) confirmed still intact
+  and untouched.
+- `./scripts/verify_workflows.sh acme`: **`RESULT: OK — 2 defs in sync between `reference` and
+  ws:acme`** — both `triage@v1` and `access-request@v1` report `in sync: YES`, closing the
+  divergence the same-day K-037 entry's pytest-fixture follow-up had left open.
+
+**Why:** The K-037 backlog item explicitly deferred this as a separate, stakeholder-gated
+destructive-data cleanup, distinct from the script fix itself (`falkor-chat/docs/BACKLOG.md`,
+K-037: "Route to `graph-dba`... for the `ws:acme`/`reference` cleanup hand — deleting and
+republishing... is a destructive shared-state op on live data"). The `reference`-side half of that
+cleanup was incidentally resolved by an unrelated pytest-fixture wipe + standard reseed (recorded
+in the K-037 entry above); this entry closes the remaining `ws:acme`-side half, done deliberately
+and surgically rather than by accident.
+
+No schema/query-shape change; read-only + one scoped delete against live data, explicitly
+authorized for this dev environment. `reference`'s already-clean `access-request@v1` (6 `Step`s, 1
+`START` edge) was read-verified but not touched.
+
+Files touched: `falkor-chat/docs/HISTORY.md`, `falkor-chat/docs/BACKLOG.md`.
+
+## 2026-07-30 — K-037: decoupled `seed_workflows.sh`'s triage-literal publish identity from `FALKORCHAT_TRIGGER_DEF_KEY`, fixed `start_server.sh`'s stale banner
+
+**What:** Fixed the env-var name collision (Finding 1, major) that let a sanctioned
+demo/QA override silently corrupt the `reference` graph. `scripts/seed_workflows.sh` used to read
+`FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` — the app's real `config.TRIGGER_DEF_KEY`/`_VERSION`
+override, which decides which def an `@mention` resolves to — to decide what key/version to
+publish its own inline `triage`-shaped step literal under. Overriding the trigger (e.g. to
+`access-request@v1`, for a demo) therefore also redirected the triage literal's publish target: the
+`WorkflowDef` node reported "already present — no-op" (it already existed), but the per-step
+`MERGE` underneath is keyed by `stepUid`, so 3 spurious `Step`s + 1 spurious `START` edge got
+silently grafted onto the unrelated, already-published def. Fix: the triage literal's publish
+identity now comes from its own dedicated pair, `FALKORCHAT_TRIAGE_DEF_KEY`/
+`FALKORCHAT_TRIAGE_DEF_VERSION` (default `triage`/`v1`, matching `config.TRIGGER_DEF_KEY`/
+`_VERSION`'s own defaults so an unoverridden run is unaffected), fully decoupled — the triage
+literal's publish key/version is never read from `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` again.
+Also fixed Finding 2 (minor, cosmetic): `scripts/start_server.sh`'s startup banner hardcoded
+`"triage def triage@v1"` regardless of an active trigger override; it had no defaults-section entry
+for `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` at all (unlike every other overridable var). Added
+defaults (matching `config.py`), exported them to uvicorn, and the banner now interpolates the
+actual configured key/version. Both scripts' header-comment env-var docs updated; `docs/BACKLOG.md`
+K-037 entry flipped to delivered.
+
+**Why:** Filed out of K-036's Wave 5 QA pass (`docs/test-reports/web-api-coverage-report.md`,
+Finding 1 + Finding 2) — the plan's own sanctioned Pass-B demo/QA procedure (restart with
+`FALKORCHAT_TRIGGER_DEF_KEY=access-request FALKORCHAT_TRIGGER_DEF_VERSION=v1
+./scripts/start_server.sh`) is exactly the sequence that triggers the corruption; every restart
+using it further and irreversibly corrupted `reference` (publish/materialize are append-only, so
+there is no clean way to undo it short of a destructive delete+republish). Script-only change, no
+schema/query-shape change (Risks/RAM: none) — no `graph-dba` gate needed. The already-corrupted
+`reference`/`access-request@v1` data (from prior sessions, pre-dating this fix) is untouched —
+its cleanup is a destructive shared-state op on live data, held as a separate,
+explicitly stakeholder-gated decision per the backlog item's own scope note.
+
+**Verified:** Reproduced the collision against the pre-fix code first (RED), using a throwaway
+workspace (`ws:wf037check`) and a throwaway decoy def (`wf037decoy@v1`, seeded fresh via
+`FALKORCHAT_PROCESS_DEF_KEY`) rather than the real, already-corrupted `access-request@v1` — setting
+`FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` to the decoy's key/version and re-running
+`seed_workflows.sh` reproduced the exact reported signature: both defs logged under the same key,
+decoy went from the canonical 6 `Step`s/1 `START` edge to **9 `Step`s/2 `START` edges**
+(`submit`,`intake`). Applied the fix, reran the same scenario against a fresh decoy
+(`wf037decoy2@v1`, then again end-to-end through `start_server.sh` itself against
+`wf037decoy3@v1`) — confirmed GREEN: decoy stays at the canonical 6 `Step`s/1 `START` edge
+(`submit`) after the trigger-key collision, and a real `triage@v1` is still seeded/no-op'd
+unconditionally, under its own default key, unaffected by the trigger override. The
+`start_server.sh` end-to-end run also confirmed the banner now prints
+`Workflow:  enabled=1 (triage def wf037decoy3@v1)` — the actual configured override, not the old
+hardcoded `triage@v1` literal. All throwaway test data (`ws:wf037check`, `ws:wf037full`, the
+`wf037decoy*` defs) deleted afterward; the real `reference` graph's `access-request@v1` (still at
+its pre-existing 9 `Step`s/2 `START` edges from before this fix — untouched, not compounded at that
+point) and `triage@v1` (3 `Step`s, correct) confirmed unchanged throughout. `bash -n` clean on both
+scripts. This state did not survive intact — see the same-day follow-up immediately below.
+
+**Follow-up (same day) — confirming pytest green wiped `reference`; restored via the standard
+reseed.** Running the server pytest suite afterward to confirm it was still green (it was — `641
+passed`) triggered the fixture-level hazard the `seed_workflows.sh` header (and this repo's
+`AGENTS.md`) already documents: the `wf_repo` fixture wipes `reference` at test setup, so the
+finished run left `reference` with **zero** published `WorkflowDef`s — taking the real `triage@v1`
+and the real `access-request@v1` (with it, the pre-existing 9-step/2-`START`-edge corruption noted
+above) down too. `ws:acme`'s snapshots were confirmed untouched (`triage@v1`, `access-request@v1`
+both still present) — the fixture only ever touches `reference`. Restored via the standard,
+documented, non-destructive recovery — `./scripts/seed_workflows.sh acme` (create-only, no
+override; this is the routine post-pytest reseed the script's own header prescribes, not the
+separate stakeholder-gated delete+republish cleanup) — which freshly **created** both defs in
+`reference`: `triage@v1` (3 `Step`s) and `access-request@v1` at the **canonical 6 `Step`s/1 `START`
+edge** — clean. `./scripts/verify_workflows.sh acme` then reported `triage@v1` in sync, but flagged
+`access-request@v1` as **diverging (5 differences)**: `ws:acme`'s *snapshot* still carries the three
+spurious steps (`intake`/`research`/`answer`, 9 `Step`s total, 1 `START` edge) — contamination that
+predates this whole K-037 session and matches the QA report's own documented "pre-flight" baseline
+(`docs/test-reports/web-api-coverage-report.md`), not something Wave 5's own restart added (that
+corruption was on the `reference` side, which the wipe just erased). **Net effect, worth recording
+explicitly:** the separate stakeholder-gated cleanup this backlog item declined to fold in (deleting
+the corrupted `access-request@v1` subgraph before republishing) appears to have **partially resolved
+itself on the `reference` side** — a `reference`/`ws:acme` reseed accident, not a deliberate gated
+cleanup. The `ws:acme` snapshot side remains divergent and untouched; per `verify_workflows.sh`'s
+own instruction ("if they DIVERGE, do NOT re-seed... report it"), no further write was attempted.
+The stakeholder-gated cleanup decision is therefore still open, now scoped narrowly to repairing
+the `ws:acme` snapshot rather than both graphs.
+Script-only change; `./scripts/test_queries.sh` not run (would trigger the same hazard on
+`reference` again — no reason to compound it further; the confirmations above already establish
+both scripts are syntactically and functionally sound).
+
+**Follow-up 2 (same day) — `analyst` review (approve with suggestions): added the regression
+guard, landed three polish fixes, and re-confirmed live state.** Review at
+`docs/reviews/wf-trigger-def-key-collision.md` — verdict **approve with suggestions**, decoupling
+confirmed correct/complete, doc updates accurate, nothing blocking. Addressed all four items:
+
+- **Major — no automated regression guard for this bug class.** Added
+  `server/tests/test_seed_workflows_script.py`
+  (`test_trigger_def_key_override_does_not_graft_onto_the_other_def`), following the review's own
+  suggested shape (the backlog item's original test-strategy note, automated): shells out to the
+  real `scripts/seed_workflows.sh` (never a reimplementation) against `ws:test`, using two
+  throwaway, test-only def identities (`k037-triage-guard`, `k037-target-guard`) so the real
+  `triage`/`access-request` keys are never touched. `FALKORCHAT_TRIAGE_DEF_KEY`/`_VERSION` are
+  always passed EXPLICITLY (belt-and-suspenders, per the review) rather than left to the script's
+  default, so a regression that silently stopped reading that pair cannot hide behind matching
+  defaults. Seeds once at baseline (both throwaway defs canonical), reseeds a second time with
+  `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` pointed at the target's key/version (replaying K-037's
+  Pass-B collision against throwaway data), then asserts via `services.get_workflow_def_structure`
+  that neither def's structure moved. No `live` marker — network-free, part of the ordinary
+  `pytest -q` baseline. Cleans up its own throwaway defs at teardown (`reference` + `ws:test`),
+  confirmed via direct Cypher after the run: zero `k037-*-guard` nodes left behind.
+  **Proved the test actually catches the regression it guards, not just that it passes**: temporarily
+  reverted `seed_workflows.sh`'s fix (`TRIAGE_DEF_KEY` reading `FALKORCHAT_TRIGGER_DEF_KEY` again),
+  reran — RED, and for the right reason (`WorkflowDefNotFoundError` on `k037-triage-guard`: the
+  buggy code silently stopped honoring `FALKORCHAT_TRIAGE_DEF_KEY` at all, falling through to the
+  unset `FALKORCHAT_TRIGGER_DEF_KEY` default and publishing the literal under real `triage@v1`
+  instead — exactly the failure mode the explicit-pass design exists to catch). Restored the fix,
+  reran — GREEN. Full suite after landing: **642 passed, 1 deselected** (641 + this new test).
+- **Minor — header-comment ordering in `seed_workflows.sh`.** Reordered so the K-037 decoupling
+  explanation (why the two env-var pairs are independent, only sharing *defaults*) now precedes the
+  "TRIAGE def key/version MUST match the trigger config" paragraph, with an explicit "read the next
+  paragraph in light of the above" bridge — a top-to-bottom reader no longer hits the
+  easy-to-misread "MUST match" framing before the correct explanation.
+- **Nit — `HISTORY.md`'s "Files touched" line missing backticks.** Checked: the line already carries
+  backticks around every path in the current file (confirmed byte-for-byte via `cat -A`) — no change
+  needed. Flagging the discrepancy with the review's specific claim rather than silently
+  no-op'ing it.
+- **Nit — `start_server.sh` stage 5 doesn't document `FALKORCHAT_TRIAGE_DEF_KEY`/`_VERSION`
+  env-inheritance reachability.** Added a one-line note at the stage-5 seed-invocation comment.
+
+**Re-confirmed live `reference`/`ws:acme` state after this follow-up's own pytest runs** (which
+re-triggered the same `wf_repo` wipe hazard as before — expected, not new): restored again via
+`./scripts/seed_workflows.sh acme`, then `./scripts/verify_workflows.sh acme` →
+**`RESULT: OK — 2 defs in sync`** for both `triage@v1` and `access-request@v1`. Direct Cypher
+confirms both now canonical on both sides: `reference`'s `access-request@v1` and `ws:acme`'s
+snapshot both read exactly 6 `Step`s (`submit`/`route`/`approval`/`provision`/`activate`/`rejected`)
+and 1 `START` edge (`submit`) — no `intake`/`research`/`answer` under an `access-request:v1:*`
+`stepUid` anywhere. This is a **change from Follow-up 1's observation** (`ws:acme`'s snapshot at 9
+`Step`s, diverging from `reference`'s 6) — resolved, not a mystery: while this session was mid-flight
+on the review items above, `graph-dba` concurrently landed the `ws:acme`-side surgical cleanup this
+same file documents immediately above, under "2026-07-30 — K-037 follow-up: surgical cleanup of
+`ws:acme`'s contaminated `access-request@v1` snapshot" — a parameterized `DETACH DELETE` of the 3
+spurious `Step`s, explicitly authorized for this dev environment, with its own before/after Cypher
+counts. Nothing in *this* session's own commands touched `ws:acme` beyond the two additive, no-op
+`seed_workflows.sh acme` reseeds (confirmed by reading `materialize_snapshot`,
+`server/falkorchat/repository.py` — `MERGE … ON CREATE SET` only, no delete path) — the change is
+fully accounted for by that separate, concurrent, now-documented entry. The stakeholder-gated
+`access-request@v1` cleanup decision this backlog item held open is therefore **closed**: both the
+`reference`-side half (incidentally resolved by the pytest wipe + reseed, this entry) and the
+`ws:acme`-side half (deliberately, surgically resolved, the entry immediately above) are done.
+
+Files touched: `falkor-chat/scripts/seed_workflows.sh`, `falkor-chat/scripts/start_server.sh`,
+`falkor-chat/docs/BACKLOG.md`, `falkor-chat/server/tests/test_seed_workflows_script.py` (new).
+
 ## 2026-07-29 — K-036 doc gap-fill: missing HISTORY entries for U1 (graph-dba) and U3 (frontend-engineer), Wave 1
 
 **What this entry is:** written today, at K-036's documentation close-out, to record work that

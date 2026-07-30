@@ -23,6 +23,13 @@ set -euo pipefail
 #                          keep the M2 direct-reply wiring only.
 #   FALKORCHAT_AGENT_ID    (default: assistant)
 #   FALKORCHAT_AGENT_NAME  (default: Assistant)
+#   FALKORCHAT_TRIGGER_DEF_KEY     (default: triage) — which def an @mention resolves/starts
+#   FALKORCHAT_TRIGGER_DEF_VERSION (default: v1)       (config.TRIGGER_DEF_KEY/_VERSION).
+#                          Override for a demo/QA session (e.g. `access-request`/`v1`) to
+#                          point the trigger at a different published def. K-037: this is
+#                          fully decoupled from `seed_workflows.sh`'s own
+#                          FALKORCHAT_TRIAGE_DEF_KEY/_VERSION — overriding this pair no
+#                          longer affects what that script publishes.
 #   UVICORN_ARGS           (default: --reload)
 #
 # Example (custom workspace + headless FalkorDB):
@@ -46,7 +53,9 @@ Stop FalkorDB: docker stop falkordb-dev
 Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID, FALKORDB_HOST,
                FALKORDB_PORT, EMBEDDING_DIM (default 1024), UVICORN_ARGS,
                FALKORCHAT_ENABLE_AGENT (default 1), FALKORCHAT_WORKFLOW_ENABLED
-               (default 1), FALKORCHAT_AGENT_ID, FALKORCHAT_AGENT_NAME
+               (default 1), FALKORCHAT_AGENT_ID, FALKORCHAT_AGENT_NAME,
+               FALKORCHAT_TRIGGER_DEF_KEY (default triage), FALKORCHAT_TRIGGER_DEF_VERSION
+               (default v1)
 EOF
 }
 
@@ -68,6 +77,12 @@ FALKORCHAT_ENABLE_AGENT="${FALKORCHAT_ENABLE_AGENT:-1}"
 FALKORCHAT_WORKFLOW_ENABLED="${FALKORCHAT_WORKFLOW_ENABLED:-1}"
 FALKORCHAT_AGENT_ID="${FALKORCHAT_AGENT_ID:-assistant}"
 FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
+# K-037/Finding 2: defaults match config.py's own TRIGGER_DEF_KEY/_VERSION defaults, so an
+# unoverridden run's banner (stage 6 below) reflects reality. Declared here (not just left
+# to config.py's own default) so the banner can interpolate the actual configured value
+# instead of a hardcoded literal.
+FALKORCHAT_TRIGGER_DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
+FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
 UVICORN_ARGS="${UVICORN_ARGS:---reload}"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -116,6 +131,10 @@ FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
 # Must run before uvicorn: the trigger's @mention-to-start resolves the def by
 # TRIGGER_DEF_KEY/VERSION; without a published def, a WORKFLOW_ENABLED @mention is a
 # silent no-op. Idempotent (publish/materialize MERGE on the fixed key/version).
+# Only FALKORCHAT_WS_ID/FALKORDB_HOST/FALKORDB_PORT are explicitly forwarded below, but
+# seed_workflows.sh's own FALKORCHAT_TRIAGE_DEF_KEY/_VERSION (K-037) still reach it if the
+# caller exported them before invoking this script — ordinary bash env inheritance, the
+# same mechanism the original K-037 bug relied on, now pointed at the harmless var.
 case "$(printf '%s' "$FALKORCHAT_WORKFLOW_ENABLED" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|on) WF_ON=1 ;;
   *) WF_ON=0 ;;
@@ -133,7 +152,7 @@ fi
 echo "[6/6] Starting uvicorn on http://localhost:8000..."
 echo "      Workspace: $FALKORCHAT_WS_ID  |  User: $FALKORCHAT_USER_ID  |  Dim: $EMBEDDING_DIM"
 echo "      AI agent:  enabled=$FALKORCHAT_ENABLE_AGENT  id=$FALKORCHAT_AGENT_ID (@mention to trigger)"
-echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def triage@v1)"
+echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def ${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION})"
 echo "      MCP endpoint: http://localhost:8000/mcp"
 echo "      Web UI:       http://localhost:8000/"
 echo "      Stop with Ctrl+C (FalkorDB keeps running in background)"
@@ -144,4 +163,5 @@ export FALKORCHAT_WS_ID FALKORCHAT_USER_ID FALKORDB_HOST FALKORDB_PORT
 export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
 export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
 export FALKORCHAT_WORKFLOW_ENABLED
+export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
 exec "$VENV_DIR/bin/uvicorn" falkorchat.app:app $UVICORN_ARGS

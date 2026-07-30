@@ -1022,7 +1022,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   needs-changes → fix, Pass 3 re-review ✅), `docs/plans/web-api-coverage-coordination.md` (teco's
   full run ledger, all 5 waves + both review gates).
 
-### K-037 — `FALKORCHAT_TRIGGER_DEF_KEY` override during a restart grafts `triage`'s steps onto `access-request@v1` in `reference` (🔵 proposed — filed out of K-036's Wave 5 QA pass, Finding 1 (major) + Finding 2 (minor), 2026-07-29)
+### K-037 — `FALKORCHAT_TRIGGER_DEF_KEY` override during a restart grafts `triage`'s steps onto `access-request@v1` in `reference` (✅ delivered 2026-07-30 — decoupled into `FALKORCHAT_TRIAGE_DEF_KEY`/`_VERSION`, banner fixed → HISTORY.md)
 
 > **Why it exists.** `docs/test-reports/web-api-coverage-report.md` Finding 1 (major, confirmed
 > reproducible): the plan's own sanctioned Pass-B demo/QA procedure — restart with
@@ -1073,6 +1073,9 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   smoke test against a throwaway workspace, reusing the exact repro sequence from the QA report.
   The `ws:acme`/`reference` cleanup (if done) needs its own before/after Cypher verification
   (step/`START`-edge counts back to 6/1), same discipline as K-034's acceptance instrument.
+- **Addendum (2026-07-30):** the `ws:acme` snapshot cleanup called for above is now also done —
+  3 spurious `Step`s surgically deleted, 9/1 → 6/1, `verify_workflows.sh acme` reports both defs
+  in sync. See `falkor-chat/docs/HISTORY.md`, 2026-07-30 "K-037 follow-up" entry.
 
 ### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations (🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29)
 
