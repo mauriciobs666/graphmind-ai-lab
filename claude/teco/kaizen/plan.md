@@ -9,6 +9,10 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-006 | 2026-07-16 | low | 🔵 | The review-default list assigns no independent reviewer for **agent-engineering (cobb) deliverables**; graph-dba design notes are only implicitly covered by "plans → analyst". |
+| K-008 | 2026-07-29 | high | 🔵 | Use the `Agent` tool's own `model` parameter for per-delegation cost routing (cheap model for cost-insensitive units), instead of a persistent per-agent pin — verify it reaches nested calls before adopting. |
+| K-009 | 2026-07-29 | medium | 🔵 | Audit whether teco itself ever uses its `WebFetch`/`WebSearch` grants (vs. delegating research to specialists) — drop if unused to trim per-spawn tool-schema overhead. |
+| K-010 | 2026-07-29 | low | 🔵 | Next token-cost pass: description regrew 568→694 chars (+22%) and body 9,866→12,656 chars (+28%) since the 2026-07-11/24 compression passes — re-trim the description's trivial-fix clause (redundant with routing-table row 1) and recheck the body. |
+| K-011 | 2026-07-29 | low | 🔵 | `.claude/settings.local.json` carries three single-use Bash allow-rules (exact escaped Cypher literals from the one-off K-001 probe run) that will never match again — prune. |
 
 > **K-007 — SendMessage continuation instead of cold respawn — ✅ done 2026-07-29** (moved to
 > history.md). Step 3 now has teco note each delegate's returned name/id when a follow-up round
@@ -50,6 +54,34 @@
 - **Rationale:** The "work ships independently reviewed" invariant names defaults for plans/code (`analyst`), ML methodology (`data-scientist`), and behavior/acceptance (`qa-engineer`). A **cobb** agent/skill deliverable has no assigned independent reviewer, and a **graph-dba** design note is only implicitly a "plan → analyst". So the invariant ("every significant deliverable checked by someone other than its producer") has a coverage hole for the team's own agent-engineering work.
 - **Proposed change:** Decide and state the reviewer for agent/skill deliverables (analyst on the prompt-as-artifact? a second cobb pass? explicitly out-of-gate for trivial agent edits) and confirm graph-dba design notes route to analyst review. Low priority — agent edits are infrequent and cobb self-lints via the §7 pass.
 - **Notes:** Surfaced by cobb's §7 prompt-lint (semantic-coverage dimension), 2026-07-16.
+
+### K-008 — Route cost-sensitive delegations to a cheaper model via the `Agent` tool's per-call `model` param
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Rationale:** teco already carries the `Agent` tool, whose own schema accepts a per-call `model` override (`sonnet`/`opus`/`haiku`/`fable`). This is a materially different lever than the per-agent frontmatter `model:` pin the team explicitly rejected on 2026-07-27 ("model choice belongs at the session level, not duplicated across 13 frontmatter files") — that decision was about a *persistent*, duplicated config; a *per-delegation* override made by teco's own judgment at dispatch time doesn't reopen it, since it's reversible and scoped to one call. On a run like the K-022 example (~1.2M tokens across 10 units), routing cost-insensitive units (doc-only touch-ups, a re-review of a tiny diff, routine suite runs) to a cheaper model per-call could cut real spend without touching any specialist's identity.
+- **Proposed change:** First verify the `model` override actually reaches an `Agent` call made *from inside* a subagent (teco is itself a subagent one level down from the top session) — confirm on one real run before relying on it. If confirmed, add a line to step 3 naming which unit shapes are candidates for a cheaper override (and which are not — anything needing design judgment or code-quality stakes stays at the inherited model).
+- **Notes:** Surfaced by the 2026-07-29 credit/interface analysis session. Distinguish carefully from the rejected per-agent pin — the write-up for this item should make the "per-call, not persistent" distinction explicit so it doesn't get read as reopening that decision.
+
+### K-009 — Tool-grant audit: does teco itself ever use `WebFetch`/`WebSearch`?
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Rationale:** teco's own reads are local-repo docs (`AGENTS.md`, READMEs, `HISTORY.md`/`BACKLOG.md`); live web lookups are consistently a specialist's job (`cobb`, `architect`, `data-scientist`). No kaizen/history entry evidences teco itself calling `WebFetch`/`WebSearch` directly. Every granted tool's schema is injected into context on every spawn, so an unused grant is pure per-spawn overhead.
+- **Proposed change:** Check recent teco transcripts/session logs for actual `WebFetch`/`WebSearch` invocations by teco itself (not by its delegates). If confirmed unused over a reasonable sample, drop both from `tools:` — delegates keep their own grants regardless, so no behavior loss.
+- **Notes:** Surfaced by the 2026-07-29 credit/interface analysis session.
+
+### K-010 — Scheduled token-cost recompression pass (description + body regrew after feature additions)
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Rationale:** The description was compressed twice (1286→659→568 chars) but has regrown to 694 (+22%) since the 2026-07-25 trivial-fix feature landed; the body was compressed 15,023→9,866 (−34%) on 2026-07-11 but has regrown to 12,656 (+28%) since, from five legitimate feature additions. Not waste on its own — real functionality — but the description is paid on every session and every subagent spawn carrying the `Agent` tool (most of the roster), so it's the highest-multiplier text in the file.
+- **Proposed change:** Next time teco.md is touched, trim the description's trailing clause ("does not design solutions and routes non-trivial implementation to a specialist; may fix a genuinely trivial single-file no-brainer directly instead of delegating it") down to the routing *signal* only — the routing table's row 1 already carries the tie-breaker prose in full. Re-check the body for the same kind of restatement once it's grown further; still 16% below the pre-compression peak, so not urgent.
+- **Notes:** Surfaced by the 2026-07-29 credit/interface analysis session.
+
+### K-011 — Prune single-use Bash allow-rules from `settings.local.json`
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Rationale:** `claude/teco/.claude/settings.local.json` carries three highly specific, single-use Bash allow-rules — exact escaped Cypher literals from the one-off K-001 probe run (`k001-run-brief.md`). Claude Code's Bash permission matching is effectively exact-string for these, so they'll never match a future command; pure clutter, not a credit cost.
+- **Proposed change:** Remove the three stale entries next time this file is touched.
+- **Notes:** Surfaced by the 2026-07-29 credit/interface analysis session. Hygiene only, no functional impact.
 
 ## Parking lot / ideas
 - **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
