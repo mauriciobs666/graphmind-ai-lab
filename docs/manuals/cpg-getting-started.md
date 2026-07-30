@@ -1,6 +1,8 @@
 # Code Property Graph (Joern + FalkorDB) — Getting Started
 
-> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208, C-301…C-307 (M1–M3)
+> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208, C-301…C-307 (M1–M3) ·
+> **Reviews:** [`docs/reviews/cpg-getting-started.md`](../reviews/cpg-getting-started.md) (analyst, approve with suggestions) ·
+> [`docs/test-reports/cpg-getting-started-report.md`](../test-reports/cpg-getting-started-report.md) (qa-engineer, 1 defect fixed 2026-07-30)
 
 ## Who this is for
 
@@ -37,9 +39,9 @@ agent needs a structural answer.
 ```mermaid
 flowchart LR
     subgraph Build["Building a CPG — rare, on demand"]
-        A[Source repo] -->|joern-parse| B[CPG binary]
-        B -->|joern-export neo4jcsv| C[CSV export]
-        C -->|cpg-to-falkordb.py| D[Cypher statements]
+        A[Source repo] -->|parse| B[Code Property Graph]
+        B -->|export| C[Graph export]
+        C -->|transform| D[Cypher statements]
         D -->|loaded into| E[(FalkorDB<br/>graph: cpg_&lt;name&gt;)]
     end
     subgraph Query["Querying a loaded CPG — cheap, frequent"]
@@ -86,11 +88,11 @@ sequenceDiagram
     participant FalkorDB
 
     You->>GDBA: "Build a CPG for this repo"
-    GDBA->>Joern: parse source -> CPG binary
-    Joern-->>GDBA: cpg.bin (call graph + data flow applied)
-    GDBA->>Joern: export (neo4jcsv format)
-    Joern-->>GDBA: CSV files (nodes + edges)
-    GDBA->>GDBA: transform CSV -> Cypher statements
+    GDBA->>Joern: parse source -> Code Property Graph
+    Joern-->>GDBA: graph in memory (call graph + data flow applied)
+    GDBA->>Joern: export (nodes + edges)
+    Joern-->>GDBA: graph export files
+    GDBA->>GDBA: transform export -> Cypher statements
     GDBA->>FalkorDB: load statements (graph: cpg_<name>)
     FalkorDB-->>GDBA: node/edge counts confirmed
     GDBA-->>You: "cpg_<name> is loaded and queryable"
@@ -147,14 +149,23 @@ answer:
 - **It's read-only, enforced by the database itself** — not just by convention. A typo'd
   graph name can't accidentally create an empty graph, and a query can't accidentally
   write or delete anything, even by mistake.
-- **Long answers are only *shown* trimmed, never silently wrong.** If a question matches
-  thousands of rows, the tool caps how much text comes back and says so explicitly
-  (which cap, how many of how many) — the underlying count is always the true one. If a
+- **Long answers are only *shown* trimmed, and the reported total is trustworthy for
+  ordinary questions.** If a question matches a few thousand rows, the tool caps how
+  much text comes back and says so explicitly (which cap, how many of how many) — the
+  reported count is the true one. **For a very large, unfiltered question (tens of
+  thousands of rows or more — e.g. "return every node in the graph")**, the reported
+  count can itself be capped by FalkorDB's own internal limit and read lower than
+  reality; if the true size of something matters, ask for a count/aggregate
+  (`RETURN count(...)`) rather than trusting the row figure on an unfiltered dump. If a
   result looks arbitrarily cut, that's a cue to narrow the question (add an order,
   filter, or count), not to trust the first few rows as "the" answer.
 - **A CPG only reflects the snapshot it was built from.** If an answer seems to describe
   code that no longer looks right, the likely explanation is that the CPG is stale — ask
   for a rebuild (see above), not "the tool is broken."
+- **Outside Claude Code, the same graph is still reachable.** The MCP tool is
+  Claude-Code-specific; querying directly with `redis-cli GRAPH.QUERY`/`GRAPH.RO_QUERY`
+  is the documented fallback (and the only path in other tools today) — ask an agent, or
+  see `cpg/mcp/README.md` for the exact command.
 
 ## FAQ / troubleshooting
 
@@ -183,3 +194,9 @@ doesn't interfere with, or get confused with, one for another part.
 Nothing above works without it. `./falkor-chat/scripts/start_falkordb.sh -d` brings up
 the shared container; it's shared with `falkor-chat` and `salesperson`, so it's rarely a
 CPG-specific problem.
+
+**I asked for "everything" and the row count looks too low for a graph this size — is that a bug?**
+Not a bug, but a real limit to know about: for a very large, unfiltered question (tens
+of thousands of rows or more), the reported total can itself be capped rather than
+exact — see the caveat above. Add a filter, or ask for a `count(...)` directly, to get a
+number you can rely on.
