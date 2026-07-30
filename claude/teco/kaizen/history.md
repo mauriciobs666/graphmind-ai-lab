@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-29 — PII leak fixed in this file (found by the team certification pass)
+- **What:** The K-009 entry below (added earlier the same day) had embedded the literal
+  flattened `~/.claude/projects/...` transcript-directory path, which leaks the OS username —
+  genericized to `<flattened-repo-path>`. Working-tree fix only; the leak reached one shared
+  commit (`e7ec4a3`) before being caught — not rewritten, per the repo's don't-rewrite-shared-history
+  norm.
+- **Why:** Surfaced by `claude/scripts/audit-team.sh` check 7 during the 2026-07-29 team
+  certification (see cobb's kaizen history for the full pass).
+- **Plan items:** none.
+
 ## 2026-07-29 — Learnings inbox distilled: 3 entries → 1 promoted to teco.md, 1 to agent-standards, 1 discarded as duplicate
 - **What:** Processed all three pending entries in `kaizen/inbox.md` (agent-maintenance skill §5):
   1. **2026-07-25 — "`.mcp.json` server materializes only at session start; subagents inherit MCP tools from the parent session"** — genuinely new, not previously captured anywhere in the repo (checked `AGENTS.md`, `cpg/mcp/README.md`, `skills/agent-standards/claude-code.md`). **Promoted** to `skills/agent-standards/claude-code.md` § MCP → Lifecycle (a harness-level fact, not teco-specific — belongs in the on-demand reference cobb maintains, not an always-loaded prompt), with a `Verified: 2026-07-25` stamp and the cpg-query-access delivery as evidence.
@@ -13,7 +23,7 @@
 ## 2026-07-29 — K-006, K-008, K-009, K-010, K-011 ✅: all five open plan items closed
 - **What:** Worked the full active backlog in one pass.
   - **K-008 (verified, then adopted):** Live-tested whether the `Agent` tool's per-call `model` override reaches a call made *from inside* a subagent — spawned a `general-purpose` agent that itself called `Agent(model:"haiku", run_in_background:true, ...)`; grepped the resulting nested transcript (`agent-<id>.jsonl`) and found `"model":"claude-haiku-4-5-20251001"`, confirming the override is honored one level down. Added a sentence to step 3: pass `model: "haiku"` on cost-insensitive units (routine doc touch-ups, small-diff re-reviews, suite runs); anything with design/code-quality stakes stays on the inherited model.
-  - **K-009 (audited, then dropped):** Grepped all 5 of teco's own session transcripts (`~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab-claude-teco/*.jsonl`) for direct `WebFetch`/`WebSearch` tool_use. Found exactly one hit: 2026-07-24, during the K-002 agent-teams evaluation, teco fetched `code.claude.com/docs/en/agent-teams` and `/agent-view` directly instead of delegating — research that its own routing table already assigns to `cobb` ("Agent/subagent/skill/prompt/hook engineering"). One mis-routed use in the whole history doesn't justify the grant; dropped `WebFetch`, `WebSearch` from `tools:`.
+  - **K-009 (audited, then dropped):** Grepped all 5 of teco's own session transcripts (`~/.claude/projects/<flattened-repo-path>-claude-teco/*.jsonl`) for direct `WebFetch`/`WebSearch` tool_use. Found exactly one hit: 2026-07-24, during the K-002 agent-teams evaluation, teco fetched `code.claude.com/docs/en/agent-teams` and `/agent-view` directly instead of delegating — research that its own routing table already assigns to `cobb` ("Agent/subagent/skill/prompt/hook engineering"). One mis-routed use in the whole history doesn't justify the grant; dropped `WebFetch`, `WebSearch` from `tools:`.
   - **K-006 (decided):** The independent-review guardrail's defaults line named `analyst` for "plans and code" without saying whether that covered `graph-dba` design notes or `cobb` agent/skill deliverables. Made both explicit in the same clause rather than adding a new row: `plans and code (including graph-dba design notes and cobb's agent/skill artifacts) → analyst`.
   - **K-010 (trimmed):** Description's trailing clause ("Does not design solutions and routes non-trivial implementation to a specialist; may fix a genuinely trivial single-file no-brainer directly instead of delegating it" — 170 chars) shortened to "Delegates non-trivial implementation; may fix a trivial single-file no-brainer itself." (88 chars) — the routing table's row 1 already carries the full tie-breaker prose, so the description only needs the routing signal.
   - **K-011 (pruned):** Removed the three single-use Bash allow-rules (exact escaped Cypher literals from the K-001 probe run) from `.claude/settings.local.json`, leaving only the `test_queries.sh` entry.

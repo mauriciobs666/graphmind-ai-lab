@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-29 — Team-coherence certification (full 12-agent pass) — script fixed, one PII leak found and fixed
+- **Scope:** user-requested certification, following the same-day teco kaizen-backlog work
+  (K-006/008/009/010/011 closure + inbox distillation). Ran the §4 pass over the whole `claude/`
+  collection.
+- **Deterministic audit (`audit-team.sh`) — first run:** 2 FAIL classes.
+  1. **PII leak** — `claude/teco/kaizen/history.md` embedded the literal flattened
+     `~/.claude/projects/-home-<user>-...` transcript path (contains the OS username) in a K-009
+     evidence note written earlier the same day. Fixed: genericized to
+     `<flattened-repo-path>`; logged in teco's own history.md. The leak had reached one shared
+     commit (`e7ec4a3`) — left as-is rather than rewriting history, per the repo's norm against
+     rewriting shared commits.
+  2. **`coder`/`devops`/`frontend-engineer`/`tdd-engineer` "missing from AGENTS.md"** — root
+     cause: commit `70d0981` (2026-07-28, direct user edit, not routed through cobb) deliberately
+     deleted the inline 12-agent roster from root `AGENTS.md` as duplication ("already documented
+     in each component's own README/AGENTS.md... already pointed to via Structure/Component
+     docs") — exactly the DRY principle this skill's §2 teaches. `audit-team.sh` check 5 predated
+     that trim and still required every agent's literal name in root `AGENTS.md`; the other 8
+     agents only passed incidentally (named in an unrelated doc-lifecycle table). **Asked the
+     user** rather than guessing between "relax the script" / "restore the roster" / "accept as a
+     known FAIL" — a real architecture call, not mechanical drift. Decision: **relax the script**.
+     Implemented: `audit-team.sh` check 5 now runs per-agent against only the two catalog owners
+     (`claude/AGENTS.md`, `claude/README.md`); a new collection-wide check 5b verifies root
+     `AGENTS.md` still *points at* that catalog (`claude/AGENTS.md` + `claude/README.md`
+     substrings present) instead of repeating every name. Script header comment and this skill's
+     §4 deterministic-half paragraph both updated to describe the new split (the paragraph's
+     `BOUNDARY_PAIRS` list was also stale — 3 pairs documented vs. 8 actual — fixed in the same
+     edit since it was the same sentence).
+- **Deterministic audit — re-run after fixes:** full **PASS** (all 12 agents × 5 per-agent
+  checks, collection check 5b, all 16 boundary-pair directions, personal-info check).
+- **§4 judgment checklist:** roster accuracy ✓ (teco's routing table names all 12 agents with
+  current contracts); handoff symmetry ✓ (no counterpart-file changes since the 2026-07-28
+  certification other than teco's own prompt, so symmetry is unchanged from that certified
+  state); subagent-awareness ✓ (teco's step 3 still carries the can't-ask-mid-run reminder);
+  enforcement parity ✓ (read `guard-coordination-doc-writes.sh` directly — it does allowlist
+  `teco/kaizen/inbox.md` alongside `docs/plans/*`, matching the guardrail prose exactly); boundary
+  reciprocity ✓ (teco is the orchestrator, not a `BOUNDARY_PAIRS` party — no gap).
+- **§7 prompt-quality lint** (folded in, scoped to what changed since the 2026-07-28
+  certification: `claude/teco/teco.md`, `skills/agent-standards/claude-code.md`): one **minor**
+  finding on `teco.md` step 3 — the newly-added model-routing sentence carries an inline
+  `"verified 2026-07-29 to reach a call made from inside a subagent"` evidence clause that
+  duplicates the fuller evidence already recorded in `teco/kaizen/history.md`; the operative
+  prompt only needs the instruction, not the dated citation. Not fixed in this pass (cosmetic,
+  user didn't ask for a teco.md edit) — noted in teco's `plan.md` parking lot instead, alongside
+  the already-flagged step-3 density item from earlier today. `claude-code.md`'s new Lifecycle
+  bullet: clean on all six dimensions (reference material, no persona/instruction-following
+  stakes).
+- **Why:** user-requested certification pass.
+- **Plan items:** none opened in cobb's own plan.md — the one lint finding was routed to teco's
+  plan.md instead (it's teco's artifact).
+
 ## 2026-07-28 — Retired the `joern` agent into `graph-dba`; team-coherence certification
 - **What:** Executed the user's decision to retire the standalone `joern` subagent
   (CPG generation is genuinely rare — doesn't justify a dedicated standing

@@ -250,13 +250,18 @@ contract changes, or on demand ("certify the team").
 greppable invariants: every agent folder has its `<name>.md` + kaizen pair, is
 symlinked into `~/.claude/agents/`, its frontmatter hook commands exist and
 are executable (after mirroring the shell-form `$HOME`/`~` expansion), every
-agent is named in the orchestrator's prompt and in all three catalogs, each
-declared boundary pair (`BOUNDARY_PAIRS` in the script — coder↔tdd-engineer,
-analyst↔qa-engineer, graph-dba↔devops) names its partner in its frontmatter
-`description` (the routing contract every router sees), and no tracked file
-anywhere in the repo contains the maintainer's personal identifiers —
-home path, username, git name/email, hostname, derived at runtime (the
-personal-info rule, §2). Fix any FAIL before judging the rest.
+agent is named in the orchestrator's prompt and in the two catalog owners
+(`claude/AGENTS.md`, `claude/README.md`) — root `AGENTS.md` is checked
+separately (once, not per agent) for still *pointing at* that catalog, not
+for repeating every name inline, since the 2026-07-28 trim deliberately
+de-duplicated the roster out of the root file — each declared boundary pair
+(`BOUNDARY_PAIRS` in the script — currently eight pairs across
+coder/tdd-engineer/frontend-engineer, analyst/qa-engineer/data-scientist,
+graph-dba/devops/data-scientist, architect/data-scientist) names its partner
+in its frontmatter `description` (the routing contract every router sees),
+and no tracked file anywhere in the repo contains the maintainer's personal
+identifiers — home path, username, git name/email, hostname, derived at
+runtime (the personal-info rule, §2). Fix any FAIL before judging the rest.
 
 > **Not a bare pass/fail plan done-condition.** Because check 7 greps *every*
 > tracked file in the repo, a plan step written as "assert `audit-team.sh`

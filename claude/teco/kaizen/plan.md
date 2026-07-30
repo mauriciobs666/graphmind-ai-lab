@@ -63,6 +63,10 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
+- **§7 lint minor (2026-07-29 team certification):** step 3's model-routing sentence carries an
+  inline `"verified 2026-07-29 to reach a call made from inside a subagent"` evidence clause that
+  duplicates the fuller record already in `kaizen/history.md` — the operative instruction only
+  needs the rule, not the dated citation. Bundle with the step-3 split below when it's next touched.
 - **Step 3 ("Delegate with complete briefs") is getting dense (noted 2026-07-29).** After today's K-008 model-routing addition and the inbox-3 promotion (brief-fencing/inbox carve-out), the paragraph now packs five distinct sub-rules (brief contents, subagent-awareness, parallel-vs-sequential dispatch, name/id tracking for SendMessage, model-override routing, brief-fencing carve-out) into one block. Candidate fix: split into short sub-bullets under step 3 next time it's touched, purely a readability/cognitive-load cleanup (§7 dimension 4) — no behavior change.
 - **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
 - ~~A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`.~~ *(✅ Resolved 2026-07-09: the roster is now an explicit routing table — task shape → owner → tie-breaker — with the coder-vs-tdd efficiency rule on both implementer rows, plus a separate handoff-contracts list. See history.md.)*

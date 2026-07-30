@@ -10,9 +10,15 @@
 #   2. the agent is symlinked into ~/.claude/agents/ (deployed)
 #   3. every frontmatter hook command exists and is executable
 #   4. the agent is named in the orchestrator's (teco) prompt — roster drift
-#   5. the agent is cataloged in claude/AGENTS.md, claude/README.md, root AGENTS.md
+#   5. the agent is cataloged in claude/AGENTS.md and claude/README.md — the
+#      catalog owners (per-agent; root AGENTS.md deliberately does NOT
+#      duplicate the roster since 2026-07-28, see check 5b)
 #
 # Collection-wide:
+#   5b. root AGENTS.md still points at claude/AGENTS.md + claude/README.md
+#       (delegates to the catalog rather than re-duplicating it — the
+#       2026-07-28 trim removed the inline 12-agent roster on purpose; this
+#       checks the pointer survives, not that every name is repeated there).
 #   6. boundary-pair symmetry — adjacent specialists whose scopes border each
 #      other must each name the other in their frontmatter `description` (the
 #      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
@@ -88,8 +94,8 @@ for a in "${agents[@]}"; do
     fi
   fi
 
-  # 5. catalogs (agent-context file, human catalog, repo-root context)
-  for doc in "$CL/AGENTS.md" "$CL/README.md" "$ROOT/AGENTS.md"; do
+  # 5. catalogs (agent-context file, human catalog — the two catalog owners)
+  for doc in "$CL/AGENTS.md" "$CL/README.md"; do
     if grep -qE "\b$a\b" "$doc"; then
       pass "$a: cataloged in ${doc#"$ROOT"/}"
     else
@@ -97,6 +103,15 @@ for a in "${agents[@]}"; do
     fi
   done
 done
+
+# 5b. root AGENTS.md delegates to the claude/ catalog rather than duplicating
+#     it (2026-07-28 trim removed the inline roster on purpose; DRY per the
+#     agent-maintenance skill §2). Check the pointer, not every name.
+if grep -q 'claude/AGENTS.md' "$ROOT/AGENTS.md" && grep -q 'claude/README.md' "$ROOT/AGENTS.md"; then
+  pass "root AGENTS.md: still points to claude/AGENTS.md + claude/README.md (roster delegated, not duplicated)"
+else
+  failmsg "root AGENTS.md: no longer points to claude/AGENTS.md and/or claude/README.md — the claude/ subagent catalog pointer is missing"
+fi
 
 # 6. boundary-pair symmetry in frontmatter descriptions
 BOUNDARY_PAIRS=("coder:tdd-engineer" "coder:frontend-engineer" "analyst:qa-engineer" "graph-dba:devops" "architect:data-scientist" "analyst:data-scientist" "graph-dba:data-scientist" "tdd-engineer:qa-engineer")
