@@ -373,7 +373,7 @@ def test_error_missing_graph_lists_loaded_graphs_and_routes_to_joern():
     )
     assert "Graph 'typo' does not exist." in out
     assert "Loaded graphs: a, b." in out
-    assert "joern agent" in out
+    assert "graph-dba agent" in out
 
 
 def test_error_missing_graph_without_a_readable_graph_list():
@@ -516,7 +516,7 @@ def test_live_missing_graph_does_not_materialise_a_key(live_graph):
     for cypher in ("MATCH (n) RETURN n", "EXPLAIN MATCH (n) RETURN n"):
         out = server.run_query(absent, cypher)
         assert f"Graph '{absent}' does not exist." in out
-        assert "joern agent" in out
+        assert "graph-dba agent" in out
     assert set(client.list_graphs()) == before
 
 

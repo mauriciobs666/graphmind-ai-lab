@@ -324,7 +324,7 @@ def graph_not_found_message(graph: str, graphs: list[str] | None) -> str:
     loaded = ", ".join(graphs) if graphs else "(could not read GRAPH.LIST)"
     return (
         f"Graph '{graph}' does not exist. Loaded graphs: {loaded}. If no CPG is loaded, "
-        "building and loading one is the joern agent's job (joern-cpg pipeline) — this tool "
+        "building and loading one is the graph-dba agent's job (joern-cpg pipeline) — this tool "
         "only queries."
     )
 
@@ -345,7 +345,7 @@ def explain_error(
         if "ro_query" in lowered:
             return (
                 "This tool is read-only (GRAPH.RO_QUERY). Loading/writing a CPG goes through "
-                "the joern pipeline, or redis-cli for ad-hoc writes."
+                "the joern-cpg pipeline (graph-dba), or redis-cli for ad-hoc writes."
             )
         if "timeout" in lowered or "timed out" in lowered:
             return (
