@@ -9,7 +9,7 @@ This directory (`claude/`) holds custom Claude Code subagents. Each agent is a f
 Roster — behavior source is always `<name>/<name>.md`, kaizen at `<name>/kaizen/`; what each
 does and when to use it lives in the injected descriptions and [`README.md`](./README.md):
 
-`teco` (coordinator) · `tico` (product owner; **first-order**: `claude --agent tico`) ·
+`teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **first-order**: `claude --agent tico`) ·
 `architect` · `coder` · `tdd-engineer` · `frontend-engineer` · `qa-engineer` · `analyst` ·
 `data-scientist` · `graph-dba` (carries two on-demand knowledge bases: `falkordb-quirks.md`,
 live-verified and perishable — re-verify on upgrades — and `falkordb-reference.md`; also drives

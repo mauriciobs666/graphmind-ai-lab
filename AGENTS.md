@@ -67,12 +67,21 @@ and OpenCode artifacts).
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history,inbox}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
   for skills), and `claude/AGENTS.md` in the same change.
-- **Module documentation convention** — all of a module's engineering docs live under
+- **Module documentation convention** — all of a module's documentation lives under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
   change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
-  `reviews/`, `test-plans/`, `test-reports/`. `falkor-chat/` is the reference
+  `reviews/`, `test-plans/`, `test-reports/`, `manuals/`. `falkor-chat/` is the reference
   implementation; other modules adopt the structure when they first need it. Modules do **not**
   use `kaizen/` dirs — that convention exists only for agent folders (`claude/<agent>/kaizen/`).
+  - **`manuals/` is the one end-user-facing kind** — everything else in this list is engineering
+    process documentation (requirements/design/review/test artifacts for the people building the
+    system). A `manuals/<slug>.md` document explains how to *use* the shipped product: screens,
+    workflows, recovery from mistakes — never internal architecture or file layout. Owned by
+    `tico`, illustrated with Mermaid diagrams wherever a picture replaces a paragraph of
+    narration (`claude/tico/tico.md`, Mode 3). Unlike the other kinds, a manual doesn't have to
+    shadow one feature's topic slug — it's often broader (a whole workflow or subsystem from the
+    user's point of view); when a manual does document one feature end-to-end, it reuses that
+    feature's slug per the family rule below.
   - **A document that freezes does not move.** It gets `Status: archived` in its own header
     block and stays exactly where it is. The status marker replaces the old "move it to
     `archive/` when the milestone closes" rule — and with it the inbound-link repair that move
@@ -93,8 +102,10 @@ and OpenCode artifacts).
   - **Collision rules.** (1) The primary key is `(component, kind, topic-slug, role)`. (2) The
     **same slug across several kinds is the family** — required, not merely tolerated:
     `requirements/x.md` → `plans/x.md` → `plans/x-coordination.md` → `reviews/x.md` →
-    `test-plans/x.md` → `test-reports/x-report.md`; a downstream document that invents a new
-    slug is a defect. (3) A topic slug is never reused for a different topic. (4) The same
+    `test-plans/x.md` → `test-reports/x-report.md` → optionally `manuals/x.md` (only when the
+    manual documents that exact feature end-to-end; a manual with broader scope is its own topic
+    slug, not a family member); a downstream document that invents a new slug is a defect. (3) A
+    topic slug is never reused for a different topic. (4) The same
     basename in two directories is safe **because every citation carries a directory** — rules
     2 and 4 are a matched pair: adopt both or neither. (5) For a second document of the same
     kind and topic, the selector is one question — **has the earlier document been approved,
@@ -130,8 +141,8 @@ and OpenCode artifacts).
     `teco`'s coordination**). The owner who performs the `archived` flip, by kind:
     `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
     `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
-    `reviews/*` → `analyst` · `requirements/*` → `tico` · `test-plans/*` and `test-reports/*` →
-    `qa-engineer`. **`teco` coordinates the close; it does not perform the flips** — its write
+    `reviews/*` → `analyst` · `requirements/*` and `manuals/*` → `tico` · `test-plans/*` and
+    `test-reports/*` → `qa-engineer`. **`teco` coordinates the close; it does not perform the flips** — its write
     guard reaches `docs/plans/*` only, so any other kind would raise a human approval prompt
     per file.
   - **The whole lifecycle, one line:** `grep -m1 -H 'Status:' docs/plans/*.md`.
