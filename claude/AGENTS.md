@@ -30,6 +30,16 @@ graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destruc
 hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
 symlink.
 
+**Git-commit authority is prompt-level, not hook-enforced.** Only `tico` and `teco` document
+`git add`/`git commit` authority — `tico` for its own doc kinds (requirements, manuals; mirrors
+its Write/Edit guard exactly), `teco` for a coordinated specialist's already-verified deliverable
+by explicit path (its integrator role, deliberately wider than its own Write/Edit guard). No
+`PreToolUse` hook matches `git commit` (the destructive-ops guards match Bash command patterns
+like `GRAPH.DELETE`, not versioning commands), so this is self-discipline backstopped only by
+`scripts/audit-team.sh` check 8, which fails if any agent other than `tico`/`teco` claims the
+same authority. Stakeholder decision, 2026-07-30: no proliferation of commit rights beyond these
+two — see `claude/teco/kaizen/history.md` and `claude/cobb/kaizen/history.md` for the reasoning.
+
 ## Maintenance rules
 
 - Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md` (and seed `kaizen/inbox.md` on creation), the full catalog entry in [`README.md`](./README.md), and the name rosters here and in the repo-root `AGENTS.md`, in the same change.

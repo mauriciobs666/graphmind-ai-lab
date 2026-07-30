@@ -53,3 +53,24 @@
 - A `docs/requirements/` template file vs the inline template (only if the inline one drifts across features).
 - Non-functional requirements section (performance, security) — add when a feature actually needs one rather than padding every doc.
 - Project-scoped `agent` setting to make tico the default session agent in a requirements-heavy phase — only if launching via `--agent` proves to be friction.
+- **Proposal declined 2026-07-30 (cobb review):** widening tico's commit authority to cover
+  artifacts produced by agents it summons under Mode 3 (analyst/qa-engineer verification
+  passes), so tico becomes "an orchestrator like teco." Declined — breaks the
+  write-scope==commit-scope invariant every commit-capable agent holds, conflicts with
+  `audit-team.sh`'s single-orchestrator assumption and the team's "tico is not a delegation
+  target" framing, and isn't backstopped by any hook. tico was right to hold the line and not
+  self-waive its guardrail even under stakeholder pressure. Full reasoning in
+  `claude/cobb/kaizen/history.md` (2026-07-30 entry).
+  **RESOLVED 2026-07-30 — closed by explicit stakeholder decision, do not re-open.** The
+  stakeholder ruled directly (not via cobb's recommendation, and not the softer
+  session-scoped-summoned-only variant either): "I dont want the subagents to proliferate
+  commits, tico (you) and teco are special and have coordination rights." So: `analyst`/
+  `qa-engineer`/every other specialist stays **without** commit authority, permanently, not
+  pending a recurrence — and `teco`'s own commit authority (previously undocumented — it had
+  quietly used `Bash` to commit four uncommitted deliverables this same day with no guardrail
+  text backing it) is now formally documented in `teco.md`, scoped to its integrator role, and
+  backstopped by a new `audit-team.sh` check 8 that fails if any agent other than `tico`/`teco`
+  ever claims the same authority. Full implementation in `claude/teco/kaizen/history.md`
+  (2026-07-30 entry) and `claude/cobb/kaizen/history.md` (2026-07-30 entry). This question is
+  closed — if uncommitted-deliverable friction recurs, the fix is routing through `tico`/`teco`
+  (both now empowered for exactly this), never a third agent gaining commit rights.

@@ -2,6 +2,53 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-07-30 — Commit authority formalized: `Bash` may now `git add`/`git commit` a coordinated deliverable, by explicit path
+- **What:** Documented, for the first time, teco's authority to `git add`/`git commit` a
+  specialist's deliverable it is actively coordinating — a plan, review, test plan/report, or
+  kaizen-inbox entry it has already verified fits (step 4) — by explicit path, one coherent unit
+  per commit, never `git add -A`/`.`/`-a`, never `push`/`reset`/`rebase`/amend, never anything
+  outside the coordination it's actively running. Three touch points, no frontmatter/tool change
+  (`Bash` was already granted): (1) Guardrails gained a dedicated bullet, placed right after the
+  existing "you coordinate, you don't do the specialists' jobs" bullet, which now drops its stale
+  "never mutating the tree" clause since that's no longer literally true; (2) step 4 gained one
+  sentence — commit a verified deliverable rather than leave it sitting uncommitted; "verified but
+  uncommitted" is now explicitly unfinished integration, not a stopping point; (3) cross-referenced
+  in `claude/README.md` (teco + tico rows) and a new paragraph in `claude/AGENTS.md`'s Hook
+  machinery section explaining this is prompt-level, not hook-backed. **Scoping deliberately
+  differs from `tico`'s existing grant** (2026-07-23): tico's commit scope mirrors its own
+  Write/Edit guard exactly (it only ever commits what it itself authored); teco's commit scope is
+  wider than its own Write/Edit guard (which reaches only the coordination doc + its inbox)
+  because its role — integrator of a whole coordinated unit's output — is structurally different
+  from tico's. Both grants are pinned to the same stakeholder line so neither reads as
+  self-expanding: "tico and teco are special and have coordination rights."
+- **Deterministic backstop added:** `claude/scripts/audit-team.sh` gained **check 8** —
+  `COMMIT_AUTHORS=("tico" "teco")`; every other agent's `<name>.md` fails the audit if it ever
+  comes to claim `git add`/`git commit` authority, and `tico`/`teco` fail if their documented
+  grant ever goes missing. This exists because no `PreToolUse` hook can gate a *prose* capability
+  the way the doc-scoped/destructive-ops hooks gate Write/Edit paths and Bash command patterns —
+  the grep-based check is the only mechanical trip-wire available for "did commit authority
+  quietly spread to a third agent." Full audit re-run clean (95+ PASS, 0 FAIL) after the change.
+- **Verified the four commits that prompted this change were safe, not just retroactively
+  justified.** Read all four (`15d3ad5`, `4fe43a0`, `10f13ae`, `38e020d`) via `git show --stat`:
+  each touches exactly the files its subject line names — `docs/reviews/cpg-getting-started.md`
+  (analyst's review); `docs/test-plans/cpg-getting-started.md` +
+  `docs/test-reports/cpg-getting-started-report.md` (qa-engineer's plan+report, one coherent
+  unit); `claude/analyst/kaizen/inbox.md` (analyst's own learning); `claude/qa-engineer/kaizen/inbox.md`
+  (qa-engineer's own learning) — no unrelated file in any diff, consistent with explicit-path
+  staging rather than `git add -A`/`-a`. No `push`/`reset`/`rebase`/amend in the sequence (four
+  distinct hashes, ~30s apart, matching four sequential `git commit` calls, not one commit
+  rewritten). This matches the newly-formalized scope precisely — every committed file was a
+  verified deliverable from a specialist teco was actively coordinating (the
+  `docs/manuals/cpg-getting-started.md` review-gate rollout), none of it teco's own authorship.
+  Nothing found that needed flagging as unsafe.
+- **Why:** stakeholder decision, relayed via `cobb`: extend commit/coordination authority to
+  `tico` and `teco` specifically (declining `cobb`'s earlier 2026-07-30 recommendation to instead
+  extend narrow per-doc-kind commit rights to `analyst`/`qa-engineer`) — closes the gap between
+  what teco had already done once in this session (four commits, undocumented authority) and what
+  its prompt claimed ("never mutating the tree", no carve-out at all).
+- **Plan items:** none opened (the fix was direct, not a backlog item); one §7 minor logged to
+  `plan.md`'s parking lot (bullet density).
+
 ## 2026-07-29 — Manuals join the routing table, handoff contracts, doc scan, and review-gate defaults
 - **What:** Four small additions reflecting tico's new Mode 2/3 (didactic explanation + user-manual maintenance, same day): (1) a new routing-table row — live explanations stay pause→user (tico isn't a delegation target), but a self-contained manual write/update is delegable to tico like any other subagent deliverable; (2) the tico handoff-contract line now names `docs/manuals/<slug>.md` alongside the requirements doc; (3) the documentation-impact scan bullet now lists user manuals (flag, don't write — `tico` owns them); (4) the "Work ships independently reviewed" guardrail gained a manuals entry: split by claim — `qa-engineer` verifies walkthroughs against the running app, `analyst` checks architectural/factual claims and clarity. The manuals-delegable routing row also notes the review gate still applies when teco routes a manual update this way.
 - **Why:** user ruling following the 2026-07-29 team certification, which flagged manuals as the one doc kind with no independent-review gate; user chose the qa-engineer/analyst split (behavioral vs. everything else) and "mandatory in teco + offered in tico's first-order sessions" for how forced the gate should be.

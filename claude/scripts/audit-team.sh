@@ -30,6 +30,15 @@
 #      and identity-portable ($HOME/.claude/agents/<name>/… resolves via the
 #      deployment symlink on any machine). Origin: 2026-07-10, six agents'
 #      hook commands were committed with the absolute /home/<user>/… path.
+#   8. git-commit-authority containment — only tico and teco may document
+#      `git add`/`git commit` authority in their own prompt (COMMIT_AUTHORS
+#      below); every other agent's <name>.md must stay free of those verbs
+#      entirely. Stakeholder decision, 2026-07-30: "I dont want the subagents
+#      to proliferate commits, tico and teco are special and have coordination
+#      rights" — this check is the deterministic backstop so a future prompt
+#      edit can't silently re-open commit authority for a specialist without
+#      a human noticing (no PreToolUse hook can gate this: it's a prose
+#      capability, not a Write/Edit path or a Bash command pattern).
 #
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
@@ -150,6 +159,26 @@ for label in "${!pii[@]}"; do
   leaked=1
 done
 [ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked file"
+
+# 8. git-commit-authority containment — only tico/teco may claim git add/commit
+echo
+COMMIT_AUTHORS=("tico" "teco")
+is_commit_author() { local n; for n in "${COMMIT_AUTHORS[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
+for a in "${agents[@]}"; do
+  if is_commit_author "$a"; then
+    if grep -qE '`?git (add|commit)`?' "$CL/$a/$a.md"; then
+      pass "$a: documents its git commit authority (stakeholder-approved coordination right)"
+    else
+      failmsg "$a: is a designated commit author (COMMIT_AUTHORS) but its prompt documents no git add/commit authority — grant missing or worded unrecognizably"
+    fi
+  else
+    if grep -qE '`?git (add|commit)`?' "$CL/$a/$a.md"; then
+      failmsg "$a: prompt claims git add/commit authority — only tico/teco may (stakeholder decision 2026-07-30, no proliferation of commit rights)"
+    else
+      pass "$a: no git commit authority claimed (correct — not tico/teco)"
+    fi
+  fi
+done
 
 echo
 if [ "$fail" -eq 0 ]; then

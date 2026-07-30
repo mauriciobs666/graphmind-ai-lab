@@ -63,6 +63,13 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
+- **§7 lint minor (2026-07-30, authoring pass on the new commit-authority guardrail):** the new
+  Guardrails bullet ("`Bash` is read-only investigation... integration commits") is dense — one
+  paragraph packing the grant, its scope boundary vs. `tico`'s, the stakeholder-decision citation,
+  and the hook-gap disclosure. Consistent with the section's existing density (the "Work ships
+  independently reviewed" bullet is comparably long) so not fixed now; if Guardrails gets another
+  addition, split this bullet into sub-bullets (grant / boundary-vs-tico / no-hook-backstop) rather
+  than let a fourth dense paragraph land on top.
 - **§7 lint minor (2026-07-29 team certification):** step 3's model-routing sentence carries an
   inline `"verified 2026-07-29 to reach a call made from inside a subagent"` evidence clause that
   duplicates the fuller record already in `kaizen/history.md` — the operative instruction only

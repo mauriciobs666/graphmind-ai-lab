@@ -2,6 +2,143 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-07-30 — Stakeholder decision implemented: formalized teco's commit authority; declined recommendation stays declined
+- **What:** Follow-up to the "declined" entry directly below. The stakeholder made the recommendation
+  surfaced there an explicit decision, verbatim: **"I dont want the subagents to proliferate
+  commits, tico (you) and teco are special and have coordination rights."** Two things this
+  settles, not one to evaluate: (1) `cobb`'s own recommendation below — extend narrow
+  commit-as-you-go rights to `analyst`/`qa-engineer` for their own doc kinds — is **declined**, not
+  left open; no other agent gains commit authority, ever, absent a fresh stakeholder decision.
+  (2) `tico` and `teco` **specifically** are confirmed as the two commit-capable agents. Implemented:
+  - **`claude/teco/teco.md`** — new Guardrails bullet + a step-4 sentence formalizing `Bash`'s
+    integration-commit authority: `git add`/`git commit` a coordinated specialist's
+    already-verified deliverable, by explicit path, one unit per commit, never bulk-staged/pushed/
+    reset/rebased/amended. **Scoped deliberately differently from `tico`'s grant**, and said so in
+    the prompt: `tico`'s commit scope mirrors its own Write/Edit guard exactly (only ever commits
+    what it authored); `teco`'s is wider than its Write/Edit guard (which reaches only the
+    coordination doc + its inbox) because its role — integrating a whole coordinated unit's
+    output — is structurally different. This was the open design question the task asked me to
+    resolve with judgment, not copy tico's grant verbatim; the honest answer is that teco's
+    write-footprint and its natural commit footprint were never going to be the same shape, so
+    forcing the tico framing onto it would have been a fiction. Full text: `claude/teco/teco.md`
+    Guardrails, second bullet.
+  - **`claude/scripts/audit-team.sh`** — new **check 8**, a deterministic containment backstop:
+    `COMMIT_AUTHORS=("tico" "teco")`; fails if any other agent's own `<name>.md` claims
+    `git add`/`git commit`, and fails if `tico`/`teco` ever lose their documented grant. No
+    `PreToolUse` hook can gate a *prose* capability the way the existing doc-scoped/destructive-ops
+    hooks gate Write/Edit paths and Bash command patterns — this grep-based check is the only
+    mechanical trip-wire available, and it's exactly the "harness enforcement over hopeful prose"
+    philosophy this team already applies everywhere else. Full audit re-run clean after the change
+    (all prior checks + the new one, 0 FAIL).
+  - **Catalogs**: `claude/README.md` — teco's row gained the integration-commit clause, cross-
+    referencing `tico` and the 2026-07-30 stakeholder confirmation; `tico`'s row gained a matching
+    one-clause cross-reference for symmetry. `claude/AGENTS.md` — new paragraph in "Hook machinery"
+    stating plainly that git-commit authority is prompt-level, not hook-enforced, naming both
+    grants' different scoping and pointing at check 8. `audit-team.sh`'s own header comment updated
+    (item 8 in the checks list).
+  - **`claude/teco/kaizen/history.md`** and **`claude/tico/kaizen/plan.md`** — dated entries; the
+    tico parking-lot note left 2026-07-30 (the "recommendation surfaced, not implemented" pointer)
+    now carries a `RESOLVED` addendum so nobody re-opens it as a live question.
+- **Verified the four commits that prompted this, rather than accepting the stakeholder's framing
+  on faith** (the task's own instruction: formalizing authority isn't the same question as whether
+  the specific commits were done safely). Read all four directly (`git show --stat`, then full
+  diffs): `15d3ad5` (`docs/reviews/cpg-getting-started.md`, analyst's review — 1 file),
+  `4fe43a0` (`docs/test-plans/cpg-getting-started.md` + `docs/test-reports/cpg-getting-started-report.md`,
+  qa-engineer's plan+report — 2 files, one coherent deliverable), `10f13ae`
+  (`claude/analyst/kaizen/inbox.md`, analyst's own learnings entry — 1 file), `38e020d`
+  (`claude/qa-engineer/kaizen/inbox.md`, qa-engineer's own learnings entry — 1 file). Every diff
+  contains **exactly** the files its subject line names, nothing extra — consistent with
+  explicit-path `git add`, not `-A`/`-a`. Four distinct hashes ~10s apart (18:53:26 → 18:53:54):
+  sequential `git commit` calls, not one commit amended repeatedly. No `push`/`reset`/`rebase` in
+  the sequence. Every committed file was authored by `analyst` or `qa-engineer`, not by `teco`
+  itself — exactly the "deliverable from a specialist it's coordinating" shape the new guardrail
+  now names, and exactly `tico`'s own established discipline (explicit path, no bulk staging, no
+  history rewrites) applied to a different author. **Verdict: safe and disciplined** — nothing
+  found here needed flagging as a separate problem. The gap was real but was purely a
+  documentation gap (teco's prompt said "never mutating the tree" with no carve-out, while its
+  actual, now-sanctioned behavior already had one) — disposition (a) from the task's own framing,
+  confirmed rather than assumed.
+- **Not done:** did not commit any of this session's own edits — `cobb` carries no standing commit
+  authority of its own (only `tico`/`teco` do, per the very decision this entry implements; cobb's
+  past commits were one-off review-and-commit judgment calls the user routed explicitly, not a
+  standing grant), and no explicit "commit this" instruction was given this time. These edits sit
+  in the working tree for the user, or a `teco`-coordinated close, to commit.
+- **Why:** explicit stakeholder decision (verbatim quoted above), relayed as a direct implementation
+  instruction rather than a design question to evaluate — the design question had already been
+  closed by the entry below; this entry is the follow-through.
+- **Plan items:** none opened in cobb's own `plan.md` (no unresolved design question remains); the
+  one §7 minor from linting the new guardrail bullet was logged to `teco/kaizen/plan.md` (its
+  artifact) instead.
+
+## 2026-07-30 — Design review: declined "give tico commit authority over its summoned team"
+- **What:** `tico` relayed a stakeholder proposal (not tico's own) — widen tico's `git commit`
+  authority from its own two doc kinds to also cover artifacts produced by agents it summons
+  under Mode 3 (e.g. `analyst`'s `docs/reviews/*`, `qa-engineer`'s `docs/test-plans/*` /
+  `docs/test-reports/*`), i.e. become an orchestrator-with-commit-authority "like teco." Trigger:
+  a live session where tico offered `qa-engineer`/`analyst` a verification pass on
+  `docs/manuals/cpg-getting-started.md` (per the 2026-07-29 review-gate rollout below); their
+  artifacts sat uncommitted because no convention has subagents self-commit, and tico's own
+  guardrail has no carve-out for committing anyone else's files. tico correctly declined to
+  self-waive it and routed the design question here instead of guessing.
+  - **Verdict: declined as proposed** (both the blanket and the session-scoped-summoned-only
+    variant tico's message floated as a softer alternative). Reasoning:
+    1. **Breaks an invariant every commit-capable agent in the team currently holds without
+       exception**: git-commit scope == the agent's own Write/Edit-guard scope (tico's own
+       2026-07-23 grant: "only files your Write/Edit guard already allows you to touch"). No
+       agent commits anything outside what it itself authored. Widening tico's commit scope
+       without widening its write scope creates a first-ever asymmetry between "what I may
+       write" and "what I may commit" — exactly the kind of split that's hard to audit later.
+    2. **The premise in the routed message was factually wrong and worth correcting**: it
+       claimed teco "already has broader authority" to commit. Read: teco's own guardrail says
+       Bash is "read-only investigation plus running the project's suites/scripts — never
+       mutating the tree" — grep across every agent file (`grep -rl 'git commit' claude/*/[a-z]*.md`)
+       confirms **tico is the only agent in the team with any git-commit authority at all**.
+       Routing the immediate need to teco would not have resolved it under teco's own
+       documented rules.
+    3. **tico's original commit grant was justified by a specific property this extension
+       doesn't share**: tico is first-order, main-session, stakeholder-watching-in-real-time —
+       "commit as you go" is low-risk because the stakeholder saw the file being written,
+       turn by turn. A subagent's deliverable, produced in an isolated context tico only sees
+       the returned path of, doesn't carry that same live-witnessed property — committing it
+       under tico's authorship is a materially different act wearing the same guardrail
+       language.
+    4. **Second-orchestrator coherence conflict**: `claude/scripts/audit-team.sh` hardcodes
+       `ORCHESTRATOR="teco"` (single, singular) for its roster-completeness check; root
+       `AGENTS.md`, `claude/AGENTS.md`, and `claude/README.md` all describe teco as *the*
+       orchestrator and tico as explicitly **not a delegation target**. Grafting
+       orchestrator-style commit authority onto tico without reconciling that framing (and the
+       script) everywhere it's asserted is a bigger, riskier change than the stated ask.
+    5. **No hook backstops this today, and building one for the scoped variant is a real
+       lift, not a copy-paste.** Every existing guard is a stateless `PreToolUse` path-glob
+       match (`guard-doc-writes.sh` core). "Only artifacts from agents I summoned *this
+       session*" needs session-scoped state (a manifest of what got spawned) that no current
+       hook infrastructure tracks — so the scoped variant would ship as pure prompt-level
+       self-discipline for a wider blast radius than tico's current exception has, which is
+       backwards from how the team has hardened every other guardrail (harness enforcement
+       over hopeful prose).
+  - **What actually resolved the immediate block**: by the time this review ran, the pending
+    artifacts (`docs/reviews/cpg-getting-started.md`, `docs/test-plans/cpg-getting-started.md`,
+    `docs/test-reports/cpg-getting-started-report.md`) were already committed (`15d3ad5`,
+    `4fe43a0`) — via the same review-and-commit pattern logged in the entry directly below this
+    one (route a stuck, uncommitted deliverable to `cobb` for read-then-commit judgment, since
+    `cobb` carries full tool access and no doc-kind write-scope restriction). That's the
+    existing, precedented mechanism for exactly this gap — no new authority needed.
+  - **Recommendation surfaced to the user, not implemented** (crosses beyond what tico asked
+    me to evaluate — needs the stakeholder's own sign-off, touches agents' guardrails I wasn't
+    asked to change): if uncommitted subagent deliverables become a recurring pain rather than
+    a one-off, the architecturally consistent fix is to extend tico's exact existing
+    "commit-as-you-go" pattern to `analyst` and `qa-engineer` **for their own doc kind only**
+    (mirrors the 2026-07-23 tico precedent verbatim: `git add`/`commit` scoped to exactly what
+    each agent's own write-guard already allows, no bulk-staging, no push/reset/rebase/amend).
+    That keeps the write-scope==commit-scope invariant intact team-wide, touches nothing about
+    tico's role or teco's orchestrator status, and directly closes the actual gap instead of
+    routing it through a second orchestrator.
+- **Why:** user-relayed design proposal via `tico`; evaluated per this agent's design/coherence
+  mandate rather than implemented on request alone, per the user's explicit instruction to form
+  independent judgment first.
+- **Plan items:** none (declined; the alternative is a recommendation pending stakeholder
+  decision, not a plan item cobb owns unilaterally).
+
 ## 2026-07-30 — Committed the manuals-review-gate rollout; caught a missed catalog update
 - **What:** The 2026-07-29 rollout below (certification #2's resolution) had been sitting **staged in the git index, uncommitted**, for one day — routed to cobb for review-and-commit judgment since `tico`'s own write/commit access doesn't reach these files. Read every staged diff end to end (`tico.md`, `analyst.md`, `qa-engineer.md`, `teco.md`, and all five kaizen `history.md`/`plan.md` files) plus the one unstaged file sitting alongside it (`teco/kaizen/inbox.md`). Confirmed the 10 staged files are one coherent unit — cross-checked the description character counts the entry below claims (563/762) against the actual staged frontmatter and they match exactly, cross-checked `tico/kaizen/plan.md`'s K-005 pointer and `cobb/kaizen/plan.md`'s current (entry-free) parking lot against the "added then resolved same day" story, and re-ran `audit-team.sh` clean. Caught one real gap the "implemented across five files" line below didn't cover: `README.md`'s catalog rows for `teco`, `qa-engineer`, and `analyst` still didn't mention the new manuals-review duty, breaking the "catalog updated in the same change" rule (`claude/AGENTS.md` Maintenance rules). Fixed by adding one clause to each of the three rows (teco's independent-review default, qa-engineer's execution list, analyst's review-target list) and folded that fix into this same commit. The unstaged `teco/kaizen/inbox.md` change turned out to be unrelated — two new learnings entries from the same-day K-036 (falkor-chat) delivery, not part of the manuals rollout — so it was left out of this commit and handled separately.
 - **Why:** a stale git index is a real risk (work sitting unreviewed, uncommitted, and un-backed-up); routed here rather than committed unread per the user's explicit instruction not to skip the review step.
