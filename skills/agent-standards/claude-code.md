@@ -324,6 +324,18 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
 
 ### Lifecycle
 
+- **A newly-wired `.mcp.json` server materializes only at the *next* session
+  start — not live, within the session that wrote/approved it.** `claude mcp
+  list` can report a server `✔ Connected` while the current session still has
+  no matching tool, because Claude Code reads `.mcp.json` once, at startup.
+  Treat a dependent unit's done-condition as *"first act of the next
+  session"*, not a same-session resumable action. Subagents inherit MCP tools
+  from the parent session's state, so this gates every delegate's access too.
+  Verified 2026-07-25 (graphmind-ai-lab, cpg-query-access delivery: the
+  delivering session wrote `.mcp.json` and had `claude mcp list` show
+  Connected, but no `mcp__cpg__query` tool existed in that session; the
+  following session started with the server's `instructions` in the system
+  prompt and the tool present, no user action needed).
 - **Stdio servers are local processes and are NOT auto-reconnected** if they die
   mid-session. HTTP/SSE reconnect with exponential backoff (five attempts), and
   retry a failed initial connection three times on transient errors. Recovery for
