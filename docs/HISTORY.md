@@ -5,6 +5,20 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-07-30 — CPG getting-started manual, reviewed and behavior-verified (doc-only)
+
+New `docs/manuals/cpg-getting-started.md` — the component's first end-user-facing manual,
+walking a reader through readiness checks, the read-only `mcp__cpg__query` tool, and routing
+CPG-build requests to `graph-dba` — authored by `tico` (commit `814c954`). Independently
+reviewed by `analyst` for factual/architectural accuracy (`docs/reviews/cpg-getting-started.md`,
+**approve with suggestions**, no blocker; commit `15d3ad5`) and behavior-verified by `qa-engineer`
+by driving the manual's walkthroughs against the running tool
+(`docs/test-plans/cpg-getting-started.md` / `docs/test-reports/cpg-getting-started-report.md`,
+commit `4fe43a0`) — 1 real defect found: **DEF-001**, the manual's claim that "the underlying
+count is always the true one" is false above FalkorDB's 10,000-row `RESULTSET_SIZE` default cap.
+DEF-001's wording was folded back into the manual the same day (commit `27ec883`). **Doc-only —
+no source, test, script or container touched.**
+
 ## 2026-07-27 — Documentation reference & naming convention adopted (C-322, doc-only)
 
 The repo carried **two silently competing anchoring conventions** for citing a document, and no
