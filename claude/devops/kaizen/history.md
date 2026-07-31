@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-07-31 — Boundary note: `tico` may hand off demo-environment lifecycle requests
+- **What:** Added one bullet to Boundaries & handoffs: `tico` (stakeholder-facing, all three of its modes) may hand devops a demo-environment bring-up/cleanup request mid-conversation — a stakeholder wants to see a feature live or verify a manual's walkthrough. Framed explicitly as a plain lifecycle op: orient, boot/tear down what's asked, non-destructive by default, this agent's existing destructive-ops gate (hook + prompt-level judgment) applies exactly as it would to any other caller. No new capability, no frontmatter/tool/hook change — devops already does exactly this kind of work; the only thing new is who else may ask for it.
+- **Why:** Reciprocal to the same-day `tico` change (`claude/tico/kaizen/history.md`, 2026-07-31): tico can now offer a live demo and delegates the actual bring-up/cleanup to devops via `Agent`. devops's own prompt needed the matching boundary note so the handoff isn't one-sided — tico owns *what* gets shown, devops owns *whether the environment is up*, and devops doesn't take instructions from tico about what to explain or document (the reverse boundary, made explicit).
+- **Plan items:** none new here — the e2e verification is tracked on tico's side (K-006, `claude/tico/kaizen/plan.md`), since tico is the one initiating the delegation.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.

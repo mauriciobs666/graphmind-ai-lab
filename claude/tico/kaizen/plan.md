@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-29
+> Last reviewed: 2026-07-31
 
 ## Active
 
@@ -13,6 +13,7 @@
 | K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind (architect-owned doc) |
+| K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
 
 ### K-001 — Live e2e spin (first-order)
 - **Status:** 🔵 proposed
@@ -46,6 +47,13 @@
 - **Rationale:** root `AGENTS.md` was extended directly with the new `manuals/` kind (needed immediately for tico's new capability), but the formal, heavily-reviewed spec at `docs/plans/doc-reference-convention.md` (Owner: `architect`, Status: active, Tracks: C-322) still doesn't mention it. That document is architect's, not cobb's, to extend with a proper versioned changelog entry.
 - **Proposed change:** an `architect` pass adding a `manuals/` mention to the convention plan (changelog entry, any affected checks/tables) — purely additive, doesn't reopen any existing ruling (D1/D4/D6 etc.).
 - **Notes:** not blocking — root `AGENTS.md` is what's actually enforced/read every session; this is closing the paper trail, not fixing a behavior gap.
+
+### K-006 — Live e2e spin of the demo-environment delegation
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Rationale:** the demo-environment offer (2026-07-31) is unexercised — same validate-by-running discipline as K-001/K-004, which only cover the interview and Modes 2/3's own writing. This one crosses an agent boundary (tico → devops), so it has its own failure surface: does the offer actually surface at the right moment, does the `Agent` brief carry enough for devops to orient without back-and-forth, and — the discipline most worth watching — does tico actually stop and ask before requesting teardown rather than assuming a good moment.
+- **Proposed change:** in a real `claude --agent tico` session (Mode 2 or 3, over a component devops can plausibly boot, e.g. `falkor-chat/`), let the stakeholder accept a demo offer; verify devops comes back with the environment actually up (real command output, not a claimed green) and tico correctly attributes what's running to devops's work. Then verify the teardown path: tico asks before tearing down, waits for a yes, and only then delegates cleanup — never auto-triggers it on topic change or session end.
+- **Notes:** run independently of K-001/K-004; a different mode and a different agent boundary than either.
 
 ## Parking lot / ideas
 - **Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition):** clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.
