@@ -5,6 +5,69 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-31 — Cleanup: RCA + QA live-repro test artifacts removed from `ws:acme` demo data
+
+**What:** Removed the live test artifacts two rounds of K-039 reproduction/acceptance testing left
+in the demo workspace `ws:acme`, per stakeholder request ("clean up the demo test artifacts").
+Both authors had disclosed their artifacts rather than silently leaving them
+(`docs/reviews/mention-reply-delivery-rca.md` §2, `docs/test-reports/mention-reply-delivery-report.md`
+"Artifacts left in the live demo"). Full live inventory taken before any delete (edge-by-edge,
+mirroring the 2026-07-30 K-037 follow-up's methodology below):
+
+1. **`analyst`'s RCA repro**, spliced out of the pre-existing `demo-welcome` thread (22 other
+   messages untouched): message `ae8719305b5d4f3bb580b7e4c6d05253` ("analyst-rca-live-repro: what
+   is 2+2?") plus the `WorkflowRun` it triggered (`00d95a27ac2a4dc8b74a86ed117b5c95`, `triage@v1`,
+   3 `StepRun`s — `intake`/`research`/`answer` — none of which had produced a `Message`, matching
+   the RCA's own root-cause finding). The message was the thread's `TAIL`; deleted and relinked
+   `TAIL` to the prior message (`07b9e0da006c4893893a150ef27adcc1`) in the same atomic query — no
+   `NEXT`-chain gap left behind.
+2. **`qa-engineer`'s acceptance pass**, two whole threads under `demo-general` (both created by
+   that pass, confirmed via full message-chain walk — nothing pre-existing in either):
+   - `4c7eb4368bee4b12a1ea85b4dc18d300` ("qa-mention-reply-delivery"): 13 messages, 3
+     `WorkflowRun`s (`ae7b7a4a36754b63a30852bb9e43a7ce`, `58a3933a581f4fd6950fae10879ea641`,
+     `9265582e1b8f4c5c994f9a2eb3c71908`), 11 `StepRun`s (the third run resumed twice — 3×`intake`
+     + `research` + `answer`), all `PRODUCED` messages included.
+   - `b9984e3097c04aacb51f552970036768` ("qa-mention-reply-delivery-clean"): 1 plain message, no
+     workflow run.
+   Both `Thread` nodes deleted along with their content; **`demo-general` channel itself kept** —
+   it is the pre-existing demo channel (it also hosts `demo-welcome`), not something QA created,
+   so only its two QA-added threads were removed, not the channel.
+
+**Safety checks (before deleting):** full undirected edge inventory on every message/run/step-run
+in scope confirmed the only edges touching them were within-scope (`NEXT`/`HEAD`/`TAIL`/
+`TRIGGERED_BY`/`HAS_STEP_RUN`/`LAST_STEP_RUN`/`PRODUCED`/`OF_DEF`) or into shared, never-deleted
+nodes (`User`/`Agent` identity nodes via `POSTED_BY`/`MENTIONS_MEMBER`, and the `triage@v1` def's
+shared `Step` nodes via `RAN`) — no `AT_STEP` edge from any other run pointed at these step-runs,
+and no unrelated thread/message referenced any of this content. The RCA's own separately-noted
+historical corroborating runs (`6dea1ba3c5d543cebf5f5a578ad07073` and the other pre-existing
+`demo-welcome` mentions that happened to exhibit the same bug, not created by the repro itself)
+were explicitly left untouched — out of scope for this cleanup.
+
+**Verified — before/after counts:**
+- `ws:acme` overall: **131 nodes / 353 relationships → 96 nodes / 256 relationships** (35 nodes /
+  97 relationships removed, exactly matching the three delete queries' own reported counts: 5/15 +
+  28/79 + 2/4).
+- `demo-welcome`: **23 → 22 messages**; `HEAD` unchanged (`c00eb063af094bce93bf565a5fdf1860`);
+  `TAIL` moved `ae8719...` → `07b9e0da006c4893893a150ef27adcc1`.
+- `demo-general` channel: **3 → 1 thread** (only `demo-welcome` remains).
+- All target msgIds/threadIds/runIds confirmed at **count 0** after.
+- `./scripts/verify_workflows.sh acme`: **FAIL** — unchanged from the pre-existing, already-flagged
+  state (`reference` MISSING both `triage@v1`/`access-request@v1`, `ws:acme` snapshot present
+  both) documented in the RCA/QA report and tracked separately; this cleanup introduced **no new**
+  drift (identical MISSING/present signature before and after).
+
+**Why:** Stakeholder-requested demo-data cleanup, explicitly authorized for this dev environment.
+Done with the same surgical rigor as the 2026-07-30 K-037 follow-up: full inventory before delete,
+safety checks that nothing live still references what's removed, one atomic parameterized
+`DETACH DELETE` per logical unit (IDs passed via `CYPHER` parameters, never string-interpolated),
+before/after counts recorded as evidence, not asserted.
+
+**Out of scope, untouched:** the pre-existing `reference`/`ws:acme` workflow-def drift (separately
+tracked, already flagged to the user); the RCA's historical corroborating runs in `demo-welcome`
+unrelated to its own repro; all of `demo-welcome`'s and `demo-general`'s other content.
+
+Files touched: `falkor-chat/docs/HISTORY.md`.
+
 ## 2026-07-31 — K-039 immediate mitigation: implicit `post_message` fallback when a granted tool goes uncalled
 
 **What:** Fixed the demo-blocking bug root-caused live in
