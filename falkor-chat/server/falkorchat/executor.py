@@ -49,6 +49,7 @@ from typing import Any, Protocol
 
 from .config import CallContext
 from .guards import CMP_KINDS, GuardVerdict, evaluate_guard, render_label
+from .llm import ToolCall
 from .repository import Repository, WorkflowRunNotFoundError
 from .services import InvalidSearchQueryError, ServiceError, UnknownMemberError
 from .tools import HumanHandoffSignal
@@ -587,6 +588,37 @@ class WorkflowExecutor:
                 last_text = result.text
 
             if not result.is_tool_call:
+                if "post_message" in granted_set and result.text and not emissions:
+                    # K-039 / mention-reply-delivery RCA #1 (immediate mitigation): the
+                    # node was granted post_message but the turn ended without calling
+                    # it — either plain prose, or a "recovery" after an earlier call's
+                    # args were rejected (both funnel through this same branch). Treat
+                    # "granted but not called" as an implicit call rather than a silent
+                    # discard: dispatch it via the same validated path a real call would
+                    # take (AC-6 checks are moot here since the tool is already granted,
+                    # but reusing `_handle_tool_call` also traces + buffers the emission
+                    # for the normal post-record PRODUCED link). A dispatch failure is
+                    # absorbed the same way a real one would be (re-prompting is moot —
+                    # this is the node's last turn — so the node still ends gracefully
+                    # with its original text, just without a posted message).
+                    #
+                    # `not emissions` guards against a double-post: if the node already
+                    # posted successfully on an earlier turn in this same loop (emissions
+                    # is non-empty), a later plain-text turn is the model narrating that
+                    # it's done, not a second answer to deliver.
+                    implicit_call = ToolCall(
+                        id="implicit_post_message", name="post_message",
+                        arguments={"text": result.text},
+                    )
+                    trace.append((
+                        "node_note",
+                        "model ended without calling granted post_message; dispatching "
+                        "it implicitly as a fallback (K-039)",
+                    ))
+                    self._handle_tool_call(
+                        implicit_call, granted_set, required_by, ctx, run, trace,
+                        emissions,
+                    )
                 return StepResult(output=result.text or "", on="done",
                                   trace=trace, emissions=emissions,
                                   thread=thread_msgs)

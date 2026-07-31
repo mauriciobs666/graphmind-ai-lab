@@ -5,6 +5,66 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-31 — K-039 immediate mitigation: implicit `post_message` fallback when a granted tool goes uncalled
+
+**What:** Fixed the demo-blocking bug root-caused live in
+`docs/reviews/mention-reply-delivery-rca.md`: `@mention`-ing the demo assistant ran `triage@v1` to
+`status: done` while posting **zero** chat messages, because the local chat model
+(`qwen/qwen3-4b-2507` via LM Studio) routinely ends an `agent` node's turn with plain text instead
+of calling its granted `post_message` tool, and `executor.py`'s `_run_agent_node` treated that as a
+normal, successful termination — the text was returned as `StepResult.output` and silently
+discarded (no `Message` node, no `PRODUCED` edge). This lands the RCA's suggestion-1 "immediate,
+demo-scoped mitigation" only; the full engine-level "terminal-node-must-post" contract (K-027 item
+2) is unaffected and stays open.
+
+**Fix (`server/falkorchat/executor.py`, `_run_agent_node`):** in the non-tool-call branch (`not
+result.is_tool_call`), when the node's granted tools include `post_message`, `result.text` is
+non-empty, and the node has not already posted a message earlier in the same loop
+(`not emissions` — guards against double-posting after a real explicit call followed by a plain
+"done" narration turn), the executor now synthesizes an implicit `ToolCall("post_message", …)` and
+dispatches it through the existing `_handle_tool_call` path — the same validation, tracing, and
+emission-buffering a real model-initiated call gets, so a successful implicit post still flows
+through the normal post-record `StepRun -[:PRODUCED]-> Message` linking
+(`_link_emissions`/`_record`). Covers both failure shapes the RCA identified: plain prose with no
+tool-call shape at all, and a call whose `mentions` argument gets rejected (a leaked display name)
+followed by the model "recovering" by dropping the tool on a later turn — both funnel through the
+same branch, so one fix location covers both. A dispatch failure on the implicit call is absorbed
+exactly like a real one (logged, traced, run still completes) since there is no further turn left
+to re-prompt.
+
+**Verification (test-first, TDD):**
+- Reproduction tests added first and confirmed RED for the right reason (no dispatch, no
+  emissions) before the fix:
+  - `server/tests/test_executor_agent.py`:
+    `test_plain_text_with_granted_post_message_is_posted_as_implicit_fallback` (primary repro —
+    plain prose, tool never called),
+    `test_recovery_after_mention_rejection_still_posts_via_implicit_fallback` (second shape —
+    rejected call, then a "recovered" plain-text turn),
+    `test_no_implicit_post_when_post_message_not_granted` and
+    `test_no_implicit_post_when_final_text_is_empty` (negative guards).
+  - `server/tests/test_executor_produced.py`:
+    `test_implicit_post_when_tool_not_called_still_creates_produced_edge_live` — the full
+    integrated path (real `Services` + real `ToolRegistry`/`PostMessageTool`, live `ws:test`
+    graph): asserts a real `Message` node and `StepRun -[:PRODUCED]-> Message` edge now exist,
+    mirroring the RCA's live repro exactly.
+- All five now pass after the fix; the pre-existing suite (including
+  `test_hallucinated_mention_does_not_fail_the_run` and
+  `test_agent_node_captures_posted_msg_ids_as_emissions`, both of which exercise adjacent branches
+  of this same code) remains green.
+- Full offline suite: **642 passed, 1 deselected → 647 passed, 1 deselected** (the 5 new tests; the
+  1 deselected is the known `@pytest.mark.live` characterization test, unaffected, still tracked
+  under K-027/D12-B — not in scope here).
+- `_drive_loop` byte-identity SHA-lock (`docs/DESIGN.md` §6.2 / project invariant) reconfirmed
+  unchanged before and after: `71055f756280` both times — the fix lives entirely in
+  `_run_agent_node`, below the `# ── seams ──` marker, never touching the locked loop.
+
+**Left alone, by design (per the RCA's own scope split):** the general engine-level
+"terminal-node-must-post" contract (K-027 item 2, `architect`-owned), promoting `pytest -m live`
+into the default run (RCA §5 item 2), and the two residual test artifacts the RCA's own live repro
+left in `ws:acme` (`msgId ae8719305b5d4f3bb580b7e4c6d05253`, `runId
+00d95a27ac2a4dc8b74a86ed117b5c95`) — untouched, that decision belongs to whoever owns `ws:acme`'s
+demo data.
+
 ## 2026-07-30 — K-037 follow-up: surgical cleanup of `ws:acme`'s contaminated `access-request@v1` snapshot
 
 **What:** Removed the 3 spurious `Step` nodes the historical K-037 env-var-collision bug had

@@ -1117,6 +1117,75 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   always wins regardless of resolution order (m6); an injected-clock or mocked-response test
   simulating an external round-trip between two ticks, asserting the panel still rebuilds (m7).
 
+### K-039 — `@mention`→`triage@v1` runs complete `done` while posting zero chat replies, demo-blocking (🟡 in-progress — immediate mitigation ✅ delivered 2026-07-31 → HISTORY.md; the CI blind-spot follow-up (item 3) and the full K-027 item 2 engine contract stay open; RCA `docs/reviews/mention-reply-delivery-rca.md`, 2026-07-30)
+
+> **Why it exists.** User report: `@mention`-ing the demo assistant visibly runs a workflow to
+> completion (run/step panel shows it) and LM Studio confirms the LLM responded, but nothing is
+> ever posted to the chat thread. Root-caused live (RCA above): the trigger correctly routes every
+> `@mention` to start `triage@v1` (`config.WORKFLOW_ENABLED=1`, no `FALKORCHAT_TRIGGER_DEF_KEY`
+> override in effect — K-037 is **not** implicated), the executor drives all three `agent` steps
+> to completion, and on the currently-configured local chat model
+> (`qwen/qwen3-4b-2507` via LM Studio) **every step in a fresh, controlled repro** ended by
+> emitting plain text instead of calling its granted `post_message` tool — so no `Message` node
+> and no `PRODUCED` edge is ever created. The run reports `status: done`; nothing about it looks
+> broken from the engine's or the UI's point of view. Bisected per the RCA's own (a)/(b)/(c)
+> framing to **(a) — the write path**: confirmed no `Message` is created at all (`GET
+> /threads/{id}/messages` returns `[]`, direct Cypher against `ws:acme` finds zero new nodes) —
+> not a read-path filter and not a `web/app.js` rendering bug (`pollMessages()`/`refreshRunPanel()`
+> are separate, independently-correct fetch loops; both are faithfully reporting real, distinct
+> backend state).
+> **Not a new defect class** — this is the live, currently-blocking confirmation of the
+> already-tracked **"Defect C" / K-027 item 2** ("Terminal-node-must-post engine contract... does
+> not hold on a 4B"). This item exists alongside K-027 because K-027 is a broad, multi-part
+> reliability epic (judge calibration, golden-set expansion, model re-probing) that is not
+> demo-blocking on its own timeline; K-039 exists to carry the specific, narrow, urgent finding
+> ("today, on this box, with this model, the triage workflow essentially never posts a reply — not
+> a rare flake") with its own live-repro evidence, so it does not have to wait on K-027's full
+> scope to get picked up.
+- **Owner:** `tdd-engineer` (executor-level fallback fix, test-first — reproduction test is a
+  direct port of this RCA's live repro) for the immediate mitigation; the full "terminal-node-must-
+  post" engine contract (K-027 item 2) remains `architect`-designed, `coder`/`tdd-engineer`-built.
+- **Scope:**
+  1. ✅ **delivered 2026-07-31** — **Immediate mitigation (this item's primary scope):** in
+     `server/falkorchat/executor.py`'s `_run_agent_node`, when a node's granted tools include
+     `post_message` and the agent loop ends via the non-tool-call branch (`not
+     result.is_tool_call`) with non-empty `result.text` and no message already posted this loop
+     (`not emissions` — avoids double-posting after a real call followed by a plain "done"
+     narration turn), the executor now dispatches `post_message` with that text as an implicit
+     fallback call (via the existing `_handle_tool_call` path, so tracing/emission-buffering/
+     PRODUCED-linking are unchanged) instead of silently discarding it into `StepResult.output`.
+     Covers both observed failure shapes: plain prose with no call shape at all, and a call whose
+     `mentions` argument gets rejected (leaked display name) causing the model to "recover" by
+     dropping the tool. Test-first (`tdd-engineer`); see
+     [`HISTORY.md`](./HISTORY.md), 2026-07-31 entry for the full test list and suite counts
+     (642 → 647 passed, 1 deselected unchanged). The `_drive_loop` byte-identity SHA-lock
+     (`71055f756280`) was reconfirmed unchanged — the fix touches only `_run_agent_node`, below the
+     `# ── seams ──` marker.
+  2. **Do not fold this into the full K-027 item 2 engine contract** — that item is broader
+     (any "must-communicate" node type, not just `post_message`-granted `agent` nodes) and
+     `architect`-owned; this item's scope is the narrow, immediately-shippable fallback.
+  3. **CI blind-spot follow-up (secondary, may be split out further):** the RCA notes
+     `pytest -m live`'s AC-4 answer-post assertion is known-RED but excluded from the default
+     `pytest -q` run, so a green baseline currently gives false confidence about this exact path.
+     Consider a reachability-gated live check in the default loop, or a readiness-banner signal
+     (`docs/BACKLOG.md` K-036's `/workspaces/{ws}/readiness` route) reporting recent triage-run
+     post-success rate.
+- **Done-condition:** a fresh `@mention` against `triage@v1` on the live demo, replayed with the
+  same fake-LLM-stub-returns-plain-text shape as this RCA's live repro, results in a `Message`
+  `PRODUCED` by the relevant `StepRun` and readable via `GET /threads/{id}/messages` — not just a
+  `StepRun.output` string. The existing `pytest -m live` AC-4 assertion (`test_workflow_live.py`)
+  should also flip from its documented deterministic-RED to green, or its known-limitation note
+  should be corrected if it tests something subtly different from this fallback's guarantee.
+- **Risks/RAM:** none — no schema/index change; the fallback dispatch reuses the existing
+  `post_message` tool path (`tools.py`) the model would otherwise have called, so provenance
+  (`PRODUCED`, `EMITTED`) stays identical in shape to a model-initiated call.
+- **Test strategy:** test-first (`tdd-engineer`). A fake-LLM stub that returns plain text for a
+  node granted `post_message` (mirroring this RCA's live repro exactly) should assert a `Message`
+  now exists with a `PRODUCED` edge; a second stub returning a call with a leaked-display-name
+  `mentions` value should assert the fallback still recovers a posted reply. Full offline suite
+  (`server/tests/test_process_flow.py`-style, no network) plus the existing `pytest -m live`
+  AC-4 assertion re-checked once LM Studio is available.
+
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
 > QA-accepted** (HISTORY.md). Baselines: pytest 156 / query suite 149/149.

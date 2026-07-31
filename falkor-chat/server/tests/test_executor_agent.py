@@ -503,3 +503,107 @@ def test_a_node_with_no_thread_context_carries_an_empty_window():
     result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
 
     assert result.thread == []
+
+
+# ── K-039 / mention-reply-delivery RCA #1 — implicit post_message fallback ────
+#
+# A node granted `post_message` that ends its turn via the non-tool-call branch (plain
+# prose, or a "recovery" after an earlier call was rejected) must not have that text
+# silently discarded — the executor dispatches `post_message` with it as a fallback
+# (an implicit call, not a silent no-op).
+
+POST_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "post_message",
+        "parameters": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        },
+    },
+}
+
+
+def test_plain_text_with_granted_post_message_is_posted_as_implicit_fallback():
+    # The RCA's primary failure shape: the model never calls its granted post_message
+    # tool at all, just writes prose. Before the fix this text is returned as
+    # `StepResult.output` and discarded — no dispatch, no emission.
+    llm = StubChatLLM([ChatResult(text="2 + 2 equals 4.")])
+    reg = StubRegistry(
+        {"post_message": POST_SCHEMA},
+        results={"post_message": '{"posted": "m99", "threadId": "t1"}'},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert reg.dispatched == [("post_message", {"text": "2 + 2 equals 4."})]
+    assert result.emissions == ["m99"]
+    assert result.output == "2 + 2 equals 4."
+
+
+def test_recovery_after_mention_rejection_still_posts_via_implicit_fallback():
+    # The RCA's second failure shape: turn 1's post_message call is rejected (a
+    # hallucinated `mentions` arg), the model "recovers" on turn 2 by dropping the tool
+    # call and just writing plain text — that funnels through the SAME non-tool-call
+    # branch, so the same fix must cover it.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "post_message", {"text": "hi", "mentions": ["alice"]})]),
+        ChatResult(text="here is your answer, no mention"),
+    ])
+
+    class _RecoveringRegistry:
+        """`post_message` rejects a call carrying `mentions`, succeeds without it —
+        mirroring the real §4 write rejecting a hallucinated displayName mention."""
+
+        def __init__(self):
+            self.dispatched: list[tuple[str, dict]] = []
+
+        def schema(self, name):
+            return POST_SCHEMA
+
+        def dispatch(self, name, arguments, *, ctx, run):
+            self.dispatched.append((name, arguments))
+            if "mentions" in arguments:
+                raise UnknownMemberError(["alice"])
+            return '{"posted": "m7", "threadId": "t1"}'
+
+    reg = _RecoveringRegistry()
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert reg.dispatched == [
+        ("post_message", {"text": "hi", "mentions": ["alice"]}),
+        ("post_message", {"text": "here is your answer, no mention"}),
+    ]
+    assert result.emissions == ["m7"]
+
+
+def test_no_implicit_post_when_post_message_not_granted():
+    # A node that was never granted post_message must never have one dispatched on its
+    # behalf — the fallback is scoped strictly to nodes that already hold the tool.
+    llm = StubChatLLM([ChatResult(text="grounded answer")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert reg.dispatched == []
+    assert result.emissions == []
+    assert result.output == "grounded answer"
+
+
+def test_no_implicit_post_when_final_text_is_empty():
+    # An empty final text has nothing to post — the fallback must not dispatch a blank
+    # message.
+    llm = StubChatLLM([ChatResult(text="")])
+    reg = StubRegistry({"post_message": POST_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert reg.dispatched == []
+    assert result.emissions == []

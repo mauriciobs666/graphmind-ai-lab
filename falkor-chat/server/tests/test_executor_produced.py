@@ -98,6 +98,63 @@ def test_integrated_agent_node_post_creates_produced_edge_live(wf_repo, conn):
     assert n == 1
 
 
+class PlainTextAnswerLLM:
+    """intake → final text (advance); answer → plain text, `post_message` NEVER called
+    (the K-039 / mention-reply-delivery bug shape, live-reproduced with the real
+    `qwen/qwen3-4b-2507`): the model was granted the tool and simply doesn't call it."""
+
+    def __init__(self):
+        self._turns = [
+            ChatResult(text="ready"),                # intake: no tool → advance
+            ChatResult(text="here is your answer"),  # answer: plain text, no tool call
+        ]
+
+    def chat(self, messages, tools):
+        return self._turns.pop(0) if self._turns else ChatResult(text="(spent)")
+
+
+def _executor_with_llm(repo, services, llm):
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(2000)
+    registry = ToolRegistry([PostMessageTool(services, agent_id="assistant")])
+    return WorkflowExecutor(
+        services, repo, llm=llm, tool_registry=registry,
+        guard_judge=None, id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+
+def test_implicit_post_when_tool_not_called_still_creates_produced_edge_live(wf_repo, conn):
+    # K-039 immediate mitigation: a node granted post_message that ends its turn on
+    # plain text (never dispatching the tool) must still result in a real posted
+    # Message + PRODUCED edge — not a silently discarded StepRun.output, which is
+    # exactly the live-reproduced demo-blocking bug (mention-reply-delivery-rca.md §2).
+    _seed(wf_repo)
+    services = Services(
+        wf_repo,
+        clock=(lambda c=itertools.count(500): next(c)),
+        id_gen=(lambda c=itertools.count(1): f"m{next(c)}"),
+    )
+    ex = _executor_with_llm(wf_repo, services, PlainTextAnswerLLM())
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    graph = db.workspace_graph(conn, WS)
+    res = graph.query(
+        "MATCH (r:WorkflowRun {runId: 'r1'})-[:HAS_STEP_RUN]->(sr:StepRun) "
+        "MATCH (sr)-[:PRODUCED]->(m:Message) "
+        "RETURN sr.stepKey AS stepKey, m.text AS text, count(*) AS n"
+    )
+    assert res.result_set, (
+        "no PRODUCED edge was created — the model's plain-text reply was silently "
+        "discarded (the exact live-reproduced K-039 failure)"
+    )
+    step_key, text, n = res.result_set[0]
+    assert step_key == "answer"
+    assert text == "here is your answer"
+    assert n == 1
+
+
 def test_link_gap_does_not_fail_run(wf_repo, conn, caplog):
     # A missing endpoint (link returns None) is a diagnosable gap logged, never fatal:
     # the run still completes. Simulate by making link_step_emission always miss.
