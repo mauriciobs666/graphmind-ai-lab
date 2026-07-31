@@ -172,6 +172,21 @@ the always-loaded project memory (`CLAUDE.md`).
 - The **harness** runs them, not the model — this is how you enforce
   deterministic "always do X" behavior. Prefer a hook over hopeful prompt text
   whenever the requirement is "must always happen."
+- **A distinct layer: auto mode's built-in Bash safety classifier.** Separate
+  from any project's `PreToolUse` hooks — it's a product-level check, not
+  something a repo's `guard-*.sh` scripts can see or special-case. Observed
+  (graphmind-ai-lab, `analyst` agent, 2026-07-31 — not independently
+  re-verified against official docs, so treat as a data point, not a spec): it
+  hard-blocks a `git stash push` targeting a tracked path outright ("Blocked by
+  classifier … modify the working tree"), including `--keep-index`, with no
+  carve-out for a fully reversible operation. Consequence for anyone designing
+  a review/verification workflow: don't build a repo mechanism that tries to
+  pattern-match "safe" instances of a blocked command back open (that
+  re-implements a safety classifier with less rigor than the one already
+  there); instead prefer a substitute that needs **no working-tree write at
+  all** (e.g., copy the tree to a scratch dir and reverse-apply the diff there)
+  — a strictly stronger isolation property than the blocked command, not a
+  lower-visibility route to its effect.
 
 ## MCP
 

@@ -147,3 +147,24 @@
 - **Suggested home:** prompt (a general fixture-design check: a fixture that wipes/mutates
   **shared/global** state to isolate itself from prior tests should also tear that state down,
   or the last test's leftovers get mistaken for real seeded state by whatever runs next)
+
+## 2026-07-31 — A "have you already produced X" idempotency guard can often reuse an existing output-accumulator list instead of a new flag
+
+- **Evidence:** `falkor-chat/server/falkorchat/executor.py`'s `_run_agent_node` buffers posted
+  msgIds onto a per-node-loop `emissions: list[str]` (via `_buffer_emission`, only appended on a
+  successful `post_message` dispatch). Implementing K-039's "implicit post_message fallback when
+  the model ends on plain text without calling its granted tool" naively as
+  `if "post_message" in granted_set and result.text:` double-posted: a node that explicitly called
+  `post_message` successfully on an earlier turn and then ended a *later* turn with a plain "done"
+  narration (a normal, common shape — confirmed by the pre-existing
+  `test_agent_node_captures_posted_msg_ids_as_emissions` regressing) got a *second*,
+  implicit post of "done". The fix was `and not emissions` — `emissions` already means "has this
+  node posted a message yet in this loop," so no new flag/counter was needed; reusing the
+  accumulator that already exists for a different purpose (post-record `PRODUCED` linking) gave
+  the idempotency check for free. Running the pre-existing suite after adding new code (not just
+  the new tests) is what caught this — the new tests alone were all green.
+- **Context:** K-039 immediate mitigation (`docs/reviews/mention-reply-delivery-rca.md`
+  suggestion 1) — a bug-fix TDD unit in `falkor-chat/server`.
+- **Suggested home:** prompt (a general TDD-loop reminder: after a fix, run the *whole* existing
+  suite, not just the new reproduction tests — an idempotency/double-fire bug in a fallback path
+  is exactly the kind of thing only an *adjacent, unrelated-looking* pre-existing test catches).
