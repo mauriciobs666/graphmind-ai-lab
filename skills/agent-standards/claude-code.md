@@ -40,6 +40,15 @@
   - `tools` — allowlist (omit to inherit all). · `disallowedTools` — denylist.
   - `permissionMode` — `default` | `acceptEdits` | `auto` | `dontAsk` |
     `bypassPermissions` | `plan`.
+    ⚠️ **`acceptEdits` is scoped to the working directory + `additionalDirectories`,
+    not global** (verified 2026-08-01 against `code.claude.com/docs/en/permissions`):
+    "Automatically accepts file edits … for paths in the working directory or
+    `additionalDirectories`." A Write/Edit outside that boundary — e.g. an agent's
+    own `$HOME/.claude/agents/<name>/kaizen/*.md`, which sits outside the project
+    repo the session was launched in — still prompts for approval every time,
+    regardless of `permissionMode: acceptEdits`. This is why an agent whose kaizen
+    learning-capture instruction tells it to write to its own inbox file still asks
+    for permission on that write even though it never asks for edits inside the repo.
   - `skills` — **preload** skills: the *full skill content* is injected at
     startup (not just the description). The subagent can still invoke *unlisted*
     project/user/plugin skills via the Skill tool.

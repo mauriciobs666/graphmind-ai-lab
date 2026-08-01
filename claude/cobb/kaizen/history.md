@@ -595,6 +595,12 @@
 - **Why:** User flagged that a committed baseline exposed the username via an absolute path; reports must use relative paths so baselines are safe to commit to a shared repo.
 - **Plan items:** —
 
+## 2026-08-01 — Documented `acceptEdits` scope boundary (working dir + `additionalDirectories` only)
+
+- **What:** Answered a user question about why `tdd-engineer` (`permissionMode: acceptEdits`) still prompts for approval when writing to its own kaizen learnings inbox at `$HOME/.claude/agents/tdd-engineer/kaizen/inbox.md`. WebFetched `code.claude.com/docs/en/permissions` and confirmed: `acceptEdits` "automatically accepts file edits … for paths in the working directory or `additionalDirectories`" — it is **not** a global auto-accept. The inbox path sits outside the project repo the session is launched in and isn't an `additionalDirectory`, so every write to it still prompts, regardless of `permissionMode`. Promoted this into `skills/agent-standards/claude-code.md` inline next to the `permissionMode` field list, stamped `verified 2026-08-01`.
+- **Why:** Perishable, non-obvious fact that affects every agent whose learning-capture instruction writes outside the repo (all of them, via the `$HOME/.claude/agents/<name>/kaizen/inbox.md` convention). Same-run promotion is in-bounds for cobb per its own maintenance mandate — verified via live docs, so no inbox detour needed.
+- **Plan items:** —
+
 ## 2026-05-31 — Added deterministic assertions (#2) to the agent eval harness
 - **What:** Implemented item #2 from the promotion roadmap in `opencode/agents/severino/tests/run.sh`: an optional per-case `expect.md` with `require:`/`reject:` literal-substring directives, checked against the **response body only** (so a prompt quoting forbidden text can't trip a `reject:`). Prints per-assertion `PASS`/`FAIL`, a suite tally, and **gates the exit code** (any failure → exit 1; cases without `expect.md` stay advisory, exit 0). Excluded `expect.md` from attached fixtures; hardened `--help` to print only the leading comment block via awk. Seeded the 3 starter cases with assertions and verified live (clean: 4 passed/exit 0; forced fail: 1 passed 1 failed/exit 1). Updated `tests/README.md` and `cobb/TESTING.md` (assertions section + roadmap: #2 moved to done).
 - **Why:** User chose to build #2 next. It's the highest-leverage maturity step — diffs are noisy on a stochastic local LLM, so deterministic substring assertions are what make the harness reword-proof and partially CI-gateable.
