@@ -867,6 +867,37 @@ def test_publish_def_is_idempotent_no_new_nodes_on_republish(wf_repo):
     )
 
 
+def test_publish_def_direct_call_is_unsafe_mints_parallel_transition_on_retarget(
+    wf_repo,
+):
+    # K-034: the guard lives in services.py, not here — see
+    # services._check_no_structural_conflict. Do not "fix" this by changing
+    # _PUBLISH_CYPHER without a graph-dba re-PROFILE gate. This pins that a raw
+    # `Repository.publish_def` call is unsafe on its own: the safety is a
+    # services.py contract, not a repository-layer guarantee.
+    _publish_sample(wf_repo)
+
+    # same (from, on, order) as the stored start->review transition, but
+    # retargeted to "done" — a *different* MERGE pattern, not an update (§2.1)
+    wf_repo.publish_def(
+        key="onboarding", version="1", name="Onboarding", kind="process",
+        start_key="start", steps=DEF_STEPS,
+        transitions=[
+            {"from": "start", "to": "done", "on": "submitted", "guard": "",
+             "order": 0},
+            DEF_TRANSITIONS[1],
+        ],
+    )
+
+    sub = wf_repo.read_def_subgraph(key="onboarding", version="1")
+    from_start = [
+        t for t in sub["transitions"]
+        if t["from"] == "start" and t["on"] == "submitted" and t["order"] == 0
+    ]
+    assert len(from_start) == 2  # parallel edge minted, the old one never removed
+    assert {t["to"] for t in from_start} == {"review", "done"}
+
+
 def test_get_def_specific_version(wf_repo):
     _publish_sample(wf_repo, version="1")
 

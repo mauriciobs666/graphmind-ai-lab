@@ -786,8 +786,20 @@ class WorkflowExecutor:
         `guards.render_label` otherwise: a `cmp` guard carries no `text`, and
         `_trace_step`'s `f"{label} -> …"` payload would otherwise open with a bare
         `" -> "` and name nothing.
+
+        **`to` is a final, additive-only tie-break (K-034 defense-in-depth).** The
+        K-034 gate makes duplicate outgoing transitions unreachable going forward
+        through the sanctioned write path, but does not retroactively repair
+        pre-existing corruption or a caller that bypasses `services.py` (both
+        `Repository` primitives are non-validating by design). Without a tie-break,
+        two transitions with equal `(guard == "", order)` sort equal and Python's
+        stable sort just preserves FalkorDB's unpinned edge-retrieval order —
+        `to` only breaks a tie that was previously undefined, so it changes
+        nothing for the non-duplicate case.
         """
-        ordered = sorted(transitions, key=lambda t: (t["guard"] == "", t["order"]))
+        ordered = sorted(
+            transitions, key=lambda t: (t["guard"] == "", t["order"], t["to"])
+        )
         judgments: list[tuple[dict[str, Any], str, GuardVerdict]] = []
         for tr in ordered:
             guard = tr["guard"]

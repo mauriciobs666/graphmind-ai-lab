@@ -35,6 +35,7 @@ from .repository import EmbeddingDimensionError as EmbeddingDimensionError
 from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
 from .repository import StepBudgetExceededError as StepBudgetExceededError
+from .repository import WorkflowDefConflictError as WorkflowDefConflictError
 from .repository import WorkflowDefNotFoundError as WorkflowDefNotFoundError
 from .repository import WorkflowDefSpecError as WorkflowDefSpecError
 from .repository import WorkflowInputRejectedError as WorkflowInputRejectedError
@@ -350,6 +351,49 @@ def _diff_structures(
             })
 
     return diffs
+
+
+def _structural_diffs(diffs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter `_diff_structures`' output to topology-changing entries only (K-034).
+
+    `meta.startKey`/`meta.startKeys` and a bare `steps[<key>]`/`transitions[...]`
+    presence row are structural — exactly what `_PUBLISH_CYPHER`'s `MERGE`
+    patterns can mint as *parallel* structure on a differing re-publish. `meta.name`/
+    `meta.kind` and any `.type`/`.config`/`.guard`-suffixed row are property-only —
+    `ON CREATE SET` already makes those safely create-only; re-publish stays a
+    silent no-op on them (K-031-pinned, unchanged by this filter).
+    """
+    return [
+        d for d in diffs
+        if d["path"] in ("meta.startKey", "meta.startKeys")
+        or (d["path"].startswith("steps[") and not d["path"].endswith((".type", ".config")))
+        or (d["path"].startswith("transitions[") and not d["path"].endswith(".guard"))
+    ]
+
+
+def _check_no_structural_conflict(
+    *, existing_raw: dict[str, Any] | None, candidate_raw: dict[str, Any],
+    key: str, version: str, resource: str,
+) -> None:
+    """Raise `WorkflowDefConflictError` if `candidate_raw`'s topology differs from
+    what's already stored at `(key, version)`. No-op when nothing is stored yet
+    (`existing_raw is None`) — a first-time publish/materialize is unaffected.
+    `resource` is "workflow def" or "workspace snapshot", for the message only.
+    """
+    if existing_raw is None:
+        return
+    existing = _canonical_structure(existing_raw, source="existing", key=key, version=version)
+    candidate = _canonical_structure(candidate_raw, source="candidate", key=key, version=version)
+    diffs = _structural_diffs(_diff_structures(existing, candidate))
+    if diffs:
+        paths = ", ".join(d["path"] for d in diffs)
+        raise WorkflowDefConflictError(
+            f"{resource} {key!r} version {version!r} is already published with a "
+            f"different topology ({len(diffs)} difference(s): {paths}) — a published "
+            f"version's structure is immutable; publish a new version instead of "
+            f"editing this one, or inspect the mismatch with "
+            f"GET /workflow-defs/{key}/versions/{version}"
+        )
 
 
 # ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ────────────────
@@ -847,6 +891,17 @@ class Services:
         then fail — and since publish is `MERGE … ON CREATE SET`, that `(key,
         version)` could never be repaired by re-publishing. A terminal outcome is a
         step with no *outgoing* transition, not a def with none.
+
+        **Topology-immutable per version (K-034).** After spec validation, a
+        second read (`read_def_structure`) checks whether `(key, version)` is
+        already published; if so, `_check_no_structural_conflict` rejects
+        (`WorkflowDefConflictError`, 409, nothing written) a candidate whose step-
+        key set, transition-identity set `(from,to,on,order)`, or start key differs
+        from what's stored. A property-only difference (`name`, `kind`, a step's
+        `type`/`config`, a transition's `guard`) is not a conflict — that stays
+        create-only-on-properties, unchanged (K-031-pinned). This read-then-write
+        is not atomic with the repository write below — see
+        `WorkflowDefConflictError`'s docstring for the residual TOCTOU shape.
         """
         start_key = self._validate_def_spec(
             kind=kind, steps=steps, transitions=transitions
@@ -865,6 +920,15 @@ class Services:
             }
             for tr in transitions
         ]
+        existing_raw = self._repo.read_def_structure(key=key, version=version)
+        _check_no_structural_conflict(
+            existing_raw=existing_raw,
+            candidate_raw={
+                "name": name, "kind": kind, "start_keys": [start_key],
+                "steps": repo_steps, "transitions": repo_transitions,
+            },
+            key=key, version=version, resource="workflow def",
+        )
         return self._repo.publish_def(
             key=key, version=version, name=name, kind=kind, start_key=start_key,
             steps=repo_steps, transitions=repo_transitions,
@@ -878,8 +942,18 @@ class Services:
         Two-phase (plan F4, non-atomic across the graph boundary but retry-safe):
         read the def subgraph from the global `reference` graph, then write the
         snapshot into the workspace. Raises `WorkflowDefNotFoundError` when the
-        def version was never published — nothing is written. Idempotent (the
-        workspace MERGE no-ops on re-materialize).
+        def version was never published — nothing is written.
+
+        **Topology-immutable per `(key, version)` against the workspace snapshot
+        (K-034).** A third read (`read_snapshot_structure`) checks whether `ctx.ws`
+        already carries a snapshot for this `(key, version)`; if so,
+        `_check_no_structural_conflict` rejects (`WorkflowDefConflictError`, 409,
+        nothing written) a candidate whose topology differs from what's stored.
+        Property-only differences stay a silent no-op (unchanged `MERGE … ON
+        CREATE SET` behavior). This read-then-write is not atomic with the
+        repository write below — see `WorkflowDefConflictError`'s docstring for
+        the residual TOCTOU shape (it applies to this method exactly as it does to
+        `publish_workflow_def`, not only the reference-graph side).
         """
         sub = self._repo.read_def_subgraph(key=key, version=version)
         if sub is None:
@@ -887,6 +961,16 @@ class Services:
                 f"workflow def {key!r} version {version!r} not found in `reference` "
                 f"— publish it before materializing"
             )
+        existing_raw = self._repo.read_snapshot_structure(ctx.ws, key=key, version=version)
+        _check_no_structural_conflict(
+            existing_raw=existing_raw,
+            candidate_raw={
+                "name": sub["name"], "kind": sub["kind"],
+                "start_keys": [sub["start_key"]],
+                "steps": sub["steps"], "transitions": sub["transitions"],
+            },
+            key=key, version=version, resource="workspace snapshot",
+        )
         return self._repo.materialize_snapshot(
             ctx.ws, key=key, version=version,
             name=sub["name"], kind=sub["kind"], start_key=sub["start_key"],

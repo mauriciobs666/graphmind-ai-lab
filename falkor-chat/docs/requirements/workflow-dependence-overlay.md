@@ -18,7 +18,8 @@ The goal is to **materialize that dependence layer as real graph structure at pu
 workflow def can be **statically analyzed when it is published (seed time)** — turning three classes
 of authoring error that today surface only at live-run time (or never) into checks that run before a
 def is ever executed. The underlying value is **cheaper, earlier, honest feedback to workflow
-authors**, made especially worthwhile because published defs are effectively immutable.
+authors**, made especially worthwhile because published defs are topology-immutable (K-034) and
+property-create-only.
 
 > Note (framing vs. need): "connect the nodes with CPG-style relationships" is the stakeholder's
 > proposed *shape*. The underlying need is *publish-time static analysis of a workflow def —
@@ -41,8 +42,9 @@ authors**, made especially worthwhile because published defs are effectively imm
   2. **Unreachable step / dead branch** — a step with no path from `START`. No check exists.
   3. **Change-impact / blast radius** — "if I change step X's output shape, which downstream guards
      break?" There is no way to answer this. It matters *specifically because* published defs are
-     create-only + immutable (K-031): a def edit costs a version bump + snapshot republish and risks a
-     `reference`↔`ws:{id}` split-brain, so knowing the blast radius **before** the edit has real value.
+     topology-immutable (K-034) and property-create-only: a def edit costs a version bump + snapshot
+     republish and risks a `reference`↔`ws:{id}` split-brain, so knowing the blast radius **before**
+     the edit has real value.
 - This is a **follow-up, not an M3 gate** — M3 (workflow engine) is delivered and QA-accepted (K-025).
 
 ## User stories
@@ -51,7 +53,7 @@ authors**, made especially worthwhile because published defs are effectively imm
   or exhaust its step budget.
 - As a **workflow author**, I want a def with an **unreachable step** rejected at publish, so that dead
   branches never ship.
-- As a **workflow author / operator**, before I edit an (immutable) published def, I want to see the
+- As a **workflow author / operator**, before I edit a (topology-immutable) published def, I want to see the
   **blast radius** — which downstream steps and guards depend on a given step's outputs — so that I can
   weigh the cost of a version bump + republish before committing to it.
 - As a **workflow author using an agent step**, I want steps whose reads *cannot* be derived statically
@@ -157,7 +159,7 @@ backlog K-032. Framing recorded: def graph already has the CFG layer; the missin
 data-dependence (READS/WRITES) layer, trapped in opaque `guard`/`config` strings.
 2026-07-22 — Payoff (the WHY) → publish-time (not live-run) detection of (1) dangling read = the
 un-enforced n-3 hazard, (2) unreachable step, (3) change-impact/blast-radius — the last made valuable
-by immutable, create-only published defs (K-031).
+by topology-immutable, property-create-only published defs (K-034).
 2026-07-22 — Hard constraints accepted (not to be reopened in design): derive at publish, never parse
 in Cypher (rule 8); overlay built inside the existing atomic publish/materialize, not a follow-up
 write; static-only, on the def graph, never on `StepRun`; honest "reads unknown" for

@@ -784,8 +784,8 @@ grounded — useful for "impact"/attribution views. Route via `GRAPH.RO_QUERY`.*
 
 ## 11. Workflow definitions & snapshots (M3 Slice 1 — K-020 / K-021)
 
-The workflow **definition model** lives canonically in the global **`reference`** graph as versioned,
-immutable `WorkflowDef` templates; publishing a def version and **materializing** it into a workspace
+The workflow **definition model** lives canonically in the global **`reference`** graph as versioned
+`WorkflowDef` templates; publishing a def version and **materializing** it into a workspace
 graph (`ws:{id}`) as a local `WorkflowDefSnapshot` subgraph are the two write paths here. DESIGN §6.1;
 the executor (`WorkflowRun`/`StepRun`, K-022) and chat linkage (K-023) are **out of scope** for this
 slice — these queries only build and read the definition/snapshot structure.
@@ -824,10 +824,15 @@ the step read and the transition read anchor on `Node By Index Scan | (d:Workflo
 returned **verbatim** and **never** filtered inside. Guard *evaluation* is run-time (K-022); Slice 1
 does not force the §13 guard-language decision.
 
-**Idempotency & the collapse idiom (live-verified).** Publish and materialize are single-graph `MERGE`
-queries — re-running the same `key@version` is a structural no-op (0 nodes/rels created). Immutability
-per version comes for free from `MERGE`. Because the query has two sequential `UNWIND` blocks (steps,
-then transitions), the naive shape **row-multiplies** the final `RETURN` (steps × transitions rows);
+**Create-only on properties, topology-enforced by `services` (K-034).** Publish and materialize are
+single-graph `MERGE` queries — a re-publish/re-materialize never updates a stored `name`/`kind`/step
+`config`/transition `guard`. It is **not** additive on **structure** as of K-034:
+`services.publish_workflow_def`/`materialize_def` reject a re-publish/re-materialize whose step set,
+transition set, or start key differs from what's stored (`409 WorkflowDefConflictError`), before any
+write. `Repository.publish_def`/`materialize_snapshot` themselves remain thin, non-validating
+primitives — the guarantee is enforced one layer up. Because the query has two sequential `UNWIND`
+blocks (steps, then transitions), the naive shape **row-multiplies** the final `RETURN` (steps ×
+transitions rows);
 each block is collapsed back to one row with an aggregation (`WITH d, count(st) AS stepCount` …) so the
 contract returns **exactly one status row**. `MATCH (start …)`/`MATCH (from …)`/`MATCH (to …)` inside
 the write resolve MERGE-created steps by their indexed `stepUid` — the spec validation in `services`
@@ -870,7 +875,9 @@ RETURN d.key AS key, d.version AS version, stepCount, transitionCount
 The `TRANSITION` MERGE-key is `(from, on, order, to)` so distinct outcomes/orders between the same two
 steps are distinct edges; `guard` is set-on-create only (may be empty, never a match key). Live-verified
 on `_probe`: run 1 → 5 nodes / 9 rels (4 `HAS_STEP` + 1 `START` + 4 `TRANSITION`) / 32 props, returns
-one row `{key, version, stepCount:4, transitionCount:4}`; run 2 → 0 created (idempotent), same row.*
+one row `{key, version, stepCount:4, transitionCount:4}`; run 2 (same content) → 0 created (idempotent),
+same row. A re-publish with a **different** topology (§11 preamble) is rejected at the service layer
+before reaching this query — see K-034.*
 
 > **⚠️ `$transitions = []` poisons the version — this query is deliberately *un*guarded.** Unlike the
 > §4 mention block (which wraps its list in `UNWIND (CASE WHEN $x = [] THEN [null] ELSE $x END)`), the
@@ -888,7 +895,8 @@ one row `{key, version, stepCount:4, transitionCount:4}`; run 2 → 0 created (i
 > `docs/BACKLOG.md`, for the proposed Cypher-level `CASE`-guard fix that would close this gap for both
 > callers). *(Verified 2026-07-24; discovered 2026-07-20 while writing `tests/test_executor_process.py`
 > — every pre-existing publish test carried ≥1 transition, so no test reached the real query with an
-> empty list.)*
+> empty list.)* A second, independent service-layer guard sits beside this one — K-034's topology-
+> conflict gate (`services._check_no_structural_conflict`, 409) — see the preamble above.
 
 ### 11.2 Read a def subgraph (reference — the materialize input, F6-safe)
 
@@ -988,8 +996,9 @@ RETURN snap.key AS key, snap.version AS version, stepCount, transitionCount
 
 *Node MERGEs backed by `WorkflowDefSnapshot {key,version}` + `Step {stepUid}` constraints (both
 workspace-local). Produces a snapshot subgraph **structurally identical** to the reference def.
-Live-verified idempotent (run 2 → 0 created). Snapshots are immutable per `(workspace, key, version)`;
-re-materialize is a no-op.*
+Live-verified idempotent (run 2, same content → 0 created). Re-materialize with unchanged topology is
+a no-op on write (properties are always create-only). A re-materialize whose topology differs from the
+stored snapshot is rejected (`409 WorkflowDefConflictError`) before this query runs — K-034.*
 
 ### 11.5 Read a snapshot subgraph (workspace)
 

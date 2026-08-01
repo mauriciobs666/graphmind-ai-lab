@@ -528,11 +528,17 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > the K-024 slice: `access-request@v1`'s spec is imported from `server/falkorchat/proof_defs.py`
 > (so the seed script and the offline acceptance test provably cannot drift), while **`triage@v1`'s
 > literal is still inline in `scripts/seed_workflows.sh`**. Moving `triage`'s def *during* K-024 was
-> declined with a reason: published defs are **create-only** (`MERGE … ON CREATE SET`), so a byte-diff
-> introduced while relocating a **live** def is silently swallowed — the re-seed prints
-> `already present — no-op` while the old config keeps running, and `reference`/`ws:<id>` can go stale
-> independently. That is a split-brain risk to take on its own, with its own verification, not as a
-> rider on a feature slice.
+> declined with a reason, since corrected by **K-034**: at the time, published defs were believed
+> **create-only** (`MERGE … ON CREATE SET`) end to end, so a byte-diff introduced while relocating a
+> **live** def was assumed silently swallowed. As of K-034 that is only true for a **property**-only
+> byte-diff (e.g. a `config` field reformatted during the move) — it still silently no-ops, so K-029's
+> planned before/after equality check remains load-bearing for that half. A **topology**-changing
+> byte-diff (e.g. a retargeted transition introduced while relocating the literal) is now **rejected**
+> (`409 WorkflowDefConflictError`, nothing written) rather than swallowed — safer, but a `409` mid-
+> deploy is still worse than catching it in a pre-flight check, so the equality check stays this item's
+> load-bearing safeguard either way. `reference`/`ws:<id>` can still go stale independently whenever
+> one side was never re-published/re-materialized at all. That is a split-brain risk to take on its
+> own, with its own verification, not as a rider on a feature slice.
 - **Owner:** **`coder`**, with an explicit before/after equality check on the published def subgraph
   (not just "the script ran").
 - **Scope:** (1) move `triage@v1`'s inline literal into `proof_defs.py` beside `ACCESS_REQUEST_DEF`,
@@ -675,9 +681,10 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
      proposal; this is the graph-shaped way to get there.
   2. **Unreachable step / dead branch** — plain CFG reachability from `START`.
   3. **Change-impact / blast radius** — "I changed `submit`'s output shape; which downstream guards
-     read it?" This matters **specifically because published defs are create-only + immutable**
-     (K-031): a def edit costs a version bump + snapshot republish + a `reference`↔`ws:{id}`
-     split-brain risk, so knowing the blast radius *before* the bump has real value here.
+     read it?" This matters **specifically because published defs are topology-immutable (K-034) and
+     property-create-only**: a def edit costs a version bump + snapshot republish + a
+     `reference`↔`ws:{id}` split-brain risk, so knowing the blast radius *before* the bump has real
+     value here.
 - **Hard constraints (fall out of locked decisions — non-negotiable in any plan):**
   - **Derive at publish, never parse in Cypher.** Rule 8 (`ctx`/`config`/`guard` opaque, never
     filtered in Cypher) holds *iff* publish is treated as a compile step — `joern-parse` builds
@@ -776,7 +783,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
   flow to confirm the `maxSteps: 24` headroom still covers it.
 
-### K-034 — Create-only re-publish is *additive*, not a silent no-op — duplicate `TRANSITION`/`START` edges, and the thirteen doc sites that say otherwise (🔵 proposed — discovered by `architect` while designing K-031, confirmed by `analyst` at the K-031 plan gate, 2026-07-24)
+### K-034 — Create-only re-publish is *additive*, not a silent no-op — duplicate `TRANSITION`/`START` edges, and the thirteen doc sites that say otherwise (✅ **delivered 2026-08-01** → HISTORY.md — discovered by `architect` while designing K-031, confirmed by `analyst` at the K-031 plan gate, 2026-07-24)
 
 > **Why it exists.** The whole component is documented on the claim that re-publishing the same
 > `key@version` is a **structural no-op** — "immutability per version comes for free from `MERGE`".

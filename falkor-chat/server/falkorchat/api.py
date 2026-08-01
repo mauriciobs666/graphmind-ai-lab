@@ -232,7 +232,9 @@ def build_router(
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────
     # Def authoring/reading is GLOBAL (the `reference` graph); only materialize +
     # snapshot list consume the tenant workspace via `get_context`. Spec/​not-found
-    # errors map to 400/404 through the app-level exception handlers.
+    # errors map to 400/404 through the app-level exception handlers; a topology-
+    # differing re-publish/re-materialize maps to 409 (`WorkflowDefConflictError`,
+    # K-034).
 
     @router.post("/workflow-defs", status_code=201)
     def publish_workflow_def(

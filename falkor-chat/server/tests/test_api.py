@@ -578,6 +578,113 @@ def test_republish_is_create_only_on_properties_structure_read_unchanged(wf_clie
     assert after == before
 
 
+# ── K-034 — topology-conflict gate (409) ─────────────────────────────────────
+#
+# `WorkflowDefConflictError` → 409, same envelope shape as the other workflow
+# error handlers. This first test isolates the app-level wiring (handler
+# registration) from the gate logic itself — it doesn't matter yet *how* the
+# service raises the error, only that the app maps it correctly when it does.
+
+
+def test_workflow_def_conflict_error_maps_to_409(wf_client, monkeypatch):
+    from falkorchat.services import Services, WorkflowDefConflictError
+
+    def _boom(self, ctx, **kwargs):
+        raise WorkflowDefConflictError("onboarding v1 topology differs")
+
+    monkeypatch.setattr(Services, "publish_workflow_def", _boom)
+
+    r = wf_client.post("/workflow-defs", json=DEF_BODY)
+
+    assert r.status_code == 409
+    assert r.json()["error"] == "WorkflowDefConflictError"
+    assert "topology differs" in r.json()["detail"]
+
+
+def test_republish_with_changed_transition_to_is_409_and_leaves_structure_unchanged(
+    wf_client,
+):
+    # end-to-end proof against the real `_PUBLISH_CYPHER`: a retargeted
+    # transition would otherwise MERGE a *parallel* edge beside the old one
+    # (§2.1) — the gate must reject before that write happens.
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    before = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+
+    conflicting = {
+        **DEF_BODY,
+        "steps": [*DEF_BODY["steps"], {"key": "escalate", "type": "message"}],
+        "transitions": [
+            {"from": "start", "to": "escalate", "on": "submitted", "order": 0},
+        ],
+    }
+    r = wf_client.post("/workflow-defs", json=conflicting)
+
+    assert r.status_code == 409
+    assert r.json()["error"] == "WorkflowDefConflictError"
+
+    after = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+    assert after == before  # exactly the original — no parallel structure minted
+
+
+def test_republish_with_changed_start_key_is_409_and_leaves_one_start(wf_client):
+    # end-to-end proof: a moved start step would otherwise MERGE a *second*
+    # `START` edge beside the old one (§2.1) — the gate must reject first.
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    before = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+
+    conflicting = {
+        **DEF_BODY,
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman": true}'},
+            {"key": "done", "type": "message", "start": True},  # start moved here
+        ],
+    }
+    r = wf_client.post("/workflow-defs", json=conflicting)
+
+    assert r.status_code == 409
+    assert r.json()["error"] == "WorkflowDefConflictError"
+
+    after = wf_client.get("/workflow-defs/onboarding/versions/1").json()
+    assert after == before
+    assert after["startKey"] == "start"
+    assert "startKeys" not in after  # exactly one START edge, not two
+
+
+def test_materialize_conflict_after_seeded_drift_is_409_and_leaves_snapshot_unchanged(
+    wf_client, wf_repo,
+):
+    # Reproduce the live trap the way it actually arises (§2.2): the reference
+    # def stays clean, but the workspace snapshot independently drifts (e.g. via
+    # a caller that bypasses `services.py` — `Repository` is a thin, non-
+    # validating primitive by design, §3.3). The subsequent service-layer
+    # materialize call must reject, not silently mint parallel structure.
+    wf_client.post("/workflow-defs", json=DEF_BODY)
+    wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+
+    wf_repo.materialize_snapshot(
+        "test", key="onboarding", version="1", name="Onboarding", kind="process",
+        start_key="start",
+        steps=[
+            {"key": "start", "type": "human", "config": '{"waitsForHuman": true}'},
+            {"key": "done", "type": "message", "config": ""},
+            {"key": "escalate", "type": "message", "config": ""},
+        ],
+        transitions=[
+            {"from": "start", "to": "escalate", "on": "submitted", "order": 0,
+             "guard": ""},
+        ],
+    )
+    before = wf_client.get("/workspaces/test/snapshots/onboarding/versions/1").json()
+
+    r = wf_client.post("/workflow-defs/onboarding/versions/1/materialize")
+
+    assert r.status_code == 409
+    assert r.json()["error"] == "WorkflowDefConflictError"
+
+    after = wf_client.get("/workspaces/test/snapshots/onboarding/versions/1").json()
+    assert after == before  # nothing written — still the seeded, differing content
+
+
 def test_snapshot_structure_route_404_before_and_200_after_materialize(wf_client):
     wf_client.post("/workflow-defs", json=DEF_BODY)
 

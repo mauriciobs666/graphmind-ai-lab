@@ -35,6 +35,7 @@ from .services import (
     ServiceError,
     Services,
     ThreadNotFoundError,
+    WorkflowDefConflictError,
     WorkflowDefNotFoundError,
     WorkflowDefSpecError,
     WorkflowEngineDisabledError,
@@ -89,6 +90,15 @@ def _register_error_handlers(app: FastAPI) -> None:
     async def _handle_wf_not_found(_request, exc: WorkflowDefNotFoundError):  # noqa: ANN001
         return JSONResponse(
             status_code=404,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
+
+    # A topology-differing re-publish/re-materialize (K-034) — same "state
+    # conflict, nothing written" 409 precedent as `WorkflowRunNotWaitingError`.
+    @app.exception_handler(WorkflowDefConflictError)
+    async def _handle_wf_def_conflict(_request, exc: WorkflowDefConflictError):  # noqa: ANN001
+        return JSONResponse(
+            status_code=409,
             content={"error": type(exc).__name__, "detail": str(exc)},
         )
 

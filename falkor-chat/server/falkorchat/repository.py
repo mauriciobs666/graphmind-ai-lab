@@ -61,6 +61,30 @@ class WorkflowDefSpecError(Exception):
     """
 
 
+class WorkflowDefConflictError(Exception):
+    """A re-publish or re-materialize would change the topology of an existing
+    `(key, version)` (M3 §11 / K-034).
+
+    Raised by `services.publish_workflow_def` (against `reference`) and
+    `services.materialize_def` (against `ctx.ws`'s snapshot) when the incoming
+    step-key set, transition-identity set `(from,to,on,order)`, or start key
+    differs from what's already stored — before any repository write. A
+    property-only difference (`name`, `kind`, a step's `type`/`config`, a
+    transition's `guard`) is NOT a conflict; that stays create-only-on-properties
+    (K-031-pinned). Nothing is written when this is raised. Re-exported by
+    `services`.
+
+    Both `publish_workflow_def` and `materialize_def` read-then-decide-then-write
+    with no atomicity between the read and the write (the same residual TOCTOU
+    shape as any check-then-act over two round trips): two concurrent callers
+    racing a **brand-new** `(key, version)` with differing content can both
+    observe "nothing stored yet" and both proceed to write. This is a
+    pre-existing, out-of-scope hazard (unrelated to and not worsened by this
+    gate) — for an *existing* `(key, version)`, a topology-differing candidate
+    is always rejected regardless of read timing.
+    """
+
+
 class WorkflowRunNotFoundError(Exception):
     """A workflow run (or its current-position anchor) was not found (M3 §12).
 
@@ -950,8 +974,8 @@ class Repository:
 
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
     #
-    # Definitions live canonically in the GLOBAL `reference` graph as versioned,
-    # immutable WorkflowDef templates; materializing copies a def@version into a
+    # Definitions live canonically in the GLOBAL `reference` graph as versioned
+    # WorkflowDef templates; materializing copies a def@version into a
     # workspace as a local WorkflowDefSnapshot subgraph. Reference-scoped methods
     # take NO `ws` (plan F3); only materialization consumes a workspace. Every
     # node MERGE is backed by a UNIQUE constraint (`WorkflowDef {key,version}` /
@@ -959,9 +983,11 @@ class Repository:
     # are opaque strings, stored and returned verbatim (rule 8). Each method maps
     # 1:1 to a verified QUERIES.md §11 query.
 
-    # Publish/materialize share the same idempotent MERGE shape (§11.1 / §11.4),
-    # differing only in the root label and the target graph. The two sequential
-    # UNWIND blocks each collapse via `count(...)` so the RETURN is one status row
+    # Publish/materialize share the same MERGE shape (§11.1 / §11.4), differing
+    # only in the root label and the target graph. Create-only on properties,
+    # topology-enforced by services (K-034) — see this class's docstrings, not
+    # "idempotent" unconditionally. The two sequential UNWIND blocks each
+    # collapse via `count(...)` so the RETURN is one status row
     # (a naive shape row-multiplies steps × transitions).
     _PUBLISH_CYPHER = (
         "MERGE (d:{label} {{key: $key, version: $version}}) "
@@ -1088,13 +1114,18 @@ class Repository:
         self, *, key: str, version: str, name: str, kind: str, start_key: str,
         steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Publish a def version into the `reference` graph (idempotent). §11.1.
+        """Publish a def version into the `reference` graph. §11.1.
 
-        Write path. Every node MERGE is constraint-backed; re-publishing the same
-        `key@version` is a structural no-op (immutability per version). The spec
-        is validated by `services.publish_workflow_def` *before* this call, so the
-        inner `MATCH (start …)`/`MATCH (from/to …)` always resolve for a valid spec.
-        Returns `{key, version, stepCount, transitionCount}`.
+        Write path. Every node MERGE is constraint-backed. **This method itself
+        does not enforce structural immutability** — a differing payload for an
+        existing `(key, version)` mints parallel `TRANSITION`/`START` structure
+        (K-034; see `test_publish_def_direct_call_is_unsafe_mints_parallel_
+        transition_on_retarget`). The guarantee is enforced by the caller:
+        `services.publish_workflow_def` rejects a topology-differing re-publish
+        (`WorkflowDefConflictError`, 409) *before* calling this method — same as
+        `_validate_def_spec`, which is also run there, before this call, so the
+        inner `MATCH (start …)`/`MATCH (from/to …)` always resolve for a valid
+        spec. Returns `{key, version, stepCount, transitionCount}`.
         """
         res = self._reference().query(
             self._PUBLISH_CYPHER.format(label="WorkflowDef"),
@@ -1644,10 +1675,15 @@ class Repository:
 
         Write path — the workspace half of the two-phase materialize (the
         `name/kind/start_key/steps/transitions` come from `read_def_subgraph`).
-        Same idempotent MERGE shape as `publish_def` with the
-        `WorkflowDefSnapshot` root label, scoped to the workspace graph; produces
-        a subgraph structurally identical to the reference def. Re-materialize is
-        a no-op. Returns `{key, version, stepCount, transitionCount}`.
+        Same MERGE shape as `publish_def` with the `WorkflowDefSnapshot` root
+        label, scoped to the workspace graph; produces a subgraph structurally
+        identical to the reference def. **This method itself does not enforce
+        structural immutability** — a differing payload for an existing
+        `(key, version)` mints parallel `TRANSITION`/`START` structure in the
+        snapshot (K-034), the same hazard `publish_def` carries. The guarantee is
+        enforced by the caller: `services.materialize_def` rejects a topology-
+        differing re-materialize (`WorkflowDefConflictError`, 409) *before*
+        calling this method. Returns `{key, version, stepCount, transitionCount}`.
         """
         res = self._graph(ws).query(
             self._PUBLISH_CYPHER.format(label="WorkflowDefSnapshot"),

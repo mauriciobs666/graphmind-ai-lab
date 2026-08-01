@@ -78,9 +78,15 @@ _(draft — FR-6/FR-7 still need their unknowns closed)_
   `claude/README.md`. This is the one def this feature produces.
 
 **Constraints carried from the current system (context for the architect, not requirements)**
-- Published workflow defs are effectively **immutable** (`MERGE … ON CREATE SET`); a re-import
-  of a changed def cannot update in place — it needs a version bump or an explicit teardown.
-  This collides head-on with FR-2's idempotence for the def half of the import.
+- Published workflow defs are **topology-immutable per version** (K-034): a re-import of a
+  *topology*-changed def (different steps/transitions/start) fails loudly (`409
+  WorkflowDefConflictError`, nothing written) rather than updating in place — it needs a version
+  bump or an explicit teardown. A *property*-only changed re-import (name, step config, guard
+  text) still silently no-ops (does not update) — the pre-K-034 "silently swallowed" hazard
+  survives for that half only. FR-2b's "publish a new version" strategy already sidesteps both
+  cases for the def half of the import, so this does not change FR-2b's collision handling; it
+  only corrects what the *un*-bumped, same-version re-publish path would now do if it were ever
+  reached by accident.
 - Def (`reference` graph) and workspace snapshot (`ws:{id}`) go stale **independently**.
 - Step types `prompt` / `tool` / `message` raise `NotImplementedError` today; only
   `human` / `decision` / `wait` / `agent` are live.

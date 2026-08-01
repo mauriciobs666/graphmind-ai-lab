@@ -99,7 +99,7 @@ We use **four classes of named graph**. Each is an independent Redis key; edges 
 ├─────────────────────────────────────────────────────────────────────┤
 │ reference                (1 graph, global, read-mostly)               │
 │   Domain reference data / ontology / catalogs                         │
-│   Canonical WorkflowDef templates (versioned, immutable)              │
+│   Canonical WorkflowDef templates (topology-immutable, K-034)         │
 │   Tool registry, prompt templates                                     │
 │   Replicated; served via GRAPH.RO_QUERY                               │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -141,14 +141,18 @@ relationship to a `WorkflowDef` that lives in `reference`. Two ways to bridge:
 | Approach | How | When |
 |---|---|---|
 | **A. Property reference** | Run stores `defKey` + `defVersion` as properties; app resolves the def by querying `reference` | Cheap, always correct, but no traversal across the boundary |
-| **B. Materialize (chosen for defs)** | On workflow *publish*, copy the def subgraph (immutable, versioned) into each workspace graph that uses it | Real edges → runs traverse their own steps locally; def graphs stay small and are duplicated cheaply |
+| **B. Materialize (chosen for defs)** | On workflow *publish*, copy the def subgraph (topology-immutable per version, K-034) into each workspace graph that uses it | Real edges → runs traverse their own steps locally; def graphs stay small and are duplicated cheaply |
 
-**Decision:** canonical definitions live in `reference` (single source of truth, versioned,
-immutable once published). When a workspace first uses `defKey@v`, we **materialize that
-version's step subgraph into `ws:{id}`** under a `WorkflowDefSnapshot`. Runs then have real,
-local edges to their steps — fast, self-contained, and the snapshot is immutable so it never
-drifts. Same pattern applies to any *small, shared, read-mostly* reference subgraph a hot
-traversal needs to walk (e.g. an ontology fragment).
+**Decision:** canonical definitions live in `reference` (single source of truth, versioned).
+When a workspace first uses `defKey@v`, we **materialize that version's step subgraph into
+`ws:{id}`** under a `WorkflowDefSnapshot`. Runs then have real, local edges to their steps —
+fast, self-contained. **The enforced guarantee (K-034):** topology (steps, transitions, start)
+is immutable per version — a re-publish/re-materialize whose topology differs from what's
+stored is rejected (`409 WorkflowDefConflictError`) before any write, so the snapshot never
+silently drifts from the def it was materialized from. Properties (`name`, `kind`, step
+`config`, transition `guard`) are create-only — a differing resubmit of those stays a silent
+no-op, unchanged. Same pattern applies to any *small, shared, read-mostly* reference subgraph a
+hot traversal needs to walk (e.g. an ontology fragment).
 
 > Large reference catalogs that are only *looked up* (not traversed from workspace nodes) stay
 > in `reference` and are reached by property key — no materialization.
@@ -567,7 +571,7 @@ traversal — one read-only query, routable to a replica.
 | Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches (writes ignore TIMEOUT — §10) |
 | Embed messages | async worker: compute embedding → `SET m.embedding = vecf32($v)` | Decouple embedding latency from the post path |
 | Advance workflow | create `StepRun`, append `NEXT`, move `AT_STEP` | All local to `ws:{id}`; fully transactional within the graph |
-| Publish workflow def | write to `reference`; materialize snapshot into consuming `ws:{id}` graphs | Immutable per version; bump version, never mutate in place |
+| Publish workflow def | write to `reference`; materialize snapshot into consuming `ws:{id}` graphs | Topology-immutable per version (rejected `409` on a differing re-publish, K-034); properties stay create-only. Bump version to change either. |
 
 **Rule:** every `MERGE` is backed by a uniqueness constraint, or it's a duplicate-node bug
 waiting for concurrency. (The §4 v2 message writes contain no MERGE at all — guarded CREATE

@@ -27,8 +27,10 @@ from falkorchat.services import (
     ThreadNotFoundError,
     UnknownActorError,
     UnknownMemberError,
+    WorkflowDefConflictError,
     WorkflowRunNotFoundError,
     _diff_structures,
+    _structural_diffs,
 )
 
 CTX = CallContext(ws="test", actor="u1")
@@ -798,6 +800,42 @@ VALID_TRANSITIONS = [
      "guard": {"expr": "x>0"}, "order": 0},
 ]
 
+# The repository-shaped ("already stored") structure that a first successful
+# `_publish(svc, repo)` of VALID_STEPS/VALID_TRANSITIONS would leave behind —
+# serialized `config`/`guard`, `start` flag stripped, matches
+# `test_publish_workflow_def_derives_start_and_serializes_config_and_guard`'s
+# own assertions byte-for-byte. Seeds `repo.def_structures`/`snapshot_structures`
+# to simulate "this (key, version) is already published" for the K-034 gate tests.
+EXISTING_ONBOARDING_STRUCTURE = {
+    "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+    "steps": [
+        {"key": "start", "type": "human", "config": '{"a":1,"waitsForHuman":true}'},
+        {"key": "review", "type": "decision", "config": "raw-string"},
+        {"key": "done", "type": "message", "config": ""},
+    ],
+    "transitions": [
+        {"from": "start", "to": "review", "on": "submitted", "order": 0, "guard": ""},
+        {"from": "review", "to": "done", "on": "approved", "order": 0,
+         "guard": '{"expr":"x>0"}'},
+    ],
+}
+
+# Same topology as `EXISTING_ONBOARDING_STRUCTURE`, but in `read_def_subgraph`'s
+# single-`start_key` shape (`repo.defs`) — the `materialize_def` read source.
+EXISTING_ONBOARDING_SUBGRAPH = {
+    "name": "Onboarding", "kind": "process", "start_key": "start",
+    "steps": [
+        {"key": "start", "type": "human", "config": '{"a":1,"waitsForHuman":true}'},
+        {"key": "review", "type": "decision", "config": "raw-string"},
+        {"key": "done", "type": "message", "config": ""},
+    ],
+    "transitions": [
+        {"from": "start", "to": "review", "on": "submitted", "order": 0, "guard": ""},
+        {"from": "review", "to": "done", "on": "approved", "order": 0,
+         "guard": '{"expr":"x>0"}'},
+    ],
+}
+
 
 def _publish(svc, repo, *, kind="process", steps=None, transitions=None):
     return svc.publish_workflow_def(
@@ -984,6 +1022,149 @@ def test_publish_workflow_def_dangling_transition_to_raises_nothing_written():
     assert repo.published == []
 
 
+# ── K-034 — topology-equality gate on re-publish ─────────────────────────────
+#
+# `_check_no_structural_conflict`, wired into `publish_workflow_def` right before
+# the repository write. §6.1 cases 1-3 (no existing / byte-identical / property-
+# only) must stay `201`-equivalent (succeeds, exactly one `repo.published` entry);
+# cases 4-7 (new step key / changed transition `to` / changed start key / removed
+# transition) must raise `WorkflowDefConflictError` with nothing written.
+
+
+def test_publish_workflow_def_no_existing_structure_succeeds_unaffected():
+    repo = FakeRepo()  # repo.def_structures empty — first-time publish
+    svc = make_service(repo)
+
+    _publish(svc, repo)
+
+    assert len(repo.published) == 1
+
+
+def test_publish_workflow_def_identical_resubmission_succeeds():
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+
+    _publish(svc, repo)  # byte-identical to what's "already stored"
+
+    assert len(repo.published) == 1
+
+
+def test_publish_workflow_def_property_only_difference_succeeds():
+    # mirrors the K-031-pinned API test's exact scenario: stored name/kind/step
+    # config differ, topology (step keys, transition identities, start) is the same.
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = {
+        "name": "Old Name", "kind": "conversation", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"different":true}'},
+            {"key": "review", "type": "decision", "config": "old-raw-string"},
+            {"key": "done", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "review", "on": "submitted", "order": 0,
+             "guard": ""},
+            {"from": "review", "to": "done", "on": "approved", "order": 0,
+             "guard": '{"expr":"old"}'},
+        ],
+    }
+    svc = make_service(repo)
+
+    _publish(svc, repo)  # kind="process" (default) differs from stored "conversation"
+
+    assert len(repo.published) == 1
+
+
+def test_publish_workflow_def_new_step_key_raises_nothing_written():
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    svc = make_service(repo)
+    steps = [
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
+        {"key": "done", "type": "message"},
+        {"key": "extra", "type": "message"},   # topology grows — new step key
+    ]
+    transitions = [{"from": "start", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefConflictError):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_changed_transition_to_raises_nothing_written():
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+            {"key": "other", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    svc = make_service(repo)
+    steps = [
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
+        {"key": "done", "type": "message"},
+        {"key": "other", "type": "message"},
+    ]
+    # same (from, on, order) as stored, but a different `to` — a parallel edge,
+    # not an update (§2.1's MERGE-key analysis)
+    transitions = [{"from": "start", "to": "other", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefConflictError):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_changed_start_key_raises_nothing_written():
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+    # same step set/transitions as VALID_STEPS/VALID_TRANSITIONS, but `start:True`
+    # moved from "start" to "review" — only the start key differs
+    moved_start_steps = [
+        {"key": "start", "type": "human", "config": {"a": 1, "waitsForHuman": True}},
+        {"key": "review", "type": "decision", "config": "raw-string", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+
+    with pytest.raises(WorkflowDefConflictError):
+        _publish(svc, repo, steps=moved_start_steps)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_removed_transition_raises_nothing_written():
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+    # drop review->done — candidate has fewer transitions than stored
+    fewer_transitions = [
+        {"from": "start", "to": "review", "on": "submitted", "order": 0},
+    ]
+
+    with pytest.raises(WorkflowDefConflictError):
+        _publish(svc, repo, transitions=fewer_transitions)
+
+    assert repo.published == []
+
+
 def test_materialize_def_two_phase_reads_reference_then_writes_workspace():
     repo = FakeRepo()
     svc = make_service(repo)
@@ -1010,6 +1191,161 @@ def test_materialize_def_not_found_raises_nothing_materialized():
 
     with pytest.raises(WorkflowDefNotFoundError):
         svc.materialize_def(CTX, key="ghost", version="1")
+
+    assert repo.materialized == []
+
+
+# ── K-034 — topology-equality gate on re-materialize ─────────────────────────
+#
+# Mirrors the publish-side block above, against `ctx.ws`'s snapshot instead of
+# `reference`: `repo.defs` seeds the `read_def_subgraph` source (what's about to
+# be materialized), `repo.snapshot_structures` seeds "what's already in ctx.ws".
+
+
+def test_materialize_def_no_existing_snapshot_succeeds_unaffected():
+    repo = FakeRepo()  # repo.snapshot_structures empty — first-time materialize
+    repo.defs[("onboarding", "1")] = dict(EXISTING_ONBOARDING_SUBGRAPH)
+    svc = make_service(repo)
+
+    svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert len(repo.materialized) == 1
+
+
+def test_materialize_def_identical_resubmission_succeeds():
+    repo = FakeRepo()
+    repo.defs[("onboarding", "1")] = dict(EXISTING_ONBOARDING_SUBGRAPH)
+    repo.snapshot_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+
+    svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert len(repo.materialized) == 1
+
+
+def test_materialize_def_property_only_difference_succeeds():
+    repo = FakeRepo()
+    repo.defs[("onboarding", "1")] = dict(EXISTING_ONBOARDING_SUBGRAPH)
+    repo.snapshot_structures[("onboarding", "1")] = {
+        "name": "Old Name", "kind": "conversation", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"different":true}'},
+            {"key": "review", "type": "decision", "config": "old-raw-string"},
+            {"key": "done", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "review", "on": "submitted", "order": 0,
+             "guard": ""},
+            {"from": "review", "to": "done", "on": "approved", "order": 0,
+             "guard": '{"expr":"old"}'},
+        ],
+    }
+    svc = make_service(repo)
+
+    svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert len(repo.materialized) == 1
+
+
+def test_materialize_def_new_step_key_raises_nothing_materialized():
+    repo = FakeRepo()
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": "start",
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+            {"key": "extra", "type": "message", "config": ""},  # topology grows
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    repo.snapshot_structures[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefConflictError):
+        svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert repo.materialized == []
+
+
+def test_materialize_def_changed_transition_to_raises_nothing_materialized():
+    repo = FakeRepo()
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": "start",
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+            {"key": "other", "type": "message", "config": ""},
+        ],
+        # same (from, on, order) as stored, but a different `to`
+        "transitions": [
+            {"from": "start", "to": "other", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    repo.snapshot_structures[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+            {"key": "other", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefConflictError):
+        svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert repo.materialized == []
+
+
+def test_materialize_def_changed_start_key_raises_nothing_materialized():
+    repo = FakeRepo()
+    # same step set/transitions as EXISTING_ONBOARDING_SUBGRAPH, but the start
+    # key moved from "start" to "review"
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": "review",
+        "steps": EXISTING_ONBOARDING_SUBGRAPH["steps"],
+        "transitions": EXISTING_ONBOARDING_SUBGRAPH["transitions"],
+    }
+    repo.snapshot_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefConflictError):
+        svc.materialize_def(CTX, key="onboarding", version="1")
+
+    assert repo.materialized == []
+
+
+def test_materialize_def_removed_transition_raises_nothing_materialized():
+    repo = FakeRepo()
+    # drop review->done — the def subgraph about to be materialized has fewer
+    # transitions than what's already in the workspace snapshot
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": "start",
+        "steps": EXISTING_ONBOARDING_SUBGRAPH["steps"],
+        "transitions": [
+            {"from": "start", "to": "review", "on": "submitted", "order": 0,
+             "guard": ""},
+        ],
+    }
+    repo.snapshot_structures[("onboarding", "1")] = dict(EXISTING_ONBOARDING_STRUCTURE)
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefConflictError):
+        svc.materialize_def(CTX, key="onboarding", version="1")
 
     assert repo.materialized == []
 
@@ -1223,6 +1559,69 @@ def test_diff_structures_changed_transition_endpoint_reads_as_two_presences():
         ("transitions[s->x@go#0]", "present", "absent"),
         ("transitions[s->y@go#0]", "absent", "present"),
     ]
+
+
+# ── `_structural_diffs` — topology-only filter over `_diff_structures` (K-034) ──
+#
+# Mirrors `test_diff_structures_one_class_at_a_time`'s cases: property-only paths
+# (`meta.name`/`meta.kind`, `.type`/`.config`/`.guard`) must be filtered OUT;
+# presence-shaped paths (`meta.startKey`/`meta.startKeys`, a bare `steps[...]`/
+# `transitions[...]` row) must survive.
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "survives"),
+    [
+        # property-only — filtered out
+        (dict(name="A"), dict(name="B"), False),
+        (dict(kind="process"), dict(kind="conversation"), False),
+        (dict(steps=[{"key": "x", "type": "message", "config": ""}]),
+         dict(steps=[{"key": "x", "type": "decision", "config": ""}]), False),
+        (dict(steps=[{"key": "x", "type": "message", "config": "{}"}]),
+         dict(steps=[{"key": "x", "type": "message", "config": '{"a":1}'}]), False),
+        (dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": "g1"}]),
+         dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": "g2"}]), False),
+        # structural — survives
+        (dict(start_keys=("s",)), dict(start_keys=("t",)), True),
+        (dict(start_keys=("s",)), dict(start_keys=("s", "t")), True),
+        (dict(steps=[{"key": "x", "type": "message", "config": ""}]),
+         dict(steps=[]), True),
+        (dict(steps=[]),
+         dict(steps=[{"key": "x", "type": "message", "config": ""}]), True),
+        (dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": ""}]),
+         dict(transitions=[]), True),
+        (dict(transitions=[]),
+         dict(transitions=[{"from": "s", "to": "x", "on": "go", "order": 0,
+                            "guard": ""}]), True),
+    ],
+)
+def test_structural_diffs_one_class_at_a_time(left, right, survives):
+    diffs = _diff_structures(_canon(**left), _canon(**right))
+    assert len(diffs) == 1, diffs
+
+    survivors = _structural_diffs(diffs)
+
+    assert (len(survivors) == 1) is survives
+
+
+def test_structural_diffs_new_step_key_survives_alongside_a_filtered_property_diff():
+    # the class of case §3.2 calls out explicitly: a topology change (new step)
+    # must reject even when it arrives bundled with a property-only diff.
+    diffs = _diff_structures(
+        _canon(name="A", steps=[{"key": "s", "type": "human", "config": ""}]),
+        _canon(name="B", steps=[
+            {"key": "s", "type": "human", "config": ""},
+            {"key": "extra", "type": "message", "config": ""},
+        ]),
+    )
+    assert len(diffs) == 2  # meta.name (property) + steps[extra] (structural)
+
+    survivors = _structural_diffs(diffs)
+
+    assert [d["path"] for d in survivors] == ["steps[extra]"]
 
 
 def test_diff_preview_truncates_long_opaque_values():

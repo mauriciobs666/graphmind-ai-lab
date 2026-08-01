@@ -5,6 +5,68 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-01 — K-034: close the additive-`MERGE` defect — topology-conflict gate on re-publish/re-materialize
+
+**What:** Implemented `docs/plans/workflow-republish-semantics.md` (reviewed, approve with
+suggestions). Republishing/re-materializing an existing `(key, version)` with a *structurally*
+differing payload — a new/removed step key, a retargeted or removed transition, or a moved start
+key — is now rejected (`409 WorkflowDefConflictError`, nothing written) instead of silently
+minting parallel `TRANSITION`/`START` structure beside the old edges. A **property-only**
+resubmit (`name`, `kind`, a step's `type`/`config`, a transition's `guard`) is unchanged: still a
+silent no-op, exactly the K-031-pinned behavior.
+
+- **New gate, service layer only.** `services._structural_diffs` filters K-031's existing
+  `_diff_structures` output to topology-changing paths; `services._check_no_structural_conflict`
+  reads the existing structure (`Repository.read_def_structure`/`read_snapshot_structure`, both
+  pre-existing K-031 reads), diffs it against the candidate, and raises on any structural survivor.
+  Wired into `services.publish_workflow_def` (against `reference`) and `services.materialize_def`
+  (against `ctx.ws`'s snapshot), both *before* the repository write. `Repository.publish_def`/
+  `materialize_snapshot` and `_PUBLISH_CYPHER` itself are **unchanged** — the guarantee is
+  enforced one layer up, same layering `_validate_def_spec` already established.
+- **New error** — `WorkflowDefConflictError` (`repository.py`, re-exported by `services`), mapped
+  to `409` in `app.py` the same way `WorkflowRunNotWaitingError` already is ("state conflict,
+  nothing written").
+- **Defense-in-depth** — `executor._select_transition`'s sort key gained `to` as a final,
+  additive-only tie-break, so a pre-existing or bypass-created duplicate outgoing transition
+  resolves deterministically regardless of edge-retrieval order, rather than depending on
+  whatever order FalkorDB happened to return. Confirmed outside the SHA-locked `_drive_loop`
+  (`71055f756280`, unchanged — verified byte-identical before/after via AST hash).
+- **Doc/docstring sweep** — corrected every live (non-archived) site the K-034 backlog table and
+  this plan named: `docs/QUERIES.md` §11 preamble/footnotes, `docs/DESIGN.md` (topology diagram,
+  §4 decision paragraph, §9 write-paths row), `falkor-chat/AGENTS.md`'s `seed_workflows.sh` row,
+  `docs/requirements/agent-import.md`, `docs/requirements/workflow-dependence-overlay.md`,
+  `docs/BACKLOG.md`'s K-029 and K-032 premises, `repository.py`'s `publish_def`/
+  `materialize_snapshot` docstrings and §11 block comment, `services.py`'s `materialize_def`/
+  `publish_workflow_def` docstrings (also documents the residual TOCTOU race for **both**
+  `publish_workflow_def` and `materialize_def`, broadening the plan's publish-only framing per
+  the review's Minor 2), and `api.py`'s §11 section comment. Corrected framing throughout:
+  "create-only on properties, topology-enforced by services (K-034)" — not "immutable"/"idempotent"
+  unconditionally. Archived documents, `HISTORY.md`'s own past entries, `docs/reviews/*`, and
+  already-executed plans (`workflow-def-structure-read.md`, `m3-followups-coordination.md`) were
+  correctly left untouched per root `AGENTS.md`'s frozen-document rule.
+- **Review Minor 1 verified, not just trusted.** `tests/test_api.py::
+  test_diff_reports_divergence_after_the_documented_reseed_trap` was run as an early canary before
+  writing the new `409` tests and confirmed green: the preceding `_wipe_reference` call makes
+  `existing_raw is None`, so the gate never fires and the resubmit is treated as a first-time
+  create, exactly as the review traced.
+
+**Test counts:** `test_queries.sh` **282/282**, unaffected (`_PUBLISH_CYPHER` untouched, as the
+plan required). `pytest -q` **658 → 691 passed, 1 deselected** (+33 new tests: 12 `_structural_diffs`
+unit tests, 7 `publish_workflow_def` gate tests + 7 `materialize_def` gate tests (FakeRepo,
+service layer), 2 executor tie-break tests (parametrized, reversed order), 1 repository
+contract-boundary test (pins that a raw `Repository.publish_def` call stays unsafe on its own),
+3 live API end-to-end tests (changed transition `to`, changed start key, materialize-side drift —
+all asserting the structure is byte-identical before/after the rejected write), 1 app-wiring test
+(409 mapping, isolated from the gate logic).
+
+**Files touched:** `server/falkorchat/repository.py` (new error class, corrected docstrings/
+comments), `server/falkorchat/services.py` (`_structural_diffs`, `_check_no_structural_conflict`,
+gate wiring + docstrings), `server/falkorchat/app.py` (409 handler), `server/falkorchat/api.py`
+(comment), `server/falkorchat/executor.py` (tie-break), `server/tests/test_services.py`,
+`server/tests/test_api.py`, `server/tests/test_repository.py`, `server/tests/test_executor.py`,
+`docs/QUERIES.md`, `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/requirements/agent-import.md`,
+`docs/requirements/workflow-dependence-overlay.md`, `falkor-chat/AGENTS.md`.
+
 ## 2026-07-31 — K-039 item 3: CI blind-spot follow-up — recent triage post-success readiness signal
 
 **What:** Addressed the RCA's contributing-factor-2 gap by building a lagging, informational

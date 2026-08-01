@@ -199,6 +199,44 @@ def test_unconditional_fires_when_no_conditional_guard_matches(wf_repo):
     assert [s["stepKey"] for s in trail] == ["pick", "viaDefault"]  # fell through
 
 
+# ── K-034 defense-in-depth — `_select_transition`'s tie-break is deterministic ─
+#
+# A def with two outgoing `TRANSITION`s sharing `(from, on, order)` but different
+# `to` is unreachable through the sanctioned write path after the K-034 gate, but
+# stays reachable via a direct `materialize_snapshot` call (as this fixture does,
+# same as `_start_run` above) or pre-existing corrupted data. `_select_transition`
+# sorted only by `(guard == "", order)`, so two equal-priority candidates sorted
+# equal and Python's stable sort just preserved whatever order the list arrived
+# in — standing in for FalkorDB's unpinned edge-retrieval order. Supplying the
+# same two transitions in both orders must land on the same `to` either way.
+
+TIEBREAK_STEPS = [
+    {"key": "pick", "type": "agent", "config": "{}"},
+    {"key": "viaA", "type": "agent", "config": "{}"},
+    {"key": "viaB", "type": "agent", "config": "{}"},
+]
+TIEBREAK_TRANSITIONS = [
+    {"from": "pick", "to": "viaB", "on": "x", "guard": "", "order": 0},
+    {"from": "pick", "to": "viaA", "on": "x", "guard": "", "order": 0},
+]
+
+
+@pytest.mark.parametrize("transitions", [TIEBREAK_TRANSITIONS, list(reversed(TIEBREAK_TRANSITIONS))])
+def test_select_transition_tie_break_is_deterministic_regardless_of_order(
+    wf_repo, transitions
+):
+    _start_run(wf_repo, steps=TIEBREAK_STEPS, transitions=transitions,
+               start_key="pick")
+    ex = _make_executor(wf_repo, guard_judge=StubJudge([]))
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    # deterministic regardless of input order — `to` is the final tie-break
+    assert [s["stepKey"] for s in trail] == ["pick", "viaA"]
+
+
 # ── AC-5 — tracing on vs off ─────────────────────────────────────────────────
 
 def test_debug_run_records_trace_events(wf_repo):
