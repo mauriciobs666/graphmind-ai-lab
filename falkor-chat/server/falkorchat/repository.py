@@ -1543,6 +1543,40 @@ class Repository:
             for row in res.result_set
         ]
 
+    def read_recent_post_success(
+        self, ws: str, *, def_key: str, def_version: str, limit: int
+    ) -> dict[str, int]:
+        """Last-`limit` terminal-run post-success sample (RO). QUERIES.md §12.15
+        (K-039 item 3).
+
+        Feeds `Services.check_demo_readiness`'s `postSuccess` field: of the last
+        `limit` **terminal** (`status IN ['done', 'failed']`) runs of
+        `def_key`@`def_version`, ordered `startedAt DESC`, how many produced at
+        least one reply (`StepRun -[:PRODUCED]-> Message`, D2, §12.6).
+        `waiting`/`running` runs are excluded from the sample — they haven't
+        reached a verdict yet. `sampleSize`/`postedCount` are both `0` for a
+        fresh workspace or an unknown `def_key`/`def_version` — never an
+        exception. **`postedCount` comes back from FalkorDB as a Python
+        `float`**, never `NULL`/`None`, in both the empty and non-empty case
+        (live-verified, QUERIES.md §12.15) — cast to `int` here so callers get
+        two clean `int`s, not `"postedCount": 1.0` leaking into the JSON
+        response.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun) "
+            "WHERE r.startedAt >= 0 "
+            "  AND r.defKey = $defKey AND r.defVersion = $defVersion "
+            "  AND r.status IN ['done', 'failed'] "
+            "WITH r ORDER BY r.startedAt DESC LIMIT $limit "
+            "OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(:StepRun)-[:PRODUCED]->(m:Message) "
+            "WITH r, count(m) AS producedCount "
+            "RETURN count(r) AS sampleSize, "
+            "       sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END) AS postedCount",
+            {"defKey": def_key, "defVersion": def_version, "limit": limit},
+        )
+        row = res.result_set[0]
+        return {"sampleSize": row[0], "postedCount": int(row[1])}
+
     def append_trace_event(
         self, ws: str, *, step_run_id: str, trace_id: str, seq: int, kind: str,
         at: int, payload: str,

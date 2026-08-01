@@ -5,6 +5,62 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-07-31 — K-039 item 3: CI blind-spot follow-up — recent triage post-success readiness signal
+
+**What:** Addressed the RCA's contributing-factor-2 gap by building a lagging, informational
+post-success signal into the existing `GET /workspaces/{ws}/readiness` route
+(`Services.check_demo_readiness`), separate from the deterministic `ready` boolean. Reports the
+last 20 terminal `triage@v1` runs' post-success rate (`postSuccess: {defKey, defVersion,
+sampleSize, postedCount, rate, status}`, `status` ∈ `"ok"`/`"degraded"`/`"no-data"`), deliberately
+kept informational to avoid flipping `ready` on LLM mood swings. The RCA had noted that
+`pytest -m live`'s AC-4 answer-post assertion was deterministically RED but excluded from the
+default `pytest -q` run, giving false confidence about this exact path; the readiness banner now
+surfaces a production-data metric to close that blind spot.
+
+**Implementation:** Built by `graph-dba` (new query, `docs/QUERIES.md` §12.15,
+`test_queries.sh` 276→282), `coder` (repository/service wiring, `pytest -q` 647→658, 11 new
+tests), and `frontend-engineer` (banner rendering in `web/index.html`/`web/app.js`).
+
+- **New query** — `repository.read_recent_post_success(ws, def_key, def_version, limit)`:
+  counts the last-N terminal (`done`/`failed`) runs of a given def and how many produced at least
+  one `StepRun -[:PRODUCED]-> Message` edge. Anchors on `WorkflowRun.status` (independently
+  indexed, `bootstrap_schema.sh:145-146`); verified live via `GRAPH.PROFILE`.
+- **Service layer** — `Services.check_demo_readiness` now composes
+  `Repository.read_recent_post_success` into the response alongside the existing `ready`/`defs`
+  fields. `postSuccess.status` is `"no-data"` when `sampleSize == 0` (fresh workspace, no runs
+  yet), `"ok"` when every sampled run posted (`postedCount == sampleSize`), `"degraded"`
+  otherwise (at least one sampled run completed without posting). `rate` is `None` in the
+  no-data case, else `postedCount / sampleSize`.
+- **Web banner** — K-036's existing ready-to-demo banner now displays the post-success signal
+  as a separate status indicator (does not gate the `ready` boolean).
+
+**Test counts:** `test_queries.sh` **276 → 282/282** (+6 query assertions for the new query's
+empty/populated/ordering/edge cases); `pytest -q` **647 → 658 passed, 1 deselected** (+11 new
+tests: 6 repository integration cases, 5 service unit cases; the two existing `test_api.py`
+readiness-route tests were extended in place, not added, including widening
+`_READINESS_KEYS` to `{"ready", "defs", "postSuccess"}`).
+
+**Review gates:** Plan-gate (`docs/reviews/mention-reply-delivery.md` Pass 1, 2026-07-31) —
+**approve with suggestions** (4 minor + 1 nit, all folded into plan v2). Diff-scoped re-gate
+(Pass 2, 2026-07-31) — **approve, no findings**. Both gates checked the edge-case float/int
+handling, PROFILE verification against the live engine, and cross-referenced the RCA's own
+contributing-factor-2 note.
+
+**QA acceptance:** `qa-engineer` ran a black-box acceptance pass against the delivered code
+(no defects found in K-039's own diff). Separately, re-ran `pytest -m live` once with LM Studio
+reachable against commit that included K-039 item 1's implicit-`post_message`-fallback fix;
+AC-4's answer-post assertion — the same one K-027's D12-B documented as deterministically RED —
+now passes, confirming the implicit-fallback fix resolved the failure mode it was designed for.
+(Note recorded at `docs/BACKLOG.md` K-027 §5, "Update (2026-07-31...)".)
+
+**Scope completion:** K-039 scope items 1 (immediate mitigation, ✅ 2026-07-31) + 3 (CI
+blind-spot follow-up, ✅ 2026-07-31) are both delivered. Item 2 ("do not fold into K-027 item 2")
+is a non-deliverable scope clarification (the broader engine contract stays open in K-027). K-039
+itself is now **complete**.
+
+Files touched: `falkor-chat/server/falkorchat/repository.py`, `falkor-chat/server/falkorchat/services.py`,
+`falkor-chat/web/app.js`, `falkor-chat/web/index.html`, `falkor-chat/docs/QUERIES.md`.
+
 ## 2026-07-31 — Cleanup: RCA + QA live-repro test artifacts removed from `ws:acme` demo data
 
 **What:** Removed the live test artifacts two rounds of K-039 reproduction/acceptance testing left

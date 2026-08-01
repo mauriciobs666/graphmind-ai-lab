@@ -12,7 +12,7 @@ import itertools
 import pytest
 from fastapi.testclient import TestClient
 
-from falkorchat import db
+from falkorchat import config, db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
 from falkorchat.repository import Repository
@@ -754,9 +754,12 @@ def test_diff_both_absent_is_404(wf_client):
 # exhaustively covers the presence/sync/tripwire logic against a fake repo;
 # this is the contract test that the route is wired and shaped correctly.
 
-_READINESS_KEYS = {"ready", "defs"}
+_READINESS_KEYS = {"ready", "defs", "postSuccess"}
 _READINESS_ENTRY_KEYS = {
     "key", "version", "defPresent", "snapshotPresent", "inSync", "problems",
+}
+_POST_SUCCESS_KEYS = {
+    "defKey", "defVersion", "sampleSize", "postedCount", "rate", "status",
 }
 
 
@@ -776,6 +779,15 @@ def test_readiness_route_not_ready_when_nothing_seeded(wf_client):
             f"{label}: not published in `reference` at this version",
             f"{label}: not materialized into ws:test at this version",
         ]
+    # no WorkflowRuns exist in this fresh ws:test graph — "no data", not 0%
+    post_success = body["postSuccess"]
+    assert set(post_success) == _POST_SUCCESS_KEYS
+    assert post_success["defKey"] == config.TRIGGER_DEF_KEY
+    assert post_success["defVersion"] == config.TRIGGER_DEF_VERSION
+    assert post_success["sampleSize"] == 0
+    assert post_success["postedCount"] == 0
+    assert post_success["rate"] is None
+    assert post_success["status"] == "no-data"
 
 
 def test_readiness_route_ready_when_both_demo_defs_published_and_synced(wf_client):
@@ -795,6 +807,9 @@ def test_readiness_route_ready_when_both_demo_defs_published_and_synced(wf_clien
             True, True, True,
         )
         assert entry["problems"] == []
+    # publishing/materializing the demo defs starts no WorkflowRuns — still "no data"
+    assert body["postSuccess"]["status"] == "no-data"
+    assert body["postSuccess"]["sampleSize"] == 0
 
 
 # ── U12 run-inspection REST reads (AC-5 observability seam) ─────────────────────

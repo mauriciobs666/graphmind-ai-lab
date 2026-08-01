@@ -1129,6 +1129,50 @@ assert_contains "find_runs_for_thread(th2): zero runs (empty, not an error)" "0"
 prof=$(gp "$WS" "$FRFT")
 assert_index_scan "find_runs_for_thread anchors on WorkflowRun.startedAt index" "$prof"
 
+echo ""
+echo "▶ §12.15 read_recent_post_success (K-039 item 3) — recent triage post-success sample"
+
+# Dedicated, self-contained fixture — defKey "post_success_probe" is not used anywhere
+# else in this suite, so this section's assertions can't be perturbed by the §12
+# fixtures above (rft1-3, wr1, wr3, etc. all use different defKeys). Two done runs
+# (one with a PRODUCED reply, one silent), one failed run (no reply), one still-waiting
+# run the terminal-status filter must exclude — the plan's own suggested shape (§4 Step
+# 1, docs/plans/mention-reply-delivery.md).
+gq "$WS" 'CREATE (:Message {msgId:"psp_msg1", text:"reply", role:"agent", createdAt:9000, threadId:"psp_th"})' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"psp_msg1"}) CREATE (r:WorkflowRun {runId:"psp1", defKey:"post_success_probe", defVersion:"v1", status:"done", startedAt:9000, endedAt:9100, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""}) CREATE (sr:StepRun {stepRunId:"psp_sr1", stepKey:"answer", status:"done", startedAt:9000, endedAt:9100, input:"{}", output:"posted"}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:PRODUCED]->(m)' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp2", defKey:"post_success_probe", defVersion:"v1", status:"done", startedAt:9050, endedAt:9150, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""})' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp3", defKey:"post_success_probe", defVersion:"v1", status:"failed", startedAt:9025, endedAt:9060, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:""})' > /dev/null
+gq "$WS" 'CREATE (:WorkflowRun {runId:"psp4", defKey:"post_success_probe", defVersion:"v1", status:"waiting", startedAt:9075, endedAt:0, ctx:"{}", trace:false, maxSteps:12, stepCount:1, waitingThreadId:"psp_th"})' > /dev/null
+
+# Canonical body (QUERIES.md §12.15) — as with §12.1/§12.2 above, the test copy composes
+# the two RETURN columns into one labelled, collision-resistant grep target ("sampleSize=…
+# postedCount=…") rather than asserting on bare digits that could match PROFILE/redis-cli
+# timing noise.
+RPS='MATCH (r:WorkflowRun) WHERE r.startedAt >= 0 AND r.defKey = $defKey AND r.defVersion = $defVersion AND r.status IN ["done", "failed"] WITH r ORDER BY r.startedAt DESC LIMIT $limit OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(:StepRun)-[:PRODUCED]->(m:Message) WITH r, count(m) AS producedCount RETURN "sampleSize="+toString(count(r))+" postedCount="+toString(sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END)) AS s'
+
+out=$(gq "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=20 $RPS")
+assert_contains "§12.15 sample of 3 terminal runs (psp4 waiting excluded), 1 posted" "sampleSize=3 postedCount=1.000000" "$out"
+
+# LIMIT truncates to the newest N by startedAt: psp2(9050), psp3(9025) — excludes psp1(9000)
+out=$(gq "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=2 $RPS")
+assert_contains "§12.15 LIMIT 2: newest 2 sampled (psp1 excluded), neither posted" "sampleSize=2 postedCount=0.000000" "$out"
+
+# zero-sample: an unknown defKey is "no data," not an exception and not a false "0% healthy"
+out=$(gq "$WS" "CYPHER defKey=\"nonexistent_def\" defVersion=\"v1\" limit=20 $RPS")
+assert_contains "§12.15 zero-sample (unknown defKey): sampleSize=0, postedCount=0" "sampleSize=0 postedCount=0.000000" "$out"
+
+# PROFILE: no label scan; both WorkflowRun.startedAt and WorkflowRun.status fold into one
+# Node By Index Scan (compound — see QUERIES.md §12.15 for the isolation tests proving
+# this), only defKey/defVersion surface as the separate Filter above it.
+prof=$(gp "$WS" "CYPHER defKey=\"post_success_probe\" defVersion=\"v1\" limit=20 $RPS")
+assert_index_scan "§12.15 read_recent_post_success anchors on a WorkflowRun index scan" "$prof"
+assert_contains "§12.15 PROFILE shows the residual Filter above the index scan" "Filter" "$prof"
+
+# cleanup this section's fixture (isolated defKey, safe to scope the delete narrowly)
+gq "$WS" 'MATCH (r:WorkflowRun {defKey:"post_success_probe"}) DETACH DELETE r' > /dev/null
+gq "$WS" 'MATCH (sr:StepRun {stepRunId:"psp_sr1"}) DETACH DELETE sr' > /dev/null
+gq "$WS" 'MATCH (m:Message {msgId:"psp_msg1"}) DETACH DELETE m' > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

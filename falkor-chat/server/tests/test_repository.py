@@ -1475,6 +1475,163 @@ def test_find_runs_for_thread_ignores_other_threads(wf_repo):
     assert wf_repo.find_runs_for_thread("test", thread_id="other") == []
 
 
+# ── §12.15 read_recent_post_success ──────────────────────────────────────────
+
+def _seed_trigger(repo, msg_id, *, created_at=130):
+    """A second (or later) trigger message in thread t1, for a second run."""
+    repo.post_subsequent_message(
+        "test", thread_id="t1", msg_id=msg_id, author_id="u1",
+        text="another", role="user", created_at=created_at,
+    )
+
+
+def _post_success_run(
+    repo, *, run_id, trigger, started_at, terminal, posted,
+):
+    """Seed one WorkflowRun for the post-success sample.
+
+    `posted=True` advances the run one step (creating a StepRun linked to it
+    via HAS_STEP_RUN, reusing the existing `_advance` helper) and links a
+    `StepRun -[:PRODUCED]-> Message` edge (D2) before reaching `terminal`
+    status; `posted=False` reaches `terminal` with no StepRun/PRODUCED edge at
+    all. `terminal` is one of `"done"`, `"failed"`, `"waiting"`, or `"running"`
+    (the run is simply left as `_start_at` leaves it).
+    """
+    _start_at(repo, run_id=run_id, trigger=trigger, started_at=started_at)
+    if posted:
+        _advance(repo, run_id=run_id, step_run_id=f"{run_id}-sr", to_step="research")
+        repo.link_step_emission("test", step_run_id=f"{run_id}-sr", msg_id=trigger)
+    if terminal == "done":
+        repo.complete_run("test", run_id=run_id, ended_at=started_at + 10)
+    elif terminal == "failed":
+        repo.fail_run("test", run_id=run_id, ended_at=started_at + 10, ctx="{}")
+    elif terminal == "waiting":
+        repo.suspend_run("test", run_id=run_id, thread_id="t1")
+    # terminal == "running": nothing further — _start_at already leaves it running.
+
+
+def test_read_recent_post_success_all_posted(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _seed_trigger(wf_repo, "trig2")
+    _post_success_run(
+        wf_repo, run_id="r1", trigger="trig1", started_at=1000,
+        terminal="done", posted=True,
+    )
+    _post_success_run(
+        wf_repo, run_id="r2", trigger="trig2", started_at=2000,
+        terminal="failed", posted=True,
+    )
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=20
+    )
+
+    assert res == {"sampleSize": 2, "postedCount": 2}
+    # the query's raw `postedCount` is a Python float (sum() over a CASE) —
+    # the repository must cast it to a clean int before returning.
+    assert isinstance(res["postedCount"], int)
+    assert isinstance(res["sampleSize"], int)
+
+
+def test_read_recent_post_success_some_posted(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _seed_trigger(wf_repo, "trig2")
+    _post_success_run(
+        wf_repo, run_id="r1", trigger="trig1", started_at=1000,
+        terminal="done", posted=True,
+    )
+    _post_success_run(
+        wf_repo, run_id="r2", trigger="trig2", started_at=2000,
+        terminal="done", posted=False,
+    )
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=20
+    )
+
+    assert res == {"sampleSize": 2, "postedCount": 1}
+
+
+def test_read_recent_post_success_none_posted(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _seed_trigger(wf_repo, "trig2")
+    _post_success_run(
+        wf_repo, run_id="r1", trigger="trig1", started_at=1000,
+        terminal="done", posted=False,
+    )
+    _post_success_run(
+        wf_repo, run_id="r2", trigger="trig2", started_at=2000,
+        terminal="failed", posted=False,
+    )
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=20
+    )
+
+    assert res == {"sampleSize": 2, "postedCount": 0}
+
+
+def test_read_recent_post_success_zero_runs_is_no_data_not_an_error(wf_repo):
+    _seed_run_fixtures(wf_repo)  # thread/snapshot exist, but no run was ever started
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=20
+    )
+
+    assert res == {"sampleSize": 0, "postedCount": 0}
+
+
+def test_read_recent_post_success_respects_limit(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _seed_trigger(wf_repo, "trig2")
+    _seed_trigger(wf_repo, "trig3")
+    # oldest run is unposted; the two newest are posted — a limit of 2 must
+    # truncate to just the newest two and drop the unposted oldest one.
+    _post_success_run(
+        wf_repo, run_id="r1", trigger="trig1", started_at=1000,
+        terminal="done", posted=False,
+    )
+    _post_success_run(
+        wf_repo, run_id="r2", trigger="trig2", started_at=2000,
+        terminal="done", posted=True,
+    )
+    _post_success_run(
+        wf_repo, run_id="r3", trigger="trig3", started_at=3000,
+        terminal="done", posted=True,
+    )
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=2
+    )
+
+    assert res == {"sampleSize": 2, "postedCount": 2}
+
+
+def test_read_recent_post_success_excludes_waiting_and_running(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _seed_trigger(wf_repo, "trig2")
+    _seed_trigger(wf_repo, "trig3")
+    _post_success_run(
+        wf_repo, run_id="r1", trigger="trig1", started_at=1000,
+        terminal="done", posted=True,
+    )
+    _post_success_run(
+        wf_repo, run_id="r2", trigger="trig2", started_at=2000,
+        terminal="waiting", posted=False,
+    )
+    _post_success_run(
+        wf_repo, run_id="r3", trigger="trig3", started_at=3000,
+        terminal="running", posted=False,
+    )
+
+    res = wf_repo.read_recent_post_success(
+        "test", def_key="triage", def_version="1", limit=20
+    )
+
+    # only r1 (done) counts — r2 (waiting) and r3 (running) are non-terminal
+    assert res == {"sampleSize": 1, "postedCount": 1}
+
+
 # ── §12.10 / §12.11 trace write & read ───────────────────────────────────────
 
 def test_append_trace_event_then_read_trace_round_trips(wf_repo):

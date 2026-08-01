@@ -1,8 +1,9 @@
 # falkor-chat — Canonical Query Library
 
 Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
-**276/276, 2026-07-28** (`./scripts/test_queries.sh`; 256/256 before the K-036 §2/§12.14 gate;
-241/241 before that, before the K-024 §12.12/§12.13 gate).
+**282/282, 2026-07-31** (`./scripts/test_queries.sh`; 276/276 before the K-039 §12.15 gate;
+256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
+§12.12/§12.13 gate).
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
 In `falkordb-py`: `g.query(cypher, params={"key": value})`.
@@ -1499,3 +1500,102 @@ small, unfiltered label and the other is a much larger label filtered by an **un
 property in `WHERE` can hit this same anchor trap — the fix (an extra, even-if-vacuous predicate
 on the variable you want as anchor) generalizes. See `claude/graph-dba/falkordb-quirks.md` for the
 schema-independent write-up.
+
+### 12.15 `read_recent_post_success` — last-N post-success sample for the `@mention` def (K-039 item 3)
+
+```cypher
+// $defKey, $defVersion, $limit
+MATCH (r:WorkflowRun)
+WHERE r.startedAt >= 0
+  AND r.defKey = $defKey AND r.defVersion = $defVersion
+  AND r.status IN ['done', 'failed']
+WITH r ORDER BY r.startedAt DESC LIMIT $limit
+OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(:StepRun)-[:PRODUCED]->(m:Message)
+WITH r, count(m) AS producedCount
+RETURN count(r) AS sampleSize,
+       sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END) AS postedCount
+```
+
+Feeds the K-036 readiness route's new `postSuccess` field (`docs/plans/mention-reply-delivery.md`
+§3.3): of the last `$limit` **terminal** (`done`/`failed`) runs of the `@mention`-triggered def
+(`config.TRIGGER_DEF_KEY`@`config.TRIGGER_DEF_VERSION`, currently `triage`@`v1`), how many produced
+at least one reply (`StepRun -[:PRODUCED]-> Message`, D2, §12.6). `waiting`/`running` runs are
+excluded from the sample — they haven't reached a verdict yet. Verified live against `ws:test`
+(synthetic fixture) and read-only against `ws:acme` (real production data), pinned build
+`v4.18.11`/module `41811`.
+
+**Result types (Python side, `falkordb-py` 1.6.x) — live-verified, both the zero-row and
+non-empty case:** `sampleSize` is a clean `int` (from `count(r)`); `postedCount` is always a
+**Python `float`** (`0.0`, `1.0`, …) — `sum()` over this `CASE` expression **never returns
+`NULL`/`None`** in either case. Confirmed via `g.query(...).result_set`:
+
+```
+row: [3, 1.0]              # non-empty sample (3 terminal runs, 1 posted)
+zero-case row: [0, 0.0]     # unknown defKey/defVersion — "no data," not an exception
+```
+
+The repository layer must cast `postedCount` to `int` before returning it — left as a `float`, the
+JSON response carries `"postedCount": 1.0` and the readiness banner would render `"1.0/2 replied"`.
+
+**Which index the query actually lands on — not just "an index scan":** `r.defKey`/`r.defVersion`
+carry no index (none needed — `WorkflowRun` cardinality is tiny per workspace, §RAM below), so this
+query's index-anchor situation is **materially different from §12.14's** (there, the load-bearing
+`WHERE r.startedAt >= 0` conjunct exists purely to pull the label-scan anchor off a *different*
+pattern variable, `m:Message`; here every filter is on `r` itself and two of them — `startedAt` and
+`status` — are independently indexed).
+
+PROFILE against `ws:test` (dedicated fixture, defKey `post_success_probe`, 3 terminal + 1 waiting
+run):
+
+```
+Results | Records produced: 1
+    Aggregate | Records produced: 1
+        Aggregate | Records produced: 3
+            Optional Conditional Traverse | (r)->(m:Message) | Records produced: 3
+                Limit | Records produced: 3
+                    Sort | Records produced: 3
+                        Project | Records produced: 3
+                            Filter | Records produced: 3
+                                Node By Index Scan | (r:WorkflowRun) | Records produced: 3
+```
+
+No `Node By Label Scan` anywhere (AGENTS.md rule 3) — but the interesting fact is *what the single
+`Node By Index Scan` step already excludes before `Filter` ever runs*. Isolated by testing three
+variants of the same fixture:
+
+- Query with only `r.startedAt >= 0` (drop the `status` predicate): `Node By Index Scan` alone
+  produces all 4 fixture rows (the `waiting` run included) — `startedAt` anchors on its own.
+- Query with only `r.status IN [...]` (drop the `startedAt` predicate): `Node By Index Scan` alone
+  produces exactly the 3 terminal rows (the `waiting` run excluded) — `status` anchors on its own
+  too.
+- Both predicates dropped (only the unindexed `defKey`/`defVersion` left): the plan falls back to
+  **`Node By Label Scan | (r:WorkflowRun)`** — confirmed neither `defKey` nor `defVersion` can
+  anchor anything by themselves.
+- **The deciding test:** with the full query (both predicates present) plus one extra probe row
+  (`status:'done'`, `startedAt:-5`, `defKey` matching), the `Node By Index Scan` step still
+  produces only 3 — the probe row is excluded **at the index-scan step itself**, before `Filter`
+  ever runs. If the engine had picked only one of the two indexes as anchor and pushed the other
+  predicate into `Filter`, the probe row (which fails only the `startedAt` predicate) would have
+  survived to the `Filter` step and been visible in its input count. It wasn't.
+
+**New planner fact, previously undocumented (verified 2026-07-31, v4.18.11/module `41811`):** when
+two independently-indexed properties on the same label both appear as `AND`-ed `WHERE` predicates
+(one a numeric range, one a `status IN [...]` list), FalkorDB's planner does not pick one as "the"
+anchor and filter the other — it folds **both indexed predicates into the single `Node By Index
+Scan` step**, and only the genuinely unindexed predicates (`defKey`, `defVersion` here) surface as
+a separate `Filter` operator above it. So the honest answer to "which index" is **both
+`WorkflowRun.startedAt` and `WorkflowRun.status`, combined** — not an either/or choice, and not
+"just an index scan." Cross-checked read-only against `ws:acme`'s real data (11 `WorkflowRun`s,
+mixed `triage@v1`/`access-request@v1`): `Node By Index Scan` produced exactly 7 (every `done`/
+`failed` row across *both* defs — the `status` half of the compound scan, `startedAt` doesn't
+additionally reduce there since every real timestamp is positive), then `Filter` narrowed to the
+2 `triage@v1` rows (`sampleSize=2, postedCount=1` — the RCA's own corroborating "1/2 degraded"
+case, §7 finding 4). Promoted to the general quirks KB (`claude/graph-dba/falkordb-quirks.md`,
+"Query tuning") — this is an engine fact, not specific to this schema.
+
+**RAM (rule 6): none.** No new index, no new label, no new property — the query reuses the
+existing `WorkflowRun.status` and `WorkflowRun.startedAt` indexes (`bootstrap_schema.sh:145-156`),
+confirmed live (`CALL db.indexes()` on both `ws:test` and `ws:acme` returns exactly
+`[runId, status, startedAt]` for `WorkflowRun`, no `defKey`). `WorkflowRun` cardinality is tiny per
+workspace (same argument §12.9/§12.14 already accepted), so an unindexed residual `Filter` on
+`defKey`/`defVersion` costs nothing worth adding an index for.

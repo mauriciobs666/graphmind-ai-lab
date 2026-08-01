@@ -428,9 +428,15 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   raw newline inside the JSON string argument would have left it unparseable. Item 5's re-probe
   should not treat the claim as a proven precondition. The **engine-level guarantee (item 2)
   is still owed, and item 5's re-probe should now re-measure against this parse layer.** Also
-  recorded: `pytest -m live` is **RED deterministically (2/2)** on
+  recorded (at the time of this QA pass): `pytest -m live` was **RED deterministically (2/2)** on
   the AC-4 answer-post assertion — a known, filed limitation (D12-B), not an unknown regression.
   Evidence: `docs/archive/test-reports/m3-workflow-engine-report.md` §3.9 / DEF-K027-A / DEF-K027-B.
+  **Update (2026-07-31, K-039 item 3 acceptance pass, `qa-engineer`):** re-run once,
+  `.venv/bin/python -m pytest -m live -s`, against a reachable LM Studio, after K-039 item 1's
+  implicit-`post_message`-fallback fix landed (`docs/HISTORY.md` 2026-07-31 "K-039 immediate
+  mitigation" entry). Result: **1 passed** — `test_triage_flow_runs_end_to_end_against_live_llm`'s
+  AC-4 answer-post assertion is green. The RED above is resolved for the failure mode it was filed
+  against (D12-B); this note is now historical context, not current state.
 - **Carried findings from the analyst gate** (`docs/archive/reviews/m3-guard-thread-context-impl.md`, minors +
   nits — recorded here so they cannot rot):
   - **m-1 · `guards.py` negator window leaks across clause boundaries.** The 12-char window misses
@@ -1117,7 +1123,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   always wins regardless of resolution order (m6); an injected-clock or mocked-response test
   simulating an external round-trip between two ticks, asserting the panel still rebuilds (m7).
 
-### K-039 — `@mention`→`triage@v1` runs complete `done` while posting zero chat replies, demo-blocking (🟡 in-progress — immediate mitigation ✅ delivered 2026-07-31 → HISTORY.md; the CI blind-spot follow-up (item 3) and the full K-027 item 2 engine contract stay open; RCA `docs/reviews/mention-reply-delivery-rca.md`, 2026-07-30)
+### K-039 — `@mention`→`triage@v1` runs complete `done` while posting zero chat replies, demo-blocking (✅ delivered — items 1 & 3 ✅ both delivered 2026-07-31 → HISTORY.md; the full K-027 item 2 engine contract stays open; RCA `docs/reviews/mention-reply-delivery-rca.md`, 2026-07-30)
 
 > **Why it exists.** User report: `@mention`-ing the demo assistant visibly runs a workflow to
 > completion (run/step panel shows it) and LM Studio confirms the LLM responded, but nothing is
@@ -1164,12 +1170,16 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   2. **Do not fold this into the full K-027 item 2 engine contract** — that item is broader
      (any "must-communicate" node type, not just `post_message`-granted `agent` nodes) and
      `architect`-owned; this item's scope is the narrow, immediately-shippable fallback.
-  3. **CI blind-spot follow-up (secondary, may be split out further):** the RCA notes
+  3. ✅ **delivered 2026-07-31** — **CI blind-spot follow-up:** the RCA noted
      `pytest -m live`'s AC-4 answer-post assertion is known-RED but excluded from the default
-     `pytest -q` run, so a green baseline currently gives false confidence about this exact path.
-     Consider a reachability-gated live check in the default loop, or a readiness-banner signal
-     (`docs/BACKLOG.md` K-036's `/workspaces/{ws}/readiness` route) reporting recent triage-run
-     post-success rate.
+     `pytest -q` run, giving false confidence about this exact path. Built a readiness-banner signal
+     (`GET /workspaces/{ws}/readiness` route's new `postSuccess` field, `docs/HISTORY.md` 2026-07-31
+     entry) reporting recent triage-run post-success rate (last 20 terminal runs). Separate from the
+     deterministic `ready` boolean to avoid flipping on LLM mood. New query in `docs/QUERIES.md`
+     §12.15 (live-verified via `GRAPH.PROFILE`), repository/service wiring (11 new tests, `pytest -q`
+     647→658), web banner rendering. Both review gates approve (plan-gate: approve with suggestions;
+     diff-scoped re-gate: approve). QA acceptance pass found no defects; `pytest -m live` AC-4
+     assertion now passes.
 - **Done-condition:** a fresh `@mention` against `triage@v1` on the live demo, replayed with the
   same fake-LLM-stub-returns-plain-text shape as this RCA's live repro, results in a `Message`
   `PRODUCED` by the relevant `StepRun` and readable via `GET /threads/{id}/messages` — not just a
@@ -1185,6 +1195,38 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   `mentions` value should assert the fallback still recovers a posted reply. Full offline suite
   (`server/tests/test_process_flow.py`-style, no network) plus the existing `pytest -m live`
   AC-4 assertion re-checked once LM Studio is available.
+
+### K-040 — `POST /workflow-runs`'s request field is `version`, not `defVersion` — decide whether to rename for consistency (🔵 proposed — found during a `tico` manual-verification pass, 2026-07-31)
+
+> **Why it exists.** `StartWorkflowRunIn` (`server/falkorchat/schemas.py:198-202`) declares the
+> field as `version`, while the rest of the def/snapshot vocabulary — `WorkflowRun.defVersion`
+> (DESIGN §6.2), the `GET /workflow-defs/{key}/versions/{version}` path segment name notwithstanding,
+> and the general "def key + version" phrasing throughout `DESIGN.md` §14.4/§12 — uses `defVersion`.
+> The mismatch is easy to get wrong by pattern-matching the graph model rather than the actual
+> schema: it produced a real `422 Unprocessable Entity` in a first draft of
+> `falkor-chat/docs/manuals/workflows.md`'s API walkthrough, caught only because a `qa-engineer`
+> verification pass actually called the endpoint rather than composing the example from the schema
+> next to the design doc. Already fixed in the manual (`docs/manuals/workflows.md`, 2026-07-31); this
+> item is about the underlying inconsistency, not the doc.
+- **The actual decision, not pre-judged here:** either (a) rename `StartWorkflowRunIn.version` →
+  `defVersion` for consistency with the rest of the surface — a live API contract change, so it
+  needs an assessment of what currently depends on `version` (the web UI does not call this route
+  today per `docs/manuals/workflows.md`'s Walkthrough 4 note that it's API-only; MCP tools don't
+  cover workflow runs either per DESIGN §15.2 — so the blast radius may be small, but that needs
+  confirming, not assuming) — or (b) leave the field as-is and treat this as a documented,
+  intentional naming divergence (a one-line callout at `DESIGN.md` §14.4 / `QUERIES.md` §12.12 would
+  suffice). Both are legitimate; this item exists so the choice is made deliberately rather than by
+  the next person guessing again.
+- **Owner:** **`architect`** — assess the rename's blast radius and decide (a) vs (b); if (a),
+  **`coder`**/`tdd-engineer` implements + updates every call site and doc reference.
+- **Scope:** grep every caller of `POST /workflow-runs` (tests, scripts, docs, the manual) before
+  deciding; if renaming, land the schema change, the `test_process_flow.py`/`test_services.py` call
+  sites, and the `docs/manuals/workflows.md` example in the same change.
+- **Risks/RAM:** none — no graph/DDL surface; purely a request-schema field name. The only risk is a
+  silently-missed caller if the rename is chosen without the grep above.
+- **Test strategy:** if renamed, flip the existing `test_process_flow.py` start-run assertions to the
+  new field name (should go red first, confirming the old name is actually gone) plus a negative test
+  that the old `version` name is rejected, not silently ignored.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,

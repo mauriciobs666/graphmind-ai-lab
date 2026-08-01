@@ -98,6 +98,13 @@ class WorkflowEngineDisabledError(RuntimeError):
 # while the deployment keeps `TIMEOUT_MAX=0`.
 RAG_QUERY_TIMEOUT_MS = 5000
 
+# ── K-039 item 3: readiness "recent triage post-success" sample size ────────────
+# Last-N terminal runs of the `@mention`-triggered def sampled by
+# `check_demo_readiness`'s `postSuccess` field (repository.read_recent_post_success,
+# QUERIES.md §12.15). A plain module constant, mirroring RAG_QUERY_TIMEOUT_MS above
+# — nobody has asked to tune this per-deployment.
+POST_SUCCESS_SAMPLE_SIZE = 20
+
 # ── errors ─────────────────────────────────────────────────────────────────────
 
 
@@ -1010,6 +1017,15 @@ class Services:
         and problem-free. `problems` reuses the script's own wording verbatim —
         this endpoint and the script must never disagree about what "ready"
         means.
+
+        **`postSuccess` (K-039 item 3)** is a separate, purely informational
+        field — a lagging, production-data signal ("of the last N triage runs,
+        how many actually posted a reply") that is deliberately **not** folded
+        into `ready` (plan `docs/plans/mention-reply-delivery.md` §3.3: `ready`
+        stays a deterministic, configuration-only signal; a model-behavior
+        metric would make it flip on LLM mood instead). `rate` is `None` when
+        `sampleSize == 0` — a fresh workspace with no triage runs yet is
+        "no data," not "0% healthy".
         """
         results: list[dict[str, Any]] = []
         ready = True
@@ -1066,7 +1082,28 @@ class Services:
                 "problems": problems,
             })
 
-        return {"ready": ready, "defs": results}
+        post_success = self._repo.read_recent_post_success(
+            ctx.ws, def_key=config.TRIGGER_DEF_KEY,
+            def_version=config.TRIGGER_DEF_VERSION, limit=POST_SUCCESS_SAMPLE_SIZE,
+        )
+        sample_size = post_success["sampleSize"]
+        posted_count = post_success["postedCount"]
+        return {
+            "ready": ready,
+            "defs": results,
+            "postSuccess": {
+                "defKey": config.TRIGGER_DEF_KEY,
+                "defVersion": config.TRIGGER_DEF_VERSION,
+                "sampleSize": sample_size,
+                "postedCount": posted_count,
+                "rate": (posted_count / sample_size) if sample_size else None,
+                "status": (
+                    "no-data" if sample_size == 0
+                    else "ok" if posted_count == sample_size
+                    else "degraded"
+                ),
+            },
+        }
 
     # ── §12 Workflow execution — runs, step-runs & traces (M3 executor) ──────────
     #

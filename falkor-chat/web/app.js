@@ -621,9 +621,23 @@ function renderReadinessBadge(report) {
 
 function renderReadinessPanel(report) {
   const problems = (report.defs || []).flatMap((d) => d.problems || []);
-  $("readiness-content").innerHTML = problems.length
+  const defsHtml = problems.length
     ? `<ul>${problems.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>`
     : '<div class="sub">All expected definitions are published, materialized, and in sync.</div>';
+  $("readiness-content").innerHTML = defsHtml + renderPostSuccess(report.postSuccess);
+}
+
+// Recent triage post-success (K-039 item 3) — a lagging, production-data
+// signal, deliberately separate from `ready`/the badge color (plan
+// mention-reply-delivery §3.3): never fold this into renderReadinessBadge.
+function renderPostSuccess(postSuccess) {
+  if (!postSuccess) return "";
+  const { sampleSize, postedCount, status } = postSuccess;
+  if (status === "no-data") {
+    return '<div class="sub post-success">Recent triage post-success: no runs yet.</div>';
+  }
+  const cls = status === "degraded" ? "post-success post-success--degraded" : "post-success";
+  return `<div class="sub ${cls}">Recent triage post-success: ${postedCount}/${sampleSize} replied</div>`;
 }
 
 function toggleReadinessPanel() {

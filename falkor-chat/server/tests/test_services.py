@@ -13,11 +13,13 @@ import json
 import pytest
 from redis.exceptions import ResponseError
 
+from falkorchat import config
 from falkorchat.config import CallContext
 from falkorchat.repository import MessageWriteStatus
 from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
     DEMO_EXPECTED_DEFS,
+    POST_SUCCESS_SAMPLE_SIZE,
     ChannelNotFoundError,
     InvalidSearchQueryError,
     MemberIdCollisionError,
@@ -72,6 +74,7 @@ class FakeRepo:
         self.waiting_runs: dict[str, dict] = {}  # threadId -> waiting run (resume lookup)
         self.runs_by_thread: dict[str, list[dict]] = {}  # threadId -> run history (§12.14)
         self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
+        self.post_success_result = _UNSET  # override to script read_recent_post_success (§12.15)
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -253,6 +256,12 @@ class FakeRepo:
     def find_runs_for_thread(self, ws, *, thread_id, limit=10):
         self.calls.append(("find_runs_for_thread", ws, thread_id, limit))
         return self.runs_by_thread.get(thread_id, [])[:limit]
+
+    def read_recent_post_success(self, ws, *, def_key, def_version, limit):
+        self.calls.append(("read_recent_post_success", ws, def_key, def_version, limit))
+        if self.post_success_result is _UNSET:
+            return {"sampleSize": 0, "postedCount": 0}
+        return self.post_success_result
 
     def list_thread_participants(self, ws, *, thread_id):
         self.calls.append(("list_thread_participants", ws, thread_id))
@@ -1396,6 +1405,97 @@ def test_check_demo_readiness_flags_multi_start_tripwire():
         f"{key}@{version}: reference def has 2 START edges (a, b) — see K-034",
         f"{key}@{version}: ws:{CTX.ws} snapshot has 2 START edges (a, b) — see K-034",
     ]
+
+
+# ── K-039 item 3: `postSuccess` (recent triage post-success signal) ─────────────
+#
+# Purely informational — must never affect `ready`/`defs` (plan §3.3). The
+# existing `test_check_demo_readiness_*` tests above assert `ready`/`defs` and
+# stay green unmodified: they don't script `post_success_result`, so `FakeRepo`'s
+# default (`{"sampleSize": 0, "postedCount": 0}`, i.e. "no-data") applies and
+# `postSuccess` is simply an extra key those tests don't look at.
+
+
+def test_check_demo_readiness_post_success_ok_when_all_sampled_runs_posted():
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    repo.post_success_result = {"sampleSize": 5, "postedCount": 5}
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["postSuccess"] == {
+        "defKey": config.TRIGGER_DEF_KEY, "defVersion": config.TRIGGER_DEF_VERSION,
+        "sampleSize": 5, "postedCount": 5, "rate": 1.0, "status": "ok",
+    }
+    # informational only — never mixed into ready/defs
+    assert out["ready"] is True
+
+
+def test_check_demo_readiness_post_success_degraded_when_some_unposted():
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    repo.post_success_result = {"sampleSize": 4, "postedCount": 1}
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["postSuccess"]["status"] == "degraded"
+    assert out["postSuccess"]["rate"] == 1 / 4
+    assert out["postSuccess"]["sampleSize"] == 4
+    assert out["postSuccess"]["postedCount"] == 1
+    # still purely informational — a degraded post-success rate does not flip ready
+    assert out["ready"] is True
+
+
+def test_check_demo_readiness_post_success_no_data_when_sample_empty():
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    repo.post_success_result = {"sampleSize": 0, "postedCount": 0}
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["postSuccess"]["status"] == "no-data"
+    assert out["postSuccess"]["rate"] is None  # never 0% — that would read as unhealthy
+
+
+def test_check_demo_readiness_post_success_uses_trigger_def_key_and_version():
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    svc = make_service(repo)
+
+    svc.check_demo_readiness(CTX)
+
+    assert (
+        "read_recent_post_success", CTX.ws, config.TRIGGER_DEF_KEY,
+        config.TRIGGER_DEF_VERSION, POST_SUCCESS_SAMPLE_SIZE,
+    ) in repo.calls
+
+
+def test_check_demo_readiness_existing_ready_and_defs_assertions_are_regression_pinned():
+    # a literal re-run of the all-present-and-synced case, confirming `ready`/
+    # `defs` are byte-for-byte what they were before `postSuccess` landed —
+    # the plan's explicit regression check (§5 item 2).
+    repo = FakeRepo()
+    for key, version in DEMO_EXPECTED_DEFS:
+        _seed_pair(repo, key, version)
+    svc = make_service(repo)
+
+    out = svc.check_demo_readiness(CTX)
+
+    assert out["ready"] is True
+    assert [d["key"] for d in out["defs"]] == [k for k, _ in DEMO_EXPECTED_DEFS]
+    for d in out["defs"]:
+        assert d["defPresent"] is True
+        assert d["snapshotPresent"] is True
+        assert d["inSync"] is True
+        assert d["problems"] == []
+    assert "postSuccess" in out  # additive, not a replacement
 
 
 # ── §12 workflow-run orchestration (U5) ─────────────────────────────────────────
