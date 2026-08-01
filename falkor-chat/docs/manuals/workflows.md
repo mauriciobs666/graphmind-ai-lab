@@ -41,7 +41,6 @@ stateDiagram-v2
     waiting --> running: reply received
     running --> done: reached a finish point
     running --> failed: hit an error or ran too long
-    waiting --> failed: ran too long while parked
     done --> [*]
     failed --> [*]
 ```
@@ -102,17 +101,17 @@ Click **View** on the run cue (or reopen it later while the run is still going) 
 - If the run is a **process workflow** and it's `waiting` on a decision, a small form appears right
   there with whatever question/fields that step is asking for — fill it in and press **Submit** to
   let the run continue (see the walkthrough below for the same mechanism from the API side).
-- An optional **Show trace** toggle, for a detailed technical breakdown of what the assistant did
-  internally at each step (only present for runs started with tracing on — most day-to-day runs
-  won't have one).
+- A **Show trace** toggle, for a detailed technical breakdown of what the assistant did internally
+  at each step. It's always there, but it only has anything to show for runs that were started with
+  tracing on — most day-to-day runs weren't, so it will just say there's no trace to show.
 
 ### 3. Browsing available workflow definitions
 
 Click the **Workflow defs** button (top of the app) to see every published definition in the
-workspace — its name, version, and kind. Click one to see its full flowchart as a table: every
-step (with its type, and which one is the starting step), and every transition between steps
-(including the condition that decides when it's taken). This is read-only — a definition is a
-published template; there's no editing here.
+workspace, by name and version. Click one to see its full detail: its kind (conversation or
+process), and its whole flowchart as a table — every step (with its type, and which one is the
+starting step), and every transition between steps (including the condition that decides when it's
+taken). This is read-only — a definition is a published template; there's no editing here.
 
 ### 4. Driving a process workflow (API — no web UI screen yet)
 
@@ -126,7 +125,7 @@ a demo:
 
 ```mermaid
 flowchart TD
-    submit["submit\n(files the request)"] --> route{route}
+    submit["submit\n(files the request)"] -- "filed" --> route{route}
     route -- "role needs approval" --> approval["approval\n(a manager decides)"]
     route -- "otherwise" --> provision["provision\n(waits for provisioning)"]
     approval -- "approved" --> provision
@@ -137,7 +136,7 @@ flowchart TD
 1. **Start the run:**
    ```
    POST /workflow-runs
-   { "defKey": "access-request", "defVersion": "v1" }
+   { "defKey": "access-request", "version": "v1" }
    ```
    The response includes a `runId` — keep it, there's no run listing page for process runs yet.
 
@@ -197,3 +196,10 @@ above (`GET /workflow-runs/{runId}` and `/step-runs`) to check on it instead.
 **Can I edit a workflow definition?**
 Not from the web UI — the defs viewer is read-only. Publishing or changing a definition is done
 through the API by whoever administers the workspace.
+
+**What happens if I `@mention` the assistant again while it's already waiting on my reply in that
+thread?**
+Nothing special — your message is simply treated as the reply the run is waiting for, whether or
+not it happens to contain an `@mention`. A thread only ever has the existing waiting run pick up
+your next message; mentioning the assistant again does not start a second, separate run alongside
+it.
