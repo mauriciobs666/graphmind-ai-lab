@@ -228,3 +228,40 @@
 - **Suggested home:** knowledge base (agent-design trade-offs) or prompt (architect/cobb: when
   deciding "duplicate the rule into prompts vs. point at root `AGENTS.md`" in this repo, the pointer
   is already resolved for every Claude Code agent, subagents included)
+
+## 2026-08-01 — `kiro-cli`'s local-agent discovery is exact-CWD only (no upward directory walk), so a repo-checked-in agent config's "no manual wiring" claim still depends on which directory the run command `cd`s into
+
+- **Evidence:** `kiro-cli agent create probe-agent -d .kiro/agents` in
+  `scratch/kiro-probe/.kiro/agents/probe-agent.json`, then `kiro-cli agent list` from
+  `scratch/kiro-probe/` lists it as `Workspace`; the identical command run one level down from
+  `scratch/kiro-probe/subdir/` (no local `.kiro/agents/` there) does **not** list it and does not
+  fall back to the parent directory. `kiro-cli agent list --help` only hints at this ("local
+  agents are only discovered if the command is invoked at a directory that contains them") without
+  stating there's no upward walk — had to verify by actually cd-ing one level down and re-running.
+- **Context:** designing `kiro/docs/plans/kiro-demo-agent.md` (minimal Kiro↔falkor-chat MCP demo
+  agent) — AC-3 required "no manual MCP wiring beyond what's checked in," and this fact determined
+  the config's home directory (`kiro/.kiro/agents/`, requiring `cd kiro/` before `kiro-cli chat`)
+  and forced an explicit runbook rather than assuming repo-root invocation would just work.
+- **Suggested home:** knowledge base (a Kiro-CLI-facts doc, analogous to
+  `claude/graph-dba/falkordb-quirks.md` for FalkorDB) — this is the kind of tool quirk likely to
+  recur across future Kiro-agent design work in this repo.
+
+## 2026-08-01 — `kiro-cli` agent config: `tools` is the reachability allowlist (default `["*"]` = everything), `allowedTools` only controls interactive-approval skipping within that set, and MCP tools are referenced as `@server_name/tool_name` against the `mcpServers` map key — none of this is discoverable from `kiro-cli --help-all`, only from `kiro.dev/docs/cli/custom-agents/configuration-reference/` and empirical `kiro-cli mcp add`/`agent create --from` probes
+
+- **Evidence:** `kiro-cli agent create <name> --from kiro_default -d <dir>` (non-interactive via
+  `EDITOR=true`) dumped the real built-in agent's default `"tools": ["*"]`; `~/.kiro/agents/
+  agent_config.json.example` (pre-existing on this machine) documents the `@server/tool` syntax;
+  `kiro-cli mcp add --name X --url http://localhost:8000/mcp --agent <name> --force` wrote
+  `"mcpServers": {"X": {"url": "..."}}` with **no `"type"` field** — remote-vs-local is
+  discriminated by the presence of `url` vs `command`, not an explicit type tag. This directly
+  contradicts `falkor-chat/docs/DESIGN.md` §15.3's generic MCP client example
+  (`{"type": "streamable-http", "url": "..."}`), which is a different client's config spelling, not
+  kiro-cli's.
+- **Context:** same kiro-demo-agent plan — FR-2/AC-4 required restricting a demo agent's reachable
+  MCP tool set to exactly 2 of falkor-chat's 7; got the mechanism wrong on a first guess (assumed
+  `allowedTools` alone would restrict reachability) before confirming `tools` is the actual
+  allowlist via the docs.
+- **Suggested home:** knowledge base (same prospective Kiro-CLI-facts doc as above) + prompt
+  (architect: for any future Kiro agent-config design, verify `tools` vs `allowedTools` semantics
+  against `kiro.dev/docs/cli/custom-agents/configuration-reference/` rather than assuming Claude
+  Code's `allowed-tools` semantics carry over — they don't map 1:1).
