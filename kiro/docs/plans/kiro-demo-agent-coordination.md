@@ -96,8 +96,37 @@ Plus doc-curation done-conditions (see scan below).
 - [x] Unit 4 — analyst code review, dispatched 2026-08-01. Verdict: **approve**, no blockers/
   majors/minors — independently re-verified byte-match, relocation `git log --follow` history,
   live `kiro-cli` re-run, falkor-chat no-touch constraint, doc consistency. Committed (`15f9b6e`).
-- [ ] Unit 5 — qa-engineer acceptance QA (live), dispatched 2026-08-01 (parallel with unit 4).
-- [ ] Unit 6
+- [x] Unit 5 — qa-engineer acceptance QA (live), dispatched 2026-08-01. **3 of 4 ACs PASS**
+  (AC-1, AC-3, AC-4, live). **AC-2 FAILS** — not a Kiro-side defect, but a real, code-confirmed
+  `falkor-chat` bug (D-1, High): MCP `send_message` never schedules the `assistant` responder/
+  workflow-trigger background task the REST route does, so a message posted through the Kiro
+  agent (or any real MCP client) never gets a reply to read back. Test plan + report committed
+  (`3c7ed6d`). **Paused here — see note below, awaiting a stakeholder call before unit 6.**
+- [ ] Unit 6 — blocked on the D-1 decision below.
+
+## Open decision (2026-08-01, paused for the stakeholder — not decided by `teco` unilaterally)
+
+QA's finding changes what "done" means for this feature and reaches outside its own build scope
+(the requirements explicitly rule out changing falkor-chat's MCP server), so this isn't `teco`'s
+call to make silently. Full defect writeup: `kiro/docs/test-reports/kiro-demo-agent-report.md`
+§"Defects" (D-1). Options:
+
+1. **Fix D-1 now, as its own falkor-chat unit** (not part of this feature's build), then re-run
+   AC-2. Likely `tdd-engineer` (bug fix, reproduction test first) — wire the same
+   `BackgroundTasks` scheduling `api.py`'s REST route already does into `mcp.py`'s `send_message`
+   (or, per the report's recommendation, move the scheduling into `Services.post_message()` so
+   REST and MCP share one code path instead of two policies that must stay hand-in-sync). Delays
+   this feature's close but ships a demo that actually round-trips.
+2. **Ship the Kiro feature as-is, file D-1 as a new `falkor-chat/docs/BACKLOG.md` K-item**, and
+   proceed to unit 6 with AC-2 documented as blocked-not-met, not silently dropped. The demo would
+   "hang" after the read-back step exactly as the report warns — acceptable if the near-term need
+   is the checked-in config existing, not a fully working live demo yet.
+3. Something else the stakeholder prefers (e.g. a narrower same-day patch vs. a fuller
+   REST/MCP-unification fix, per the report's two-copies-risk note).
+
+Recommendation: **option 1**, scoped to the minimal mechanical fix (mirror `api.py`'s scheduling
+into `mcp.py`), given D-1 is the single most audience-visible failure mode this feature could hit
+and the fix is narrow and well-diagnosed already.
 
 ## Note on the parallel falkor-chat K-034 work (2026-08-01, post-crash resume)
 
