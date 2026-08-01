@@ -4,10 +4,10 @@
 >
 > `teco` coordination doc for the **minimal Kiro demo agent** feature (a repo-checked-in Kiro
 > agent config that reaches falkor-chat's MCP server as a client, for a live demo).
-> Requirements: [`../../../docs/requirements/kiro-demo-agent.md`](../../../docs/requirements/kiro-demo-agent.md)
+> Requirements: [`../requirements/kiro-demo-agent.md`](../requirements/kiro-demo-agent.md)
 > (Status: Ready for design, no open questions).
 > Related, not in scope here:
-> [`../../../docs/requirements/kiro-vision-followups.md`](../../../docs/requirements/kiro-vision-followups.md)
+> [`../requirements/kiro-vision-followups.md`](../requirements/kiro-vision-followups.md)
 > (item 4 — this feature is that item's first slice).
 > Started 2026-08-01.
 
@@ -30,7 +30,7 @@ Plus doc-curation done-conditions (see scan below).
   **not yet a structured component** (no `kiro/docs/` tree, not listed in root `AGENTS.md`
   Structure or Component-docs tables). This feature is the first real build-out of `kiro/`.
 - The two requirements docs for this feature area were filed by `tico` at repo-root
-  `docs/requirements/kiro-demo-agent.md` and `docs/requirements/kiro-vision-followups.md` —
+  `kiro/docs/requirements/kiro-demo-agent.md` and `kiro/docs/requirements/kiro-vision-followups.md` —
   **not** `kiro/docs/requirements/…`. Root `docs/` is otherwise scoped entirely to the CPG
   component (its `BACKLOG.md`/`HISTORY.md` headers say so explicitly) — these two files are
   presumably a stopgap filed before `kiro/` had its own `docs/` tree, and likely belong at
@@ -56,10 +56,10 @@ Plus doc-curation done-conditions (see scan below).
 - `AGENTS.md` (root) — Structure table + Component docs table need a `kiro/` row (implementer).
 - `kiro/docs/` tree — likely net-new (`plans/`, `reviews/`, `test-plans/`, `test-reports/`,
   `HISTORY.md`; `BACKLOG.md` only if architect judges it warranted for a feature this size).
-- `docs/requirements/kiro-demo-agent.md` — candidate relocation to `kiro/docs/requirements/`
+- `kiro/docs/requirements/kiro-demo-agent.md` — candidate relocation to `kiro/docs/requirements/`
   (architect recommends, implementer executes if approved); Status flips `archived` at close,
   owner `tico`, once its own path is settled.
-- `docs/requirements/kiro-vision-followups.md` — item 4 gets a factual update noting this slice
+- `kiro/docs/requirements/kiro-vision-followups.md` — item 4 gets a factual update noting this slice
   shipped (owner `tico`); same relocation question applies to this file for consistency.
 - No end-user manual judged necessary (a live, manually-run demo config is not an end-user
   product surface) — flagged in the final report as an open call for the stakeholder, not decided
@@ -84,8 +84,11 @@ Plus doc-curation done-conditions (see scan below).
   behavior (not `kiro/DESIGN.md`'s stale sketch). Recommends relocating both root
   `docs/requirements/kiro-*.md` files into `kiro/docs/requirements/` (§3.5) — flagged for unit 2
   to weigh in on, executes in unit 3 if the review doesn't object.
-- [ ] Unit 2 — analyst plan review, dispatched 2026-08-01.
-- [ ] Unit 3
+- [x] Unit 2 — analyst plan review, dispatched 2026-08-01. Verdict: approve with suggestions, no
+  blockers (1 Major — a rationale claim contradicted the plan's own evidence, chosen config value
+  unaffected — + 2 minors). All three folded back into the plan by `architect` in place. Plan +
+  review committed together (`0e20fb1`).
+- [ ] Unit 3 — coder, dispatched 2026-08-01.
 - [ ] Unit 4
 - [ ] Unit 5
 - [ ] Unit 6

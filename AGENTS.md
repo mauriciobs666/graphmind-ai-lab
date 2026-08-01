@@ -34,6 +34,10 @@ and OpenCode artifacts).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history + learnings inbox the agent appends to during runs; `cobb` distills the inboxes). See `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context;
   `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
+- `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
+  server as a client, restricted to `send_message`/`read_messages`, for a live demo of
+  Kiro-to-falkor-chat MCP connectivity; plus a broader, still-Draft multi-agent Kiro vision in
+  `kiro/DESIGN.md`. See `kiro/README.md` and `kiro/DESIGN.md`.
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
@@ -51,6 +55,7 @@ and OpenCode artifacts).
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
 | `cpg/` | `cpg/mcp/README.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
+| `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 
 ## Working in this repo

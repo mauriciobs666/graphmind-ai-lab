@@ -4,7 +4,7 @@
 ## Intent
 Prove that a Kiro agent can reach `falkor-chat` as a real MCP client — not just described, but
 demonstrable — as the first slice of the still-open "Kiro connected to falkor-chat" gap
-(`docs/requirements/kiro-vision-followups.md`, item 4). This is for a demo: someone types a
+(`kiro/docs/requirements/kiro-vision-followups.md`, item 4). This is for a demo: someone types a
 message in a Kiro chat session and sees it land in falkor-chat, then reads a response back,
 showing the cross-tool wiring is real.
 
@@ -55,7 +55,7 @@ showing the cross-tool wiring is real.
 - **Authentication / production hardening.** falkor-chat's MCP is already unauthenticated by
   design in M1; unchanged here.
 - **Multi-agent coordination, turn-taking, artifact provenance.** Tracked separately in
-  `docs/requirements/kiro-vision-followups.md`.
+  `kiro/docs/requirements/kiro-vision-followups.md`.
 - **Importing Claude Code agent definitions into falkor-chat.** A different, separate feature
   (`falkor-chat/docs/requirements/agent-import.md`).
 - **Standing up falkor-chat/the demo workspace/LM Studio.** Assumed already running per existing
