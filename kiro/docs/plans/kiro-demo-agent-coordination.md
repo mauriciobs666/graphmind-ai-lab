@@ -1,6 +1,6 @@
 # Kiro demo agent — coordination log
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—)
 >
 > `teco` coordination doc for the **minimal Kiro demo agent** feature (a repo-checked-in Kiro
 > agent config that reaches falkor-chat's MCP server as a client, for a live demo).
@@ -101,8 +101,16 @@ Plus doc-curation done-conditions (see scan below).
   `falkor-chat` bug (D-1, High): MCP `send_message` never schedules the `assistant` responder/
   workflow-trigger background task the REST route does, so a message posted through the Kiro
   agent (or any real MCP client) never gets a reply to read back. Test plan + report committed
-  (`3c7ed6d`). **Paused here — see note below, awaiting a stakeholder call before unit 6.**
-- [ ] Unit 6 — blocked on the D-1 decision below.
+  (`3c7ed6d`). D-1 fixed as K-041 (see decision below); AC-1/AC-2 re-verified live afterward —
+  **all 4 ACs now PASS** (`kiro-demo-agent2{,-report}.md`, committed `e3f03f2`).
+- [x] Unit 6 — doc freeze, dispatched 2026-08-01 to each document's own owner:
+  `architect` (plan, `4ee0abe`), `analyst` (2 reviews, `4ee0abe`), `qa-engineer` (2 test plans +
+  2 test reports, `4ee0abe`), `tico` (requirements `Status: archived` + `kiro-vision-followups.md`
+  item 4 factual note, self-committed `aec2179`/`dc29774`). This coordination doc archived last,
+  by `teco`, as the closing act.
+
+**Feature closed 2026-08-01. All 4 acceptance criteria pass live. `kiro/` is now a structured
+component** (README, docs tree, root `AGENTS.md` rows) with its first delivered feature.
 
 ## Open decision (2026-08-01, paused for the stakeholder — not decided by `teco` unilaterally)
 
