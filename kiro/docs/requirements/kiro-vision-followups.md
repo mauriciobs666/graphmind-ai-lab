@@ -38,6 +38,12 @@ resolved differently.
    `falkor-chat/docs/BACKLOG.md` K-018 (proposed, deferred) — pointed at here, not re-proposed.
 4. **An actual Kiro agent connected to falkor-chat.** Nothing exists yet. The first slice of this
    gap is being captured immediately, in its own requirements doc (the minimal demo agent).
+   **2026-08-01 update:** that first slice has now shipped and is live-verified — a repo-checked-in
+   Kiro CLI agent config connecting to `falkor-chat`'s MCP server. See
+   `kiro/docs/requirements/kiro-demo-agent.md` (now archived) for the requirements and
+   `kiro/README.md` for the built, checked-in piece and how to run it. This closes only the demo
+   slice, not the wider gap — turn-taking/backoff (item above), deliverable/artifact provenance
+   (item above), and real-time push (K-018) remain open/undecided.
 
 ## User stories
 _(draft, for future prioritization — not yet committed work)_
