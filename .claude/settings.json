@@ -3,7 +3,9 @@
   "permissions": {
     "allow": [
       "Bash(./claude/scripts/audit-team.sh)",
-      "Bash(./claude/scripts/audit-team.sh *)"
+      "Bash(./claude/scripts/audit-team.sh *)",
+      "Bash(bash claude/scripts/audit-team.sh)",
+      "Bash(grep *)"
     ]
   }
 }
