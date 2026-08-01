@@ -88,9 +88,16 @@ Plus doc-curation done-conditions (see scan below).
   blockers (1 Major — a rationale claim contradicted the plan's own evidence, chosen config value
   unaffected — + 2 minors). All three folded back into the plan by `architect` in place. Plan +
   review committed together (`0e20fb1`).
-- [ ] Unit 3 — coder, dispatched 2026-08-01.
-- [ ] Unit 4
-- [ ] Unit 5
+- [x] Unit 3 — coder, dispatched 2026-08-01. Delivered exactly per plan §4 (config byte-matches
+  §3.1, README/HISTORY.md/AGENTS.md rows written, requirements docs relocated + cross-refs fixed,
+  `kiro-cli agent validate`/`agent list` both green, falkor-chat self-check clean). Verified
+  independently by `teco` (byte-diff on the config, live `kiro-cli` re-run, grep re-run) before
+  committing (`d33a8af`).
+- [x] Unit 4 — analyst code review, dispatched 2026-08-01. Verdict: **approve**, no blockers/
+  majors/minors — independently re-verified byte-match, relocation `git log --follow` history,
+  live `kiro-cli` re-run, falkor-chat no-touch constraint, doc consistency. Committed (`c3f8b6b`
+  — see below).
+- [ ] Unit 5 — qa-engineer acceptance QA (live), dispatched 2026-08-01 (parallel with unit 4).
 - [ ] Unit 6
 
 ## Note on the parallel falkor-chat K-034 work (2026-08-01, post-crash resume)
