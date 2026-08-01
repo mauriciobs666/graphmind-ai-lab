@@ -1,6 +1,6 @@
 # `kiro-demo-agent2` — Test Report (AC-2 re-verification)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-041 (—) · **Extends:** `kiro/docs/test-reports/kiro-demo-agent-report.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-041 (—) · **Extends:** `kiro/docs/test-reports/kiro-demo-agent-report.md`
 
 ## Summary
 

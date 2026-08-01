@@ -1,6 +1,6 @@
 # `kiro-demo-agent` — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (—) · **Extended by:** `kiro/docs/test-reports/kiro-demo-agent2-report.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (—) · **Extended by:** `kiro/docs/test-reports/kiro-demo-agent2-report.md`
 
 ## Summary
 

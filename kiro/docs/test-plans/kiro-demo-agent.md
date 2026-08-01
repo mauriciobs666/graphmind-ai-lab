@@ -1,6 +1,6 @@
 # `kiro-demo-agent` — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (—)
 
 ## 1. Scope & objective
 

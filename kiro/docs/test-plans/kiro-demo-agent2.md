@@ -1,6 +1,6 @@
 # `kiro-demo-agent2` — Test Plan (AC-2 re-verification)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-041 (—) · **Extends:** `kiro/docs/test-plans/kiro-demo-agent.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-041 (—) · **Extends:** `kiro/docs/test-plans/kiro-demo-agent.md`
 
 ## 1. Scope & objective
 

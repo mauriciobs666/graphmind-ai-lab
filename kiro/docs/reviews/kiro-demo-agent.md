@@ -1,6 +1,6 @@
 # Minimal Kiro Demo Agent for falkor-chat — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (—)
 
 ## Scope & verdict
 

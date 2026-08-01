@@ -1,6 +1,6 @@
 # Minimal Kiro Demo Agent for falkor-chat — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (—)
 
 Requirements: `docs/requirements/kiro-demo-agent.md` (Status: Ready for design — relocation to
 `kiro/docs/requirements/kiro-demo-agent.md` is **recommended by this plan**, see §3.5). Related,
