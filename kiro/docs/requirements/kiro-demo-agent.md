@@ -1,5 +1,5 @@
 # Minimal Kiro Demo Agent for falkor-chat — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-08-01
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-08-01
 
 ## Intent
 Prove that a Kiro agent can reach `falkor-chat` as a real MCP client — not just described, but
