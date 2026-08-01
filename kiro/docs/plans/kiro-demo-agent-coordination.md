@@ -132,9 +132,22 @@ and the fix is narrow and well-diagnosed already.
 `falkor-chat`-scoped unit (K-041, not part of this feature's own coordination units) — wire
 `responder`/`embed_worker`/`trigger` through `mcp.configure()` the same way `app.py` already wires
 them into `api.build_router`, mirroring the REST route's one-handler-guarantee ordering exactly.
-Test-first: reproduction test on the MCP path first, then the fix. Once landed and reviewed, unit
-5's AC-2 needs a **re-run** (not a fresh QA pass — just the previously-failing check) before unit
-6 closes this feature.
+Test-first: reproduction test on the MCP path first, then the fix. Landed, independently code-
+reviewed (approve with suggestions, 3 minor/nit findings folded in), committed (`17c2fa0`).
+
+**Environment note (`teco`, 2026-08-01):** verifying K-041 required running `falkor-chat/scripts/
+test_queries.sh` again, which — per its own documented teardown — wipes the `reference` graph
+(publish state for both seeded workflow defs). `ws:acme`'s already-materialized snapshot data was
+confirmed **intact** (`GRAPH.QUERY ws:acme` showed the `WorkflowDefSnapshot`/`WorkflowRun`/etc.
+node counts unchanged); `./scripts/verify_workflows.sh acme` reporting both defs "MISSING"
+immediately after was `reference`-side only (its checks appear to short-circuit once `reference`
+is empty, not a real ws:acme data loss). Restored via `./scripts/bootstrap_schema.sh acme` +
+`./scripts/seed_workflows.sh acme` (idempotent, create-only) — `verify_workflows.sh acme` now
+reports both defs **in sync**. Flagging this because unit 5's re-verification below needs a
+healthy `reference`/`ws:acme` pair to mean anything.
+
+Unit 5's AC-2 (and, for safety, AC-1 as its precondition) needs a **re-verification** against the
+fixed code before unit 6 closes this feature — dispatched to the same `qa-engineer` below.
 
 ## Note on the parallel falkor-chat K-034 work (2026-08-01, post-crash resume)
 
