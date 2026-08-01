@@ -20,12 +20,18 @@ from falkorchat.services import Services
 TEST_CTX = CallContext(ws="test", actor="u1")
 
 
-def _configure(repo, *, actor="u1"):
+def _configure(
+    repo, *, actor="u1", responder=None, embed_worker=None, trigger=None
+):
     clock = itertools.count(1000)
     ids = (f"id{n}" for n in itertools.count(1))
     svc = Services(repo, clock=lambda: next(clock), id_gen=lambda: next(ids))
     mcp_mod.configure(
-        svc, context_provider=lambda: CallContext(ws="test", actor=actor)
+        svc,
+        context_provider=lambda: CallContext(ws="test", actor=actor),
+        responder=responder,
+        embed_worker=embed_worker,
+        trigger=trigger,
     )
     return svc
 
@@ -202,3 +208,170 @@ def test_send_message_unknown_mention_errors(repo):
 
     with pytest.raises(Exception):
         asyncio.run(scenario())
+
+
+# ── K-041: MCP send_message must schedule the same background work the REST ────
+# route does (out-of-band embed + trigger XOR responder, the M3 one-handler
+# guarantee) — see `falkorchat/background.py` for the shared policy. Before this
+# fix, `mcp.py`'s `send_message` posted via `Services.post_message` directly and
+# returned, so no reply was ever scheduled for an MCP-posted message (D-1).
+
+
+class RecordingWorker:
+    """Records embed_message calls scheduled off-band."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def embed_message(self, ws, *, msg_id, text):
+        self.calls.append((ws, msg_id, text))
+        return [0.0]
+
+
+class RecordingResponder:
+    """Records maybe_respond calls scheduled off-band."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def maybe_respond(self, ctx, *, thread_id, msg_id, text, role, channel_id, mentions):
+        self.calls.append(
+            {
+                "thread_id": thread_id, "msg_id": msg_id, "text": text,
+                "role": role, "channel_id": channel_id, "mentions": mentions,
+            }
+        )
+        return None
+
+
+class RecordingTrigger:
+    """Records maybe_trigger calls scheduled off-band."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def maybe_trigger(self, ctx, *, thread_id, msg_id, text, role, mentions):
+        self.calls.append(
+            {"thread_id": thread_id, "msg_id": msg_id, "text": text,
+             "role": role, "mentions": mentions}
+        )
+        return None
+
+
+@pytest.fixture()
+def sync_schedule():
+    """Make MCP background scheduling synchronous so tests can assert deterministically.
+
+    Production fires a daemon thread (a plain MCP tool function has no per-call
+    `BackgroundTasks` object the way a FastAPI route does); tests swap the
+    `mcp_mod._schedule` seam for an inline call so the scheduled work has
+    already happened by the time `call_tool` returns.
+    """
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)
+    yield
+    mcp_mod._schedule = original
+
+
+def _thread(svc, name="general"):
+    ch = svc.create_channel(TEST_CTX, name=name)
+    return svc.create_thread(TEST_CTX, channel_id=ch["channelId"], title="hi")
+
+
+def test_send_message_schedules_responder_with_posted_message(repo, sync_schedule):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.ensure_agent("test", agent_id="bot1", name="Bot")
+    responder = RecordingResponder()
+    svc = _configure(repo, responder=responder)
+    th = _thread(svc)
+
+    asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message",
+        {"body": "hey @bot", "re": th["threadId"], "mentions": ["bot1"]},
+    ))
+
+    assert len(responder.calls) == 1
+    call = responder.calls[0]
+    assert call["thread_id"] == th["threadId"]
+    assert call["text"] == "hey @bot"
+    assert call["role"] == "user"
+    assert call["mentions"] == ["bot1"]
+
+
+def test_send_message_trigger_wired_schedules_trigger_not_responder(repo, sync_schedule):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    trigger = RecordingTrigger()
+    responder = RecordingResponder()
+    svc = _configure(repo, trigger=trigger, responder=responder)
+    th = _thread(svc)
+
+    asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message", {"body": "@bot help", "re": th["threadId"]}
+    ))
+
+    # Exactly one handler fires — the trigger, never the responder (M3 one-handler
+    # guarantee: an @mention can never fire both a workflow and a direct reply).
+    assert len(trigger.calls) == 1
+    assert trigger.calls[0]["text"] == "@bot help"
+    assert responder.calls == []
+
+
+def test_send_message_embeds_independently_of_trigger_or_responder(repo, sync_schedule):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingWorker()
+    trigger = RecordingTrigger()
+    svc = _configure(repo, embed_worker=worker, trigger=trigger)
+    th = _thread(svc)
+
+    asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message", {"body": "hello", "re": th["threadId"]}
+    ))
+
+    assert len(worker.calls) == 1
+    assert worker.calls[0][2] == "hello"
+    assert len(trigger.calls) == 1
+
+
+def test_send_message_with_no_wiring_posts_normally(repo, sync_schedule):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo)
+    th = _thread(svc)
+
+    result = asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message", {"body": "hi", "re": th["threadId"]}
+    ))
+
+    assert _unwrap(result)["text"] == "hi"
+
+
+def test_send_message_default_scheduling_runs_off_a_background_thread(repo):
+    """Without the `sync_schedule` override, scheduling must not block the tool call
+    (mirrors the REST route's off-band intent) — verified by observing that the
+    responder call lands on a different thread than the one that ran `send_message`."""
+    import threading
+
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.ensure_agent("test", agent_id="bot1", name="Bot")
+    seen_threads: list[int] = []
+    done = threading.Event()
+
+    class ThreadRecordingResponder(RecordingResponder):
+        def maybe_respond(self, *args, **kwargs):
+            seen_threads.append(threading.get_ident())
+            result = super().maybe_respond(*args, **kwargs)
+            done.set()
+            return result
+
+    responder = ThreadRecordingResponder()
+    svc = _configure(repo, responder=responder)
+    th = _thread(svc)
+
+    caller_thread = threading.get_ident()
+    asyncio.run(mcp_mod.mcp.call_tool(
+        "send_message",
+        {"body": "hey @bot", "re": th["threadId"], "mentions": ["bot1"]},
+    ))
+
+    assert done.wait(timeout=2), "responder was never scheduled"
+    assert len(responder.calls) == 1
+    assert seen_threads[0] != caller_thread

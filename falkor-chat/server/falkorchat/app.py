@@ -184,7 +184,13 @@ def create_app(
     provider = context_provider or config.get_context
 
     if mount_mcp:
-        mcp_mod.configure(services, context_provider=context_provider)
+        mcp_mod.configure(
+            services,
+            context_provider=context_provider,
+            responder=responder,
+            embed_worker=embed_worker,
+            trigger=trigger,
+        )
         mcp_app = mcp_mod.mcp.streamable_http_app()
         # Forward the MCP app's lifespan or the session manager never inits
         # (python-sdk #1367). On this build the lifespan is exposed as the

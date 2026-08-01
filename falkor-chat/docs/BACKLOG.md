@@ -1235,6 +1235,55 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   new field name (should go red first, confirming the old name is actually gone) plus a negative test
   that the old `version` name is rejected, not silently ignored.
 
+### K-041 — MCP `send_message` never scheduled the responder/workflow trigger — one-handler guarantee silently absent on the agent front door (✅ delivered 2026-08-01 → HISTORY.md)
+
+> **Why it exists.** Found by a live QA pass of the unrelated `kiro-demo-agent` feature
+> (`kiro/docs/test-reports/kiro-demo-agent-report.md`, Defect D-1, High severity): a message posted
+> through the **MCP** `send_message` tool — including an `@mention`-bearing one — never triggered
+> `assistant`'s reply or the M3 workflow trigger, while the exact same post through the **REST**
+> route (`POST /threads/{id}/messages`) worked correctly. `server/falkorchat/mcp.py`'s
+> `send_message` called `Services.post_message(...)` directly and returned; the whole file had zero
+> references to `BackgroundTasks`, `trigger`, or `responder`. `server/falkorchat/api.py`'s REST
+> route (~line 144-171) was the *only* place that scheduled the M3 one-handler guarantee (exactly
+> one of {trigger, responder} handles a posted message, plus `embed_worker` always-if-configured) —
+> a `BackgroundTasks`-dependent policy `app.py`'s `create_app()` wired into `api.build_router(...)`
+> but never passed to `mcp_mod.configure(...)`. Every prior QA/test of "`@mention` → reply"
+> (`docs/test-reports/mention-reply-delivery-report.md`) posted via REST, never a real MCP client,
+> so this gap had never been exercised.
+- **Root cause, code-confirmed:** `mcp.configure()` (`mcp.py:33-40`, pre-fix) accepted only
+  `services`/`context_provider` — no seam for `responder`/`embed_worker`/`trigger` existed at all —
+  and `app.py`'s `create_app()` (`:187`, pre-fix) called it without them even though the identical
+  three objects were constructed/received right there and passed into `api.build_router(...)` a few
+  lines later.
+- **Fix:** (1) moved the three failure-isolated scheduling functions (`_safe_embed`/`_safe_respond`/
+  `_safe_run_workflow`) out of `api.py` into a new shared module, `server/falkorchat/background.py`,
+  so the M3 one-handler policy is defined exactly once and imported by both transports instead of
+  risking two hand-synced copies (the QA report's own recommendation). (2) Extended `mcp.configure()`
+  to accept `responder`/`embed_worker`/`trigger`, mirroring `api.build_router`'s signature, stored as
+  new module-level state alongside `_services`/`_get_context`. (3) `mcp.py`'s `send_message` now
+  calls a new `_schedule_background(ctx, posted)` after a successful post, replicating `api.py`'s
+  exact ordering (embed always-if-configured; trigger XOR responder). (4) Since a plain
+  `@mcp.tool()` function has no per-call object like FastAPI's `BackgroundTasks`, scheduling uses a
+  daemon `threading.Thread` fire-and-forget by default — swappable via a module-level `_schedule`
+  seam (`mcp._schedule`) that tests override for deterministic, non-racy assertions. (5)
+  `app.py`'s `create_app()` now passes `responder=responder, embed_worker=embed_worker,
+  trigger=trigger` into `mcp_mod.configure(...)`, the same three objects already passed to
+  `api.build_router(...)`.
+- **Test strategy:** test-first (`tdd-engineer`). New MCP-side `Recording*` doubles
+  (`RecordingWorker`/`RecordingResponder`/`RecordingTrigger`, mirroring `test_api.py`'s) in
+  `tests/test_mcp.py`, plus a `sync_schedule` fixture that swaps the `_schedule` seam for an inline
+  call so assertions don't race a background thread. Five new tests cover: a mention-bearing
+  `send_message` schedules the responder when only a responder is configured; with both a trigger
+  and a responder configured, the trigger fires and the responder does not (one-handler guarantee);
+  `embed_worker` fires independently of trigger/responder; no wiring configured → posting still
+  works, nothing scheduled; and — without the `sync_schedule` override — the default scheduling
+  genuinely runs off a separate thread from the caller (proving the write is never blocked).
+  `server/falkorchat/api.py`'s own suite is unaffected by the `background.py` extraction (functions
+  moved, not changed). See [`HISTORY.md`](./HISTORY.md), 2026-08-01 entry for the full test list and
+  suite counts (691 → 696 passed, 1 deselected unchanged); `./scripts/test_queries.sh` unaffected
+  (282/282, no Cypher touched by this fix).
+- **Risks/RAM:** none — no schema/index/query change; pure application-layer wiring.
+
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
 > QA-accepted** (HISTORY.md). Baselines: pytest 156 / query suite 149/149.

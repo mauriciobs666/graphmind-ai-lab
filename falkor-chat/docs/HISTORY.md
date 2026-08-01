@@ -5,6 +5,58 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-01 — K-041: MCP `send_message` now schedules the responder/workflow trigger (D-1 fix)
+
+**What:** Fixed a High-severity defect found by a live QA pass of the unrelated `kiro-demo-agent`
+feature (`kiro/docs/test-reports/kiro-demo-agent-report.md`, Defect D-1): a message posted through
+the **MCP** `send_message` tool — including an `@mention`-bearing one — never triggered
+`assistant`'s reply or the M3 workflow trigger, because the `BackgroundTasks` scheduling that
+implements the M3 one-handler guarantee (exactly one of {trigger, responder} handles a posted
+message, `embed_worker` always-if-configured) lived only in `api.py`'s REST route, never in
+`mcp.py`. The REST route (`POST /threads/{id}/messages`) always worked correctly; every prior
+"`@mention` → reply" QA/test pass went through REST, never a real MCP client, so the gap had never
+been exercised.
+
+- **New shared module** — `server/falkorchat/background.py` now holds `_safe_embed`/
+  `_safe_respond`/`_safe_run_workflow` (moved out of `api.py` verbatim, behavior unchanged), so the
+  M3 one-handler policy is defined exactly once and imported by both transports instead of two
+  hand-synced copies.
+- **`mcp.configure()`** (`server/falkorchat/mcp.py`) now accepts `responder`/`embed_worker`/
+  `trigger`, mirroring `api.build_router`'s signature, stored as new module-level state.
+- **`mcp.py`'s `send_message`** now calls a new `_schedule_background(ctx, posted)` helper after a
+  successful post, replicating `api.py`'s exact scheduling order. Since a plain `@mcp.tool()`
+  function has no per-call object like FastAPI's `BackgroundTasks`, scheduling defaults to a daemon
+  `threading.Thread` fire-and-forget (`mcp._default_schedule`) — the already-synchronous,
+  failure-isolated `_safe_*` functions run off-band so the message write is never blocked. The
+  scheduling call itself is a swappable module-level seam (`mcp._schedule`) that tests override for
+  deterministic, non-racy assertions.
+- **`app.py`'s `create_app()`** now passes `responder=responder, embed_worker=embed_worker,
+  trigger=trigger` into `mcp_mod.configure(...)` — the same three objects already passed to
+  `api.build_router(...)` a few lines later.
+- **Doc cross-references corrected**: three docstring/comment sites that named
+  `api._safe_run_workflow` (`services.py`, `executor.py`, `tests/test_process_input.py`,
+  `tests/test_workflow_live.py`) now point at `background._safe_run_workflow`, its new home.
+
+**Test counts:** test-first (`tdd-engineer`). New MCP-side `Recording*` doubles
+(`RecordingWorker`/`RecordingResponder`/`RecordingTrigger`, mirroring `test_api.py`'s) plus a
+`sync_schedule` fixture (swaps the `_schedule` seam for an inline call) added to
+`server/tests/test_mcp.py`. Five new tests: `test_send_message_schedules_responder_with_posted_message`,
+`test_send_message_trigger_wired_schedules_trigger_not_responder`,
+`test_send_message_embeds_independently_of_trigger_or_responder`,
+`test_send_message_with_no_wiring_posts_normally`,
+`test_send_message_default_scheduling_runs_off_a_background_thread` (asserts the default
+threading-based path genuinely runs off a different thread than the caller, confirmed non-flaky
+over repeated runs). `pytest -q` **691 → 696 passed, 1 deselected** unchanged.
+`./scripts/test_queries.sh` unaffected — **282/282**, no Cypher touched by this fix.
+
+**Files touched:** `server/falkorchat/background.py` (new), `server/falkorchat/api.py` (imports
+the three functions instead of defining them), `server/falkorchat/mcp.py` (`configure()` +
+`send_message` + `_schedule_background` + `_schedule` seam), `server/falkorchat/app.py`
+(`mcp_mod.configure(...)` wiring), `server/falkorchat/services.py`, `server/falkorchat/executor.py`
+(doc cross-reference fix), `server/tests/test_mcp.py` (new tests + doubles),
+`server/tests/test_process_input.py`, `server/tests/test_workflow_live.py` (doc cross-reference
+fix), `docs/BACKLOG.md` (K-041).
+
 ## 2026-08-01 — K-034: close the additive-`MERGE` defect — topology-conflict gate on re-publish/re-materialize
 
 **What:** Implemented `docs/plans/workflow-republish-semantics.md` (reviewed, approve with

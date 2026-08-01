@@ -523,7 +523,7 @@ def test_the_failed_envelope_ctx_is_the_graphs_post_fault_ctx_not_the_submission
 
 def test_a_swallowed_drive_fault_still_logs_its_stack(svc, wf_repo, caplog):
     # U4b M-A — D-G's catch also covers the CHAT start path (`trigger.py` step 3 calls
-    # `start_workflow_run`), and `api._safe_run_workflow`'s isolation only ever logs
+    # `start_workflow_run`), and `background._safe_run_workflow`'s isolation only ever logs
     # what propagates out of it. Without this line a live run that dies on an unwired
     # judge or an unimplemented step type leaves no trace anywhere.
     _materialize(wf_repo, steps=TOOL_START_STEPS,

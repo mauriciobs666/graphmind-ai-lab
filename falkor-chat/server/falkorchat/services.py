@@ -1478,7 +1478,7 @@ class Services:
         **The fault is logged with its stack before the envelope is built** (U4b M-A).
         Swallowing the exception here also swallows it for the *chat* start path:
         `start_workflow_run` is what `trigger.py` step 3 (@mention-to-start) calls, and
-        `api._safe_run_workflow`'s `logging.exception` only ever sees what propagates
+        `background._safe_run_workflow`'s `logging.exception` only ever sees what propagates
         out of it. Without this line a live `triage@v1` run that dies on an unwired
         judge leaves no log entry anywhere — only a `failed` run someone has to go
         looking for. The envelope itself is D-G verbatim; only the trace is restored.

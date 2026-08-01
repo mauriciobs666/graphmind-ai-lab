@@ -255,7 +255,7 @@ def _guard_judgments(graph) -> list[str]:
 
 def _post_and_trigger(services, trigger, *, thread_id, text, mentions=None):
     """Post a human message and hand it to the trigger, exactly as the API's background
-    task does (`api._safe_run_workflow`). Returns the trigger's result."""
+    task does (`background._safe_run_workflow`). Returns the trigger's result."""
     posted = services.post_message(
         CTX, thread_id=thread_id, text=text, mentions=mentions
     )
