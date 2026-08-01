@@ -172,6 +172,25 @@ to the general fact here.
   downstream of it runs — no `SET` is partially applied**. Don't read the absent `Filter`
   operator as "the predicate was dropped".
 
+- **Two independently-indexed properties on the same label, both `AND`-ed plain `WHERE`
+  predicates (not a `{prop:$x}` pattern-property match) — a numeric range AND a `status IN
+  [...]` list — fold into ONE `Node By Index Scan`, not "pick one, filter the other"**
+  (verified 2026-07-31 on v4.18.11 / module `41811`, `falkor-chat` `ws:test` + `ws:acme`).
+  `MATCH (r:Label) WHERE r.rangeProp >= 0 AND r.tagProp IN [...] AND r.unindexedProp = $x`
+  profiles as a single `Node By Index Scan | (r:Label)` whose **output already reflects both
+  indexed predicates** — an unindexed third predicate (`unindexedProp`) is the only thing that
+  surfaces as a separate `Filter` operator above it. Distinguished from "only one property
+  actually anchors, the other rides along coincidentally" by planting a probe row that matches
+  one indexed predicate but fails the other (`status:'done'` with `startedAt:-5` against
+  `WHERE startedAt >= 0 AND status IN [...]`): the probe was excluded **at the index-scan
+  step itself**, before `Filter` ran, proving both predicates are evaluated inside the scan.
+  Complements the CAS entry above (which showed one *pattern-property* match + one *`WHERE`*
+  match folding together) — this is the same folding behavior for two independent plain
+  `WHERE` predicates. Consequence for "which index does this query use": with two indexed
+  predicates present, the honest answer is **both, combined** — don't force a single-index
+  answer when profiling a query shaped like this. Full isolation-test write-up (drop-each-
+  predicate variants + the probe-row test) in `falkor-chat/docs/QUERIES.md` §12.15.
+
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
