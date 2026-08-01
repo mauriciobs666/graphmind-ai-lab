@@ -128,6 +128,14 @@ Recommendation: **option 1**, scoped to the minimal mechanical fix (mirror `api.
 into `mcp.py`), given D-1 is the single most audience-visible failure mode this feature could hit
 and the fix is narrow and well-diagnosed already.
 
+**Decision (stakeholder, 2026-08-01): option 1 — fix now.** `tdd-engineer` dispatched as a
+`falkor-chat`-scoped unit (K-041, not part of this feature's own coordination units) — wire
+`responder`/`embed_worker`/`trigger` through `mcp.configure()` the same way `app.py` already wires
+them into `api.build_router`, mirroring the REST route's one-handler-guarantee ordering exactly.
+Test-first: reproduction test on the MCP path first, then the fix. Once landed and reviewed, unit
+5's AC-2 needs a **re-run** (not a fresh QA pass — just the previously-failing check) before unit
+6 closes this feature.
+
 ## Note on the parallel falkor-chat K-034 work (2026-08-01, post-crash resume)
 
 At the same crash, `falkor-chat`'s K-034 (re-publish semantics) implementation was found
