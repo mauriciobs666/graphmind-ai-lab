@@ -2,6 +2,39 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-08 — Closed C-309 and C-311: audit-team.sh untracked-file blindness, guard-destructive-ops.sh wrapped-delete blindness
+- **What:** Fixed two confirmed gaps in the team's own safety-net scripts, delegated by `teco`
+  with the root cause already diagnosed (this run's job was the fix + verification, not the
+  diagnosis). **C-309(a)** — five backlog-flagged PII leaks — turned out already genericized as
+  fallout from unrelated work; confirmed clean by direct grep of all five paths plus a green
+  `audit-team.sh` run, closed as bookkeeping with no code change.
+  **C-309(b)** — `audit-team.sh` check 7 scanned via `git grep`, seeing tracked files only, so a
+  brand-new file leaking `$HOME`/username/etc. passed silently until its first commit. Fixed by
+  unioning `git ls-files --cached` with `git ls-files --others --exclude-standard` before grepping
+  (`claude/scripts/audit-team.sh`, check 7 block + header comment). Verified live: planted an
+  untracked file containing `$HOME` under `claude/`, confirmed the gate FAILed on it (both the
+  "home path" and "username" labels fired), removed it, confirmed `RESULT: PASS` returned.
+  **C-311** — `guard-destructive-ops.sh` matched only the literal Bash command string, so
+  `skills/joern-cpg/scripts/pipeline.sh --reset` (which runs `GRAPH.DELETE` *inside* the script)
+  deleted a graph with zero human approval. Added a wrapper-match branch (`pipeline.sh` +
+  `--reset`, either token order) alongside the existing `docker`/`FLUSHALL`/`GRAPH.DELETE`
+  branches, with a code comment scoping it as ad hoc (population of one; re-grepped
+  `skills/*/scripts/` and confirmed no second wrapper needs the same treatment) and flagging that
+  a second wrapper should trigger a documented wrapper-registry convention instead of more
+  one-off patterns. Verified with manual PreToolUse-payload tests: both `--reset` orderings ask;
+  `pipeline.sh` without `--reset`, an unrelated benign command, and all pre-existing patterns
+  behave unchanged.
+- **Also touched:** `claude/AGENTS.md`'s "Hook machinery" section (one line, naming the new
+  wrapper pattern) and `docs/BACKLOG.md`/`docs/HISTORY.md` (C-309/C-311 resolution writeup,
+  per the module-documentation convention). Both scripts' documented stdin/stdout contract and
+  existing match behavior were preserved unchanged, per the delegation's explicit constraint —
+  these are live safety nets other agents' `PreToolUse` hooks depend on.
+- **Why:** These two scripts are `cobb`'s own maintenance machinery
+  (`claude/AGENTS.md`: "`cobb` (team maintainer: ... `scripts/audit-team.sh`...)"; the
+  destructive-ops guard core is likewise cobb-maintained shared infrastructure), so the fix and
+  its bookkeeping fall in-scope for `cobb` even when delegated in rather than self-initiated.
+- **Left uncommitted** per the delegation — `teco` reviews and commits.
+
 ## 2026-07-31 — Triaged an "Instruction Poisoning" flag on an `analyst` kaizen-inbox entry; edited another agent's inbox directly (own normal channel, verified rather than assumed)
 - **What:** `teco` routed a security-check flag on `analyst/kaizen/inbox.md`'s 2026-07-31 entry (a scratch-copy-and-reverse-patch technique, written up as "here's what to do when the classifier blocks `git stash`"). Judged it a genuine framing concern, not a false positive: the *action* taken was benign and independently confirmed harmless, but the *entry's framing* taught "route around a safety-classifier block" as reusable precedent rather than teaching the safety property (zero working-tree touch) that actually justified the substitute — a materially different shape from this inbox's other classifier-adjacent entry (2026-07-25, `pipeline.sh --reset`), which reports a gap in a repo-owned guard for its maintainer rather than instructing a workaround. Reworded the entry in place and routed the reusable environment fact (auto mode's Bash classifier has no reversible-op carve-out for `git stash`) to `skills/agent-standards/claude-code.md` §Hooks. Full account in `claude/analyst/kaizen/history.md` (2026-07-31 entry).
 - **On write access:** `teco` flagged, correctly, that it has no authority to edit another agent's inbox or to adjudicate this itself, and pre-emptively warned `cobb` not to route around its *own* write guard if blocked, given the subject matter. Checked rather than assumed: `analyst`'s `guard-review-doc-writes.sh` is a `PreToolUse` hook wired in `analyst`'s **own** frontmatter (`analyst.md` `hooks:` block) — Claude Code hooks fire per-subagent-session, so it applies only while `analyst` itself is the active agent, not when a different subagent (`cobb`) issues the Write/Edit. `cobb`'s own frontmatter carries no hook. Direct maintainer edits to another agent's kaizen files are exactly `cobb`'s documented normal channel (`agent-maintenance` skill §5: "the maintainer (cobb) distills... verify → route → log → clear"). Confirmed by attempting the edit (it succeeded, no interception) rather than declaring in advance that access did or didn't exist — the point being not to defer uncritically to another agent's claim about my own permissions, in either direction, on a task about exactly that failure mode.

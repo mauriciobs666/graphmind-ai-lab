@@ -5,6 +5,39 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-08 — Two safety-net script gaps closed: audit-team.sh untracked-file blindness, guard-destructive-ops.sh wrapped-delete blindness (C-309, C-311)
+
+`claude/scripts/audit-team.sh` check 7 (personal-info leak scan) and
+`claude/scripts/guard-destructive-ops.sh` (destructive-ops PreToolUse guard) each had a hole in
+their own safety net.
+
+**C-309 (two parts, both closed).** Part (a) — five pre-existing home-path/username leaks the
+backlog had flagged — turned out to already be genericized as fallout from earlier, unrelated
+work (`claude/joern/kaizen/inbox.md` no longer exists; the joern agent folded into `graph-dba` in
+commit `cbf26c4`); confirmed clean by direct grep and a green `audit-team.sh` run, so this closed
+as bookkeeping with **no code change**. Part (b) was real: check 7 scanned via `git grep`, seeing
+tracked files only, so a brand-new file leaking an identifier passed the gate silently until its
+first commit. Fixed by unioning `git ls-files --cached` with `git ls-files --others
+--exclude-standard` before grepping, so untracked-but-not-gitignored files are covered too.
+Verified by planting an untracked file containing `$HOME` under `claude/`, confirming the gate
+FAILed, then removing it and confirming `RESULT: PASS` returned.
+
+**C-311.** `guard-destructive-ops.sh` matches the literal Bash command string for destructive ops
+(`GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, `docker rm -f`, volume wipes), but
+`skills/joern-cpg/scripts/pipeline.sh --reset` runs `GRAPH.DELETE` *inside* the script — the
+guard never saw the string, so the graph could be deleted with zero human approval. Added a
+wrapper-match branch (matching `pipeline.sh` + `--reset` in either token order) alongside the
+existing patterns, with a reason string naming it as a wrapped `GRAPH.DELETE`; commented in place
+that this ad-hoc match should be replaced by a documented wrapper-registry convention if a second
+such wrapper ever appears (re-grepped `skills/*/scripts/` and confirmed `pipeline.sh` is still the
+only one today). Verified with manual PreToolUse-payload tests covering both `--reset` orderings,
+the no-`--reset` case, an unrelated benign command, and all pre-existing patterns — all behaved as
+expected.
+
+Also updated `claude/AGENTS.md`'s "Hook machinery" section to mention the new wrapper pattern.
+**Both fixes confined to `claude/scripts/audit-team.sh` and
+`claude/scripts/guard-destructive-ops.sh` — no other script or hook contract changed.**
+
 ## 2026-07-30 — CPG getting-started manual, reviewed and behavior-verified (doc-only)
 
 New `docs/manuals/cpg-getting-started.md` — the component's first end-user-facing manual,

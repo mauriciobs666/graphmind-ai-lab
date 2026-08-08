@@ -216,16 +216,24 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   Owner: `graph-dba`. *(Cited as a forward reference from
   [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md) and
   [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) — do not renumber.)*
-- **C-309 — `audit-team.sh` gate is red, and blind to untracked files.** 🔵 Two parts.
-  **(a)** The gate already returns `RESULT: FAIL` on **two pre-existing** check-7 home-path and
-  username leaks — hit in `.claude/settings.json` (2 lines), `claude/devops/kaizen/inbox.md`,
-  `claude/joern/kaizen/inbox.md`, `docs/plans/m2-cpg-analysis-skill.md`, plus a username in
-  `falkor-chat/docs/requirements/workflow-dependence-overlay.md`. These predate M3, which is why
-  every M3 step used *"no **new** failures"* (a before/after diff) as its done-condition.
-  Genericize them and restore "audit passes" as a usable gate. **(b)** Check 7 uses `git grep`, so
-  it sees **tracked files only** — every new untracked artifact is invisible to it until committed,
-  making the differential audit a **post-commit-only** signal for new files. Each implementer must
-  grep its own new files directly until this is fixed; the limitation belongs in the project docs.
+- **C-309 — `audit-team.sh` gate was red, and blind to untracked files.** ✅ **Resolved
+  2026-08-08 by `cobb`.** Two parts. **(a)** The gate previously returned `RESULT: FAIL` on
+  **two pre-existing** check-7 home-path and username leaks — hit in `.claude/settings.json`
+  (2 lines), `claude/devops/kaizen/inbox.md`, `claude/joern/kaizen/inbox.md`,
+  `docs/plans/m2-cpg-analysis-skill.md`, plus a username in
+  `falkor-chat/docs/requirements/workflow-dependence-overlay.md`. These predated M3, which is why
+  every M3 step used *"no **new** failures"* (a before/after diff) as its done-condition. Already
+  genericized as fallout from later, unrelated work and never reflected back into this backlog
+  entry — `claude/joern/kaizen/inbox.md` doesn't even exist anymore (the joern agent was folded
+  into `graph-dba`, commit `cbf26c4`). Confirmed clean by grepping all five paths directly plus a
+  green `audit-team.sh` run; **no code change needed for (a)**. **(b)** Check 7 used `git grep`,
+  so it saw **tracked files only** — every new untracked artifact was invisible to it until
+  committed, making the differential audit a **post-commit-only** signal for new files.
+  **Fixed:** the scan now unions `git ls-files --cached` with `git ls-files --others
+  --exclude-standard` before grepping, so a brand-new untracked (non-ignored) file leaking an
+  identifier now fails the gate too, no `git add` required first. Verified by planting an
+  untracked file containing `$HOME` under `claude/`, confirming the gate FAILed on it, then
+  removing it and confirming `RESULT: PASS` returned.
   Owner: `cobb` / `devops`.
 - **C-310 — OpenCode + Kiro MCP wiring for the `cpg` server.** 🔵 `.mcp.json` and
   `enabledMcpjsonServers` are **Claude Code only**; OpenCode and Kiro configure MCP through their
@@ -240,13 +248,23 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   Two new obligations for this item: Docker becomes a prerequisite on any harness host (`run.sh` is
   what ports to a Docker-less one), and **`MCP_TIMEOUT` is a Claude-Code knob** — OpenCode's and
   Kiro's own startup budgets must be established here. Owner: `cobb` / `devops`.
-- **C-311 — `guard-destructive-ops.sh` is blind to destructive commands wrapped in scripts.** 🔵
-  The guard matches the Bash *command string*, so `pipeline.sh --reset` deletes a graph with **no
-  prompt** — the approval S8 originally leaned on could not fire (S8 was restructured to run an
-  explicit `redis-cli GRAPH.DELETE`, which does trip the guard with the graph name in the text the
-  human approves). Decide the remedy — match known wrapper invocations (`pipeline.sh .* --reset`),
-  or make wrappers require an out-of-band delete — and apply it to every wrapper in
-  `skills/*/scripts/`. Owner: `cobb` / `devops`.
+- **C-311 — `guard-destructive-ops.sh` was blind to destructive commands wrapped in scripts.** ✅
+  **Resolved 2026-08-08 by `cobb`.** The guard matched the Bash *command string*, so
+  `pipeline.sh --reset` deleted a graph with **no prompt** — the approval S8 originally leaned on
+  could not fire (S8 was restructured to run an explicit `redis-cli GRAPH.DELETE`, which does trip
+  the guard with the graph name in the text the human approves). **Fixed:** added a wrapper-match
+  branch to `guard-destructive-ops.sh` (alongside the existing `docker`/`FLUSHALL`/`GRAPH.DELETE`
+  branches) that catches a `pipeline.sh` invocation carrying `--reset`, in either token order, with
+  a reason string naming it as a wrapped `GRAPH.DELETE`. Re-grepped `skills/*/scripts/` and
+  confirmed `pipeline.sh` is still the **only** wrapper in the repo with a destructive flag, so the
+  ad-hoc pattern match (rather than a general wrapper-registry mechanism) stays appropriately
+  scoped, per the code comment left in place: if a second such wrapper appears, replace this
+  one-off matching with a documented wrapper-registry convention rather than accreting more
+  special cases. Verified with manual PreToolUse-payload tests: both `--reset` token orderings
+  trigger `permissionDecision: "ask"`; `pipeline.sh` without `--reset`, an unrelated benign
+  command, and all pre-existing patterns (`GRAPH.DELETE`, `FLUSHALL`, `docker rm -f`) behave
+  unchanged.
+  Owner: `cobb` / `devops`.
 - **C-312 — `FILENAME` is relative to the Joern parse root: add a post-load verification step.** 🔵
   The parse root alone silently decides whether every `STARTS WITH 'tests/'` filter in the
   `cpg-analysis` recipes matches anything, **and the failure is invisible in node/edge counts** — a

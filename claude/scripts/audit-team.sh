@@ -22,14 +22,19 @@
 #   6. boundary-pair symmetry — adjacent specialists whose scopes border each
 #      other must each name the other in their frontmatter `description` (the
 #      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
-#   7. personal-info leak — no tracked file anywhere in the repo may
-#      contain the maintainer's personal identifiers: home path, username,
-#      git user.name, git user.email, or hostname. Patterns are derived at
-#      runtime (never hardcoded here — that would itself be the leak), so the
-#      check protects whoever runs it. Committed artifacts must be machine-
-#      and identity-portable ($HOME/.claude/agents/<name>/… resolves via the
-#      deployment symlink on any machine). Origin: 2026-07-10, six agents'
-#      hook commands were committed with the absolute /home/<user>/… path.
+#   7. personal-info leak — no tracked *or untracked-but-not-gitignored* file
+#      anywhere in the repo may contain the maintainer's personal identifiers:
+#      home path, username, git user.name, git user.email, or hostname.
+#      Patterns are derived at runtime (never hardcoded here — that would
+#      itself be the leak), so the check protects whoever runs it. Committed
+#      artifacts must be machine- and identity-portable
+#      ($HOME/.claude/agents/<name>/… resolves via the deployment symlink on
+#      any machine). Origin: 2026-07-10, six agents' hook commands were
+#      committed with the absolute /home/<user>/… path. Widened 2026-08-08
+#      (C-309b) — a brand-new untracked file used to be invisible to `git
+#      grep`; the scan now unions tracked files with untracked-but-not-
+#      ignored ones so the gate catches a leak before the first commit, not
+#      only after.
 #   8. git-commit-authority containment — only tico and teco may document
 #      `git add`/`git commit` authority in their own prompt (COMMIT_AUTHORS
 #      below); every other agent's <name>.md must stay free of those verbs
@@ -153,12 +158,20 @@ leaked=0
 for label in "${!pii[@]}"; do
   wordflag=()                                      # short bare tokens get word bounds to avoid substring noise
   case "$label" in username|hostname) wordflag=(-w) ;; esac
-  hits="$(git -C "$ROOT" grep -I -n -i "${wordflag[@]}" -F "${pii[$label]}" 2>/dev/null)" || continue
+  # Tracked + untracked-but-not-gitignored, so a brand-new file leaking an
+  # identifier can't pass this gate silently just because it hasn't been
+  # `git add`ed yet (C-309b, 2026-08-08 — plain `git grep` only sees tracked
+  # content). Check output emptiness rather than exit code so an empty file
+  # list (xargs -r skips the run) and a clean grep (exit 1) both fall through
+  # to "no hits" instead of one of them misfiring as a false FAIL.
+  hits="$(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard \
+            | xargs -0 -r grep -I -n -i "${wordflag[@]}" -F -e "${pii[$label]}" -- 2>/dev/null)"
+  [ -n "$hits" ] || continue
   printf '%s\n' "$hits" | sed 's/^/      /'
-  failmsg "repo: $label leaked into tracked files — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
+  failmsg "repo: $label leaked into a tracked or untracked (non-ignored) file — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
   leaked=1
 done
-[ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked file"
+[ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked or untracked (non-ignored) file"
 
 # 8. git-commit-authority containment — only tico/teco may claim git add/commit
 echo

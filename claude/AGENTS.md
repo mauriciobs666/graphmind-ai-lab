@@ -26,7 +26,10 @@ allowed-path globs and escalation message; the core does jq→python3 path extra
 and the `permissionDecision: "ask"` escalation. The three destructive-ops guards (devops,
 graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destructive-ops.sh`**
 (each passes its agent name; the core matches Bash command patterns — `GRAPH.DELETE`,
-`FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f` — not write paths). Frontmatter wires every
+`FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`, and (since 2026-08-08, C-311)
+`pipeline.sh ... --reset` — a wrapper invocation matched ad hoc because the script runs
+`GRAPH.DELETE` internally, where the literal string never reaches the guard — not write paths).
+Frontmatter wires every
 hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
 symlink.
 

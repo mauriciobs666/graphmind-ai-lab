@@ -57,6 +57,16 @@ elif printf '%s' "$norm" | grep -qiE "docker[- ]compose[[:space:]].*down.*(-v${B
   reason="compose down -v/--volumes — removes named volumes and their data"
 elif printf '%s' "$norm" | grep -qiE "(^|[^[:alnum:]])(FLUSHALL|FLUSHDB)${B}|GRAPH\.DELETE${B}"; then
   reason="flush/delete of a shared Redis/FalkorDB datastore — wipes data other components depend on"
+elif printf '%s' "$norm" | grep -qiE "pipeline\.sh${B}.*--reset${B}|--reset${B}.*pipeline\.sh${B}"; then
+  # Ad-hoc wrapper match (C-311, 2026-08-08): skills/joern-cpg/scripts/pipeline.sh
+  # --reset runs `redis-cli ... GRAPH.DELETE` INSIDE the script, so the literal
+  # string never appears in the Bash command text this guard inspects — match
+  # the wrapper invocation itself instead. This repo has exactly one such
+  # wrapper today (verified by grepping skills/*/scripts/ for other destructive
+  # flags); if a second wrapper appears, replace this one-off pattern with a
+  # documented wrapper-registry convention rather than accreting more special
+  # cases here.
+  reason="skills/joern-cpg/scripts/pipeline.sh --reset — wraps a GRAPH.DELETE the guard can't see in the script's own command text"
 fi
 
 [ -z "$reason" ] && exit 0
