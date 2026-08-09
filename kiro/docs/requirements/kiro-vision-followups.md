@@ -43,7 +43,12 @@ resolved differently.
    `kiro/docs/requirements/kiro-demo-agent.md` (now archived) for the requirements and
    `kiro/README.md` for the built, checked-in piece and how to run it. This closes only the demo
    slice, not the wider gap — turn-taking/backoff (item above), deliverable/artifact provenance
-   (item above), and real-time push (K-018) remain open/undecided.
+   (item above), and real-time push (K-018) remain open/undecided. **2026-08-09 update:** `mcp-monitor/`
+   has shipped as a standalone MCP tool-result watcher (`mcp-monitor/docs/requirements/mcp-monitor.md`)
+   that demonstrates the auto-wake trigger mechanism live end-to-end — polling an MCP tool for a regex
+   match and launching a command when triggered. The mechanism works (see `mcp-monitor/scripts/demo_falkor_chat.sh`),
+   but wiring an actual Kiro agent to *consume* an mcp-monitor launch remains unbuilt, and turn-taking
+   among multiple agents responding to the same trigger is still explicitly open.
 
 ## User stories
 _(draft, for future prioritization — not yet committed work)_

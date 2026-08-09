@@ -1411,6 +1411,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Done-condition:** a posted message appears in another client without a poll; graceful fallback to polling.
 - **Risks/RAM:** no graph RAM; Pub/Sub is transient. Publish *after* the guarded §4 write commits, never inside it (atomicity rule).
 - **Test strategy:** integration test of publish-on-write + a WebSocket client receiving it.
+- **Related work (client-side polling alternative):** `mcp-monitor/` (`mcp-monitor/docs/requirements/mcp-monitor.md`) has shipped as a separate, polling-based watcher that detects MCP tool-result changes and launches commands — a distinct, complementary approach to K-018's server-side push. K-018 remains its own open item.
 
 ### — M2.5-quality track (retrieval evaluation; parallel to M2.5 hardening, off the M3 critical path) —
 
