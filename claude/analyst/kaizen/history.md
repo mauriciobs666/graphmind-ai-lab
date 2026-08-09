@@ -2,6 +2,146 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-09 — Independent safety recheck cleared; `review-techniques.md` marker removed
+- **What:** Removed the "⚠️ Pending an independent analyst safety recheck before first use"
+  callout from technique (b) (scratch-copy + reverse-patch) in `claude/analyst/review-techniques.md`.
+  A separate, narrowly-scoped analyst session ran the independent safety recheck and returned a
+  clean verdict — no embedded-instruction/manipulation concern, scope-limiting language intact.
+  Also folded in the recheck's one optional suggestion: appended "the block was doing its job;
+  this substitute earns the exception on its own zero-touch merits" to the existing "not a general
+  license" paragraph, affirming the classifier's original block was itself legitimate scrutiny.
+- **Why:** The marker existed because this exact technique had triggered an instruction-poisoning
+  flag on 2026-07-31 (see that entry below) before being reframed and promoted into this file on
+  2026-08-09. The recheck was the condition for treating it as a routine technique rather than
+  "informational only." Requested by `teco`, relaying two independent reviews'
+  (`docs/reviews/{kaizen-inbox-distillation,analyst-inbox-distillation}.md`) findings plus the
+  separate recheck's result.
+- **Plan items:** none.
+
+## 2026-08-09 — Held entry 28 promoted: consolidated Kiro-facts edit landed
+`cobb` closed out the "(H) Held, not cleared — entry 28" note from the same-day distillation
+entry below: the race window against `architect`'s two held entries (both targeting the same
+file) is over, so the `kiro-cli agent create` default `"resources": []"` fact was re-verified
+(now against `kiro-cli 2.16.2`, up from `2.14.1` — held) and written into
+`skills/agent-standards/kiro.md`'s CLI custom-agents `resources` config-key bullet. `inbox.md`
+entry 28 cleared; `inbox.md` is back to the standard empty placeholder.
+
+## 2026-08-09 — Full inbox distillation pass: 30 of 31 entries processed (entry 28 held for a coordinated follow-up)
+
+`cobb` ran the agent-maintenance skill §5 distillation over the full inbox (31 entries spanning
+2026-07-19 → 2026-08-08), preceded by a read-only proposal pass that verified each entry against
+current repo state, then a second re-verification immediately before applying edits (repo state
+was unchanged — `git status` clean both times, aside from an unrelated concurrent edit to
+`claude/tdd-engineer/tdd-engineer.md`'s step 5 discovered mid-pass, which this pass's own
+description-clause edit landed cleanly alongside). Grouped by disposition; every entry not listed
+under "held" is now cleared from `inbox.md`.
+
+**(A) Discard — already resolved/stale, cleared with no promotion (entries 1, 12, 15, 16, 18, 20,
+25).** Re-verification found each condition no longer holds: entry 1 (falkor-chat pytest
+self-skip) is already documented at `falkor-chat/docs/DESIGN.md` §14.7; entry 12
+(`audit-team.sh` failing check 7) — a live run now shows full `PASS`, including check 7, the five
+cited leaks having been cleaned up since; entry 15 (`pipeline.sh --reset` bypassing the
+destructive-ops guard) — `claude/scripts/guard-destructive-ops.sh` now carries a dedicated C-311
+branch (dated 2026-08-08) matching exactly what the entry asked for; entry 16 (Claude Code MCP
+25k-token output cap) and entry 18 (`CLAUDE_PROJECT_DIR` expansion) are both already in
+`skills/agent-standards/claude-code.md`; entry 20 (MCP startup-timeout doc disagreement) is
+already resolved there too (`MCP_TIMEOUT` vs `MCP_TOOL_TIMEOUT` disambiguated); entry 25 (stale
+"the joern agent's job" error text in `cpg/mcp/server.py`) — the live string now reads "the
+graph-dba agent's job", no trace of "joern agent" left in the file.
+
+**(B) Promoted to project docs — `falkor-chat/AGENTS.md` + `docs/DESIGN.md` (entries 4, 5, 6, 7,
+10).** Consolidated into one new "Probing shared graph state without mutating it" subsection in
+`AGENTS.md` (entries 5 + 10: the `publish_def`/`materialize_snapshot` graph-seam asymmetry, and
+`test_services.py` as the review-safe pytest subset) plus a note on the `bootstrap_schema.sh`
+Key-scripts row (entry 6, and entry 7's misfiled second "Suggested home" line, which was about
+`bootstrap_schema.sh` despite being appended under the line-number-invariance entry — routed to
+its actual topic here). Entry 4 (`pytest --collect-only -q` as the non-mutating way to check a
+claimed test count) went to `docs/DESIGN.md` §14.7, next to the existing pytest-hazard bullets.
+**Line numbers re-verified and corrected**, not copied from the inbox — the original entries cited
+`repository.py:132-134`/`:937`/`:1483` etc.; current `HEAD` has the same functions at
+`:156-158`/`:992`/`:1669` (drift from other commits landing between 2026-07-24 and now). Entry
+7's own topic — the line-number-invariance re-gate technique — went to (F) below, not here.
+Also logged in `falkor-chat/docs/HISTORY.md` (2026-08-09).
+
+**(C) Promoted to knowledge base — `claude/graph-dba/falkordb-quirks.md` (entries 14, 17, 27).**
+Entries 14 + 17 bundled into one "Ops, config & tooling" bullet (`GRAPH.PROFILE` executes writes
+for real despite suppressing `RETURN` output; neither `RO_QUERY` nor an `EXPLAIN`/`PROFILE`
+prefix — even after a Cypher comment — is honored as a planning directive under either query
+command). Entry 27 (`sum(CASE...)` returns float `0.0`, never `NULL`, on zero-row aggregation,
+and stays `float` not `int` on non-empty input) added under "Cypher dialect & query behavior",
+next to the existing aggregation-pitfalls bullets. Edited directly per the established
+maintainer-edits-another-agent's-knowledge-base-file channel (precedent: 2026-07-31 entry below);
+no `graph-dba`-side kaizen entry needed.
+
+**(D) Promoted to knowledge base — `skills/agent-standards/claude-code.md` (entries 13, 19, 21,
+31).** Entry 13 (FastMCP `structured_output=False` — otherwise a `str`-returning tool ships its
+payload twice via a spurious `outputSchema`) added to § Output limits. Entry 19 (a containerized
+stdio MCP server's own labelled container is legitimately `Up` for the whole session that's
+probing it, so a "docker ps --filter label=… must be empty" orphan-check is unsatisfiable from
+inside an open session) added to § Lifecycle, framed as a liveness-aware-check rule rather than a
+bare reviewer habit. Entries 21 + 31 (this environment's Bash tool shell-shadows `find`→`bfs` and
+`grep`→`ugrep` via wrapper functions with a spoofed `ARGV0`, not inherited by a spawned
+subprocess) merged into one new § Bash tool environment section, since they're the same
+phenomenon discovered on two different dates. Per `skills/README.md`'s Maintenance section
+("changes to `agent-maintenance`/`agent-standards` are logged in `claude/cobb/kaizen/history.md`"
+— see that file, 2026-08-09).
+
+**(E) New skill — `skills/python-web-quirks/SKILL.md` (entries 2, 11, 29).** Stakeholder decision:
+Python/web-framework stack knowledge belongs in a skill consulted by the relevant personas, not
+duplicated into one project's docs. Entries 2 + 29 merged into one background-task-GC/threading
+note (`asyncio.create_task` fire-and-forget GC-safety warned-but-not-reproduced-under-stress,
+paired with Starlette/FastAPI `BackgroundTasks`' bounded-threadpool concurrency vs. an unbounded
+raw `threading.Thread` — both are about async-dispatch mechanics an implementer might get wrong
+in the same code path). Entry 11 (FastAPI/pydantic `response_model_exclude_unset` silently
+dropping defaulted fields on **nested**, not just top-level, models) as its own section. Wired via
+a routing clause in `coder`, `tdd-engineer`, `architect`, and this agent's own frontmatter
+`description` (mirroring how `cpg-analysis` is wired into `analyst`/`architect`). Registered in
+`skills/README.md` and root `AGENTS.md`'s `skills/` bullet. No dedicated `kaizen/` for the new
+skill — no existing skill in this repo actually carries one despite the agent-maintenance skill's
+general rule (`agent-standards`/`agent-maintenance` are logged in `cobb`'s kaizen per
+`skills/README.md`; `joern-cpg`/`cpg-analysis` changes are logged in `graph-dba`'s kaizen instead,
+per that file) — followed the established precedent (log in the creating/maintaining agent's own
+kaizen, here `cobb`'s) over the written-but-unpracticed rule; logged in `claude/cobb/kaizen/history.md`
+(2026-08-09).
+
+**(F) New on-demand file — `claude/analyst/review-techniques.md` (entries 3, 7, 8, 26).**
+Stakeholder decision: specialized review techniques go on-demand (mirrors
+`graph-dba/falkordb-quirks.md`), not always-loaded prompt body. Holds: the AST line-range
+byte-identity hash technique (3), the line-number-invariance re-gate technique (7's actual
+topic), the stub-package HEAD-vs-working-tree import technique (8), and the scratch-copy +
+reverse-patch technique (26) — written in using the **already-reframed** text that survived the
+2026-07-31 security review (see that entry below), not any earlier draft, and carrying an
+explicit "⚠️ Pending an independent analyst safety recheck before first use" marker per the
+stakeholder's instruction; a separate narrowly-scoped analyst session is checking it. `analyst.md`
+gained a one-line pointer to this file (in "How you work" step 3) rather than inlining the
+content.
+
+**(G) Core prompt — `analyst.md` (entries 9, 22, 23, 24, 30).** Entry 9 (a deliverable already
+sitting at the target path when a run starts — e.g. resuming after an interruption — may have
+executed/side-effecting claims narrated in past tense before the command actually ran; re-verify
+against the live system before inheriting them) added as its **own** Guardrails bullet — stakeholder
+judged it high-severity (a resumed analyst could hand `teco` false confidence about live system
+state), not folded into an existing one. Entries 22 (a `git grep`/`git ls-files` count is a bound,
+not a fact, when the artifact under review or a sibling deliverable is itself untracked), 23 (a
+suggested regex/glob/pattern fix is a claim, run it before writing it into a review — the specific
+extglob bug that motivated this is already fully documented in
+`docs/plans/doc-reference-convention.md`, no further action needed there), 24 (cross-check a named
+agent's `PreToolUse` guard globs when a plan assigns it doc-write ownership), and 30 (`shellcheck`
+isn't installed in this environment — `bash -n` + live execution is the substitute) folded as
+**clause-level extensions to the existing "Evidence over vibes" guardrail sentence**, per
+stakeholder instruction to avoid four new standalone bullets.
+
+**(H) Held, not cleared — entry 28** (`kiro-cli agent create` default `resources: []`).
+Disposition decided (promote to `skills/agent-standards/kiro.md`) but left in `inbox.md` with a
+one-line "queued for consolidated follow-up" note: `teco` is coordinating a combined edit to that
+shared file alongside two related facts from `architect`'s inbox, to avoid two sessions racing on
+the same file.
+
+**Inbox-authoring defects found and corrected while applying:** entry 6 had no "Suggested home"
+line of its own (its dispositioning text had been appended, in error, under entry 7 — see (B));
+entry 1 likewise had no "Suggested home" line (moot — turned out to already be stale). No entries
+were found to conflict with each other.
+
 ## 2026-07-31 — Inbox entry reframed after an "Instruction Poisoning" flag; classifier-gap fact partially distilled
 - **What:** A security check flagged the 2026-07-31 inbox entry ("Auto mode's Bash classifier blocks `git stash`…") as instruction-poisoning-shaped: a persistent, forward-looking "here's how to route around a safety classifier block" write-up, regardless of how benign the originating use was. `teco` (no write access to this inbox, no adjudication authority) routed the triage to `cobb`. Verdict: **reframe needed, not a false positive and not a full policy violation** — the underlying technique (scratch-copy + reverse-patch, zero working-tree touch) is sound and consistent with this inbox's established isolation discipline (the 2026-07-24 stub-package and review-safe-pytest-subset entries), but the entry's *framing* ("here's the workaround now that git stash is off-limits") taught evasion-shaped reasoning rather than the safety property that actually makes the substitute acceptable. Contrast: the 2026-07-25 `pipeline.sh --reset` entry is safe precisely because it reports a gap in a guard **this repo owns** (`claude/scripts/guard-destructive-ops.sh`) for that guard's maintainer to close — it never tells an agent to use the gap. The 2026-07-31 entry, by naming a *product-level* auto-mode classifier (not a repo hook) and framing the substitute as "the answer to being blocked," was the wrong shape even though the action taken was benign and verified harmless (`git status` clean before/after, independently spot-checked by `teco`).
   - Entry rewritten in place (`kaizen/inbox.md`): kept the technique and its evidence, added an explicit scope note disclaiming the "route around any classifier block" generalization, and stated plainly that the classifier itself is not a repo mechanism there's anything here to harden.

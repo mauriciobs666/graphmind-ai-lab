@@ -128,6 +128,18 @@ to the general fact here.
   `RETURN "n="+toString(count(m))+" def="+collect(d.key)[0] AS s`. Silent-zero-rows is the
   dangerous shape here — a test asserting on the string just fails with an empty `got:`.
 
+- **`sum(CASE WHEN … THEN 1 ELSE 0 END)` over a zero-row aggregation returns a float `0.0`, never
+  Cypher `NULL` — and returns `float`, not `int`, over non-empty input too, via `falkordb-py`**
+  (verified 2026-07-31 on v4.18.11 via both `redis-cli GRAPH.QUERY` and `falkordb-py`). A query
+  shaped `... WITH r, count(m) AS producedCount RETURN count(r) AS sampleSize, sum(CASE WHEN
+  producedCount > 0 THEN 1 ELSE 0 END) AS postedCount` returns `sampleSize=1 <int>,
+  postedCount=0.0 <float>` over zero matching rows, and `sampleSize=2 <int>, postedCount=1.0
+  <float>` over non-empty input — `count()` stays a clean Python `int` in both cases, only
+  `sum()` comes back `float`. Consequence: don't `None`-coalesce a `sum(CASE...)` result
+  expecting `NULL` on empty input (it's already a defined `0.0`), and expect a `float`-vs-`int`
+  JSON-serialization mismatch (`"postedCount": 1.0` instead of `1`) wherever this shape feeds a
+  response model.
+
 ## Query tuning
 
 - **An `OR` across two label-specific properties as the scan anchor**
@@ -217,3 +229,17 @@ to the general fact here.
 - **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
   `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
   vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.
+- **`GRAPH.PROFILE` is not read-only, and neither `GRAPH.RO_QUERY` nor a `PROFILE`/`EXPLAIN`
+  prefix inside a query string is honored as a planning directive — the query just executes.**
+  Per docs.falkordb.com/commands/graph.profile: unlike `GRAPH.EXPLAIN`, `GRAPH.PROFILE`
+  *executes* the query including any write operations (it only suppresses `RETURN` output, not
+  the side effects) — so a `PROFILE`-prefixed write bypasses any `GRAPH.RO_QUERY`-based
+  read-only guard. Live-verified on v4.18.11: an `EXPLAIN`/`PROFILE`/`profile` prefix inside a
+  `GRAPH.QUERY` or `GRAPH.RO_QUERY` string — including after a `//` or `/* */` comment — is
+  silently ignored and the query runs for real, returning results with no error and no plan;
+  actual plans come only from the separate `GRAPH.EXPLAIN`/`GRAPH.PROFILE` commands.
+  Consequence for any tool that sniffs a directive prefix to route to
+  `Graph.explain()`/`Graph.profile()` or to refuse a write: whitespace/case trimming is not
+  enough, and a leading comment defeats the sniff. Also: in `falkordb-py` 1.6.x,
+  `Graph.explain`/`Graph.profile` take no `timeout` parameter (only `query, params`), unlike
+  `query`/`ro_query`. (Verified 2026-07-24/25, surfaced reviewing an MCP read-tool design.)

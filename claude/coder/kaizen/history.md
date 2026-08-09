@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-09 — Description gained a `python-web-quirks` skill routing clause
+- **What:** Frontmatter `description` gained one clause: in a Python web/async codebase, the
+  agent consults the new `skills/python-web-quirks/SKILL.md` for asyncio/FastAPI/Starlette/
+  pydantic gotchas — mirroring how `cpg-analysis` is wired into `analyst`/`architect`. No body
+  change; skills are progressively disclosed and self-describe.
+- **Why:** `python-web-quirks` was created distilling three general Python/web-framework facts
+  from `analyst`'s learnings inbox (asyncio `create_task` GC-safety, `BackgroundTasks` vs.
+  `threading.Thread` concurrency bounds, FastAPI/pydantic `exclude_unset` on nested models).
+  Stakeholder wired it to `coder`/`tdd-engineer`/`architect`/`analyst` at minimum since all four
+  plausibly implement or review Python web/async code. See `claude/analyst/kaizen/history.md`
+  (2026-08-09) for the full distillation record and `skills/README.md` for the catalog entry.
+- **Plan items:** none.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.

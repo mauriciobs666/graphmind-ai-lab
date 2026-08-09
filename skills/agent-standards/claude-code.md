@@ -10,6 +10,8 @@
 > **`model` frontmatter field re-verified 2026-07-27** against
 > `code.claude.com/docs/en/sub-agents` (accepts `fable` and full model IDs; **defaults to
 > `inherit`**).
+> **Bash tool environment** (shell-shadowed `find`/`grep`) — **observed 2026-07-26/2026-08-08**,
+> not doc-sourced (no official page documents this; see that section for the evidence).
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -197,6 +199,27 @@ the always-loaded project memory (`CLAUDE.md`).
   — a strictly stronger isolation property than the blocked command, not a
   lower-visibility route to its effect.
 
+## Bash tool environment
+
+- **The Bash tool's shell shadows some coreutils with wrapper functions that
+  `exec` a different binary under a spoofed `ARGV0`** — observed for both `find`
+  (wraps `bfs`: `type find` shows a function execing `${CLAUDE_CODE_EXECPATH}`
+  with `ARGV0=bfs -S dfs -regextype findutils-default`) and `grep` (wraps
+  `ugrep`: `ARGV0=ugrep "$_cc_bin" -G --ignore-files --hidden -I ...`). Both are
+  Claude-Code-provided convenience wrappers, defined only in the interactive
+  tool shell — **not** `export -f`'d, so a freshly spawned subprocess (`bash
+  script.sh`, or `bash -c '...'`) does **not** inherit them and genuinely runs
+  real GNU `find`/`grep`. Consequence: a bare `find`/`grep` typed directly at
+  this shell's own prompt can behave differently from the same tool run by a
+  script the shell invokes (`bfs`'s breadth-first traversal order vs. GNU
+  `find`'s; `ugrep -G`'s basic-regex flavor vs. POSIX ERE `grep -E` — one
+  boundary-heavy alternation pattern produced a different match verdict between
+  the two). When auditing a script's own `find`/`grep`/`sed` logic by running
+  it, exercise it **through the real invocation** (`bash script.sh`, the actual
+  hook entry point) rather than trusting a bare command typed at this shell's
+  prompt — the two are not guaranteed equivalent here. (Observed
+  graphmind-ai-lab, 2026-07-26 and 2026-08-08.)
+
 ## MCP
 
 > **Verified: 2026-07-25** against `code.claude.com/docs/en/mcp` (full page).
@@ -345,6 +368,16 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   `tools/list` entry raises *that tool's* threshold, **ceiling 500,000 chars**,
   independent of `MAX_MCP_OUTPUT_TOKENS` (text content only — image content stays
   bound by the token limit).
+- **FastMCP (Python `mcp` SDK) emits an `outputSchema` — and duplicates the whole
+  payload as `structuredContent` — even for a plain `-> str` tool, unless you opt
+  out.** Verified against `mcp` 1.28.1: `@mcp.tool()` on a `def f(...) -> str`
+  produces `outputSchema: {"properties": {"result": {"type": "string"}}, ...}` in
+  `tools/list`, and a text-returning tool ships its text twice (`content` +
+  `structuredContent`) — doubling the token cost for any tool designed around a
+  character budget. `@mcp.tool(structured_output=False)` suppresses it
+  (`outputSchema: None`); the `structured_output: bool | None = None` parameter is
+  on `FastMCP.tool` in this version. Check for it whenever a plan or review
+  assumes a `str`-returning tool ships unstructured text only.
 
 ### Lifecycle
 
@@ -367,6 +400,19 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   crash-proof and must never write to stdout (the transport owns it).
 - `list_changed` notifications refresh a server's tools/prompts/resources without a
   reconnect; a failed refresh keeps the previously discovered set (v2.1.214+).
+- **A containerized stdio MCP server is itself a running container for the whole
+  session** — its process owns the session's pipe for the session's lifetime. A
+  verification/orphan-check step written as "`docker ps -a --filter
+  label=<server>` must be empty" is therefore unsatisfiable **the moment it runs
+  from inside an open session**: the current session's own labelled container is
+  legitimately `Up` at that point, and a follow-on "stop/remove the survivor"
+  instruction would kill the live server the check had just been run against
+  (with no auto-reconnect for stdio — see above, so recovery costs a session
+  restart). Write such a check as **liveness-aware**: expect exactly one `Up`
+  container per currently-open session and zero `Exited` ones, and only assert
+  "empty" with all sessions using that server closed. (Observed
+  graphmind-ai-lab, 2026-07-26, reviewing a `cpg` MCP server containerization
+  design whose own author had measured the check with no session open.)
 
 ### How MCP meets subagents and skills
 

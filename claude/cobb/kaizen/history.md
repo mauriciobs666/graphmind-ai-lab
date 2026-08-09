@@ -2,6 +2,123 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-09 — Review follow-ups: `claude/README.md` catalog completion + `claude-code.md` stamp gap
+- **What:** Two minor fixes from independent reviews of the same-day inbox-distillation batch
+  (`docs/reviews/{kaizen-inbox-distillation,analyst-inbox-distillation}.md`): (1)
+  `claude/README.md`'s catalog rows for `architect`, `coder`, `tdd-engineer`, and `analyst` now
+  mention the `python-web-quirks` skill, mirroring the existing `cpg-analysis` mention pattern in
+  the same rows — each agent's frontmatter `description` already carried the routing clause
+  (logged in each agent's own `kaizen/history.md` on creation), but the human-facing catalog had
+  gone stale relative to the repo's own precedent. (2) `skills/agent-standards/claude-code.md`'s
+  top `Verified:` stamp block gained a line for the new "Bash tool environment" section
+  (shell-shadowed `find`/`grep`), observed 2026-07-26/2026-08-08, not doc-sourced — every other
+  section already had a stamp line and this one was silently missing, a discoverability gap for
+  anyone skimming just the header.
+- **Why:** Both flagged as non-blocking minors by the two reviews; relayed by `teco` for a small
+  follow-up fix rather than a new review cycle.
+- **Plan items:** none.
+
+## 2026-08-09 — Consolidated Kiro-facts edit: three held inbox entries (`analyst` #28, `architect` #15/#16) landed in `skills/agent-standards/kiro.md`
+- **What:** Follow-up to the same-day full-team inbox distillation: three facts from two agents'
+  inboxes had been deliberately left "held, not cleared" (rather than applied immediately) because
+  all three target the same file and two concurrent distillation sessions writing it at once would
+  race — `teco` queued them for one consolidated pass once both source sessions were done. Before
+  writing, re-verified all three live against `kiro-cli 2.16.2` (the installed version had moved
+  from `2.14.1` at original capture on 2026-08-01 to `2.16.2`) — all three held with no drift:
+  1. **`kiro-cli agent create`'s default template is `"resources": []"`, never pre-populated**
+     (`analyst` inbox #28). Reproduced: `EDITOR=true kiro-cli agent create <name> -d
+     .kiro/agents` in a fresh scratch dir → `"resources": []` verbatim. Landed as an addition to
+     the `resources` config-key bullet under "CLI custom agents — JSON," alongside the existing
+     note on the separate `chat.disableInheritingDefaultResources` inheritance setting (which
+     governs *inheritance*, independent of the template itself always starting empty).
+  2. **Local-agent discovery is exact-CWD only, no upward directory walk** (`architect` inbox
+     #15). Reproduced: an agent created in `probe/.kiro/agents/` is listed by `kiro-cli agent
+     list` from `probe/`, but not from `probe/subdir/` (no local `.kiro/agents/` there, no
+     parent fallback). Landed as a new sub-bullet under the CLI agents' `Location` bullet, with
+     the practical consequence spelled out (a repo-checked-in agent's "no manual wiring" claim
+     still depends on which directory the run command `cd`s into).
+  3. **`mcpServers` remote entries carry no `"type"` field** — local vs. remote is discriminated
+     by `command` vs. `url` key presence (`architect` inbox #16). Reproduced: `kiro-cli mcp add
+     --name X --url <url> --agent <name> --force` wrote `"mcpServers": {"X": {"url": "..."}}`
+     with no type key. Landed as a rewrite of the existing `mcpServers` bullet (which previously
+     only documented the local `command`-keyed case, phrased as "each needs `command`" — now
+     stale/incomplete) to cover both shapes, plus a flag that `falkor-chat/docs/DESIGN.md`
+     §15.3's generic MCP-client example (`{"type": "streamable-http", "url": "..."}`) is a
+     *different* client's config spelling, not kiro-cli's — don't copy that shape into a
+     kiro-cli config.
+  Bumped the file's top `Verified:` header block with a new sentence covering all three facts and
+  the 2026-08-01 → 2026-08-09 re-verification span. Cleared the corresponding entries from both
+  source inboxes (`claude/analyst/kaizen/inbox.md`, `claude/architect/kaizen/inbox.md` — both now
+  at the standard empty placeholder) and logged the promotion in each agent's own
+  `kaizen/history.md`.
+- **Why:** Standing distillation duty (`agent-maintenance` skill §5) — these three facts had
+  already cleared verification and disposition during the main distillation pass; only the
+  shared-file write itself was deferred to avoid a race between the two source sessions. This
+  entry was itself a bookkeeping gap flagged by independent review (`docs/reviews/kaizen-inbox-distillation.md`):
+  the `kiro.md` content edit had landed without a matching `cobb` history entry, only the earlier
+  review-log entry below existed.
+- **Plan items:** none.
+
+## 2026-08-09 — Independent second-opinion review of the `analyst` inbox-distillation pass (self-review-conflict routing)
+- **What:** `analyst` would normally review a `cobb` deliverable, but the artifact under review here
+  *was* `analyst`'s own prompt/kaizen files (the same-day full inbox distillation logged below and
+  in `claude/analyst/kaizen/history.md`) — a real `analyst` session judging its own future prompt
+  would be a self-review conflict, so `teco` routed the second opinion to a fresh `cobb` session
+  (this one, no shared memory with the session that did the distillation) instead. Reviewed
+  `analyst.md`, the new `review-techniques.md`, `analyst`'s kaizen history/inbox, the cross-checked
+  `falkordb-quirks.md`/`claude-code.md` knowledge-base additions, and `cobb`'s own kaizen log for
+  honesty — independently re-deriving technical claims rather than trusting citations: live-ran
+  `GRAPH.PROFILE`/`EXPLAIN`-prefix/`sum(CASE...)` behavior against the running `falkordb-dev`
+  container, installed and exercised `mcp` 1.28.1's `FastMCP` `outputSchema`/`structured_output`
+  behavior in `cpg/mcp/.venv`, reproduced the pydantic nested-`exclude_unset` drop in
+  `falkor-chat/server/.venv`, re-ran `claude/scripts/audit-team.sh` (full PASS), and reproduced the
+  `DESIGN.md` SHA-lock re-extraction command byte-for-byte. Verdict: **approve with suggestions** —
+  zero blockers/majors, every reproducible claim reproduced, `analyst.md`'s scope matched exactly
+  what was pre-approved (1 new Guardrails bullet + clause extensions to one sentence + 2
+  routing/pointer additions, nothing more). Two minor, non-blocking polish notes (the "Evidence
+  over vibes" bullet reads dense after four clause additions; `claude-code.md`'s top-of-file
+  `Verified:` stamp block doesn't list the new "Bash tool environment" section). Written to
+  `docs/reviews/analyst-inbox-distillation.md`.
+- **Why:** `agent-maintenance` skill §5 fold-in — a distillation pass gets independent review like
+  any other significant deliverable, and the routing rule (never let an agent review its own future
+  prompt) needed a live instance to route correctly.
+- **Plan items:** none closed; the two minor findings above are parking-lot items (below), not
+  planned work — they're take-or-leave polish the original stakeholder can act on or not.
+
+## 2026-08-09 — `analyst` inbox distillation: new `python-web-quirks` skill + four `agent-standards/claude-code.md` knowledge-base additions
+- **What:** Two pieces of machinery-adjacent work from a full `analyst` learnings-inbox
+  distillation pass (see `claude/analyst/kaizen/history.md`, 2026-08-09, for the complete
+  disposition record across all 31 entries):
+  1. **Created `skills/python-web-quirks/SKILL.md`** — a new reference skill (Read/WebFetch/
+     WebSearch only) holding three live-verified, version-pinned Python/web-framework gotchas
+     (`asyncio.create_task` fire-and-forget GC-safety, Starlette/FastAPI `BackgroundTasks`'
+     bounded-threadpool concurrency vs. an unbounded raw `threading.Thread`, FastAPI/pydantic
+     `response_model_exclude_unset` dropping fields on nested models). Registered in
+     `skills/README.md` and root `AGENTS.md`'s `skills/` bullet; wired via a routing clause in
+     `coder`/`tdd-engineer`/`architect`/`analyst`'s frontmatter `description` (each agent's own
+     kaizen carries its edit). **No `kaizen/` dir under the new skill's own folder** — logging
+     it here instead, following the precedent set by `agent-maintenance`/`agent-standards`
+     (per `skills/README.md`'s Maintenance section) since no skill in this repo actually carries
+     a self-contained `kaizen/` despite the agent-maintenance skill's general §1 rule; this is
+     partial progress on **K-014** (below) but doesn't close it — the convention still isn't
+     written down anywhere, only followed by example.
+  2. **Four additions to `skills/agent-standards/claude-code.md`**: a new "Output limits" bullet
+     on FastMCP's `structured_output=False` opt-out (a `str`-returning tool otherwise ships its
+     payload twice via a spurious `outputSchema`); a new "Lifecycle" bullet on why a
+     containerized stdio MCP server's orphan-check ("`docker ps --filter label=…` must be
+     empty") is unsatisfiable from inside the very session that's checking it; and a new
+     top-level "Bash tool environment" section merging two prior observations (`find`→`bfs`,
+     `grep`→`ugrep` — this environment's interactive shell shadows both with wrapper functions
+     under a spoofed `ARGV0`, not inherited by a spawned subprocess) into one entry, since they're
+     the same underlying phenomenon discovered on different dates.
+- **Why:** Stakeholder decisions on the `analyst` inbox distillation proposal: general
+  Python/web-framework facts belong in a skill personas consult, not duplicated project docs
+  (hence the new skill rather than folding into `falkor-chat/AGENTS.md`, the only current
+  FastAPI consumer); the Claude-Code-harness facts (FastMCP behavior, MCP container lifecycle,
+  shell-shadowing) belong in cobb's existing perishable reference rather than `analyst`'s own
+  always-loaded prompt, since they're general harness/library facts, not review technique.
+- **Plan items:** touches **K-014** (see plan.md) — not closed.
+
 ## 2026-08-08 (Pass 2) — Fixed a regression my own C-311 tightening introduced; corrected the overclaiming docs; promoted a testing gotcha into TESTING.md
 - **What:** `analyst`'s Pass-2 re-review of my C-311 regex tightening (below) downgraded from
   approve to **needs changes**: my single-alternation fix

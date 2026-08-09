@@ -47,7 +47,9 @@ and OpenCode artifacts).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
-  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side). OpenCode-authored skills used only
+  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified
+  asyncio/Starlette/FastAPI/pydantic gotchas for `coder`/`tdd-engineer`/`architect`/`analyst`).
+  OpenCode-authored skills used only
   by OpenCode agents live separately, in `opencode/skills/`. See `skills/README.md`. Format
   ports across Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per
   tool.
