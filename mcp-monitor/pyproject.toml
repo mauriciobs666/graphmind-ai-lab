@@ -1,0 +1,44 @@
+[project]
+name = "mcp-monitor"
+version = "0.1.0"
+description = "Generic MCP tool-result watcher: poll a tool, match a regex, launch a command."
+requires-python = ">=3.12"
+# mcp is pinned to one minor, matching the in-repo precedent (falkor-chat/server's
+# pyproject.toml, cpg/mcp/requirements.txt): both existing MCP integrations in
+# this repo are verified against mcp 1.28.x, and mcp-monitor is the first
+# component to open a real stdio *and* real Streamable-HTTP client connection
+# here — a minor SDK bump changing client-side shapes (e.g.
+# StdioServerParameters' fields, see mcp_monitor/client.py) is exactly the kind
+# of break a wide pin would hide.
+dependencies = [
+    "mcp>=1.28,<1.29",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.14,<0.15",
+    "anyio>=4.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# anyio's bundled pytest plugin (`@pytest.mark.anyio`) drives the async tests —
+# anyio is already a transitive dependency of `mcp` itself, so this is zero net
+# new dependencies for async test support (plan §11). No pytest-asyncio.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Deliberately small: pyflakes + pycodestyle + import order — matches
+# falkor-chat/server's pyproject.toml. No behavioral rewrites.
+select = ["E", "F", "W", "I"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mcp_monitor*", "fake_mcp_server*"]

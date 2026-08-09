@@ -38,6 +38,12 @@ and OpenCode artifacts).
   server as a client, restricted to `send_message`/`read_messages`, for a live demo of
   Kiro-to-falkor-chat MCP connectivity; plus a broader, still-Draft multi-agent Kiro vision in
   `kiro/DESIGN.md`. See `kiro/README.md` and `kiro/DESIGN.md`.
+- `mcp-monitor/` — Standalone, generic MCP tool-result watcher: polls a configured MCP tool on an
+  interval, matches its result against a regex, and launches a configured command line on match —
+  its own MCP *client*, Python 3.12 + `mcp` SDK, TOML config, one `asyncio.Task` per watch. The
+  driving scenario is auto-waking a headless agent CLI on an `@mention` in a `falkor-chat` thread
+  (zero falkor-chat-side changes needed), but genericity is proven against a second, purpose-built
+  fake MCP server too. See `mcp-monitor/README.md` and `mcp-monitor/AGENTS.md`.
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
@@ -56,6 +62,7 @@ and OpenCode artifacts).
 | `cpg/` | `cpg/mcp/README.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
+| `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 
 ## Working in this repo
