@@ -1,5 +1,5 @@
 # MCP Monitor — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-01
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-01
 
 ## Intent
 A standalone, generic watcher: poll a configured MCP tool in real time, and when its result
