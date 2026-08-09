@@ -5,6 +5,44 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-09 — CPG backlog follow-ups closed (C-308, C-312, C-314, C-315, C-318, C-319, C-321)
+
+Closeout phase of a `teco`-coordinated round of follow-up backlog items from M3 and the M3
+containerization (C-320). All implementation and review work completed; final documentation updates
+applied.
+
+**Closed items:**
+- **C-308** — bounded transitive upward call-closure query, live-verified against `cpg_falkorchat`;
+  one genuine transitive addition detected, two name-collision artifacts explained, first-draft
+  self-recursion bug caught and fixed (documented inline).
+- **C-312** — `FILENAME` post-load verification flag added to `pipeline.sh`, scripted and manual
+  fallback documented in `SKILL.md` Gotchas.
+- **C-314** — map-valued cells now render as plain `dict` instead of leaking `OrderedDict` — fixed
+  via new `_normalize_for_repr()` helper that recursively walks nested structures; caught after
+  Pass-1 review and verified with edge cases.
+- **C-315** — booleans now render lowercase `true`/`false` instead of Python-style, fixed in the
+  same pass as C-314.
+- **C-318** — server `instructions=` string pinned in test suite; pin verified real by transiently
+  blanking the string and confirming assertion failure.
+- **C-319** — approval-scoping behavior documented in `skills/agent-standards/claude-code.md` §MCP;
+  causal-link error caught and fixed in self-review before finalization.
+- **C-321** — both halves done: scratch-graph-name UUID uniqueness fix (replaces `os.getpid()`),
+  plus autobuild pull-free gate (`CPG_MCP_NO_PULL=1`), hash-walk robustness (`image-tag.sh`), and
+  build-step reordering (`test` then `runtime`).
+- **C-316** also closed this round via a separate process; see its BACKLOG entry.
+
+**Reviews:** `coder`/`devops` implementation; `analyst` independent code review
+(`docs/reviews/cpg-followups-impl.md`, **approve**, Pass 2 after one Major finding on C-314/C-315
+re-fix); `cobb` skill/doc review (`docs/reviews/cpg-followups-skills-impl.md`, **approve**, one
+Major self-caught finding on C-319 wording, fixed in place).
+
+**Test suite (host venv):** `cpg/mcp/.venv/bin/python -m pytest -q` → **67 passed, 7 deselected**
+(offline default run); with `-m live` selected, the 7 live-marked tests pass (67 deselected). No new
+failures introduced.
+
+**Documentation fix:** `cpg/mcp/README.md` lines 434–439 updated from present-tense warning about
+PID-1 collision to past-tense reflection that the issue is fixed by C-321.
+
 ## 2026-08-08 — C-311 follow-up: tightened the pipeline.sh --reset match after review; fixed a stale C-312 owner
 
 Same-day follow-up to the C-309/C-311 fix below (commit `6ab4ffe`). `analyst`'s independent review

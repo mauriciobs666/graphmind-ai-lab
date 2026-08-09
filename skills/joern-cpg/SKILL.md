@@ -30,7 +30,8 @@ them rather than hand-running `joern-*` from memory.
 One command, end to end (build → export → transform → optional load):
 
 ```bash
-scripts/pipeline.sh <source> --graph cpg_myrepo --workdir ./joern-work --load
+scripts/pipeline.sh <source> --graph cpg_myrepo --workdir ./joern-work --load \
+  --verify-prefix tests/
 # omit --load to stop at the .cypher artifact (./joern-work/load.cypher)
 ```
 
@@ -39,7 +40,13 @@ Useful flags: `--language <lang>` forces a frontend (**Python → `pythonsrc`**,
 Gotchas); `--reset` `GRAPH.DELETE`s the target graph before `--load` for a clean
 reload (destructive, guard-gated); `--repr <r>` narrows the exported layers. After
 transform it asserts the CPG produced nodes (a failed frontend exits 0 but yields
-an empty graph), and after `--load` it verifies node/edge counts.
+an empty graph), and after `--load` it verifies node/edge counts **and**, for
+every `--verify-prefix PREFIX` given (repeatable), that `MATCH (m:METHOD) WHERE
+m.FILENAME STARTS WITH PREFIX RETURN count(m)` is nonzero — a healthy node/edge
+count alone does **not** catch a wrong parse root (see Gotchas below), and this
+does. Pass `--verify-prefix` whenever a downstream query (e.g. `cpg-analysis`'s
+test-gap recipe) will filter `FILENAME` by prefix; a failing prefix exits the
+pipeline non-zero with the fix (rebuild from a parse root that includes it).
 
 Or run the stages individually:
 
@@ -157,10 +164,27 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
 - **`FILENAME` is relative to the parse root you hand `joern-parse`, not the repo
   root.** A CPG built from `<repo>/app` emits bare basenames like `services.py`,
   so any query filtering `FILENAME STARTS WITH 'app/'` silently matches nothing —
-  no error, no empty-graph signal, just a wrong answer that looks like missing
-  code. Check `MATCH (m:METHOD) RETURN DISTINCT m.FILENAME LIMIT 10` right after
-  any load; if the prefix you expect isn't there, rebuild from a parse root that
-  includes it.
+  no error, no empty-graph signal, and **node/edge counts still look healthy**
+  (this is retroactively identified as the actual root cause of an earlier
+  `cpg_falkorchat` build being useless before a rebuild fixed it — the missing
+  test sources were a red herring). Just a wrong answer that looks like missing
+  code.
+  - **Scripted check:** `scripts/pipeline.sh ... --load --verify-prefix tests/`
+    (repeatable) asserts `MATCH (m:METHOD) WHERE m.FILENAME STARTS WITH 'tests/'
+    RETURN count(m)` is nonzero right after load and **exits the pipeline
+    non-zero** if not — make this part of any load whose downstream queries
+    (e.g. `cpg-analysis`'s test-gap recipe) filter `FILENAME` by prefix.
+  - **Manual check** (when running the stages individually / no `--load`, or
+    inspecting an already-loaded graph): `MATCH (m:METHOD) RETURN DISTINCT
+    m.FILENAME LIMIT 10` — or, to directly confirm an expected prefix, `MATCH
+    (m:METHOD) WHERE m.FILENAME STARTS WITH 'tests/' RETURN count(m)`. If the
+    prefix you expect isn't there (or the count is 0), rebuild from a parse root
+    that includes it.
+  - **Live-verified** (2026-08-09, `falkordb-dev`, graph `cpg_falkorchat`, via
+    `mcp__cpg__query`): happy path `MATCH (m:METHOD) WHERE m.FILENAME STARTS
+    WITH "tests/" RETURN count(m)` → **1067**; failure path with the same query
+    against `"nonexistent/"` → **0**, i.e. exactly the condition
+    `pipeline.sh --verify-prefix` treats as a hard failure and exits 1 on.
 - **No `--exclude`/ignore flag exists.** `build-cpg.sh`/`pipeline.sh` parse
   whatever directory they're pointed at verbatim — pointing at a real project
   directory also parses its `.venv`/`node_modules`/build caches. To scope a

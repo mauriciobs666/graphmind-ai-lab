@@ -6,6 +6,7 @@
 #
 # Usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG]
 #                    [--repr R] [--reset] [--load] [--host H] [--port P]
+#                    [--verify-prefix PREFIX ...]
 #   <source>     source dir/file to analyze (required)
 #   --graph      FalkorDB graph key             (default cpg_<basename>)
 #   --workdir    scratch dir for cpg.bin/export (default ./joern-work)
@@ -17,19 +18,32 @@
 #                guard-gated) so the load is clean; no-op if it doesn't exist
 #   --load       ingest into FalkorDB (else stops at the .cypher artifact)
 #   --host/--port  FalkorDB endpoint            (default localhost:6379)
+#   --verify-prefix PREFIX  after --load, assert count(METHOD nodes whose
+#                FILENAME STARTS WITH PREFIX) > 0; repeatable. FILENAME is
+#                relative to <source> (the parse root), NOT the repo root — a
+#                wrong root produces a healthy-looking graph that answers
+#                prefix-filtered queries (e.g. cpg-analysis's test-gap recipe,
+#                which filters on a `tests/`-style prefix) with silent zero
+#                rows. Pass e.g. `--verify-prefix tests/` whenever a downstream
+#                query will filter FILENAME by prefix; no prefix is assumed by
+#                default since the pipeline is generic. A failing prefix exits
+#                the pipeline non-zero — see SKILL.md Gotchas for the fix
+#                (rebuild from a parse root that includes the expected prefix).
 #
 # Robustness: after transform the pipeline ASSERTS the CPG produced nodes and
 # fails loudly otherwise — joern-parse exits 0 even when a frontend fails, so a
 # silent empty build would otherwise pass. Loading uses cpg-to-falkordb's
 # single-socket loader (no per-statement redis-cli). After --load it verifies
-# node/edge counts in the graph.
+# node/edge counts in the graph, and — if --verify-prefix was given — that the
+# expected FILENAME prefix(es) actually resolve to a nonzero METHOD count.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-SRC="${1:?usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG] [--repr R] [--reset] [--load] [--host H] [--port P]}"
+SRC="${1:?usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG] [--repr R] [--reset] [--load] [--host H] [--port P] [--verify-prefix PREFIX ...]}"
 shift
 GRAPH=""; WORKDIR="./joern-work"; LANGUAGE=""; REPR="cpg"; RESET=""; LOAD=""
 HOST="${FALKORDB_HOST:-localhost}"; PORT="${FALKORDB_PORT:-6379}"
+VERIFY_PREFIXES=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --graph) GRAPH="$2"; shift 2 ;;
@@ -40,6 +54,7 @@ while [ $# -gt 0 ]; do
     --port) PORT="$2"; shift 2 ;;
     --reset) RESET=1; shift ;;
     --load) LOAD="--load"; shift ;;
+    --verify-prefix) VERIFY_PREFIXES+=("$2"); shift 2 ;;
     *) echo "pipeline: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
@@ -83,4 +98,29 @@ if [ -n "$LOAD" ]; then
   N="$(count 'MATCH (n) RETURN count(n)')"
   E="$(count 'MATCH ()-[r]->() RETURN count(r)')"
   echo "pipeline: loaded '$GRAPH' on $HOST:$PORT — nodes=$N edges=$E" >&2
+
+  # FILENAME is relative to the parse root ($SRC), not the repo root (see
+  # SKILL.md Gotchas). A wrong root still yields healthy node/edge counts
+  # above, so that check alone cannot catch it — verify the prefix(es) the
+  # caller expects downstream queries to filter on actually resolve.
+  if [ "${#VERIFY_PREFIXES[@]}" -gt 0 ]; then
+    VERIFY_FAILED=0
+    for PREFIX in "${VERIFY_PREFIXES[@]}"; do
+      PCOUNT="$(count "MATCH (m:METHOD) WHERE m.FILENAME STARTS WITH \"$PREFIX\" RETURN count(m)")"
+      if [ -z "$PCOUNT" ] || [ "$PCOUNT" = "0" ]; then
+        echo "pipeline: VERIFY FAILED — 0 METHOD nodes with FILENAME STARTS WITH '$PREFIX' in '$GRAPH'." >&2
+        VERIFY_FAILED=1
+      else
+        echo "pipeline: verify OK — $PCOUNT METHOD nodes with FILENAME STARTS WITH '$PREFIX'." >&2
+      fi
+    done
+    if [ "$VERIFY_FAILED" -eq 1 ]; then
+      echo "pipeline: the graph looks healthy by node/edge count but the expected FILENAME" >&2
+      echo "pipeline: prefix(es) above resolve to nothing — FILENAME is relative to the parse" >&2
+      echo "pipeline: root ('$SRC'), not the repo root. Rebuild from a parse root that includes" >&2
+      echo "pipeline: the expected prefix (see SKILL.md Gotchas: 'FILENAME is relative to the" >&2
+      echo "pipeline: parse root')." >&2
+      exit 1
+    fi
+  fi
 fi

@@ -17,6 +17,15 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
 ## Parking lot / ideas
+- From the 2026-08-09 self-review during the C-308/C-312/C-319 skill-review pass
+  (`docs/reviews/cpg-followups-skills-impl.md`): the C-319 promotion compressed two independently
+  true, parallel "cwd-independent" facts (`.mcp.json` discovery walk-up; `${CLAUDE_PROJECT_DIR}`
+  expansion) into one causal clause ("stays uniform via ...") that the source evidence never
+  established. General lesson for future inbox distillations (§5): when promoting a fact that
+  echoes or sits next to another fact in the doc, keep them stated as separate claims unless the
+  *mechanism link* between them was itself verified — don't add connective "via"/"because" prose
+  as free editorial polish. Consider adding a line to §5's procedure about this specific failure
+  mode (causal-compression during promotion) if it recurs.
 - From the 2026-08-09 independent review of `analyst`'s inbox-distillation pass
   (`docs/reviews/analyst-inbox-distillation.md`): consider a sub-list format for `analyst.md`'s
   "Evidence over vibes" Guardrails bullet (now 5 sub-rules in one run-on sentence after four clause

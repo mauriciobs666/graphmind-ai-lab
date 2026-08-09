@@ -191,21 +191,68 @@ def split_directive(cypher: str) -> tuple[str, str]:
 # --------------------------------------------------------------------------
 
 
+class _ReprAsIs:
+    """Wraps pre-rendered text so ``repr()`` inserts it verbatim, unquoted.
+
+    Used by ``_normalize_for_repr`` to make a nested ``bool`` render as
+    ``true``/``false`` even though it sits inside a ``dict``/``list`` whose
+    own ``repr()`` will call ``repr()`` on each element in turn.
+    """
+
+    __slots__ = ("_text",)
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def __repr__(self) -> str:
+        return self._text
+
+
+def _normalize_for_repr(value: object) -> object:
+    """Recursively prepare a value so ``repr()`` renders it consistently.
+
+    Applied before ``repr()`` to any ``dict``/``list``/``tuple`` cell (and,
+    recursively, to every value nested inside one) so that a ``bool`` or a
+    map renders the same way at *any* depth, not just at the top level:
+    booleans lowercase (``true``/``false``), and maps as plain ``dict``
+    literals regardless of the concrete mapping type the FalkorDB client
+    handed back (e.g. its ``OrderedDict``, which normally leaks its class
+    name into ``repr()``, at any nesting depth — ``RETURN properties(m)``
+    style results routinely nest one map's values inside another).
+    """
+    if isinstance(value, bool):
+        return _ReprAsIs("true" if value else "false")
+    if isinstance(value, dict):
+        return {key: _normalize_for_repr(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_normalize_for_repr(item) for item in value)
+    return value
+
+
 def render_cell(value: object, max_chars: int) -> str:
     """Render one result cell as a single line of at most ~``max_chars`` chars.
 
-    ``None`` becomes ``null`` (distinguishable from an empty string), strings
-    pass through, nodes/edges use their FalkorDB ``__str__``, lists and maps use
-    ``repr``. Newlines and tabs are escaped so that one row is always one line;
-    pipes are deliberately *not* escaped (return a single column when a value
-    must be copied out exactly).
+    ``None`` becomes ``null`` (distinguishable from an empty string), booleans
+    render lowercase (``true``/``false``, matching Cypher/JSON convention
+    rather than Python's), strings pass through, nodes/edges use their
+    FalkorDB ``__str__``, lists and maps use ``repr`` after recursively
+    normalizing every nested value via ``_normalize_for_repr`` — so a map is
+    rendered as a plain ``dict`` literal and a boolean lowercase at *any*
+    nesting depth, not just when it is the cell's own top-level value (a
+    client-library subclass, e.g. ``falkordb``'s ``OrderedDict``, therefore
+    never leaks its class name into the rendering, however deeply nested).
+    Newlines and tabs are escaped so that one row is always one line; pipes
+    are deliberately *not* escaped (return a single column when a value must
+    be copied out exactly).
     """
     if value is None:
         text = "null"
+    elif isinstance(value, bool):
+        text = "true" if value else "false"
     elif isinstance(value, str):
         text = value
-    elif isinstance(value, (list, tuple, dict)):
-        text = repr(value)
+    elif isinstance(value, (dict, list, tuple)):
+        text = repr(_normalize_for_repr(value))
     else:
         text = str(value)
 

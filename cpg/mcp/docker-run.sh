@@ -81,11 +81,22 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1 </dev/null; then
   # A failed build is the one launch failure that would otherwise exit on raw BuildKit
   # output with no hint that a fallback exists — and on a fresh clone or an offline
   # machine it is the MOST LIKELY failure. Every other path here has a curated line.
-  if ! "$HERE/build.sh" --runtime-only >&2 </dev/null; then
+  #
+  # CPG_MCP_NO_PULL=1: this autobuild must stay local-only. Without it, build.sh
+  # unconditionally `docker pull`s the base image with no timeout on EVERY miss —
+  # including a miss triggered by a test-only edit that cannot change the runtime image
+  # (the hash covers tests/, which the runtime stage never COPYs) — inside Claude
+  # Code's 30 s MCP startup budget. In steady state the base is already in the local
+  # image store (an interactive `cpg/mcp/build.sh` put it there), so this changes
+  # nothing when it matters and removes the unbounded pull when it doesn't. The
+  # explicit `cpg/mcp/build.sh`, run by hand without this override, stays the thing
+  # that refreshes the base image. See docs/reviews/cpg-mcp-containerization.md M-8.
+  if ! CPG_MCP_NO_PULL=1 "$HERE/build.sh" --runtime-only >&2 </dev/null; then
     echo "cpg/mcp/docker-run.sh: build of $IMAGE FAILED (BuildKit output above)." >&2
     echo "  Offline? A build needs the network unless python:3.12-slim is already in the local image store." >&2
     echo "  Fall back to the host venv: cpg/mcp/run.sh (see cpg/mcp/README.md), or retry with more" >&2
     echo "  startup budget: MCP_TIMEOUT=60000 claude" >&2
+    echo "  ...or run cpg/mcp/build.sh once with a network connection to refresh the local image store." >&2
     exit 1
   fi
 fi

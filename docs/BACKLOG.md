@@ -208,14 +208,14 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
 
 ## Follow-ups (post-M3)
 
-- **C-308 — Bounded transitive upward call-closure query.** 🔵 Give `impact-analysis.md` a single
-  query for *"who calls `X`, **transitively**"* — the L1/L2/L3 shape `test-gap.md` already uses
-  downward, with the `WITH`-splitting idiom and the name-collision caveat — and live-verify it. A
-  naive composition returned **0 rows** on the live graph, so this is real work, not a copy-paste.
-  Deferred by **D3**; until it lands, the recipe answers the transitive question by iterating.
-  Owner: `graph-dba`. *(Cited as a forward reference from
-  [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md) and
-  [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) — do not renumber.)*
+- **C-308 — Bounded transitive upward call-closure query.** ✅ Added Q4 to `skills/cpg-analysis/references/impact-analysis.md`:
+  bounded (L1/L2/L3) `CALL.NAME`-based upward closure reusing `test-gap.md`'s `WITH`-splitting idiom
+  in reverse. **Live-verified** against `cpg_falkorchat` (target `post_message`): 24 rows vs. Q1's 21
+  direct callers — 1 genuine transitive addition (`test_triage_flow_runs_end_to_end_against_live_llm`,
+  reached only at L2) plus 2 expected name-collision artifacts, fully explained with a filter
+  recommendation. During verification a first-draft self-recursion guard was found to silently drop a
+  legitimate same-named caller and was removed — fix documented inline in the recipe. Reviewed by
+  `cobb`: approve, no findings. Owner: `graph-dba`.
 - **C-309 — `audit-team.sh` gate was red, and blind to untracked files.** ✅ **Resolved
   2026-08-08 by `cobb`.** Two parts. **(a)** The gate previously returned `RESULT: FAIL` on
   **two pre-existing** check-7 home-path and username leaks — hit in `.claude/settings.json`
@@ -299,15 +299,14 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   `mypipeline.sh --reset` (still does not ask); all pre-existing branches and the fail-open
   malformed-stdin contract re-verified unchanged.
   Owner: `cobb` / `devops`.
-- **C-312 — `FILENAME` is relative to the Joern parse root: add a post-load verification step.** 🔵
-  The parse root alone silently decides whether every `STARTS WITH 'tests/'` filter in the
-  `cpg-analysis` recipes matches anything, **and the failure is invisible in node/edge counts** — a
-  graph can look healthy and answer test-gap questions wrongly. This, not the missing test sources,
-  is why the pre-rebuild `cpg_falkorchat` was useless. Add an explicit post-load check (assert the
-  expected `FILENAME` prefixes resolve, e.g. a non-zero count of `METHOD`s under `tests/`) to
-  `skills/joern-cpg/SKILL.md`. Producer-path work, out of scope for M3. Owner: `graph-dba`
-  *(corrected 2026-08-08 — the `joern` agent was retired into `graph-dba`, commit `cbf26c4`,
-  which now drives the `joern-cpg` skill's CPG build/export/load pipeline this item concerns)*.
+- **C-312 — `FILENAME` post-load verification.** ✅ `skills/joern-cpg/scripts/pipeline.sh` gained a
+  repeatable `--verify-prefix PREFIX` flag, run after `--load`: asserts `MATCH (m:METHOD) WHERE
+  m.FILENAME STARTS WITH PREFIX RETURN count(m)` is nonzero for each prefix, exits non-zero
+  (reporting every prefix checked, not short-circuiting) with a fix-it message if any fails.
+  `SKILL.md`'s Gotchas entry documents both the scripted check and a manual fallback. **Live-verified**
+  against `cpg_falkorchat`: happy path (`tests/`) → 1067, failure path (`nonexistent/`) → 0. Reviewed
+  by `cobb`: approve, no findings (one optional low-severity note not acted on: unescaped `"` in a
+  `--verify-prefix` value could break the Cypher literal — not blocking). Owner: `graph-dba`.
 - **C-313 — DEF-1: AC-3's "byte-identical value sets" is unmeetable as written.** ✅ **Resolved
   2026-07-25 by stakeholder ruling D5 — Option A.** AC-3 asked for byte-identical value sets
   between the tool and `redis-cli`, while plan §4.4 mandates Python `repr` for list/map cells; the
@@ -319,37 +318,59 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   authority; **AC-3 now passes**. **Option B — re-rendering lists `redis-cli`-style — was
   rejected; no source change**, the server is correct as built. A specification reconciliation, not
   a defect concession. Ruled by the stakeholder; recorded in the requirements decision log.
-- **C-314 — DEF-2: map-valued cells leak the client's Python type.** 🔵 Low. A map renders as
-  `OrderedDict({'a': 1, 'b': 'x'})` because `falkordb 1.6.2` returns an `OrderedDict` whose `repr`
-  carries the class name — plan §4.4's *"map → `repr`"* did not anticipate that. Agent-facing noise
-  and a non-round-trippable cell. No CPG recipe projects a map today, so exposure is currently nil;
-  cheap to fix before one does. Owner: `coder`.
-- **C-315 — DEF-3: booleans render Python-style `True`/`False`.** 🔵 Low. Plan §4.4's rendering
-  table omits booleans, so they fall through to `str()` — contradicting the `SKILL.md` gotcha that
-  CPG booleans are real booleans (`WHERE m.IS_EXTERNAL = false`). Verified **cosmetic**: FalkorDB
-  accepts boolean literals case-insensitively, so the rendered form still round-trips.
-  Owner: `coder`.
-- **C-316 — DEF-5: plan §7.3's char-cap probe does not bind the char cap.** 🔵 Low (test design).
-  `MATCH (m:METHOD) RETURN m.CODE` yields ~1,951 chars on this graph — the **row** cap binds first,
-  so anyone following the plan literally leaves the char-cap path untested. A genuine binder:
+- **C-314 — map-valued cells leaking client type.** ✅ Fixed in `cpg/mcp/server.py`: a new
+  `_normalize_for_repr()` helper recursively walks dict/list/tuple values (not just top-level) before
+  `repr()`, rebuilding any `Mapping` (e.g. `falkordb`'s `OrderedDict`) as a plain `dict` at every
+  nesting depth. Pinned by two tests: the original flat-case test plus
+  `test_render_cell_normalizes_booleans_and_maps_at_any_nesting_depth` (added after `analyst`'s
+  Pass-1 review caught that the first draft only handled the top-level case). Reviewed by `analyst`:
+  Pass 1 found a Major (nested values still leaked) → fixed → Pass 2 **approve**, independently
+  re-verified including edge cases (apostrophe-in-key, 10-level nesting, tuples, empty containers,
+  nested `set`). Owner: `coder`.
+- **C-315 — booleans rendering Python-style.** ✅ Fixed in the same `_normalize_for_repr()` pass as
+  C-314 (same commit-worthy diff, same review cycle) — booleans anywhere in a nested structure now
+  render lowercase `true`/`false` via a `_ReprAsIs` repr-substitution sentinel, not just at the top
+  level. Same review history as C-314 (Pass 1 Major → fixed → Pass 2 approve). Owner: `coder`.
+- **C-316 — DEF-5: plan §7.3's char-cap probe does not bind the char cap.** ✅ **Resolved
+  2026-08-09 — corrected probe recorded here, plan left unedited.** `docs/plans/cpg-query-access.md`
+  is `Status: archived`; per the repo's doc-reference convention (root `AGENTS.md`), an archived
+  document takes no substantive edits, only a header-pointer edit — so §7.3 is **intentionally not
+  corrected in place**. This entry is the authoritative record of the fix going forward: the
+  original probe, `MATCH (m:METHOD) RETURN m.CODE`, yields ~1,951 chars on the reference graph — the
+  **row** cap (200 rows) binds before the char cap (30,000 chars) does, so anyone following the plan
+  literally leaves the char-cap path untested. The genuine binder is
   `MATCH (n:LITERAL) WHERE size(n.CODE) > 400 RETURN size(n.CODE) AS len, n.CODE AS code`
-  (29,890 chars, 92 of 111 rows). Correct the probe in the plan. Owner: `qa-engineer` / `architect`.
+  (29,890 chars, 92 of 111 rows on the graph this defect was originally filed against). **Live
+  re-verification 2026-08-09, `mcp__cpg__query` against `cpg_falkorchat`** (`falkordb-dev` was
+  briefly down mid-session; `teco` restarted it and confirmed `cpg_falkorchat` survived in the
+  persisted volume): the probe returns `rows=120` in 9.6ms, and the tool truncates its own reply
+  with `"showing 92 of 120 rows (char cap 30000)"` — the **char cap**, not the 200-row cap, is what
+  cuts the response off, which is exactly what this defect required demonstrating. Individual `len`
+  values observed range from 405 up to 4,314 chars (e.g. a 4,314-char `LITERAL` in the transition-guard
+  evaluation module), comfortably past the 300-char single-cell truncation threshold, confirming the
+  probe binds a meaningful char cap. The row/char counts differ slightly from the original filing
+  (120 rows here vs. 111 then, reflecting normal drift in `cpg_falkorchat`'s content since); the
+  binding **shape** — char cap trips before row cap, on real oversized `LITERAL.CODE` values — is
+  confirmed live, not merely reviewed statically. Owner: `qa-engineer`.
 - **C-317 — DEF-4: dangling `C-308` citation in the requirements.** ✅ 2026-07-25 — both
   `requirements/cpg-query-access.md` and `requirements/joern-cpg-pipeline.md` deferred the
   transitive upward-closure query to *"backlog item C-308"* before this backlog carried one.
   Closed by creating **C-308** above under M3's follow-ups; the citations now resolve. Owner: S10.
-- **C-318 — Pin the server `instructions=` string in the test suite.** 🔵 `architect`'s
-  recommendation. `cpg/mcp/tests/test_server.py` asserts the whole tool contract, but nothing
-  asserts that `mcp.instructions` is non-empty and ≤ 2,000 chars — it is the only unguarded part of
-  the contract, and it is what tool search reads (MCP tools are deferred by default), so a cold
-  session depends on it. Owner: `coder`.
-- **C-319 — Document `enabledMcpjsonServers` approval scoping.** 🔵 `.mcp.json` **discovery** walks
-  up to the git root, but pre-approval is keyed on the **session's cwd** — a session started in a
-  subdirectory (e.g. `falkor-chat/`) reports `⏸ Pending approval` where the repo root reports
-  `✔ Connected`, costing one extra approval prompt per subdirectory. That is approval scoping, not
-  path expansion, and the `$CLAUDE_PROJECT_DIR` form is otherwise cwd-independent. Documentation
-  home: `skills/agent-standards/claude-code.md` §MCP. Already filed in
-  `claude/devops/kaizen/inbox.md`. Owner: `cobb` / `devops`.
+- **C-318 — pin the server `instructions=` string.** ✅ `cpg/mcp/tests/test_server.py` gained
+  `test_server_instructions_are_present_and_bounded`, asserting `mcp.instructions` is non-empty and
+  ≤2000 chars (currently 408 chars). Verified as a real pin (not a tautology) by transiently
+  blanking the string and observing the assertion fail before restoring. Reviewed by `analyst`:
+  approve. Owner: `coder`.
+- **C-319 — document `enabledMcpjsonServers` approval scoping.** ✅ Added to
+  `skills/agent-standards/claude-code.md` §MCP → "Scopes, precedence, and the approval gate":
+  `.mcp.json` discovery walks up to the git root (cwd-independent), but project-scope approval is
+  keyed to the session's cwd, costing one extra interactive approval per subdirectory a session
+  starts in — stated as a fact parallel to (not caused by) `${CLAUDE_PROJECT_DIR}` path expansion,
+  which is a separate, unrelated cwd-independent mechanism (server-launch env var, not `.mcp.json`
+  discovery). Sourced from and distilled out of `claude/devops/kaizen/inbox.md`'s 2026-07-25 entry.
+  Reviewed by `cobb` (self-review, applying real scrutiny per the round's brief): caught and fixed a
+  Major finding — the first draft asserted an unsupported causal link between the two facts;
+  corrected to state them as parallel, verified against the official MCP docs. Owner: `cobb`.
 - **C-320 — Containerize the `cpg` MCP server.** ✅ **Delivered 2026-07-26.** The server runs as a
   container instead of a host venv, so a clone needs **Docker** rather than a correctly built local
   Python 3.12 venv to answer CPG queries. The tool contract is unchanged (one tool, two parameters,
@@ -361,42 +382,30 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   is **retained** as the test loop and the fallback. Design, measurements and rejected alternatives:
   `docs/plans/cpg-mcp-containerization.md` (v3); review:
   `docs/reviews/cpg-mcp-containerization.md`. Owner: `devops`.
-- **C-321 — Make the live suite's scratch-graph name unique inside a container.** 🔵
-  `cpg/mcp/tests/test_server.py:472` derives the scratch graph from `os.getpid()`, which is **`1`**
-  in a container's PID namespace — so every containerized `-m live` run uses the same key
-  `_cpg_mcp_selftest_1` on the **shared** FalkorDB. The suite is still self-contained with respect to
-  `cpg_*`/`ws:*`/`reference`, but the uniqueness that made it safe *against itself* is gone: two
-  concurrent container live runs corrupt each other, and an interrupted one leaves residue on a
-  shared instance. Fix: `uuid4().hex[:8]` instead of `os.getpid()`. Worked around meanwhile by
-  documenting "do not run the live gate concurrently" plus a `GRAPH.LIST` residue check
-  (`cpg/mcp/README.md`). Found during C-320; out of that change's scope because it is test code.
-  Owner: `tdd-engineer` / `coder`.
-  - **Also do this here (deferred from the C-320 review, M-8): make the autobuild not pull.**
-    `cpg/mcp/docker-run.sh:84` calls `build.sh --runtime-only` on a hash miss without setting
-    `CPG_MCP_NO_PULL`, so **every autobuild performs an unbounded Docker Hub `docker pull` inside
-    Claude Code's 30 s MCP startup budget** (`build.sh:191-196`), followed by a build that also
-    resolves `FROM` metadata over the network when the base is not in the local image store. That is
-    a degradation on the exact axis the design was chosen for — the launch path being local and
-    offline — and it is bounded (non-blocking MCP startup, a curated fallback message, `MCP_TIMEOUT`)
-    rather than a break, which is why it was not fixed in C-320.
-    **Why it belongs with this item specifically:** the content hash covers every file under
-    `cpg/mcp/tests/` (plus `pytest.ini` and `requirements-dev.txt`), none of which the **runtime**
-    stage COPYs — so this item's one-line edit to `tests/test_server.py` invalidates the launch image
-    and forces the miss branch to rebuild a **byte-identical** runtime image. The first session start
-    after it lands pays for a pull and a build unless `cpg/mcp/build.sh` is run first.
-    **Cheapest known fix:** `CPG_MCP_NO_PULL=1 "$HERE/build.sh" --runtime-only …` at
-    `docker-run.sh:84` (the base is already in the local store in the steady state, and the explicit
-    `cpg/mcp/build.sh` stays the thing that refreshes it), plus one line in the existing curated
-    build-failure message: "…or run `cpg/mcp/build.sh` once with a network connection". Rejected as
-    over-reach for now: splitting the digest into runtime-inputs and test-inputs halves, which would
-    cost the "same hash on both tags" property that makes a stale gate image unreachable.
-    Also worth folding in while in this file, from the same review (all safe-direction, all one-line):
-    `image-tag.sh`'s walk excludes `**/__pycache__` and `*.pyc` but **not** `.pytest_cache`, which
-    three places claim it mirrors from `.dockerignore` (m-21); a file-mode change (m-18) and a symlink
-    under a walked directory (m-19) do not move the hash; a missing walked directory is silently
-    skipped where a missing file is a hard error (m-20); a failed `find` is unobserved (m-22); and
-    under `--no-cache` the two `docker build` invocations can resolve different dependency versions
-    (m-23). Full evidence and suggested fixes: `docs/reviews/cpg-mcp-containerization.md` §17–§18.
+- **C-321 — both halves now done, close the whole item.** ✅ **Core** (the item's main body):
+  `cpg/mcp/tests/test_server.py`'s live-suite scratch-graph key now derives from `uuid4().hex[:8]`
+  instead of `os.getpid()` (extracted into a `_scratch_graph_name()` helper), fixing the PID-1
+  collision risk when the server runs containerized. TDD red/green: pinned the bug with
+  `test_scratch_graph_name_is_unique_across_calls` (red under the old `os.getpid()` behavior, green
+  after), then sanity-checked live (7/7 passed, no residue). **"Also do this here" sub-item**
+  (deferred from the C-320 review, M-8): `docker-run.sh`'s autobuild path now sets `CPG_MCP_NO_PULL=1`
+  on its `build.sh --runtime-only` call (plus a one-line addition to the build-failure message
+  pointing at a manual `cpg/mcp/build.sh` run) — smoke-tested end to end, confirmed no `docker pull`
+  step, ~5s cold build, well under the 30s MCP startup budget. `image-tag.sh`'s hash-walk now
+  excludes `.pytest_cache` (matching `.dockerignore`) and hard-fails (rather than silently
+  skipping/succeeding) on a missing walked directory, a symlink under a walked directory, or a failed
+  `find` — judged by captured `find` stderr content rather than exit code, to correctly distinguish a
+  real failure from an unrelated SIGPIPE under this script's `set -euo pipefail`. A file-mode change
+  is deliberately left out of the hash, with an inline comment explaining why (inert today; revisit if
+  the image's `CMD` ever execs a COPYed file directly). `build.sh` was reordered so the `test` image
+  builds first (respecting `--no-cache` if given) and `runtime` builds second always without
+  `--no-cache`, so `runtime` deterministically reuses the dependency layer `test` just populated —
+  closing a version-drift risk between the two images under `--no-cache`. Verified as a no-op
+  reordering when `--no-cache` isn't requested at all. Reviewed by `analyst`: approve (Pass 2
+  confirmed U4/U5 diffs untouched by the C-314/315 re-fix cycle). One non-blocking Informational
+  note from the review: the `.pytest_cache` exclusion is currently a no-op given the real directory
+  layout (pytest's cache lands at `cpg/mcp/.pytest_cache`, never under a walked `tests/` subtree) —
+  correct and defensive, not a defect, no action needed. Owner: `coder` / `devops`.
 
 - **C-322 — Documentation reference & naming convention.** ✅ **Delivered 2026-07-27.** The repo had
   **two silently competing anchoring conventions** for citing a document and **no stated rule** for

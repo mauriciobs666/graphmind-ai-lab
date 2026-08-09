@@ -250,6 +250,30 @@ claude.ai connectors). When the same server name exists in two scopes the
   (in `~/.claude.json`, per project — the `/mcp` panel's on/off toggle) vs
   `enabledMcpjsonServers` / `disabledMcpjsonServers` (in settings — `.mcp.json`
   *approval*).
+- **`.mcp.json` *discovery* walks up to the git root and is cwd-independent,
+  but project-scope *approval* is keyed to the session's cwd** — a session
+  started inside a subdirectory can see a server that a root-started session
+  already approved as still `⏸ Pending approval`. `~/.claude.json`'s
+  `projects` map holds one entry per absolute path a session has actually been
+  launched from (with its own `hasTrustDialogAccepted`); a subdirectory that
+  has never itself been a launch cwd has no entry, so the repo root's
+  `enabledMcpjsonServers` pre-approval doesn't reach it even though the same
+  `.mcp.json` is discovered and in effect there. Consequence: one extra
+  interactive approval per subdirectory a session happens to start in — this
+  is approval *scoping*, distinct from the discovery mechanism (walk-up to the
+  git root), which is cwd-independent on its own terms. Separately,
+  `${CLAUDE_PROJECT_DIR}` path expansion inside a `.mcp.json` entry is also
+  cwd-independent, but via the unrelated server-launch-env-var mechanism
+  described below — two parallel cwd-independent facts, not one shared cause.
+  Observed graphmind-ai-lab,
+  2026-07-25 (`claude/devops/kaizen/inbox.md`, C-319): with `.mcp.json` +
+  `"enabledMcpjsonServers": ["cpg"]` at the repo root, `claude mcp list` from
+  the repo root reported `cpg: … ✔ Connected`; the identical command run from
+  the `falkor-chat/` subdirectory reported `⏸ Pending approval (run \`claude\`
+  to approve)` — the server was still *discovered* there (walk-up to the git
+  root worked), confirming this is approval scoping and not a discovery
+  failure. `~/.claude.json`'s `projects` map carried exactly one entry for
+  this repo (the root) and none for the subdirectory.
 - **There is no per-server tool filter.** You can disable a whole server; you
   cannot subset the tools a server advertises. A permission `deny` rule blocks a
   *call*, but the tool still occupies the model's tool list — so "buy the server

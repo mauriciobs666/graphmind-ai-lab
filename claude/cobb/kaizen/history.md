@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-09 — Independent review of U1/U2/U6 (C-308, C-312, C-319 skill/doc units), including self-review
+- **What:** Reviewed three parallel Wave-1 deliverables from `docs/plans/cpg-followups-coordination.md`
+  against skill-authoring conventions: U1 (`graph-dba`, C-308, Q4 transitive-upward-call-closure
+  recipe in `skills/cpg-analysis/references/impact-analysis.md`) and U2 (`graph-dba`, C-312,
+  `--verify-prefix` on `skills/joern-cpg/scripts/pipeline.sh` + matching `SKILL.md` Gotchas) both
+  approved clean — query logic traced by hand, `WITH`-splitting idiom cross-checked against
+  `test-gap.md`, shell repeatable-flag parsing and no-short-circuit reporting verified line-by-line,
+  and the "red herring" root-cause claim corroborated against pre-existing `docs/HISTORY.md`/
+  `docs/BACKLOG.md` text (not fabricated). U6 (my own earlier same-session C-319 promotion into
+  `skills/agent-standards/claude-code.md` §MCP) got a self-review per the brief's explicit ask not to
+  rubber-stamp it: the distillation bookkeeping (verify/route/log/clear) checked out, but I found the
+  promoted bullet's "distinct from the discovery mechanism, which stays uniform via
+  `$CLAUDE_PROJECT_DIR`" clause asserts an unverified causal link — WebFetch of
+  `code.claude.com/docs/en/mcp` confirms `CLAUDE_PROJECT_DIR` is documented only as a spawned-server
+  env var / path-expansion mechanism, not as how `.mcp.json` file discovery works, and neither the
+  original inbox entry nor the C-319 backlog filing (which states the two facts as parallel, not
+  causal) supports the "via" framing. Flagged as a Major finding with a concrete rewrite. Filed the
+  review at `docs/reviews/cpg-followups-skills-impl.md` after a same-topic-path collision with
+  `analyst`'s parallel U3–U5 review (both units wrote `docs/reviews/cpg-followups-impl.md`
+  concurrently; the later write won) — split per each unit's brief, with a pointer note added to
+  both files' headers.
+- **Why:** Wave-2 review gate for this round, `cobb`'s domain per the C-303/C-307 precedent
+  (skill/standards-content review). The self-review finding is exactly the kind of drift this
+  agent's own machinery exists to catch — an inference added during promotion that outran its
+  evidence, in a doc other agents will cite as fact.
+- **Plan items:** none new; not on the active K-list. Overall verdict recorded in the review:
+  approve with suggestions (U1/U2 clean, U6 needs one clause reworded before Wave 3 closeout).
+
+## 2026-08-09 — C-319 follow-up: applied the self-review's suggested rewrite to `claude-code.md` §MCP
+- **What:** On `teco`'s direction (trivial, docs-only, factual-accuracy fix, no design stakes —
+  the "genuinely trivial" exception to independent review), applied the fix from my own review
+  finding (`docs/reviews/cpg-followups-skills-impl.md`, U6): replaced the unsupported "distinct
+  from the discovery mechanism, which stays uniform via `$CLAUDE_PROJECT_DIR` (see below)" clause
+  in `skills/agent-standards/claude-code.md` §MCP → "Scopes, precedence, and the approval gate"
+  with wording that states discovery's cwd-independence and `${CLAUDE_PROJECT_DIR}`'s
+  cwd-independence as two parallel, separately-caused facts — matching how `docs/BACKLOG.md`'s
+  C-319 filing already phrased it, per the finding. Re-read the edited paragraph after the change
+  to confirm it reads cleanly.
+- **Why:** Closes the Major finding without a second review loop, per `teco`'s explicit low-risk
+  exception call.
+- **Plan items:** resolves the specific instance in the 2026-08-09 parking-lot entry below (the
+  general lesson about causal-compression during promotion stays open).
+
+## 2026-08-09 — C-319: promoted `.mcp.json` approval-scoping fact into `claude-code.md` §MCP
+- **What:** Added a bullet to `skills/agent-standards/claude-code.md` § MCP → "Scopes,
+  precedence, and the approval gate": `.mcp.json` **discovery** walks up to the git root and is
+  cwd-independent, but project-scope **approval** is keyed to the session's cwd — a session
+  started in a subdirectory can see a server the root already approved as still `⏸ Pending
+  approval`. Cited the source evidence directly (`claude/devops/kaizen/inbox.md`, 2026-07-25
+  entry, C-319): `claude mcp list` from the repo root reported `✔ Connected`, the identical
+  command from `falkor-chat/` reported `⏸ Pending approval`, and `~/.claude.json`'s `projects`
+  map carried one entry (the root) and none for the subdirectory. Re-checked the `projects` map
+  live today — still exactly one entry, same shape — before promoting; did not re-derive the
+  `claude mcp list` contrast itself (a quick attempt in this environment hit unrelated infra
+  failures — no reachable `docker`/FalkorDB backing the `cpg` server — so it couldn't cleanly
+  reproduce either outcome; the inbox's original, cleaner evidence is what's cited). Promoted the
+  underlying inbox entry out of `claude/devops/kaizen/inbox.md` into
+  `claude/devops/kaizen/history.md` (agent-maintenance skill §5 distillation).
+- **Why:** Backlog item C-319 — the fact was already filed in devops's inbox as durable and
+  non-obvious; this closes the loop by moving it into the standards doc other agents actually
+  read, in the same evidence-based style as the section's other observed-behavior bullets (e.g.
+  the Lifecycle section's containerized-stdio-server note).
+- **Plan items:** none new; not on the active K-list.
+
 ## 2026-08-09 — Review follow-ups: `claude/README.md` catalog completion + `claude-code.md` stamp gap
 - **What:** Two minor fixes from independent reviews of the same-day inbox-distillation batch
   (`docs/reviews/{kaizen-inbox-distillation,analyst-inbox-distillation}.md`): (1)

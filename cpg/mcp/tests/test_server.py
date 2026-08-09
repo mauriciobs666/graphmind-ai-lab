@@ -13,7 +13,7 @@ The `live` tests run against a REAL FalkorDB and are deselected by default
 from __future__ import annotations
 
 import asyncio
-import os
+from uuid import uuid4
 
 import pytest
 
@@ -129,6 +129,18 @@ def test_default_caps():
     assert server.MAX_RESULT_SIZE_CHARS == 60000
 
 
+def test_server_instructions_are_present_and_bounded():
+    """C-318: `mcp.instructions` is the only unguarded part of the tool contract.
+
+    It is what MCP tool search reads before a cold session ever calls `query`
+    (tools are deferred by default), so a missing or oversized string is a
+    silent defect nothing else here would catch.
+    """
+    instructions = server.mcp.instructions
+    assert instructions
+    assert len(instructions) <= 2000
+
+
 # --------------------------------------------------------------------------
 # 2 — directive splitting (plan §4.4 D5a)
 # --------------------------------------------------------------------------
@@ -239,7 +251,14 @@ def test_render_cell_none_is_distinguishable_from_empty_string():
 def test_render_cell_passes_strings_and_scalars_through():
     assert server.render_cell("plain", 300) == "plain"
     assert server.render_cell(42, 300) == "42"
-    assert server.render_cell(True, 300) == "True"
+
+
+def test_render_cell_renders_booleans_lowercase_like_cypher_json_not_python():
+    # C-315: booleans previously fell through to str(), producing Python's
+    # capitalized `True`/`False`. Render lowercase to match Cypher/JSON
+    # convention and the rest of this function's scalar rendering.
+    assert server.render_cell(True, 300) == "true"
+    assert server.render_cell(False, 300) == "false"
 
 
 def test_render_cell_escapes_newlines_and_tabs_so_a_row_stays_one_line():
@@ -250,6 +269,49 @@ def test_render_cell_uses_str_for_nodes_and_repr_for_collections():
     assert server.render_cell(NodeLike(), 300) == '(:CpgNode:METHOD{NAME:"post_message"})'
     assert server.render_cell(["a", 1], 300) == "['a', 1]"
     assert server.render_cell({"k": "v"}, 300) == "{'k': 'v'}"
+
+
+def test_render_cell_renders_map_valued_cells_without_leaking_client_type():
+    # C-314: falkordb 1.6.2 returns map cells as OrderedDict, whose repr
+    # includes the class name (e.g. `OrderedDict({'a': 1, 'b': 'x'})`). The
+    # rendering must look like a plain dict regardless of the concrete
+    # mapping type the client library hands back.
+    from collections import OrderedDict
+
+    out = server.render_cell(OrderedDict([("a", 1), ("b", "x")]), 300)
+    assert out == "{'a': 1, 'b': 'x'}"
+    assert "OrderedDict" not in out
+
+
+def test_render_cell_normalizes_booleans_and_maps_at_any_nesting_depth():
+    # Review finding on the flat-only fix above: `RETURN properties(m)`-shaped
+    # results nest one map's values inside another, and C-315's own
+    # motivating example is a boolean *property* (`IS_EXTERNAL`) inside such
+    # a map, not a top-level scalar. Both the bool-lowercasing and the
+    # OrderedDict-hiding must apply recursively, not just to the cell's own
+    # top-level value.
+    from collections import OrderedDict
+
+    # A property map, as `properties(m)` would return it, containing the
+    # exact `IS_EXTERNAL` boolean field the backlog item cites.
+    out = server.render_cell({"NAME": "foo", "IS_EXTERNAL": False}, 300)
+    assert out == "{'NAME': 'foo', 'IS_EXTERNAL': false}"
+
+    # A map nested inside a map — OrderedDict must not leak at any depth.
+    nested = OrderedDict([("a", 1), ("nested", OrderedDict([("b", 2)]))])
+    out = server.render_cell(nested, 300)
+    assert out == "{'a': 1, 'nested': {'b': 2}}"
+    assert "OrderedDict" not in out
+
+    # A map inside a list.
+    out = server.render_cell([1, OrderedDict([("a", 1)])], 300)
+    assert out == "[1, {'a': 1}]"
+    assert "OrderedDict" not in out
+
+    # A tuple containing a bool and a nested map with a bool value; the
+    # tuple's own type (round parens) must be preserved.
+    out = server.render_cell((1, True, {"x": False}), 300)
+    assert out == "(1, true, {'x': false})"
 
 
 def test_render_cell_marks_how_much_it_cut():
@@ -461,6 +523,27 @@ def test_explain_path_sends_the_stripped_query_and_renders_the_plan(fake_client)
 # --------------------------------------------------------------------------
 
 
+def _scratch_graph_name() -> str:
+    """Key for the live suite's throwaway scratch graph (see `live_graph` below).
+
+    C-321: must not derive from `os.getpid()` — that's `1` inside every
+    container's PID namespace, so two concurrent containerized `-m live` runs
+    (or an interrupted one leaving residue) would collide on the same key
+    against the shared FalkorDB. `uuid4` is unique regardless of PID namespace.
+    """
+    return f"_cpg_mcp_selftest_{uuid4().hex[:8]}"
+
+
+def test_scratch_graph_name_is_unique_across_calls():
+    """C-321 regression pin: offline, no FalkorDB needed.
+
+    `os.getpid()` was constant for the whole test process (and is `1` inside
+    every container's PID namespace regardless), so two calls used to collide
+    on the same key. The uuid4-derived key must not.
+    """
+    assert _scratch_graph_name() != _scratch_graph_name()
+
+
 @pytest.fixture(scope="module")
 def live_graph():
     """Create a throwaway graph, yield its name, delete it afterwards.
@@ -469,7 +552,7 @@ def live_graph():
     of `cpg_*`, `ws:*` or `reference`, and must not modify them.
     """
     client = server.get_client()
-    name = f"_cpg_mcp_selftest_{os.getpid()}"
+    name = _scratch_graph_name()
     graph = client.select_graph(name)
     graph.query(
         "CREATE (:CpgMcpSelfTest {name:'alpha', note:'line1\nline2'}), "

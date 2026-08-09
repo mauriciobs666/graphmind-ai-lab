@@ -215,14 +215,29 @@ fi
 CACHE_FLAG=()
 [ "$NO_CACHE" -eq 1 ] && CACHE_FLAG=(--no-cache)
 
-echo "build.sh: building $RUNTIME_TAG (target runtime)…" >&2
-docker build "${CACHE_FLAG[@]+"${CACHE_FLAG[@]}"}" --target runtime \
-  -t "$RUNTIME_TAG" -t "$REPO:dev" "$HERE" >&2
-
-if [ "$RUNTIME_ONLY" -eq 0 ]; then
+# Build order matters under --no-cache: `test` and `runtime` share the `base` stage
+# (requirements.txt's pip install), and requirements.txt pins RANGES, not exact
+# versions. Two independent `docker build` invocations that BOTH pass --no-cache each
+# re-resolve `base` from scratch, so a patch release landing on PyPI between them can
+# leave the test image and the runtime image with different dependency versions —
+# exactly the drift the in-container test gate exists to rule out (m-23). Building
+# `test` first (with --no-cache if requested) and `runtime` SECOND, always WITHOUT
+# --no-cache, makes the runtime build hit Docker's layer cache for `base` — the one
+# `test` just (re)populated — so both images are guaranteed to share the same resolved
+# dependencies by construction, not by timing. On a warm cache (no --no-cache) this
+# reordering is a no-op: `base` is already cache-hit either way.
+if [ "$RUNTIME_ONLY" -eq 1 ]; then
+  echo "build.sh: building $RUNTIME_TAG (target runtime)…" >&2
+  docker build "${CACHE_FLAG[@]+"${CACHE_FLAG[@]}"}" --target runtime \
+    -t "$RUNTIME_TAG" -t "$REPO:dev" "$HERE" >&2
+else
   echo "build.sh: building $TEST_TAG (target test)…" >&2
   docker build "${CACHE_FLAG[@]+"${CACHE_FLAG[@]}"}" --target test \
     -t "$TEST_TAG" -t "$REPO:test" "$HERE" >&2
+
+  echo "build.sh: building $RUNTIME_TAG (target runtime)…" >&2
+  docker build --target runtime \
+    -t "$RUNTIME_TAG" -t "$REPO:dev" "$HERE" >&2
 fi
 
 # --- report ----------------------------------------------------------------------

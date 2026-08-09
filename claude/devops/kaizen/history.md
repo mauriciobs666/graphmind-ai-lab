@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-08-09 — Learnings-inbox entry promoted: `.mcp.json` approval scoping (C-319, cobb)
+- **What:** The 2026-07-25 inbox entry "Claude Code MCP: `.mcp.json` discovery walks up to the
+  repo root, but project-approval scope is keyed on the session's cwd" was verified (re-checked
+  `~/.claude.json`'s `projects` map: still exactly one entry for this repo, none for
+  `falkor-chat/`) and promoted into `skills/agent-standards/claude-code.md` §MCP → "Scopes,
+  precedence, and the approval gate", citing this inbox entry's original evidence directly rather
+  than re-deriving it. Entry removed from `kaizen/inbox.md`.
+- **Why:** Backlog item C-319 asked for this durable fact to move from the inbox into the
+  standards doc, matching the style/detail level of the doc's other observed-behavior bullets
+  (e.g. the Lifecycle section's containerized-stdio-server note). Distillation performed by
+  `cobb` per agent-maintenance skill §5.
+- **Plan items:** none.
+
 ## 2026-07-31 — Boundary note: `tico` may hand off demo-environment lifecycle requests
 - **What:** Added one bullet to Boundaries & handoffs: `tico` (stakeholder-facing, all three of its modes) may hand devops a demo-environment bring-up/cleanup request mid-conversation — a stakeholder wants to see a feature live or verify a manual's walkthrough. Framed explicitly as a plain lifecycle op: orient, boot/tear down what's asked, non-destructive by default, this agent's existing destructive-ops gate (hook + prompt-level judgment) applies exactly as it would to any other caller. No new capability, no frontmatter/tool/hook change — devops already does exactly this kind of work; the only thing new is who else may ask for it.
 - **Why:** Reciprocal to the same-day `tico` change (`claude/tico/kaizen/history.md`, 2026-07-31): tico can now offer a live demo and delegates the actual bring-up/cleanup to devops via `Agent`. devops's own prompt needed the matching boundary note so the handoff isn't one-sided — tico owns *what* gets shown, devops owns *whether the environment is up*, and devops doesn't take instructions from tico about what to explain or document (the reverse boundary, made explicit).

@@ -431,12 +431,10 @@ Run it after a Dockerfile, `requirements*.txt` or base-image change. Because the
 runtime tag's content hash, a stale gate image cannot be reached by accident — if
 `cpg-mcp:test-<hash>` does not exist for the current hash, the command simply does not resolve.
 
-> **Do not run the live gate concurrently with another copy of itself.** Inside a container
-> `os.getpid()` is **1**, so `tests/test_server.py`'s scratch-graph name collapses to the constant
-> `_cpg_mcp_selftest_1` on the **shared** FalkorDB, and two simultaneous runs would corrupt each
-> other. Check `GRAPH.LIST` afterwards; a leftover `_cpg_mcp_selftest_*` means an earlier run was
-> interrupted, and removing it is a **write to a shared database** — approval-gated. Backlog
-> **C-321** fixes the root cause (`uuid4().hex[:8]` instead of `getpid()`).
+> **The live gate's scratch-graph name is unique per run** (fixed by C-321). Earlier, inside a
+> container `os.getpid()` was **1**, so the scratch-graph name collapsed to the constant
+> `_cpg_mcp_selftest_1` on the **shared** FalkorDB, and concurrent runs would corrupt each other.
+> That collision is **fixed**: the name now derives from `uuid4().hex[:8]` instead of `getpid()`.
 
 ### Container debug recipe
 
