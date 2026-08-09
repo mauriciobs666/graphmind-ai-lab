@@ -2,6 +2,108 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-09 — Held entries 15/16 promoted: consolidated Kiro-facts edit landed
+`cobb` closed out the two held-for-consolidated-follow-up entries (exact-CWD-only local-agent
+discovery, no upward walk; and the `mcpServers` remote-entry schema using `url` with no `type`
+field): the race window against `analyst`'s held entry 28 (same target file) is over, so both
+facts were re-verified (now against `kiro-cli 2.16.2`, up from `2.14.1` at original
+live-verification — both held) and written into `skills/agent-standards/kiro.md` — discovery
+fact into the CLI custom-agents `Location` bullet, `mcpServers` schema fact into the
+`mcpServers` config-key bullet (which also corrected the doc's prior "each needs `command`"
+phrasing to cover the `url`-keyed remote case). `inbox.md` entries 15 and 16 cleared; `inbox.md`
+is back to the standard empty placeholder.
+
+## 2026-08-09 — Description gained a `python-web-quirks` skill routing clause
+- **What:** Frontmatter `description` gained one clause, appended to the existing `cpg-analysis`
+  routing sentence: in a Python web/async codebase, the agent also uses the new
+  `skills/python-web-quirks/SKILL.md` for asyncio/FastAPI/Starlette/pydantic gotchas. No body
+  change.
+- **Why:** `python-web-quirks` was created distilling three general Python/web-framework facts
+  from `analyst`'s learnings inbox. Stakeholder wired it to `coder`/`tdd-engineer`/`architect`/
+  `analyst` at minimum, mirroring the existing `cpg-analysis` wiring pattern. See
+  `claude/analyst/kaizen/history.md` (2026-08-09) for the full distillation record and
+  `skills/README.md` for the catalog entry.
+- **Plan items:** none.
+
+## 2026-08-09 — Inbox entry #1 routed to a separate architect-persona task, not edited here
+- **What:** Entry #1 (2026-07-19, `_drive_loop` byte-identity-lock SHA-reproduction command) is
+  disposed as: **promoted to `falkor-chat/docs/DESIGN.md`** (the doc-drift note near §6.2, where
+  the lock's SHA is already quoted with corrected byte-count guidance but no robust reproduction
+  command) — via a dedicated architect-persona task, teco-coordinated, running in parallel, **not
+  edited by cobb**. Content and destination were fully decided in the 2026-08-09 read-only
+  proposal pass; only execution was delegated. Cleared from `kaizen/inbox.md`.
+- **Why:** Role-responsibility principle — this is `falkor-chat/` project-doc content within a
+  component `architect` owns the plans/design for; a team-maintainer session (cobb) editing it
+  directly would cross a boundary that belongs to the producing discipline, not the team
+  maintainer. Distillation duty (agent-maintenance skill §5), teco-coordinated.
+- **Plan items:** —
+
+## 2026-08-09 — Guardrails: verify what a hook pattern-matches before treating its prompt as a gate
+- **What:** Added one Guardrails bullet: *"Verify hook gates by pattern, not intent. When a plan
+  step's verification depends on a `PreToolUse` hook firing, check what the hook actually
+  pattern-matches (the command text, not the intent) before treating the prompt as a gate — a
+  destructive operation wrapped inside a script can bypass a hook that only greps literal command
+  strings."* No other prompt/frontmatter/catalog change.
+- **Why:** Distilled from inbox entry #9 (2026-07-25, `guard-destructive-ops.sh` matches the Bash
+  *command string*, so `skills/joern-cpg/scripts/pipeline.sh --reset` bypassed the destructive-ops
+  approval prompt entirely — the token the guard greps for never appears in the command text the
+  hook sees). Stakeholder judged this **high-recurrence** (hook-gated approval prompts are this
+  team's central safety mechanism — five doc-scoped write guards plus the destructive-ops guards
+  across `devops`/`graph-dba`/`qa-engineer`) and **already-proven-costly** (the bypass this entry
+  describes actually happened and shipped; the fix landed as C-311 on 2026-08-08, roughly two
+  weeks after the gap was knowable). Cleared from inbox alongside the rest of the distillation pass
+  (see the batched entry below) — its *specific* finding (the `pipeline.sh --reset` bypass) is
+  independently discarded there as already fixed; this entry is the promotion of its *general*
+  habit.
+- **Plan items:** —
+
+## 2026-08-09 — Inbox distillation: 13 entries discarded (already fully covered elsewhere)
+- **What:** Processed 13 inbox entries against current repo state (agent-maintenance skill §5):
+  2026-07-24 `MERGE … ON CREATE SET` create-only-for-properties/additive-for-structure;
+  2026-07-24 `OPTIONAL MATCH` + `collect(DISTINCT …)` non-aggregated-field-is-a-grouping-key;
+  2026-07-24 falkor-chat def-publish-has-no-graph-seam; 2026-07-24 FalkorDB silently ignores
+  `EXPLAIN`/`PROFILE` inside `GRAPH.QUERY`; 2026-07-24 `tools:` allowlist makes new MCP tools
+  invisible to `analyst`/`architect`; 2026-07-25 check-7-forbids-absolute-home-paths +
+  `.mcp.json`'s portable `$CLAUDE_PROJECT_DIR` form; 2026-07-25 `teco`'s write guard can't own
+  edits outside `docs/plans/`; 2026-07-25 `guard-destructive-ops.sh` command-string bypass
+  (specific finding only — general habit promoted separately above); 2026-07-25 MCP output over
+  threshold persists to disk, truncation notices belong at the head; 2026-07-25 an MCP server's
+  `instructions=` is injected every session and is probe-verifiable; 2026-07-26 leading-slash
+  markdown links aren't agent-followable; 2026-07-26 this repo cites paths as backticked strings,
+  not markdown links, so a link-checker is nearly blind here; 2026-07-27 root `AGENTS.md` reaches
+  subagents too via `CLAUDE.md`'s `@AGENTS.md` import.
+  **Verified each still-true-but-superseded or already-promoted:** the MERGE-additive defect was
+  closed outright by **K-034** (`falkor-chat/docs/HISTORY.md:60`, 2026-08-01) — re-publish now
+  fails loudly (409) instead of silently minting parallel structure, so the trap the entry warned
+  about no longer exists. The grouping-key hazard and the all-rows-read decision it drove are
+  documented verbatim in `falkor-chat/docs/QUERIES.md:925-941` (the K-031 §11.2 callout). The
+  def-publish-no-seam finding and its throwaway-`ws:`-probe workaround are recorded as executed in
+  `falkor-chat/docs/HISTORY.md:903-919` (K-031 V-1). The `EXPLAIN`/`PROFILE` behavior is documented
+  verbatim in `skills/cpg-analysis/SKILL.md:65-75`. The `tools:` allowlist gotcha is documented in
+  `skills/agent-standards/claude-code.md:373-375`, and the concrete instance was closed the day
+  after capture (this file, 2026-07-25 entry: `mcp__cpg__query` added to `architect`'s and
+  `analyst`'s `tools:`). The check-7/`.mcp.json` portable-form fact is documented in
+  `skills/agent-standards/claude-code.md:259-276` and is what the repo's actual `.mcp.json` uses
+  today. The `pipeline.sh --reset` bypass is fixed (C-311, `claude/scripts/guard-destructive-ops.sh`,
+  2026-08-08). The MCP output-limit/disk-persistence and server-`instructions=`-injection facts are
+  both documented near-verbatim in `skills/agent-standards/claude-code.md:307-347`. The
+  `teco`-write-guard-scope fact is stated directly in `claude/teco/teco.md:67`. The leading-slash
+  and backticked-path-citation facts are exactly what root `AGENTS.md`'s citation convention now
+  states — those two entries **became** the shipped convention. The subagent-reachability fact is
+  documented in `skills/agent-standards/claude-code.md:141-142,175` and is what motivated this
+  agent's own 2026-07-27 "header block from root `AGENTS.md`" prompt line (this file). In every
+  case the promotion had already happened, dated the same day or within days of capture, as a
+  byproduct of shipping the plan that surfaced the fact — only the inbox-clear step was
+  outstanding. Entry #4's secondary "verify a live probe has a graph/tenancy seam before
+  scheduling it" habit is **parked, not promoted** — recorded in `kaizen/plan.md`'s parking lot
+  (judged narrow/single-occurrence; revisit on recurrence). All 13 cleared from
+  `kaizen/inbox.md`; entries #1, #15, #16 handled separately (see the adjacent 2026-08-09 entries
+  and `kaizen/inbox.md`, which still carries #15/#16 pending a consolidated `skills/agent-standards/kiro.md`
+  follow-up).
+- **Why:** Standing distillation duty (agent-maintenance skill §5), teco-coordinated pass over the
+  full inbox (267 lines, 16 entries — the largest in the team).
+- **Plan items:** —
+
 ## 2026-07-28 — Inbox entry distilled: `audit-team.sh` is not a usable bare pass/fail done-condition
 - **What:** Processed the 2026-07-25 inbox entry *"`audit-team.sh` passes is an unusable plan
   done-condition"* (agent-maintenance skill §5). **Verified still true:** re-ran
