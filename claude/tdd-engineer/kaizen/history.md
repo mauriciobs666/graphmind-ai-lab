@@ -2,6 +2,61 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-09 — Description gained a `python-web-quirks` skill routing clause
+- **What:** Frontmatter `description` gained one clause: in a Python web/async codebase, the
+  agent consults the new `skills/python-web-quirks/SKILL.md` for asyncio/FastAPI/Starlette/
+  pydantic gotchas — mirroring how `cpg-analysis` is wired into `analyst`/`architect`. No body
+  change. **Note:** this edit landed via `Edit` while the file already had unrelated in-flight
+  changes to step 5 ("Verify honestly") from a concurrent session — the edit applied cleanly and
+  did not touch that content; flagging the concurrency here for visibility, not because anything
+  needed reconciling.
+- **Why:** `python-web-quirks` was created distilling three general Python/web-framework facts
+  from `analyst`'s learnings inbox. Stakeholder wired it to `coder`/`tdd-engineer`/`architect`/
+  `analyst` at minimum. See `claude/analyst/kaizen/history.md` (2026-08-09) for the full
+  distillation record and `skills/README.md` for the catalog entry.
+- **Plan items:** none.
+
+## 2026-08-09 — Learnings-inbox distillation, first pass (5 prompt additions; 3 discards)
+
+- **What:** Processed all 9 entries in `kaizen/inbox.md` (dated 2026-07-15 through 2026-07-31) —
+  the agent's first-ever distillation pass. Applied to `tdd-engineer.md`:
+  1. New **Principles** bullet — symmetric fixture teardown for shared/global state (from the
+     2026-07-24 "fixture wipes at setup, not teardown" entry).
+  2. New **Principles** bullet — gate optional/slow tests with the runner's marker/tag mechanism,
+     not a bare reachability skip (from the 2026-07-15 "reachability-skip doesn't gate a live test"
+     entry).
+  3. Expanded the **Cover the edges** bullet with positional/anchored-rule coverage guidance — vary
+     the anchored position (first/middle/last) and check what the consumer does with the whole
+     result (merged the 2026-07-24 "single-line corpus can't test a line-anchored rule" entry and
+     the 2026-07-24 "positional accept-rule anchored on one list element" entry — the same
+     underlying lesson, rediscovered twice in the same K-027 review pass).
+  4. New **Principles** bullet — when merging two callers onto one shared helper, compare what each
+     caller *does* with the result (validating vs. acting consumer), not just how similar the
+     parsing looks (from the 2026-07-24 "two extractors, opposite safety postures" entry).
+  5. Rewrote workflow step 5 ("Verify honestly") to require reading `passed`/`skipped`/`deselected`
+     counts, not just exit code, and to run the *whole* suite (not just new/reproduction tests)
+     after a fix, keeping the concrete "adjacent, unrelated-looking pre-existing test catches
+     idempotency bugs" illustration (merged the 2026-07-24 "green exit code isn't evidence a suite
+     ran" entry and the *second half* of the 2026-07-31 "idempotency guard can reuse an
+     accumulator" entry).
+  - **Discarded, already covered:** the 2026-07-15 empty-`UNWIND`-in-`materialize_snapshot` entry
+    — fully superseded by `falkor-chat/docs/BACKLOG.md` K-030 (🔵 proposed), which documents the
+    same defect in more depth (both `publish_def` and `materialize_snapshot`, the partial-write
+    hazard, the fix). Nothing left to add.
+  - **Discarded, too narrow/inconclusive for this pass:** the 2026-07-24 "first `docker ps` hangs"
+    entry (single-occurrence, root cause explicitly not isolated by the reporting agent, and reads
+    more like a devops/team-wide environment-probing fact than a TDD-specific one — no shared
+    cross-agent home exists today, so parking it in this prompt would misfile it) and the *first
+    half* of the 2026-07-31 "idempotency guard" entry (reuse-an-existing-accumulator-instead-of-a-
+    new-flag is a real but narrow craftsmanship tip, not a durable prompt-level rule). Both are
+    easy to re-raise if the pattern recurs.
+- **Why:** Team-maintainer distillation pass (agent-maintenance skill §5), dispositions
+  stakeholder-approved after cobb's read-only proposal pass the same day. Two independent
+  near-duplicate lesson-pairs (the two positional-rule entries; the skip-count and
+  whole-suite-after-fix entries) were merged into single prompt edits rather than kept as separate
+  redundant bullets — stakeholder's explicit call.
+- **Plan items:** none. `inbox.md` cleared to empty.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.
