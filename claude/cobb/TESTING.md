@@ -16,6 +16,27 @@ you're testing:**
 |---|---|---|
 | **Deterministic code** (functions, converters, parsers) | **pytest** | Output is exact and assertable. Red/green/refactor; matches the `tdd-engineer` agent's discipline. |
 | **Agent behavior** (a persona prompt, a model swap) | **eval / bless harness** | A local LLM is non-deterministic — you can't assert byte-for-byte. You review diffs against a blessed reference and judge better/worse. |
+| **A shell-based `PreToolUse` hook/guard** (`claude/scripts/guard-*.sh`) | **drive the real script**, synthetic JSON on stdin | See the gotcha immediately below — a standalone regex typed at the prompt can silently test different semantics than what the script actually runs. |
+
+### Gotcha — test hook-guard regex logic through the script, never a bare `grep` typed inline
+
+**Fact:** in a Claude Code interactive session, plain `grep` typed directly in a Bash tool call
+may resolve to a shell **function** (this environment wraps it as `ugrep` with different ERE
+semantics than GNU grep) instead of `/usr/bin/grep` — but that function is **not exported**, so a
+fresh subprocess (`bash some-script.sh`) does **not** inherit it and calls real GNU grep as
+normal. The two can disagree on regex behavior, silently.
+
+**Consequence:** typing `grep -qiE '<pattern>' <<< '<test string>'` directly to sanity-check a
+guard script's regex is not equivalent to running the guard — verifying that way was already
+flagged as suspect once (a 2026-08-08 `guard-destructive-ops.sh` regex fix, C-311). The reliable
+check is always to pipe synthetic input through the actual script (`bash
+claude/scripts/guard-<name>.sh <agent> <<< '{"tool_input":{"command":"..."}}'`) and read its
+stdout/exit code, never a standalone `grep`/`echo | grep` typed at the prompt as a stand-in for
+the script's own logic.
+
+**Verify it still holds:** `type grep` in the interactive shell vs. `bash -c 'type grep'` — if
+the two disagree, the gotcha is live; re-check after any harness update, since it depends on how
+this environment wraps `grep`, not on anything in this repo.
 
 ### Standard 1 — pytest (deterministic code)
 

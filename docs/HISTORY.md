@@ -5,6 +5,55 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-08 — C-311 follow-up: tightened the pipeline.sh --reset match after review; fixed a stale C-312 owner
+
+Same-day follow-up to the C-309/C-311 fix below (commit `6ab4ffe`). `analyst`'s independent review
+(`docs/reviews/safety-net-guard-fixes.md`, verdict approve, no blockers) flagged one non-blocking
+finding: the new `guard-destructive-ops.sh` branch matched `pipeline.sh` as a bare, unanchored
+substring, so it also fired on unrelated commands merely containing "pipeline.sh" and "--reset"
+(confirmed live with `mypipeline.sh --reset`). The stakeholder asked for it tightened.
+
+**Fix:** added a left token-boundary requirement on the `pipeline.sh` basename (start-of-string or
+non-alphanumeric immediately before it) — rejects the confirmed false positive without requiring
+any specific directory prefix. Deliberately **not** anchored to the full
+`skills/joern-cpg/scripts/` path: the skill's own documented usage
+(`scripts/pipeline.sh <source> ...` in `skills/joern-cpg/SKILL.md`) is written cwd-relative, so a
+real invocation may legitimately appear in the Bash command text as `scripts/pipeline.sh`,
+`./pipeline.sh`, or bare `pipeline.sh` depending on the caller's cwd — anchoring on the full path
+would have risked a false negative on exactly the gap C-311 exists to close. Re-verified with
+synthetic PreToolUse payloads: every realistic invocation shape (full repo-root path,
+`bash`/`sh`-prefixed, SKILL.md's documented cwd-relative form, bare basename, absolute path)
+still asks; `mypipeline.sh --reset` now passes through clean; a prose/argument mention of the
+real path (e.g. inside `grep`/`echo`) still asks — accepted as inherent to command-text matching
+and shared by the pre-existing `GRAPH.DELETE`/`FLUSHALL` branches, not a regression.
+
+**Pass-2 correction, same day.** The re-review (`docs/reviews/safety-net-guard-fixes.md`,
+revised — verdict *needs changes*) caught that the tightened regex, as first written, was one
+alternation (`pipeline\.sh.*--reset|--reset.*pipeline\.sh`) whose left- and right-boundary groups
+could both need to consume the *same* single-space separator when the tokens sat right next to
+each other — so `--reset pipeline.sh` (bare basename, flag before the name) silently stopped
+matching, a real regression against the already-approved `6ab4ffe`, and falsified this entry's
+"before or after the path" claim above. Rated major, not blocker — no realistic single command
+can put `--reset` textually before a *bare* `pipeline.sh`, since the executable has to precede
+its own flags — but the written claim was wrong regardless. **Fixed:** replaced the one
+intertwined alternation with two independent `grep` checks ANDed together (`pipeline.sh` present,
+basename-anchored, AND `--reset` present as its own token), so each boundary consumes its own
+separator no matter which token comes first or how far apart they sit. Re-verified through the
+actual script (`bash claude/scripts/guard-destructive-ops.sh`, not a standalone shell
+`grep -qiE` — this sandbox's interactive `grep` is shadowed by `ugrep` with different ERE
+semantics than the GNU grep the script subprocess actually runs) against the full matrix:
+`pipeline.sh --reset`, `--reset pipeline.sh` (the regression case, now asks correctly),
+`scripts/pipeline.sh --reset`, `bash .../pipeline.sh --reset`, absolute path, `sh`-prefixed, and
+the negative `mypipeline.sh --reset` (still does not ask); all pre-existing branches and the
+fail-open malformed-stdin contract re-verified unchanged.
+
+**Also fixed in passing:** `docs/BACKLOG.md`'s C-312 entry still listed `Owner: joern` — that
+agent was retired into `graph-dba` in commit `cbf26c4` (the same fact C-309(a) already cited).
+Corrected to `graph-dba`, which now drives the `joern-cpg` skill's pipeline that C-312 concerns.
+
+**Confined to `claude/scripts/guard-destructive-ops.sh` and `docs/BACKLOG.md` — no other script,
+hook contract, or the `audit-team.sh` fix from earlier today touched.**
+
 ## 2026-08-08 — Two safety-net script gaps closed: audit-team.sh untracked-file blindness, guard-destructive-ops.sh wrapped-delete blindness (C-309, C-311)
 
 `claude/scripts/audit-team.sh` check 7 (personal-info leak scan) and

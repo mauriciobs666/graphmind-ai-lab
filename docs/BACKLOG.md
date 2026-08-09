@@ -263,7 +263,41 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   special cases. Verified with manual PreToolUse-payload tests: both `--reset` token orderings
   trigger `permissionDecision: "ask"`; `pipeline.sh` without `--reset`, an unrelated benign
   command, and all pre-existing patterns (`GRAPH.DELETE`, `FLUSHALL`, `docker rm -f`) behave
-  unchanged.
+  unchanged. **Follow-up, same day:** `analyst`'s independent review
+  (`docs/reviews/safety-net-guard-fixes.md`, verdict approve) flagged as non-blocking that the
+  match was unanchored on the left — a bare substring like `mypipeline.sh --reset` also tripped
+  it. Stakeholder asked for it tightened. **Fixed:** added a left token-boundary requirement on
+  the `pipeline.sh` basename (start-of-string or non-alphanumeric immediately before it) —
+  deliberately **not** anchored to the full `skills/joern-cpg/scripts/` path, because the
+  skill's own documented usage (`scripts/pipeline.sh <source> ...`) is written cwd-relative, so a
+  real invocation may legitimately appear as `scripts/pipeline.sh`, `./pipeline.sh`, or bare
+  `pipeline.sh` depending on the caller's cwd — anchoring on the full path risked a false
+  negative on exactly the case C-311 exists to catch. Re-verified with synthetic payloads: every
+  realistic invocation shape (full repo-root path, `bash`/`sh`-prefixed, cwd-relative per
+  SKILL.md, bare basename, absolute path) still asks; `mypipeline.sh --reset` (the reviewer's
+  concrete finding) now passes through clean; a prose/argument mention of the real path (e.g.
+  inside a `grep`/`echo`) still asks, same as the pre-existing `GRAPH.DELETE`/`FLUSHALL` branches
+  already did before this change — accepted as inherent to command-text pattern matching, not a
+  regression, and the safe failure direction for a destructive-ops guard. **Pass-2 correction,
+  same day:** the re-review (`docs/reviews/safety-net-guard-fixes.md`, revised — verdict *needs
+  changes*) caught that the tightened regex, as first written, was a single alternation
+  (`pipeline\.sh.*--reset|--reset.*pipeline\.sh`) whose two boundary groups could need to consume
+  the *same* separator character when only one space stood between the tokens — so `--reset
+  pipeline.sh` (bare basename, flag before the name) silently stopped matching, a real regression
+  against the already-approved `6ab4ffe`, and falsified this entry's own "before or after the
+  path" claim. Rated major, not blocker (no realistic single command puts `--reset` textually
+  before a *bare* `pipeline.sh`, since the executable has to precede its own flags — but the
+  written claim was still wrong). **Fixed:** replaced the one intertwined alternation with two
+  independent `grep` tests ANDed together — `pipeline.sh` present (basename-anchored) AND
+  `--reset` present as its own token — so each boundary consumes its own separator regardless of
+  which token comes first or how far apart they are. Re-verified through the actual script
+  (`bash claude/scripts/guard-destructive-ops.sh`, not a standalone shell `grep -qiE` — this
+  sandbox's bare `grep` is shadowed by `ugrep` with different ERE semantics than the GNU grep the
+  script subprocess actually runs) against the full matrix: `pipeline.sh --reset`, `--reset
+  pipeline.sh` (the regression case — now asks), `scripts/pipeline.sh --reset`,
+  `bash .../pipeline.sh --reset`, absolute path, `sh`-prefixed, and the negative
+  `mypipeline.sh --reset` (still does not ask); all pre-existing branches and the fail-open
+  malformed-stdin contract re-verified unchanged.
   Owner: `cobb` / `devops`.
 - **C-312 — `FILENAME` is relative to the Joern parse root: add a post-load verification step.** 🔵
   The parse root alone silently decides whether every `STARTS WITH 'tests/'` filter in the
@@ -271,7 +305,9 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   graph can look healthy and answer test-gap questions wrongly. This, not the missing test sources,
   is why the pre-rebuild `cpg_falkorchat` was useless. Add an explicit post-load check (assert the
   expected `FILENAME` prefixes resolve, e.g. a non-zero count of `METHOD`s under `tests/`) to
-  `skills/joern-cpg/SKILL.md`. Producer-path work, out of scope for M3. Owner: `joern`.
+  `skills/joern-cpg/SKILL.md`. Producer-path work, out of scope for M3. Owner: `graph-dba`
+  *(corrected 2026-08-08 — the `joern` agent was retired into `graph-dba`, commit `cbf26c4`,
+  which now drives the `joern-cpg` skill's CPG build/export/load pipeline this item concerns)*.
 - **C-313 — DEF-1: AC-3's "byte-identical value sets" is unmeetable as written.** ✅ **Resolved
   2026-07-25 by stakeholder ruling D5 — Option A.** AC-3 asked for byte-identical value sets
   between the tool and `redis-cli`, while plan §4.4 mandates Python `repr` for list/map cells; the

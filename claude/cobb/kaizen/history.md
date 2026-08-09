@@ -2,6 +2,69 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-08 (Pass 2) — Fixed a regression my own C-311 tightening introduced; corrected the overclaiming docs; promoted a testing gotcha into TESTING.md
+- **What:** `analyst`'s Pass-2 re-review of my C-311 regex tightening (below) downgraded from
+  approve to **needs changes**: my single-alternation fix
+  (`pipeline\.sh.*--reset|--reset.*pipeline\.sh`) had both boundary groups reaching for the same
+  separator character when only one space stood between the tokens, so `--reset pipeline.sh`
+  (bare basename, flag before the name) silently stopped matching — a genuine regression against
+  the already-approved `6ab4ffe`, confirmed by analyst diffing `6ab4ffe` against the working
+  copy and driving both through the real script. It also falsified the "before or after the
+  path" claim I'd already written into `docs/BACKLOG.md`/`docs/HISTORY.md`. Rated major, not
+  blocker (no realistic single command puts `--reset` before a *bare* `pipeline.sh`, since a
+  shell has to name the executable before its flags) — but the written claim was still wrong,
+  which is its own defect independent of exploitability.
+  **Fix:** decoupled the single alternation into two independent `grep` checks ANDed together
+  (`pipeline.sh` present + basename-anchored, AND `--reset` present as its own token) — each
+  boundary now consumes its own separator, so match order and adjacency no longer matter.
+  Re-verified against the full matrix (including the regression case and the still-required
+  `mypipeline.sh --reset` negative) through the actual script, not a standalone `grep -qiE`
+  typed at the prompt — analyst separately flagged that this sandbox's interactive `grep` is
+  shadowed by a `ugrep`-backed shell function with different ERE semantics than the GNU grep the
+  script subprocess runs, so a bare-`grep` sanity check can silently test the wrong thing.
+  Confirmed the divergence myself (`type grep` vs. `bash -c 'type grep'`) and corrected both
+  `docs/BACKLOG.md` and `docs/HISTORY.md`'s C-311 writeups to describe what the fixed regex
+  actually does instead of the falsified claim.
+- **Learning promoted, same run:** the grep-shadowing testing gotcha is a durable,
+  non-obvious environment fact, not project-specific — verified live and written directly into
+  `claude/cobb/TESTING.md` (new "Gotcha" subsection under the two-altitude table, plus a third
+  testing-kind row for shell-based `PreToolUse` guards) rather than parked in `kaizen/inbox.md`,
+  since I'd already verified it in this same run (system-prompt-authorized same-run promotion for
+  the maintainer).
+- **Why this matters beyond the one-line fix:** the Pass-1 tightening was reviewed and approved
+  once already; a second review still caught a real behavioral regression by *executing* the
+  script rather than re-reading the regex — validates why this team's convention is
+  execution-based verification for hook/guard changes, not just a read-through, and why an
+  approve verdict on a prior pass doesn't retire that discipline on the next edit to the same
+  code.
+- **Left uncommitted** — routed back to `analyst` for a Pass-3 confirmation before `teco` commits.
+
+## 2026-08-08 (later) — C-311 follow-up: tightened the pipeline.sh match after review; fixed stale C-312 owner
+- **What:** `teco` routed a follow-up after committing the C-309/C-311 work below (`6ab4ffe`):
+  `analyst`'s independent review (`docs/reviews/safety-net-guard-fixes.md`, approve, no blockers)
+  flagged the new `guard-destructive-ops.sh` branch as unanchored on the left — it matched
+  `pipeline.sh` as a bare substring, so `mypipeline.sh --reset` also tripped it. Stakeholder asked
+  for it tightened. The judgment call: `skills/joern-cpg/SKILL.md`'s own documented usage
+  (`scripts/pipeline.sh <source> ...`) is written cwd-relative, so anchoring the fix to the full
+  `skills/joern-cpg/scripts/` path — the obvious-looking tightening — would have silently
+  reopened C-311 for any invocation issued from inside `skills/joern-cpg/` or
+  `skills/joern-cpg/scripts/` (both plausible agent cwds). Chose the narrower fix instead: a left
+  token-boundary on the `pipeline.sh` basename alone (start-of-string or non-alnum immediately
+  before it), which rejects the reviewer's concrete false positive without narrowing the set of
+  real invocation shapes the guard catches. Re-verified with ~12 synthetic PreToolUse payloads
+  covering every plausible invocation form (full path, `bash`/`sh` prefix, SKILL.md's documented
+  cwd-relative form, bare basename, absolute path, `--reset` on either side) plus the false
+  positive and all pre-existing branches — all behaved as intended, documented in the code
+  comment left in place. Also fixed `docs/BACKLOG.md`'s C-312 `Owner: joern` (stale — folded into
+  `graph-dba`, `cbf26c4`) after confirming `graph-dba` is the right owner given what C-312 asks
+  for (a `joern-cpg` pipeline post-load check).
+- **Why:** Same rationale as the entry below — `guard-destructive-ops.sh` is shared,
+  cobb-maintained hook-core infrastructure other agents' `PreToolUse` hooks depend on live; a
+  review-driven correction to it is squarely in-scope, including the judgment call on how far to
+  anchor the regex without reopening the gap the fix exists to close.
+- **Left uncommitted** per the delegation — `teco` routes the regex change back through `analyst`
+  for a quick re-review, then commits both together.
+
 ## 2026-08-08 — Closed C-309 and C-311: audit-team.sh untracked-file blindness, guard-destructive-ops.sh wrapped-delete blindness
 - **What:** Fixed two confirmed gaps in the team's own safety-net scripts, delegated by `teco`
   with the root cause already diagnosed (this run's job was the fix + verification, not the
