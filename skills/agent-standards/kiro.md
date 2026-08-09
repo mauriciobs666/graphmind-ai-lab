@@ -7,7 +7,11 @@
 > + the custom-agents config reference. **Subagent communication model + `delegate`
 > re-verified 2026-06-21** (`kiro.dev/docs/chat/subagents`, `/cli/experimental/delegate`):
 > report-back only, no agent-to-agent messaging. Skills section verified
-> 2026-06-16 (`kiro.dev/docs/skills`, `/cli/skills`). Re-verify before relying on
+> 2026-06-16 (`kiro.dev/docs/skills`, `/cli/skills`). **Three CLI empirical facts
+> (default `resources: []` template, exact-CWD-only local-agent discovery, remote
+> `mcpServers` entries have no `type` field) live-verified 2026-08-01 against
+> `kiro-cli 2.14.1` and re-verified 2026-08-09 against `kiro-cli 2.16.2` — held
+> across the version bump.** Re-verify before relying on
 > an exact key — Kiro ships fast and has **two surfaces (IDE + CLI)** that differ.
 
 ## Building blocks
@@ -39,6 +43,14 @@ definition you can invoke directly or hand a subagent task to.
 ### CLI custom agents — JSON (`kiro.dev/docs/cli/custom-agents/configuration-reference`)
 - **Location:** `.kiro/agents/*.json` (local) or `~/.kiro/agents/*.json` (global).
   **Filename (minus `.json`) = agent name.**
+  - **Local-agent discovery is exact-CWD only — no upward directory walk.** An agent
+    created in `some/dir/.kiro/agents/foo.json` is listed by `kiro-cli agent list` when
+    run from `some/dir/`, but **not** from `some/dir/subdir/` (no local `.kiro/agents/`
+    there) — it does not fall back to a parent directory. `agent list --help` only hints
+    at this; verified by cd-ing one level down and re-running. Practical effect: a
+    repo-checked-in agent config's "no manual wiring" claim still depends on which
+    directory the run command `cd`s into — pin the runbook to that directory. (Verified
+    2026-08-01 against `kiro-cli 2.14.1`, re-verified 2026-08-09 against `2.16.2`.)
 - **Config keys:**
   - `name` (optional; from filename), `description`, `model` (e.g. `"claude-sonnet-4"`;
     falls back to default if unavailable).
@@ -51,9 +63,24 @@ definition you can invoke directly or hand a subagent task to.
   - `toolAliases` — remap tool names to resolve collisions.
   - `toolsSettings` — per-tool config, e.g. `{"write": {"allowedPaths": ["src/**"]}}`
     and **`toolsSettings.subagent`** (subagent permissions — see below).
-  - `mcpServers` (each needs `command`), `includeMcpJson` (pull `~/.kiro/settings/mcp.json`).
+  - `mcpServers` — each entry is discriminated by key presence, **not** a `"type"`
+    field: a **local** server needs `command`; a **remote** server needs `url` instead
+    and gets no `type` key at all (`kiro-cli mcp add --name X --url <url> --agent
+    <name> --force` writes `"mcpServers": {"X": {"url": "..."}}` verbatim, nothing
+    else). This diverges from other MCP clients' config spelling (e.g.
+    `falkor-chat/docs/DESIGN.md` §15.3's generic example uses an explicit
+    `{"type": "streamable-http", "url": "..."}`) — don't copy that shape into a
+    kiro-cli config. `includeMcpJson` (pull `~/.kiro/settings/mcp.json`).
   - `resources` — `file://…` globs, `skill://.kiro/skills/**/SKILL.md`, or a
-    `knowledgeBase` object.
+    `knowledgeBase` object. **The `kiro-cli agent create` default template is always
+    `"resources": []`** — never pre-populated with `file://AGENTS.md`,
+    `file://README.md`, or `skill://...` entries (`EDITOR=true kiro-cli agent create
+    <name> -d <dir>` in a fresh scratch dir produces `[]` verbatim). Resource
+    *inheritance* (steering files, skills, `AGENTS.md`) is governed separately by the
+    global runtime setting `chat.disableInheritingDefaultResources` — that's
+    independent of the per-agent JSON template, which starts empty regardless. (Both
+    verified 2026-08-01 against `kiro-cli 2.14.1`, re-verified 2026-08-09 against
+    `2.16.2`.)
   - `hooks` — JSON map keyed by trigger: `agentSpawn`, `userPromptSubmit`,
     `preToolUse`, `postToolUse`, `stop` (entries take `command` + optional `matcher`).
 
