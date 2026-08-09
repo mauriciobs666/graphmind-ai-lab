@@ -1,0 +1,91 @@
+# mcp-monitor config — copy this file, edit, and point --config at your copy.
+#
+# One or more [[watch]] entries, each referencing a [server.<name>] connection
+# block by name. Full schema, field by field, below.
+
+# ── servers ──────────────────────────────────────────────────────────────
+#
+# [server.<name>].transport is "http" or "stdio".
+#
+#   "http"  needs: url (str)
+#   "stdio" needs: command (array of strings — the full argv of the server
+#                  process, e.g. ["python3", "path/to/server.py", "--flag"])
+#
+# A stdio server's `command` array is split at load time: the first element
+# becomes the executable, the rest become its arguments — this matches how
+# the underlying MCP SDK's StdioServerParameters wants them (two separate
+# fields, not one argv blob). You write it as one array here regardless; the
+# split happens in mcp_monitor/config.py, not something you do by hand.
+#
+# `env` (optional, both transports) is extra environment variables to set for
+# this connection — for stdio, they land in the launched server's own
+# environment (e.g. telling fake_mcp_server where its state file lives).
+#
+# A stdio `command`'s relative paths (here and in [[watch]] below) resolve
+# against mcp-monitor's own process working directory — i.e. wherever you ran
+# `run.sh` from, not this file's directory. Every path in this example is
+# written relative to the repo root, matching README.md's own Quick start
+# (`mcp-monitor/run.sh --config mcp-monitor/config.toml`, run from the repo
+# root, one level above mcp-monitor/). If you invoke run.sh from somewhere
+# else, adjust these paths (or use absolute ones) to match.
+
+[server.falkor-chat]
+transport = "http"
+url = "http://localhost:8000/mcp"
+
+[server.fake-test]
+transport = "stdio"
+# The `mcp` SDK fake_mcp_server/server.py imports is installed only into
+# mcp-monitor's own venv (setup.sh), not necessarily onto a bare `python3` —
+# so this points at that venv's interpreter rather than "python3".
+command = ["mcp-monitor/.venv/bin/python", "mcp-monitor/fake_mcp_server/server.py"]
+env = { FAKE_MCP_STATE_FILE = "/tmp/mcp-monitor-fake-state.json" }
+
+# ── watches ──────────────────────────────────────────────────────────────
+#
+# Each [[watch]] is an independent poll/match/launch loop:
+#
+#   name              str    — identifier passed to the launched command
+#                              (MCP_MONITOR_WATCH_NAME / the stdin payload's
+#                              "watch" field)
+#   server            str    — must match a [server.*] block name above
+#   tool              str    — the MCP tool name to call on that server
+#   args              table  — static arguments passed to every call of that
+#                              tool (may be empty: args = {})
+#   interval_seconds  number — must be > 0; how long to sleep between polls
+#   pattern           str    — a Python regex; every non-overlapping match in
+#                              the poll's flattened result text is a candidate
+#   repeat_trigger    bool   — default false. false = a given matched
+#                              substring fires its command at most once for
+#                              this process's lifetime (in-memory dedupe, lost
+#                              on restart — see docs/BACKLOG.md). true = every
+#                              occurrence fires every time it's seen.
+#   command           array  — argv of the command to launch on a match. Runs
+#                              as an argv exec, never a shell string — use
+#                              ["bash", "-c", "..."] yourself for shell
+#                              features. Receives the full match payload as
+#                              JSON on stdin (see README.md).
+
+[[watch]]
+name = "falkor-chat-mention"
+server = "falkor-chat"
+tool = "read_messages"
+# Explicit since = 0 deliberately avoids read_messages' cursor-advance branch,
+# so mcp-monitor never touches falkor-chat's shared actor's read cursor. See
+# docs/plans/mcp-monitor.md §8 for why this is the AC-3 detection mechanism
+# instead of the isMention flag.
+args = { re = "demo-welcome", since = 0, limit = 200 }
+interval_seconds = 5
+pattern = '@mcp-monitor\b'
+repeat_trigger = false
+command = ["bash", "-c", "echo triggered: $MCP_MONITOR_WATCH_NAME"]
+
+[[watch]]
+name = "fake-server-demo"
+server = "fake-test"
+tool = "get_status"
+args = {}
+interval_seconds = 2
+pattern = '"value":\s*"READY"'
+repeat_trigger = true
+command = ["mcp-monitor/scripts/handle_trigger.sh"]
