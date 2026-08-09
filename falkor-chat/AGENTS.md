@@ -67,7 +67,7 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 |---|---|
 | `./scripts/start_falkordb.sh` | Starts FalkorDB in Docker (foreground; `-d`/`--detach` for headless). Data lives in the `falkordb-data` volume. |
 | `./scripts/start_server.sh` | One-shot: starts FalkorDB, bootstraps schema, seeds demo agent + workflows, starts uvicorn. Runtime env vars are documented in the script's own header comment. |
-| `./scripts/bootstrap_schema.sh <wsId> …` | Creates all indexes + constraints for `reference` + workspace(s). Idempotent. |
+| `./scripts/bootstrap_schema.sh <wsId> …` | Creates all indexes + constraints for `reference` + workspace(s). Idempotent. **Always touches `reference` too, even when called with only a probe workspace ID** — `bootstrap_reference` (`scripts/bootstrap_schema.sh:37-70`) runs unconditionally before the per-workspace loop (`:248`), but it is exclusively `CREATE INDEX`/`GRAPH.CONSTRAINT CREATE` — no `MERGE`/`CREATE (n)`/`DELETE` — so bootstrapping a throwaway probe workspace is safe for `reference`'s *data*. |
 | `./scripts/test_queries.sh` | End-to-end test suite against the live instance; must pass before any schema change is committed. **⚠️ Deletes the `reference` graph at teardown**, wiping both published workflow defs (workspace snapshots survive, so `@mention`-to-start silently breaks). Re-run `seed_workflows.sh <wsId>` afterward, or check first with `verify_workflows.sh <wsId>`. |
 | `./scripts/backfill_thread_ids.sh <wsId> …` | One-off: stamps `Message.threadId` on pre-K-007 messages. Idempotent; run once per existing workspace. |
 | `./scripts/load_test.sh` | Load-tests the REST append path, profiles the four hot reads, and measures per-workspace RAM delta against a throwaway `ws:load`. Env: `LOAD_MESSAGES`/`LOAD_WORKERS`/`SERVER_PORT`. |
@@ -77,6 +77,26 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
+
+### Probing shared graph state without mutating it
+
+- **A workflow-def *publish* has no graph seam** — `Repository._reference()`
+  (`server/falkorchat/repository.py:156-158`) always resolves to `db.reference_graph()`
+  (`server/falkorchat/db.py:87-94`), a hardcoded `select_graph("reference")` with no
+  parameter/env override, so `publish_def` can only ever write the global graph. The isolatable
+  equivalent is the **snapshot** side: `materialize_snapshot` (`repository.py:1669`) formats the
+  same `_PUBLISH_CYPHER` constant (`:992`) against `self._graph(ws)` instead, and
+  `get_snapshot` (`repository.py:1702`), via `_read_subgraph` (`:1031`), read it back with the
+  same `_READ_META_CYPHER` (`:1016`). Any engine-semantics probe about publish/read behaviour can
+  therefore run byte-identically against a throwaway `ws:<probe>` graph and be torn down with
+  `GRAPH.DELETE`, instead of touching `reference`.
+- **`server/tests/test_services.py` is the review-safe pytest subset** — it builds
+  `Services(FakeRepo())` (a module-local fake) and requests no `conftest.py` fixture that reaches
+  a real `conn`/`wf_repo`, so it (and any `test_api.py` node that builds its own throwaway
+  `FastAPI` app rather than requesting `wf_client`) can run against a live shared instance with
+  zero risk to `reference` or any `ws:<id>`. Pair with `./scripts/verify_workflows.sh <wsId>`
+  (read-only, `GRAPH.RO_QUERY` only) for a before/after check that a review didn't disturb shared
+  state.
 
 ### M1 server (`server/`)
 

@@ -5,6 +5,32 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-09 — Fix: `AGENTS.md` citation nit (`get_snapshot` vs. `_read_subgraph` line numbers)
+- **What:** Corrected `AGENTS.md`'s "Probing shared graph state without mutating it" subsection,
+  which cited `get_snapshot`/`_read_subgraph` under one shared line number (`repository.py:1031`)
+  — that's `_read_subgraph`'s definition only; `get_snapshot` (which calls into it) is actually at
+  `:1702`. Now attributes each symbol to its own line.
+- **Why:** Flagged as a nit by an independent review (`docs/reviews/kaizen-inbox-distillation.md`)
+  of the same-day distillation pass that introduced the subsection.
+- **Plan items:** none.
+
+## 2026-08-09 — Docs: safe shared-state probing notes + collect-only counting tip (analyst inbox distillation)
+
+**What:** `AGENTS.md` gained a new "Probing shared graph state without mutating it" subsection
+(after the Key scripts table): the `publish_def`/`materialize_snapshot` graph-seam asymmetry (a
+def *publish* always hits the global `reference` graph, but the *snapshot* side reuses the same
+Cypher constants against a throwaway `ws:<probe>` and can be torn down safely) and
+`server/tests/test_services.py` as the review-safe pytest subset (pure `FakeRepo`, no FalkorDB
+fixture). The `bootstrap_schema.sh` Key-scripts row gained a note that it always touches
+`reference` too (DDL-only, safe). `docs/DESIGN.md` §14.7 gained a note that `pytest
+--collect-only -q` is the non-mutating way to check a claimed test count.
+**Why:** Distilled from four `analyst` learnings-inbox entries (2026-07-24) surfaced across the
+K-031 review and other falkor-chat gates — verification techniques specific to this component's
+shared-graph layout, not generic enough for `analyst`'s own prompt. Routed by `cobb` per
+`agent-maintenance` skill §5; full disposition rationale in `claude/analyst/kaizen/history.md`
+(2026-08-09).
+**Plan items:** none.
+
 ## 2026-08-01 — K-041: MCP `send_message` now schedules the responder/workflow trigger (D-1 fix)
 
 **What:** Fixed a High-severity defect found by a live QA pass of the unrelated `kiro-demo-agent`

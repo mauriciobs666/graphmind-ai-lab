@@ -410,7 +410,11 @@ is the *why*, not a query copy.
 > **`_drive_loop` is SHA-locked** (`71055f756280`, see `docs/archive/plans/m3-process-flow.md`
 > §3.1) — do not edit its body without deliberately re-opening that lock. `_execute_step`,
 > `_select_transition`, `_trace_step`, and `resume` sit **outside** the lock and may be changed
-> freely.
+> freely. **Recompute the lock line-number-independently** — a `sed` line-range breaks the moment
+> anything shifts elsewhere in the file, even with the locked body untouched — by bounding the
+> extraction on the `def`/seam-comment markers instead:
+> `awk '/^    def _drive_loop/{f=1} /^    # ── seams/{f=0} f' server/falkorchat/executor.py | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba' | sha256sum | cut -c1-12`
+> (verified reproducing `71055f756280` on this commit).
 
 > **What `maxSteps` actually means (K-031, documented — not changed).** `maxSteps` is a **runaway
 > tripwire checked *after* each recorded step**, not a hard cap: a run executes at most
@@ -987,6 +991,11 @@ teardown hazard already documented at the `AGENTS.md` "Key scripts" table:
   unrelated to the served workspaces' real dimension (1024/1536). Never point a real-embedder test
   at it: a wrong-dimension `vecf32` write is silently accepted (§2/§7.1) and then drops out of ANN
   — the write "succeeds" and retrieval finds nothing, with no error anywhere in the chain.
+
+**Verifying a claimed test count safely:** `pytest --collect-only -q` reports the suite's test
+count with no FalkorDB connection and no writes — the correct way to check a plan's or review's
+"N tests" baseline claim without triggering either the `wf_repo` setup-time wipe or
+`test_queries.sh`'s teardown wipe above.
 
 ---
 

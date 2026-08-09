@@ -461,7 +461,10 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
     The **SHA is correct and reproducible; the byte count is wrong** (the extraction yielding that hash
     is 2860 bytes; a third figure, 2839, appears in an earlier coordination entry). A future gate
     verifying the lock by byte count would wrongly report it broken. Correct the figure wherever the
-    lock is quoted — or drop the byte count and verify by SHA only.
+    lock is quoted — or drop the byte count and verify by SHA only, with the line-number-independent
+    extraction now documented at the lock site (`DESIGN.md` §6.2): `awk` bounded by the `def _drive_loop`
+    / seam-comment markers, not a `sed` line range (which breaks on any unrelated line shift elsewhere
+    in the file).
   - **m-A / n-1 (carried from the earlier `m3-executor-landing2-impl.md` gate) ·** `node_note` is
     missing from the trace-kind enumeration in `docs/QUERIES.md` §12.10 and `docs/DESIGN.md` §5,
     although the executor emits it.
