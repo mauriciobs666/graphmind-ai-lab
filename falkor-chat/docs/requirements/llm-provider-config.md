@@ -41,11 +41,42 @@ Two drivers, in the stakeholder's order of pain:
 
 ## User stories
 
-*(to be filled as the interview proceeds)*
+- As an administrator, I want to declare providers and models once in an `opencode.json`-format
+  file, so that falkor-chat and OpenCode read the same configuration and I never maintain it twice.
+- As an administrator, I want to point falkor-chat at that file with an environment variable, so
+  that I can share one file across tools (or keep separate ones) without editing code.
+- As an administrator, I want each **workflow step** to name the model it runs on, so that an
+  expensive reasoning step and a cheap routine step don't have to share one model.
+- As an administrator, I want each **agent** to name its model, so that different agent
+  participants in a workspace can run on different models.
+- As an administrator, I want each **guard** (the llm-kind judge) to name its model, so that
+  judging doesn't silently consume the same model as the agent doing the work.
+- As an administrator, I want the **embedding** model declared through the same config, so there
+  is one place to look for every model the system uses.
+- As an administrator, I want a per-kind default, so that I only name a model where I actually
+  want to deviate.
 
 ## Functional requirements
 
-*(to be filled as the interview proceeds)*
+- **FR-1** — Providers and models are declared in a configuration file using the **same format as
+  `opencode.json`** (`provider.<id>` carrying endpoint/credential options and a `models` map),
+  such that a file authored for OpenCode is accepted by falkor-chat unchanged.
+- **FR-2** — The path to that file is supplied by an **environment variable**, so one file can be
+  shared with OpenCode.
+- **FR-3** — A model is referenced by a **single uniform identifier** combining provider and model
+  (the OpenCode `"<provider>/<model-id>"` convention), and the same identifier form works
+  everywhere a model can be named.
+- **FR-4** — **Every** place falkor-chat uses an LLM resolves its model through **one common
+  internal mechanism** — no consumer reads endpoint/model settings by its own private route, and a
+  future consumer gets the capability by using that mechanism rather than by adding new
+  configuration. *(Stakeholder's words: "create an internal abstraction and use it everywhere".)*
+- **FR-5** — Each of the following can name its own model, and any of them may omit it:
+  - a **workflow step**
+  - an **agent**
+  - an **llm-kind guard**
+  - the **embedding** consumer
+- **FR-6** — When a consumer names no model, it resolves to the **default for its kind** (an agent
+  default, a guard default, an embedding default, …), declared in the same configuration.
 
 ## Out of scope
 
@@ -57,15 +88,27 @@ Two drivers, in the stakeholder's order of pain:
 
 ## Open questions
 
-1. What is the smallest thing that can carry a model choice (per workflow step? per agent? per
-   consumer kind?), and what happens when it doesn't declare one?
-2. Are **embeddings** in scope, or is this chat/completion models only?
+1. Where does a per-step model choice live from the admin's point of view, and what does changing
+   it cost? (Workflow definitions are topology-immutable — see K-034.)
+2. How soon must a config change take effect — restart, or live?
 3. What should happen when the config file is missing, malformed, or names a model that the
    provider doesn't actually serve?
-4. Do the existing `FALKORCHAT_LLM_*` env vars keep working, or are they replaced?
-5. Which parts of the OpenCode schema must be honoured, and which may be ignored?
+4. Do the existing `FALKORCHAT_LLM_*` / `FALKORCHAT_EMBEDDING_*` env vars keep working, or are
+   they replaced?
+5. Which parts of the OpenCode schema must be honoured, and which may be ignored (e.g. `npm`,
+   `agent.*` blocks, tool permissions)?
+6. Embedding **dimension** is frozen at vector-index creation. What should happen if the config
+   names an embedding model whose dimension doesn't match the workspace's index?
 
 ## Decision log
 
-2026-08-10 — What triggered this, and which driver stings more: per-node model choice **and**
-single shared config, but **per-node model choice is the bigger pain**.
+2026-08-10 — What triggered this, and which driver stings more? → Both, but **per-node model
+choice stings more** than the duplicated configuration.
+
+2026-08-10 — Which places can name their own model? → **All four** — workflow step, agent, guard,
+embedding worker — and additionally: *"we should create an internal abstraction and use it
+everywhere"* (one uniform seam, no consumer bypassing it).
+
+2026-08-10 — What happens when a consumer names no model? → **Default per kind** (an agent
+default, a guard default, an embedding default), not a single global default and not a hard
+failure.
