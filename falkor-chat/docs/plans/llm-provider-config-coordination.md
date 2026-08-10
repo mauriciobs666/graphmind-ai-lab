@@ -36,9 +36,10 @@ This document, not any agent's context window, is the state of record.
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict |
 |---|---|---|---|---|---|
 | U0 | `tico` | `ae8daf5e6fb321743` | accepted | requirements `Status:` → `Ready for design` | none (mechanical) |
-| U1 | `architect` | `a6607eea81e284553` | delivered | `docs/plans/llm-provider-config.md` + K-042/M4 backlog entry | `analyst` → — |
-| U2 | `graph-dba` | `a9469ba9c6b47c56b` | delivered | `docs/plans/llm-provider-config-graph.md` | `analyst` (with U1) → — |
-| U3 | `analyst` | `a87afc398f73067b8` | in-flight | `docs/reviews/llm-provider-config.md` | — |
+| U1 | `architect` | `a6607eea81e284553` | gated | `docs/plans/llm-provider-config.md` | `analyst` → **needs changes**; revising as v2 |
+| U2 | `graph-dba` | `a9469ba9c6b47c56b` | gated | `docs/plans/llm-provider-config-graph.md` | `analyst` → 2 items; revising as v2 |
+| U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` | — |
+| U3b | `analyst` | `a87afc398f73067b8` | queued | re-gate of both v2 documents (Pass 2) | — |
 | U4+ | TBD | — | queued | Landing 1 implementation (from U1's sequencing) | `analyst` re-gate |
 | U5+ | TBD | — | queued | Landing 2 implementation | `analyst` re-gate |
 | U6 | `devops` | — | queued | env-var cutover + secret hygiene (FR-12/FR-20) | `analyst` |
@@ -87,15 +88,48 @@ The plan rests on four live claims. Each was independently re-checked, not accep
   now narrower than the implemented behaviour — **`tico` should reconcile FR-10's text** at the next
   requirements touch so the document does not read as contradicting the build.
 
+## Plan gate — Pass 1 (`analyst`, 2026-08-10): **needs changes**
+
+2 blockers, 6 majors, 9 minors. Both blockers independently re-verified by `teco`:
+
+- **B-1** — Landing 2 is not buildable for the `guard` kind; the plan's §6.1 "every resolution
+  point carries the workspace" is false, and the naive fix lands inside the SHA-locked
+  `_drive_loop`. Routed to **both** owners: plan-side to `architect`, and the `-graph.md` §2.6
+  read-placement half to `graph-dba`.
+- **B-2** — the FR-10 taxonomy has two holes. Verified in a live interpreter:
+  `urllib.error.HTTPError` **is** a subclass of `URLError` (so the plan's catch order makes the
+  HTTP-status branch dead code), and a `urlopen` read timeout raises a bare `TimeoutError` whose
+  MRO is `(TimeoutError, OSError, …)` — **not** a `URLError`, so it escapes classification and
+  FR-18's fallback would never fire on a hung endpoint. Routed to `architect`.
+
+### A miss in this coordination's own scan
+
+The gate found `server/.env.example:19-21,30-31` sets all four env vars FR-20 replaces — a site
+**this document's blast-radius scan also missed**. Root cause: the original sweep was
+`grep --include='*.sh' --include='*.md' --include='*.py' --include='*.yml' --include='*.json'`,
+which structurally cannot match an extensionless dotfile. Any future env-var cutover scan must
+not be extension-filtered. `architect` was told to re-derive §2.9 with a method that catches
+dotfiles.
+
+### Referred items, ruled
+
+| Item | Ruling |
+|---|---|
+| `StepRun.model` vs `resolvedModel` | **`resolvedModel`** (+ `modelSource`) — `graph-dba` carried it; the plan had delegated the shape |
+| `{kind\|"*"}` wildcard / FR-16 | **Per-kind is faithful**, not a narrowing — "everything" is a scope quantifier, not an arity claim. **Does not go to the stakeholder.** `graph-dba`'s "contradicts FR-19 by construction" reasoning was overstated and is being corrected |
+| `/v1` normalization | Right in principle, insufficient as specified (3 gaps); also affects `/embeddings`, where `error` is a *string* not an *object* |
+| FR-4 vs surviving `llm=` injection | **Faithful** — DI reads no config; close the hole with an enforcement test |
+| §6.1 landing boundary | Right on 5 of 6 seams; the sixth is B-1, and the *inbound* override carrier is unsolved by both documents |
+
 ## Open questions still outstanding
 
-- **The `{kind|"*"}` wildcard for the workspace override (FR-16).** FR-16's literal text says a
-  workspace may override "everything running in it"; `graph-dba` rejected a true blanket because it
-  would force the embedding worker onto a chat model and break FR-19 by construction, and proceeded
-  with per-kind overrides. Routed to the `analyst` gate to rule on whether per-kind is a faithful
-  reading or a silent narrowing. Stakeholder call only if `analyst` says it is a narrowing.
-- **`StepRun.model` vs `StepRun.resolvedModel`** — the two design documents diverge on this one
-  name. At the `analyst` gate to settle before an implementer sees it.
+*Both former open questions were closed by the Pass 1 gate — see the rulings table above. Neither
+needs a stakeholder decision.*
+
+- **Still unsolved by both documents:** the *inbound* workspace-override carrier — how a
+  workspace-level setting physically reaches the resolver at each of the four consumers. Flagged by
+  the gate under §6.1; expected to be closed by the two v2 revisions in flight. If v2 does not close
+  it, it becomes a design unit of its own before Landing 2.
 
 ## Log
 
