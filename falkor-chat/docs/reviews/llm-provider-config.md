@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 2
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 3
 
 ## 1. Scope & verdict
 
@@ -869,3 +869,128 @@ the B-1 fix in particular is a better design than what I asked for (it discovere
 already threaded through to `evaluate_guard` today, turning what could have been a signature
 change into a pure additive stamp). This is a small, well-scoped gap standing between the design
 and Landing-2 implementation readiness, not a sign of a design in trouble.
+
+---
+
+## Pass 3 — 2026-08-10, narrow re-gate of Version 3 (the two Pass-2 items only)
+
+Scope, per the coordinator's instruction: verify only P2-B's adoption and the paired `-graph.md`
+§6.5 minor. Everything settled in Pass 1 or Pass 2 (B-1, B-2, m-1 through m-9, A-1 through A-5,
+the `compose.yaml`/`.env.example` spot-checks) was **not** re-opened, re-read for its own sake, or
+re-verified — this section only touches what changed between v2 and v3.
+
+**What I did:** read the plan's new §12 (Pass-2 disposition) and every `modelFallback`/
+`model_fallback`/`ChatResult.fallback` occurrence in `docs/plans/llm-provider-config.md` v3 (25
+hits, matching the coordinator's independent grep count) in its surrounding context — not just the
+matched lines — cross-checked field-for-field against `-graph.md`'s (unchanged, per its own v3
+note) §1.1/§1.3/§1.4/§1.5/§1.6/§1.7/§6.2; traced every `resolvedModel`/`modelSource` co-occurrence
+in the plan to check none was left a two-field update; and read `-graph.md`'s v3 revision note,
+§2.1 and §6.5 in full, plus a document-wide grep for the withdrawn phrase
+(`breaks FR-19 by construction`, `direct contradiction`, and the new corrected phrasing) to locate
+every remaining occurrence and classify each as live or historical. No code changed since Pass 2
+(`git status` on `server/`, `scripts/`, `compose.yaml`, `README.md` — clean), so no re-execution
+against the tree was needed for this narrow scope; `./scripts/verify_workflows.sh acme` re-run
+regardless, before finishing → `OK — 2 defs in sync`. No document edited outside this review; no
+git command that mutates the tree.
+
+### 1. P2-B — substantively verified, adopted correctly. Not fully closed: one small internal
+wording inconsistency, Landing-2-only, not a blocker.
+
+**The carrier chain matches `-graph.md` §1.3/§6.2 field for field**, checked structurally, not by
+grep count:
+
+| Field | `-graph.md` §1.3/§1.4/§1.5/§6.2 spec | Plan v3 | Match |
+|---|---|---|---|
+| Graph property | `StepRun.modelFallback`, boolean, nullable, absent by default | Same (§2.6, §8.1) | ✔ |
+| Repository kwarg | `record_step_and_advance(..., model_fallback=...)` | Same (§5's `repository.py` row, §7 L2-2) | ✔ |
+| `StepResult` carrier | `modelFallback: bool \| None = None` (§1.5) | Same, verbatim type (§7 L2-2) | ✔ |
+| Computation rule | `modelFallback = (index of the successful entry > 0)`, computed by the resolver at the moment a call succeeds (§6.2 req. 4) | `ChatResult.fallback = (index of the successful element > 0)`, set by `FallbackClient` "at the same point it already resolves `ChatResult.model`" (§7 L2-1) — identical formula, identical computation site | ✔ |
+| Orthogonality to `modelSource` | *"orthogonal to `modelSource`... `('workspace', True)` is a valid, meaningful combination, not a contradiction"* (§6.2 req. 4) | Same sentence structure, same example pair, same conclusion (§7 L2-2) | ✔ — reasoning reproduced, not just the conclusion |
+| Read surface | Both `-graph.md` §1.7 queries gain a `modelFallback`/`fellBack` column | `GET /workflow-runs/{id}/step-runs` gains the field "matching `-graph.md` §1.7's read projection" (§7 L2-2) | ✔ |
+| m-6 multi-call rule | "last answering model wins," implicitly all fields since they're one write | Explicit: *"`resolvedModel`, `modelSource` **and `modelFallback`** are overwritten together on each iteration and read once after the loop exits"* (§7 L2-2) | ✔ — the plan is more explicit here than the source it's matching |
+
+**Checked for the coordinator's specific worry — a spot where only the original two fields got
+updated:** grepped every `resolvedModel`/`modelSource` co-occurrence in the plan (9 locations).
+Every one that describes a schema/carrier/test surface (§2.6, §5's `repository.py` row, §7 L2-2,
+§8.1, §10's Landing-2 behaviour list, §10's AC-9 row, §11.1's disposition table) includes
+`modelFallback` alongside them. The two that don't (line 22, the *historical* v1→v2 changelog
+predating `modelFallback`'s existence; the §9.3 "Settled, not reopened" one-liner, which names
+*adjudications* — A-1, A-2, A-4, M-2 — by ID, not a field inventory) are correctly scoped to not
+need it. **No missed spot.**
+
+**One real, minor-severity finding: an internal wording inconsistency about the non-fallback
+sentinel value, present in the plan alone (not a cross-document gap this time).**
+
+`-graph.md` §6.2 requirement 4 is unambiguous: *"Leave it unset (`None`) rather than `False` on
+the non-fallback path... the property's presence is the signal an operator scans for, not its
+value."* Two places in the plan hedge this into ambiguity:
+
+- §5's `llm.py` row: *"set `True` iff the answering chain element's index is `> 0`, `None`/`False`
+  on a length-1 chain."*
+- §7 L2-1's done-condition: *"a chain of one (no fallback) reports `ChatResult.fallback` as
+  `None`/`False`."*
+
+Read literally, `index > 0` for a length-1 chain (`index == 0`) computes to the Python value
+`False`, not `None` — so an implementer who codes the formula exactly as stated in these two spots
+would set `ChatResult.fallback = False` (a real boolean) rather than leave it `None`, and if that
+`False` flows unchanged through `StepResult.modelFallback` into
+`record_step_and_advance(model_fallback=False)`, the Cypher `CREATE` would **persist**
+`modelFallback: false` on every LLM step rather than omit the property — which contradicts both
+`-graph.md`'s binding requirement and, notably, **the plan's own §7 L2-2 done-condition two rows
+later**, which gets it right: *"a non-fallback run's `StepRun.modelFallback` is absent (not
+`false`)."* So this is an internal inconsistency within v3 itself: the `ChatResult`-layer wording
+(§5, L2-1) is looser than the `StepRun`-layer wording (L2-2) it's supposed to feed.
+
+**Severity: minor, not a blocker, and not a Landing-1 concern at all** — `modelFallback` is
+entirely Landing-2 scope (L2-1/L2-2), the RAM estimate in `-graph.md` §5 already assumes the
+property is written only on the rare fallback rows (so a literal `False`-on-every-row
+implementation would also be the kind of thing `qa-engineer`'s Landing-2 test plan or a first
+`GRAPH.MEMORY USAGE` check would catch quickly), and the correct rule is already stated precisely
+in the same document at L2-2. *Routed to: `architect`, one-line fix — align §5's `llm.py` row and
+L2-1's done-condition with L2-2's "absent (not `false`)" wording; e.g. `fallback = True if idx > 0
+else None`, not a bare `idx > 0`.* Worth fixing before L2-1 is implemented; does not need a v4 gate
+on its own — flag it to whoever picks up L2-1.
+
+### 2. `-graph.md` §6.5's stale restatement — CLOSED, confirmed by a full-document search, not a
+spot-check of the cited lines alone
+
+Grepped `docs/plans/llm-provider-config-graph.md` end to end for `breaks FR-19 by construction`,
+`direct contradiction`, and the new corrected phrasing (`permanently-unembeddable`/`permanently
+unembeddable`/`blanket override`). Three surviving hits of the withdrawn phrase, all legitimate:
+
+- The v2 revision note (line 48) — quoting what v1 said, in a changelog, correctly past-tense.
+- The v3 revision note (lines 73-74) — quoting the same withdrawn sentence to describe *what §6.5
+  used to say before this revision fixed it*, i.e. the revision note documenting its own diff.
+- §2.1 itself (line 404) — the original correction, structurally quoted-then-withdrawn: *"v1
+  justified it by claiming a blanket override 'breaks FR-19 by construction'... **That was
+  overstated, and I withdraw it.**"* — unchanged since Pass 2, still correctly self-contained.
+
+**§6.5's own bullet was substantively rewritten, not merely relabeled or pointed elsewhere.**
+Read in full (`-graph.md:943-953`): it no longer asserts the withdrawn claim at all — it now states
+the *actual*, narrower argument (a blanket override makes an incoherent configuration
+*expressible*, whose only reachable outcome is a workspace that can never embed again; nothing
+"breaks," nothing "contradicts") inline, in its own words, with an explicit editorial marker —
+*"(Corrected in v3 — this passage still carried the overstated framing §2.1 withdrew in v2; see
+§2.1 for the full argument.)"* — and a forward reference to §2.1 for the complete reasoning. This
+is the right way to fix a stale cross-reference: restate the corrected argument locally (so a
+reader who lands on §6.5 first, which is a plausible entry point — it's titled "answers to that
+plan's §8" — gets the right reasoning immediately) rather than just deleting the sentence or
+silently pointing elsewhere. **Confirmed closed. No further action.**
+
+### Pass 3 verdict: **approve with suggestions**
+
+No blocker survives. P2-B is substantively, correctly adopted — the carrier chain matches
+`-graph.md`'s specification field for field, the orthogonality reasoning is reproduced faithfully
+rather than just cited, and the m-6 multi-call rule was correctly extended to cover all three
+fields together (checked, not assumed — no spot was found where only the original two fields got
+updated). The paired minor (`-graph.md` §6.5) is fully closed, verified by a document-wide search
+rather than a check of only the cited lines. One new, genuinely minor finding survives: an
+internal wording inconsistency in the plan alone (§5/L2-1 vs. L2-2) about whether the non-fallback
+`ChatResult.fallback` sentinel is `None` or may be `False` — real, checkable, worth a one-line fix
+before `L2-1` is implemented, but Landing-2-scoped, non-blocking, and already correctly stated
+elsewhere in the same document.
+
+**Landing 1 is clear to dispatch on this gate.** `modelFallback` (P2-B and its one residual nit)
+is entirely inside Landing 2 (`L2-1`/`L2-2`); nothing in this pass touches any Landing-1 unit,
+file, or acceptance criterion. Carry the one-line `None`-not-`False` fix as a note for whoever
+picks up `L2-1`, not as a gate on Landing 1's start.
