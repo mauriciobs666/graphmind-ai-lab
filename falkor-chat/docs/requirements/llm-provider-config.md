@@ -77,6 +77,13 @@ Two drivers, in the stakeholder's order of pain:
   - the **embedding** consumer
 - **FR-6** — When a consumer names no model, it resolves to the **default for its kind** (an agent
   default, a guard default, an embedding default, …), declared in the same configuration.
+- **FR-7** — A consumer may name **either** a concrete model (`"<provider>/<model-id>"`) **or** a
+  **role** — a stable name declared in the configuration and mapped there to a concrete model.
+  Roles exist so that a model can be swapped by editing the shared configuration, without
+  republishing a workflow definition (workflow defs are topology-immutable — K-034).
+- **FR-8** — Given roles and concrete names coexist, it must be possible to determine **which
+  concrete model actually ran** for any given execution, without re-deriving it by hand from the
+  configuration.
 
 ## Out of scope
 
@@ -112,3 +119,8 @@ everywhere"* (one uniform seam, no consumer bypassing it).
 2026-08-10 — What happens when a consumer names no model? → **Default per kind** (an agent
 default, a guard default, an embedding default), not a single global default and not a hard
 failure.
+
+2026-08-10 — What should a per-step model swap cost? Concrete model in the def (republish per
+swap) vs. a role mapped in the shared config (config edit only)? → **Allow both.** A step may name
+a concrete model or a role. Accepted consequence: two ways to express one thing, hence FR-8
+(the resolved model must be discoverable per execution).
