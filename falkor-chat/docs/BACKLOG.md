@@ -60,6 +60,7 @@
 | **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 | **M3.5 — Web API Coverage** ✅ | **Reached (2026-07-29)** — FR-1..FR-10/AC-1..AC-6 wired into `web/` (defs viewer, inline run cue + detail panel, structured-input resume, participants list, ready-to-demo banner), **QA-accepted**: K-036 verdict **PASS with parked/non-blocking limitations**, zero blocking defects (`docs/test-reports/web-api-coverage-report.md`) | **K-036 ✅** (5 waves, 2026-07-28→2026-07-29) ⇒ **M3.5 ✅**. K-037 (`TRIGGER_DEF_KEY` graft bug + banner cosmetic) and K-038 (`refreshRunPanel` overlapping-poll-tick race) are follow-ups, **not** M3.5-green gates. |
+| **M4 — LLM provider & model configuration** 🟡 | Providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the `FALKORCHAT_LLM_*`/`FALKORCHAT_EMBEDDING_BASE_URL`/`_MODEL` env vars **replaced** — QA-accepted with AC-2/AC-3 recorded model-gated (no cloud API key available) | **K-042** 🟡 (two landings — L1: FR-1..FR-6/FR-11..FR-15/FR-20; L2: FR-7..FR-10/FR-16..FR-19). Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
 > narrow §12 roadmap DoD: embeddings + vector index + hybrid retrieval + agent participant +
@@ -1286,6 +1287,76 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   suite counts (691 → 696 passed, 1 deselected unchanged); `./scripts/test_queries.sh` unaffected
   (282/282, no Cypher touched by this fix).
 - **Risks/RAM:** none — no schema/index/query change; pure application-layer wiring.
+
+### — Milestone M4 (LLM provider & model configuration) — 🟡 IN PROGRESS —
+
+### K-042 — LLM provider & model configuration: two config files, one internal resolution seam, per-consumer model choice (🟡 in-progress — requirements `docs/requirements/llm-provider-config.md`, plan `docs/plans/llm-provider-config.md`, 2026-08-10)
+
+> **Why it exists.** Every LLM consumer in the system is handed **the same** model. There is no way
+> to say "this workflow step uses the big model, the guard judge uses the cheap fast one" — the
+> stakeholder's larger pain — and the same provider/endpoint settings are maintained twice, once in
+> `opencode.json` and once in falkor-chat's environment variables. Today's three separate
+> `LMStudioLLM()` instances plus one `LMStudioEmbedder()` are all constructed in
+> `server/falkorchat/app.py::_build_default_app` (`:245-303`), each reading module constants from
+> `config.py`. FR-4 — *"create an internal abstraction and use it everywhere"* — is aimed squarely
+> at that.
+- **Scope (two landings, stakeholder-decided).**
+  **Landing 1** — FR-1..FR-6, FR-11..FR-15, FR-20: the two files (a **pristine, unmodified**
+  OpenCode `opencode.json` located by `FALKORCHAT_OPENCODE_CONFIG`, plus falkor-chat's own overlay
+  at `FALKORCHAT_MODEL_CONFIG`), the single `ModelGateway` seam all four consumers resolve through,
+  per-kind defaults (`agent`/`step`/`guard`/`embedding`), per-model settings incl. request timeout,
+  `{env:}`/`{file:}` secret substitution, and the **replacement** (not deprecation) of
+  `FALKORCHAT_LLM_BASE_URL`/`_MODEL` and `FALKORCHAT_EMBEDDING_BASE_URL`/`_MODEL`. Shippable and
+  demonstrable alone. **Landing 2** — FR-7..FR-10, FR-16..FR-19: roles, ordered fallback chains,
+  workspace override + the fixed precedence (workspace → the step/agent/guard's own choice →
+  per-kind default, workspace is a **hard cap**), the resolved concrete model recorded on the run's
+  execution trace, publish-time rejection of an unresolvable model/role, and the embedding-dimension
+  guard.
+- **Two live-verified facts the design turns on** (2026-08-10, plan §2.3/§2.6):
+  1. **LM Studio serves the OpenAI-compatible API only under `/v1`, and a missing prefix is not an
+     HTTP error** — `POST http://localhost:1234/chat/completions` answers **HTTP 200** with
+     `{"error":"Unexpected endpoint or method…"}`, so today's `resp["choices"][0]` raises a bare
+     `KeyError: 'choices'`. `GET /models` answers 200 at **both** paths, so no probe can
+     auto-detect the prefix. The stakeholder's real shared file declares
+     `baseURL: http://192.168.0.69:1234` (**no** `/v1`) while the repo's severino sample declares
+     `http://localhost:1234/v1` — both must be accepted unmodified (FR-1/AC-1), hence the declared
+     normalization rule + a per-provider overlay override as the escape hatch.
+  2. **`TraceEvent`s are debug-only** — `executor._drive_loop:388` selects a `NullTracer` whenever
+     `run["trace"]` is false, so an ordinary run writes zero trace events. FR-8's resolved model
+     must therefore be a **durable `StepRun` property**, written by the existing atomic
+     `record_step_and_advance` — a `TraceEvent`-only design would make AC-4/AC-6/AC-9/AC-10 hold
+     for debug runs only.
+- **Gated ACs (stakeholder-accepted).** **No cloud API key is available.** AC-2 (`{env:}`
+  substitution against a real hosted provider) and AC-3 (three provider kinds end-to-end) are
+  **deferred / model-gated** — verified structurally, recorded as such by `qa-engineer`, exactly as
+  K-025 handled its gated ACs. The design supports them fully; only the end-to-end proof waits.
+- **Declared non-goal.** A **native Anthropic Messages client** (`/v1/messages`, `x-api-key`) is
+  *not* built: `ResolvedModel.protocol` names the seam and an unsupported protocol fails loudly at
+  startup rather than sending a wrong-shaped payload. Anthropic is reachable in this build through
+  its documented OpenAI-SDK-compatibility base URL. File a follow-up if native support is wanted.
+- **Owner chain:** `tico` (requirements ✅) → `architect` (plan) + `graph-dba`
+  (`docs/plans/llm-provider-config-graph.md`, FR-8/FR-16/FR-17/FR-19 mechanics) → `analyst` (plan
+  gate) → implementers per landing → `devops` (env-var cutover, `compose.yaml` bind-mount +
+  `host.docker.internal`, secret hygiene) → `analyst` re-gate → `qa-engineer`
+  (`docs/test-plans/llm-provider-config.md` + `-report.md`). Coordinated by `teco`
+  (`docs/plans/llm-provider-config-coordination.md`).
+- **Risks/RAM (rule 6):** Landing 1 is **application-layer only** — no node type, index, property,
+  Cypher or vector dimension, so `./scripts/test_queries.sh` is untouched. Landing 2 adds a
+  `StepRun` property plus two reads ⇒ `QUERIES.md` and the query suite **must** rise with
+  enumerated assertions (`graph-dba` gate). Operational risk carried into Landing 1: today there is
+  **no** HTTP timeout anywhere, so introducing one (default 180 s, per-model overridable) is a
+  behaviour change for slow first-load local models.
+- **Test strategy:** everything but the live-marked tests stays **offline** — the four consumers are
+  covered by asserting *which URL and which model id* an injected fake transport received, so
+  "step A and step B used different models" needs no live model and the default `pytest` run stays
+  network-free (DESIGN §14.7). New `server/tests/test_transport.py` + `test_models.py`; the 37
+  existing `llm=` and 23 `guard_judge=` injection sites are designed to need **zero** edits
+  (`StaticModelGateway` sugar in `__init__`; the guard's `model=` kwarg is passed only when the
+  guard declares one). Live `pytest -m live` adds one run whose two steps genuinely hit two
+  different LM Studio models. Full ordered behaviour list + AC→landing map: plan §10.
+- **Done-condition:** both landings delivered and `analyst`-gated, `qa-engineer` acceptance PASS
+  (AC-2/AC-3 recorded model-gated), DESIGN §1.3/§14 and the run instructions updated in the same
+  changes ⇒ **M4 ✅**.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
