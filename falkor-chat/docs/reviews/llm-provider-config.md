@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4)
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 2
 
 ## 1. Scope & verdict
 
@@ -570,3 +570,302 @@ Worth protecting through the revision, because a lot of it is unusually good:
    observation: substitution is scoped to the `provider.*` / `providers.*` subtrees only, which
    covers every place a credential can appear today. Native Anthropic Messages API remains a
    declared non-goal.
+
+---
+
+## Pass 2 — 2026-08-10, re-gate of Version 2
+
+Both documents were re-read **in full**, not diffed against Pass-1 memory, per the coordinator's
+instruction. Every load-bearing claim in both revision notes was independently re-verified against
+the live tree, the running interpreter, and (where the constraints allow) the shared FalkorDB
+instance — not accepted on report. What I ran or read for this pass:
+
+- Re-read `docs/plans/llm-provider-config.md` (Version 2, 837 lines) and
+  `docs/plans/llm-provider-config-graph.md` (Version 2, 1081 lines) end to end.
+- Re-read `server/falkorchat/executor.py:296-436,769-812` and `guards.py:150-233` directly, to
+  trace `run()`/`resume()` → `_drive` → `_drive_loop` → `_select_transition` → `evaluate_guard`
+  by hand rather than trust §4.10's table.
+- Recomputed the `_drive_loop` SHA lock with DESIGN §6.2's command → **`71055f756280`**, unchanged
+  from Pass 1 — still live on this tree (`git status` confirms zero source changes since Pass 1).
+- Re-ran the `urllib` exception-ladder probe (`HTTPError`/`URLError`/`TimeoutError`/`ValueError`
+  dispatched through the exact ordered `except` clauses §4.9 now specifies).
+- Re-derived the plan's own §11.2 rebuttal of my Pass-1 M-6 (`urlopen` on a schemeless URL) —
+  reproduced `URLError`, not the `ValueError` I originally claimed.
+- Re-ran `grep -rn "Chunk" server/falkorchat/*.py` (m-4) and
+  `grep -n "FALKORCHAT_LLM_\|FALKORCHAT_EMBEDDING_BASE_URL\|FALKORCHAT_EMBEDDING_MODEL" compose.yaml`
+  (item 7a) — both fresh, both against the unchanged tree.
+- Grepped both documents for naming stragglers (`StepRun.model`, `.label`, bare `model=`) and for
+  every mention of `modelFallback`/`model_fallback`/`ChatResult`/`StepResult`.
+- Re-ran `./scripts/verify_workflows.sh acme` before finishing → `OK — 2 defs in sync`. No
+  `./scripts/test_queries.sh`. No file written outside `docs/reviews/`. No git command that
+  mutates the tree.
+
+**LM Studio was not running during this pass** (`curl` → connection refused, port 1234 has no
+listener). I could not literally re-execute the `/v1`-prefix and string-vs-object `error` probes
+live a second time; I rely on Pass 1's captured evidence (which both v2 documents also cite
+verbatim, consistently with what I recorded) rather than re-asserting it as freshly observed. Flag
+this rather than silently reuse it.
+
+### Pass 2 verdict: **needs changes** — one new blocker, everything else from Pass 1 closes clean
+
+Six of the seven items I was asked to adjudicate close cleanly and correctly. One does not: **the
+two v2 documents now disagree on the `StepRun` schema itself** — a real, checkable regression
+introduced *by* the revision, not a carryover from Pass 1. Separately, one stale passage inside
+`-graph.md` still asserts the overstated reasoning its own §2.1 just withdrew. Both are new,
+both are concrete, both are cheap to close.
+
+#### 1. B-1 — CLOSED, verified by direct trace, not by report
+
+The plan's §4.10 claim is **exactly right**, and in one respect *better* than it needs to claim
+credit for. Traced by hand, not accepted from the table:
+
+- `run()` (`executor.py:300-306`) and `resume()` (`:309-331`) each build `run` fresh from
+  `self._repo.get_run(...)` and both call `self._drive(ctx, run)` — confirmed the **single**
+  convergence point claim.
+- `_drive` (`:339`) runs `run_id = run["runId"]`; `run_ctx = _load_json_obj(run["ctx"])`; `try:
+  return self._drive_loop(ctx, run)`. The proposed `run["ws"] = ctx.ws` stamp lands in this body,
+  **before** the `try:` — entirely outside `_drive_loop`, which the recomputed SHA lock
+  (`71055f756280`, unchanged) confirms spans only `executor.py:375-435` (`awk` bounded on the
+  `def _drive_loop` / `# ── seams` markers, same command as Pass 1).
+- `_drive_loop` (`:397-399`) forwards the **same** `run` object to `_select_transition` — no new
+  parameter, no copy.
+- `_select_transition` (`:805-808`) already calls
+  `evaluate_guard(guard, ctx=run_ctx, run=run, step_output=result.output, thread=result.thread,
+  judge=self._guard_judge)` — **`run=run` is passed today**, on the unmodified v1 code. Better
+  than the plan states: this isn't a change to land, it already exists.
+- `guards.evaluate_guard`'s signature (`guards.py:185`) already **declares** a `run:
+  dict[str, Any]` parameter — and, checked by grepping the function body, **never reads it**. It
+  is a currently-dead, already-plumbed-through parameter. The `accepts_run` mechanism the plan
+  proposes is therefore not new plumbing; it's finally using plumbing that's already there.
+
+Net: **zero edits inside the SHA-locked body**, confirmed by direct inspection of the boundary,
+not by trusting the plan's own table. `-graph.md` §2.6's corrected placement (`_drive`, `:339`,
+outside the lock, `run["ws"]`/`run["modelOverrides"]`) matches the plan's §4.10 exactly — the two
+documents agree on this mechanism byte-for-byte. **B-1 is resolved.**
+
+#### 2. B-2 — CLOSED, both holes empirically closed by the new ladder
+
+Re-ran the exact ordering (`HTTPError` → `URLError` → `(TimeoutError, OSError)` → `ValueError`)
+against one instance of each exception type:
+
+```
+HTTPError instance -> HTTPError-branch
+URLError instance  -> URLError-branch
+bare TimeoutError  -> Timeout/OSError-branch
+bare ValueError    -> ValueError-branch
+```
+
+Both Pass-1 holes are closed: `HTTPError` is no longer dead code (it's caught before the parent
+`URLError` clause reaches it), and a bare `TimeoutError` — which is *not* a `URLError` subclass,
+independently reconfirmed — has its own explicit rung and no longer escapes unclassified. The
+body-level `error`-as-string-vs-object renderer (m-1, `msg = err.get("message", str(err)) if
+isinstance(err, Mapping) else str(err)`) is specified correctly in §4.9 rung 5 and matches the
+Pass-1 evidence I couldn't re-probe live this pass (see the LM-Studio-down note above). **B-2 is
+resolved.**
+
+One correction to my own Pass-1 finding, which the plan caught and I confirm: M-6's *remedy* (load-
+time scheme/netloc validation) was right, but the *failure mode* I cited was wrong — a schemeless
+`baseURL` (`"192.168.0.69:1234"`, `"localhost:1234/v1"`) raises **`URLError: unknown url type`**,
+not `ValueError`, when passed to `urlopen`. Reproduced fresh this pass:
+
+```
+urlopen('192.168.0.69:1234/v1/chat/completions') -> URLError: <urlopen error unknown url type: 192.168.0.69>
+urlopen('localhost:1234/v1/chat/completions')    -> URLError: <urlopen error unknown url type: localhost>
+```
+
+So it would in fact have been caught by rung 2, with a body-free but provider/URL-bearing message
+— less bad than I originally claimed, though still worse than catching it at load time with the
+`urlparse`-based check the plan adopted anyway. The plan's §11.2 rebuttal is accurate; my original
+citation was wrong. Correctly logged as a partial rebuttal, not silently absorbed as a full
+concession — this is the right way to handle a reviewer error and I have nothing to add to it.
+
+#### 3. m-4 / m-5 / m-6 — two right, one **incompletely landed**
+
+**m-4 (Chunk gating) — sound design, adopted correctly.** `grep -rn "Chunk" server/falkorchat/*.py`
+re-run fresh: still exactly one hit, a comment (`config.py:32`). Gating layers 2/3 (the write-time
+checks) on the label actually being written, while keeping both labels in layer 1 (the startup
+assertion, an operator warning) is the right shape — it doesn't block a real write over an
+unrelated, unused index, and the forward-compatibility note (the introspection query is already
+`$label`-parameterised, so a future `Chunk` writer inherits layers 2/3 for free) is a genuine
+design improvement over what I asked for, not just a restatement. No note beyond confirming it.
+
+**m-6 (multi-call "last wins") — sound, and consistently landed in both documents.** `-graph.md`
+§1.6's addendum and the plan's L2-2 both state the identical rule ("last answering model wins"),
+with the graph note additionally flagging the implementation hazard correctly (a "set once on
+first resolution" implementation would silently record the wrong model — the loop must overwrite
+pending values each iteration and read them once after the loop exits). This is good design
+craftsmanship, not just a restated finding.
+
+**m-5 (`modelFallback`) — the graph note's design is sound; the plan never adopted it.** This is
+the substantive new finding of this pass — see §P2-B below.
+
+#### 4. A-2's overstated framing — softened in the two places that matter, **but one stale
+restatement survives inside the same document**
+
+`-graph.md` §2.1 and §7-Q1 correctly withdraw the overstated *"breaks FR-19 by
+construction... the two requirements would be in direct contradiction"* claim, replace it with the
+narrower, stronger argument (a blanket override makes an *incoherent configuration expressible*,
+whose only reachable outcome is a permanently-dead embedding path — not a requirements
+contradiction), and withdraw the stakeholder escalation. The plan's own §8 restatement (*"the
+wildcard is correctly rejected — adjudication A-2"*) never repeats the overstated language at all.
+
+**But `-graph.md` §6.5 (its own §8.2 answer, `-graph.md:927-934`) was not touched by the revision
+and still reads:**
+
+> *"A `"*"` blanket that includes the embedding kind forces the embedding worker onto a chat model
+> and **breaks FR-19 by construction** (§2.1) — the two requirements would be in direct
+> contradiction."*
+
+This is the exact sentence §2.1 just withdrew, verbatim, **citing §2.1 as though it still supports
+the claim it now contradicts**. It's a real, checkable internal inconsistency — a reader who
+starts at §6.5 (a plausible entry point; it's the "answers to the other document's §8" section)
+gets the overstated, withdrawn reasoning and a citation pointing at the correction that
+contradicts it. *Routed to: `graph-dba` — a one-paragraph fix, replace §6.5's sentence with §2.1's
+corrected argument or a forward reference to it.* Minor severity (the *conclusion* — per-kind, not
+blanket — is right and consistent everywhere it's acted on; only the stated *reason* in one
+passage is stale), but real, and it's precisely the kind of thing "don't trust the revision note's
+own completeness claim" is asking me to catch.
+
+#### 5. Naming (A-1 + `modelFallback`) — consistent **except** the field the graph note added
+
+`resolvedModel` / `resolved_model=` / `modelSource` are used consistently throughout both
+documents with no `StepRun.model` stragglers as *live* recommendations — grepped both files for
+`StepRun\.[a-zA-Z]+`; the only `StepRun.model` hit is inside `-graph.md`'s §1.3 "Amendment
+requested" block, which is a historical quotation of what v1 the plan needed to change, correctly
+preserved for traceability, not a live claim. `.label` → `.ref` is likewise clean — the only
+`.label` hits are the changelog line and the disposition-table row recording the rename.
+
+**`modelFallback` is not clean — see §P2-B below.** It's a genuine third naming/schema state, not
+a stragglers-grep miss.
+
+#### 6. Inbound workspace-override carrier — CLOSED, and consistent between documents
+
+Both v2 documents specify the identical mechanism: `run["ws"] = ctx.ws` and
+`run["modelOverrides"] = self._repo.read_model_overrides(ctx.ws)`, stamped in `_drive`
+(`executor.py:339`) before `_drive_loop` runs, explicitly rejecting `self` as a carrier (correctly
+— the executor is a process-wide singleton driven from the anyio threadpool and from `mcp.py`'s
+daemon threads, verified unchanged since Pass 1). The plan's L2-3 additionally covers the two
+run-less consumers (responder, embedding worker: "read once per drive / **per responder call**")
+and its file list includes `responder.py`, `embedding.py`, `tools.py` — less rigorously
+line-cited than the guard path (understandably: those paths don't cross the SHA lock and already
+carry `ctx.ws` directly), but not missing. **This is now a solved design problem**, not an open
+one — it should not be reopened as its own unit before Landing 2 starts.
+
+#### 7. Two independent spot-checks
+
+**(a) `compose.yaml` sets none of the four FR-20 vars — confirmed, fresh.**
+`grep -n "FALKORCHAT_LLM_\|FALKORCHAT_EMBEDDING_BASE_URL\|FALKORCHAT_EMBEDDING_MODEL"
+compose.yaml` → no matches; `services.server.environment` (`compose.yaml:35-39`) sets only
+`FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORCHAT_WS_ID`, `FALKORCHAT_USER_ID`. The plan is right, the
+coordination record's blast-radius list is wrong, and the plan's §11.2 correctly declines to
+"fix" `compose.yaml` itself and instead relays the correction to `teco` (the right call — this
+plan doesn't own the coordination record).
+
+**(b) `server/.env.example`'s fold-in into FR-20 is genuinely complete, not just mentioned.**
+Checked three independent places, not just the changelog line: the §2.9 blast-radius table names
+the exact lines (`server/.env.example:20,21,30,31`) and the fix; §5's file list carries the same
+row; L1-5's "Files" column lists it and its done-condition is a **positive, executable test**
+("copying `.env.example` to `.env`, sourcing it and running uvicorn **starts successfully**"), not
+just "update the file." §10's test-strategy item 14 restates the same positive assertion. This is
+what a complete fold-in looks like — a finding that shows up in the blast-radius table, the file
+list, the unit's done-condition, *and* the test plan, not just the revision note's summary line.
+
+---
+
+### P2-B — New blocker: `-graph.md` v2 adds `StepRun.modelFallback`; the plan v2 never adopted it
+
+**Severity: blocker.** *Owner: `architect` and `graph-dba` jointly (a `teco`-coordinated
+reconciliation, since it's a two-document disagreement, not a one-side error).*
+
+`-graph.md`'s response to my Pass-1 m-5 ("`modelSource` cannot distinguish a role's primary from
+its fallback") was not a documentation note — it's a new, fully-specified **fourth `StepRun`
+scalar property**, threaded through the whole document:
+
+- §1.1's schema block gains `modelFallback` (boolean, nullable, absent by default).
+- §1.3 justifies it explicitly over the documentation-only alternative I suggested, with a
+  specific, well-reasoned point: `modelSource='workspace'` combined with `modelFallback=true` is a
+  *valid, meaningful* combination (a workspace override can itself be a role with its own fallback
+  chain), which a comment on `modelSource` alone cannot express.
+- §1.4's `CREATE` Cypher gains a third `⊕` line, and reuses the verified `NULL`-omits-the-property
+  behavior for it.
+- §1.5 adds `modelFallback: bool | None = None` to the `StepResult` carrier requirement.
+- §1.7's two read-path queries both gain a `modelFallback` / `fellBack` column.
+- §5's RAM table adds a row for it.
+- §6.2 (the resolver-facing interface contract — the seam the plan is supposed to implement
+  against) states a **binding requirement**: *"`modelFallback` is set by comparing the answering
+  call against the chain the winning rung named... `modelFallback = (index of the successful entry
+  > 0)`. It is orthogonal to `modelSource`."*
+
+Grepped the plan (`docs/plans/llm-provider-config.md`) for `modelFallback` and `model_fallback`:
+**zero hits, in either casing, anywhere in the document.** Concretely, the plan's own artifacts
+that would need to carry this field do not:
+
+- §5's file list: `llm.py` row adds only `ChatResult.model: str | None = None` (M-5) — no
+  fallback-boolean sibling field, so the resolver has no return-value channel to communicate "was
+  this a fallback" up from `FallbackClient`/the client that answered.
+- §5's `repository.py` row: `record_step_and_advance` "gains `resolved_model=` / `model_source=`"
+  — no `model_fallback=`.
+- L2-2's own text (`docs/plans/llm-provider-config.md:594`) still describes the **old,
+  documentation-only** answer to m-5 verbatim: *"`modelSource` ... does **not** mark a fallback
+  (m-5); record that limitation next to the field and expose fallback occurrence in logs + debug
+  `TraceEvent`s."* This is the position the graph note's v2 explicitly moved away from (§1.3: *"This
+  is chosen over the review's documentation-only alternative... because AC-9 is a formal acceptance
+  criterion, not a debugging concern, and `TraceEvent`s are debug-only by construction"*) — the
+  plan's L2-2 has not caught up with that argument at all, let alone rebutted it.
+
+This is not a cosmetic gap. `-graph.md`'s own §0 preamble states *"the two documents agree on
+every substantive decision; the single divergence is a property name"* — that sentence was true
+of v1 and is **no longer true of v2**: the revision that was supposed to close the naming gap
+introduced a second, larger one (a whole additional persisted property, with its own write path,
+read path, and resolver-side computation rule, that only one of the two documents knows about). An
+implementer handed both documents today would build `StepRun` with three properties per one
+document's Cypher and two per the other's file list, and `ChatResult`/`StepResult` would have no
+carrier for the third — a partial, silently-incomplete Landing 2, discovered only when someone
+tries to wire `record_step_and_advance(..., model_fallback=...)` against a repository method that
+was never told to accept it.
+
+**Suggested resolution** (either direction closes it — this is a coordination gap, not a design
+defect on either side):
+
+1. **Adopt it** (my recommendation — the design is sound and I said so under item 3 above): add to
+   the plan — `ChatResult.fallback: bool` (or fold it into `.model` as a `(model, fallback)` pair),
+   `StepResult.modelFallback: bool | None = None`, `record_step_and_advance(...,
+   model_fallback=...)` in §5's `repository.py` row, and rewrite L2-2's m-5 sentence to match
+   `-graph.md` §1.3/§6.2 instead of contradicting it. Small, mechanical, and the graph note has
+   already done the harder design work (the "orthogonal to `modelSource`" reasoning, the
+   `index > 0` computation rule).
+2. **Reject it** — if `architect` still prefers the documentation-only answer, say so explicitly
+   in a v3 exchange and have `graph-dba` withdraw §1.1/§1.3/§1.4/§1.5/§1.7/§5/§6.2's `modelFallback`
+   additions accordingly. Silence is the one outcome that isn't acceptable here, because it's what
+   produced this gap.
+
+Either way, this must close **before** Landing 2 implementation starts — L2-2's done-condition
+("Two steps on two models produce two different `StepRun.resolvedModel` values... a two-model node
+records the last") is achievable either way, but AC-9's trace-reading half depends on which
+document an implementer trusts for the schema, and right now the two disagree.
+
+---
+
+### Pass 2 summary
+
+| # | Item | Status |
+|---|---|---|
+| 1 | B-1 (guard carrier / SHA lock) | **Closed** — verified by direct trace of `run()`/`resume()`/`_drive`/`_drive_loop`/`_select_transition`/`evaluate_guard`, not by trusting §4.10's table. Zero edits inside the lock, confirmed against the recomputed hash. |
+| 2 | B-2 (exception ladder) | **Closed** — both holes empirically closed by the re-run ladder probe. One correction to my own Pass-1 evidence (M-6's failure mode is `URLError`, not `ValueError`) accepted, correctly logged by the plan as a partial rebuttal. |
+| 3 | m-4 | **Closed**, well-designed (Chunk gating, re-verified via fresh grep). |
+| 3 | m-5 | **Not closed** — see P2-B (new blocker). Design is sound; adoption is one-sided. |
+| 3 | m-6 | **Closed**, well-designed and consistently landed in both documents. |
+| 4 | A-2 framing | **Mostly closed** — withdrawn where it's acted on (§2.1, §7-Q1, plan §8); one stale restatement survives at `-graph.md` §6.5 (minor, routed to `graph-dba`). |
+| 5 | Naming (A-1) | **Clean** except for the `modelFallback` gap, which is a schema/scope disagreement, not a naming-consistency miss. |
+| 6 | Inbound override carrier | **Closed** — consistent, specific, and correctly rejects `self` as a carrier. |
+| 7a | `compose.yaml` sets none of the four vars | **Confirmed independently**, fresh grep. |
+| 7b | `.env.example` fold-in is complete | **Confirmed independently** — present in the blast-radius table, the file list, the unit's done-condition, and the test plan, not just the revision note. |
+
+**Overall Pass 2 verdict: needs changes.** One blocker (P2-B, `modelFallback` cross-document
+disagreement — routed to `architect` + `graph-dba`, `teco`-coordinated), one minor (the stale
+`-graph.md` §6.5 restatement — routed to `graph-dba`). Everything else from Pass 1 — both
+blockers, all six majors, and eight of nine minors — is genuinely resolved, and resolved well:
+the B-1 fix in particular is a better design than what I asked for (it discovered that `run` is
+already threaded through to `evaluate_guard` today, turning what could have been a signature
+change into a pure additive stamp). This is a small, well-scoped gap standing between the design
+and Landing-2 implementation readiness, not a sign of a design in trouble.
