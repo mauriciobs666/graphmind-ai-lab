@@ -104,28 +104,94 @@ Two drivers, in the stakeholder's order of pain:
   small fast one can be operated under different limits.
 - **FR-15** — Configuration is read at **startup**; a change takes effect on server restart. No
   live reload is required.
+- **FR-16** — A **workspace** may override model choice for everything running in it.
+- **FR-17** — Resolution order is fixed and first-match-wins: **workspace override → the
+  step/agent/guard's own choice → the per-kind default.** The workspace override is a **hard cap**:
+  it beats an explicit per-step choice. FR-8 is what makes this safe — the trace shows the model
+  that actually ran, so an overruled step choice is discoverable rather than invisible.
+- **FR-18** — A role may declare an **ordered fallback chain** of models. When a call fails
+  (endpoint down, error response), the next model in the chain is tried. The execution trace
+  records **which model actually answered** (FR-8), so a silent downgrade is never invisible.
+- **FR-19** — The embedding consumer **refuses to embed, loudly**, when the configured embedding
+  model's vector dimension does not match the target workspace's vector index — rather than
+  writing vectors that are silently accepted and then never retrieved.
+- **FR-20** — The existing `FALKORCHAT_LLM_*` and `FALKORCHAT_EMBEDDING_BASE_URL`/`_MODEL`
+  environment variables are **replaced**, not kept as a fallback. Every place that sets them today
+  (`scripts/start_server.sh`, container/compose definitions, docs) is updated in the same change,
+  so there is one source of truth.
 
 ## Out of scope
 
-*(to be filled as the interview proceeds)*
+- **Editing configuration through a UI or API.** Both files are hand-edited by the administrator.
+- **Live / hot reload.** A change requires a server restart (FR-15).
+- **Modifying the `opencode.json` schema, or contributing anything back to OpenCode.**
+  falkor-chat *reads* that format; it never extends or rewrites the shared file (FR-11).
+- **Interpreting OpenCode's `agent.*` blocks, tool permissions, prompts or modes.** Only the
+  `provider` declarations (and value substitution) are consumed from the shared file.
+- **Cost, token accounting, budgets or rate limiting.**
+- **Streaming responses, prompt caching, or any change to how prompts are built.**
+- **Re-embedding or migrating existing workspaces** when the embedding model changes. FR-19 only
+  refuses a mismatch; it does not repair one.
+- **Per-user model choice.** Overrides go as far as the workspace (FR-16), not to individual users.
+- **Changing which consumers exist.** This feature configures the four existing LLM consumers; it
+  adds no new ones.
 
 ## Acceptance criteria
 
-*(to be filled as the interview proceeds)*
+- **AC-1** — Given an existing `opencode.json` authored for OpenCode, when falkor-chat is pointed
+  at it by environment variable, then it starts and its providers/models are usable — with **no
+  edit to that file**, and OpenCode continues to read it unchanged.
+- **AC-2** — Given a provider whose `apiKey` is written as `{env:SOME_KEY}` (or `{file:...}`),
+  when the server starts with that variable set, then the provider authenticates and **no literal
+  secret appears in either config file**.
+- **AC-3** — Given three providers declared — LM Studio on localhost, a second OpenAI-compatible
+  host, and one cloud provider — then a model from **each** can be exercised end-to-end.
+- **AC-4** — Given a workflow whose step A names one model and step B names another, when the
+  workflow runs, then each step's LLM call goes to **its own** model, and the run trace shows the
+  two different concrete models.
+- **AC-5** — Given an agent, an llm-guard and the embedding worker that name **no** model, when
+  they run, then each uses **its kind's default** — and the three defaults may differ.
+- **AC-6** — Given a step that names the **role** `reasoning`, when the role's mapping in the
+  falkor-chat config file is changed to a different model and the server is restarted, then the
+  next run uses the new model **with no workflow republish**, and the trace shows the new concrete
+  model.
+- **AC-7** — Given a workflow definition whose step names a model or role the configuration cannot
+  resolve, when it is published, then publish **fails** with an error identifying the step and the
+  unresolvable identifier.
+- **AC-8** — Given a model that resolves at publish but fails at call time, when a run reaches it
+  and no fallback chain applies, then the run **suspends with an error naming what failed** — and
+  no other model is used in its place.
+- **AC-9** — Given a role with an ordered fallback chain whose first model's endpoint is
+  unreachable, when a step using that role runs, then the next model in the chain answers and the
+  trace records **that** model as the one that ran.
+- **AC-10** — Given a workspace override, when a step that explicitly names a different model runs
+  in that workspace, then the **workspace's** model is used, and the trace shows it (not the
+  step's declared choice).
+- **AC-11** — Given an embedding model whose dimension differs from the target workspace's vector
+  index, when embedding is attempted, then it **fails with a clear message** and **no vector is
+  written**.
+- **AC-12** — Given a role that declares a request timeout longer than the default, when a slow
+  model is called through it, then the call is allowed the declared time rather than the default.
+- **AC-13** — Given the old `FALKORCHAT_LLM_MODEL` / `FALKORCHAT_LLM_BASE_URL` /
+  `FALKORCHAT_EMBEDDING_BASE_URL` / `FALKORCHAT_EMBEDDING_MODEL` variables are set and no config
+  file is provided, then the server does **not** silently run on them — the replacement is
+  complete and the failure is explicit.
 
 ## Open questions
 
-1. Where does a per-step model choice live from the admin's point of view, and what does changing
-   it cost? (Workflow definitions are topology-immutable — see K-034.)
-2. How soon must a config change take effect — restart, or live?
-3. What should happen when the config file is missing, malformed, or names a model that the
-   provider doesn't actually serve?
-4. Do the existing `FALKORCHAT_LLM_*` / `FALKORCHAT_EMBEDDING_*` env vars keep working, or are
-   they replaced?
-5. Which parts of the OpenCode schema must be honoured, and which may be ignored (e.g. `npm`,
-   `agent.*` blocks, tool permissions)?
-6. Embedding **dimension** is frozen at vector-index creation. What should happen if the config
-   names an embedding model whose dimension doesn't match the workspace's index?
+*(none — pending stakeholder readback confirmation)*
+
+## Notes for design (context, not requirements)
+
+- Today's four consumers are constructed directly in `server/falkorchat/app.py`
+  (`LMStudioLLM()`, `LMStudioEmbedder()`, `_build_llm_judge(LMStudioLLM())`), each reading module
+  constants from `config.py`. FR-4's "one internal mechanism" is aimed squarely at that.
+- Workflow-def steps already carry an opaque `config` dict, and workflow runs already persist an
+  execution trace in the workspace graph — relevant to FR-5 and FR-8.
+- K-034 (topology-immutable defs, silent no-op on property-only edits) is the constraint that
+  makes FR-7's roles worth having.
+- Where the **workspace** override is stored, and how a workspace-level setting reaches the
+  resolver, is a design question (FR-16/FR-17 state only the behaviour and the precedence).
 
 ## Decision log
 
@@ -139,6 +205,23 @@ everywhere"* (one uniform seam, no consumer bypassing it).
 2026-08-10 — What happens when a consumer names no model? → **Default per kind** (an agent
 default, a guard default, an embedding default), not a single global default and not a hard
 failure.
+
+2026-08-10 — Embedding-model dimension mismatch against a workspace's frozen vector index? →
+**Refuse to embed, loudly.** No silent degradation.
+
+2026-08-10 — Do the existing `FALKORCHAT_LLM_*` / `FALKORCHAT_EMBEDDING_*` env vars survive? →
+**Replaced.** Not a fallback, not deprecated-with-warning — scripts/compose/docs are updated in
+the same change.
+
+2026-08-10 — Can a **workspace** override model choice? → **Yes, in scope.**
+
+2026-08-10 — Should a failing model fall back to another? → **Yes — a declared, ordered fallback
+chain per role.** (Distinct from FR-10: an *unresolvable* name still fails loudly; a *failing
+call* may fall through a chain the admin declared.)
+
+2026-08-10 — Workspace override vs. an explicit per-step model: who wins? → **The workspace
+wins** — it is a hard cap. Accepted consequence: an explicit step choice can be overruled; the
+trace (FR-8) is what keeps that visible.
 
 2026-08-10 — Which providers must work on day one? → **All three**: LM Studio local, a second
 OpenAI-compatible host, and hosted cloud (OpenAI/Anthropic). Secret handling is therefore in scope.
