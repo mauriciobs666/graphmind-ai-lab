@@ -83,7 +83,13 @@ Two drivers, in the stakeholder's order of pain:
   republishing a workflow definition (workflow defs are topology-immutable — K-034).
 - **FR-8** — Given roles and concrete names coexist, it must be possible to determine **which
   concrete model actually ran** for any given execution, without re-deriving it by hand from the
-  configuration.
+  configuration. The resolved concrete model is recorded on the **workflow run's execution trace**,
+  so it remains accurate even after the configuration is later changed.
+- **FR-9** — A workflow definition that names a model or role which the configuration cannot
+  resolve is **rejected at publish time**, with an error naming the offending step and identifier.
+- **FR-10** — An unresolvable model encountered at **use time** fails loudly — the run suspends
+  (or the reply fails) with an error stating what could not be resolved. It never silently falls
+  back to another model.
 
 ## Out of scope
 
@@ -119,6 +125,13 @@ everywhere"* (one uniform seam, no consumer bypassing it).
 2026-08-10 — What happens when a consumer names no model? → **Default per kind** (an agent
 default, a guard default, an embedding default), not a single global default and not a hard
 failure.
+
+2026-08-10 — Where do you look to see which concrete model actually ran? → **The workflow run's
+execution trace** (not server logs, not a resolved-config dump).
+
+2026-08-10 — What happens when a model name doesn't resolve? → **Reject at publish, fail loudly at
+run.** Explicitly *not* a silent fallback to the kind default, and explicitly *not* refusing to
+start the server.
 
 2026-08-10 — What should a per-step model swap cost? Concrete model in the def (republish per
 swap) vs. a role mapped in the shared config (config edit only)? → **Allow both.** A step may name
