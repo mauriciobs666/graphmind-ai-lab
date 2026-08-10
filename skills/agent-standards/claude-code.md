@@ -12,6 +12,8 @@
 > `inherit`**).
 > **Bash tool environment** (shell-shadowed `find`/`grep`) — **observed 2026-07-26/2026-08-08**,
 > not doc-sourced (no official page documents this; see that section for the evidence).
+> **`initialPrompt` language gotcha** — **observed 2026-08-09**, not doc-sourced (see the
+> main-session section below).
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -85,7 +87,7 @@
 
 ### Running a definition as the MAIN session agent (verified 2026-07-09 against `/en/sub-agents`)
 
-An agent definition is not only a delegation target — it can be the **first-order,
+An agent definition is not only a delegation target — it can be the **interactive,
 conversational agent**:
 
 - **`claude --agent <name>`** (or the **`agent` setting**) starts a session where the
@@ -101,6 +103,20 @@ conversational agent**:
 - The main-thread agent can spawn subagents via `Agent`; the **`Agent(agent_type)`
   allowlist syntax** in `tools` restricts which types — but **only** in main-thread
   mode (inside a subagent definition the parenthesized type list is ignored).
+- **Gotcha — `initialPrompt`-driven greetings and a "default language" rule don't mix
+  reliably** (observed, not doc-sourced): `initialPrompt` auto-submits as the first
+  *user* turn, but it carries no actual linguistic evidence from the human — nobody
+  has "written" anything yet. A prompt rule like "respond in English by default, mirror
+  the user's language once they write in another one" can still get overridden at that
+  first line by other contextual signals available to the model (e.g. the operator's
+  git identity/locale), because the literal condition for the default ("no user text
+  yet") is met but the model reaches for a different heuristic anyway. If a canned
+  `initialPrompt` greeting must have a deterministic language, say so explicitly inside
+  the `initialPrompt` text itself ("Introduce yourself in one line **in English**...")
+  rather than relying on a general default-language rule stated elsewhere in the prompt
+  to reach that one line. Simpler fix where a canned greeting isn't earning its keep:
+  drop `initialPrompt` entirely and let the human's real first message set the language
+  and the routing naturally.
 
 ### Built-in subagents & multi-agent primitives (agent-teams re-verified 2026-06-21 against `/en/agent-teams`)
 

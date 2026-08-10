@@ -2,20 +2,21 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-31
+> Last reviewed: 2026-08-09
 
 ## Active
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-09 | high | 🔵 | Live e2e spin: a real `claude --agent tico` interview on a genuine feature request |
-| K-002 | 2026-07-09 | — | ⚪ | ~~SendMessage continuation for interview rounds~~ — moot in first-order mode |
+| K-002 | 2026-07-09 | — | ⚪ | ~~SendMessage continuation for interview rounds~~ — moot once tico converses natively as the main-session agent |
 | K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
+| K-007 | 2026-08-09 | medium | 🔵 | Live check that a fresh `claude --agent tico` session opens in the stakeholder's actual language and correctly infers the mode from their first message, now that the canned `initialPrompt` greeting and the explicit language-mirror rule are both gone |
 
-### K-001 — Live e2e spin (first-order)
+### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
 - **Priority:** high
 - **Rationale:** the live-interview design is unexercised; same validate-by-running discipline as teco's K-001.
@@ -25,7 +26,7 @@
 ### K-002 — SendMessage continuation for rounds
 - **Status:** ⚪ rejected 2026-07-09
 - **Rationale (original):** make re-invoked interview rounds cheaper by continuing the spawned agent.
-- **Why rejected:** the first-order redesign removed the rounds protocol from the primary path — as the main-session agent tico converses natively. The subagent fallback keeps doc-as-state and needs no continuation machinery.
+- **Why rejected:** the interactive redesign removed the rounds protocol from the primary path — as the main-session agent tico converses natively. The subagent fallback keeps doc-as-state and needs no continuation machinery.
 
 ### K-003 — Requirements→plan traceability
 - **Status:** 🔵 proposed
@@ -54,6 +55,13 @@
 - **Rationale:** the demo-environment offer (2026-07-31) is unexercised — same validate-by-running discipline as K-001/K-004, which only cover the interview and Modes 2/3's own writing. This one crosses an agent boundary (tico → devops), so it has its own failure surface: does the offer actually surface at the right moment, does the `Agent` brief carry enough for devops to orient without back-and-forth, and — the discipline most worth watching — does tico actually stop and ask before requesting teardown rather than assuming a good moment.
 - **Proposed change:** in a real `claude --agent tico` session (Mode 2 or 3, over a component devops can plausibly boot, e.g. `falkor-chat/`), let the stakeholder accept a demo offer; verify devops comes back with the environment actually up (real command output, not a claimed green) and tico correctly attributes what's running to devops's work. Then verify the teardown path: tico asks before tearing down, waits for a yes, and only then delegates cleanup — never auto-triggers it on topic change or session end.
 - **Notes:** run independently of K-001/K-004; a different mode and a different agent boundary than either.
+
+### K-007 — Live check of the no-`initialPrompt` opening (language + mode inference)
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Rationale:** 2026-08-09 removed tico's `initialPrompt` (the canned "introduce yourself, then ask which job" greeting) and the explicit "respond in English by default, mirror Portuguese" rule, after the user observed the old greeting was defaulting to Portuguese despite the explicit English-default instruction — most likely the model inferring a language from the operator's git identity rather than from any real stakeholder utterance, since at that first line there was none. The fix removes the ungrounded first line entirely rather than trying to patch the instruction; unexercised since.
+- **Proposed change:** launch a fresh `claude --agent tico` session with no prior context and open in English — verify tico's first real reply lands in English and correctly infers the mode (interview / explanation / manual) from that opening message without forcing a menu first. Repeat opening in Portuguese to confirm the natural mirroring (now ungoverned by an explicit rule) still holds. Also worth checking a genuinely ambiguous opener actually gets a clarifying question instead of a guessed mode.
+- **Notes:** the same gotcha, and the fix, were promoted into `skills/agent-standards/claude-code.md`'s main-session section (marked observed, not doc-sourced) so it isn't rediscovered on the next `initialPrompt`-bearing agent.
 
 ## Parking lot / ideas
 - **Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition):** clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.

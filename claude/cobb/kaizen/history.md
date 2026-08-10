@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-09 — Diagnosed tico's Portuguese-greeting bug; removed its `initialPrompt` + language-mirror rule; renamed "first-order" → "interactive" team-wide
+- **What:** User asked why tico's opening line kept defaulting to Portuguese, and whether spending
+  tokens on a self-introduction was worth it at all. Diagnosed live: tico's `initialPrompt`
+  auto-submits as the first *user* turn in main-session mode, but that turn carries no real
+  linguistic evidence (nobody has actually written anything yet), so the "mirror if they write in
+  it" half of tico's language rule was vacuously false and the "English by default" half should
+  have governed — instead the model most likely leaned on other in-session context (the operator's
+  git identity, a Portuguese-signaling name) to guess a language, overriding
+  the stated default. Fixed at the source rather than by strengthening the instruction: removed
+  `initialPrompt` and the language-mirror line from `claude/tico/tico.md` entirely, so there's no
+  ungrounded first line left to guess from — mode selection is now explicitly inferred from the
+  stakeholder's real opening message (full detail in `claude/tico/kaizen/history.md`, same date).
+  Separately, the user corrected my own inline claim that tico was "the only first-order agent" —
+  teco is also designed to converse with and pause for the human; the word "first-order" (my own
+  coinage, not a Claude Code term) was the flawed part, not the roster. Asked the user to pick a
+  replacement via `AskUserQuestion` (interactive / foreground / human-facing) — **interactive**
+  won — and renamed it everywhere it labeled this quality: `claude/tico/tico.md` (description +
+  body), `claude/AGENTS.md`, `claude/README.md` (two spots), `claude/teco/teco.md`'s reference to
+  tico, and `skills/agent-standards/claude-code.md`'s generic "MAIN session agent" section header
+  (which is where I'd originally coined "first-order, conversational agent" as the category label
+  for that Claude Code mechanism). Also promoted the underlying gotcha — an `initialPrompt`
+  greeting plus a "default language" rule don't reliably compose, because the model has other
+  context to lean on besides the literal absence of user text — into that same skill section,
+  tagged observed/not-doc-sourced (its own `Verified:` stamp block gained a matching line) so the
+  next agent author wiring an `initialPrompt` greeting doesn't rediscover this the same way.
+- **Why:** same-run promotion is in-bounds for me alone (per my own "Learning capture" rule) —
+  this was a durable, non-obvious fact about how main-session `initialPrompt` interacts with
+  language defaults, worth fixing in the skill immediately rather than parking it in an inbox.
+  The terminology question (what to call "runs interactive with a human, not a delegation target
+  for background work") was a genuine naming call, not mine to make unilaterally, hence
+  `AskUserQuestion` rather than picking on my own judgment.
+- **Verification:** re-read `claude/tico/tico.md` after edits — no dangling reference to
+  `initialPrompt` or the removed language line remained; grepped the repo for stray "first-order"
+  occurrences afterward and confirmed the only remaining hits are historical (dated kaizen
+  `history.md` entries elsewhere, correctly left untouched as a dated record) or in an unrelated
+  module (`mcp-monitor/docs/plans/mcp-monitor-coordination.md`, out of scope for this pass).
+- **Plan items:** none of cobb's own opened — the follow-up (a live e2e check of tico's new
+  opening) is tico's own K-007, not cobb's to hold.
+
 ## 2026-08-09 — Independent review of U1/U2/U6 (C-308, C-312, C-319 skill/doc units), including self-review
 - **What:** Reviewed three parallel Wave-1 deliverables from `docs/plans/cpg-followups-coordination.md`
   against skill-authoring conventions: U1 (`graph-dba`, C-308, Q4 transitive-upward-call-closure
