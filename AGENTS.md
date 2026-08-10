@@ -156,7 +156,10 @@ and OpenCode artifacts).
     `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
     `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
     `reviews/*` → `analyst` · `requirements/*` and `manuals/*` → `tico` · `test-plans/*` and
-    `test-reports/*` → `qa-engineer`. **`teco` coordinates the close; it does not perform the flips** — its write
+    `test-reports/*` → `qa-engineer`. **This table controls where it disagrees with a document's own
+    `Owner:` field** — a `reviews/*` document authored by some other specialist still flips via
+    `analyst`; only the `-ml` and `-graph` rows follow the owner, and they do so because they are
+    named rows here, not by inference. **`teco` coordinates the close; it does not perform the flips** — its write
     guard reaches `docs/plans/*` only, so any other kind would raise a human approval prompt
     per file.
   - **The whole lifecycle, one line:** `grep -m1 -H 'Status:' docs/plans/*.md`.

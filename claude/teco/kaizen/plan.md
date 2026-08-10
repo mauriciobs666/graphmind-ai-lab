@@ -2,11 +2,48 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-29
+> Last reviewed: 2026-08-10
 
 ## Active
 
-*(none — all five prior active items closed 2026-07-29, see history.md)*
+| ID | Added | Priority | Status | Summary |
+|------|------------|----------|--------|---------|
+| K-012 | 2026-08-10 | high | 🔵 | Verify `ListAgents` actually materializes in a teco run |
+| K-013 | 2026-08-10 | med | 🔵 | Exercise the `SendMessage` continuation loop once, for real |
+| K-014 | 2026-08-10 | low | 🔵 | Nothing enforces that the ledger's `agentId` cell gets filled |
+
+### K-012 — verify `ListAgents` actually materializes
+- **Status:** 🔵 proposed · **Priority:** high
+- **Rationale:** the 2026-08-10 probe found teco's *runtime* tool list to be exactly
+  `Read, Bash, Agent, SendMessage, Write, Edit` — **`Grep` and `Glob` are declared in
+  frontmatter and simply absent at runtime**, silently, with no error. A frontmatter grant is
+  therefore not proof of availability on this harness build, and `ListAgents` was granted the
+  same day on the assumption that it is.
+- **Confound found the same day:** a verification probe run *from the session that made the
+  grant* reported `ListAgents` absent — but custom agent definitions load at **parent-session
+  start**, so that session was still holding the pre-edit `teco.md`. The negative result is
+  therefore inconclusive for `ListAgents` (it is conclusive for `Grep`/`Glob`, which predate the
+  session). Re-probe from a **fresh session**.
+- **Already de-risked:** step 5 no longer depends on the answer — it says to attempt the
+  `SendMessage` and treat an addressing error as non-resolution, and Guardrails records the
+  runtime tool set explicitly. If a fresh-session probe shows `ListAgents` still absent, drop the
+  frontmatter grant as decoration; if present, add the enumeration step back to step 5.
+
+### K-013 — exercise the `SendMessage` continuation loop for real
+- **Status:** 🔵 proposed · **Priority:** medium
+- **Rationale:** the mechanism has been prompt-level since 2026-07-29 and has **never fired**
+  (0 occurrences in any confirmed teco run vs. 42 repo-wide). The 2026-08-10 pass made it
+  addressable (`agentId` in the ledger) but still unexercised; an unexercised path is a claim.
+- **Proposed change:** on the next coordination with a review gate, deliberately route the
+  re-check through `SendMessage` and record the first datapoint here — did resuming actually
+  preserve the delegate's context, and what did it save vs. a cold respawn?
+
+### K-014 — the `agentId` ledger cell has no enforcement
+- **Status:** 🔵 proposed · **Priority:** low
+- **Rationale:** the whole continuation path now depends on a cell teco fills by self-discipline;
+  no hook or script checks it. Same enforcement-parity shape as the milestone-close freeze below.
+- **Proposed change:** decide from evidence after a few coordinations — if the cell gets skipped,
+  a cheap `audit`-style checker over `*-coordination.md` files is the fix; if it doesn't, leave it.
 
 > **K-006 — review-default list has no reviewer for agent-engineering deliverables — ✅ done
 > 2026-07-29** (moved to history.md). Disposition: made explicit in the existing "Work ships
@@ -63,18 +100,10 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
-- **§7 lint minor (2026-07-30, authoring pass on the new commit-authority guardrail):** the new
-  Guardrails bullet ("`Bash` is read-only investigation... integration commits") is dense — one
-  paragraph packing the grant, its scope boundary vs. `tico`'s, the stakeholder-decision citation,
-  and the hook-gap disclosure. Consistent with the section's existing density (the "Work ships
-  independently reviewed" bullet is comparably long) so not fixed now; if Guardrails gets another
-  addition, split this bullet into sub-bullets (grant / boundary-vs-tico / no-hook-backstop) rather
-  than let a fourth dense paragraph land on top.
-- **§7 lint minor (2026-07-29 team certification):** step 3's model-routing sentence carries an
-  inline `"verified 2026-07-29 to reach a call made from inside a subagent"` evidence clause that
-  duplicates the fuller record already in `kaizen/history.md` — the operative instruction only
-  needs the rule, not the dated citation. Bundle with the step-3 split below when it's next touched.
-- **Step 3 ("Delegate with complete briefs") is getting dense (noted 2026-07-29).** After today's K-008 model-routing addition and the inbox-3 promotion (brief-fencing/inbox carve-out), the paragraph now packs five distinct sub-rules (brief contents, subagent-awareness, parallel-vs-sequential dispatch, name/id tracking for SendMessage, model-override routing, brief-fencing carve-out) into one block. Candidate fix: split into short sub-bullets under step 3 next time it's touched, purely a readability/cognitive-load cleanup (§7 dimension 4) — no behavior change.
+- ~~Guardrails commit bullet is dense (2026-07-30); step-3 density (2026-07-29); model-routing
+  evidence clause (2026-07-29).~~ *(✅ All three resolved 2026-08-10 — steps 3/4 split into
+  sub-bullets, Guardrails' commit bullet split four ways, the dated evidence clause dropped from
+  the operative instruction. See history.md.)*
 - **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.
 - ~~A routing cheat-sheet / decision tree teco self-checks before delegating (which specialist for which signal), to reduce mis-routing between `coder` and `tdd-engineer`.~~ *(✅ Resolved 2026-07-09: the roster is now an explicit routing table — task shape → owner → tie-breaker — with the coder-vs-tdd efficiency rule on both implementer rows, plus a separate handoff-contracts list. See history.md.)*
 - Guard against over-orchestration: a heuristic for "this is a single-specialist job, skip the breakdown."

@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-10 — Coordination state moves out of the context window: canonical ledger, in-flight tracking, `agentId`-addressed continuation
+
+- **What:** the largest structural pass on `teco.md` since its creation, from a `cobb` review of
+  how teco coordinates, tracks units, and routes between *running* and *fresh* agents.
+  1. **Frontmatter:** `tools:` gained `ListAgents` — step 5's "fall back to a cold spawn only if
+     the identifier no longer resolves" was previously untestable from inside teco.
+  2. **Steps 3 and 4 split into sub-bullets** before anything was added to them (two prior
+     parking-lot deferrals, §7 dimension 4): each now carries one rule per bullet.
+  3. **New step 2 ledger, mandatory at 3+ units or any gated unit** (replacing the unmeasurable
+     "for large or long-running work"): `| Unit | Owner | Agent id | Status | Deliverable | Gate →
+     verdict |`, with a closed status vocabulary (`queued` · `in-flight` · `delivered` · `gated` ·
+     `accepted` · `abandoned`). Stated explicitly: the ledger, not teco's context window, is where
+     a unit's state lives.
+  4. **New step 1 resume path:** an existing coordination doc for the slug is the state of record —
+     read it and reconcile `in-flight` rows against `git log` and the tree before dispatching.
+  5. **New step 4, "Track what's in flight":** `Agent` runs in the background by default; never
+     state or predict a pending delegate's result; a transient platform failure (500/timeout/kill)
+     is not a deficient result but a re-dispatch with a **state-recovery brief** (inspect
+     `git status`/`git diff`, continue from actual state); a unit superseded mid-flight is
+     `abandoned`, its result discarded.
+  6. **Identity recorded at dispatch, always** — every `Agent` call returns an `agentId`; it goes
+     in the unit's ledger row immediately, not "when a follow-up seems likely" (which asked teco to
+     predict the future). That id is what `SendMessage` addresses; `ListAgents` is how resolution
+     is checked.
+- **Why (evidence, not opinion):** `SendMessage` appears **42×** across this box's transcripts and
+  **0×** in any confirmed teco run — K-007 shipped 2026-07-29 and had never fired. All five real
+  coordination docs on disk invent a different Status table and **none** records who is running or
+  how to reach them. The delegate id lived only in teco's context, the one thing lost to
+  compaction, on exactly the long coordinations where continuation matters.
+- **Two proven failure modes turned into rules.** `model:"haiku"` doc-closeouts fabricated numbers
+  twice (2026-07-31: a 70% threshold existing nowhere in the codebase; 2026-08-09: a breakdown that
+  doesn't arithmetically add up), both caught only by teco's own re-verification. Step 3's model
+  routing now confines haiku to **mechanical** units and requires summarizing briefs to carry
+  *"state only figures you directly observed in this run's command output; never decompose a total
+  into a breakdown you did not observe"*; step 5 pairs it with mandatory re-verification of any
+  summarized number — the cheaper model tier never buys out the verification.
+- **Five standing practices promoted from the user's AutoMem file into the committed prompt**
+  (double analyst gate — plan gate **and** diff-scoped re-gate, replacing the weaker "and/or";
+  mutation-testing green-on-arrival tests; shared-file serialization + single ownership of shared
+  DB state; independent verification of a self-reported recovery; the tree-mutating-git
+  prohibition — `stash`/`checkout <path>`/`restore` — now explicitly binding **inside implementer
+  briefs**, with `git show <ref>:<path>` named as the safe baseline read). A live probe confirmed
+  **the memory *index* reaches a subagent but not the entry bodies**: teco saw the
+  `teco-process-lessons` one-line gloss and nothing behind it, so it had a teaser it could not act
+  on. The committed prompt is the right home regardless.
+- **Also:** Guardrails' dense commit-authority paragraph split into grant / never-mutate-the-tree /
+  boundary-vs-`tico` / no-hook-backstop (the parking-lot note said to split it the next time
+  Guardrails gained an addition, and it just did); the milestone-close bullet now states that root
+  `AGENTS.md`'s by-kind flip table **controls over a document's own `Owner:`** where they disagree.
+- **Verified:** `claude/scripts/audit-team.sh` — 98 PASS / 0 FAIL before, re-run clean after (diff,
+  not a bare gate, per `agent-maintenance` §4).
+- **Plan items:** closed three parking-lot items (step-3 density, Guardrails bullet split,
+  model-routing evidence clause); opened K-012, K-013, K-014.
+
+## 2026-08-10 — Learnings inbox distilled: 5 entries → 2 to teco.md, 2 to project docs, 1 closed by probe
+
+- **What:** processed every pending entry per `agent-maintenance` §5.
+  1. **2026-07-31 + 2026-08-09 (haiku doc-closeout fabrications, two independent instances)** →
+     **promoted to `teco.md`** (step 3 model routing + step 5 numeric re-verification). Two
+     datapoints of the same shape made this the highest-value entry in the inbox.
+  2. **2026-08-09 (archival-flip authority: by-kind table vs. a document's own `Owner:`)** →
+     **promoted to root `AGENTS.md`** lifecycle section (the table now says it controls) **and** one
+     clause in teco's own milestone-close bullet. A fact about the project's doc convention belongs
+     in project docs, not hoarded in one agent's prompt.
+  3. **2026-07-29 (`node` not on `PATH` on this WSL2 box; two sessions rediscovered the
+     workaround)** → **promoted to `falkor-chat/AGENTS.md`**, next to the bootstrap env note.
+  4. **2026-07-29 ("continue via SendMessage" not backed by an available tool)** → **closed by
+     live probe**, not promoted: a 2026-08-10 read-only probe of a real teco run shows
+     `SendMessage` present as a full tool definition with **no** ToolSearch step and **no**
+     deferred-tool reminder anywhere in its context. The entry described the pre-K-007 state
+     (`SendMessage` was absent from `tools:` until 2026-07-29); it is no longer true.
+- **Inbox cleared.**
+- **Plan items:** none (distillation).
+
 ## 2026-07-30 — Commit authority formalized: `Bash` may now `git add`/`git commit` a coordinated deliverable, by explicit path
 - **What:** Documented, for the first time, teco's authority to `git add`/`git commit` a
   specialist's deliverable it is actively coordinating — a plan, review, test plan/report, or

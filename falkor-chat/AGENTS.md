@@ -78,6 +78,11 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
 
+**`node` is not on `PATH` on the usual dev box (WSL2).** The web unit tests are bare-`node`
+scripts (`node web/tests/run-select.test.js`), so find a working interpreter before assuming the
+suite is unrunnable: a Playwright-bundled Node binary, or the Windows `node.exe` reachable from
+WSL, both work. Two independent agent sessions each burned turns rediscovering this.
+
 ### Probing shared graph state without mutating it
 
 - **A workflow-def *publish* has no graph seam** — `Repository._reference()`

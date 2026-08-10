@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-10 — Reviewed and reworked `teco`'s coordination/tracking/continuation machinery (§7 lint + §5 distillation)
+
+- **Scope:** user asked for a review of how `teco` coordinates, keeps track of tasks, and routes
+  between *running* and *fresh* agents. Read `teco.md`, all three kaizen files, the five real
+  `*-coordination.md` ledgers on disk, and ~20 transcripts; then implemented the full rework the
+  user approved (all three scoping choices taken at the recommended option).
+- **What the review found (evidence, not impression):** `SendMessage` — the continuation
+  mechanism K-007 shipped on 2026-07-29 — appears **42×** across this box's transcripts and **0×**
+  in any confirmed teco run. Delegate identity lived only in teco's context window, which
+  compaction destroys on exactly the long coordinations where continuation matters. None of the
+  five real ledgers records a running delegate's id or an in-flight state, and each invents its
+  own table shape. The prompt had **no in-flight model at all** despite `Agent` defaulting to
+  background. Two independent instances of a `model:"haiku"` doc-closeout fabricating numbers sat
+  unpromoted in the inbox.
+- **Delivered:** ledger schema mandatory at 3+ units or any gated unit; resume-from-ledger path;
+  a new "Track what's in flight" step; `agentId` recorded at dispatch and used to address
+  `SendMessage`; the haiku-fabrication rule paired with mandatory numeric re-verification; five
+  standing practices promoted out of the user's AutoMem file into the committed prompt; steps 3–5
+  and the Guardrails commit bullet split into sub-bullets (§7 dimension 4 — three parking-lot
+  deferrals closed). Full detail in `claude/teco/kaizen/history.md`.
+- **§7 lint findings this pass** (on `teco.md`): *cognitive load* — **major**, two ~350-word
+  blocks holding ~11 sub-rules, fixed by splitting before adding; *coverage* — **major**, no
+  in-flight/abandon/self-resume paths, all three added; *ambiguity* — **minor**, "large or
+  long-running work" had no operational test (now a unit-count threshold), "note the id when a
+  follow-up seems likely" required predicting the future (now always), "have the reviewer
+  re-check" didn't say fresh-or-resumed (now the same reviewer by id); *composition* — **major**,
+  five practices lived only in user-scoped memory that reaches a subagent as an index without
+  bodies; *contradiction* and *persona* — clean.
+- **Three harness facts discovered by live probe, filed to my own inbox** (not yet promoted):
+  a subagent's runtime tool set can be **narrower than its frontmatter** (`Grep`/`Glob` declared
+  and absent, silently); custom agent definitions load at **parent-session start**, so an
+  agent-definition edit cannot be verified from the session that made it; AutoMem reaches a
+  subagent as an **index only**, never entry bodies. The first two cost a wasted probe before the
+  confound was spotted — the corollary (verify agent edits from a fresh session) is the durable
+  lesson.
+- **Verified:** `claude/scripts/audit-team.sh` 98 PASS / 0 FAIL before **and** after (diff, not a
+  bare gate, per `agent-maintenance` §4). No personal identifiers in any edited file.
+- **Docs touched:** `claude/teco/teco.md` · `claude/teco/kaizen/{history,plan,inbox}.md` ·
+  `claude/README.md` (teco row) · root `AGENTS.md` (flip-table authority) ·
+  `falkor-chat/AGENTS.md` (`node` on PATH) · `claude/cobb/kaizen/{history,inbox}.md`.
+
 ## 2026-08-09 — Diagnosed tico's Portuguese-greeting bug; removed its `initialPrompt` + language-mirror rule; renamed "first-order" → "interactive" team-wide
 - **What:** User asked why tico's opening line kept defaulting to Portuguese, and whether spending
   tokens on a self-introduction was worth it at all. Diagnosed live: tico's `initialPrompt`
