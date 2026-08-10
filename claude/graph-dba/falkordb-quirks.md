@@ -44,11 +44,40 @@ to the general fact here.
   vecf32([...])` is **silently accepted** (`Properties set: 1`, no error) — but the node then
   **drops out of the ANN index** and never appears in `db.idx.vector.queryNodes` results.
   Querying the index with a mismatched query vector *does* error
-  (`Vector dimension mismatch, expected N but got M`), which is the reliable way to prove an
-  index's dimension (`db.indexes()` does not expose it). There is **no `vec.dimension()`
+  (`Vector dimension mismatch, expected N but got M`). There is **no `vec.dimension()`
   function** on this build to check a stored vector's length. Consequence: validate embedding
   length client-side before writing — a buggy worker sending wrong-size vectors produces
   permanently unretrievable nodes with no error surfaced.
+  **Re-confirmed 2026-08-10 on the pinned build (module `41811`)**: a 3-dim `vecf32` write
+  against a dim-4 index still reports `Properties set: 2`, the node is `MATCH`-able, and it
+  never appears in `db.idx.vector.queryNodes` results.
+- **`db.indexes()` DOES expose a vector index's dimension** — **corrects the earlier
+  "does not expose it" claim**, which was recorded against the edge build (module 999999) and
+  is **false on the pinned `v4.18.11` / module `41811`** (verified 2026-08-10). The `options`
+  column is a map keyed by property name; a `VECTOR`-typed property's entry carries
+  `{dimension, similarityFunction, M, efConstruction, efRuntime}`. Dynamic map-key access and
+  a post-`YIELD` `WHERE` both work, and the whole thing runs under `GRAPH.RO_QUERY`
+  (replica-routable, zero write risk):
+  ```
+  GRAPH.RO_QUERY <graph> "CYPHER lbl='Message' prop='embedding'
+    CALL db.indexes() YIELD label, types, options
+    WHERE label = $lbl AND types[$prop] = ['VECTOR']
+    RETURN options[$prop].dimension AS dim"
+  ```
+  Behaviour at the edges (all verified 2026-08-10): the dimension is reported **before any
+  vector is written** (it is index metadata, not data); a label with only `RANGE` indexes
+  returns a row with `dim = NULL`; an unknown label returns **zero rows**; and a graph key
+  that does not exist yet errors `ERR Invalid graph operation on empty key` rather than
+  returning zero rows. This is now the cheap, reliable way to prove an index's dimension —
+  prefer it over the mismatched-query-vector probe.
+- **`CREATE VECTOR INDEX` on an already-indexed property is rejected, never re-applied**
+  (verified 2026-08-10, module `41811`). Re-creating `(:Message) ON (n.embedding)` with a
+  *different* `dimension` (or a different `similarityFunction`) returns
+  `Attribute 'embedding' is already indexed` and the index **keeps its original options**.
+  Operationally sharp: a bootstrap script that re-runs with a changed dimension env var does
+  **not** change the dimension, and because `redis-cli` exits 0 on Redis-level errors, a
+  `set -e` script sails past it. The only way to change a vector index's dimension is to drop
+  and re-create the index.
 - **ANN kNN returns *up to* `k`, not exactly `k`** — on a small/near-empty HNSW index,
   `db.idx.vector.queryNodes(…, k, …)` may return fewer than `k` (approximate recall of distant/
   orthogonal candidates). Near neighbors are returned and correctly ordered; don't treat
