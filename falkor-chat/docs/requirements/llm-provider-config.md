@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Feature Requirements
 
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-10
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** K-042 (M4) · **Last updated:** 2026-08-10
 
 ## Intent
 
@@ -179,7 +179,7 @@ Two drivers, in the stakeholder's order of pain:
 
 ## Open questions
 
-*(none — pending stakeholder readback confirmation)*
+*(none — stakeholder readback confirmed 2026-08-10)*
 
 ## Notes for design (context, not requirements)
 
@@ -246,3 +246,5 @@ start the server.
 swap) vs. a role mapped in the shared config (config edit only)? → **Allow both.** A step may name
 a concrete model or a role. Accepted consequence: two ways to express one thing, hence FR-8
 (the resolved model must be discoverable per execution).
+
+2026-08-10 — Readback confirmed; scope split into two landings (Landing 1: FR-1..FR-6, FR-11..FR-15, FR-20 — config files, resolver seam, per-kind defaults, per-model settings, env-var cutover. Landing 2: FR-7..FR-10, FR-16..FR-19 — roles, fallback chains, workspace override, resolved-model trace, embedding-dimension guard). No cloud API key available, so AC-2/AC-3 verification is deferred/model-gated; the design still supports them. Tracked as K-042 under milestone M4.
