@@ -49,15 +49,20 @@ This document, not any agent's context window, is the state of record.
 | U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | delivered | `docs/plans/llm-provider-config-graph.md` v2 | Pass 1 → m-4/m-5/m-6; v2 complete |
 | U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 1) | needs changes |
 | U3b | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 2) | needs changes — 1 blocker, 1 minor |
-| U1v3 | `architect` | `a03bf509bc62cd995` | delivered | plan v3 — adopt `modelFallback` | Pass 3 pending |
-| U2v3 | `graph-dba` | `a59fa97de2ef0a511` | delivered | graph note v3 — fix stale §6.5 language | Pass 3 pending |
-| U3c | `analyst` | `a87afc398f73067b8` | queued | Pass 3 re-gate — P2-B + minor only | — |
-| U4+ | TBD | — | queued | Landing 1 implementation (from U1's sequencing) | `analyst` re-gate |
-| U5+ | TBD | — | queued | Landing 2 implementation | `analyst` re-gate |
-| U6 | `devops` | — | queued | env-var cutover + secret hygiene (FR-12/FR-20) | `analyst` |
-| U7 | `qa-engineer` | — | queued | `docs/test-plans/llm-provider-config.md` + `-report.md` | — |
+| U1v3 | `architect` | `a03bf509bc62cd995` | accepted | plan v3 — adopt `modelFallback` | Pass 3 → approve with suggestions |
+| U2v3 | `graph-dba` | `a59fa97de2ef0a511` | accepted | graph note v3 — fix stale §6.5 language | Pass 3 → approve with suggestions |
+| U3c | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 3) | approve with suggestions — design phase closed |
+| U4 | `coder` | — | queued | Landing 1 implementation (L1-1..L1-6, plan §6) | `analyst` diff-scoped re-gate |
+| U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
+| U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
+| U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
-Unit shapes for U4..U7 are provisional — U1's plan sets the real sequencing.
+**U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
+`.env.example`, `compose.yaml`, `start_server.sh`, README, AGENTS.md) is core resolver-coupled
+code (`assert_no_legacy_model_env()` is called from `ModelGateway.from_env()`), not an environment
+blocker — it stays inside `coder`'s U4, per the plan's own L1-5 file list, rather than forking to
+`devops` and creating a same-file split. `devops` remains the fallback if U4 hits a genuine
+environment blocker (deps, containers, secrets) mid-run.
 
 ## Documentation impact (scanned at decomposition)
 
@@ -162,6 +167,29 @@ Re-dispatched as **fresh agents with state-recovery briefs** (inspect `git diff`
 file and continue from actual state, not restart) per this agent's own standing guardrail for
 transient platform failures — distinct from the close-the-loop-on-the-same-delegate path, which
 is for deficient results, not platform failures.
+
+## Design phase closed (2026-08-10)
+
+Pass 3 (`docs/reviews/llm-provider-config.md`, committed `0719e8a`): **approve with suggestions**,
+no blocker survives. Both Pass 2 items independently re-verified by `teco` before acceptance:
+
+- **P2-B adoption** — the `ChatResult.fallback` → `StepResult.modelFallback` →
+  `record_step_and_advance(model_fallback=...)` carrier chain matches `-graph.md` §1.3/§6.2
+  field-for-field (property name, nullability, computation formula, orthogonality reasoning, m-6
+  last-wins extension to all three fields).
+- **Stale §6.5 language** — confirmed via grep that only historical/quoted occurrences of the
+  withdrawn phrase remain; §6.5's own bullet is rewritten in its own words.
+
+**One residual minor, Landing-2-only, tracked for pre-L2 fix:** plan §5 (`llm.py` row), §7 L2-1's
+done-condition, and §12 say the non-fallback `ChatResult.fallback` value is `` `None`/`False` ``;
+`-graph.md` §1.3/§6.2 (lines 246, 257) is unambiguous the non-fallback state is **absent (`None`)
+only**, matching what §7 L2-2's done-condition already states correctly two rows later. Confirmed
+by `teco` via direct read of both documents. Does not touch Landing 1 — routed to `architect`
+ahead of Landing 2 kickoff, not dispatched now.
+
+Both design documents (`llm-provider-config.md` v3, `llm-provider-config-graph.md` v3) and the
+review (`Version: 3`) are the documents of record. **Landing 1 implementation (U4) dispatched to
+`coder`.**
 
 ## Log
 
