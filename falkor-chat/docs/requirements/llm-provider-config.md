@@ -90,6 +90,20 @@ Two drivers, in the stakeholder's order of pain:
 - **FR-10** — An unresolvable model encountered at **use time** fails loudly — the run suspends
   (or the reply fails) with an error stating what could not be resolved. It never silently falls
   back to another model.
+- **FR-11** — The shared OpenCode file stays a **valid, unmodified `opencode.json`** — falkor-chat
+  adds no keys to it. falkor-chat's own extras (roles, per-kind defaults) live in a **second,
+  falkor-chat-specific file**, also located by environment variable, that layers on top of the
+  providers declared in the shared file.
+- **FR-12** — Credentials are never required to be written literally into the shared file:
+  OpenCode's `{env:VAR}` and `{file:path}` substitution is honoured wherever a value can appear.
+- **FR-13** — Three provider kinds must work: a **local OpenAI-compatible endpoint** (LM Studio),
+  a **second OpenAI-compatible host** on the LAN, and **hosted cloud providers** (OpenAI /
+  Anthropic) authenticated with an API key.
+- **FR-14** — A model or role may carry **per-model settings** — at minimum request **timeout**,
+  plus generation settings such as temperature and max tokens — so that a large slow model and a
+  small fast one can be operated under different limits.
+- **FR-15** — Configuration is read at **startup**; a change takes effect on server restart. No
+  live reload is required.
 
 ## Out of scope
 
@@ -125,6 +139,18 @@ everywhere"* (one uniform seam, no consumer bypassing it).
 2026-08-10 — What happens when a consumer names no model? → **Default per kind** (an agent
 default, a guard default, an embedding default), not a single global default and not a hard
 failure.
+
+2026-08-10 — Which providers must work on day one? → **All three**: LM Studio local, a second
+OpenAI-compatible host, and hosted cloud (OpenAI/Anthropic). Secret handling is therefore in scope.
+
+2026-08-10 — When must a config edit take effect? → **Restart is fine.** No live reload, no
+on-demand reload endpoint.
+
+2026-08-10 — Where do falkor-chat's extras (roles, per-kind defaults) live? → **A second,
+falkor-chat-specific file.** The shared `opencode.json` stays pristine and unmodified; neither
+tool's file can break the other.
+
+2026-08-10 — Per-model settings (temperature, max tokens, timeout)? → **In scope**, not deferred.
 
 2026-08-10 — Where do you look to see which concrete model actually ran? → **The workflow run's
 execution trace** (not server logs, not a resolved-config dump).
