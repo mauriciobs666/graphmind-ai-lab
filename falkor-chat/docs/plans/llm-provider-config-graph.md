@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 2
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 3
 
 Graph-side design note for `docs/requirements/llm-provider-config.md`. Scope is the three
 graph questions in that feature: **FR-8** (record the resolved concrete model on the execution
@@ -65,6 +65,24 @@ true, so it was re-probed and the entry rewritten with the 2026-08-10 evidence.
 Two things re-checked and confirmed still correct after the above: the per-kind (not blanket)
 override design (§2.1, corrected reasoning, same conclusion), and `StepRun.resolvedModel`/
 `modelSource` naming used consistently throughout (the A-1 ruling in this note's favor).
+
+**v3 revision (2026-08-10)**, responding to the Pass 2 `analyst` re-gate (`docs/reviews/llm-provider-config.md`
+`## Pass 2`):
+
+- **Minor (routed to `graph-dba`) — one stale restatement in §6.5, now fixed.** §2.1 and §7-Q1
+  correctly withdrew the overstated "a blanket override breaks FR-19 by construction... the two
+  requirements would be in direct contradiction" framing in v2, but §6.5's own §8.2 answer (the
+  wildcard-rejection bullet) was not touched by that revision and still carried the withdrawn
+  sentence verbatim — while citing §2.1 as though it still supported the claim §2.1 now
+  contradicts. That bullet is corrected to state §2.1's actual argument (a blanket override makes
+  a permanently-unembeddable configuration expressible, not a requirements contradiction) and now
+  points to §2.1 for the full reasoning instead of restating a version of it that had drifted from
+  the source it cites.
+- **Not mine:** Pass 2's one blocker, P2-B (`-graph.md`'s `modelFallback` field from v2/m-5 was
+  not yet adopted into `docs/plans/llm-provider-config.md`'s `StepRun` schema), is `architect`'s
+  side of a cross-document disagreement and is being closed there in parallel. No change to this
+  document was needed or made for P2-B — `modelFallback`'s design here (§1.3, §1.4, §6.2) is
+  unchanged and was reconfirmed sound by the same Pass 2 pass.
 
 ---
 
@@ -926,12 +944,17 @@ not `reference`** (§2.2, §2.3). Node/property choice §2.2; write path §2.4; 
 alternatives incl. the config-file option and the condition to flip §2.3.
 
 - **Shape: `{kind -> ref}`, and explicitly *not* `{kind|"*" -> ref}`.** §8.2 offered the wildcard
-  as an option; reject it. A `"*"` blanket that includes the embedding kind forces the embedding
-  worker onto a chat model and **breaks FR-19 by construction** (§2.1) — the two requirements
-  would be in direct contradiction. An administrator who wants "everything chat" sets the three
-  chat kinds; that is one extra key in a hand-written admin action, against a wildcard that makes
-  a self-contradictory configuration expressible. If a wildcard is added anyway it **must**
-  exclude `embedding`, and that exclusion must live in the resolver, not in a comment.
+  as an option; reject it. *(Corrected in v3 — this passage still carried the overstated framing
+  §2.1 withdrew in v2; see §2.1 for the full argument.)* A `"*"` blanket that includes the
+  embedding kind does not break anything by construction — FR-19 would do exactly its job, reading
+  the frozen index dimension and refusing every embed once it finds a chat model's dimension
+  doesn't match. The objection is narrower than "contradiction": that refusal is **permanent**,
+  because nothing else can ever satisfy it, so a blanket override makes an incoherent
+  configuration *expressible* whose only reachable outcome is a workspace that can never embed
+  again. An administrator who wants "everything chat" sets the three chat kinds; that is one extra
+  key in a hand-written admin action, against a wildcard that makes a permanently-broken
+  configuration expressible for no expressive gain (§2.1 point 3). If a wildcard is added anyway
+  it **must** exclude `embedding`, and that exclusion must live in the resolver, not in a comment.
 - **Write path: a one-shot parameterised `MERGE`** (§2.4) — a seed script or an admin query, as
   §8.2 anticipated. Constraint-backed, per the standing `MERGE` rule; the constraint is the only
   new DDL in this design (§4).
