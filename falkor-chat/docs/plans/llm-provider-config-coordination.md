@@ -49,8 +49,9 @@ This document, not any agent's context window, is the state of record.
 | U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | delivered | `docs/plans/llm-provider-config-graph.md` v2 | Pass 1 → m-4/m-5/m-6; v2 complete |
 | U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 1) | needs changes |
 | U3b | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 2) | needs changes — 1 blocker, 1 minor |
-| U1v3 | `architect` | `a03bf509bc62cd995` | in-flight | plan v3 — adopt `modelFallback` | Pass 3 pending |
-| U2v3 | `graph-dba` | `a59fa97de2ef0a511` | delivered | graph note v3 — fix stale §6.5 language | Pass 3 pending on plan v3 |
+| U1v3 | `architect` | `a03bf509bc62cd995` | delivered | plan v3 — adopt `modelFallback` | Pass 3 pending |
+| U2v3 | `graph-dba` | `a59fa97de2ef0a511` | delivered | graph note v3 — fix stale §6.5 language | Pass 3 pending |
+| U3c | `analyst` | `a87afc398f73067b8` | queued | Pass 3 re-gate — P2-B + minor only | — |
 | U4+ | TBD | — | queued | Landing 1 implementation (from U1's sequencing) | `analyst` re-gate |
 | U5+ | TBD | — | queued | Landing 2 implementation | `analyst` re-gate |
 | U6 | `devops` | — | queued | env-var cutover + secret hygiene (FR-12/FR-20) | `analyst` |
