@@ -36,8 +36,8 @@ This document, not any agent's context window, is the state of record.
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict |
 |---|---|---|---|---|---|
 | U0 | `tico` | `ae8daf5e6fb321743` | accepted | requirements `Status:` → `Ready for design` | none (mechanical) |
-| U1 | `architect` | `a6607eea81e284553` | gated | `docs/plans/llm-provider-config.md` | `analyst` → **needs changes**; revising as v2 |
-| U2 | `graph-dba` | `a9469ba9c6b47c56b` | gated | `docs/plans/llm-provider-config-graph.md` | `analyst` → 2 items; revising as v2 |
+| U1 | `architect` | `a6607eea81e284553` → `a03bf509bc62cd995` | in-flight | `docs/plans/llm-provider-config.md` v2 | `analyst` → **needs changes**; revision resumed |
+| U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | in-flight | `docs/plans/llm-provider-config-graph.md` v2 | `analyst` → 2 items; revision resumed |
 | U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` | — |
 | U3b | `analyst` | `a87afc398f73067b8` | queued | re-gate of both v2 documents (Pass 2) | — |
 | U4+ | TBD | — | queued | Landing 1 implementation (from U1's sequencing) | `analyst` re-gate |
@@ -130,6 +130,24 @@ needs a stakeholder decision.*
   workspace-level setting physically reaches the resolver at each of the four consumers. Flagged by
   the gate under §6.1; expected to be closed by the two v2 revisions in flight. If v2 does not close
   it, it becomes a design unit of its own before Landing 2.
+
+## Transient failure and recovery (2026-08-10)
+
+Both v2-revision agents (`a6607eea81e284553` on the plan, `a9469ba9c6b47c56b` on the graph note)
+were terminated mid-run by a platform API session-limit error — not a deficient result. Both had
+substantial, coherent work already on disk:
+
+- **Plan** — `Version: 2` header already stamped, ~894 lines of diff, B-1/B-2/A-1..A-5 and majors
+  m-1/m-2/m-3/m-7/m-8/m-9 all appeared addressed with an index in-document.
+- **Graph note** — B-1's read-site relocation addressed with a dated revision note, a new §8
+  live-verification log (19 entries) appended, but its own last message
+  (*"Now the three minors the review assigns to me. m-4 first..."*) showed m-4/m-5/m-6 not yet
+  started, and no `Version:` field had been added to the header.
+
+Re-dispatched as **fresh agents with state-recovery briefs** (inspect `git diff` of their own
+file and continue from actual state, not restart) per this agent's own standing guardrail for
+transient platform failures — distinct from the close-the-loop-on-the-same-delegate path, which
+is for deficient results, not platform failures.
 
 ## Log
 
