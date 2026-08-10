@@ -52,7 +52,7 @@ This document, not any agent's context window, is the state of record.
 | U1v3 | `architect` | `a03bf509bc62cd995` | accepted | plan v3 — adopt `modelFallback` | Pass 3 → approve with suggestions |
 | U2v3 | `graph-dba` | `a59fa97de2ef0a511` | accepted | graph note v3 — fix stale §6.5 language | Pass 3 → approve with suggestions |
 | U3c | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 3) | approve with suggestions — design phase closed |
-| U4 | `coder` | — | queued | Landing 1 implementation (L1-1..L1-6, plan §6) | `analyst` diff-scoped re-gate |
+| U4 | `coder` | `ab38a5f2c9766f810` | in-flight | Landing 1 implementation (L1-1..L1-6, plan §6) | `analyst` diff-scoped re-gate |
 | U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
 | U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
@@ -189,7 +189,9 @@ ahead of Landing 2 kickoff, not dispatched now.
 
 Both design documents (`llm-provider-config.md` v3, `llm-provider-config-graph.md` v3) and the
 review (`Version: 3`) are the documents of record. **Landing 1 implementation (U4) dispatched to
-`coder`.**
+`coder`** (`ab38a5f2c9766f810`): L1-1..L1-6 per plan §6, Landing-2 scope explicitly fenced off,
+mutation-testing of the §4.9 ladder and the `/v1` rule required, no commit — diff left for the
+coordinator to gate and commit.
 
 ## Log
 
