@@ -29,14 +29,23 @@ This document, not any agent's context window, is the state of record.
   sample that exists; a second OpenAI-compatible LAN host does not exist today.
 - FR-20 blast radius (sites setting the replaced env vars):
   `server/falkorchat/config.py`, `server/falkorchat/app.py`, `scripts/start_server.sh`,
-  `compose.yaml`, `README.md`, `server/tests/test_workflow_live.py`, plus docs.
+  `README.md`, `server/tests/test_workflow_live.py`, plus docs.
+  **Correction (2026-08-10, `architect`'s v2 plan §2.9/§11.2):** `compose.yaml` does **not**
+  set any of the four — this document's original scan was wrong about that site (grep noise, not
+  an extension-filter miss like `.env.example`). The plan's own unfiltered re-scan
+  (`grep -rn -e FALKORCHAT_LLM_BASE_URL -e FALKORCHAT_LLM_MODEL -e FALKORCHAT_EMBEDDING_BASE_URL
+  -e FALKORCHAT_EMBEDDING_MODEL .`, excluding `.git/`/`.venv/`/`__pycache__/`/`docs/archive/`/the
+  K-042 documents themselves) is the list to trust; `compose.yaml` still needs Landing-1 changes
+  (the two config-file paths + a read-only bind mount) but not because it sets a legacy var.
+  **`server/.env.example` sets all four** and was missed by this document's original
+  extension-filtered scan — folded into U1's plan as finding M-1 and into U6's scope below.
 
 ## Ledger
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict |
 |---|---|---|---|---|---|
 | U0 | `tico` | `ae8daf5e6fb321743` | accepted | requirements `Status:` → `Ready for design` | none (mechanical) |
-| U1 | `architect` | `a6607eea81e284553` → `a03bf509bc62cd995` | in-flight | `docs/plans/llm-provider-config.md` v2 | `analyst` → **needs changes**; revision resumed |
+| U1 | `architect` | `a6607eea81e284553` → `a03bf509bc62cd995` | delivered | `docs/plans/llm-provider-config.md` v2 | Pass 1 → needs changes; v2 complete, awaiting Pass 2 |
 | U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | in-flight | `docs/plans/llm-provider-config-graph.md` v2 | `analyst` → 2 items; revision resumed |
 | U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` | — |
 | U3b | `analyst` | `a87afc398f73067b8` | queued | re-gate of both v2 documents (Pass 2) | — |
@@ -57,10 +66,12 @@ Every item below is a done-condition on the unit that invalidates it, not a clea
 | `falkor-chat/AGENTS.md` | key-scripts env table + M1-server run instructions reference the old vars | U6 |
 | `falkor-chat/README.md` | documents the replaced env vars | U6 |
 | `falkor-chat/scripts/start_server.sh` (header comment + body) | sets the replaced env vars | U6 |
-| `falkor-chat/compose.yaml` | sets the replaced env vars | U6 |
+| `falkor-chat/server/.env.example` | sets all four replaced env vars (missed by the original scan — see correction above) | U6 |
+| `falkor-chat/compose.yaml` | does **not** set the vars (correction above), but still needs the two new config-file paths + read-only bind mount | U6 |
 | `falkor-chat/docs/BACKLOG.md` | K-042 + M4 milestone row | U1 |
 | `falkor-chat/docs/HISTORY.md` | one entry per delivered landing | each landing's closing unit |
 | `falkor-chat/docs/manuals/` | admin-facing "how to configure models" is a plausible new manual — decide at Landing 1 close | flagged for `tico`, gated `qa-engineer` + `analyst` |
+| `falkor-chat/docs/plans/local-model-ram-budget-ml.md` (`Status: active`, owner `data-scientist`) | 8 references incl. a literal `FALKORCHAT_LLM_MODEL=` env block, per `architect`'s plan §2.9/§9.3 item 5 — a live document this K-042 work invalidates but does not own | flagged for **`data-scientist`**: a dated amendment noting the env-var mechanism was replaced by K-042, applied by that document's own owner, at or before Landing 1 close |
 
 ## Milestone close
 
