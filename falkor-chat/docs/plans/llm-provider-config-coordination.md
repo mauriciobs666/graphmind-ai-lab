@@ -46,9 +46,9 @@ This document, not any agent's context window, is the state of record.
 |---|---|---|---|---|---|
 | U0 | `tico` | `ae8daf5e6fb321743` | accepted | requirements `Status:` → `Ready for design` | none (mechanical) |
 | U1 | `architect` | `a6607eea81e284553` → `a03bf509bc62cd995` | delivered | `docs/plans/llm-provider-config.md` v2 | Pass 1 → needs changes; v2 complete, awaiting Pass 2 |
-| U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | in-flight | `docs/plans/llm-provider-config-graph.md` v2 | `analyst` → 2 items; revision resumed |
-| U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` | — |
-| U3b | `analyst` | `a87afc398f73067b8` | queued | re-gate of both v2 documents (Pass 2) | — |
+| U2 | `graph-dba` | `a9469ba9c6b47c56b` → `a59fa97de2ef0a511` | delivered | `docs/plans/llm-provider-config-graph.md` v2 | Pass 1 → m-4/m-5/m-6; v2 complete |
+| U3 | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 1) | needs changes |
+| U3b | `analyst` | `a87afc398f73067b8` | in-flight | Pass 2 re-gate of both v2 documents | — |
 | U4+ | TBD | — | queued | Landing 1 implementation (from U1's sequencing) | `analyst` re-gate |
 | U5+ | TBD | — | queued | Landing 2 implementation | `analyst` re-gate |
 | U6 | `devops` | — | queued | env-var cutover + secret hygiene (FR-12/FR-20) | `analyst` |
