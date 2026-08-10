@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4)
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 2
 
 Graph-side design note for `docs/requirements/llm-provider-config.md`. Scope is the three
 graph questions in that feature: **FR-8** (record the resolved concrete model on the execution
@@ -11,9 +11,9 @@ dimension guard) — acceptance criteria **AC-4, AC-6, AC-9, AC-10, AC-11**.
 layering/parsing, precedence *implementation* and publish-time validation are
 `docs/plans/llm-provider-config.md` (`architect`). §6 states the interface contract between the
 two, and **§6.5 answers that plan's §8 point by point** in its own numbering. The two documents
-agree on every substantive decision; the single divergence is a property name (§1.3) and the
-single open disagreement candidate is the override's shape (§7-Q1), both flagged for the
-`analyst` gate.
+agree on every substantive decision; the single divergence is a property name (§1.3). *(v1 also
+flagged the override's shape, §7-Q1, as an open disagreement candidate; the `analyst` gate upheld
+the per-kind design as a faithful reading of FR-16, and v2 withdraws the question — §2.1, §7-Q1.)*
 
 **Sequencing:** every decision here lands in **Landing 2** (FR-7..FR-10, FR-16..FR-19). This is
 **design-ahead**, not immediately-implemented — Landing 1 ships the resolver seam and per-kind
@@ -37,6 +37,35 @@ claimed `db.indexes()` **does not** expose a vector index's dimension. That was 
 the *edge* build (module 999999) and is **false on the pinned build** — §3 depends on it being
 true, so it was re-probed and the entry rewritten with the 2026-08-10 evidence.
 
+**v2 revision (2026-08-10)**, responding to `docs/reviews/llm-provider-config.md`:
+
+- **B-1 / A-5 (blocker, accepted in full):** §2.6's read-site guidance was wrong — `Executor.run`/
+  `resume` never read a snapshot; the actual convergence point is `_drive`, outside the SHA lock.
+  §2.6 now names the correct call site, the correct carrier (`run["ws"]`/`run["modelOverrides"]`
+  stamped on the `run` dict), and why it is the *only* lock-free way the `guard` kind — which has
+  no `CallContext` — can see a workspace override at all.
+- **A-2 (accepted, reasoning only):** §2.1's per-kind conclusion stands, but the v1 justification
+  ("a blanket override breaks FR-19 by construction") was overstated and is withdrawn; the
+  correct, narrower argument is in §2.1, and §7-Q1 is withdrawn as a stakeholder question with it.
+- **m-4 (accepted):** §3.3's `Chunk` check moved to layer 1 (startup assertion, operator warning
+  only) and each write-time layer now gates on the label actually being written — `grep -rn
+  'Chunk' server/falkorchat/*.py` finds no real usage, so gating a `Message` write on `Chunk`'s
+  index was a refusal with nothing behind it.
+- **m-5 (accepted):** `modelSource` cannot show that an FR-18 fallback occurred — §1.3/§6.2 now add
+  a fourth, boolean `StepRun` property (`modelFallback`) for that orthogonal fact, rather than
+  overloading `modelSource`.
+- **m-6 (accepted):** a single `StepRun.resolvedModel` cannot represent a step whose iterations
+  answered on two different models (FR-18 chain mid-loop). §1.6 gains an addendum recording the
+  same rule already used for guards — **last answering model wins** — next to the guard
+  discussion it mirrors.
+- New **§8 Live verification log** re-runs the load-bearing checks (trace properties, the
+  `WorkspaceConfig` node, `db.indexes()` dimension exposure) against the pinned build and records
+  the commands, so the [verified] claims above are independently re-checkable.
+
+Two things re-checked and confirmed still correct after the above: the per-kind (not blanket)
+override design (§2.1, corrected reasoning, same conclusion), and `StepRun.resolvedModel`/
+`modelSource` naming used consistently throughout (the A-1 ruling in this note's favor).
+
 ---
 
 ## 1. FR-8 / AC-4, AC-6, AC-9, AC-10 — the resolved model on the execution trace
@@ -49,11 +78,13 @@ inside the existing atomic advance. No new label, no new edge type, no new index
 ```
 (:StepRun {stepRunId, stepKey, status, startedAt, endedAt, input, output,
            resolvedModel,        // NEW — "<provider>/<model-id>", the model that ACTUALLY answered
-           modelSource})         // NEW — 'workspace' | 'step' | 'default', which precedence rung won
+           modelSource,          // NEW — 'workspace' | 'step' | 'default', which precedence rung won
+           modelFallback})       // NEW in v2 (§1.3, m-5) — true iff resolvedModel is not the
+                                  // kind's primary/first choice; absent when no fallback occurred
 ```
 
-Both are **nullable and absent by default**. A step that made no LLM call (`decision`, `human`,
-`wait`, and the `agent`-without-LLM offline stub) carries neither property.
+All three are **nullable and absent by default**. A step that made no LLM call (`decision`,
+`human`, `wait`, and the `agent`-without-LLM offline stub) carries none of them.
 
 **These are not inside `ctx` / `input` / `output`.** Rule 8 of `falkor-chat/AGENTS.md` forbids
 designing queries that filter inside those three serialised strings; `resolvedModel` and
@@ -132,14 +163,38 @@ on exactly this ("the trace is what keeps that visible", FR-17/AC-10).
 > what the step asked for" into "a workspace override overruled the step" — the difference
 > between a reader inferring the cause and reading it. Recommended, not required.
 
+**`modelFallback` — new in v2 (analyst m-5; finding accepted).** `modelSource ∈ {workspace, step,
+default}` names *which precedence rung won*; it cannot say whether, within that rung, an FR-18
+fallback chain had to move past the primary model. An operator reading the trace after an AC-9
+event sees `modelSource = 'step'` and a model the step never named, with nothing on the row
+saying a degradation occurred — the two facts (which rung, and whether that rung's answer came
+from a fallback) are orthogonal, and the review is right that overloading `modelSource` with a
+`'fallback'` value would conflate them (a fallback can happen *at any rung* — a workspace
+override can itself be a role with a fallback chain).
+
+**Decision: a fourth, boolean `StepRun` property, `modelFallback`**, set `true` only when
+`resolvedModel` is not the first model in whichever chain the winning rung named, and **omitted
+(not written) otherwise** — following the same "nullable, absent by default" contract as
+`resolvedModel`/`modelSource` (§1.1, §1.4's `NULL`-omits-the-property proof). This is chosen over
+the review's documentation-only alternative (leaving fallback visible only in logs/debug
+`TraceEvent`s) because AC-9 is a **formal acceptance criterion**, not a debugging concern, and
+`TraceEvent`s are debug-only by construction (§1.2 — `run["trace"]` false for an ordinary run, so
+a `TraceEvent`-borne signal would exist only for runs someone thought to flag in advance, the
+exact failure mode §1.2 already rejected `TraceEvent` over for `resolvedModel` itself). The same
+argument applies unchanged to whether a fallback occurred: it must be on every run's durable
+record, not gated behind an opt-in flag.
+
+Cost: one boolean, written only on the (expected-rare) rows where a fallback actually fired — near
+enough to the existing ~50-bytes/row estimate (§5) to not move it. The resolver sets it; see §6.2.
+
 ### 1.4 Write path — the one real constraint
 
 `record_step_and_advance` (`repository.py:1301`, `QUERIES.md` §12.2) is a **single atomic query**
 that creates the `StepRun`, hangs `NEXT` off the `LAST_STEP_RUN` tail, moves `AT_STEP` and bumps
-`stepCount`. The two properties ride the existing `CREATE`:
+`stepCount`. The three properties ride the existing `CREATE`:
 
 ```cypher
-// [proposed] — QUERIES.md §12.2, additions marked ⊕
+// [proposed] — QUERIES.md §12.2, additions marked ⊕ (modelFallback added in v2, m-5)
 MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step)
 MATCH (to:Step {stepUid: $toStepUid})
 OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun)
@@ -147,7 +202,8 @@ CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key,
                     status: $stepStatus, startedAt: $startedAt,
                     endedAt: $endedAt, input: $input, output: $output,
                     resolvedModel: $resolvedModel,          // ⊕
-                    modelSource: $modelSource})             // ⊕
+                    modelSource: $modelSource,              // ⊕
+                    modelFallback: $modelFallback})         // ⊕ v2 — NULL unless a fallback fired
 CREATE (r)-[:HAS_STEP_RUN]->(sr)
 CREATE (sr)-[:RAN]->(cur)
 FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END |
@@ -168,14 +224,19 @@ HEAD/TAIL must be a single `GRAPH.QUERY`") is preserved because nothing was spli
 with `rm=NULL` reports `Properties set: 2` (not 4) and `keys(s)` returns `[stepRunId, stepKey]`.
 So **one query shape serves LLM and non-LLM steps alike** — no branching, no `FOREACH` trick, and a
 `decision`/`human`/`wait` StepRun costs **zero** extra bytes. This is what makes the "nullable and
-absent by default" contract in §1.1 free rather than a compromise.
+absent by default" contract in §1.1 free rather than a compromise. `modelFallback` (v2) follows
+the identical rule — `$modelFallback=NULL` on the non-fallback (common) path omits it exactly like
+the original two. This is a generic engine behavior (row 12, §8), not specific to a two-property
+`CREATE`, so it was not re-run for a third property; nothing in FalkorDB's `CREATE {..: NULL}`
+handling is arity-dependent.
 
 **[verified] Backward compatible with no migration.** A `StepRun` written before Landing 2 simply
 lacks the properties; the read below returns `NULL` for it. Proved on the probe with a mixed trace
 (two annotated step-runs plus one "legacy" one) — the legacy row came back with empty
 `resolvedModel`/`modelSource` and correct `NEXT` ordering. **No backfill script is needed**, and
 none should be written: a historical run's model is genuinely unknown, and inventing one from
-today's config is precisely the re-derivation FR-8 exists to prevent.
+today's config is precisely the re-derivation FR-8 exists to prevent. The same applies to
+`modelFallback`: absent means "unknown/not applicable", never "confirmed no fallback".
 
 ### 1.5 The `_drive_loop` SHA lock — the sharp edge for the implementer
 
@@ -190,11 +251,11 @@ Consequence, and it constrains the implementation shape:
 > adding a `decision` argument to `_record`, or a new positional parameter — edits the locked
 > body and forces a deliberate lock reopen plus a SHA recompute.
 
-`StepResult` is a frozen dataclass outside the lock, so `resolvedModel: str | None = None` and
-`modelSource: str | None = None` are additive and default-safe. **Recommended path: zero lock
-impact.** The value itself must be produced by whichever client actually made the call, so a
-fallback chain reports the model that *answered*, not the one that was tried first (AC-9) — see
-the interface contract, §6.2.
+`StepResult` is a frozen dataclass outside the lock, so `resolvedModel: str | None = None`,
+`modelSource: str | None = None` and `modelFallback: bool | None = None` (v2, §1.3) are all
+additive and default-safe. **Recommended path: zero lock impact.** The value itself must be
+produced by whichever client actually made the call, so a fallback chain reports the model that
+*answered*, not the one that was tried first (AC-9) — see the interface contract, §6.2.
 
 ### 1.6 Deliberately **not** recorded: the guard judge's model
 
@@ -219,6 +280,38 @@ of strings** (a first-class list property, not a serialised blob — so `ANY(m I
 works). Recorded here so the successor doesn't re-litigate it. Flagged to `architect` as an
 explicit scope boundary in §7.
 
+**Addendum — v2 (analyst m-6; finding accepted).** The same "one scalar, many calls" shape
+recurs **one level down**, inside a single step's *own* execution, and needs the same explicit
+rule. `_run_agent_node` (`executor.py:585`) loops up to `config.maxIterations`, calling
+`self._llm.chat` on each pass; with an FR-18 fallback chain live, iteration 1 can answer on model
+A and a later iteration (after the chain re-engages mid-loop) can answer on model B.
+`StepRun.resolvedModel`/`.modelSource` are one scalar apiece, same as above — but this time it is
+the step's *own* calls colliding, not a set of guards.
+
+**Decision: last answering model wins**, same rule §1.6 would use for guards if it recorded them.
+`resolvedModel`/`modelSource`/`modelFallback` record whichever `chat` call **produced the output
+the loop actually returned** — the terminal iteration, not the first, not an aggregate. Rationale:
+
+- Matches the contract §1.1/§6.2 already state: "`resolvedModel` is the model that answered, not
+  the one that was chosen." For a multi-iteration step, the call whose output the step actually
+  emits is unambiguously "the model that answered"; an earlier iteration's model is causally
+  superseded by it and answers a question ("what generated *this* step's output") the requirement
+  doesn't ask.
+- Costs nothing beyond what §1.4/§1.5 already specify: `StepResult.resolvedModel` is stamped once
+  from whichever client made the last successful call — a multi-iteration step is a resolver-loop
+  detail invisible to the write path, exactly as designed.
+- If per-iteration history is ever wanted, it is a **`StepRun.iterationModels`** deduped list
+  property — the same shape recommendation as `guardModels` above, and, like it, not something any
+  Landing-2 AC asks for.
+
+**Implementer note, so "last wins" is not silently violated by construction:** the resolver/
+executor must let each iteration's result **overwrite** the pending `resolvedModel`/`modelSource`/
+`modelFallback` values inside `_run_agent_node`'s loop, so whatever is current when the loop exits
+is what reaches `StepResult`. This falls out for free if the loop just reassigns local variables
+per iteration and reads them once after the loop — no special-casing required — but it is worth
+flagging because a "set once, on first resolution" implementation would silently record model A's
+values when B is what actually answered, and nothing downstream would catch it.
+
 ### 1.7 Read path — "which model ran for this run's steps"
 
 Extend the existing `read_step_runs` projection (`QUERIES.md` §12.8, `repository.py:1497`). This
@@ -227,6 +320,7 @@ AC-10 become observable through an endpoint that already exists.
 
 ```cypher
 // [verified] — §12.8 + ⊕. Anchors on Node By Index Scan (r:WorkflowRun); route via GRAPH.RO_QUERY.
+// modelFallback column added in v2 (m-5).
 // $runId
 MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)
 OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr)
@@ -235,7 +329,8 @@ MATCH (sr)-[:NEXT*0..]->(x:StepRun)
 RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, x.status AS status,
        x.startedAt AS startedAt, x.endedAt AS endedAt, x.input AS input, x.output AS output,
        x.resolvedModel AS resolvedModel,        // ⊕
-       x.modelSource   AS modelSource           // ⊕
+       x.modelSource   AS modelSource,          // ⊕
+       x.modelFallback AS modelFallback         // ⊕ v2
 ORDER BY x.startedAt
 ```
 
@@ -245,19 +340,21 @@ broken on this build (quirks KB) and this projection change must not tempt anyon
 And the compact audit answer, for a human asking "what did this run actually use":
 
 ```cypher
-// [verified] — the FR-8 one-liner. GRAPH.RO_QUERY.
+// [verified] — the FR-8 one-liner. GRAPH.RO_QUERY. modelFallback column added in v2 (m-5).
 // $runId
 MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun)
 WHERE sr.resolvedModel IS NOT NULL
-RETURN sr.resolvedModel AS model, sr.modelSource AS source, count(sr) AS steps
+RETURN sr.resolvedModel AS model, sr.modelSource AS source,
+       coalesce(sr.modelFallback, false) AS fellBack, count(sr) AS steps
 ORDER BY model
 ```
 
 AC-4 reads as two rows with different `model`. AC-6 reads as the *new* concrete model appearing
 after a config edit + restart with no republish. AC-9 reads as the fallback model, not the first
-choice. AC-10 reads as the workspace's model with `source = 'workspace'` — which is strictly more
-than AC-10 asks, and is what turns "an explicit step choice was overruled" from invisible into a
-single-column fact.
+choice — and now, explicitly, as `fellBack = true` on that row rather than requiring the reader to
+infer degradation from the model name alone (v2, m-5). AC-10 reads as the workspace's model with
+`source = 'workspace'` — which is strictly more than AC-10 asks, and is what turns "an explicit
+step choice was overruled" from invisible into a single-column fact.
 
 ### 1.8 No index on `resolvedModel`
 
@@ -278,15 +375,40 @@ adding it, not from this note.
 ### 2.1 The problem beneath the requirement
 
 FR-16 says a workspace "may override model choice for **everything** running in it" and FR-17
-makes it a **hard cap** beating an explicit per-step choice. Read literally as a single blanket
-model string, that is **incoherent**: it would force the embedding worker onto a chat model, which
-breaks FR-19 by construction (a chat model has no embedding endpoint, and if it had one the
-dimension would not match the workspace's frozen index).
+makes it a **hard cap** beating an explicit per-step choice. The design question is whether
+"everything" means *one string governs all four consumers* (arity) or *the scope is the whole
+workspace rather than one step* (scope).
 
-**Assumption I proceeded on** (flagged to `architect` and `tico`, §7-Q1): *the workspace override
-is **per consumer kind**, not a single blanket value.* This is the only reading consistent with
-FR-17's own precedence chain, whose last rung is already per-kind ("→ the per-kind default"), and
-with FR-5's four independent consumers. A blanket single-string override should not be built.
+**Decision: per consumer kind**, not a single blanket value.
+
+> **Reasoning corrected in v2 (analyst A-2).** The **conclusion was upheld** — per-kind is a
+> *faithful* reading of FR-16, not a silent narrowing. But v1 justified it by claiming a blanket
+> override "breaks FR-19 by construction" and that "FR-16 and FR-19 would contradict each other".
+> **That was overstated, and I withdraw it.** FR-19 would work exactly as specified: it would
+> read the workspace's frozen index dimension, find that a chat model's declared dimension does
+> not match, and refuse to embed, loudly — which is precisely its job. Nothing breaks and no two
+> requirements contradict. The correct objection is narrower, and it is *stronger for being
+> narrower*.
+
+**The argument that actually holds**, in ascending weight:
+
+1. **"Everything" is a scope quantifier, not an arity claim.** It contrasts *the whole workspace*
+   with *one step / one agent / one guard* — the granularities FR-5 enumerates. It does not assert
+   that one string is type-correct against all of them.
+2. **FR-17's own chain is already kind-indexed at two of its three rungs** — the middle rung is
+   "the **step/agent/guard**'s own choice", the last is "the **per-kind** default". A kind-blind
+   top rung would be the odd one out in a precedence chain the requirement itself writes as
+   kind-aware throughout.
+3. **A blanket override makes an incoherent configuration *expressible*, and its only reachable
+   outcome is a workspace that can never embed again.** A chat ref forced onto the embedding
+   consumer either has no embeddings endpoint or produces the wrong width; FR-19 then correctly
+   refuses every embed, permanently, until someone edits the override. The administrator gets a
+   working hard cap on three consumers and a silently dead GraphRAG corpus on the fourth. Per-kind
+   can express every *coherent* thing a blanket can (set the three chat kinds) and only loses that
+   one.
+
+So this is a **refinement of FR-16, not a departure from it** — no requirement change is needed,
+and none is requested (§7-Q1, restated in v2).
 
 ### 2.2 Decision
 
@@ -404,11 +526,51 @@ RETURN c.agentModelOverride     AS agentModel,
 
 Zero rows and an all-null row are therefore **equivalent** and must be handled by one code path.
 
-### 2.6 When to read it
+### 2.6 When to read it — and where, exactly
 
-Recommended: **once per drive** — read at `Executor.run` / `resume` entry, alongside the snapshot
-read that already happens there, and carry it through the resolver's per-call scope for the whole
-loop. Cost is one index-anchored `RO_QUERY` per run (0.008 ms plan time), not per LLM call.
+> **Revised in v2 (analyst B-1 / A-5).** The v1 text said to read the overrides "at
+> `Executor.run` / `resume` entry, alongside the snapshot read that already happens there".
+> **That was wrong, and wrong in the specific way this note warns about elsewhere.** The snapshot
+> read is at `executor.py:376-378` — *inside* `_drive_loop`, *inside* the SHA lock. `run()` and
+> `resume()` do not read the snapshot. Sending an implementer there would have cost a lock reopen
+> for the **inbound** read, the mirror image of the outbound hazard §1.5 correctly flagged.
+> Finding accepted in full; the corrected placement follows.
+
+**Read once per drive, in `_drive` (`executor.py:339`) — outside the lock — and carry it on the
+`run` dict.**
+
+```python
+# executor._drive, before `return self._drive_loop(ctx, run)` at :366  [proposed]
+run["ws"] = ctx.ws                                    # B-1: the guard kind's only carrier
+run["modelOverrides"] = self._repo.read_model_overrides(ctx.ws)   # §2.5, one RO_QUERY
+```
+
+**[verified] why this placement and no other:**
+
+| Fact | Evidence |
+|---|---|
+| The lock covers `_drive_loop` only | `awk '/^    def _drive_loop/{f=1} /^    # ── seams/{f=0} f'` — body spans `:375`–`:436` |
+| The lock is live on this tree | recomputed → **`71055f756280`**, matching DESIGN §6.2 |
+| `_drive` (`:339`) is outside it, and has both `ctx` and `run` | `def _drive(self, ctx: CallContext, run: dict[str, Any])` |
+| `_drive` is the **single** convergence point of both entry paths | `run()` `:307` and `resume()` `:335` both call `self._drive(ctx, run)`; `repo.get_run` is at `:304`/`:332` |
+| The `run` dict reaches every consumer inside the loop, untouched | `_drive_loop` forwards it to `_execute_step` (`:404`) and `_select_transition` (`:405-407`) — **no locked line changes** |
+| …including the guard, which has no other route | `_select_transition` calls `evaluate_guard(guard, ctx=run_ctx, run=run, …)` at `:806-808` — **`run` is already passed**; `ctx=` there is the run-ctx dict, not a `CallContext` |
+
+That last row is the whole of B-1's graph-side half. The `guard` kind is the one consumer with
+**no `CallContext` in scope** — `repository.get_run`'s projection cannot carry `ws`, because in
+this design *the workspace is the graph key*, not a field. Stamping `run["ws"]` in `_drive` is
+therefore not a convenience; **it is the only lock-free way FR-17's hard cap reaches
+`guardModelOverride` at all.** Without it, `guardModelOverride` (§2.2) is a property nothing can
+read, and the failure is invisible — a guard with no declared model resolves to the kind default
+whether or not the cap applied, so AC-5 still passes while the cap silently does not.
+
+**Rejected: storing the overrides on `self`.** The `Executor` is a process-wide singleton and
+drives run concurrently — sync routes and sync `BackgroundTasks` on Starlette's anyio worker
+threadpool (`api.py:105`), plus a bare daemon thread per posted message (`mcp.py:71`). Per-drive
+state on `self` is a straightforward data race between two runs in the same process, and the
+symptom would be an audit field that lies about which workspace's cap applied. The `run` dict is
+per-drive by construction. *(Same hazard the review raises against a cached `FallbackClient` —
+the fix is the same: carry per-drive values on per-drive objects.)*
 
 For the two consumers with no run — the `@mention` responder and the embedding worker — read per
 call. Both are already network-bound on an LLM round trip, so a sub-millisecond local read is
@@ -521,10 +683,40 @@ Three layers, each catching what the one before cannot:
    `EmbeddingDimensionError` on a length mismatch. Keep both. They now compare against the
    **introspected** dimension instead of `config.EMBEDDING_DIM` (which FR-20 removes anyway).
 
-**Both `Message` and `Chunk` must be checked**, independently. `bootstrap_schema.sh` creates both
-from one `EMBEDDING_DIM`, but nothing *enforces* that they agree — and §3.1's "already indexed"
-rejection means a partially-bootstrapped workspace can end up genuinely divergent. Checking only
-`Message` would leave the entire GraphRAG corpus path unguarded.
+**Which labels get checked, and at which layer** — *revised in v2 (analyst m-4; finding accepted,
+with one addition).*
+
+v1 said "both `Message` and `Chunk` must be checked, independently" without saying *where*, which
+read as "check both on every write". That is wrong, and the review is right about why:
+
+- **[verified] nothing in the application writes `Chunk.embedding` today.**
+  `grep -rn 'Chunk' server/falkorchat/*.py` returns **exactly one hit, and it is a comment**
+  (`config.py:32`). `Chunk`/`Document` are bootstrapped DDL and a DESIGN §3 corpus concept; no
+  module populates them.
+- So gating a **`Message` write** on the `Chunk` index's dimension would let a divergent-but-
+  **unused** `Chunk` index block message embedding that the workspace would accept perfectly
+  well — a refusal with no corresponding corruption to prevent. FR-19 says refuse *"when the
+  configured embedding model's vector dimension does not match the target workspace's vector
+  index"*; for a `Message` write, the target index is `Message.embedding`. Nothing else.
+
+**Corrected rule — gate each write on the label being written:**
+
+| Layer | Checks | Blocking? |
+|---|---|---|
+| 1 — startup assertion (§3.3) | **both** `Message` and `Chunk` | yes, at startup — an operator-facing warning that the workspace is internally inconsistent |
+| 2 — first-embed cache (§3.3) | **the label being written**, only | yes — this is the write gate |
+| 3 — post-hoc length check | **the label being written**, only | yes |
+
+The `Chunk` check keeps its place in layer 1, where it belongs: `bootstrap_schema.sh` creates both
+indexes from one `EMBEDDING_DIM`, but nothing *enforces* that they agree, and §3.1's "already
+indexed" rejection means a re-bootstrapped workspace can end up genuinely divergent. That is worth
+telling an operator about at startup. It is not worth blocking an unrelated write over.
+
+**Addition the review does not make, and it matters for sequencing:** when a `Chunk` writer *is*
+built, it inherits layers 2 and 3 for `Chunk` automatically — the introspection query (§3.2) is
+already label-parameterised (`$label ∈ {'Message','Chunk'}`) and the cache is keyed `(ws, label)`.
+No FR-19 rework is needed then. That is the reason to keep the design label-generic even though
+only one label is live today.
 
 ### 3.4 The failure surface
 
@@ -582,8 +774,9 @@ gconstraint "$g" UNIQUE NODE WorkspaceConfig PROPERTIES 1 workspaceConfigId
 `PENDING` and reaches `OPERATIONAL` (confirmed via `CALL db.constraints()`), and the subsequent
 `MERGE` + `RO_QUERY` behave as §2.4/§2.5 describe.
 
-**No DDL for FR-8.** `resolvedModel` / `modelSource` are unindexed properties on an existing label
-(§1.8). **No DDL for FR-19** — it is a read of existing index metadata.
+**No DDL for FR-8.** `resolvedModel` / `modelSource` / `modelFallback` (v2) are unindexed
+properties on an existing label (§1.8). **No DDL for FR-19** — it is a read of existing index
+metadata.
 
 `reference` is untouched by this design. So is the `identity` graph.
 
@@ -596,6 +789,7 @@ RAM is the binding constraint; every item is called out.
 | Addition | Cost | Basis |
 |---|---|---|
 | `StepRun.resolvedModel` + `.modelSource` | **≈50 bytes per LLM-executing StepRun**; ≈1 MB per 20 000 | **[verified]** `GRAPH.MEMORY USAGE` delta between two 20 000-node probe graphs with and without the two properties: 2 MB → 3 MB (`amortized_node_attributes_by_label_sz_mb` for `StepRun`, 1 → 2). MB granularity — treat as an upper bound of that order, not a precise figure. |
+| …`.modelFallback` (v2, §1.3) | **effectively zero** | one boolean, written only on the rows where a fallback fired (expected rare); on the common (non-fallback) row it is omitted, same as the other two — not separately measured, below the ≈50 B/row figure's own MB-granularity noise floor |
 | …on non-LLM step-runs (`decision`/`human`/`wait`/offline stub) | **zero** | **[verified]** a `NULL` param omits the property entirely (§1.4) |
 | `WorkspaceConfig` node | **one node per workspace** + one label matrix + one range index + one constraint over 1 row | effectively zero; below `GRAPH.MEMORY USAGE`'s 1 MB resolution |
 | Index on `resolvedModel` | **not added** (§1.8) | avoided cost |
@@ -639,11 +833,13 @@ read_model_overrides(ws) -> {agentModel, guardModel, embeddingModel, responderMo
 Per LLM call, the resolver must return alongside the client:
 
 ```
-resolvedModel: str    # the concrete "<provider>/<model-id>" that ACTUALLY answered
-modelSource:   str    # 'workspace' | 'step' | 'default' — which rung won
+resolvedModel:  str    # the concrete "<provider>/<model-id>" that ACTUALLY answered
+modelSource:    str    # 'workspace' | 'step' | 'default' — which rung won
+modelFallback:  bool   # NEW in v2 (§1.3, m-5) — True iff resolvedModel is not the winning
+                        # rung's primary/first-choice model; omit (None) when it is
 ```
 
-Three binding requirements:
+Four binding requirements:
 
 1. **`resolvedModel` is the model that answered, not the one that was chosen.** With an FR-18
    fallback chain the two differ, and AC-9 is specifically about the difference. The value must
@@ -653,9 +849,17 @@ Three binding requirements:
    populates.
 2. **It must reach `_record` on the `StepResult`** — see §1.5. `StepResult` is the only value the
    SHA-locked `_drive_loop` call site already passes to `_record`; anything else forces a lock
-   reopen. Both new fields default to `None` so non-LLM step types are unaffected.
+   reopen. All three new fields default to `None` so non-LLM step types are unaffected.
 3. **`modelSource` must be set by whichever rung actually won**, including `'workspace'` when a
    hard cap overruled an explicit step choice. This is the field AC-10 turns on.
+4. **`modelFallback` is set by comparing the answering call against the chain the winning rung
+   named, not against `modelSource`.** The resolver already holds the ordered chain it is walking
+   (FR-18) at the moment a call succeeds; `modelFallback = (index of the successful entry > 0)`.
+   It is **orthogonal to `modelSource`** — a workspace override can itself resolve to a role with
+   its own fallback chain, so `('workspace', True)` is a valid, meaningful combination, not a
+   contradiction. Leave it unset (`None`) rather than `False` on the non-fallback path, matching
+   the omission contract in §1.1/§1.4 — the property's *presence* is the signal an operator scans
+   for, not its value.
 
 ### 6.3 What the resolver must VALIDATE
 
@@ -790,16 +994,23 @@ in the overlay's `agents` map (where it already fits), **not** on the node.
 
 Flagged to `architect` (resolver) and `tico` (requirements), each with the assumption taken.
 
-**Q1 — Is the workspace override per-kind or blanket? (FR-16/FR-17)** *Blocking-if-wrong; the
-one question in this note that needs a stakeholder answer rather than an engineering one.*
-Requirements say "everything running in it", and `docs/plans/llm-provider-config.md` §8.2 offers
-`{kind|"*" -> ref}` as a candidate shape. Read as a true blanket, it forces the embedding worker
-onto a chat model and **breaks FR-19 by construction** (§2.1) — FR-16 and FR-19 would contradict
-each other.
-**Assumption:** per consumer kind — four independent nullable overrides, **no `"*"` wildcard**
-(reasoning in §6.5/§8.2). Design proceeds on it, and both documents should land on it.
-If a blanket single value is genuinely wanted, it must exclude the embedding kind in the
-resolver, and FR-16 needs a sentence saying so. For `tico`.
+**Q1 — ~~Is the workspace override per-kind or blanket?~~ WITHDRAWN in v2. No stakeholder
+question is raised.** The `analyst` gate (A-2) upheld per-kind as a **faithful reading of FR-16**,
+not a narrowing: "everything running in it" is a scope quantifier, and FR-17's chain is already
+kind-indexed at two of three rungs. It is a design refinement inside the approved requirement, so
+it needs no requirements amendment and no stakeholder adjudication.
+
+v1 escalated this to `tico` on the premise that a blanket override would make FR-16 and FR-19
+*contradict*. That premise was wrong (§2.1 carries the correction and the argument that does
+hold), and the escalation went with it. **Nothing to route.**
+
+**One residual worth a sentence in the manual, not a question** *(analyst A-2, and I agree)*:
+with per-kind overrides, "everything" is exactly as complete as the kind set. Plan §3.1 declares
+that set **fixed and closed**, which closes the hole today — but adding a fifth consumer kind
+later means adding its override property in §2.2, or the new kind silently escapes a control the
+requirement calls a *hard cap*. That is a **note for the admin manual and a comment on the
+`WorkspaceConfig` DDL**, owned by `tico` and whoever adds the fifth kind. Not a blocker, and not
+a question needing an answer now.
 
 **Q2 — The `@mention` responder has no execution trace.** FR-8 records the resolved model on "the
 workflow run's execution trace". The responder (FR-5/consumer 1) runs **outside** any workflow when
