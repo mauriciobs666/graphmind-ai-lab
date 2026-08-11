@@ -63,7 +63,7 @@ This document, not any agent's context window, is the state of record.
 | U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
 | U12 | `coder` | `ac3a30856c37f943c` | accepted | L2-7 (docs + close) + D-1 fixture fix. Committed `c4cf5ad` | `analyst` (`a04f9a7d6e04f4a70`) → **approve**, no blockers, no majors |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
-| U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
+| U7 | `qa-engineer` | `a8a683efb479866dd` | in-flight | Landing 2 acceptance pass — AC-6..AC-11 + AC-4's trace half | terminal gate for Landing 2 (mirrors U6's role for Landing 1) |
 
 **U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
 `.env.example`, `compose.yaml`, `start_server.sh`, README, AGENTS.md) is core resolver-coupled
@@ -467,6 +467,19 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U7 dispatched — 2026-08-11
+
+All implementation and docs-close work for Landing 2 is now committed and independently gated
+(U8–U12, `17c20dc`/`0801b3c`/`eb1a60f`/`44494d5`/`c4cf5ad`), plus the two residual-item fixes
+(`5b28c65` `-graph.md` v4, `56f5e15` `local-model-ram-budget-ml.md`). `qa-engineer` dispatched
+(`a8a683efb479866dd`) for U7, the Landing-2 acceptance pass — the terminal gate for this landing,
+mirroring how U6's PASS closed Landing 1 (no further `analyst` re-review after this). Scope: AC-6
+through AC-11 plus AC-4's trace half, against the real running system. Per root `AGENTS.md`'s
+document-family rules, `qa-engineer` writes **new** documents
+(`docs/test-plans/llm-provider-config2.md`, `docs/test-reports/llm-provider-config2-report.md`,
+`Extends:`/`Extended by:` the Landing-1 pair) rather than revising the already-executed-against
+Landing-1 test-plan/report in place.
 
 ## U12 delivered — 2026-08-11
 
