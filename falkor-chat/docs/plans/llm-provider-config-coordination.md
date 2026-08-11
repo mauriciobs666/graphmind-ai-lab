@@ -59,7 +59,7 @@ This document, not any agent's context window, is the state of record.
 | U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
-| U10 | `coder` | `af0638405efcb716a` | in-flight | L2-4 (publish-time rejection) | `analyst` diff-scoped gate |
+| U10 | `coder` | `af0638405efcb716a` | delivered (uncommitted) | L2-4 (publish-time rejection). 853 passed, 1 deselected (8 new); `teco` independently re-ran, exact match | `analyst` diff-scoped gate — dispatched `a7a621e2bbb36d6e1` |
 | U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
@@ -467,6 +467,29 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U10 delivered — 2026-08-11
+
+`coder` (`af0638405efcb716a`) delivered L2-4: `_declared_model_refs`/`_check_models_resolvable`
+(`services.py`), wired into `publish_workflow_def` immediately before `self._repo.publish_def(...)`
+and after `_check_no_structural_conflict` (the M-4 ordering). `Services` gains an optional
+`models=` constructor param + a `set_models()` late-bind method, mirroring the existing
+`set_executor()` pattern — chosen over reordering construction because `app.py::_build_default_app`
+only builds `ModelGateway.from_env(...)` inside `config.ENABLE_AGENT`'s branch, so requiring it at
+`Services.__init__` would force every disabled-agent deployment to read the two config files
+(violating plan §4.1's "required only when a consumer is wired" rule). `teco` independently
+verified: `git diff --stat` matches (3 files, +319/-2, no leakage into `executor.py`/
+`modelconfig.py`/`repository.py`/any Cypher); offline suite re-run, **853 passed, 1 deselected**,
+exact match; read the full `services.py`/`app.py` diffs by eye — the ordering, the workspace-
+override boundary (`FakeModels.resolve` asserts `ws is None and overrides is None` on every call,
+not just accepts them), the `_normalize_opaque` REST-coverage, and the late-bind wiring at both
+`ModelGateway.from_env(...)` sites in `app.py` all check out. The M-4 regression test
+(`test_publish_workflow_def_topology_conflict_wins_over_model_resolution_m4`) asserts both the 409
+**and** `models.calls == []` — a direct proof of ordering, stronger than an exception-type check
+alone.
+
+`analyst` diff-scoped gate dispatched (`a7a621e2bbb36d6e1`), including its own independent
+mutation-test of the M-4 ordering.
 
 ## U9 gated and committed — 2026-08-11
 
