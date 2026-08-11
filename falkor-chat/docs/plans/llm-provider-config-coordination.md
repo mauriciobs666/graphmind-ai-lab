@@ -60,8 +60,8 @@ This document, not any agent's context window, is the state of record.
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
 | U10 | `coder` | `af0638405efcb716a` | accepted | L2-4 (publish-time rejection). Committed `eb1a60f` | `analyst` (`a7a621e2bbb36d6e1`) → **approve with suggestions**, no blockers, no majors |
-| U11 | `coder` | `af1650a97aa6a0278` | delivered (uncommitted) | L2-5 (test-only, confirmed no production change needed) + L2-6 (embedding-dim guard, layers 2+3). 866 passed, 1 deselected (13 new); `teco` independently re-ran, exact match. Live `test_queries.sh` 320/320, reseeded and verified in sync | `analyst` diff-scoped gate — dispatched `a71f25eedc144778d` |
-| U12 | `coder` | — | queued | L2-7 (docs + close) | — |
+| U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
+| U12 | `coder` | — | queued (not dispatched — paused) | L2-7 (docs + close) | — |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
@@ -467,6 +467,59 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## Paused (2026-08-11) — stakeholder directive
+
+**Stakeholder instruction, received mid-flight (message text: "pause now. Do not dispatch U10,
+U11, U12, or U7"): honored at the nearest clean boundary.** The message itself was written against
+an earlier state (it describes `teco` as "mid-verification of U9's diff"); by the time it was
+processed, U9, U10 **and** U11 had already been dispatched, independently verified, gated by
+`analyst`, and committed (`0801b3c`, `eb1a60f`, `44494d5`) — work already done cannot be undone, and
+each of those three was already at its own clean gated-and-committed boundary before this message
+arrived. Consistent with the instruction's own stated intent ("finish only what's safe to finish at
+the current boundary... commit if you reach a clean, gated stopping point"), this session:
+
+- Did **not** dispatch U12 (L2-7, docs + close) or U7 (`qa-engineer`'s Landing-2 acceptance pass) —
+  both remain `queued`, untouched.
+- Finished only the already-in-flight bookkeeping: this coordination doc's own ledger/log update
+  recording U11's already-complete gate-and-commit, which is documentation of settled fact, not new
+  work.
+
+**State at pause, precise:**
+
+- **Committed, on `main`:** U8 (`17c20dc`) L2-1+L2-2, U9 (`0801b3c`) L2-3, U10 (`eb1a60f`) L2-4, U11
+  (`44494d5`) L2-5+L2-6. All four independently verified by `teco` and gated by `analyst` (approve /
+  approve with suggestions / approve / approve — no blockers anywhere across the whole landing so
+  far). B-1 is closed. Offline suite: **866 passed, 1 deselected**. Live query suite: **320/320**.
+  `ws:acme`/`reference` were left reseeded and in sync after U11's live-suite run.
+- **Not started:** U12 (L2-7 — `docs/DESIGN.md` §14.8 roles/precedence/trace additions,
+  `docs/HISTORY.md` Landing-2 entry, `docs/BACKLOG.md` K-042 → ✅ + M4 row, `falkor-chat/AGENTS.md`
+  additions per the original task brief) and U7 (`qa-engineer`'s black-box acceptance pass against
+  the running system, mirroring U6's Landing-1 pattern).
+- **Residual items carried forward, not yet closed by anyone:**
+  1. A non-gating documentation-precision finding in `-graph.md` §3.2's own illustrative table (the
+     `User`/`RANGE`-only example is actually the zero-rows case, not "one row, `dim=NULL`" as the
+     prose states) — independently reproduced by both `coder` (U11) and the `analyst` U11 gate.
+     Candidate for a small `graph-dba` amendment; not blocking anything.
+  2. D-1 from Landing 1 (Minor: `config/opencode.example.json`'s `openai` provider entry has no
+     `options.baseURL`) — still open, a cheap doc/fixture fix.
+  3. `compose.yaml`/`Dockerfile` K-042 changes remain unverified against a real `docker build`/
+     `docker compose` — no Docker anywhere in this pipeline so far.
+  4. `docs/plans/local-model-ram-budget-ml.md` still needs its owner's (`data-scientist`) dated
+     amendment noting the env-var mechanism K-042 replaced (flagged since Landing 1 design phase,
+     never picked up).
+
+**Resume point, when the stakeholder clears it:** dispatch U12 to `coder` — a docs-only unit, no
+independent-review gate needed per this coordination's own severity-matched-ceremony practice (the
+prior landing's L1-6 docs unit was folded directly into the code unit rather than separately gated;
+L2-7 is smaller still, pure documentation, and every fact it documents has already been through two
+independent gates as code). Then dispatch U7 (`qa-engineer`), mirroring U6's Landing-1 acceptance
+pass: driven against the real running server/FalkorDB/LM Studio, AC-6 through AC-11 in scope (the
+Landing-2 ACs), same "AC-2/AC-3 model-gated, no cloud key" carve-out as Landing 1. On U7's PASS,
+Landing 2 — and this coordination — closes: flip this document's own `Status:` to `archived` per
+root `AGENTS.md`'s routing table (`teco` performs that flip itself, per the standing rule), after
+confirming every other frozen document in the "Milestone close" section above has also been
+flipped by its own owner.
 
 ## U11 delivered — 2026-08-11
 
