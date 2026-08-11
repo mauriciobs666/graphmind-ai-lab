@@ -98,3 +98,30 @@
   deficient because of the size (unconfirmed at the time of this entry — the run had not yet
   completed) — the fact worth capturing is the token/duration cost signal itself, independent of
   outcome quality.
+
+## 2026-08-11 — Update: the oversized-landing entry above is now stakeholder-confirmed, and the outcome cost is in
+
+- **Evidence:** the same K-042 Landing 1 unit finished at **458k subagent tokens / 222 tool calls
+  / ~45 min** for the initial dispatch (on top of the ~370k already burned mid-run at the time of
+  the entry above). Its diff-scoped `analyst` gate then found 2 majors — both test-coverage gaps
+  against the plan's own named done-conditions (`test_executor_agent.py`, `test_responder.py`,
+  `test_tools.py` left completely untouched despite being named in the plan's §5 file list; the
+  AC-13 tripwire shipped with zero test coverage) — requiring a **second** dispatch to the same
+  `coder` agent just to close two named gaps that were part of the original unit's own scope.
+  Stakeholder's own words, unprompted, on seeing the cost: *"please never again create a landing
+  so big."* This upgrades the prior entry from a `teco`-side cost observation to an explicit,
+  standing user directive.
+- **Context:** same coordination as the entry above; the missed-test-coverage finding is itself
+  suggestive evidence for the mechanism — a single ~2.7M-ms, 6-step, ~10-file run plausibly lost
+  track of 3 of the plan's ~15 named files under its own scope, in a way a smaller, checkpointed
+  unit (one agent per plan step, verified before the next starts) would have caught immediately
+  rather than needing a whole extra review-and-fix round trip. This specific gap — untouched
+  files silently dropped from a large unit's own stated scope — argues that oversizing costs
+  correctness, not just tokens.
+- **Suggested home:** prompt — same "Delegate with complete briefs" / dispatch step as the entry
+  above, now with a concrete correctness cost attached, not just a token-cost signal. Concrete
+  rule to carry forward on this same feature's Landing 2 (already recorded in
+  `falkor-chat/docs/plans/llm-provider-config-coordination.md`'s "Diff-scoped gate and
+  fix-forward" section): split by the plan's own step boundaries (L2-1+L2-2 / L2-3 / L2-4 /
+  L2-5+L2-6 / L2-7), one dispatch per step or small adjacent-step cluster, sequenced as dependent
+  units rather than one landing-wide brief.
