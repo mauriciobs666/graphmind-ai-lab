@@ -60,7 +60,7 @@
 | **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 | **M3.5 — Web API Coverage** ✅ | **Reached (2026-07-29)** — FR-1..FR-10/AC-1..AC-6 wired into `web/` (defs viewer, inline run cue + detail panel, structured-input resume, participants list, ready-to-demo banner), **QA-accepted**: K-036 verdict **PASS with parked/non-blocking limitations**, zero blocking defects (`docs/test-reports/web-api-coverage-report.md`) | **K-036 ✅** (5 waves, 2026-07-28→2026-07-29) ⇒ **M3.5 ✅**. K-037 (`TRIGGER_DEF_KEY` graft bug + banner cosmetic) and K-038 (`refreshRunPanel` overlapping-poll-tick race) are follow-ups, **not** M3.5-green gates. |
-| **M4 — LLM provider & model configuration** ✅ | **Reached (2026-08-11)** — providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the four legacy per-provider/per-model env vars **replaced** — **QA-accepted** (both landings) with AC-2/AC-3 recorded model-gated (no cloud API key available), zero blocking defects (`docs/test-reports/llm-provider-config-report.md`, `docs/test-reports/llm-provider-config2-report.md`) | **K-042 ✅** (two landings — **L1**: FR-1..FR-6/FR-11..FR-15/FR-20, the `ModelGateway` seam, `transport.py`, both config files, the cutover, QA-accepted `20d0262`; **L2**: FR-7..FR-10/FR-16..FR-19 — roles, fallback chains, workspace override (closing finding B-1), trace recording, publish-time rejection, the dimension guard, QA-accepted `719870b` — one Major defect (D-2, a REST-layer fault-envelope gap) found and fixed same-session, `analyst`-gated `b3c3019`) ⇒ **M4 ✅**. Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. |
+| **M4 — LLM provider & model configuration** ✅ | **Reached (2026-08-11)** — providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the four legacy per-provider/per-model env vars **replaced** — **QA-accepted** (both landings) with AC-2/AC-3 recorded model-gated (no cloud API key available), zero blocking defects (`docs/test-reports/llm-provider-config-report.md`, `docs/test-reports/llm-provider-config2-report.md`) | **K-042 ✅** (two landings — **L1**: FR-1..FR-6/FR-11..FR-15/FR-20, the `ModelGateway` seam, `transport.py`, both config files, the cutover, QA-accepted `20d0262`; **L2**: FR-7..FR-10/FR-16..FR-19 — roles, fallback chains, workspace override (closing finding B-1), trace recording, publish-time rejection, the dimension guard, QA-accepted `719870b` — one Major defect (D-2, a REST-layer fault-envelope gap) found and fixed same-session, `analyst`-gated `b3c3019`) ⇒ **M4 ✅**. Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. Three non-blocking follow-ups filed at close, none gating M4: **K-043** (`compose.yaml`/`Dockerfile` never verified against a real Docker build), **K-044** (whether an admin manual is wanted — open `tico` decision), **K-045** (FR-10's requirements text is stale against the shipped `failed`-with-cause behavior). |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
 > narrow §12 roadmap DoD: embeddings + vector index + hybrid retrieval + agent participant +
@@ -1369,6 +1369,65 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Done-condition — met.** Both landings delivered and `analyst`-gated, `qa-engineer` acceptance
   PASS on both (AC-2/AC-3 recorded model-gated), DESIGN §1.3/§14 and the run instructions updated
   in the same changes ⇒ **M4 ✅**.
+
+### K-043 — `compose.yaml`/`Dockerfile` never verified against a real `docker build`/`docker compose` (🔵 proposed — filed out of K-042 close, 2026-08-11)
+
+> **Why it exists.** K-042 Landing 1's L1-5 unit updated `compose.yaml` (the two config-file paths,
+> a read-only bind mount of the shared overlay file, `host.docker.internal:host-gateway`) and
+> `Dockerfile`-adjacent run instructions on the strength of static review only — no Docker toolchain
+> was available anywhere in the coordination pipeline (agents, gates, or the QA acceptance pass), so
+> the change was never exercised by an actual `docker build` / `docker compose up`. The risk is
+> narrow (a bind-mount path typo or a missing `host.docker.internal` extra_hosts entry would only
+> surface in a real container run) but real, and it's the one surface in K-042 that shipped unverified.
+- **Owner:** **`devops`** — build the image, bring the stack up via `compose.yaml`, and confirm the
+  server inside the container can resolve both config-file paths and reach LM Studio on the host via
+  `host.docker.internal`.
+- **Scope:** `docker build` against `falkor-chat/Dockerfile`; `docker compose up` against
+  `falkor-chat/compose.yaml`; confirm the bind-mounted shared overlay file is readable at the path
+  the container expects, and that a chat request round-trips to the host LM Studio instance.
+- **Risks/RAM:** none — verification only, no design change expected unless the run surfaces a defect.
+- **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
+  follow-up rather than folding it into this item.
+
+### K-044 — Decide whether an admin manual (`docs/manuals/llm-provider-config.md`) is wanted (🔵 proposed — filed out of K-042 close, 2026-08-11)
+
+> **Why it exists.** `tico` flagged, while archiving K-042's requirements document, that no
+> end-user-facing manual was written for LLM provider/model configuration — the two config files,
+> per-kind defaults, roles/fallback chains, workspace override precedence, and how to read the
+> resolved model off a run's trace are all documented at requirements/plan altitude
+> (`docs/requirements/llm-provider-config.md`, `docs/plans/llm-provider-config.md`) but not at the
+> operator-facing altitude `docs/manuals/` is for (per root `AGENTS.md`'s documentation convention).
+> This was never raised to the stakeholder as a decision point — it's an open call, not a commitment.
+- **Owner:** **`tico`** — decide whether the audience (whoever hand-edits the two config files) needs
+  a manual, or whether the existing `README.md` config section is sufficient; if yes, author
+  `docs/manuals/llm-provider-config.md` per the family-slug convention (this feature's slug already
+  spans requirements/plans/reviews/test-plans/test-reports, so a manual would join that family).
+- **Scope:** a stakeholder check-in on whether this is wanted, then (if yes) write the manual,
+  illustrated with a diagram of the precedence chain (workspace → step/agent/guard's own choice →
+  per-kind default) where a picture beats prose.
+- **Risks/RAM:** none — documentation only.
+- **Test strategy:** N/A (docs); if written, a `qa-engineer` walkthrough of the manual's steps against
+  the running system per the standard manual-verification pattern.
+
+### K-045 — FR-10's requirements text ("the run suspends") is stale against the shipped `failed`-with-cause behavior (🔵 proposed — filed out of K-042 close, 2026-08-11)
+
+> **Why it exists.** `docs/requirements/llm-provider-config.md` FR-10 reads "An unresolvable model
+> encountered at **use time** fails loudly — the run suspends…". The shipped Landing 2 behavior
+> (confirmed by U7's QA acceptance pass and D-2's fix) is that a use-time resolution/provider failure
+> fails the run with a recorded cause (`status='failed'`), not a suspend/park state — the same
+> failure vocabulary as the executor's other terminal faults, not the human/wait "suspend and wait for
+> a signal" semantics FR-10's wording evokes. `tico` flagged the drift while flipping the requirements
+> document's header to `Status: archived`, but an archived document's metadata-only edit (the one
+> kind of edit `archived` permits) cannot fix stale body text.
+- **Owner:** **`tico`** — since the source document is `archived`, this needs a deliberate choice per
+  root `AGENTS.md`'s collision rules: either a successor requirements document (new document,
+  `Supersedes:`/`Superseded by:` pointers) correcting the wording, or a deliberate un-archive (only if
+  the original owner chain agrees the fix is a trivial in-place correction rather than a substantive
+  change) — not a silent edit to the archived file.
+- **Scope:** correct FR-10's language to match the shipped `failed`-with-cause behavior; no code
+  change implied — this is a documentation-accuracy item only.
+- **Risks/RAM:** none — documentation only.
+- **Test strategy:** N/A (docs).
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
