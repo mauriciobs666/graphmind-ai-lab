@@ -57,7 +57,7 @@ This document, not any agent's context window, is the state of record.
 | U4-fix | `coder` (resumed) | `ab38a5f2c9766f810` | accepted | closed Major 1 (7 new AC-13 tests) + Major 2 (6 new consumer-binding tests) — 13 new, 791 total | `teco` re-checked directly: diff scoped to exactly the 3 named test files (+207 lines, zero production code), 791 passed re-run myself |
 | **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
 | U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
-| U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
+| U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
 **U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
@@ -292,6 +292,37 @@ as dependent dispatches (chained `SendMessage` continuations or fresh `Agent` ca
 prior step's diff state), not one brief covering the whole landing. See
 `claude/teco/kaizen/inbox.md`'s 2026-08-10 entry, now confirmed by the stakeholder rather than
 just a `teco`-side observation.
+
+## Landing 1 QA acceptance pass (U6) — 2026-08-11, closes Landing 1
+
+`qa-engineer` (`a55e67da7ed500591`) ran the first execution-based (black-box) pass on this
+feature — driven against the real running server, real FalkorDB (`falkordb-dev`, untouched), and
+real LM Studio at `localhost:1234`, using a throwaway `ws:qa-k042` graph deleted at teardown. All
+nine in-scope ACs (AC-1, AC-4 partial, AC-5, AC-12, AC-13 end-to-end; AC-2/AC-3 structural, per
+stakeholder decision 3) passed. Full offline suite re-reproduced independently: **791 passed, 1
+deselected**.
+
+**One defect, D-1 (Minor):** `config/opencode.example.json`'s `openai` provider entry has no
+`options.baseURL`, so the shipped cloud-provider example can't resolve as shipped — a one-line
+fixture gap, not a resolver defect (isolated: adding the key makes it resolve identically to the
+other two providers). Not fixed in this pass, left for a documentation touch-up. `teco`
+independently re-verified both the suite count and D-1 (direct read of the file — `apiKey` present,
+`baseURL` absent) before accepting.
+
+Deliverables committed as `20d0262`: `docs/test-plans/llm-provider-config.md` (TP-001..TP-010),
+`docs/test-reports/llm-provider-config-report.md`, a `HISTORY.md` entry, and `qa-engineer`'s own
+kaizen-inbox learnings (the no-implicit-`baseURL`-default fact, and a Bash-tool backgrounding
+gotcha).
+
+**Landing 1 is now fully closed**: implemented (`a2b8aa9`), diff-gated and fixed
+(`U4-gate`/`U4-fix`), and QA-accepted (`20d0262`). Residual, not blocking: D-1 (cheap doc/fixture
+fix), the pre-existing Landing-2-only `"None`/`False`"`→`None` phrasing fix routed to `architect`,
+and `compose.yaml`/`Dockerfile` still unverified against a real Docker build (no Docker anywhere in
+this pipeline).
+
+**Landing 2 (U5+) has not been dispatched.** Per the stakeholder's standing directive, it must be
+split along plan §7's L2-1..L2-7 step boundaries into multiple smaller, sequenced units — never
+one landing-wide brief again — and is being picked up in a fresh session.
 
 ## Log
 
