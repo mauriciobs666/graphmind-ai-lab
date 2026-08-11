@@ -56,7 +56,12 @@ This document, not any agent's context window, is the state of record.
 | U4-gate | `analyst` | `a3b8fcad7a0088cfd` | accepted | `docs/reviews/llm-provider-config.md` `## Landing 1 code review` (`Version: 4`) | approve with suggestions — 2 majors (coverage gaps), 2 minors, no blocker |
 | U4-fix | `coder` (resumed) | `ab38a5f2c9766f810` | accepted | closed Major 1 (7 new AC-13 tests) + Major 2 (6 new consumer-binding tests) — 13 new, 791 total | `teco` re-checked directly: diff scoped to exactly the 3 named test files (+207 lines, zero production code), 791 passed re-run myself |
 | **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
-| U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
+| U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
+| U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
+| U9 | `tdd-engineer` | — | queued | L2-3 (workspace override + precedence — closes B-1) | `analyst` diff-scoped gate |
+| U10 | `coder` | — | queued | L2-4 (publish-time rejection) | `analyst` diff-scoped gate |
+| U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
+| U12 | `coder` | — | queued | L2-7 (docs + close) | — |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
@@ -83,6 +88,10 @@ Every item below is a done-condition on the unit that invalidates it, not a clea
 | `falkor-chat/docs/HISTORY.md` | one entry per delivered landing | each landing's closing unit |
 | `falkor-chat/docs/manuals/` | admin-facing "how to configure models" is a plausible new manual — decide at Landing 1 close | flagged for `tico`, gated `qa-engineer` + `analyst` |
 | `falkor-chat/docs/plans/local-model-ram-budget-ml.md` (`Status: active`, owner `data-scientist`) | 8 references incl. a literal `FALKORCHAT_LLM_MODEL=` env block, per `architect`'s plan §2.9/§9.3 item 5 — a live document this K-042 work invalidates but does not own | flagged for **`data-scientist`**: a dated amendment noting the env-var mechanism was replaced by K-042, applied by that document's own owner, at or before Landing 1 close |
+| `falkor-chat/docs/QUERIES.md` §12.2 (`record_step_and_advance`) and §12.8 (`read_step_runs`) | plan §10 "Suite discipline": Landing 2 touches `record_step_and_advance` and adds two reads, so QUERIES.md must rise with the `-graph.md`-designed Cypher (§1.4/§1.7 `[proposed]` blocks) turned `[verified]` | U8 (StepRun `resolvedModel`/`modelSource`/`modelFallback`) |
+| `falkor-chat/scripts/bootstrap_schema.sh` | `-graph.md` §4 specifies new DDL (a `WorkspaceConfig.workspaceConfigId` index + a backing `UNIQUE` constraint) for the workspace-override singleton — **named in `-graph.md` but absent from `architect`'s plan §7 L2-3 file list**, a gap this coordination's scan catches now rather than at implementation time | U9 (workspace override) |
+| `falkor-chat/docs/QUERIES.md` (new entry) | `-graph.md` §2.4/§2.5 (`WorkspaceConfig` MERGE/read) and §3.2 (`db.indexes()` dimension introspection) are new query shapes with no QUERIES.md entry yet | U9 (§2.4/§2.5) and U11 (§3.2, embedding-dim guard) |
+| `falkor-chat/scripts/test_queries.sh` | any new/changed Cypher above must be exercised by the live query suite (AGENTS.md rule 5) before that unit's diff is gated | whichever of U8/U9/U11 touches the Cypher in question |
 
 ## Milestone close
 
@@ -337,3 +346,109 @@ one landing-wide brief again — and is being picked up in a fresh session.
   U2 was dispatched before the finding existed and its brief had pointed it at the execution trace
   generically. Also pointed U2 at the plan's §8 interface items. Correcting a running agent's
   premise beat discarding its work.
+
+## Resumed 2026-08-11 — Landing 2 kickoff
+
+Fresh session, per the prior session's pause point. Read this document, the plan (v3 at read
+time), `-graph.md` v3, and the review's Pass 1/2/3 + Landing-1-code-review sections in full before
+acting — no unit dispatched on a stale read.
+
+**U5-prereq dispatched and closed.** `architect` (`a1893af3fc6cffdbd`) fixed the three
+`` `None`/`False` ``→`` `None` `` occurrences, bumped the plan to `Version: 4`, added a dated
+revision note. `teco` independently verified the diff (`git diff docs/plans/llm-provider-config.md`)
+touches exactly those three spots plus the header/revision-note addition — nothing else. Committed
+`d7136ec`.
+
+**A gap in the plan's own Landing-2 file lists, caught before dispatch.** `-graph.md` §4 specifies
+DDL (`WorkspaceConfig` index + `UNIQUE` constraint) that `architect`'s plan §7 L2-3 never lists a
+file for (`bootstrap_schema.sh` is absent from L2-3's file column), and plan §10's own "Suite
+discipline" line ("QUERIES.md + the query suite must rise... owned by `-graph.md`") has no
+corresponding row in any L2-N unit either. Folded into U9's (workspace override) and U8/U11's
+(StepRun trace fields, embedding-dim guard) briefs as explicit done-conditions rather than spun out
+as separate units — the underlying Cypher is already fully designed and `[proposed]`/live-verified
+in `-graph.md` §1.4/§1.7/§2.4/§2.5/§3.2/§4, so implementing it alongside the Python that drives it
+is the same unit of work, not a new one. Recorded in the Documentation impact table above.
+
+**Landing 2 split and sequencing, per the standing stakeholder directive** ("please never again
+create a landing so big"): five implementation units along the plan's own step boundaries
+(U8 = L2-1+L2-2, U9 = L2-3, U10 = L2-4, U11 = L2-5+L2-6, U12 = L2-7 docs-only), each with its own
+`analyst` diff-scoped gate (U12 is docs-only, no code gate). **Sequenced, not parallel** — U8, U9
+and U10 all touch `services.py`/`executor.py`/`repository.py`/`modelconfig.py` in overlapping
+ways, so each unit is briefed with the current `git diff` state and dispatched only after the prior
+unit's diff is gated and (fix-forward if needed) committed. Committing per-unit rather than
+Landing-1's single end-of-landing commit — five sequenced units each landing a working, gated,
+committed slice is a cleaner recovery boundary than one 830k-token mega-diff, and it is what the
+directive is asking for in spirit, not just in dispatch-count.
+
+## U8 delivered — 2026-08-11
+
+`coder` (`aa36e66470469ff6d`) delivered L2-1 (roles + ordered fallback chains, `FallbackClient`
+with structurally-enforced no-mutable-state via `__slots__`) + L2-2 (`StepResult`/
+`record_step_and_advance`/`read_step_runs` gain `resolvedModel`/`modelSource`/`modelFallback`,
+matching `-graph.md` §1.4/§1.7 Cypher exactly) + the QUERIES.md/`test_queries.sh` gap. `teco`
+independently verified: `git diff --stat` matches the reported file list exactly (12 files, +958/
+-55, no leakage into `services.py`/`schemas.py`/`api.py`/`guards.py`/`responder.py`/`embedding.py`/
+`tools.py` — confirmed by their absence from `git status --short`); offline suite re-run from
+scratch, **822 passed, 1 deselected**, exact match to `coder`'s report; read the full diffs of
+`llm.py`, `modelconfig.py`, `executor.py`, `repository.py` by eye against `-graph.md` §1.4/§1.5/
+§1.6/§1.7 and the plan's §7 L2-1/L2-2 rows — all match; confirmed `_drive_loop`'s locked body is
+untouched by reading the diff region.
+
+**Deviation flagged by `coder`, independently confirmed real by `teco`, carried forward to U9
+rather than adjudicated here (routed to the `analyst` gate and then to U9's brief):** `modelSource`
+is derived locally in `_run_agent_node` from `config.get("model")` truthiness (`'step'` vs
+`'default'`), not carried on `Resolution`/returned by `ModelGateway.resolve()` — because
+`test_executor_agent.py`'s `RecordingGateway` pins `gateway.calls` to exactly one call per node
+execution (`teco` confirmed this test double and its call-count assertion exist as described,
+`server/tests/test_executor_agent.py:622,657,672,691`). Correct for L2-1/L2-2's own reachable
+outcomes ({step, default} only — no workspace rung exists yet), but a real forward-compatibility
+question for **U9 (L2-3)**: a workspace override silently overruling an explicit step choice is
+invisible to a `config.get("model")`-only check — only `resolve()` itself knows which rung won.
+Sent to the `analyst` gate as an explicit item to judge (accept as correctly-scoped for U8 with the
+risk flagged forward, or require a reshape now); U9's brief will carry whatever the gate concludes.
+
+**Observation, not a finding:** `coder` reports the plain offline `pytest` suite (not just
+`test_queries.sh`) also touches the shared `reference`/`ws:test` graph state via `conftest.py`'s
+`wf_repo` fixture (`DETACH DELETE` on every `wf_repo`-based test) when live FalkorDB is reachable —
+pre-existing test-infra behavior, not introduced by this diff. `falkor-chat/AGENTS.md`'s key-scripts
+table currently only documents this hazard for `test_queries.sh`. Worth a doc note at some point;
+not gating this unit.
+
+`analyst` diff-scoped gate dispatched (`a5469d493547b45ca`), covering both the standard code-review
+checks and an explicit request to judge the `modelSource` deviation above.
+
+## U8 gated and committed — 2026-08-11
+
+`analyst` (`a5469d493547b45ca`) verdict: **approve with suggestions, no blocker**
+(`docs/reviews/llm-provider-config.md` `Version: 5`, `## Landing 2 — U8 (L2-1/L2-2) code review`).
+Independently reproduced the offline suite (822/1 deselected), recomputed the `_drive_loop` SHA
+lock (`71055f756280`, matches, no locked code touched), ran the live query suite (295/295,
+reseeded), and ran two of its own mutation tests (advance-on-failure, last-wins overwrite) —
+both caught the injected regression as predicted. Judged the `modelSource` deviation **acceptable
+as shipped for U8's own scope**, but ruled it a genuine forward-compatibility risk for U9 and gave
+a concrete, actionable requirement (below). One new minor found independently (Minor 3:
+`ModelGateway.embedder()` silently drops fallback-chain elements beyond the primary for kind
+`embedding` — no AC requires it, not gating, deferred to whichever unit next touches `embedder()`).
+
+**Committed `17c20dc`** (U8's implementation + the review doc's new section, bundled — same
+pattern Landing 1's `a2b8aa9` used).
+
+**Carried into U9's brief, verbatim from the gate's recommendation:** replace `_run_agent_node`'s
+local `config.get('model')`-truthiness `modelSource` derivation with a resolver-sourced value that
+can also report `'workspace'` — stated as an explicit done-condition, not left as an implicit
+consequence of adding the override read. The gate's own worked example of the wrong path (a third
+`elif` bolted onto the local truthiness check) is included in U9's brief verbatim, since it names
+the exact bug class (a workspace override targeting a role that itself falls back) a naive fix
+would silently reintroduce. Minor 3 (`embedder()` fallback-chain silently truncated) is also folded
+into U9's scope as a small additional fix, since U9 is the next unit likely to touch
+`modelconfig.py`.
+
+**Routing decision (`teco`, not resolved by the coordination doc):** U8/U10/U11/U12 → `coder` (a
+fully detailed plan exists for each, `coder`'s stated fit). **U9 → `tdd-engineer`**, deliberately
+different from the rest: this is the unit that closes B-1 (the guard-kind workspace-carrier gap
+that cost a whole review cycle in the design phase), its behaviour contract is unusually crisp and
+enumerable (three precedence rungs × four consumer kinds, hard-cap direction, `run["ws"]`/
+`run["modelOverrides"]` already staged by Landing 1 with zero lock reopen required), and
+test-first is the more efficient path for a unit whose main risk is a silently-wrong precedence
+direction rather than an implementation-shape decision. This is the "give it real attention" the
+task brief asked for, made concrete as a routing choice, not just a review-depth note.
