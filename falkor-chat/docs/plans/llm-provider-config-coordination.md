@@ -58,7 +58,7 @@ This document, not any agent's context window, is the state of record.
 | **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
 | U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
-| U9 | `tdd-engineer` | `a6012b2f9de191b86` | delivered (uncommitted) | L2-3 (workspace override + precedence — closes B-1) — carries the `modelSource` reshape + Minor 3 forward from the U8 gate. 845 passed, 1 deselected (23 new); `teco` independently re-ran, exact match. Live `test_queries.sh` 315/315, `ws:acme`/`reference` reseeded and verified in sync | `analyst` diff-scoped gate — dispatched `a9efb77759f3bf495` |
+| U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
 | U10 | `coder` | — | queued | L2-4 (publish-time rejection) | `analyst` diff-scoped gate |
 | U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
@@ -467,6 +467,24 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U9 gated and committed — 2026-08-11
+
+`analyst` (`a9efb77759f3bf495`) verdict: **approve, no blockers, no majors**
+(`docs/reviews/llm-provider-config.md` `Version: 6`, `## Landing 2 — U9 (L2-3) code review`).
+Independently re-derived the kind↔property crosswalk from `-graph.md` §8.4 (not just checking
+`teco`'s/`tdd-engineer`'s reasoning) and confirmed it correct — no escalation to `graph-dba`
+needed. Independently mutation-tested the hard-cap direction itself (same inversion `teco` ran) —
+all four kinds failed, `guard` included. Recomputed the SHA lock (`71055f756280`, matches). Offline
+suite reproduced at 845/1 deselected. One non-gating minor noted (no admin write path for
+`write_model_overrides` yet — expected, out of scope per the plan).
+
+**Committed `0801b3c`** (U9's implementation + the review doc's new section, same bundling pattern
+as U8/Landing 1).
+
+Landing 2 running total so far: U8 + U9 committed, offline suite now at 845 passed (from 791 at
+Landing-1 close), live query suite at 315/315 (from 269 baseline). Continuing to U10 (L2-4,
+publish-time rejection).
 
 ## U8 gated and committed — 2026-08-11
 
