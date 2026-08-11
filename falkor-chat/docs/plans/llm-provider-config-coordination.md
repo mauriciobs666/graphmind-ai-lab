@@ -52,7 +52,7 @@ This document, not any agent's context window, is the state of record.
 | U1v3 | `architect` | `a03bf509bc62cd995` | accepted | plan v3 — adopt `modelFallback` | Pass 3 → approve with suggestions |
 | U2v3 | `graph-dba` | `a59fa97de2ef0a511` | accepted | graph note v3 — fix stale §6.5 language | Pass 3 → approve with suggestions |
 | U3c | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 3) | approve with suggestions — design phase closed |
-| U4 | `coder` | `ab38a5f2c9766f810` | in-flight | Landing 1 implementation (L1-1..L1-6, plan §6) | `analyst` diff-scoped re-gate |
+| U4 | `coder` | `ab38a5f2c9766f810` | delivered (uncommitted) | Landing 1 implementation (L1-1..L1-6, plan §6) — 778 passed offline; mutation-tests on §4.9 ladder + `/v1` rule all caught | `analyst` diff-scoped re-gate — **paused, not dispatched (2026-08-10): out of credits, U4 alone cost 458k subagent tokens** |
 | U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
 | U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
@@ -192,6 +192,39 @@ review (`Version: 3`) are the documents of record. **Landing 1 implementation (U
 `coder`** (`ab38a5f2c9766f810`): L1-1..L1-6 per plan §6, Landing-2 scope explicitly fenced off,
 mutation-testing of the §4.9 ladder and the `/v1` rule required, no commit — diff left for the
 coordinator to gate and commit.
+
+## Paused (2026-08-10) — out of credits
+
+`coder` (U4) delivered: **778 passed** offline (verified green both normally and with `HOME`
+pointed at an empty directory, the M-2 done-condition), new `test_transport.py` (13) +
+`test_modelconfig.py` (51), the FR-4 AST-enforcement test in place, unfiltered legacy-env-var
+grep clean, all 4 mutation-tests caught and reverted. Diff left **uncommitted** in the working
+tree as instructed — none of it has been independently re-verified or committed yet.
+
+**Stakeholder-flagged budget constraint: pause here, do not dispatch the `analyst` diff-scoped
+re-gate or anything further.** U4 alone cost 458k subagent tokens / 222 tool calls / ~45 min —
+on top of the ~370k it had already burned mid-flight per an earlier `/context` check. This is
+roughly the same order of cost as the entire three-pass design-review cycle (three `analyst`
+gates + two revision rounds each on `architect`/`graph-dba`) combined, for one implementation
+unit. See `claude/teco/kaizen/inbox.md`'s 2026-08-10 entry on this unit's size.
+
+**Deviations `coder` flagged in its own report, not yet adjudicated by anyone:**
+- `Dockerfile` gained `COPY config config` — not in the plan's L1-5 file list, but necessary for
+  the container's default `MODEL_CONFIG_PATH` to resolve.
+- Two edits outside the plan's stated L1-5 sites: 2 lines in `docs/BACKLOG.md` and an addition to
+  `falkor-chat/AGENTS.md` itself, both to keep the unfiltered legacy-env-var grep clean.
+- `compose.yaml`/`Dockerfile` changes are **unverified against real `docker build`/`docker
+  compose`** — no Docker available in `coder`'s environment; best-effort per the plan's spec.
+- Flagged for the eventual review: `EmbeddingWorker`/`GraphragRetrieveTool` make two gateway
+  calls per embed (one for the client, one for `dim`) when no `expected_dim` override is given —
+  cheap offline, but worth a second look against the plan's "resolve is a cheap per-call lookup"
+  assumption.
+
+**Resume point, when credits allow:** independently verify `coder`'s claims (re-run the offline
+suite myself, spot-check at least one mutation-test claim, read the flagged deviations against
+the plan), then dispatch the `analyst` diff-scoped re-gate, then commit + `qa-engineer`
+Landing-1 acceptance pass — exactly the sequence already recorded in the ledger above, just not
+yet started.
 
 ## Log
 
