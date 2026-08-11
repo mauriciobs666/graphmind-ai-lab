@@ -54,7 +54,8 @@ This document, not any agent's context window, is the state of record.
 | U3c | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 3) | approve with suggestions — design phase closed |
 | U4 | `coder` | `ab38a5f2c9766f810` | delivered (uncommitted) | Landing 1 implementation (L1-1..L1-6, plan §6) — 778 passed offline; mutation-tests on §4.9 ladder + `/v1` rule all caught; `teco` independently re-verified | `analyst` diff-scoped re-gate — **dispatched 2026-08-10** |
 | U4-gate | `analyst` | `a3b8fcad7a0088cfd` | accepted | `docs/reviews/llm-provider-config.md` `## Landing 1 code review` (`Version: 4`) | approve with suggestions — 2 majors (coverage gaps), 2 minors, no blocker |
-| U4-fix | `coder` (resumed) | `ab38a5f2c9766f810` | in-flight | close Major 1 (AC-13 tripwire test) + Major 2 (3 untested consumer bindings) | re-check by `teco` on return, no full re-gate (narrow, additive test-only fix) |
+| U4-fix | `coder` (resumed) | `ab38a5f2c9766f810` | accepted | closed Major 1 (7 new AC-13 tests) + Major 2 (6 new consumer-binding tests) — 13 new, 791 total | `teco` re-checked directly: diff scoped to exactly the 3 named test files (+207 lines, zero production code), 791 passed re-run myself |
+| **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
 | U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
 | U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
