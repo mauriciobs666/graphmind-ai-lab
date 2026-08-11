@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Landing 1 Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4)
 
 Executes `docs/test-plans/llm-provider-config.md` (TP-001..TP-010). Against commit `595cc70`
 (HEAD; Landing 1 implementation committed at `a2b8aa9`), FalkorDB `falkordb-dev` (untouched, still

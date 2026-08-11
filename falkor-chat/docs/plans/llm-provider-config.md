@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-042 (M4) · **Version:** 4 · **Reviews:** `docs/reviews/llm-provider-config.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-042 (M4) · **Version:** 4 · **Reviews:** `docs/reviews/llm-provider-config.md`
 
 Turns `docs/requirements/llm-provider-config.md` (FR-1..FR-20, AC-1..AC-13) into an ordered,
 two-landing build. Coordination record: `docs/plans/llm-provider-config-coordination.md`.

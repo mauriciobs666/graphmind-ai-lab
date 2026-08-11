@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** K-042 (M4) · **Last updated:** 2026-08-10
+> **Status:** archived · **Owner:** `tico` · **Tracks:** K-042 (M4) · **Last updated:** 2026-08-10
 
 ## Intent
 

@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 10
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 10
 
 ## 1. Scope & verdict
 

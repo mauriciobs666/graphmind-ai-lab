@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-042 (M4)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-042 (M4)
 
 Coordination record for delivering `docs/requirements/llm-provider-config.md`.
 This document, not any agent's context window, is the state of record.
@@ -468,6 +468,32 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## Milestone close in progress — 2026-08-11
+
+M4 is done (`docs/BACKLOG.md` flipped ✅, commit `011644e`). Per this document's own "Milestone
+close" section and root `AGENTS.md`'s per-kind `archived`-flip routing table, dispatched the five
+owner flips in parallel (each a one-field header edit, no content change, verified by `teco` where
+already returned):
+
+- `docs/plans/llm-provider-config.md` → `architect` (`a3e488f37ad1d0dde`) — **done**, `Status:
+  archived`, diff confirmed touching only the `Status:` token.
+- `docs/plans/llm-provider-config-graph.md` → `graph-dba` (`a634694912f440b3a`) — **done**, same.
+- `docs/reviews/llm-provider-config.md` → `analyst` (`a1ef4c51d1e8a4096`) — **done**, same.
+- `docs/test-plans/llm-provider-config.md` + `-2.md`, `docs/test-reports/llm-provider-config-report.md`
+  + `-2-report.md` → `qa-engineer` (`a8f9f072c29ded435`) — **done**, all four confirmed touching
+  only the `Status:` token; the `Extends:`/`Extended by:` pointer pair between the two test-plan
+  documents is unchanged.
+- `docs/requirements/llm-provider-config.md` → `tico` (`a7059c45cdfc80cc2`) — **done**, same. `tico`
+  flagged (without acting on it — an `archived` document permits only header-pointer metadata
+  edits) that FR-10's text still says "the run suspends," now stale against the stakeholder's
+  2026-08-10 `failed`-with-cause decision; reconciling it needs a successor document or a
+  deliberate unarchive, not a silent edit. Carried into the final report as an open follow-up.
+
+All seven owner flips independently verified by `teco` (`git diff` on each — every one touches
+exactly the `Status:` token, nothing else) before this document's own flip below. **This
+document's own `Status:` flip is last**, per the routing table's one carve-out for the coordinator,
+and closes this coordination.
 
 ## D-2 fix gated and committed; U7 accepted — 2026-08-11
 

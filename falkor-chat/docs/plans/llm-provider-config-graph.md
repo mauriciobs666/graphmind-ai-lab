@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 4
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 4
 
 Graph-side design note for `docs/requirements/llm-provider-config.md`. Scope is the three
 graph questions in that feature: **FR-8** (record the resolved concrete model on the execution

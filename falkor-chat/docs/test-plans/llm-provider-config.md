@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Landing 1 Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4) · **Extended by:** `docs/test-plans/llm-provider-config2.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4) · **Extended by:** `docs/test-plans/llm-provider-config2.md`
 
 ## 1. Scope & objective
 

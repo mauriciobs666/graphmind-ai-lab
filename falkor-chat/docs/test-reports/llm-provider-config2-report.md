@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Landing 2 Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-042 (M4)
 
 Executes `docs/test-plans/llm-provider-config2.md` (TP2-001..TP2-015). Against `main` at the
 Landing-2-complete commit (`c4cf5ad` plus the coordination doc's bookkeeping commits on top; tree
