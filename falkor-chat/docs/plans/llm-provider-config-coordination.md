@@ -468,6 +468,17 @@ more than one reader's eyes.
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
 
+## `local-model-ram-budget-ml.md` amendment delivered and committed — 2026-08-11
+
+`data-scientist` (`a7cf3d91cc8f34c6a`) added a top-of-doc correction plus inline pointers at the
+two literal copy-paste-shaped config blocks (§5, §7.6), redirecting `FALKORCHAT_LLM_MODEL`/
+`FALKORCHAT_EMBEDDING_MODEL` references to `config/models.json`'s per-kind defaults (or an admin
+role, since Landing 2), while leaving `FALKORCHAT_EMBEDDING_DIM` (a separate, still-live var)
+explicitly called out as unaffected. Corrected the brief's stated "8" occurrences to the actual
+**7** (6× `FALKORCHAT_LLM_MODEL` + 1× `FALKORCHAT_EMBEDDING_MODEL`) — `teco` independently
+re-counted against `git show HEAD:...` before accepting, exact match. RAM-budget analysis and
+recommendations unchanged, mechanism-naming only. **Committed `56f5e15`.**
+
 ## `-graph.md` §3.2 fix delivered and committed — 2026-08-11
 
 `graph-dba` (`a48838941fcb2c773`) corrected §3.2's `User` edge-case row (zero rows, not "one row,
