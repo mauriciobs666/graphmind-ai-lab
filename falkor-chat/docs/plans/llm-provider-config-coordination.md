@@ -61,7 +61,7 @@ This document, not any agent's context window, is the state of record.
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
 | U10 | `coder` | `af0638405efcb716a` | accepted | L2-4 (publish-time rejection). Committed `eb1a60f` | `analyst` (`a7a621e2bbb36d6e1`) → **approve with suggestions**, no blockers, no majors |
 | U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
-| U12 | `coder` | `ac3a30856c37f943c` | in-flight | L2-7 (docs + close) — DESIGN.md §14.8, HISTORY.md, BACKLOG.md (implementation-complete wording only, not the final ✅ — that's gated on U7), AGENTS.md, + the D-1 fixture fix | `analyst` diff-scoped gate (stakeholder: full rigor, no shortcuts) |
+| U12 | `coder` | `ac3a30856c37f943c` | delivered (uncommitted) | L2-7 (docs + close) — DESIGN.md §14.8, HISTORY.md, BACKLOG.md, AGENTS.md, D-1 fixture fix. `teco` found + fixed one stale cross-reference in HISTORY.md directly (trivial, single-line) before gating | `analyst` diff-scoped gate (stakeholder: full rigor, no shortcuts) — dispatched `a04f9a7d6e04f4a70` |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
@@ -467,6 +467,34 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U12 delivered — 2026-08-11
+
+`coder` (`ac3a30856c37f943c`) delivered L2-7: `docs/DESIGN.md` §14.8 extended with Landing-2
+material (roles/fallback chains, the resolved-model trace, the workspace hard cap closing B-1,
+publish-time rejection, the embedding-dim guard) — the now-stale Landing-1 "bare role refs are
+rejected" paragraph was correctly rewritten in place rather than left contradicting the new content
+below it; `docs/HISTORY.md` gained a dated Landing-2 entry with suite counts taken from this
+coordination doc's own log; `docs/BACKLOG.md`'s M4 row and K-042 item were updated to
+"implementation complete and gated, QA pending" wording, deliberately **not** flipped to a final ✅
+(gated on U7); `falkor-chat/AGENTS.md` gained a terse Landing-2 addition; `config/opencode.example.json`
+got Landing-1's D-1 fix (missing `openai` provider `baseURL`).
+
+**`coder` self-flagged a real concurrency artifact**, caught rather than silently written past: its
+brief described `HEAD` as `8ab3d0d` (the state at dispatch time), but by the time it finished, three
+more commits had landed from the parallel `graph-dba`/`data-scientist` dispatches — including the
+`local-model-ram-budget-ml.md` amendment actually completing and committing (`56f5e15`) while U12
+was still in flight. `coder`'s own HISTORY.md entry, written from its stale read, said that
+amendment was still "not yet picked up." `teco` found and fixed this directly — a trivial,
+single-sentence factual correction to a not-yet-committed draft document, well within the
+genuinely-trivial-fix exception — verified the fix against the actual current state (`56f5e15`
+committed) before applying it, then re-ran the offline suite (`866 passed, 1 deselected`,
+unaffected) since `config/opencode.example.json` is a fixture some tests read.
+
+`analyst` diff-scoped gate dispatched (`a04f9a7d6e04f4a70`), per the stakeholder's explicit
+full-rigor instruction for the remaining units — every factual claim in the diff checked against
+the actual shipped code, not accepted on the writer's word, same standard as a code gate despite
+this being a documentation-only unit.
 
 ## `local-model-ram-budget-ml.md` amendment delivered and committed — 2026-08-11
 
