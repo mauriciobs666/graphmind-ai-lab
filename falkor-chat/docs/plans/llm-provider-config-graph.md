@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 3
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-042 (M4) · **Version:** 4
 
 Graph-side design note for `docs/requirements/llm-provider-config.md`. Scope is the three
 graph questions in that feature: **FR-8** (record the resolved concrete model on the execution
@@ -83,6 +83,26 @@ override design (§2.1, corrected reasoning, same conclusion), and `StepRun.reso
   side of a cross-document disagreement and is being closed there in parallel. No change to this
   document was needed or made for P2-B — `modelFallback`'s design here (§1.3, §1.4, §6.2) is
   unchanged and was reconfirmed sound by the same Pass 2 pass.
+
+**v4 revision (2026-08-11)**, responding to a finding from K-042 Landing 2's U11 unit
+(`coder`, implementing FR-19's guard, and the independent `analyst` review gate — both reproduced
+the same result live against `ws:test`, in the same session):
+
+- **§3.2's edge-behaviour table, `User` row, corrected.** The row read "one row, `dim = NULL`" for
+  a label with only `RANGE` indexes; the actual result is **zero rows**, identical in shape to the
+  row below it ("label unknown to the graph"). Cause: `types[$prop]` is a map access on a property
+  name (`embedding`) `User` has no index of any kind on — `User`'s only index is `userId`
+  (`RANGE`) — so the lookup is a missing key, evaluating to `NULL`; `WHERE ... AND NULL = ['VECTOR']`
+  is `NULL`, not `true`, so the `WHERE` filters the row out rather than passing it through with a
+  `NULL` dimension. Re-verified independently for this revision: `GRAPH.RO_QUERY ws:test` against
+  the §3.2 query filtered to `label = 'User'` returns zero rows; `CALL db.indexes() ... WHERE label
+  = 'User' RETURN label, properties, types` confirms `User`'s only index is `{userId: [RANGE]}` —
+  no `embedding` entry exists in its `types` map at all. This does not change the design or any
+  downstream code: `repository.read_index_dimension` (Landing 2, U11) already collapses "zero rows"
+  and "one row, `dim = NULL`" to the same `None`, so the guard's behavior was never in question —
+  only this document's worked example.
+- The genuinely-`NULL`-row shape is real but was mis-attributed to the wrong example; §3.2 now adds
+  a footnote naming its actual precondition instead of claiming it for `User`.
 
 ---
 
@@ -664,7 +684,7 @@ ORDER BY label
 | Situation | Result | Guard must |
 |---|---|---|
 | Vector index exists, **zero vectors written** | dimension reported normally (it is index metadata, not data) | proceed — an empty workspace is fully checkable |
-| Label has only `RANGE` indexes (e.g. `User`) | one row, `dim = NULL` | **refuse** — no vector index means no place to put an embedding |
+| Label has only `RANGE` indexes on other properties, none named `embedding` (e.g. `User`, indexed only on `userId`) | **zero rows**¹ | **refuse** — no vector index means no place to put an embedding |
 | Label unknown to the graph | **zero rows** | **refuse** |
 | Graph key does not exist at all | `ERR Invalid graph operation on empty key` | **refuse**, and do not let a write create the graph implicitly |
 
@@ -672,6 +692,19 @@ The last one matters: an un-bootstrapped workspace **errors** rather than return
 the guard's error handling cannot be a bare `if not rows`. And under no circumstances may the
 guard "recover" by issuing a write — that would create the graph with no indexes and no
 constraints, which is worse than the mismatch.
+
+¹ **[verified], re-confirmed 2026-08-11 against `ws:test`.** `types[$prop]` is a map lookup keyed
+by property *name*; when the label has no index — of any type — on a property literally named
+`embedding`, the lookup is a missing key, which evaluates to `NULL`. `WHERE ... AND NULL =
+['VECTOR']` evaluates to `NULL`, not `true`, so the row is filtered out — the query returns **zero
+rows**, not a row with `dim = NULL`. A genuine "one row, `dim = NULL`" *is* producible, but only
+from a **different** precondition than "has only `RANGE` indexes": a label carrying a `RANGE`
+(non-vector) index **specifically on the property named `embedding`**. Nothing in this schema's
+current DDL does that — every indexed property in the bootstrap DDL that isn't `embedding` is
+named something else, and the `Message`/`Chunk` `embedding` indexes are `VECTOR`, not `RANGE` — so
+this shape has no live example in the current schema; it is included here only so a future reader
+who does add such an index understands why they'd see a `NULL` row instead of the empty result
+this table documents for every case observed against the real schema today.
 
 Rejected alternative: **probing by ANN query with a deliberately mismatched vector** and parsing
 the `Vector dimension mismatch, expected N but got M` error text. This was the previously-documented
