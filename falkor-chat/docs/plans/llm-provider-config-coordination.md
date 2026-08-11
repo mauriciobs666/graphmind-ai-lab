@@ -61,7 +61,7 @@ This document, not any agent's context window, is the state of record.
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
 | U10 | `coder` | `af0638405efcb716a` | accepted | L2-4 (publish-time rejection). Committed `eb1a60f` | `analyst` (`a7a621e2bbb36d6e1`) → **approve with suggestions**, no blockers, no majors |
 | U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
-| U12 | `coder` | `ac3a30856c37f943c` | delivered (uncommitted) | L2-7 (docs + close) — DESIGN.md §14.8, HISTORY.md, BACKLOG.md, AGENTS.md, D-1 fixture fix. `teco` found + fixed one stale cross-reference in HISTORY.md directly (trivial, single-line) before gating | `analyst` diff-scoped gate (stakeholder: full rigor, no shortcuts) — dispatched `a04f9a7d6e04f4a70` |
+| U12 | `coder` | `ac3a30856c37f943c` | accepted | L2-7 (docs + close) + D-1 fixture fix. Committed `c4cf5ad` | `analyst` (`a04f9a7d6e04f4a70`) → **approve**, no blockers, no majors |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
 
