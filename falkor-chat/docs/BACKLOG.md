@@ -60,7 +60,7 @@
 | **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
 | **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
 | **M3.5 — Web API Coverage** ✅ | **Reached (2026-07-29)** — FR-1..FR-10/AC-1..AC-6 wired into `web/` (defs viewer, inline run cue + detail panel, structured-input resume, participants list, ready-to-demo banner), **QA-accepted**: K-036 verdict **PASS with parked/non-blocking limitations**, zero blocking defects (`docs/test-reports/web-api-coverage-report.md`) | **K-036 ✅** (5 waves, 2026-07-28→2026-07-29) ⇒ **M3.5 ✅**. K-037 (`TRIGGER_DEF_KEY` graft bug + banner cosmetic) and K-038 (`refreshRunPanel` overlapping-poll-tick race) are follow-ups, **not** M3.5-green gates. |
-| **M4 — LLM provider & model configuration** 🟡 | Providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the four legacy per-provider/per-model env vars **replaced** — QA-accepted with AC-2/AC-3 recorded model-gated (no cloud API key available) | **K-042** 🟡 (two landings — **L1 delivered**: FR-1..FR-6/FR-11..FR-15/FR-20, the `ModelGateway` seam, `transport.py`, both config files, the cutover; **L2 implementation complete and independently `analyst`-gated** (U8–U11, committed `17c20dc`/`0801b3c`/`eb1a60f`/`44494d5`): FR-7..FR-10/FR-16..FR-19 — roles, fallback chains, workspace override, trace recording, publish-time rejection, the dimension guard — **QA acceptance pass (U7) not yet run**). Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. |
+| **M4 — LLM provider & model configuration** ✅ | **Reached (2026-08-11)** — providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the four legacy per-provider/per-model env vars **replaced** — **QA-accepted** (both landings) with AC-2/AC-3 recorded model-gated (no cloud API key available), zero blocking defects (`docs/test-reports/llm-provider-config-report.md`, `docs/test-reports/llm-provider-config2-report.md`) | **K-042 ✅** (two landings — **L1**: FR-1..FR-6/FR-11..FR-15/FR-20, the `ModelGateway` seam, `transport.py`, both config files, the cutover, QA-accepted `20d0262`; **L2**: FR-7..FR-10/FR-16..FR-19 — roles, fallback chains, workspace override (closing finding B-1), trace recording, publish-time rejection, the dimension guard, QA-accepted `719870b` — one Major defect (D-2, a REST-layer fault-envelope gap) found and fixed same-session, `analyst`-gated `b3c3019`) ⇒ **M4 ✅**. Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. |
 
 > ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
 > narrow §12 roadmap DoD: embeddings + vector index + hybrid retrieval + agent participant +
@@ -1288,9 +1288,9 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   (282/282, no Cypher touched by this fix).
 - **Risks/RAM:** none — no schema/index/query change; pure application-layer wiring.
 
-### — Milestone M4 (LLM provider & model configuration) — 🟡 IN PROGRESS —
+### — Milestone M4 (LLM provider & model configuration) — ✅ DELIVERED (K-042 → HISTORY.md 2026-08-11) —
 
-### K-042 — LLM provider & model configuration: two config files, one internal resolution seam, per-consumer model choice (🟡 in-progress — requirements `docs/requirements/llm-provider-config.md`, plan `docs/plans/llm-provider-config.md`, 2026-08-10)
+### K-042 — LLM provider & model configuration: two config files, one internal resolution seam, per-consumer model choice (✅ delivered 2026-08-11 — requirements `docs/requirements/llm-provider-config.md`, plan `docs/plans/llm-provider-config.md`, both landings QA-accepted)
 
 > **Why it exists.** Every LLM consumer in the system is handed **the same** model. There is no way
 > to say "this workflow step uses the big model, the guard judge uses the cheap fast one" — the
@@ -1330,14 +1330,18 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   substitution against a real hosted provider) and AC-3 (three provider kinds end-to-end) are
   **deferred / model-gated** — verified structurally, recorded as such by `qa-engineer`, exactly as
   K-025 handled its gated ACs. The design supports them fully; only the end-to-end proof waits.
-- **Status (2026-08-11).** Landing 1 is fully closed: implemented (`a2b8aa9`), diff-gated and
-  fixed, and **QA-accepted** (`20d0262`, U6, PASS with one minor defect D-1, fixed by the L2-7 docs
-  unit). Landing 2's **implementation is complete**: L2-1..L2-6 delivered across four sequenced
-  units (U8–U11), each **independently `analyst`-gated** with no blockers found anywhere
-  (`17c20dc`, `0801b3c`, `eb1a60f`, `44494d5`), offline suite at 866 passed / 1 deselected, live
-  query suite at 320/320. **Landing 2's QA acceptance pass (unit U7) has not yet run** — M4 does
-  not reach ✅ until it does, matching how Landing 1 only closed on its own QA unit (U6), not on
-  the implementation commit alone.
+- **Status (2026-08-11) — both landings closed.** Landing 1: implemented (`a2b8aa9`), diff-gated
+  and fixed, **QA-accepted** (`20d0262`, U6, PASS with one minor defect D-1, fixed by the L2-7 docs
+  unit). Landing 2: implemented across five sequenced units (U8–U12,
+  `17c20dc`/`0801b3c`/`eb1a60f`/`44494d5`/`c4cf5ad`), each **independently `analyst`-gated** with
+  no blockers found anywhere, **QA-accepted** (U7, PASS, `719870b`) — all seven in-scope ACs
+  (AC-4's trace half, AC-6..AC-11) hold live against the real running server, real FalkorDB, real
+  LM Studio, including AC-10's workspace hard cap across **all four consumer kinds including
+  `guard`**, the actual payoff of finding B-1. One Major defect found by that pass (D-2: a
+  REST-layer 500-vs-envelope gap for a drive-time `ModelResolutionError`/`ProviderCallError`) was
+  fixed same-session and `analyst`-gated clean (`b3c3019`) rather than deferred, given the
+  stakeholder's explicit full-rigor instruction for these closing units. Final offline suite: **870
+  passed, 1 deselected**; live query suite: **320/320**.
 - **Declared non-goal.** A **native Anthropic Messages client** (`/v1/messages`, `x-api-key`) is
   *not* built: `ResolvedModel.protocol` names the seam and an unsupported protocol fails loudly at
   startup rather than sending a wrong-shaped payload. Anthropic is reachable in this build through
@@ -1362,9 +1366,9 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   (`StaticModelGateway` sugar in `__init__`; the guard's `model=` kwarg is passed only when the
   guard declares one). Live `pytest -m live` adds one run whose two steps genuinely hit two
   different LM Studio models. Full ordered behaviour list + AC→landing map: plan §10.
-- **Done-condition:** both landings delivered and `analyst`-gated, `qa-engineer` acceptance PASS
-  (AC-2/AC-3 recorded model-gated), DESIGN §1.3/§14 and the run instructions updated in the same
-  changes ⇒ **M4 ✅**.
+- **Done-condition — met.** Both landings delivered and `analyst`-gated, `qa-engineer` acceptance
+  PASS on both (AC-2/AC-3 recorded model-gated), DESIGN §1.3/§14 and the run instructions updated
+  in the same changes ⇒ **M4 ✅**.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,

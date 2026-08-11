@@ -5,6 +5,50 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-11 — K-042 Landing 2: QA acceptance pass (U7) + D-2 fix — closes M4
+
+**What:** First execution-based (black-box) verification of Landing 2, driven against the real
+running server, real FalkorDB, and real LM Studio — two throwaway workspaces, four genuine server
+restarts to exercise FR-15's no-reload-path for AC-6/AC-8, a genuinely-unreachable declared LAN
+endpoint for AC-9's fallback-chain proof. `docs/test-plans/llm-provider-config2.md`
+(`Extends:` the Landing-1 plan) + `docs/test-reports/llm-provider-config2-report.md`.
+
+**Result: PASS.** All seven in-scope acceptance criteria hold live: AC-4's trace half (two steps,
+two models, one non-debug run's `StepRun.resolvedModel`), AC-6 (role remap + restart, no
+republish), AC-7 (publish-time rejection, both halves, plus the M-4 409-beats-400 ordering), AC-8
+(drive-time unresolvable model, run fails with cause, no fallback used), AC-9 (fallback chain via a
+genuinely-unreachable first element), AC-10 (workspace override hard cap across **all four
+consumer kinds including `guard`** — the actual payoff of closing finding B-1), and AC-11
+(embedding-dimension guard, pre-flight, no vector written on mismatch). Offline suite independently
+re-reproduced: 866 passed, 1 deselected, matching the coordination record.
+
+**One defect found, D-2 (Major):** `POST /workflow-runs` (and, by code inspection, `.../input`)
+returned a raw `500` traceback instead of the documented `{"status":"failed","error":...}` envelope
+for a drive-time `ModelResolutionError` — `services._drive_or_fault`'s caught-exception tuple
+predated Landing 2's new drive-time fault classes. The run's own graph state was correct throughout
+(confirmed via a follow-up `GET`); this was a REST-layer translation gap, not a correctness defect.
+Unlike Landing 1's D-1 (Minor, deferred), D-2 was **fixed the same session** rather than deferred —
+the stakeholder's explicit "keep full rigor, no shortcuts" instruction for these closing units,
+weighed against the severity (a genuine break in the primary REST contract for exactly the scenario
+Landing 2's own AC-8 exists to prove). The fix's scope was independently widened beyond the
+QA-suggested one-line patch (`ModelResolutionError` only) after `teco` traced AC-8's own wording
+("fails at call time... no fallback chain applies") to `ProviderCallError` — the transport/
+fallback-exhaustion half of the same AC, unverified live in this pass but reachable by the
+identical code path — and confirmed both belong in the fix by tracing `executor._drive`'s fault net
+directly. `services._drive_or_fault` now catches both, with a corrected docstring explaining why
+each belongs (and why `ModelConfigError` deliberately does not — it has no drive-time occurrence
+path, config is parsed once at construction). Fixed, tested (4 new tests, reproduction-first),
+mutation-tested independently by both `teco` and the `analyst` gate, and `analyst`-gated clean
+(approve, no blockers/majors/minors) — commit `b3c3019`. Final offline suite: **870 passed, 1
+deselected**.
+
+**M4 is now fully reached** — both landings implemented, independently `analyst`-gated at every
+step, and QA-accepted. `docs/BACKLOG.md`'s M4 row and K-042 item flipped to ✅. Residual, non-
+blocking: `compose.yaml`/`Dockerfile` remain unverified against a real `docker build`/`docker
+compose` (no Docker anywhere in this pipeline, carried since Landing 1); whether a
+`docs/manuals/llm-provider-config.md` admin manual is wanted remains an open `tico` decision, not
+yet raised to the stakeholder.
+
 ## 2026-08-11 — K-042 Landing 2: roles, workspace override, resolved-model trace, publish-time rejection, embedding-dimension guard (U8–U12)
 
 **What:** Implemented Landing 2 of the model-resolution seam, `docs/plans/llm-provider-config.md`
