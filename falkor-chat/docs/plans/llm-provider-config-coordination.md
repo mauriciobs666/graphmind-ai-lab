@@ -417,6 +417,20 @@ not gating this unit.
 `analyst` diff-scoped gate dispatched (`a5469d493547b45ca`), covering both the standard code-review
 checks and an explicit request to judge the `modelSource` deviation above.
 
+## U9 transient failure and recovery — 2026-08-11
+
+`tdd-engineer` (`a6012b2f9de191b86`) was terminated mid-run by a platform API session-limit error —
+not a deficient result, the same pattern already recorded above for U1/U2's v2 revisions.
+Independently confirmed before acting: `git status --short` and `git diff --stat` both **empty** —
+the agent was still in its reading/investigation phase (last recorded message: *"Now let's check
+`embedding.py` and `tools.py` for `ws=` usage... and `bootstrap_schema.sh`'s `bootstrap_workspace()`
+region"*), so there is no partial diff to reconcile or lose. Resumed via `SendMessage` to the same
+agent id rather than a fresh dispatch — it had "no active task" (confirming it wasn't still silently
+running) and picked the message up from its own transcript, which preserves whatever it had already
+read/understood. If a second termination happens with still-empty `git diff`, the next resume should
+just re-send the same continuation; if a diff exists by then, switch to a state-recovery brief
+(inspect `git diff`, continue from actual state) per the standing transient-failure guardrail.
+
 ## U8 gated and committed — 2026-08-11
 
 `analyst` (`a5469d493547b45ca`) verdict: **approve with suggestions, no blocker**
