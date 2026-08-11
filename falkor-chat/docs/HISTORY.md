@@ -5,6 +5,28 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-11 — K-042 Landing 1: QA acceptance pass (U6)
+
+**What:** First execution-based (black-box) verification of Landing 1, driven against the real
+running server, real FalkorDB, and real LM Studio — distinct from the two prior static/diff-scoped
+`analyst` gates on the design and the code diff. `docs/test-plans/llm-provider-config.md`
+(TP-001..TP-010) + `docs/test-reports/llm-provider-config-report.md`.
+
+**Result: PASS**, all nine in-scope acceptance criteria (AC-1, AC-4 partial, AC-5, AC-12, AC-13
+end-to-end; AC-2/AC-3 structurally, no cloud API key available in this environment) hold against
+the real system. Full offline suite independently re-reproduced: 791 passed, 1 deselected,
+matching the coordination record's prior report. One defect found and filed: `config/opencode.
+example.json`'s `openai` provider entry has no `options.baseURL`, so the shipped cloud-provider
+example cannot itself resolve until one line is added (Minor — self-diagnosing, isolated, does not
+affect the resolver logic, which was confirmed correct and uniform across all three provider kinds
+once the missing key was supplied). All QA state lived in a throwaway `ws:qa-k042` graph, deleted
+at teardown; `reference`/`ws:acme`/`ws:test` untouched throughout.
+
+**Not covered (expected, no implementation exists yet):** AC-6..AC-11 (Landing 2). Also open:
+`compose.yaml`/`Dockerfile` remain unverified against a real `docker build`/`docker compose` (no
+Docker in this environment either — the same gap already flagged at U4); a live hosted-cloud-
+provider call (no API key available, stakeholder decision).
+
 ## 2026-08-10 — K-042 Landing 1: the model-resolution seam (`ModelGateway`) + FR-20 env-var cutover
 
 **What:** Replaced falkor-chat's four independently-constructed, env-var-configured LLM/embedding
