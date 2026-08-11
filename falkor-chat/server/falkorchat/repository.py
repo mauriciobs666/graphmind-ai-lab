@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from falkordb import FalkorDB
+from redis.exceptions import ResponseError
 
 from . import config, db
 
@@ -699,6 +700,50 @@ class Repository:
             {"msgId": msg_id, "embedding": list(embedding)},
         )
         return res.properties_set > 0
+
+    def read_index_dimension(
+        self, ws: str, *, label: str, prop: str = "embedding"
+    ) -> int | None:
+        """Introspect `ws:{ws}`'s vector-index dimension for `label.prop` (FR-19,
+        `-graph.md` §3.2). QUERIES.md §6 (new subsection).
+
+        Returns the configured dimension, or `None` for every "no vector index"
+        edge case — the four `-graph.md` §3.2 edge behaviours collapse to exactly
+        two outcomes here:
+
+        - **a real int** — the vector index exists (dimension is index metadata,
+          not data, so this is `True` even with zero vectors written).
+        - **`None`** — covers all three "there is no vector index to compare
+          against" cases, deliberately not distinguished further (the caller's
+          only correct response to any of them is "refuse"):
+            1. the label has only non-vector (e.g. `RANGE`) indexes → one row,
+               `dim` column `NULL`;
+            2. the label is unknown to this graph → zero rows;
+            3. the graph key `ws:{ws}` does not exist at all → FalkorDB raises
+               `ERR Invalid graph operation on empty key` rather than returning
+               rows — caught here and folded into the same `None` outcome.
+
+        Routed via `ro_query` (never a write) so a nonexistent graph key is never
+        implicitly created as a side effect of this check — `ro_query`/`GRAPH.RO_QUERY`
+        raising the "empty key" error (rather than silently creating the graph) is
+        exactly what makes case 3 distinguishable from case 2 at all, and is the same
+        behaviour `services._read_or_absent` already relies on for the reference/
+        snapshot "cold graph key" probe.
+        """
+        try:
+            res = self._graph(ws).ro_query(
+                "CALL db.indexes() YIELD label, types, options "
+                "WHERE label = $label AND types[$prop] = ['VECTOR'] "
+                "RETURN options[$prop].dimension AS dim",
+                {"label": label, "prop": prop},
+            )
+        except ResponseError as exc:
+            if "empty key" in str(exc):
+                return None
+            raise
+        if not res.result_set:
+            return None
+        return res.result_set[0][0]
 
     def hybrid_search(
         self, ws: str, *, q_vec: list[float], k: int = 10, limit: int = 10,

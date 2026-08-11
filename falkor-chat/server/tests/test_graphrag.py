@@ -155,3 +155,45 @@ def test_hybrid_search_workspace_wide_spans_channels(repo):
     wide = repo.hybrid_search(WS, q_vec=_pad([1.0]), k=10, limit=10)
     ids = [r["msgId"] for r in wide]
     assert {"m1", "mA"} <= set(ids)
+
+
+# ── read_index_dimension (K-042 Landing 2, FR-19) ───────────────────────────────
+#
+# `-graph.md` §3.2's `CALL db.indexes()` introspection, live against `ws:test`
+# (bootstrapped at TEST_EMBEDDING_DIM=4, `conftest.py::_schema`). The four edge
+# behaviours the design tabulates collapse to two outcomes at this layer: a real
+# int (vector index present — index metadata, not data, so this holds even with
+# zero vectors written) or `None` (every "no vector index to compare against"
+# case, including the graph-key-absent one below).
+
+
+def test_read_index_dimension_returns_the_configured_dimension_for_message(repo):
+    assert repo.read_index_dimension(WS, label="Message") == TEST_EMBEDDING_DIM
+
+
+def test_read_index_dimension_none_for_a_range_only_label(repo):
+    # `User` carries only a plain range index (`bootstrap_schema.sh`) — no vector
+    # index at all for this label, so the read must be "no index", not an error
+    # and not a made-up dimension.
+    assert repo.read_index_dimension(WS, label="User") is None
+
+
+def test_read_index_dimension_none_for_an_unknown_label(repo):
+    assert repo.read_index_dimension(WS, label="NoSuchLabelAtAll") is None
+
+
+def test_read_index_dimension_none_when_the_graph_key_does_not_exist(repo, conn):
+    # -graph.md §3.2 edge case 4: a `ws:{id}` graph that was never bootstrapped
+    # makes FalkorDB raise "ERR Invalid graph operation on empty key" rather than
+    # returning zero rows. The read must fold this into the same "no index"
+    # answer as the other two cases above, and — critically — must NOT create
+    # the graph as a side effect of merely checking it (routed via `ro_query`,
+    # never a write).
+    ghost_ws = "u11-fr19-ghost-probe-does-not-exist"
+    before = set(conn.list_graphs())
+    assert f"ws:{ghost_ws}" not in before
+
+    assert repo.read_index_dimension(ghost_ws, label="Message") is None
+
+    after = set(conn.list_graphs())
+    assert f"ws:{ghost_ws}" not in after  # confirmed: the read created nothing

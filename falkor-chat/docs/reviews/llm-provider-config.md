@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 7
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 8
 
 ## 1. Scope & verdict
 
@@ -1801,3 +1801,275 @@ None blocking. The `docs/plans/llm-provider-config-coordination.md` diff observe
 `git status` but absent from `git diff` is noted above as a non-issue (stale index entry, working
 tree matches `HEAD`); flagging only so a future reviewer isn't puzzled by the same transient
 `git status` reading.
+
+## Landing 2 — U11 (L2-5/L2-6) code review — 2026-08-11
+
+**Scope: this is a diff-scoped code review, not a design re-review.** Baseline is
+`docs/plans/llm-provider-config.md` (`Version: 4`) §4.5 and §7's L2-5/L2-6 rows (loud use-time
+failure FR-10, and the embedding-dimension guard FR-19), and
+`docs/plans/llm-provider-config-graph.md` (`Version: 3`) §3 in full (§3.1–§3.4 — the introspection
+Cypher, the four edge behaviours, the three-layer design, the five-fact error message). `HEAD` is
+`c7c6ca7`; U8/U9/U10 are already committed and out of scope beyond a leakage check. Baseline
+against `coder`'s **uncommitted** working-tree diff, read directly (`git status --short`/`git
+diff`), including the untracked `server/tests/test_background.py`; nothing mutated in the diff
+itself.
+
+**What I executed** (mutating steps are copy-aside → edit → run → confirm → restore from copy,
+never `git checkout`/`restore`):
+
+- `git status --short`/`git diff --stat` → exactly the expected 7 tracked files + 1 new untracked
+  file, +501/-8: `docs/QUERIES.md` (+43), `scripts/test_queries.sh` (+58), `server/falkorchat/
+  embedding.py` (+52), `server/falkorchat/repository.py` (+45), `server/tests/test_embedding.py`
+  (+165/-8), `server/tests/test_executor.py` (+102), `server/tests/test_graphrag.py` (+42), plus
+  untracked `server/tests/test_background.py` (75 lines, read directly). `docs/plans/
+  llm-provider-config-coordination.md` briefly showed as modified in my very first `git status`
+  read and was gone on every subsequent check with zero diff at any point — the same transient
+  stale-index reading already documented in the U10 section above, not a real change. **Zero
+  changes** to `executor.py`, `background.py`, `modelconfig.py`, `app.py`, `services.py`,
+  `schemas.py`, `api.py`, `guards.py`, `responder.py`, `tools.py`, `bootstrap_schema.sh`,
+  `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/HISTORY.md` — confirmed by their absence from `git
+  diff --stat`. No leakage into L2-7 (docs-close) territory beyond `QUERIES.md`/`test_queries.sh`,
+  which are this unit's own legitimate deliverables per the coordination doc's Documentation
+  impact table; nothing touching U8/U9/U10's already-committed files.
+
+- **L2-5's "no production code change" claim — verified true, and trivially so.** `executor.py`
+  and `background.py` do not appear in `git diff --stat` at all — not "changed with no logic
+  edits," genuinely untouched. Read both files directly at their relevant points anyway, not just
+  trusting their absence from the diff: `_drive`'s `except Exception as exc:` net
+  (`executor.py`, wrapping `_drive_loop`) calls `self._fail_with_note(...)` then re-raises, and
+  `_fail_with_note`/`fail_run` clears `atStepKey` unconditionally on any run failure, not
+  specifically for model-resolution errors — a genuinely pre-existing, generic net, not something
+  narrowly shaped to make this claim true. `background.py::_safe_respond`'s `except Exception:`
+  wraps `responder.maybe_respond(...)` and calls `_log.exception("background responder failed
+  (msgId=%s)", ...)`, unconditionally, for any responder failure — also genuinely pre-existing and
+  generic. The claim holds.
+  - **`test_unresolvable_model_ref_at_drive_time_fails_the_run_with_identifier_in_message`**
+    (`test_executor.py`): a `_UnresolvableGateway.resolve_llm()` raises `ModelResolutionError`
+    naming the ref; asserts the run's `status == "failed"`, `atStepKey is None` (AT_STEP cleared),
+    and the identifier readable in `run["ctx"]`. Matches AC-8 exactly.
+  - **`test_unresolvable_model_ref_uses_no_fallback_model`** — read this test specifically to
+    judge the distinctness claim against U8's fallback-exhaustion tests
+    (`test_modelconfig.py`'s `FallbackClient` coverage). Genuinely distinct, not a near-duplicate:
+    U8's tests exercise a *chain of ≥1 elements*, each raising `ProviderCallError` in turn, until
+    the chain is exhausted — a call happens, fails, the next is tried. This test's
+    `_UnresolvableGateway.resolve_llm()` raises **before any chain is even named** — no client is
+    ever handed back, no model is ever tried, and the assertion (`wf_repo.read_step_runs(...) ==
+    []`) proves it structurally: zero `StepRun`s exist because the step never completed a single
+    execution, which is a different failure shape than "every element of a known chain was tried
+    and all failed." The brief's requested distinction is explicit both in the test's own comment
+    and in what it actually asserts.
+  - **`test_background.py`'s coverage of the responder path** — read the file in full (it is new
+    and untracked, `git diff` alone would miss it). `_UnresolvableGateway.embedder()` raises
+    `ModelResolutionError`; `FakeServices.hybrid_search`/`post_agent_answer` are instrumented to
+    prove retrieval and posting are never reached. The single test asserts, inside `caplog.at_level
+    (logging.ERROR)`: (1) `_safe_respond` does not raise — the safety net itself; (2)
+    `services.post_calls == []` — no reply posted; (3) exactly one ERROR record, whose message
+    contains both "background responder failed" and the failing `msgId` ("m1"); (4)
+    `error_records[0].exc_info is not None` and the identifier ("nope/thing") is present in the
+    exception's string form. This is a genuine, direct test of `_safe_respond`'s real behaviour
+    (confirmed by reading `background.py:37-58`: the log line format and `_log.exception` call
+    match the test's assertions exactly, not just plausibly), not a mock of the safety net's
+    existence.
+
+- **The embedding-dimension guard — read and independently cross-checked against `-graph.md`
+  §3.2.** `Repository.read_index_dimension` (`repository.py:704-746`)'s Cypher is byte-identical
+  to `-graph.md` §3.2's:
+  ```cypher
+  CALL db.indexes() YIELD label, types, options
+  WHERE label = $label AND types[$prop] = ['VECTOR']
+  RETURN options[$prop].dimension AS dim
+  ```
+  Routed through `self._graph(ws).ro_query(...)` (never `.query`), consistent with every other
+  read in the file (`ro_query` appears ~15 times in `repository.py`, `read_index_dimension` is one
+  more, not an exception). It wraps the call in `try/except ResponseError` and returns `None` when
+  `"empty key" in str(exc)`, re-raising otherwise. **Verified the `_read_or_absent` precedent the
+  docstring cites is real, not a stretch**: read `services.py:510-525` — `_read_or_absent` catches
+  the identical `ResponseError` with the identical `"empty key" in str(exc)` substring check, for
+  the identical reason (a cold `reference`/`ws:{id}` graph key reads as "absent," not a fault). The
+  new code is the same pattern applied one layer down, not a borrowed name with different
+  behaviour.
+  - **Pre-flight ordering, no HTTP call on mismatch.** Read `EmbeddingWorker.embed_message`
+    (`embedding.py:129-189`): the model is resolved (`self._models.resolve(...)`, no network call
+    — resolution is local config lookup) and `index_dim = self._index_dimension(ws,
+    self._WRITE_LABEL)` is computed, compared, and raised on **before** `embedder.embed(text)` is
+    reached at all. Confirmed by line order, not by the docstring's claim alone.
+  - **All five required facts + remedy, read directly from the f-string.** The raised message
+    interpolates `ws`, `self._WRITE_LABEL` ("Message"), `index_dim`, `model_ref` (the resolved
+    model's ref, or a literal marker when `expected_dim` was injected directly), and `dim` (the
+    model's declared dimension) — five distinct facts, matching §3.4's requirement — plus explicit
+    remedy text ("cannot be changed in place," "re-bootstrapping does NOT change it," "configure a
+    model whose declared dimension matches the index, or create a new workspace"). Matches §3.4's
+    "index dimension cannot be changed in place; re-bootstrapping does not change it; either
+    configure a matching model or create a new workspace" almost verbatim.
+  - **`Chunk` never consulted on the `Message` write path.** `_WRITE_LABEL = "Message"` is a class
+    constant; `_index_dimension` is only ever called with it inside `embed_message`. Found and
+    read `test_worker_never_queries_or_considers_chunk_when_writing_a_message`
+    (`test_embedding.py`) — matches the brief's suggested name exactly — which asserts
+    `repo.index_dim_calls == [("acme", "Message", "embedding")]` and `all(label == "Message" for
+    ... in repo.index_dim_calls)` after an embed. Pins the claim, not just documents it.
+
+- **The `(ws, label)` cache never caches a failure — read, then independently mutation-tested
+  (not just re-reading `coder`'s claimed result).** Read `_index_dimension`
+  (`embedding.py:119-127`): `if dim is not None: self._index_dim_cache[key] = dim` — the store is
+  conditional on a non-`None` result; the lookup (`cached = self._index_dim_cache.get(key); if
+  cached is not None: return cached`) treats a cache miss and a stored failure identically, so a
+  failure is structurally never distinguishable from "not yet probed," which is exactly the
+  "never cache a failure" property. Found
+  `test_worker_never_caches_a_failed_index_lookup_reprobes_every_call` — matches the brief's
+  suggested name exactly — which asserts two consecutive failing calls both hit
+  `read_index_dimension` (`repo.index_dim_calls` has two entries), then flips `repo._index_dim = 4`
+  mid-test (simulating the workspace becoming bootstrapped without a restart) and asserts the very
+  next call succeeds via a fresh read. **Mutation-tested myself**: copied `embedding.py` aside to
+  `/tmp`, changed both the store condition and the lookup condition to unconditionally cache
+  (`if key in self._index_dim_cache: return ...` / always `self._index_dim_cache[key] = dim`,
+  including `None`), ran `pytest -k "cache or never_caches"` — the mutated cache-lookup test
+  failed exactly as predicted (`repo.index_dim_calls` had one entry instead of the expected two,
+  since the second call now serves the cached `None` instead of re-probing), the passing
+  companion test (`test_worker_caches_the_index_dimension_per_ws_label_for_process_lifetime`)
+  still passed (expected — that one only pins the *success* case, which the mutation didn't
+  touch). Restored from the copy, `diff` confirmed byte-identical to the pre-mutation file, full
+  `test_embedding.py` back to 16/16 green.
+
+- **Mutation-tested the dimension-mismatch guard itself, independently.** Copied `embedding.py`
+  aside again, replaced the mismatch `if index_dim != dim:` guard with `if False:` (disabling the
+  pre-flight check entirely while leaving `_index_dimension` still computed, so the mutation is
+  surgical — only the enforcement is removed, not the plumbing around it), ran the full
+  `test_embedding.py` suite. Exactly the three dimension-guard-dependent tests failed as predicted
+  (`test_worker_raises_before_calling_embedder_on_index_dimension_mismatch`,
+  `test_worker_raises_when_no_vector_index_exists_for_message_at_all`, and
+  `test_worker_never_caches_a_failed_index_lookup_reprobes_every_call` — the third fails too
+  because it also relies on the guard raising, not just on the caching mechanics), all with `Failed:
+  DID NOT RAISE EmbeddingDimensionError`; the other 13 tests in the file (including the `ws:test`
+  dim-4 regression test and the plain caching-success test) stayed green, confirming the mutation
+  was scoped correctly and didn't collaterally break unrelated coverage. Restored from the copy,
+  `diff` confirmed byte-identical, full suite back to 16/16 green, and `git diff --stat
+  server/falkorchat/embedding.py` confirmed the working tree still matches the original diff
+  exactly (52 insertions, 0 deletions — no stray edits left behind by the mutation exercise).
+
+- **Live query suite — re-ran myself, not just trusting the report.** FalkorDB was reachable
+  (`falkordb-dev` container, `redis-cli -p 6379 ping` → `PONG`). `./scripts/test_queries.sh` →
+  **320/320 passed**, exact match to `coder`'s/`teco`'s report. Read the new `§6.1` block: three
+  live cases (`Message`'s real dim-4 index, the `User` `RANGE`-only label, an unknown label) plus a
+  documented reason the fourth edge case (nonexistent graph key) doesn't fit this script and is
+  covered by the offline suite instead (`test_read_index_dimension_none_when_the_graph_key_does_
+  not_exist`, `test_graphrag.py` — read and confirmed it exists, asserts both the `None` return
+  and that the ghost workspace's graph key is still absent from `conn.list_graphs()` afterward, i.e.
+  the probe genuinely never created it). Read the `assert_no_data_row` helper
+  (`scripts/test_queries.sh`): it trims everything from the first blank line onward via `awk
+  '/^$/{exit} {print}'` before comparing to the expected header-only output — a sound fix for the
+  flakiness described (`redis-cli`'s "Cached execution: N / ... execution time: X milliseconds"
+  footer has effectively-random digits in `X`, so a bare `assert_not_contains "4"` against the raw
+  reply could coincidentally see a `4` in that footer and false-fail; trimming the footer before
+  the substring check removes the false-positive source entirely without weakening what's actually
+  being asserted — "no data row beneath the header"). Reseeded afterward per the documented remedy
+  (`bootstrap_schema.sh acme` → `seed_demo.sh acme` → `seed_workflows.sh acme` →
+  `verify_workflows.sh acme`) — **RESULT: OK, 2 defs in sync**.
+
+- **The self-flagged `-graph.md` §3.2 documentation-precision finding — independently verified
+  live, not just re-read.** Ran the raw introspection query against `ws:test`'s `User` label
+  myself: `CALL db.indexes() YIELD label, types, options WHERE label = "User" RETURN label, types,
+  options` returns `types = {userId: [RANGE]}` — **no `embedding` key at all** in the `types` map.
+  So `types['embedding']` in the guard's actual query is a missing-map-key access, which FalkorDB
+  Cypher evaluates to `NULL`, and `WHERE ... AND NULL = ['VECTOR']` evaluates the whole predicate
+  to `NULL` (not `false`, but not-true either), which `WHERE` treats as "filter this row out" —
+  **zero rows**, confirmed directly with `CYPHER label="User" prop="embedding" CALL db.indexes()
+  YIELD label, types, options WHERE label = $label AND types[$prop] = ['VECTOR'] RETURN
+  options[$prop].dimension AS dim` returning no data row. `-graph.md` §3.2's own table entry
+  ("Label has only `RANGE` indexes (e.g. `User`) → one row, `dim = NULL`") describes a different
+  shape — the row-with-`NULL` shape it names would actually require a label that has a genuine
+  non-vector index declared specifically *on the `embedding` property*, which nothing in this
+  schema has; `User`'s only index is on `userId`, an unrelated property, which is why it produces
+  zero rows via the missing-key path instead. **Verdict: this is a real, if narrow, documentation
+  imprecision in `-graph.md` §3.2's illustrative table** — the worked example doesn't match live
+  behaviour for the concrete case it names — and `coder`'s diagnosis of *why* is correct (missing
+  map key → `NULL` → filtered out by `WHERE`, not a `NULL`-valued row surviving the filter). It is
+  genuinely non-behaviour-affecting: `read_index_dimension` (`repository.py`) treats "zero rows"
+  and "one row, `dim` = `NULL`" identically (`if not res.result_set: return None`, and a `NULL`
+  dim column would also read back as `None` from the driver), so nothing downstream — the guard,
+  its tests, or any caller — depends on which of the two shapes actually occurs. Worth a small
+  `graph-dba` amendment to `-graph.md` §3.2's table at Landing 2 close (either fix the `User`
+  example to state "zero rows" or swap in a label that genuinely has a non-`embedding`-property
+  RANGE index that *is* named `embedding` to preserve the one-row/`NULL` illustration) — not
+  blocking, and `coder`'s own live-verified comment in `scripts/test_queries.sh` already documents
+  the discrepancy for anyone reading the test suite, so the imprecision is not silently sitting
+  undocumented anywhere in this diff.
+
+- **Layer-1 scope exclusion — independent read.** `-graph.md` §3.3 lists three layers: (1) a
+  startup assertion per known workspace ("a fail-fast convenience, **not** the correctness
+  boundary" — the document's own words), (2) first-embed resolution per `(ws, label)`, cached for
+  the process lifetime ("**the correctness boundary**" — again the document's own framing), (3) the
+  existing post-hoc length check. This unit built (2) and (3) only. Read AC-11 directly (via §7
+  L2-6's row and the requirements it cites): "a mismatch raises naming model, its dim, the
+  workspace and the index dim; the message's `embedding` is null afterwards" — nothing in AC-11's
+  text references startup behaviour, a specific number of known workspaces, or process-launch
+  timing; it is entirely about the outcome of an embed attempt. Layer 2 alone already delivers that
+  outcome, correctly, for every workspace (not just ones known at startup) — layer 1 only exists as
+  a faster, narrower-scoped *warning* for the subset of workspaces the process happens to know
+  about at launch, which is explicitly not what AC-11 asks for. **Verdict: agree — the exclusion is
+  safe for this unit.** Layer 1 is a genuine, real piece of the full `-graph.md` §3.3 design (an
+  operator convenience worth building eventually, and `-graph.md` frames it as such), but nothing
+  in FR-19/AC-11 as stated requires it, and layers 2+3 as delivered here are provably sufficient on
+  their own (the mutation test above proves layer 2 actually gates the write, not just documents an
+  intention to). Building it now would be scope creep against this unit's own brief, not a gap in
+  what this unit was asked to close.
+
+- **Offline suite — ran myself from scratch.** `.venv/bin/python -m pytest -q` from `server/` →
+  **866 passed, 1 deselected**, exact match to both `coder`'s and `teco`'s independent reports.
+
+**Verdict: approve, no blockers, no majors.** L2-5 needed, and delivered, zero production code —
+verified by the diff's own absence of `executor.py`/`background.py` changes and by reading both
+files' pre-existing generic exception nets directly, not merely trusting the claim; the three new
+tests (drive-time failure, no-fallback-used, and the responder path) prove the claim rather than
+just asserting it, and the "no fallback used" test is genuinely distinct from U8's fallback-
+exhaustion coverage, not a near-duplicate. L2-6's guard matches `-graph.md` §3.2's Cypher exactly,
+reuses a real and comparable existing precedent (`_read_or_absent`) for its "empty key" handling,
+runs read-only, fires before any HTTP call, names all five required facts plus remedy text, and
+never consults `Chunk` on the `Message` write path — every one of these claims was independently
+verified by reading the actual code and/or a dedicated, correctly-named test, and the two most
+load-bearing behavioural claims (the cache never storing a failure, and the guard actually gating
+the write) were independently mutation-tested by me, not just re-derived from `coder`'s report,
+and both held. The live query suite passed 320/320 on my own re-run and was reseeded back into
+sync. The layer-1 scope exclusion is correct per an independent reading of AC-11's actual wording,
+not just agreement with the brief's framing. The self-flagged `-graph.md` §3.2 documentation
+imprecision is real (independently reproduced live against `ws:test`) but narrow and
+non-behaviour-affecting, correctly diagnosed by `coder`, and already visibly flagged in the shipped
+`test_queries.sh` comment — a candidate for a small `graph-dba` doc fix at Landing 2 close, not a
+gate blocker.
+
+### What's solid
+
+- **The "no production code change" claim for L2-5 is not just true by omission — it's backed by
+  a genuine pre-existing generic fault net on both paths**, confirmed by reading `_drive`'s
+  `except Exception` and `background.py::_safe_respond`'s `except Exception` directly, and the new
+  tests prove the net actually catches this specific exception type rather than merely asserting
+  that it should.
+- **The "no fallback model used" test is a real, structurally distinct test from U8's
+  fallback-exhaustion coverage** — a chain that's tried-and-exhausted vs. no chain ever named at
+  all, proven by the zero-`StepRun`s assertion, not just a differently-worded copy of the same
+  scenario.
+- **`read_index_dimension`'s "empty key" handling reuses a real, load-bearing precedent** —
+  `services._read_or_absent` — read and confirmed to catch the identical `ResponseError` substring
+  for the identical reason, not a superficially similar name attached to different behaviour.
+  Routing through `ro_query` (never a write) is exactly what keeps this the case — an un-
+  bootstrapped workspace's graph key is never implicitly created by merely checking it.
+- **Both of the diff's most safety-critical claims are mutation-test-proven, by me, independently
+  of `coder`'s and `teco`'s own mutation runs**: the cache never storing a failed lookup, and the
+  pre-flight guard actually blocking the embed rather than merely computing a value nobody checks.
+  Both mutations produced exactly the predicted, narrowly-scoped test failures.
+- **The documentation-precision finding was independently reproduced against the live graph**, not
+  taken on faith — the `User` label's `types` map genuinely has no `embedding` key, confirming the
+  "missing-key → `NULL` → filtered to zero rows" mechanism `coder` diagnosed, and confirming the
+  finding is real but harmless.
+- **The layer-1 scope exclusion holds up under an independent reading of AC-11's actual text**, not
+  just agreement with how the brief framed it — nothing in the acceptance criterion's wording
+  requires startup-time behaviour, and layers 2+3 are demonstrably sufficient (mutation-tested)  on
+  their own.
+
+### Open questions
+
+None blocking. One forward pointer, not a gate item: `-graph.md` §3.2's table entry for the
+`User`/RANGE-only-label case should be corrected by `graph-dba` at Landing 2 close (see the
+documentation-precision finding above) — either restate the `User` example as the zero-rows case,
+or replace it with a label that genuinely carries a non-vector index declared on the `embedding`
+property so the one-row/`NULL` shape the table describes has a real example. Low priority; already
+visibly flagged in the shipped `test_queries.sh` comment, so it will not surprise the next reader.

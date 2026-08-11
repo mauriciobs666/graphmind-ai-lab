@@ -457,6 +457,49 @@ SET m.embedding = vecf32($embedding)
 *Run from the embedding worker after the message is posted. Decoupled from the
 write path — the message is readable before the embedding lands.*
 
+### 6.1 Introspect a workspace's vector-index dimension (K-042 Landing 2, FR-19)
+
+Design: `docs/plans/llm-provider-config-graph.md` §3.2 (edge behaviours), §3.4 (error
+surface). `EmbeddingWorker.embed_message` (`server/falkorchat/embedding.py`) runs this
+**before** calling the embedder at all — a mismatch raises `EmbeddingDimensionError`
+with no HTTP call made and no vector written. `Repository.read_index_dimension`
+(`server/falkorchat/repository.py`).
+
+```cypher
+// [verified] GRAPH.RO_QUERY ws:{id} — replica-routable, zero write risk, never
+// creates the graph as a side effect (see the "graph key absent" row below).
+// $label = the label about to be written (only 'Message' is written anywhere in
+//          this codebase today — 'Chunk' is bootstrapped DDL, never populated);
+// $prop  = 'embedding' (parameterised, though this codebase only ever uses one).
+CALL db.indexes() YIELD label, types, options
+WHERE label = $label AND types[$prop] = ['VECTOR']
+RETURN options[$prop].dimension AS dim
+```
+
+Four distinct edge behaviours, tabulated in `-graph.md` §3.2 — all four collapse to
+two outcomes at the repository layer (a real `int`, or `None` for every "no vector
+index to compare against" case):
+
+| Situation | Raw result | `read_index_dimension` returns |
+|---|---|---|
+| Vector index exists (even with zero vectors written — dimension is index metadata, not data) | one row, `dim` = the configured int | the int |
+| Label has only non-vector (e.g. `RANGE`) indexes | one row, `dim` = `NULL` | `None` |
+| Label unknown to this graph | zero rows | `None` |
+| Graph key `ws:{id}` does not exist at all | FalkorDB raises `ERR Invalid graph operation on empty key` | `None` (caught) |
+
+The last row is why the guard's own error handling cannot be a bare `if not rows`
+— an un-bootstrapped workspace *errors*, it does not return an empty result. The
+read is routed via `ro_query` precisely so this probe can never implicitly create
+the graph as a side effect (the same "empty key" `ResponseError` behaviour
+`services._read_or_absent` already relies on for the reference/snapshot cold-graph
+probe).
+
+**Caching** (`-graph.md` §3.3 layer 2): `EmbeddingWorker` caches the returned
+dimension per `(ws, label)` for the process lifetime — the index dimension
+provably cannot change in place (§3.1: only drop+recreate does, an out-of-band
+admin action) — but **never caches a `None`**, since an un-bootstrapped workspace
+can become bootstrapped without a process restart.
+
 ---
 
 ## 7. Agents

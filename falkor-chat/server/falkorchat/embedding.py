@@ -92,6 +92,10 @@ class EmbeddingWorker:
     working unmodified. `models` is the real `ModelGateway` production wiring passes.
     """
 
+    # `EmbeddingWorker` is a process-lifetime singleton (`app.py::_build_default_app`
+    # constructs exactly one) — the label being written today (§3.3 layer 2).
+    _WRITE_LABEL = "Message"
+
     def __init__(
         self,
         repo: Any,
@@ -103,9 +107,40 @@ class EmbeddingWorker:
         self._repo = repo
         self._models = models or StaticModelGateway(embedder=embedder)
         self._expected_dim = expected_dim
+        # K-042 Landing 2 (FR-19, `-graph.md` §3.3 layer 2 — "the correctness
+        # boundary"): the introspected index dimension, cached per `(ws, label)` for
+        # the process lifetime — the dimension provably cannot change in place
+        # (§3.1: only drop+recreate, an out-of-band admin action, changes it). A
+        # `None` (no vector index yet — e.g. an un-bootstrapped workspace) is
+        # **never** cached: a workspace can become bootstrapped without a process
+        # restart, so a cached miss would permanently and wrongly refuse it.
+        self._index_dim_cache: dict[tuple[str, str], int] = {}
+
+    def _index_dimension(self, ws: str, label: str) -> int | None:
+        key = (ws, label)
+        cached = self._index_dim_cache.get(key)
+        if cached is not None:
+            return cached
+        dim = self._repo.read_index_dimension(ws, label=label)
+        if dim is not None:
+            self._index_dim_cache[key] = dim
+        return dim
 
     def embed_message(self, ws: str, *, msg_id: str, text: str) -> list[float]:
         """Embed `text` and write it onto message `msg_id` in workspace `ws`.
+
+        **Pre-flight (FR-19, new):** before calling the embedder at all, the
+        resolved model's *declared* dimension is compared against the workspace's
+        *introspected* vector-index dimension for `Message` — the label this
+        method writes. `Chunk` is never written by any code path in this codebase
+        today (`-graph.md` §3.3/§3.4, plan §4.5) and is deliberately never
+        consulted here — a divergent `Chunk` index must not block a `Message`
+        embed. On mismatch (including "no vector index exists for `Message` in
+        this workspace at all" — an un-bootstrapped workspace, a `RANGE`-only
+        label, or an unknown label all read back as `None` and are treated as a
+        mismatch, since none of them is a dimension the model's output could ever
+        satisfy) this raises `EmbeddingDimensionError` **before any HTTP call**:
+        no wasted inference, no vector computed.
 
         Validates the embedder's output length before writing — a wrong-length
         vector (a buggy or misconfigured model) is rejected loudly rather than
@@ -119,11 +154,28 @@ class EmbeddingWorker:
         embedder = self._models.embedder("embedding", ws=ws)
         if self._expected_dim is not None:
             dim = self._expected_dim
+            model_ref = "(explicit expected_dim override)"
         else:
             resolution = self._models.resolve("embedding", ws=ws)
+            model_ref = resolution.primary.ref
             dim = resolution.primary.dim
             if dim is None:
                 dim = config.EMBEDDING_DIM
+
+        index_dim = self._index_dimension(ws, self._WRITE_LABEL)
+        if index_dim != dim:
+            raise EmbeddingDimensionError(
+                f"embedding dimension mismatch for workspace {ws!r}, label "
+                f"{self._WRITE_LABEL!r}: the workspace's vector index is "
+                f"dimension {index_dim!r}, but the configured embedding model "
+                f"{model_ref!r} declares dimension {dim!r} (msgId={msg_id!r}) — "
+                f"refusing to embed before calling the model (no HTTP call made, "
+                f"no vector written). The index dimension cannot be changed in "
+                f"place, and re-bootstrapping does NOT change it (dropping and "
+                f"recreating the index is the only way) — either configure a "
+                f"model whose declared dimension matches the index, or create a "
+                f"new workspace at the desired dimension."
+            )
 
         vector = embedder.embed(text)
         if len(vector) != dim:

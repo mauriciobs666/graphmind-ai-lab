@@ -61,6 +61,27 @@ assert_index_scan() {
   assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
 }
 
+assert_no_data_row() {
+  # redis-cli always appends a "Cached execution: N / Query internal execution
+  # time: X milliseconds" footer after a blank line; X is a float whose digits
+  # are effectively random, so asserting "does not contain <bare digit>"
+  # against the raw reply is flaky (X can coincidentally contain that digit).
+  # Trims everything from the first blank line onward, then checks the
+  # remaining header-only output has no data row beneath it.
+  local label="$1" header="$2" actual="$3"
+  local trimmed
+  trimmed=$(printf '%s\n' "$actual" | awk '/^$/{exit} {print}')
+  if [ "$trimmed" = "$header" ]; then
+    echo "  ✓ ${label}"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ ${label}"
+    echo "    expected exactly the header '${header}' with no data row"
+    echo "    got: ${trimmed}"
+    FAIL=$((FAIL+1))
+  fi
+}
+
 # ── setup ────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -385,6 +406,43 @@ assert_not_contains "§6 ANN retrieval has no All Node Scan"                  "A
 out=$(rq "$WS" "CALL db.idx.vector.queryNodes('Message', 'embedding', 2, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message) WITH seed, score, collect(DISTINCT related)[..5] AS expanded RETURN seed.msgId, score, [m IN expanded | m.text] AS relatedContext ORDER BY score ASC LIMIT 5" 2>&1)
 assert_contains     "§6 workspace-wide variant returns m1" "m1" "$out"
 assert_not_contains "§6 workspace-wide variant no error"   "ERR" "$out"
+
+echo ""
+echo "▶ §6.1 read_index_dimension — vector-index introspection (K-042 Landing 2, FR-19)"
+
+# Normal read: ws:test was bootstrapped EMBEDDING_DIM=4 above — Message carries a
+# real dim-4 vector index.
+IDXQ='CALL db.indexes() YIELD label, types, options WHERE label = $label AND types[$prop] = ["VECTOR"] RETURN options[$prop].dimension AS dim'
+out=$(rq "$WS" "CYPHER label=\"Message\" prop=\"embedding\" $IDXQ")
+assert_contains "§6.1 Message vector index reports dimension 4" "4" "$out"
+
+# RANGE-only label: User carries range indexes (bootstrap_schema.sh) but none on
+# 'embedding' at all — [live-verified deviation from -graph.md §3.2's own table,
+# see below] `types['embedding']` is then a missing-key map access (NULL), so
+# `WHERE ... AND NULL = ['VECTOR']` is NULL, not true, and the row is filtered
+# out entirely: zero rows, same shape as the unknown-label case just below, not
+# "one row, dim NULL" as §3.2's illustrative example names it. Both sub-cases
+# still collapse to the same `None` at the repository layer (`read_index_dimension`
+# treats "zero rows" and "one row, NULL" identically — see docs/QUERIES.md §6.1),
+# so this is a documentation-precision note, not a behaviour gap: a label with an
+# actual RANGE index on the literal `embedding` property (which nothing in this
+# schema has) would be the one that produces the one-row/NULL shape.
+out=$(rq "$WS" "CYPHER label=\"User\" prop=\"embedding\" $IDXQ")
+assert_no_data_row "§6.1 RANGE-only label (User) reports no numeric dimension" "dim" "$out"
+assert_not_contains "§6.1 RANGE-only label (User) is not an error" "ERR" "$out"
+
+# Unknown label: zero rows, not an error.
+out=$(rq "$WS" "CYPHER label=\"NoSuchLabelAtAll\" prop=\"embedding\" $IDXQ")
+assert_no_data_row "§6.1 unknown label returns no dim value" "dim" "$out"
+assert_not_contains "§6.1 unknown label is not an error" "ERR" "$out"
+
+# The fourth edge case (-graph.md §3.2) — the graph key not existing at all
+# (`ERR Invalid graph operation on empty key`) doesn't fit this script (it runs
+# entirely inside the one already-bootstrapped ws:test graph); covered instead by
+# the offline suite's
+# test_read_index_dimension_none_when_the_graph_key_does_not_exist
+# (server/tests/test_graphrag.py), which also asserts the probe never creates the
+# graph as a side effect.
 
 # ── §7: agents ───────────────────────────────────────────────────────────────
 

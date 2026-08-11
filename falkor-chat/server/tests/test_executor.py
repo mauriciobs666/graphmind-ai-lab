@@ -18,6 +18,7 @@ from falkorchat.executor import (
     GraphTracer,
     WorkflowExecutor,
 )
+from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.repository import WorkflowRunNotFoundError
 
 CTX = CallContext(ws="test", actor="u1")
@@ -340,6 +341,107 @@ def test_llm_guard_without_judge_fails_the_run_with_named_error(wf_repo):
     run = wf_repo.get_run("test", run_id="r1")
     assert run["status"] == "failed"
     assert "judge" in run["ctx"].lower()
+
+
+# ── K-042 Landing 2 (L2-5, FR-10): an unresolvable model at drive time ────────
+#
+# Mostly *pinning*: `_drive`'s existing M-1 net (`except Exception as exc:
+# self._fail_with_note(...); raise`) already catches a `ModelResolutionError`
+# raised anywhere inside `_drive_loop`, same as any other engine fault (the
+# `NotImplementedError`/`WorkflowConfigError` cases above). These two tests prove
+# it does so for THIS exception type specifically, with the unresolvable
+# identifier readable in the failure and AT_STEP cleared — no production code
+# change was needed for this half.
+
+class _UnresolvableGateway:
+    """A `ModelGateway`-shaped double whose `.resolve_llm()` raises
+    `ModelResolutionError` naming the unresolvable ref — the same "unknown
+    provider" unresolvable-thing `test_modelconfig.py`'s
+    `test_unknown_provider_raises_resolution_error` already covers at the
+    resolver layer. This double proves that failure reaches the drive-level M-1
+    net and terminates the run, rather than duplicating the resolver-level
+    assertion."""
+
+    def has_chat(self) -> bool:
+        return True
+
+    def resolve_llm(self, kind, *, requested=None, ws=None, overrides=None):
+        raise ModelResolutionError(f"unknown provider for ref {requested!r}")
+
+    def llm(self, kind, *, requested=None, ws=None, overrides=None):
+        raise AssertionError("llm() should never be reached — resolve_llm() failed first")
+
+    def embedder(self, kind, *, requested=None, ws=None, overrides=None):
+        raise AssertionError("embedder() should never be called by an agent step")
+
+
+UNRESOLVABLE_STEPS = [
+    {"key": "intake", "type": "agent",
+     "config": '{"model":"nope/thing-that-does-not-exist"}'},
+    # never reached — `intake` raises before transition selection; present only
+    # because an empty `transitions` list trips the empty-UNWIND row-collapse
+    # quirk (`claude/graph-dba/falkordb-quirks.md`) in the snapshot-publish query.
+    {"key": "sink", "type": "agent", "config": "{}"},
+]
+UNRESOLVABLE_TRANSITIONS = [
+    {"from": "intake", "to": "sink", "on": "done", "guard": "", "order": 0},
+]
+
+
+def _start_unresolvable_run(repo, **over):
+    _start_run(
+        repo, steps=UNRESOLVABLE_STEPS, transitions=UNRESOLVABLE_TRANSITIONS,
+        start_key="intake", **over,
+    )
+
+
+def test_unresolvable_model_ref_at_drive_time_fails_the_run_with_identifier_in_message(
+    wf_repo,
+):
+    _start_unresolvable_run(wf_repo)
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = WorkflowExecutor(
+        None, wf_repo, guard_judge=StubJudge([]), models=_UnresolvableGateway(),
+        id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    with pytest.raises(ModelResolutionError) as excinfo:
+        ex.run(CTX, run_id="r1")
+
+    assert "nope/thing-that-does-not-exist" in str(excinfo.value)
+
+    run = wf_repo.get_run("test", run_id="r1")
+    assert run["status"] == "failed"
+    assert run["atStepKey"] is None            # AT_STEP cleared, per fail_run
+    assert "nope/thing-that-does-not-exist" in run["ctx"]  # identifier readable in the failure
+
+
+def test_unresolvable_model_ref_uses_no_fallback_model(wf_repo):
+    # Distinct from a fallback-EXHAUSTION scenario (`test_modelconfig.py`'s
+    # `FallbackClient` tests, U8/L2-1: a chain of >=1 elements IS tried and every
+    # element raises `ProviderCallError` before the chain gives up). Here there is
+    # no chain at all — `resolve_llm()` itself raises before naming/trying any
+    # model — so nothing downstream of it ever runs, no LLM client is ever handed
+    # back, and no StepRun is ever recorded (the step never completed a single
+    # execution). This is the "no other model was used" half of L2-5's own
+    # done-condition, kept as an explicitly separate test so it does not read as
+    # a duplicate of the fallback-exhaustion coverage.
+    _start_unresolvable_run(wf_repo)
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = WorkflowExecutor(
+        None, wf_repo, guard_judge=StubJudge([]), models=_UnresolvableGateway(),
+        id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    with pytest.raises(ModelResolutionError):
+        ex.run(CTX, run_id="r1")
+
+    # no StepRun exists at all — the failure happened before any model answered,
+    # so there is nothing for a fallback (or any other model) to have produced
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert trail == []
 
 
 # ── Defect B — a failing tool must not kill the run (drive level) ─────────────
