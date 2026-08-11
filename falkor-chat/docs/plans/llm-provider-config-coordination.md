@@ -226,6 +226,36 @@ the plan), then dispatch the `analyst` diff-scoped re-gate, then commit + `qa-en
 Landing-1 acceptance pass — exactly the sequence already recorded in the ledger above, just not
 yet started.
 
+## `teco`'s own re-verification (2026-08-10) — done, one step ahead, then paused again
+
+Ran myself (no subagent dispatched — cheap enough to do directly):
+
+- **Diff matches the reported file list** — `git status --short` lines up exactly with `coder`'s
+  own "Files touched" list.
+- **`778 passed, 1 deselected`** — reproduced exactly, twice: normal `HOME` and `HOME` pointed at
+  an empty directory (the M-2 done-condition).
+- **One mutation-test claim reproduced independently**, not just re-read: swapped the
+  `HTTPError`/`URLError` catch order in `transport.py` myself, re-ran `-k transport` →
+  `test_http_error_branch_is_reached_first_and_preserves_the_body` failed exactly as `coder`
+  reported (asserted body string missing from the now-generic `URLError` message), then reverted
+  cleanly (`git status` confirms no diff from the revert).
+- **FR-4 AST-enforcement test** — exists (`test_fr4_only_modelconfig_constructs_openai_compatible_clients_directly`,
+  `test_modelconfig.py:660`), passes standalone.
+- **Unfiltered legacy-env-var grep, re-run independently** — clean: only `config.py`'s own
+  tripwire list (`LEGACY_MODEL_ENV_VARS`) and `docs/plans/local-model-ram-budget-ml.md` (already
+  flagged, out of this plan's scope, owner `data-scientist`).
+- **`Dockerfile` deviation read against the plan** — the plan's L1-5 file list did not name
+  `Dockerfile`, but `config.py`'s `MODEL_CONFIG_PATH` default does resolve via the same
+  sibling-of-`server/` convention `app.py` already uses for `web/` (documented inline in
+  `coder`'s `Dockerfile` comment addition) — the addition is consistent with the plan's own
+  stated mechanism, not a scope add.
+
+**Not yet done** (this was the "one step" — stopping here per stakeholder instruction, more
+credits available but not unlimited): the `analyst` diff-scoped re-gate itself, the commit, and
+`qa-engineer`'s acceptance pass. `compose.yaml`/`Dockerfile` remain unverified against a real
+`docker build`/`docker compose` (no Docker in this environment either) — still an open item for
+whichever step next has Docker access.
+
 ## Log
 
 - **2026-08-10** — Opened. Requirements read at `f78b824`; working tree clean against it
