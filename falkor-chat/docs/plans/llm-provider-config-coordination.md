@@ -64,7 +64,7 @@ This document, not any agent's context window, is the state of record.
 | U12 | `coder` | `ac3a30856c37f943c` | accepted | L2-7 (docs + close) + D-1 fixture fix. Committed `c4cf5ad` | `analyst` (`a04f9a7d6e04f4a70`) → **approve**, no blockers, no majors |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | `a8a683efb479866dd` | delivered (uncommitted) | Landing 2 acceptance pass — **PASS**, all 7 in-scope ACs hold live. 1 defect (D-2, Major) found and routed to fix-forward before final acceptance | terminal gate for Landing 2 — held pending D-2 fix |
-| U7-fix | `tdd-engineer` | `a028652ec0fbb156b` | in-flight | Fix D-2 (drive-time fault envelope gap in `services._drive_or_fault`) | `analyst` diff-scoped gate |
+| U7-fix | `tdd-engineer` | `a028652ec0fbb156b` | delivered (uncommitted) | Fix D-2 — `services._drive_or_fault` now catches `ModelResolutionError` **and** `ProviderCallError` (the AC-8 "fails at call time" half QA hadn't live-reproduced). 870 passed, 1 deselected (4 new); `teco` independently re-ran, exact match; `teco`'s own mutation test on all 4 new tests confirmed | `analyst` diff-scoped gate — dispatched `a3f70162fd74bf9c9` |
 
 **U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
 `.env.example`, `compose.yaml`, `start_server.sh`, README, AGENTS.md) is core resolver-coupled
