@@ -85,8 +85,11 @@ the dev convenience default) and falkor-chat's own overlay, `FALKORCHAT_MODEL_CO
 defaults/timeouts, per-model settings; defaults to the shipped `config/models.json`). The four
 legacy per-provider/per-model env vars K-042 replaced are gone —
 `config.assert_no_legacy_model_env()` (see `config.LEGACY_MODEL_ENV_VARS`) refuses to start if
-any is still set. See
-`docs/plans/llm-provider-config.md` §4 for the design and `config/opencode.example.json` /
+any is still set. **Landing 2** adds: a ref with no `/` resolves as a **role** to an ordered
+fallback chain; a per-workspace override is a **hard cap** that wins over every consumer's own
+choice, reaching all four kinds including the `guard` judge; and publishing a workflow def that
+names an unresolvable model or role now fails at publish time (400) instead of first use. See
+`docs/plans/llm-provider-config.md` §4/§7 for the design and `config/opencode.example.json` /
 `config/models.json` for the shipped shapes.
 
 **`node` is not on `PATH` on the usual dev box (WSL2).** The web unit tests are bare-`node`

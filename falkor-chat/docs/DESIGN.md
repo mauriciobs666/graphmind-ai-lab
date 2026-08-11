@@ -1019,7 +1019,7 @@ count with no FalkorDB connection and no writes — the correct way to check a p
   (FR-15, no reload path), so a bare `monkeypatch.setenv` alone never reaches
   `ModelGateway.from_env()` once the module is already imported.
 
-### 14.8 The model-resolution seam (K-042 Landing 1)
+### 14.8 The model-resolution seam (K-042 Landing 1 + Landing 2)
 
 **The FR-4 rule, in one sentence:** every LLM/embedding consumer holds a `ModelGateway` and asks
 it for a client; a directly-injected client (the pre-K-042 `llm=`/`embedder=` constructor kwargs
@@ -1088,12 +1088,65 @@ boundary (a fresh per-drive dict, never shared, never stored on `self`); `evalua
 itself declared one (`{"kind":"llm","text":…,"model":…}`) — both zero-churn conditional kwargs, so
 every stub judge in the test suite is called exactly as before.
 
-**A ref with no `/`** (bare role names) is rejected with a Landing-2-aware `ModelConfigError` —
-the role namespace stays reserved rather than silently misresolving. Overlay `roles`/`agents` keys
-are parsed and logged as "reserved, not honoured until Landing 2," never rejected.
+**Roles + ordered fallback chains (Landing 2, FR-7/FR-18).** A ref with no `/` now resolves as a
+**role name** — looked up in the overlay's `roles` map and expanded to an ordered, settings-applied
+chain of `provider/model` refs, rather than being rejected. A role name must not itself contain
+`/`, and a chain element that resolves to another role is rejected at **load** time, not first use
+— the role namespace can never accidentally nest. `ModelGateway.llm()`/`.embedder()` build a
+`FallbackClient` over the chain's resolved clients: `.chat(...)`/`.complete(...)` try element 0,
+then element 1, … on a `ProviderCallError` (a transport-layer `TimeoutError` already converts to
+one, closing B-2), and raise naming **every** model tried only if all fail. `FallbackClient` holds
+no mutable "last used" state (`__slots__` makes that structural, M-5) — the answering model and
+whether it came from a fallback travel on the `ChatResult` return value itself: `.model` (the
+answering ref) and `.fallback` (`True` iff a later element answered, `None` — never `False` — for
+a one-element chain or a direct non-role ref).
 
-Full design + rationale: `docs/plans/llm-provider-config.md` §3–§4; requirements:
-`docs/requirements/llm-provider-config.md`.
+**The resolved-model trace (Landing 2, FR-8).** `StepRun` gains three durable properties —
+`resolvedModel`, `modelSource` (`workspace`/`step`/`default` — the precedence rung that won,
+Landing 2) and `modelFallback` (nullable bool, orthogonal to `modelSource` — a workspace override
+can itself resolve to a role with its own fallback) — written by the same atomic
+`record_step_and_advance` every run already calls, and surfaced on `GET
+/workflow-runs/{id}/step-runs`. This is never a `TraceEvent`: those are debug-only by construction
+(a non-debug run writes zero), so an audit-relevant field placed there would silently vanish on
+precisely the runs nobody thought to flag for debugging — see `docs/plans/llm-provider-config-graph.md`
+§1.2 for the full rejection rationale. An agent node that loops and answers on more than one model
+records the **last** iteration's three fields together, never a mix of iterations.
+
+**The workspace override + precedence, and the guard-kind hard cap (Landing 2, FR-16/FR-17,
+closes B-1).** A per-workspace `WorkspaceConfig` singleton (one MERGE-backed node per `ws:{id}`)
+carries an optional per-kind override, read once per drive/responder call and stamped onto
+`run["modelOverrides"]` — never re-read per resolution. `ModelGateway.resolve()` now implements
+the real, first-match-wins precedence: **workspace → the consumer's own requested choice → the
+per-kind default.** The workspace rung is a **hard cap**: when present it wins outright, even over
+an explicit `requested=`, for **all four consumer kinds — `guard` included**. `guard` is the kind
+this section already flagged above as lacking a `CallContext`-borne `ws`; the `run["ws"]` carrier
+documented there is exactly what makes the workspace override reachable at the guard-judge
+resolution point too, closing finding B-1 (Landing 2's plan review had found the naive fix would
+otherwise have to reopen the SHA-locked `_drive_loop`).
+
+**Publish-time rejection (Landing 2, FR-9).** `publish_workflow_def` now runs
+`_check_models_resolvable` **immediately before `self._repo.publish_def(...)`, after
+`_check_no_structural_conflict`** (K-034's topology-conflict check): every step's `config.model`
+and every `{"kind":"llm"}` guard's `model` is resolved through the gateway (no `ws=`/`overrides=` —
+a global publish is never gated by per-workspace state), and an unresolvable model or role fails
+the publish with a **400** naming the offending step key (or transition endpoints) and the
+identifier — nothing is written. A def that fails **both** checks (bad topology **and** an
+unresolvable model) returns K-034's **409**, not this check's 400, since the ordering runs the
+structural check first. A `Services` built without a gateway skips the pass, but logs a WARNING
+naming the def and its unchecked identifiers if it declares any model/role, so the skip is never
+silently invisible.
+
+**The embedding-dimension guard (Landing 2, FR-19).** Before the first embed write for a
+`(workspace, label)` pair, `EmbeddingWorker` compares the resolved embedding model's *declared*
+dimension against the workspace's *introspected* vector-index dimension (`Repository
+.read_index_dimension`, cached per `(ws, label)` for the process lifetime — never caching a
+failure) and raises `EmbeddingDimensionError` **before** calling the embedder on a mismatch: no
+vector is written, no inference is wasted. This closes a real silent-failure mode — a wrong-
+dimension `vecf32` write is accepted at `SET` with no engine-level error, then simply drops out of
+ANN, so retrieval quietly finds nothing with no error anywhere in the chain.
+
+Full design + rationale: `docs/plans/llm-provider-config.md` §3–§4, §7; graph design:
+`docs/plans/llm-provider-config-graph.md`; requirements: `docs/requirements/llm-provider-config.md`.
 
 ---
 

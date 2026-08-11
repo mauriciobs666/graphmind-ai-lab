@@ -5,6 +5,83 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-11 — K-042 Landing 2: roles, workspace override, resolved-model trace, publish-time rejection, embedding-dimension guard (U8–U12)
+
+**What:** Implemented Landing 2 of the model-resolution seam, `docs/plans/llm-provider-config.md`
+§7 (L2-1..L2-6), sequenced as five independently `analyst`-gated units per the standing
+"never a landing-wide mega-dispatch again" directive, plus this docs-close unit (L2-7):
+
+- **Roles + ordered fallback chains (FR-7/FR-18, U8, `17c20dc`).** A ref with no `/` now resolves
+  as a role name — `Overlay.roles[name]` — to an ordered, settings-applied fallback chain, rejected
+  at load (not first use) if a role name contains `/` or a chain element resolves to another role.
+  `FallbackClient` (`llm.py`) tries each chain element in order on a `ProviderCallError`, holds no
+  mutable per-call state (`__slots__`), and reports the answering model and whether it fell back on
+  `ChatResult.model`/`.fallback` — never on client state.
+- **The resolved-model trace (FR-8, U8, `17c20dc`).** `StepRun` gains `resolvedModel`,
+  `modelSource` (`workspace`/`step`/`default`) and `modelFallback` (nullable bool, orthogonal to
+  `modelSource`), written by the existing atomic `record_step_and_advance` and surfaced on
+  `GET /workflow-runs/{id}/step-runs` — a durable property, never a `TraceEvent` (those are
+  debug-only by construction, `docs/plans/llm-provider-config-graph.md` §1.2). A node that loops
+  across models records the last iteration's three fields together.
+- **Workspace override + precedence, closing B-1 (FR-16/FR-17, U9, `0801b3c`).** A per-workspace
+  `WorkspaceConfig` singleton, read once per drive/responder call and stamped onto
+  `run["modelOverrides"]`. `ModelGateway.resolve()` implements the real first-match-wins
+  precedence — workspace → the consumer's own requested choice → the per-kind default — with the
+  workspace rung a **hard cap** reaching all four consumer kinds, `guard` included (closing the
+  design-phase finding that the naive fix would reopen the SHA-locked `_drive_loop`).
+- **Publish-time rejection (FR-9, U10, `eb1a60f`).** `_check_models_resolvable`, run immediately
+  before `publish_def` and after K-034's topology-conflict check, resolves every declared
+  step/guard model reference through the gateway and fails an unresolvable one with a 400 naming
+  the step key (or transition endpoints) and the identifier; a def failing both checks returns the
+  409, not the 400.
+- **Loud use-time failure + embedding-dimension guard (FR-10/FR-19, U11, `44494d5`).** Confirmed
+  the run-drive fault net and `background.py::_safe_respond`'s existing blanket try/except already
+  satisfy FR-10 (an unresolvable model at drive time fails the run, no fallback model used) —
+  zero production code changed, new tests only. `EmbeddingWorker` gained a pre-flight check
+  comparing the resolved embedding model's declared dimension against the workspace's introspected
+  vector-index dimension (`Repository.read_index_dimension`) before the first embed write per
+  `(ws, label)`, refusing loudly (`EmbeddingDimensionError`) rather than writing a silently-
+  unreachable vector.
+- **Docs + close (U12, this entry).** `docs/DESIGN.md` §14.8 extended with the five items above;
+  `falkor-chat/AGENTS.md`'s model/provider paragraph extended; `config/opencode.example.json`'s
+  `openai` provider entry gained the missing `options.baseURL` (Landing-1 QA defect D-1).
+
+Each of U8/U9/U10/U11 was independently gated by `analyst` on its own diff (no blockers anywhere
+across the whole landing: approve with suggestions / approve / approve with suggestions / approve),
+and `teco` independently re-verified suite counts, mutation-tested the hard-cap direction and the
+publish-ordering rule, and confirmed the `_drive_loop` SHA lock unchanged before each commit. Full
+detail, including two self-flagged findings not adjudicated as defects (a documentation-precision
+gap in `-graph.md` §3.2's own worked example, and a flaky `test_queries.sh` assertion fixed
+in-flight), is in `docs/plans/llm-provider-config-coordination.md`'s log (U8 through U11 delivered/
+gated/committed sections).
+
+**Test results:** offline suite **866 passed, 1 deselected** (from 791 at Landing-1 close); live
+`./scripts/test_queries.sh` **320/320** (from 269 baseline), reseeded and verified in sync
+(`bootstrap_schema.sh` → `seed_demo.sh` → `seed_workflows.sh` → `verify_workflows.sh acme` → `OK`)
+after the last live-suite run. Both figures reproduced independently by `teco`, not taken on
+report.
+
+**Why:** K-042 (M4), Landing 2 of two — FR-7..FR-10/FR-16..FR-19. Lets a consumer name a role with
+an automatic fallback chain instead of one hardcoded model, records which concrete model actually
+answered on the durable execution trace, lets a workspace pin/override the model every consumer in
+it uses (including the guard judge, closing finding B-1 from the design-phase review), rejects an
+unresolvable model at publish time instead of first use, and refuses to write an embedding whose
+dimension cannot match the workspace's vector index instead of silently dropping it out of ANN
+retrieval.
+
+**Not covered yet:** the Landing-2 QA acceptance pass (`qa-engineer`, unit U7 in the coordination
+ledger) has **not** run as of this entry — AC-6 through AC-11 are implemented and code-reviewed but
+not yet independently verified end-to-end against the running system. `compose.yaml`/`Dockerfile`
+K-042 changes remain unverified against a real `docker build`/`docker compose` (no Docker anywhere
+in this pipeline, carried forward from Landing 1). `docs/plans/local-model-ram-budget-ml.md` has
+received its owner's (`data-scientist`) dated amendment noting the env-var mechanism K-042 replaced
+(flagged since Landing 1, closed alongside this landing's docs-close work).
+
+**Plan items:** `docs/plans/llm-provider-config.md` §7 (K-042, M4); `docs/BACKLOG.md` M4 row and
+K-042 item updated to record Landing 2's implementation as complete and independently gated, QA
+acceptance still pending (not flipped to ✅ — that happens on U7's PASS, matching how Landing 1's
+own QA unit, U6, closed it out).
+
 ## 2026-08-11 — K-042 Landing 1: QA acceptance pass (U6)
 
 **What:** First execution-based (black-box) verification of Landing 1, driven against the real

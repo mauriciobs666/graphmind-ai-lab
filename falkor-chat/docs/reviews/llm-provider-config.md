@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 8
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 9
 
 ## 1. Scope & verdict
 
@@ -2073,3 +2073,218 @@ documentation-precision finding above) — either restate the `User` example as 
 or replace it with a label that genuinely carries a non-vector index declared on the `embedding`
 property so the one-row/`NULL` shape the table describes has a real example. Low priority; already
 visibly flagged in the shipped `test_queries.sh` comment, so it will not surprise the next reader.
+
+## Landing 2 — U12 (L2-7 docs) review — 2026-08-11
+
+**Scope: this is a diff-scoped documentation review, not a design or code re-review.** Dispatched
+under an explicit stakeholder override ("keep full rigor for the remaining units, so no shortcuts
+on the gate/verification process") — this session's own earlier precedent would have folded a
+docs-only unit's review into the preceding code unit's gate (as Landing 1's L1-6 was), but that
+default is set aside here on direct instruction. Baseline is `docs/plans/llm-provider-config.md`
+(`Version: 4`) §7's L2-7 row. The diff under review is `coder`'s **uncommitted** working-tree
+changes across five files, read directly (`git status --short`/`git diff`) — no artifact under
+review was mutated in the course of this check. `HEAD` is `d6e8112`; U8–U11 (L2-1..L2-6) are
+already committed (`17c20dc`, `0801b3c`, `eb1a60f`, `44494d5`) and their own code is out of scope
+here except as the ground truth every documentation claim in this diff is checked against.
+
+**What I executed:**
+
+- `git status --short` → exactly the five expected files: `AGENTS.md`,
+  `config/opencode.example.json`, `docs/BACKLOG.md`, `docs/DESIGN.md`, `docs/HISTORY.md`. `git
+  diff --stat` → 152 insertions / 10 deletions across the five, matching the brief's description
+  (DESIGN.md §14.8 additions, a new HISTORY.md entry, a BACKLOG.md status note, an AGENTS.md
+  paragraph extension, and the one-line `baseURL` fixture fix). No leakage into any production
+  code, test, or Cypher file.
+
+- **DESIGN.md §14.8 — every new factual claim checked against the actual shipped code**, not
+  accepted on the diff's own word:
+  - **Role load-time validation.** Read `modelconfig.py`'s `_build_roles` (`:464-496`) directly:
+    a role name containing `/` is rejected (`:472-479`) and a chain element with no `/` prefix
+    (i.e. one that would itself be another role) is rejected (`:486-494`) — both at overlay-parse
+    time, not first use. Matches the doc's "rejected at **load** time, not first use" claim
+    exactly.
+  - **`FallbackClient`.** Read `llm.py:178-228` directly. `__slots__ = ("_clients", "_refs")`
+    (`:195`) is genuinely structural, not documented-only. `.chat`/`.complete` both try
+    `self._clients[0]`, then `[1]`, … in order (`:212-219`, `:221-228`), catching only
+    `ProviderCallError`; on total exhaustion both raise via `_errors_message`, which joins **every**
+    element's own error string (`:205-206`), not just the last. Confirmed `transport.py` converts a
+    transport-layer `TimeoutError` to `ProviderCallError` (the B-2 fix the doc credits), so a hung
+    endpoint falls through the chain like any other failure — matches.
+  - **`ChatResult.fallback` never `False`.** Read the dataclass (`llm.py:49-73`): `fallback: bool |
+    None = None` (`:73`), and `FallbackClient.chat` sets it via `replace(result, fallback=True if
+    index > 0 else None)` (`:218`) — the only two values ever produced are `True` and `None`,
+    never `False`. This is the corrected wording from `d7136ec`/plan `Version: 4`, and the diff's
+    prose ("`None` — never `False` — for a one-element chain or a direct non-role ref") matches the
+    corrected, not the original, phrasing.
+  - **`modelSource`'s three values, resolver-sourced.** Read `executor.py`'s `_MODEL_SOURCE_LABEL`
+    (`:88-90`, mapping the resolver's `workspace`/`requested`/`default` vocabulary to the
+    persisted `workspace`/`step`/`default` terms) and `_run_agent_node` (`:639-644`,
+    `:672-675`): `model_source_rung = _MODEL_SOURCE_LABEL[resolution.source]` is computed once
+    from `self._models.resolve_llm(...)`'s own `Resolution.source`, then assigned inside the loop
+    only when `result.model is not None` — never derived from `config.get("model")` truthiness.
+    The module's own comment block (`:83-90`) and the `StepResult`/`_run_agent_node` docstrings
+    (`:127-141`, `:616-637`) independently confirm this is the U9-fixed, not the U8-original,
+    derivation. Matches the doc's claim exactly, including the specific "not the earlier,
+    since-replaced local-truthiness derivation" distinction the brief asked me to check.
+  - **Last-iteration-wins.** Read `_run_agent_node`'s loop (`executor.py:663-676`):
+    `resolved_model`/`model_source`/`model_fallback` are (re)assigned together, unconditionally,
+    on every iteration where `result.model is not None` (`:672-675`), and only read once after the
+    loop via the `StepResult(...)` constructions at `:709-713`/`:729-732`. A later iteration's
+    values genuinely overwrite an earlier one's, together, exactly as documented.
+  - **Workspace hard cap reaching all four kinds, `guard` included.** Read `modelconfig.py`'s
+    `resolve()` (`:729-755`): the workspace-override branch (`:742-745`) is checked first,
+    unconditionally, before `requested`/default — `resolve()` itself is kind-agnostic and takes no
+    branch on `kind` beyond the `_KIND_TO_OVERRIDE_KEY` lookup (`:102-107`, which does include
+    `"guard": "guardModel"`). Read `app.py`'s `_LlmGuardJudge` (`:366-428`): it reads `ws =
+    run.get("ws")` and `overrides = run.get("modelOverrides")` off the same `run` dict `_drive`
+    stamps (`:422-428`) and threads both into the same `resolve`/`resolve_llm` path every other
+    kind uses — no guard-specific carve-out exists anywhere in the resolution path. Matches.
+  - **Publish-time rejection's ordering and the "no `ws=`/`overrides=`" claim.** Read
+    `services.py`'s `publish_workflow_def` (`:985-1050`): `_check_no_structural_conflict` runs at
+    `:1031-1038`, `_check_models_resolvable` immediately after at `:1043-1046`, with an inline
+    comment at the call site (`:1039-1042`) stating the same ordering rationale the doc gives.
+    `_check_models_resolvable` (`:442-487`) calls `models.resolve(kind, requested=ref)` with no
+    `ws=`/`overrides=` keyword anywhere (`:483`). Traced the "both checks fail → 409, not 400"
+    claim structurally: `_check_no_structural_conflict` raises before `_check_models_resolvable` is
+    ever reached, so a def failing both never gets far enough to raise the 400. Confirmed the
+    status-code mapping itself in `app.py` (`:83-88`, `WorkflowDefSpecError` → 400) and (by
+    reading `_check_no_structural_conflict`'s own exception type) that K-034's conflict raises a
+    different exception mapped to 409 elsewhere in `app.py`. The WARNING-on-skip claim is also
+    accurate: `models is None` logs a `_log.warning(...)` naming the def/version and every declared
+    identifier (`:472-479`) before returning — the skip is never silent when the def actually
+    declares a model/role, and silent (no log) when it declares none, matching "if it declares any
+    model/role" precisely.
+  - **Embedding-dimension guard: pre-flight-before-HTTP and the cache-never-caches-a-failure
+    claim.** Read `embedding.py`'s `embed_message` (`:129-190`): `index_dim =
+    self._index_dimension(...)` is computed and compared (`:165-178`) strictly before
+    `embedder.embed(text)` is called (`:180`) — line order, not merely docstring assertion, proves
+    the pre-flight ordering. Read `_index_dimension` (`:119-127`): the cache write is conditional
+    on `dim is not None` (`:125-126`); the read path treats a cache miss and a never-cached `None`
+    identically (`:121-123`), so a failed/absent lookup is always re-probed on the next call. Both
+    claims hold exactly as stated.
+  - **The rewritten Landing-1 paragraph and cross-§14.8/whole-document consistency.** Grepped the
+    entire `docs/DESIGN.md` for `role`/`Landing 2`/`Landing-2` outside the new material (the old
+    "a ref with no `/` (bare role names) is rejected... reserved, not honoured until Landing 2"
+    language is gone, replaced in place, not left as a second, contradicting copy elsewhere) and
+    for every other `K-042` occurrence in the file (`:57`, `:802`, `:814`, `:1011`, `:1022`,
+    `:1025`) — none references the withdrawn "roles are rejected" behaviour or otherwise
+    contradicts the new §14.8 material. The rewrite reads as integrated, not bolted-on: it sits in
+    the same "Landing 2, FR-n" heading style the surrounding new paragraphs use, and the closing
+    "Full design + rationale" line was itself updated to add `§7` and the `-graph.md` citation
+    rather than left stale.
+  - **All FR citations verified against the requirements doc**, not assumed: `docs/requirements/
+    llm-provider-config.md` confirms FR-7 = role naming, FR-8 = trace, FR-9 = publish rejection,
+    FR-16 = workspace override, FR-17 = precedence order, FR-18 = fallback chains, FR-19 =
+    embedding-dimension guard — every "(Landing 2, FR-n)" tag in the diff matches the FR it
+    actually describes.
+
+- **HISTORY.md's new entry.** Cross-checked **866 passed, 1 deselected** and **320/320** against
+  the coordination doc's own log, not just the entry's own say-so: both figures appear verbatim,
+  multiple times, in `docs/plans/llm-provider-config-coordination.md`'s "Paused (2026-08-11)"
+  section and the U9/U11 delivered/gated sections — exact match, no drift. **Independently
+  re-ran the offline suite myself** (`.venv/bin/python -m pytest -q` from `server/`, with this
+  diff's `config/opencode.example.json` change already in the working tree): **866 passed, 1
+  deselected**, exact match, confirming the D-1 fixture fix does not perturb the suite. The entry
+  states plainly, in a dedicated "Not covered yet" paragraph, that U7 (Landing-2 QA acceptance)
+  "has **not** run as of this entry" and that AC-6..AC-11 are "implemented and code-reviewed but
+  not yet independently verified end-to-end" — not implied as passed anywhere in the entry.
+  **The `local-model-ram-budget-ml.md` reference reflects the document's actual current state**:
+  read `docs/plans/local-model-ram-budget-ml.md` directly and confirmed its top-of-doc correction
+  (dated 2026-08-11, "K-042, both landings complete") is present and substantively correct — it
+  redirects the four retired env vars to `config/models.json`/roles, explicitly carves out
+  `FALKORCHAT_EMBEDDING_DIM` as unaffected, and cites the current mechanism's design docs. This
+  document was independently amended and committed (`56f5e15`) earlier in this same session.
+  HISTORY.md's entry states it "has received its owner's (`data-scientist`) dated amendment...
+  closed alongside this landing's docs-close work" — accurate: the amendment exists, is correct,
+  and is not described as still-pending anywhere in this diff. (The phrase "closed alongside" is
+  loose — the amendment was actually a parallel, independently dispatched unit, not literally part
+  of U12's own file list — but it does not misstate the amendment's existence or correctness, and
+  the coordination doc's own log is the document of record for the precise unit boundary; not a
+  finding.)
+
+- **BACKLOG.md.** The M4 row's status emoji is still 🟡, **not** flipped to ✅ — confirmed directly
+  in the diff (`git diff` shows the emoji character unchanged, only the cell text was extended).
+  The K-042 item's row and its new "Status (2026-08-11)" bullet both use "implementation complete"
+  / "independently `analyst`-gated" language for Landing 2 and explicitly state "Landing 2's QA
+  acceptance pass (unit U7) has not yet run — M4 does not reach ✅ until it does" — the
+  implementation-complete-vs-QA-accepted distinction the brief asked me to check is drawn
+  explicitly and correctly, twice (once in the M4 row, once in the K-042 item's status bullet),
+  with no wording that could be misread as "done."
+
+- **AGENTS.md.** The added sentences (roles/fallback chain, the hard cap reaching all four kinds
+  including `guard`, publish-time 400 rejection) were checked against the same code citations as
+  the DESIGN.md claims above and hold. Appropriately terse for a working-agreements doc — three
+  short clauses plus an updated `§4/§7` pointer, no design rationale duplicated from DESIGN.md.
+
+- **`config/opencode.example.json`'s D-1 fix.** Read the whole file: the new `"baseURL":
+  "https://api.openai.com/v1"` under the `openai` provider's `options` sits in the identical shape
+  as `lmstudio`'s and `lan-host`'s own `options.baseURL` entries — same key, same nesting, same
+  position ahead of `apiKey`. Grepped `server/` for any reference to this file: only three
+  docstring/error-message string literals (`config.py:78`, `modelconfig.py:386,641`) name the path
+  as a pointer for a human/operator to read — **no test or production code parses this file**, so
+  it is genuinely a fixture-only change with zero code-path implications, confirming the brief's
+  framing rather than merely asserting it. Offline suite reproduced at **866 passed, 1 deselected**
+  with this file changed (see above) — exact match to both the pre-fix baseline recorded in the
+  coordination doc (U11's close) and this entry's own claim, confirming the fix neither breaks nor
+  is exercised by anything in the suite.
+
+- **Cross-document consistency.** Read DESIGN.md §14.8, HISTORY.md's new entry, BACKLOG.md's M4
+  row + K-042 status bullet, and AGENTS.md's extended paragraph side by side for the one fact that
+  matters across all four: Landing 2 implementation status. All four agree, in materially the same
+  words, on "implementation complete, independently `analyst`-gated across U8–U11, QA acceptance
+  (U7) not yet run" — none states or implies Landing 2 is QA-accepted, none flips M4/K-042 to a
+  final ✅, and none contradicts another on which units are committed or at what hashes (`17c20dc`/
+  `0801b3c`/`eb1a60f`/`44494d5` appear identically in BACKLOG.md and HISTORY.md).
+
+**Verdict: approve, no blockers, no majors.** Every specific factual claim named in this unit's
+brief — role load-time validation, `FallbackClient`'s structural statelessness and try-in-order/
+name-every-model behaviour, `ChatResult.fallback`'s corrected `None`-never-`False` wording,
+`modelSource`'s resolver-sourced (not locally-derived) three-value computation, the
+last-iteration-wins rule, the workspace hard cap reaching all four kinds including `guard`,
+publish-time rejection's exact ordering and its `ws=`/`overrides=`-free resolution, and the
+embedding-dimension guard's pre-flight-before-HTTP-call and never-caches-a-failure properties — was
+independently checked against the actual shipped code (file and line references above), not
+accepted on the diff's own word, and every one held exactly as documented. The offline suite was
+independently re-run with this diff's fixture change in place and reproduced the entry's own
+866/1-deselected claim exactly. BACKLOG.md and HISTORY.md correctly withhold the final ✅ pending
+U7, and all four touched documents agree with each other on that point. One non-gating observation
+below; no finding rises to minor-or-above.
+
+### What's solid
+
+- **Every code-fact claim in DESIGN.md §14.8's new material was independently traced to a specific
+  line in the actual shipped module**, not spot-checked or sampled — including the two claims the
+  brief specifically flagged as historically fragile (`ChatResult.fallback`'s corrected wording,
+  and `modelSource`'s resolver-sourced-not-local-truthiness derivation), both of which this
+  coordination had previously had to fix once already (`d7136ec` and the U8→U9 gate carry-over,
+  respectively). The diff does not regress either fix in prose.
+- **The rewritten Landing-1 paragraph leaves no residual contradiction anywhere in DESIGN.md** —
+  confirmed by a full-document grep for the withdrawn "roles are rejected" language and for every
+  other `K-042` occurrence in the file, not just a re-read of §14.8 in isolation.
+- **The offline suite was independently re-run with the diff's own fixture change in place**
+  (rather than trusting the entry's stated count), landing on the exact figure HISTORY.md claims —
+  a real check, not a formality, since `config/opencode.example.json` is a file a fixture-parsing
+  test plausibly could have touched (it does not, but that itself was confirmed by grep rather than
+  assumed).
+- **The BACKLOG.md implementation-complete-vs-QA-accepted distinction is drawn explicitly, twice,
+  with no ambiguous wording** — a reader skimming just the M4 row or just the K-042 status bullet
+  gets the same accurate picture either way.
+- **All four touched documents were read side by side for the one fact most likely to drift
+  (Landing-2 status)** and found to agree in substance, not merely in not-directly-contradicting.
+
+### Minor / observation (non-gating)
+
+- **DESIGN.md's "resolved-model trace" paragraph documents `modelSource`'s three values but does
+  not itself restate that the value is resolver-sourced** (that specific "not derived from a local
+  `config.get('model')` truthiness mirror" fact lives only in the code's own comments/docstrings,
+  and is verified true above). This is defensible — DESIGN.md documents current, as-built behaviour
+  rather than the mechanism's history, and "the precedence rung that won" already implies a
+  resolver-computed value — but a future reader auditing this specific historical fragility (this
+  coordination had to correct it once, at the U8→U9 boundary) would not find the reassurance in
+  DESIGN.md itself, only in the code. Not required reading to trust the doc; worth a one-clause
+  addition if §14.8 is touched again, not on its own.
+
+### Open questions
+
+None. Every factual claim named in the unit's brief was independently verified against the shipped
+code or an independent suite run; no claim required escalation or further investigation.

@@ -26,6 +26,7 @@
       "npm": "@ai-sdk/openai",
       "name": "OpenAI",
       "options": {
+        "baseURL": "https://api.openai.com/v1",
         "apiKey": "{env:OPENAI_API_KEY}"
       },
       "models": {
