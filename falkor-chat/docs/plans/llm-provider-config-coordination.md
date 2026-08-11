@@ -59,7 +59,7 @@ This document, not any agent's context window, is the state of record.
 | U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
-| U10 | `coder` | `af0638405efcb716a` | delivered (uncommitted) | L2-4 (publish-time rejection). 853 passed, 1 deselected (8 new); `teco` independently re-ran, exact match | `analyst` diff-scoped gate — dispatched `a7a621e2bbb36d6e1` |
+| U10 | `coder` | `af0638405efcb716a` | accepted | L2-4 (publish-time rejection). Committed `eb1a60f` | `analyst` (`a7a621e2bbb36d6e1`) → **approve with suggestions**, no blockers, no majors |
 | U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
@@ -467,6 +467,25 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U10 gated and committed — 2026-08-11
+
+`analyst` (`a7a621e2bbb36d6e1`) verdict: **approve with suggestions**, no blockers, no majors
+(`docs/reviews/llm-provider-config.md` `Version: 7`, `## Landing 2 — U10 (L2-4) code review`).
+Independently mutation-tested the M-4 ordering itself (same swap `teco` reasoned about but didn't
+execute), confirmed the workspace-override boundary is enforced (not just observed) by the test
+double's own assertion, verified the `app.py` wiring claim by reading the file directly (`Services`
+built at line 263, one line before the `ENABLE_AGENT` gate). Offline suite reproduced at 853/1
+deselected. **One minor, not gating:** none of the 8 new tests actually exercises a JSON-string
+(REST-shaped) `config`/`guard` through the new check — the REST-coverage claim rests on
+`_normalize_opaque` being the same already-tested helper other call sites use, not a dedicated test
+in this diff. Deferred (cheap to add later if it ever becomes a real gap; not blocking Landing 2).
+
+**Committed `eb1a60f`** (U10's implementation + the review doc's new section).
+
+Landing 2 running total: U8+U9+U10 committed, offline suite at 853 passed (from 791 at Landing-1
+close). Two implementation units remain: U11 (L2-5+L2-6) and U12 (L2-7, docs-close), then U7
+(`qa-engineer`'s Landing-2 acceptance pass).
 
 ## U10 delivered — 2026-08-11
 
