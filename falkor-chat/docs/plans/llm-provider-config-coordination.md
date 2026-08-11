@@ -60,7 +60,7 @@ This document, not any agent's context window, is the state of record.
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
 | U9 | `tdd-engineer` | `a6012b2f9de191b86` | accepted | L2-3 (workspace override + precedence — closes B-1). Committed `0801b3c` | `analyst` (`a9efb77759f3bf495`) → **approve**, no blockers, no majors |
 | U10 | `coder` | `af0638405efcb716a` | accepted | L2-4 (publish-time rejection). Committed `eb1a60f` | `analyst` (`a7a621e2bbb36d6e1`) → **approve with suggestions**, no blockers, no majors |
-| U11 | `coder` | `af1650a97aa6a0278` | in-flight | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) — scoped to `-graph.md` §3.3 layers 2+3 only, layer 1 (startup assertion) deliberately excluded per plan's L2-6 file list | `analyst` diff-scoped gate |
+| U11 | `coder` | `af1650a97aa6a0278` | delivered (uncommitted) | L2-5 (test-only, confirmed no production change needed) + L2-6 (embedding-dim guard, layers 2+3). 866 passed, 1 deselected (13 new); `teco` independently re-ran, exact match. Live `test_queries.sh` 320/320, reseeded and verified in sync | `analyst` diff-scoped gate — dispatched `a71f25eedc144778d` |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
@@ -467,6 +467,47 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U11 delivered — 2026-08-11
+
+`coder` (`af1650a97aa6a0278`) delivered L2-5 (confirmed the "already correct, test-only" hypothesis
+from the brief: `_drive`'s existing fault net and `background.py::_safe_respond`'s existing
+blanket try/except already satisfy FR-10/AC-8 in full — zero production code changed, only new
+tests, including a "no fallback model used" test explicitly distinguished from U8's fallback-
+exhaustion tests, and a new `test_background.py` covering the responder path) + L2-6
+(`Repository.read_index_dimension` matching `-graph.md` §3.2's Cypher exactly, routed through
+`ro_query` with an explicit catch for the "empty key" `ResponseError` so a nonexistent graph key is
+never implicitly created; `EmbeddingWorker`'s pre-flight guard with a `(ws, label)` cache that never
+caches a failure; the five-fact error message + remedy text; `Chunk` never consulted on the
+`Message` write path, pinned by a dedicated test) — deliberately scoped to `-graph.md` §3.3's
+layers 2+3 only, per `teco`'s brief.
+
+`teco` independently verified before dispatching the gate: `git diff --stat` matches (7 tracked
+files + 1 new untracked `test_background.py`, no leakage into `modelconfig.py`/`app.py`/
+`services.py`); offline suite re-run, **866 passed, 1 deselected**, exact match; live
+`./scripts/test_queries.sh` re-run, **320/320**, reseeded and verified in sync; read the
+`embedding.py`/`repository.py` diffs by eye against `-graph.md` §3.2/§3.3/§3.4 — all match; **ran my
+own mutation test** disabling the pre-flight guard, confirmed exactly the two dimension-mismatch
+tests failed as expected, restored cleanly.
+
+**Two findings `coder` self-flagged, both accepted as reasoned rather than adjudicated further by
+`teco` (sent to the `analyst` gate for a second, independent look regardless):**
+- A flaky `test_queries.sh` assertion `coder` found and fixed **during** this unit (not a
+  regression against prior work) — a bare `assert_not_contains "4"` occasionally false-failed
+  against `redis-cli`'s execution-time footer, whose digits are effectively random. Fixed with a
+  new `assert_no_data_row` helper that trims the footer first; confirmed by `teco`'s own live re-run
+  (clean).
+- A documentation-precision gap in `-graph.md` §3.2's own illustrative table: the `User`
+  (`RANGE`-only) example is actually the **zero-rows** case, not "one row, `dim = NULL`" as the
+  table's prose states — both sub-cases collapse to the same `None` at the repository layer, so
+  this doesn't affect correctness, only the design doc's own worked example. Not urgent; a
+  candidate for a small `graph-dba` amendment at Landing 2 close, not blocking.
+- **Layer-1 scope exclusion**: `coder` independently agrees it's safe to omit for this unit — AC-11's
+  wording is fully satisfied by layers 2+3 alone, and no AC references startup behavior. Matches
+  `teco`'s own reasoning in the brief.
+
+`analyst` diff-scoped gate dispatched (`a71f25eedc144778d`), with explicit instructions to rule on
+both self-flagged findings independently, not just accept `coder`'s framing.
 
 ## U10 gated and committed — 2026-08-11
 
