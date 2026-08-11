@@ -1,10 +1,13 @@
-"""LM Studio chat client for the K-013 AI responder.
+"""OpenAI-compatible chat client for the K-013 AI responder (K-042 Landing 1: renamed
+from `LMStudioLLM`, generalized to any OpenAI-compatible provider — LM Studio is one
+of several, not the only one).
 
-Mirrors `embedding.py`: an injectable `Transport` seam makes the OpenAI-compatible
-`/v1/chat/completions` request payload + response parsing unit-testable offline;
-production injects the stdlib urllib transport. The `LLM` protocol is what the
-`AgentResponder` depends on — unit tests inject a deterministic stub, so no test
-ever hits a live model.
+An injectable `Transport` seam makes the `/v1/chat/completions` request payload +
+response parsing unit-testable offline; production injects `transport.make_http_transport`
+(construction is `modelconfig.py`'s job — FR-4: every consumer resolves through
+`ModelGateway`, never constructs this client directly). The `LLM` protocol is what the
+`AgentResponder` depends on — unit tests inject a deterministic stub, so no test ever
+hits a live model.
 
 The responder calls `.complete(...)` **before** the guarded §4 write, so LLM
 latency or failure short-circuits before anything is posted (failure isolation).
@@ -14,15 +17,15 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.request
-from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from dataclasses import dataclass, field, replace
+from typing import Any, Protocol
 
-from . import config
+from .transport import ProviderCallError, Transport, make_http_transport
 
-# A transport is `(url, json_payload) -> parsed_json_dict`. Injected so the
-# client's response parsing is unit-testable without a live LM Studio server.
-Transport = Callable[[str, dict[str, Any]], dict[str, Any]]
+# Used only when a caller constructs the client with no injected transport (direct
+# construction is a tests-only / dev affordance — production always builds the
+# transport via `modelconfig.py`, which knows the resolved model's real timeout).
+_DIRECT_CONSTRUCTION_TIMEOUT = 180.0
 
 # Chat messages are OpenAI-shaped `{"role": ..., "content": ...}` dicts.
 ChatMessage = dict[str, str]
@@ -50,10 +53,17 @@ class ChatResult:
     `text` is the message content (may be None/empty when the model only calls
     tools); `tool_calls` is empty on a plain-text turn. `is_tool_call` is the
     convenience the agent loop (U8) branches on.
+
+    `model` (K-042 M-5) carries the `"<provider>/<model-id>"` ref that actually
+    answered — the FR-8 traceability carrier, set by `OpenAICompatibleLLM.chat`.
+    Additive and default-safe (`None` for any pre-K-042 construction). Landing 2's
+    `FallbackClient` reads this off the return value instead of any mutable
+    per-client "last used" state (M-5) — never on `self`.
     """
 
     text: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
+    model: str | None = None
 
     @property
     def is_tool_call(self) -> bool:
@@ -74,43 +84,56 @@ class LLM(Protocol):
     ) -> ChatResult: ...
 
 
-def _urllib_transport(url: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Default HTTP transport (stdlib only — no runtime HTTP dependency).
-
-    POSTs `payload` as JSON and returns the decoded JSON response. Network/HTTP
-    errors propagate to the responder, which runs out-of-band from the write path.
-    """
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
-    )
-    with urllib.request.urlopen(req) as resp:  # noqa: S310 (fixed, config-controlled URL)
-        return json.loads(resp.read().decode("utf-8"))
+def _default_transport() -> Transport:
+    """The fallback transport for a directly-constructed client (tests/dev only —
+    production always builds the transport in `modelconfig.py`, which knows the
+    resolved model's real per-kind/per-model timeout)."""
+    return make_http_transport(timeout=_DIRECT_CONSTRUCTION_TIMEOUT)
 
 
-class LMStudioLLM:
-    """OpenAI-compatible `/v1/chat/completions` client (LM Studio backend).
+class OpenAICompatibleLLM:
+    """OpenAI-compatible `/v1/chat/completions` client (K-042: generalized from the
+    LM-Studio-only `LMStudioLLM`; any `protocol="openai"` provider works the same way).
 
-    `transport` is injectable for tests; it defaults to a stdlib urllib POST.
+    `base_url`/`model` are **required** — no config-derived defaults (K-042 FR-20:
+    model choice is no longer an env var). `transport` is injectable for tests; it
+    defaults to a bare urllib POST with no timeout binding beyond a generic fallback
+    (real production timeouts come from `modelconfig.py`). `ref` is the resolved
+    `"<provider>/<model-id>"` string `modelconfig.py` builds this client from — the
+    FR-8 carrier `ChatResult.model` reports; defaults to `model` when omitted (a
+    direct construction with no provider prefix still gets a sensible value).
+
+    **FR-4:** only `modelconfig.py` and `tests/` may construct this client directly
+    — every real consumer resolves through `ModelGateway` (enforced by
+    `test_modelconfig.py`'s AST check).
     """
 
     def __init__(
         self,
-        base_url: str = config.LLM_BASE_URL,
-        model: str = config.LLM_MODEL,
+        base_url: str,
+        model: str,
         *,
         transport: Transport | None = None,
+        params: dict[str, Any] | None = None,
+        ref: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
-        self._transport = transport or _urllib_transport
+        self._transport = transport or _default_transport()
+        self._params = dict(params) if params else {}
+        self._ref = ref or model
 
     def complete(self, messages: list[ChatMessage]) -> str:
         resp = self._transport(
             f"{self._base_url}/chat/completions",
-            {"model": self._model, "messages": list(messages)},
+            {"model": self._model, "messages": list(messages), **self._params},
         )
-        return resp["choices"][0]["message"]["content"]
+        try:
+            return resp["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ProviderCallError(
+                f"{self._ref} @ {self._base_url}: response missing choices: {exc}"
+            ) from exc
 
     def chat(
         self, messages: list[ChatMessage], tools: list[dict[str, Any]]
@@ -124,12 +147,25 @@ class LMStudioLLM:
         turn is plain text. Name-against-granted-set and
         arg-schema validation live in the agent loop (U8), not here — `chat` only
         parses the wire shape into `ChatResult`.
+
+        The returned `ChatResult.model` carries `ref` — the resolved model that
+        actually answered (M-5); Landing 2's `FallbackClient` reads it off the
+        return value rather than any per-client mutable state.
         """
         resp = self._transport(
             f"{self._base_url}/chat/completions",
-            {"model": self._model, "messages": list(messages), "tools": list(tools)},
+            {
+                "model": self._model, "messages": list(messages), "tools": list(tools),
+                **self._params,
+            },
         )
-        return _parse_chat_message(resp["choices"][0]["message"])
+        try:
+            message = resp["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ProviderCallError(
+                f"{self._ref} @ {self._base_url}: response missing choices: {exc}"
+            ) from exc
+        return replace(_parse_chat_message(message), model=self._ref)
 
 
 def _parse_chat_message(message: dict[str, Any]) -> ChatResult:

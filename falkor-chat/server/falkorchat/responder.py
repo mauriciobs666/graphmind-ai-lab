@@ -31,6 +31,7 @@ from typing import Any
 from .config import CallContext
 from .embedding import Embedder, EmbeddingWorker
 from .llm import LLM, ChatMessage
+from .modelconfig import StaticModelGateway
 
 _SYSTEM_PROMPT = (
     "You are a helpful assistant participating in a team chat. Answer the user's "
@@ -45,16 +46,18 @@ class AgentResponder:
     def __init__(
         self,
         services: Any,
-        embedder: Embedder,
-        llm: LLM,
-        worker: EmbeddingWorker,
+        embedder: Embedder | None = None,
+        llm: LLM | None = None,
+        worker: EmbeddingWorker | None = None,
         *,
         agent_id: str,
         k: int = 10,
+        models: Any = None,
     ) -> None:
         self._services = services
-        self._embedder = embedder
-        self._llm = llm
+        # FR-4 sugar (§3): directly-injected `embedder=`/`llm=` wrap into a
+        # `StaticModelGateway` — dependency injection for tests, never a config route.
+        self._models = models or StaticModelGateway(llm=llm, embedder=embedder)
         self._worker = worker
         self._agent_id = agent_id
         self._k = k
@@ -93,11 +96,15 @@ class AgentResponder:
 
         # Failure isolation: everything that can fail (embed, retrieve, LLM) runs
         # BEFORE the guarded write. A raise here means nothing is posted.
-        q_vec = self._embedder.embed(text)
+        # K-042 FR-4/FR-6: resolves both the retrieval embedder (kind=embedding) and
+        # the answering LLM (kind=agent) through the gateway, per call.
+        embedder = self._models.embedder("embedding", ws=ctx.ws)
+        q_vec = embedder.embed(text)
         seeds = self._services.hybrid_search(
             ctx, q_vec=q_vec, k=self._k, channel_id=channel_id
         )
-        answer_text = self._llm.complete(self._build_prompt(text, seeds))
+        llm = self._models.llm("agent", ws=ctx.ws)
+        answer_text = llm.complete(self._build_prompt(text, seeds))
 
         # Post as the agent — swap the actor to the agent id so role derives to
         # `assistant` in the service (never trusted from the caller). Provenance =

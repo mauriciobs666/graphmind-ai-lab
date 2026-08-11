@@ -264,6 +264,56 @@ def test_graphrag_retrieve_configurable_tau():
     assert [s["msgId"] for s in out["seeds"]] == ["a"]
 
 
+# ── K-042 code review Major 2 (the M-3 fix itself): resolution happens INSIDE run() ──
+#
+# Every construction above passes a bare `embedder=` — the FR-4 *sugar* path
+# (`StaticModelGateway`), which is indistinguishable from the pre-K-042
+# bound-at-construction `Embedder` unless something actually calls `.embedder()`
+# through the gateway seam. This drives `GraphragRetrieveTool` with a recording
+# `models=` double instead, so a regression back to "resolve once at __init__" (the
+# exact bug M-3 exists to prevent) would fail here: the double hands back a
+# DIFFERENT embedder on each call, keyed by `ctx.ws`, and only an inside-`run()`
+# resolution can possibly pick the right one per call.
+
+class RecordingGateway:
+    """A minimal `ModelGateway`-shaped double: records every `.embedder()` call's
+    `(kind, ws)` and returns a `StubEmbedder` keyed by `ws` — so two calls with two
+    different workspaces are provably resolved independently, never cached from
+    construction."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+        self._embedders: dict[str, StubEmbedder] = {}
+
+    def embedder(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append((kind, ws))
+        if ws not in self._embedders:
+            self._embedders[ws] = StubEmbedder([float(len(self._embedders) + 1), 0.0, 0.0, 0.0])
+        return self._embedders[ws]
+
+
+def test_graphrag_retrieve_resolves_the_embedder_inside_run_not_at_construction():
+    rows = [_row("a", 0.0)]
+    svc = StubServices(search_rows=rows)
+    gateway = RecordingGateway()
+    tool = GraphragRetrieveTool(svc, models=gateway, tau=0.5)
+
+    # Nothing resolved yet — construction alone must not touch the gateway.
+    assert gateway.calls == []
+
+    tool.run({"query": "q1"}, ctx=CTX, run={})
+    assert gateway.calls == [("embedding", CTX.ws)]
+
+    other_ctx = CallContext(ws="other-ws", actor="u1")
+    tool.run({"query": "q2"}, ctx=other_ctx, run={})
+
+    # A second call, with a different ctx.ws, resolves again (and independently) —
+    # exactly what a bound-at-construction embedder could never do.
+    assert gateway.calls == [("embedding", CTX.ws), ("embedding", "other-ws")]
+    assert svc.searched[0]["q_vec"] == [1.0, 0.0, 0.0, 0.0]
+    assert svc.searched[1]["q_vec"] == [2.0, 0.0, 0.0, 0.0]
+
+
 # ── human_handoff (present, not exercised) ───────────────────────────────────
 
 def test_human_handoff_dispatch_signals_suspend():

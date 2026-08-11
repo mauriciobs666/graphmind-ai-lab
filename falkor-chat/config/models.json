@@ -1,0 +1,19 @@
+{
+  "defaults": {
+    "agent": "lmstudio/qwen/qwen3-4b-2507",
+    "step": "lmstudio/qwen/qwen3-4b-2507",
+    "guard": "lmstudio/qwen/qwen3-4b-2507",
+    "embedding": "lmstudio/text-embedding-qwen3-embedding-0.6b"
+  },
+  "timeouts": {
+    "agent": 180,
+    "step": 180,
+    "guard": 180,
+    "embedding": 30
+  },
+  "models": {
+    "lmstudio/text-embedding-qwen3-embedding-0.6b": {
+      "dim": 1024
+    }
+  }
+}

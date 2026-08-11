@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from falkorchat import db
+from falkorchat import config, db
 from falkorchat.repository import Repository
 
 TEST_WS = "test"
@@ -92,3 +92,31 @@ def wf_repo(conn) -> Repository:
     """
     db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
     return Repository(conn)
+
+
+_TESTS_DATA = Path(__file__).resolve().parent / "data"
+
+
+@pytest.fixture(autouse=True)
+def _model_config_env(monkeypatch):
+    """K-042: point the two model-config env vars at the offline `tests/data/`
+    fixtures for every test, so the suite never depends on a developer's real
+    `~/.config/opencode/opencode.json` (the M-2 gate — this repo's real dev box has
+    one; the suite must pass on a machine with no such file). `monkeypatch` reverts
+    both after each test, so a test that explicitly wants a different (or absent)
+    value can still override/delete it locally.
+
+    Sets **both** the env vars (for anything that reads `os.environ` directly, or a
+    subprocess that inherits it) **and** `config.OPENCODE_CONFIG_PATH`/
+    `config.MODEL_CONFIG_PATH` themselves — `falkorchat.config` resolves its env vars
+    once at *import* time (FR-15: read once, no reload path), and `falkorchat.config`
+    is already imported by the time this per-test fixture runs, so a bare `setenv`
+    alone would never reach `ModelGateway.from_env()`. Same pattern `test_app.py`
+    already uses for `config.ENABLE_AGENT` etc.
+    """
+    opencode_path = str(_TESTS_DATA / "opencode.json")
+    model_config_path = str(_TESTS_DATA / "models.json")
+    monkeypatch.setenv("FALKORCHAT_OPENCODE_CONFIG", opencode_path)
+    monkeypatch.setenv("FALKORCHAT_MODEL_CONFIG", model_config_path)
+    monkeypatch.setattr(config, "OPENCODE_CONFIG_PATH", opencode_path)
+    monkeypatch.setattr(config, "MODEL_CONFIG_PATH", model_config_path)

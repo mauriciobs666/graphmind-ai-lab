@@ -1,6 +1,7 @@
-"""Unit tests for the LM Studio chat client (K-013), offline via injected transport.
+"""Unit tests for the OpenAI-compatible chat client (K-013; K-042 Landing 1 renamed it
+from `LMStudioLLM`), offline via injected transport.
 
-Mirrors `test_embedding.py`: the real `LMStudioLLM` is exercised with an injected
+Mirrors `test_embedding.py`: the real `OpenAICompatibleLLM` is exercised with an injected
 transport so its request payload + `choices[0].message.content` parsing are pinned
 without a live LM Studio server. Unit tests never touch the network.
 """
@@ -9,7 +10,9 @@ from __future__ import annotations
 
 import json
 
-from falkorchat.llm import LMStudioLLM
+import pytest
+
+from falkorchat.llm import OpenAICompatibleLLM
 
 
 def test_lmstudio_llm_parses_content_and_posts_expected_payload():
@@ -20,7 +23,7 @@ def test_lmstudio_llm_parses_content_and_posts_expected_payload():
         captured["payload"] = payload
         return {"choices": [{"message": {"role": "assistant", "content": "hi there"}}]}
 
-    llm = LMStudioLLM(
+    llm = OpenAICompatibleLLM(
         base_url="http://localhost:1234/v1", model="qwen/qwen3-4b-2507",
         transport=fake_transport,
     )
@@ -40,22 +43,86 @@ def test_lmstudio_llm_strips_trailing_slash_on_base_url():
         assert url == "http://localhost:1234/v1/chat/completions"
         return {"choices": [{"message": {"content": "ok"}}]}
 
-    llm = LMStudioLLM(
+    llm = OpenAICompatibleLLM(
         base_url="http://localhost:1234/v1/", model="m", transport=fake_transport
     )
     assert llm.complete([{"role": "user", "content": "x"}]) == "ok"
 
 
-def test_lmstudio_llm_defaults_model_and_base_url_from_config():
-    from falkorchat import config
-
+def test_llm_requires_explicit_base_url_and_model():
+    # K-042 FR-20: model choice is no longer an env var — base_url/model have no
+    # config-derived defaults, so both are required positional args.
     def fake_transport(url: str, payload: dict) -> dict:
-        assert url == f"{config.LLM_BASE_URL.rstrip('/')}/chat/completions"
-        assert payload["model"] == config.LLM_MODEL
+        assert url == "http://localhost:1234/v1/chat/completions"
+        assert payload["model"] == "qwen/qwen3-4b-2507"
         return {"choices": [{"message": {"content": "ok"}}]}
 
-    llm = LMStudioLLM(transport=fake_transport)
+    llm = OpenAICompatibleLLM(
+        "http://localhost:1234/v1", "qwen/qwen3-4b-2507", transport=fake_transport
+    )
     assert llm.complete([{"role": "user", "content": "x"}]) == "ok"
+
+
+def test_llm_merges_params_into_the_chat_payload():
+    captured: dict = {}
+
+    def fake_transport(url: str, payload: dict) -> dict:
+        captured["payload"] = payload
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    llm = OpenAICompatibleLLM(
+        "http://x/v1", "m", transport=fake_transport, params={"top_p": 0.9}
+    )
+    llm.complete([{"role": "user", "content": "hi"}])
+
+    assert captured["payload"]["top_p"] == 0.9
+
+
+def test_llm_omits_params_key_entirely_when_none_given():
+    captured: dict = {}
+
+    def fake_transport(url: str, payload: dict) -> dict:
+        captured["payload"] = payload
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    llm = OpenAICompatibleLLM("http://x/v1", "m", transport=fake_transport)
+    llm.complete([{"role": "user", "content": "hi"}])
+
+    assert "top_p" not in captured["payload"]
+
+
+def test_chat_result_model_carries_the_answering_ref():
+    def fake_transport(url: str, payload: dict) -> dict:
+        return {"choices": [{"message": {"role": "assistant", "content": "hi"}}]}
+
+    llm = OpenAICompatibleLLM(
+        "http://x/v1", "qwen3", transport=fake_transport, ref="lmstudio/qwen3"
+    )
+    result = llm.chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "lmstudio/qwen3"
+
+
+def test_chat_result_model_defaults_to_bare_model_when_no_ref_given():
+    def fake_transport(url: str, payload: dict) -> dict:
+        return {"choices": [{"message": {"role": "assistant", "content": "hi"}}]}
+
+    llm = OpenAICompatibleLLM("http://x/v1", "qwen3", transport=fake_transport)
+    result = llm.chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "qwen3"
+
+
+def test_complete_raises_provider_call_error_on_missing_choices():
+    from falkorchat.transport import ProviderCallError
+
+    def fake_transport(url: str, payload: dict) -> dict:
+        return {"unexpected": "shape"}
+
+    llm = OpenAICompatibleLLM("http://x/v1", "m", transport=fake_transport, ref="p/m")
+    with pytest.raises(ProviderCallError) as excinfo:
+        llm.complete([{"role": "user", "content": "hi"}])
+    assert "p/m" in str(excinfo.value)
 
 
 # --- chat(): tool-calling seam (U6) ------------------------------------------
@@ -91,7 +158,7 @@ def test_chat_sends_tools_field_and_hits_chat_completions():
     fake_transport, captured = _chat_transport(
         {"role": "assistant", "content": "hello"}
     )
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     llm.chat([{"role": "user", "content": "hi"}], _TOOLS)
 
@@ -117,7 +184,7 @@ def test_chat_parses_native_tool_calls_shape():
         ],
     }
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "help"}], _TOOLS)
 
@@ -139,7 +206,7 @@ def test_chat_parses_content_embedded_json_fallback():
         ),
     }
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "help"}], _TOOLS)
 
@@ -158,7 +225,7 @@ def test_chat_parses_structured_output_action_shape_in_fenced_content():
         "content": f"Sure, let me look that up.\n```json\n{blob}\n```",
     }
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "help"}], _TOOLS)
 
@@ -171,7 +238,7 @@ def test_chat_parses_structured_output_action_shape_in_fenced_content():
 def test_chat_returns_plain_text_when_no_tool_call():
     message = {"role": "assistant", "content": "The office opens at 9am."}
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "hours?"}], _TOOLS)
 
@@ -186,7 +253,7 @@ def test_chat_treats_non_tool_json_content_as_text():
     payload = json.dumps({"answer": 42, "confidence": "high"})
     message = {"role": "assistant", "content": payload}
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "q"}], _TOOLS)
 
@@ -203,7 +270,7 @@ def test_chat_tolerates_string_arguments_that_fail_to_parse():
         ],
     }
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "x"}], _TOOLS)
 
@@ -235,7 +302,7 @@ OBSERVED_BARE_CALL = (
 def _chat_content(content):
     """Drive `chat` with `content` as the sole assistant message content."""
     fake_transport, _ = _chat_transport({"role": "assistant", "content": content})
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
     return llm.chat([{"role": "user", "content": "help"}], _TOOLS)
 
 
@@ -541,7 +608,7 @@ def test_chat_prefers_native_tool_calls_over_a_bare_call_in_content():
         ],
     }
     fake_transport, _ = _chat_transport(message)
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
 
     result = llm.chat([{"role": "user", "content": "help"}], _TOOLS)
 
@@ -558,7 +625,7 @@ def test_complete_still_omits_tools_field():
         captured["payload"] = payload
         return {"choices": [{"message": {"content": "unchanged"}}]}
 
-    llm = LMStudioLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
     out = llm.complete([{"role": "user", "content": "hello"}])
 
     assert out == "unchanged"

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.schema.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (test fixture)",
+      "options": {
+        "baseURL": "http://localhost:1234/v1"
+      },
+      "models": {
+        "qwen/qwen3-4b-2507": { "name": "Qwen3 4B 2507 (local)" },
+        "text-embedding-qwen3-embedding-0.6b": { "name": "Qwen3 Embedding 0.6B (local)" }
+      }
+    }
+  },
+  "agent": {
+    "assistant": {
+      "model": "lmstudio/qwen/qwen3-4b-2507"
+    }
+  }
+}

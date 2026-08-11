@@ -381,6 +381,81 @@ def test_build_llm_judge_biases_to_suspend_on_unparseable_output():
     assert verdict["decision"] is False
 
 
+def test_build_llm_judge_returns_an_object_advertising_accepts_run():
+    from falkorchat.app import _build_llm_judge
+
+    class StubLLM:
+        def complete(self, messages):
+            return '{"decision": true, "rationale": "x"}'
+
+    judge = _build_llm_judge(StubLLM())
+    assert getattr(judge, "accepts_run", False) is True
+
+
+def _fake_transport_factory(captured):
+    def fake_make_http_transport(*, timeout, headers=None, opener=None, provider="?", model="?"):
+        def _transport(url, payload):
+            captured["url"] = url
+            captured["model"] = payload.get("model")
+            return {
+                "choices": [{"message": {"content": '{"decision": true, "rationale": "ok"}'}}]
+            }
+        return _transport
+    return fake_make_http_transport
+
+
+def test_build_llm_judge_resolves_kind_guard_through_a_real_gateway_with_ws_from_run(
+    monkeypatch,
+):
+    from falkorchat.app import _build_llm_judge
+    from falkorchat.modelconfig import ModelGateway, Overlay, ProviderCatalog
+
+    catalog = ProviderCatalog(
+        {"lmstudio": {"options": {"baseURL": "http://host:1/v1"}}}, path="opencode.json"
+    )
+    overlay = Overlay({"defaults": {"guard": "lmstudio/qwen/qwen3-4b-2507"}}, path="models.json")
+    models = ModelGateway(catalog, overlay)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(captured)
+    )
+
+    judge = _build_llm_judge(models)
+    verdict = judge(
+        "enough info?", understanding={}, recent_turns=[], ctx={}, step_output="",
+        run={"ws": "acme"},
+    )
+
+    assert verdict["decision"] is True
+    assert captured["url"] == "http://host:1/v1/chat/completions"
+    assert captured["model"] == "qwen/qwen3-4b-2507"
+
+
+def test_build_llm_judge_honours_a_guard_declared_model_override(monkeypatch):
+    from falkorchat.app import _build_llm_judge
+    from falkorchat.modelconfig import ModelGateway, Overlay, ProviderCatalog
+
+    catalog = ProviderCatalog(
+        {"lmstudio": {"options": {"baseURL": "http://host:1/v1"}}}, path="opencode.json"
+    )
+    overlay = Overlay({"defaults": {"guard": "lmstudio/default-model"}}, path="models.json")
+    models = ModelGateway(catalog, overlay)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(captured)
+    )
+
+    judge = _build_llm_judge(models)
+    judge(
+        "enough info?", understanding={}, recent_turns=[], ctx={}, step_output="",
+        model="lmstudio/special-model", run={"ws": "acme"},
+    )
+
+    assert captured["model"] == "special-model"
+
+
 def test_web_ui_served_at_root_without_shadowing_rest(tmp_path, conn):
     web = tmp_path / "web"
     web.mkdir()

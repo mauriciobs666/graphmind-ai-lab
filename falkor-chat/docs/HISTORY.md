@@ -5,6 +5,71 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-10 — K-042 Landing 1: the model-resolution seam (`ModelGateway`) + FR-20 env-var cutover
+
+**What:** Replaced falkor-chat's four independently-constructed, env-var-configured LLM/embedding
+clients with one internal resolution seam, per `docs/plans/llm-provider-config.md` §6 (L1-1..L1-6):
+
+- **`server/falkorchat/transport.py`** (new) — `make_http_transport()`, `ProviderCallError`, the
+  ordered §4.9 exception ladder (`HTTPError` before `URLError`, a bare `TimeoutError` named
+  explicitly, `ValueError`, then the string-or-object body-level `error` renderer). Both
+  duplicated, timeout-less `_urllib_transport` copies in `llm.py`/`embedding.py` deleted.
+- **`server/falkorchat/modelconfig.py`** (new) — `Secret`, `ProviderCatalog`/`Overlay` (parse +
+  `{env:}`/`{file:}` substitution), the `/v1` normalization rule (§4.3, validate → strip →
+  normalize, with the overlay `providers.<id>.baseURL` escape hatch), per-kind defaults, per-model
+  settings (reserved `timeout`/`dim`/`protocol`, everything else passed through camelCase→
+  snake_case), `ModelGateway`/`StaticModelGateway`, `Resolution`/`ResolvedModel`. A ref with no
+  `/` is rejected with a Landing-2-aware message; `roles`/`agents` overlay keys are parsed and
+  logged as reserved, not honoured yet.
+- **`llm.py`/`embedding.py`** — `LMStudioLLM`/`LMStudioEmbedder` renamed and generalized to
+  `OpenAICompatibleLLM`/`OpenAICompatibleEmbedder` (required `base_url`/`model`, no config
+  defaults, no back-compat alias); `ChatResult` gained a `model` field carrying the answering ref
+  (the FR-8 carrier, unused until Landing 2).
+- **All five consumer bindings rewired** onto one gateway: `executor.py` (`_run_agent_node`
+  resolves kind `step`; `_drive` stamps `run["ws"]` — the Landing-2 `guard`-kind carrier, landed
+  now per §4.10), `guards.py` (forwards `model=`/`run=` to the judge only when the guard/judge
+  declare them), `responder.py` (`agent` + `embedding`), `embedding.py`'s `EmbeddingWorker`
+  (`embedding`, with the §4.5 dim precedence: explicit override → overlay `dim` →
+  `FALKORCHAT_EMBEDDING_DIM`), `tools.py`'s `GraphragRetrieveTool` (`embedding`, a real FR-4
+  consumer per M-3, not the type-hint-only change v1 mis-booked it as), `app.py` (`_build_llm_judge`
+  now returns an `accepts_run = True` object, not a closure; `_build_default_app` builds one
+  `ModelGateway.from_env()`). A directly-injected `llm=`/`embedder=` client is unchanged sugar
+  (`StaticModelGateway`) — all 38 `llm=`/24 `guard_judge=` test injections still pass unmodified.
+- **FR-20 cutover:** deleted the four legacy env-var constants from `config.py`; added
+  `assert_no_legacy_model_env()` (called from `ModelGateway.from_env()`), `OPENCODE_CONFIG_PATH`
+  (`FALKORCHAT_OPENCODE_CONFIG`, no product default) and `MODEL_CONFIG_PATH`
+  (`FALKORCHAT_MODEL_CONFIG`, defaults to the shipped `config/models.json`). Updated
+  `server/.env.example`, `scripts/start_server.sh` (the `$HOME/.config/opencode/...` dev
+  convenience default), `compose.yaml` (the two vars, a read-only bind mount of the shared file,
+  `host.docker.internal:host-gateway`), `Dockerfile` (`COPY config config`), `README.md`,
+  `AGENTS.md`. Shipped `config/models.json` (the overlay defaults) and
+  `config/opencode.example.json` (LM Studio + a second LAN host + hosted OpenAI via `{env:}`).
+- **Docs:** `docs/DESIGN.md` §1.3 (model rows now point at the shipped config), §14.2 (layering
+  diagram gains `modelconfig.py`/`transport.py`), new §14.8 "The model-resolution seam", §14.7
+  hazard bullet (two config files now required for a wired agent; `tests/conftest.py`'s
+  `_model_config_env` autouse fixture points both at `tests/data/`).
+
+**Test results:** `.venv/bin/python -m pytest -q` → **778 passed, 1 deselected** (the `live`
+marker), including two new suites (`test_transport.py`: 13; `test_modelconfig.py`: 51) and
+extensions to `test_llm.py`, `test_embedding.py`, `test_app.py`, `test_guards.py`. Re-verified
+green with `HOME` pointed at an empty directory (the M-2 done-condition — no dependency on a
+developer's real `~/.config/opencode/opencode.json`). The FR-4 enforcement test (an AST scan of
+`server/falkorchat/*.py`) confirms no module outside `modelconfig.py` constructs
+`OpenAICompatibleLLM`/`OpenAICompatibleEmbedder` directly. The unfiltered legacy-env-var grep
+(`docs/plans/llm-provider-config.md` §2.9's method) returns only `config.py`'s own tripwire list,
+the K-042 planning documents, and `docs/plans/local-model-ram-budget-ml.md` (explicitly not
+rewritten by this unit — routed to its own owner).
+
+**Why:** K-042 (M4), Landing 1 of two — FR-1..FR-6/FR-11..FR-15/FR-20. Replaces four
+independently-hardcoded LM Studio clients with one config-file-driven seam so any of the five LLM
+consumers can name its own model/provider without a code change, and closes a live-verified silent
+failure mode (a missing `/v1` returns HTTP 200 with an error envelope, not an error status).
+Landing 2 (roles, ordered fallback chains, workspace override + precedence, trace-recorded
+resolved model, publish-time rejection, the embedding-dimension guard) is separately tracked.
+
+**Plan items:** `docs/plans/llm-provider-config.md` (K-042, M4); `docs/BACKLOG.md` M4 row updated
+🟡 → 🟡 (Landing 1 delivered, Landing 2 pending).
+
 ## 2026-08-09 — Fix: `AGENTS.md` citation nit (`get_snapshot` vs. `_read_subgraph` line numbers)
 - **What:** Corrected `AGENTS.md`'s "Probing shared graph state without mutating it" subsection,
   which cited `get_snapshot`/`_read_subgraph` under one shared line number (`repository.py:1031`)

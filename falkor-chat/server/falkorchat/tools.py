@@ -53,6 +53,7 @@ from typing import Any, Protocol
 
 from .config import CallContext
 from .embedding import Embedder
+from .modelconfig import StaticModelGateway
 from .services import UnknownMemberError
 
 # ── DS-note Q2 retrieval-to-context policy (calibration starting points, configurable) ──
@@ -251,12 +252,18 @@ class GraphragRetrieveTool:
     name = "graphrag_retrieve"
 
     def __init__(
-        self, services: Any, embedder: Embedder, *,
+        self, services: Any, embedder: Embedder | None = None, *,
+        models: Any = None,
         tau: float = DEFAULT_RETRIEVE_TAU, cap: int = DEFAULT_RETRIEVE_CAP,
         k: int = DEFAULT_RETRIEVE_K, channel_id: str | None = None,
     ) -> None:
         self._services = services
-        self._embedder = embedder
+        # K-042 M-3: a real FR-4 consumer now, resolving through the gateway inside
+        # `run()` (which already has `ctx.ws`) instead of a bound `Embedder` fixed at
+        # construction. FR-4 sugar: a directly-injected `embedder=` wraps into a
+        # `StaticModelGateway` — every existing `GraphragRetrieveTool(services, stub)`
+        # construction keeps working unmodified.
+        self._models = models or StaticModelGateway(embedder=embedder)
         self._tau = tau
         self._cap = cap
         self._k = k
@@ -289,7 +296,8 @@ class GraphragRetrieveTool:
     def run(self, arguments: dict[str, Any], *, ctx: CallContext,
             run: dict[str, Any]) -> str:
         query = arguments.get("query", "")
-        q_vec = self._embedder.embed(query)
+        embedder = self._models.embedder("embedding", ws=ctx.ws)
+        q_vec = embedder.embed(query)
         rows = self._services.hybrid_search(
             ctx, q_vec=q_vec, k=self._k, channel_id=self._channel_id
         )
@@ -352,19 +360,22 @@ class HumanHandoffTool:
 
 
 def build_builtin_registry(
-    services: Any, embedder: Embedder, *, agent_id: str,
+    services: Any, embedder: Embedder | None = None, *, agent_id: str,
+    models: Any = None,
     tau: float = DEFAULT_RETRIEVE_TAU, cap: int = DEFAULT_RETRIEVE_CAP,
     k: int = DEFAULT_RETRIEVE_K, channel_id: str | None = None,
 ) -> ToolRegistry:
     """Wire the three built-in capabilities into a fresh `ToolRegistry` (§4).
 
     `human_handoff` is registered (present) but the triage nodes do not grant it — the
-    AC-6 fence is per-node `config.tools`, not registry membership.
+    AC-6 fence is per-node `config.tools`, not registry membership. `embedder`/`models`
+    follow `GraphragRetrieveTool`'s own FR-4 sugar (a bare `embedder=` wraps into a
+    `StaticModelGateway`; production passes the real `models=` gateway instead).
     """
     return ToolRegistry([
         PostMessageTool(services, agent_id=agent_id),
         GraphragRetrieveTool(
-            services, embedder, tau=tau, cap=cap, k=k, channel_id=channel_id
+            services, embedder, models=models, tau=tau, cap=cap, k=k, channel_id=channel_id
         ),
         HumanHandoffTool(),
     ])

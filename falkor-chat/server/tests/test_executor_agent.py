@@ -607,3 +607,90 @@ def test_no_implicit_post_when_final_text_is_empty():
 
     assert reg.dispatched == []
     assert result.emissions == []
+
+
+# ── K-042 code review Major 2: the `step`-kind gateway resolution wiring ──────────
+#
+# Every test above injects `llm=<stub>` — the pre-K-042 `StaticModelGateway` sugar
+# path, which proves backward compatibility but never exercises `_run_agent_node`'s
+# own `self._models.llm("step", requested=config.get("model"), ws=ctx.ws)` call. These
+# use a small recording `models=` double instead, so a regression at that one call
+# site (a swapped kind string, a dropped `ws=`, a `requested=` source that silently
+# stops reading `config.get("model")`) would fail here even though it is invisible to
+# every other test in this file.
+
+class RecordingGateway:
+    """A minimal `ModelGateway`-shaped double: records every `.llm()` call's
+    `(kind, requested, ws)` and returns a distinct `StubChatLLM` per `requested` ref
+    (so two differently-modeled steps are provably answered by two different
+    clients — the executor-level half of AC-4/§10 item 8, without any real
+    `ModelGateway`/config file/network)."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+        self._clients: dict[str | None, StubChatLLM] = {}
+
+    def has_chat(self) -> bool:
+        return True
+
+    def llm(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append({"kind": kind, "requested": requested, "ws": ws})
+        if requested not in self._clients:
+            self._clients[requested] = StubChatLLM(
+                [ChatResult(text=f"answer from {requested}")]
+            )
+        return self._clients[requested]
+
+    def embedder(self, kind, *, requested=None, ws=None, overrides=None):
+        raise AssertionError("_run_agent_node must never resolve an embedder")
+
+
+def test_run_agent_node_resolves_step_kind_with_the_steps_own_model_and_ws():
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    gateway = RecordingGateway()
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+
+    ex._run_agent_node(
+        CTX, RUN, STEP, _config(model="lmstudio/qwen3-4b"), {"threadId": "t1"}
+    )
+
+    assert gateway.calls == [
+        {"kind": "step", "requested": "lmstudio/qwen3-4b", "ws": CTX.ws}
+    ]
+
+
+def test_run_agent_node_requests_no_model_when_the_step_names_none():
+    # `config.get("model")` is absent — the gateway must be asked with
+    # `requested=None`, letting it fall back to the kind default rather than the
+    # executor inventing a ref.
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    gateway = RecordingGateway()
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+
+    ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert gateway.calls == [{"kind": "step", "requested": None, "ws": CTX.ws}]
+
+
+def test_two_steps_naming_different_models_resolve_to_different_clients_through_the_executor():
+    # §10 item 8 / AC-4 (Landing-1 half), driven through the executor rather than
+    # `ModelGateway` in isolation (`test_modelconfig.py` covers the gateway alone).
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    gateway = RecordingGateway()
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+
+    result_a = ex._run_agent_node(
+        CTX, RUN, {"key": "research", "type": "agent"},
+        _config(model="lmstudio/model-a"), {"threadId": "t1"},
+    )
+    result_b = ex._run_agent_node(
+        CTX, RUN, {"key": "answer", "type": "agent"},
+        _config(model="lmstudio/model-b"), {"threadId": "t1"},
+    )
+
+    assert [c["requested"] for c in gateway.calls] == [
+        "lmstudio/model-a", "lmstudio/model-b",
+    ]
+    assert result_a.output == "answer from lmstudio/model-a"
+    assert result_b.output == "answer from lmstudio/model-b"
+    assert result_a.output != result_b.output

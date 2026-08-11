@@ -13,9 +13,18 @@ set -euo pipefail
 #                          index; ws:acme is bootstrapped at 1024 (Qwen3-Embedding).
 #                          Exported to the app as FALKORCHAT_EMBEDDING_DIM so a
 #                          wrong-dim embedding can't silently drop out of ANN.
-#   FALKORCHAT_ENABLE_AGENT(default: 1)      — wire the live LM-Studio embedder +
-#                          LLM + AI responder (@mention the agent to get a reply).
-#                          Set 0 to serve the UI/REST without the AI loop.
+#   FALKORCHAT_ENABLE_AGENT(default: 1)      — wire the live embedder + LLM + AI
+#                          responder (@mention the agent to get a reply). Set 0 to
+#                          serve the UI/REST without the AI loop.
+#   FALKORCHAT_OPENCODE_CONFIG(default: $HOME/.config/opencode/opencode.json)
+#                          — K-042: the pristine, unmodified shared OpenCode file
+#                          (providers only). Required whenever ENABLE_AGENT/
+#                          WORKFLOW_ENABLED is on; this script supplies the dev
+#                          convenience default (the product itself has none — see
+#                          config/opencode.example.json for the expected shape).
+#   FALKORCHAT_MODEL_CONFIG(default: falkor-chat/config/models.json, set by
+#                          config.py itself — no need to export it here) — K-042:
+#                          falkor-chat's own overlay (per-kind defaults/settings).
 #   FALKORCHAT_WORKFLOW_ENABLED(default: 1)  — wire the M3 LLM-native workflow executor
 #                          + trigger (@mention starts the triage run; a plain reply
 #                          resumes a waiting one). Seeds the triage def first (a def MUST
@@ -55,7 +64,9 @@ Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID, FALKORDB_HOST,
                FALKORCHAT_ENABLE_AGENT (default 1), FALKORCHAT_WORKFLOW_ENABLED
                (default 1), FALKORCHAT_AGENT_ID, FALKORCHAT_AGENT_NAME,
                FALKORCHAT_TRIGGER_DEF_KEY (default triage), FALKORCHAT_TRIGGER_DEF_VERSION
-               (default v1)
+               (default v1), FALKORCHAT_OPENCODE_CONFIG (default
+               \$HOME/.config/opencode/opencode.json), FALKORCHAT_MODEL_CONFIG
+               (default falkor-chat/config/models.json)
 EOF
 }
 
@@ -84,6 +95,11 @@ FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
 FALKORCHAT_TRIGGER_DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
 FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
 UVICORN_ARGS="${UVICORN_ARGS:---reload}"
+# K-042 §4.1: the product carries no home-directory default (a default pointing into
+# one specific user's home is the "works on my box" failure mode) — this dev script
+# supplies the convenience default instead, so the stakeholder's day-to-day command
+# stays unchanged while a bare `uvicorn` run must be explicit.
+FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER_DIR="$REPO_DIR/server"
@@ -152,6 +168,7 @@ fi
 echo "[6/6] Starting uvicorn on http://localhost:8000..."
 echo "      Workspace: $FALKORCHAT_WS_ID  |  User: $FALKORCHAT_USER_ID  |  Dim: $EMBEDDING_DIM"
 echo "      AI agent:  enabled=$FALKORCHAT_ENABLE_AGENT  id=$FALKORCHAT_AGENT_ID (@mention to trigger)"
+echo "      Model config: opencode=$FALKORCHAT_OPENCODE_CONFIG  overlay=${FALKORCHAT_MODEL_CONFIG:-<falkor-chat>/config/models.json}"
 echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def ${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION})"
 echo "      MCP endpoint: http://localhost:8000/mcp"
 echo "      Web UI:       http://localhost:8000/"
@@ -164,4 +181,9 @@ export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
 export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
 export FALKORCHAT_WORKFLOW_ENABLED
 export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
+# K-042: the shared, pristine OpenCode file (providers only). FALKORCHAT_MODEL_CONFIG
+# is left unexported — config.py's own default (falkor-chat/config/models.json) is
+# right for the vast majority of runs; export it yourself to point at a different
+# overlay.
+export FALKORCHAT_OPENCODE_CONFIG
 exec "$VENV_DIR/bin/uvicorn" falkorchat.app:app $UVICORN_ARGS

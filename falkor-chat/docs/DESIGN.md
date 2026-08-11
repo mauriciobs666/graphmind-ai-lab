@@ -54,7 +54,11 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 ### 1.3 M2 stack (decided 2026-07-04, pending implementation)
 
 > User-approved M2 stack. Locked here; implemented in K-008/K-013 (see docs/BACKLOG.md). Numbers
-> detailed in §11 (RAM) and §12 (M2 roadmap).
+> detailed in §11 (RAM) and §12 (M2 roadmap). **K-042 (Landing 1) note:** the rows below are the
+> *shipped defaults*, not env vars — they are now `config/models.json`'s per-kind `defaults` +
+> the shared `config/opencode.example.json`'s provider entries. Model choice is a config-file
+> edit + restart (§14.8), never a code/env change. `EMBEDDING_DIM` remains an env var
+> (`FALKORCHAT_EMBEDDING_DIM`) — it is DDL-time/write-path input, not a model choice (§14.8).
 
 | Component | Decision | Rationale | Detailed in |
 |---|---|---|---|
@@ -794,8 +798,11 @@ them, and the internal layering.
 └────────────────────────────┘                │ services.py  domain logic, append dispatch   │
                                               │ repository.py  Cypher ⇄ QUERIES.md (RO|RW)   │
                                               │ db.py        falkordb-py conn, select_graph  │
+                                              │ modelconfig.py  the model-resolution seam    │
+                                              │   (K-042, §14.8) — every LLM/embedding call  │
+                                              │ transport.py    ← one HTTP transport, §14.8  │
                                               └────────────────────────────────────────────┬─┘
-                                                                                            ▼  FalkorDB
+                                                                                            ▼  FalkorDB / LLM providers
 ```
 
 - **`repository.py` is the only place Cypher lives.** Each method maps 1:1 to a verified query in
@@ -804,6 +811,10 @@ them, and the internal layering.
 - **`services.py` owns the invariants** the write-path rules describe: choosing the first-vs-subsequent
   append variant, id generation, `Thread.updatedAt` bumps, setting `role`/`POSTED_BY`.
 - **`api.py` is the only layer that changes** if the transport is ever revisited.
+- **`modelconfig.py`/`transport.py` (K-042, §14.8) are the model-resolution seam.** Every LLM/
+  embedding consumer (`responder.py`, `executor.py`, `guards.py`, `embedding.py`, `tools.py`) holds
+  a `ModelGateway` and resolves per call — never constructs `llm.py`'s/`embedding.py`'s
+  OpenAI-compatible clients directly (FR-4).
 
 ### 14.3 The auth/tenancy seam
 
@@ -996,6 +1007,93 @@ teardown hazard already documented at the `AGENTS.md` "Key scripts" table:
 count with no FalkorDB connection and no writes — the correct way to check a plan's or review's
 "N tests" baseline claim without triggering either the `wf_repo` setup-time wipe or
 `test_queries.sh`'s teardown wipe above.
+
+- **A wired agent now requires two config files (K-042).** `FALKORCHAT_ENABLE_AGENT=1` or
+  `FALKORCHAT_WORKFLOW_ENABLED=1` builds a `ModelGateway.from_env()`, which reads
+  `FALKORCHAT_OPENCODE_CONFIG` (no product default) and `FALKORCHAT_MODEL_CONFIG` (defaults to
+  `config/models.json`). `tests/conftest.py`'s `_model_config_env` autouse fixture points both at
+  `tests/data/` fixtures for every test — the suite must pass on a machine with **no**
+  `~/.config/opencode/opencode.json` (verified: `HOME=<empty dir> pytest -q` is green). A test that
+  needs a different value must override both the env var **and** the `falkorchat.config` module
+  attribute (`monkeypatch.setattr`) — `config.py` resolves its env vars once at *import* time
+  (FR-15, no reload path), so a bare `monkeypatch.setenv` alone never reaches
+  `ModelGateway.from_env()` once the module is already imported.
+
+### 14.8 The model-resolution seam (K-042 Landing 1)
+
+**The FR-4 rule, in one sentence:** every LLM/embedding consumer holds a `ModelGateway` and asks
+it for a client; a directly-injected client (the pre-K-042 `llm=`/`embedder=` constructor kwargs
+every consumer still accepts) is sugar `__init__` wraps into a `StaticModelGateway` — dependency
+injection for tests, never a configuration route. There is exactly one internal path from "a
+kind + an optional requested ref" to a working client, and zero consumers read an endpoint or
+model id from `config.py` or any file directly. Enforced, not aspirational: an AST check in
+`test_modelconfig.py` fails the suite if any module outside `modelconfig.py`/`tests/` constructs
+`llm.OpenAICompatibleLLM`/`embedding.OpenAICompatibleEmbedder` directly.
+
+```
+                     +-----------------------------------------------+
+  opencode.json -->  | modelconfig.py                                |
+  (pristine,         |   ProviderCatalog  <- parse + {env:}/{file:}   |
+   shared)           |   Overlay          <- defaults . models        |
+                     |   ModelGateway     <- resolve(kind, requested,  |
+  models.json  -->   |                          ws, overrides)         |
+  (falkor-chat       |                    <- .llm(...) / .embedder(...)|
+   overlay)          +-------+-----------------------------------------+
+                             | ResolvedModel(ref, base_url, model, key, timeout, params)
+                             v
+                     +------------------------------------+
+                     | transport.make_http_transport()    |  timeout + headers + loud errors
+                     +-------+----------------------------+
+                             v
+        OpenAICompatibleLLM / OpenAICompatibleEmbedder
+                             ^
+      +--------------+-------+--------+------------------+----------------+
+   responder      judge            executor         embedding worker   retrieval tool
+   (kind=agent)   (kind=guard)     (kind=step)      (kind=embedding)   (kind=embedding)
+```
+
+**Four closed consumer kinds** (`agent`, `step`, `embedding`, `guard`) — adding a fifth means
+adding its own override property, or it silently escapes FR-17's future hard cap (routed to
+`tico`, `docs/plans/llm-provider-config.md` §9.3). Five binding sites resolve through them:
+`AgentResponder.maybe_respond` (`agent` + `embedding`), the executor's `_run_agent_node` (`step`),
+`EmbeddingWorker.embed_message` (`embedding`), `GraphragRetrieveTool.run` (`embedding`), and the
+llm-kind guard judge (`guard`). Resolution is **per call**, not at construction — the workspace
+override (Landing 2) is then a function of `ws` with no signature changes.
+
+**Two hand-edited files** feed the gateway (`FALKORCHAT_OPENCODE_CONFIG` — a pristine, unmodified
+OpenCode `opencode.json`, providers only, no product default; `FALKORCHAT_MODEL_CONFIG` — falkor-
+chat's own overlay, defaults to the shipped `config/models.json`), read once at wiring time
+(`ModelGateway.from_env()` — no reload path). `config.assert_no_legacy_model_env()` refuses to
+start if any of the four legacy per-provider/per-model env vars (`config.LEGACY_MODEL_ENV_VARS`)
+is still set.
+
+**The `/v1` normalization rule (AC-1).** LM Studio's `baseURL` convention omits `/v1`, and a
+missing `/v1` is not an HTTP error — it is a `200` carrying an error envelope (a string on one
+wrong-prefix path, an object on the right one, on the *same* server), so falkor-chat must
+normalize rather than probe. Three ordered steps: **validate** (`scheme in {http,https}` and a
+non-empty `netloc`, or reject at load naming the provider/file/value), **strip** every trailing
+`/`, then **normalize** (append `/v1` only when the path is now empty; otherwise use it verbatim).
+An overlay `providers.<id>.baseURL` override wins outright over both the file and the rule — used
+exactly as declared, never auto-suffixed — and one INFO line per provider at startup names the
+declared `baseURL`, the resolved API base, and which of {the rule, the override, verbatim}
+produced it.
+
+**The `guard` kind's workspace carrier (§4.10 of the plan).** Three of the four kinds carry `ws`
+to their resolution point via `ctx`; the llm-guard judge does not — `guards.evaluate_guard`'s
+`ctx` is the *run* ctx dict, not a `CallContext`, and `_select_transition` has no `CallContext`
+either. `executor._drive` stamps `run["ws"] = ctx.ws` outside the SHA-locked `_drive_loop`
+boundary (a fresh per-drive dict, never shared, never stored on `self`); `evaluate_guard` forwards
+`run=` to the judge only when the judge advertises `accepts_run = True` (the production
+`app._LlmGuardJudge`, not the closure it used to be) and forwards `model=` only when the guard
+itself declared one (`{"kind":"llm","text":…,"model":…}`) — both zero-churn conditional kwargs, so
+every stub judge in the test suite is called exactly as before.
+
+**A ref with no `/`** (bare role names) is rejected with a Landing-2-aware `ModelConfigError` —
+the role namespace stays reserved rather than silently misresolving. Overlay `roles`/`agents` keys
+are parsed and logged as "reserved, not honoured until Landing 2," never rejected.
+
+Full design + rationale: `docs/plans/llm-provider-config.md` §3–§4; requirements:
+`docs/requirements/llm-provider-config.md`.
 
 ---
 

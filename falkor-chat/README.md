@@ -266,6 +266,15 @@ The AI responder is **off by default** so imports stay network-free; set `FALKOR
 `start_server.sh`, which enables it and seeds the demo agent. `FALKORCHAT_EMBEDDING_DIM` **must**
 match the workspace's vector index (1024 for `ws:acme`).
 
+**K-042: model/provider choice is a config file, not an env var.** `FALKORCHAT_ENABLE_AGENT=1`
+(or `FALKORCHAT_WORKFLOW_ENABLED=1`) now also requires `FALKORCHAT_OPENCODE_CONFIG` — the path to
+a pristine, unmodified OpenCode `opencode.json` (providers only; see
+`config/opencode.example.json`). There is no product default (`start_server.sh` sets the dev
+convenience default, `$HOME/.config/opencode/opencode.json`, for you). falkor-chat's own overlay
+(per-kind defaults/settings) defaults to the shipped `config/models.json` — override with
+`FALKORCHAT_MODEL_CONFIG` if you want a different one. Missing/malformed/legacy-env-var-set all
+fail startup loudly, naming the variable and the shipped example.
+
 Run the server test suite (needs FalkorDB up; uses an isolated `ws:test` graph; offline — no LM Studio):
 
 ```bash

@@ -223,11 +223,24 @@ def evaluate_guard(
         # not in the judge — it is a method decision every judge should inherit rather
         # than re-derive, and it stays unit-testable offline against a stub judge.
         recent_turns = [] if understanding else _recent_turns(thread)
-        raw = judge(
-            parsed.get("text", ""),
-            understanding=understanding, recent_turns=recent_turns,
-            ctx=ctx, step_output=step_output,
-        )
+
+        # K-042 §4.10/§2.8: forward `model=` only when the guard names its own
+        # (`{"kind":"llm","text":…,"model":…}`) — never an unconditional kwarg, so the
+        # 24 stub judges taking the pre-K-042 signature keep working unmodified.
+        # Likewise `run=` only when the judge advertises `accepts_run` (the zero-churn
+        # capability flag, not signature-sniffing) — the B-1 fix's carrier for the
+        # `guard` kind's workspace, since this `ctx` is the run-ctx dict, not a
+        # `CallContext`, and has no `ws` of its own.
+        judge_kwargs: dict[str, Any] = {
+            "understanding": understanding, "recent_turns": recent_turns,
+            "ctx": ctx, "step_output": step_output,
+        }
+        model = parsed.get("model")
+        if model:
+            judge_kwargs["model"] = model
+        if getattr(judge, "accepts_run", False):
+            judge_kwargs["run"] = run
+        raw = judge(parsed.get("text", ""), **judge_kwargs)
         return _coerce_verdict(raw)
 
     if kind in CMP_KINDS:

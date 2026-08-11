@@ -50,6 +50,7 @@ from typing import Any, Protocol
 from .config import CallContext
 from .guards import CMP_KINDS, GuardVerdict, evaluate_guard, render_label
 from .llm import ToolCall
+from .modelconfig import StaticModelGateway
 from .repository import Repository, WorkflowRunNotFoundError
 from .services import InvalidSearchQueryError, ServiceError, UnknownMemberError
 from .tools import HumanHandoffSignal
@@ -274,10 +275,14 @@ class WorkflowExecutor:
         step_budget: int = DEFAULT_STEP_BUDGET,
         id_gen: Callable[[], str] = _default_id,
         clock: Callable[[], int] = _default_clock,
+        models: Any = None,
     ) -> None:
         self._services = services
         self._repo = repo
-        self._llm = llm
+        # FR-4 sugar (§3): a directly-injected `llm=` wraps into a `StaticModelGateway`
+        # — dependency injection for tests, never a configuration route. Keeps every
+        # existing `WorkflowExecutor(..., llm=stub)` injection working unmodified.
+        self._models = models or StaticModelGateway(llm=llm)
         self._guard_judge = guard_judge
         self._tools = tool_registry
         self._tracer = tracer or _NULL_TRACER
@@ -361,6 +366,15 @@ class WorkflowExecutor:
             `WorkflowConfigError` and the M7 `NotImplementedError` reach this net)."""
         run_id = run["runId"]
         run_ctx = _load_json_obj(run["ctx"])
+        # K-042 §4.10 (B-1 fix): stamp the workspace onto the `run` dict, OUTSIDE the
+        # SHA-locked `_drive_loop` boundary, so the `guard` kind's resolution point
+        # (which has no `CallContext` of its own — `evaluate_guard`'s `ctx` is the run
+        # ctx dict) can still reach `ws` without any signature change inside the lock.
+        # `run` is a fresh per-drive dict (never shared — `run()`/`resume()` each build
+        # it from `get_run` immediately before calling `_drive`), so mutating it here is
+        # safe under the anyio threadpool / mcp.py daemon threads. Never stored on
+        # `self` — the executor is a process-wide singleton.
+        run["ws"] = ctx.ws
         try:
             return self._drive_loop(ctx, run)
         except HumanHandoffSignal:
@@ -463,7 +477,7 @@ class WorkflowExecutor:
         """
         step_type = step.get("type")
         if step_type == "agent":
-            if self._llm is None:
+            if not self._models.has_chat():
                 return StepResult(output="", on="done")
             return self._run_agent_node(ctx, run, step, config, run_ctx)
         if step_type == "decision":
@@ -561,7 +575,12 @@ class WorkflowExecutor:
 
         Every LLM prompt/response and tool call/result is collected into the returned
         `StepResult.trace` (emitted to the tracer once the StepRun exists — debug only).
+
+        K-042 FR-4/FR-5: resolves the `step`-kind LLM client **once per node
+        execution** (not per iteration) through the gateway — `config.get("model")`
+        is the step's own model choice if it named one, else the kind default.
         """
+        llm = self._models.llm("step", requested=config.get("model"), ws=ctx.ws)
         granted = list(config.get("tools", []))
         granted_set = set(granted)
         offered = [self._tools.schema(name) for name in granted]
@@ -582,7 +601,7 @@ class WorkflowExecutor:
                 ("llm_prompt", f"iter {iteration}/{max_iter}: {len(messages)} msgs, "
                                f"{len(offered)} tool(s)")
             )
-            result = self._llm.chat(messages, offered)
+            result = llm.chat(messages, offered)
             trace.append(("llm_response", _describe_result(result)))
             if result.text:
                 last_text = result.text

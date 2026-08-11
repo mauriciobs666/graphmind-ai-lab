@@ -37,6 +37,20 @@ services:
       FALKORDB_PORT: "6379"
       FALKORCHAT_WS_ID: ${FALKORCHAT_WS_ID:-acme}
       FALKORCHAT_USER_ID: ${FALKORCHAT_USER_ID:-u1}
+      # K-042: the two model-config files. The overlay ships in-image (config.py's
+      # own default, /app/config/models.json — Dockerfile COPYs config/); the shared
+      # OpenCode file is bind-mounted read-only from the host below, since it is a
+      # hand-edited file the product deliberately carries no default for (§4.1).
+      FALKORCHAT_OPENCODE_CONFIG: /run/config/opencode.json
+    volumes:
+      # Read-only: falkor-chat never writes to the shared file (§4.2). Override
+      # FALKORCHAT_OPENCODE_CONFIG_HOST if your real opencode.json lives elsewhere.
+      - ${FALKORCHAT_OPENCODE_CONFIG_HOST:-$HOME/.config/opencode/opencode.json}:/run/config/opencode.json:ro
+    extra_hosts:
+      # The container's `localhost` is itself, not the host running LM Studio — an
+      # ENABLE_AGENT=1 run needs this (or a LAN address in the mounted opencode.json)
+      # to reach a host-bound LM Studio (same pattern `cpg/mcp/docker-run.sh` uses).
+      - "host.docker.internal:host-gateway"
     depends_on:
       falkordb:
         condition: service_healthy

@@ -29,6 +29,7 @@ from . import mcp as mcp_mod
 from .config import CallContext
 from .guards import WorkflowConfigError
 from .llm import extract_own_line_json_object
+from .modelconfig import ModelGateway, StaticModelGateway
 from .repository import Repository
 from .services import (
     ChannelNotFoundError,
@@ -162,15 +163,13 @@ def create_app(
     building the default app stays network-free and existing tests are untouched.
     A production wiring constructs them explicitly and passes them in, e.g.::
 
-        from falkorchat.embedding import EmbeddingWorker, LMStudioEmbedder
-        from falkorchat.llm import LMStudioLLM
+        from falkorchat.embedding import EmbeddingWorker
+        from falkorchat.modelconfig import ModelGateway
         from falkorchat.responder import AgentResponder
 
-        embedder = LMStudioEmbedder()
-        worker = EmbeddingWorker(repo, embedder)
-        responder = AgentResponder(
-            services, embedder, LMStudioLLM(), worker, agent_id="bot1"
-        )
+        models = ModelGateway.from_env()
+        worker = EmbeddingWorker(repo, models=models)
+        responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
         app = create_app(services, responder=responder, embed_worker=worker)
     """
     if services is None:
@@ -246,15 +245,18 @@ def _build_default_app() -> FastAPI:
 
     Gated on `config.ENABLE_AGENT` (env `FALKORCHAT_ENABLE_AGENT`): when off (the
     default), returns the plain network-free app so importing this module and the
-    pytest baseline never touch LM Studio. When on, wires the live K-013 loop —
-    `LMStudioEmbedder` embeds EVERY posted message, and `AgentResponder` replies to
-    an `@mention` of `config.AGENT_ID` — sharing one `Repository`/`Services` with
-    the app. Constructing the LM Studio clients is itself offline; the first
-    network call happens when a posted message runs its background tasks.
+    pytest baseline never touch any provider or read any config file. When on, builds
+    **one** `ModelGateway` (K-042 FR-4/FR-15 — the two config files are read once,
+    here) and wires the live K-013 loop through it: the embedding worker embeds EVERY
+    posted message, and `AgentResponder` replies to an `@mention` of `config.AGENT_ID`
+    — sharing one `Repository`/`Services`/`ModelGateway` with the app. Constructing the
+    gateway is itself offline (it only parses the two files); the first network call
+    happens when a posted message runs its background tasks.
 
     The served app MUST run at the workspace's embedding dimension
-    (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`) or embeddings silently drop out
-    of the ANN index — `scripts/start_server.sh` sets it.
+    (`FALKORCHAT_EMBEDDING_DIM=1024` for `ws:acme`, or the overlay's declared `dim` for
+    the resolved embedding model, §4.5) or embeddings silently drop out of the ANN index
+    — `scripts/start_server.sh` sets it.
     """
     repo = Repository(db.LazyFalkorDB())
     services = Services(repo)
@@ -263,14 +265,14 @@ def _build_default_app() -> FastAPI:
 
     # Imported lazily so the disabled path carries no import-time weight and the
     # dependency surface for offline imports stays minimal.
-    from .embedding import EmbeddingWorker, LMStudioEmbedder
-    from .llm import LMStudioLLM
+    from .embedding import EmbeddingWorker
+    from .modelconfig import ModelGateway
     from .responder import AgentResponder
 
-    embedder = LMStudioEmbedder()
-    worker = EmbeddingWorker(repo, embedder)
+    models = ModelGateway.from_env()
+    worker = EmbeddingWorker(repo, models=models)
     responder = AgentResponder(
-        services, embedder, LMStudioLLM(), worker, agent_id=config.AGENT_ID
+        services, worker=worker, agent_id=config.AGENT_ID, models=models
     )
 
     # M3 workflow engine (K-023): checked AFTER the responder/embedder/LLM exist (the
@@ -284,10 +286,10 @@ def _build_default_app() -> FastAPI:
         from .tools import build_builtin_registry
         from .trigger import WorkflowTrigger
 
-        registry = build_builtin_registry(services, embedder, agent_id=config.AGENT_ID)
-        judge = _build_llm_judge(LMStudioLLM())
+        registry = build_builtin_registry(services, agent_id=config.AGENT_ID, models=models)
+        judge = _build_llm_judge(models)
         executor = WorkflowExecutor(
-            services, repo, llm=LMStudioLLM(), guard_judge=judge,
+            services, repo, models=models, guard_judge=judge,
             tool_registry=registry, tracer=GraphTracer(repo),
         )
         services.set_executor(executor)  # late-bind (breaks the services↔executor cycle)
@@ -346,19 +348,27 @@ def _render_judge_user(
     return "\n\n".join(blocks)[:JUDGE_USER_MAX_CHARS]
 
 
-def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
-    """Build the production fuzzy-guard judge callable (DS §Q1) over an LLM.
+class _LlmGuardJudge:
+    """The production fuzzy-guard judge (DS §Q1), K-042: a small callable **object**
+    (not a closure) so it can carry `accepts_run = True` — the zero-churn capability
+    flag `guards.evaluate_guard` checks before forwarding `run=` (§4.10 step 4). Every
+    stub judge in the test suite lacks this attribute and is called exactly as before.
 
     Matches the injected judge shape `guards.evaluate_guard` calls:
-    `(condition, *, understanding, recent_turns, ctx, step_output) -> {decision, rationale}`.
-    Builds the §Q1 prompt from whichever evidence tier `guards` selected — the compact
-    `understanding` (primary) or the RECENT-TURNS fallback; the omit rule is applied
-    upstream in `guards.evaluate_guard`, so this judge is a **dumb renderer** of what it is
-    handed. A non-JSON / malformed reply resolves to `{"decision": False, …}` — and
-    `guards._coerce_verdict` applies the same bias-to-suspend downstream, so an unreliable
-    judge never falsely advances. Calibration (κ / false-advance) is a U14/U15 concern; the
-    wired judge must simply exist so an `llm` guard never hits the m-3 "no judge" path in
-    the served flow.
+    `(condition, *, understanding, recent_turns, ctx, step_output, model=None, run=None)
+    -> {decision, rationale}`. Builds the §Q1 prompt from whichever evidence tier
+    `guards` selected — the compact `understanding` (primary) or the RECENT-TURNS
+    fallback; the omit rule is applied upstream in `guards.evaluate_guard`, so this
+    judge is a **dumb renderer** of what it is handed. A non-JSON / malformed reply
+    resolves to `{"decision": False, …}` — and `guards._coerce_verdict` applies the
+    same bias-to-suspend downstream, so an unreliable judge never falsely advances.
+    Calibration (κ / false-advance) is a U14/U15 concern; the wired judge must simply
+    exist so an `llm` guard never hits the m-3 "no judge" path in the served flow.
+
+    K-042 FR-4/FR-6/§4.10: resolves kind `guard` through the gateway on every
+    evaluation — `model` is the guard's own choice if it declared one, else the kind
+    default; `ws` comes off `run["ws"]` (the B-1 carrier `_drive` stamps, since this
+    judge otherwise has no `CallContext` — `ctx` here is the *run* ctx dict).
 
     The reply is parsed with `llm.extract_own_line_json_object(..., require_key="decision")`,
     **not** a bare `json.loads` (K-027 item 1) and **not** the permissive
@@ -385,7 +395,17 @@ def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
     one object after fence-stripping) is the documented next narrowing.
     """
 
-    def judge(condition, *, understanding, recent_turns, ctx, step_output):  # noqa: ANN001
+    accepts_run = True
+
+    def __init__(self, models: object) -> None:
+        self._models = models
+
+    def __call__(
+        self, condition, *, understanding, recent_turns, ctx, step_output,
+        model=None, run=None,
+    ):  # noqa: ANN001
+        ws = run.get("ws") if isinstance(run, dict) else None
+        llm = self._models.llm("guard", requested=model, ws=ws)
         user = _render_judge_user(condition, understanding, recent_turns)
         text = llm.complete([
             {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
@@ -396,7 +416,22 @@ def _build_llm_judge(llm: object) -> Callable[..., dict[str, object]]:
             return {"decision": False, "rationale": "unparseable judge output"}
         return parsed
 
-    return judge
+
+def _as_model_gateway(obj: object) -> object:
+    """FR-4 sugar (§3): a raw `llm`-shaped object (has `.complete(...)`) wraps into a
+    `StaticModelGateway`; an already-real gateway (`ModelGateway`/`StaticModelGateway`)
+    passes through unchanged. Lets `_build_llm_judge` accept either a bare injected
+    stub LLM (every existing direct test call) or the production `ModelGateway`."""
+    if isinstance(obj, (ModelGateway, StaticModelGateway)):
+        return obj
+    return StaticModelGateway(llm=obj)
+
+
+def _build_llm_judge(models: object) -> _LlmGuardJudge:
+    """Build the production fuzzy-guard judge (see `_LlmGuardJudge`). `models` is
+    either a real `ModelGateway` (production) or a bare LLM client (tests — wrapped
+    via `_as_model_gateway`'s FR-4 sugar)."""
+    return _LlmGuardJudge(_as_model_gateway(models))
 
 
 # Default ASGI app for `uvicorn falkorchat.app:app`.

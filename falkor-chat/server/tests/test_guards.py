@@ -290,6 +290,65 @@ def test_an_empty_guard_never_calls_the_judge_even_with_a_live_thread():
     assert verdict.decision is True
 
 
+# ── K-042 §4.10/§2.8: `model=`/`run=` forwarded to the judge, zero-churn both ways ──
+
+
+class _RunAwareJudge:
+    """A judge advertising `accepts_run` (the production `_LlmGuardJudge` shape) —
+    records every kwarg it was actually called with, so a test can assert both
+    presence AND absence."""
+
+    accepts_run = True
+
+    def __init__(self, output):
+        self.output = output
+        self.calls: list[dict] = []
+
+    def __call__(self, condition, *, understanding, recent_turns, ctx, step_output,
+                 model=None, run=None):
+        self.calls.append({"model": model, "run": run})
+        return self.output
+
+
+def test_guard_declaring_its_own_model_forwards_it_to_the_judge():
+    judge = _RunAwareJudge({"decision": True, "rationale": "x"})
+    guard = json.dumps({"kind": "llm", "text": "enough info?", "model": "lmstudio/big-model"})
+
+    evaluate_guard(guard, ctx={}, run={"ws": "acme"}, step_output="", thread=None, judge=judge)
+
+    assert judge.calls[0]["model"] == "lmstudio/big-model"
+
+
+def test_guard_without_a_declared_model_passes_no_model_kwarg():
+    # StubJudge's signature has no `model`/`run` param at all — if evaluate_guard ever
+    # passed either unconditionally, this call would raise TypeError.
+    judge = StubJudge({"decision": True, "rationale": "x"})
+
+    verdict = evaluate_guard(LLM_GUARD, ctx={}, run={}, step_output="", thread=None, judge=judge)
+
+    assert verdict.decision is True  # no TypeError ⇒ no unexpected kwarg was sent
+
+
+def test_judge_advertising_accepts_run_receives_the_run_dict():
+    judge = _RunAwareJudge({"decision": True, "rationale": "x"})
+    run = {"runId": "r1", "ws": "acme"}
+
+    evaluate_guard(LLM_GUARD, ctx={}, run=run, step_output="", thread=None, judge=judge)
+
+    assert judge.calls[0]["run"] is run
+
+
+def test_judge_without_accepts_run_receives_no_run_kwarg():
+    # StubJudge lacks `accepts_run` — same TypeError-if-forwarded argument as above.
+    judge = StubJudge({"decision": True, "rationale": "x"})
+
+    verdict = evaluate_guard(
+        LLM_GUARD, ctx={}, run={"ws": "acme"}, step_output="", thread=None, judge=judge
+    )
+
+    assert verdict.decision is True
+
+
 # ── R-1: `_NEGATION_CUES` must not fire on an AFFIRMATIVE rationale ──────────
 #
 # The cue check is a backstop against an *internally inconsistent* verdict (decision:true

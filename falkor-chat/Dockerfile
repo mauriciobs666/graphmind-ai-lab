@@ -2,7 +2,9 @@
 # uvicorn process. Build context is falkor-chat/ (the component root): app.py
 # resolves the browser client as a *sibling* of server/ (`parents[2]/web`), so
 # the image preserves the server/ + web/ layout and installs the package
-# editable to keep that path valid.
+# editable to keep that path valid. K-042: `config.py`'s own MODEL_CONFIG_PATH
+# default resolves the same way (`parents[2]/config/models.json`), so config/
+# is copied in at the same sibling depth as web/.
 #
 #   docker compose up            # preferred — wires FalkorDB too (compose.yaml)
 #   docker build -t falkorchat . # image only
@@ -18,6 +20,7 @@ WORKDIR /app
 COPY server/pyproject.toml server/pyproject.toml
 COPY server/falkorchat server/falkorchat
 COPY web web
+COPY config config
 
 RUN pip install --no-cache-dir -e ./server
 

@@ -227,3 +227,73 @@ def test_answer_self_embedding_does_not_re_trigger():
     # exactly one post: embedding the answer is a write, never a new trigger
     assert len(services.post_calls) == 1
     assert len(worker.calls) == 1
+
+
+# ── K-042 code review Major 2: the `agent`+`embedding`-kind gateway resolution wiring ──
+#
+# Every test above injects `embedder=`/`llm=` — the pre-K-042 `StaticModelGateway`
+# sugar path, which proves backward compatibility but never exercises
+# `maybe_respond`'s own `self._models.embedder("embedding", ws=ctx.ws)` /
+# `self._models.llm("agent", ws=ctx.ws)` calls. This uses a small recording
+# `models=` double instead, so a regression at either call site (a swapped kind, a
+# dropped `ws=`, or the retrieval/answer resolution firing in the wrong order) would
+# fail here even though every other test in this file is blind to it.
+
+class RecordingGateway:
+    """A minimal `ModelGateway`-shaped double: records every `.embedder()`/`.llm()`
+    call's `(kind, ws)`, in call order, and hands back the injected stub clients."""
+
+    def __init__(self, embedder, llm):
+        self.calls: list[tuple[str, str]] = []
+        self._embedder = embedder
+        self._llm = llm
+
+    def embedder(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append(("embedder", kind, ws))
+        return self._embedder
+
+    def llm(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append(("llm", kind, ws))
+        return self._llm
+
+
+def test_maybe_respond_resolves_embedding_then_agent_through_the_gateway_in_order():
+    seeds = [{"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0}]
+    services = FakeServices(seeds=seeds)
+    embedder = StubEmbedder()
+    llm = StubLLM(answer="grounded reply")
+    worker = SpyWorker()
+    gateway = RecordingGateway(embedder, llm)
+    responder = AgentResponder(
+        services, worker=worker, agent_id=AGENT_ID, models=gateway
+    )
+
+    out = responder.maybe_respond(
+        CTX, thread_id="t1", msg_id="m1", text="what about cats?",
+        role="user", channel_id="c1", mentions=[AGENT_ID],
+    )
+
+    assert gateway.calls == [
+        ("embedder", "embedding", CTX.ws),
+        ("llm", "agent", CTX.ws),
+    ]
+    assert out["text"] == "grounded reply"
+    assert embedder.seen == ["what about cats?"]
+    assert llm.calls  # the resolved llm was actually driven
+
+
+def test_maybe_respond_does_not_resolve_anything_when_not_triggered():
+    # The loop guard / no-mention short-circuit must fire BEFORE any resolution.
+    services = FakeServices()
+    gateway = RecordingGateway(StubEmbedder(), StubLLM())
+    responder = AgentResponder(
+        services, worker=SpyWorker(), agent_id=AGENT_ID, models=gateway
+    )
+
+    out = responder.maybe_respond(
+        CTX, thread_id="t1", msg_id="m1", text="just chatting",
+        role="user", channel_id="c1", mentions=["u2"],
+    )
+
+    assert out is None
+    assert gateway.calls == []

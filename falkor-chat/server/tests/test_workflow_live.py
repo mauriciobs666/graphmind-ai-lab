@@ -8,8 +8,15 @@ when LM Studio happens to be running. Run it explicitly:
     cd server && .venv/bin/python -m pytest -m live -s
 
 Needs: FalkorDB up (`./scripts/start_falkordb.sh -d`) **and** LM Studio serving a chat
-model + an embedding model at `FALKORCHAT_LLM_BASE_URL` (default `localhost:1234`).
+model + an embedding model at `FALKORCHAT_LIVE_LLM_BASE_URL` (default `localhost:1234`).
 Either being unreachable skips (never fails) with a reason.
+
+**K-042 note:** this module constructs `OpenAICompatibleLLM`/`OpenAICompatibleEmbedder`
+directly (an FR-4-sanctioned exception — only `modelconfig.py` and `tests/` may) with
+explicit `base_url`/`model` literals, rather than going through `ModelGateway.from_env()`
+— a live run needs no config file, only `FALKORCHAT_LIVE_LLM_BASE_URL`/
+`FALKORCHAT_LIVE_LLM_MODEL`/`FALKORCHAT_LIVE_EMBEDDING_MODEL` env overrides (all optional;
+defaults match the M2 stack, DESIGN §1.3).
 
 **Why its own `ws:live` workspace, not `ws:test` or `ws:acme`:**
 
@@ -48,15 +55,25 @@ import pytest
 
 from falkorchat import config, db
 from falkorchat.config import CallContext
-from falkorchat.embedding import EmbeddingWorker, LMStudioEmbedder
+from falkorchat.embedding import EmbeddingWorker, OpenAICompatibleEmbedder
 from falkorchat.executor import GraphTracer, WorkflowExecutor
-from falkorchat.llm import LMStudioLLM
+from falkorchat.llm import OpenAICompatibleLLM
 from falkorchat.repository import Repository
 from falkorchat.services import Services
 from falkorchat.tools import build_builtin_registry
 from falkorchat.trigger import WorkflowTrigger
 
 pytestmark = pytest.mark.live
+
+# K-042: model choice is no longer an env var product-wide (FR-20), but this live
+# test still needs *some* way to point at a running LM Studio without a config file
+# — these three are live-test-only knobs, distinct from the deleted
+# FALKORCHAT_LLM_*/FALKORCHAT_EMBEDDING_* product vars (never read by `config.py`).
+LIVE_LLM_BASE_URL = os.environ.get("FALKORCHAT_LIVE_LLM_BASE_URL", "http://localhost:1234/v1")
+LIVE_LLM_MODEL = os.environ.get("FALKORCHAT_LIVE_LLM_MODEL", "qwen/qwen3-4b-2507")
+LIVE_EMBEDDING_MODEL = os.environ.get(
+    "FALKORCHAT_LIVE_EMBEDDING_MODEL", "text-embedding-qwen3-embedding-0.6b"
+)
 
 LIVE_WS = "live"
 AGENT_ID = "assistant"
@@ -122,7 +139,7 @@ def _probe_embedding_dim() -> int:
     would make AC-3 pass while retrieving nothing. So we ask the model rather than
     hardcode 1024.
     """
-    return len(LMStudioEmbedder().embed("probe"))
+    return len(OpenAICompatibleEmbedder(LIVE_LLM_BASE_URL, LIVE_EMBEDDING_MODEL).embed("probe"))
 
 
 @pytest.fixture(scope="module")
@@ -134,7 +151,7 @@ def live_dim() -> int:
         dim = _probe_embedding_dim()
     except Exception as exc:
         pytest.skip(
-            f"LM Studio not reachable at {config.EMBEDDING_BASE_URL} ({exc!r}) — "
+            f"LM Studio not reachable at {LIVE_LLM_BASE_URL} ({exc!r}) — "
             f"start it and load a chat + an embedding model"
         )
     return dim
@@ -189,10 +206,12 @@ def _build_live_stack(dim: int):
 
     repo = Repository(db.connect())
     services = Services(repo)
-    embedder = LMStudioEmbedder()
+    embedder = OpenAICompatibleEmbedder(LIVE_LLM_BASE_URL, LIVE_EMBEDDING_MODEL)
     registry = build_builtin_registry(services, embedder, agent_id=AGENT_ID)
+    llm = OpenAICompatibleLLM(LIVE_LLM_BASE_URL, LIVE_LLM_MODEL)
     executor = WorkflowExecutor(
-        services, repo, llm=LMStudioLLM(), guard_judge=_build_llm_judge(LMStudioLLM()),
+        services, repo, llm=llm,
+        guard_judge=_build_llm_judge(OpenAICompatibleLLM(LIVE_LLM_BASE_URL, LIVE_LLM_MODEL)),
         tool_registry=registry, tracer=GraphTracer(repo),
     )
     services.set_executor(executor)

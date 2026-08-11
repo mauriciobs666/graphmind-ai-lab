@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 3
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 4
 
 ## 1. Scope & verdict
 
@@ -994,3 +994,233 @@ elsewhere in the same document.
 is entirely inside Landing 2 (`L2-1`/`L2-2`); nothing in this pass touches any Landing-1 unit,
 file, or acceptance criterion. Carry the one-line `None`-not-`False` fix as a note for whoever
 picks up `L2-1`, not as a gate on Landing 1's start.
+
+---
+
+## Landing 1 code review — 2026-08-10
+
+**Scope: this is a code review, not a design review.** Baseline is the approved plan
+(`docs/plans/llm-provider-config.md` v3, §6, units L1-1..L1-6) against `coder`'s **uncommitted**
+working-tree diff in `falkor-chat/` (`git status --short`/`git diff` read directly, nothing
+mutated). I did not re-open Passes 1-3 above; Landing 2 scope was checked only for *absence*, not
+re-judged on its merits. `./scripts/test_queries.sh` was **not** run (destroys the shared
+`reference` graph — out of scope for this offline unit anyway). No Docker available in this
+environment — `Dockerfile`/`compose.yaml` changes are read and reasoned about, not build-verified;
+carried below as a residual open item, not a finding.
+
+**What I executed** (nothing mutating; every restore below is a copy-back, never `git
+checkout`/`restore`):
+
+- `.venv/bin/python -m pytest -q` from `server/` → **778 passed, 1 deselected** (the `live`
+  marker), 9.6s. Re-ran with `HOME=<a fresh empty scratch dir>` → **778 passed, 1 deselected**,
+  identical — the plan's M-2 done-condition ("the full suite passes on a machine with no
+  `~/.config/opencode/opencode.json`") holds.
+- The unfiltered legacy-env-var grep the plan's own §2.9/L1-5 done-condition specifies
+  (`grep -rn -e FALKORCHAT_LLM_BASE_URL -e FALKORCHAT_LLM_MODEL -e FALKORCHAT_EMBEDDING_BASE_URL
+  -e FALKORCHAT_EMBEDDING_MODEL .`, excluding `.git/`/`.venv/`/`__pycache__/`/`docs/archive/`)
+  minus the K-042 planning documents (requirements/plans/reviews) and
+  `docs/plans/local-model-ram-budget-ml.md` (explicitly out of scope, already routed to
+  `data-scientist`) → **exactly `server/falkorchat/config.py:57-58`, `LEGACY_MODEL_ENV_VARS`
+  itself.** Nothing else. Matches `coder`'s claim exactly.
+- Diffed `server/tests/data/opencode_severino_sample.json` against the real
+  `opencode/agents/severino/opencode.json`, and `opencode_stakeholder_sample.json` against the
+  real `~/.config/opencode/opencode.json` on this box — both **byte-identical**. The two
+  §4.3/§4.4 fixtures the offline suite depends on are exactly the two real files the plan's
+  §2.3-§2.5 grounding was built on, not paraphrases.
+- Mutation-tested two pieces of logic myself (copy-aside → edit → run targeted test → confirm
+  red → restore from the copy; no `git` reversion used):
+  1. **The §4.9 ladder** (`transport.py`): swapped the `except HTTPError` / `except URLError`
+     clauses back to the pre-B-2 (`URLError`-first) order. `test_http_error_branch_is_reached_
+     first_and_preserves_the_body` failed exactly as predicted — the message became `"...
+     connection failed: Unauthorized"` (the 401 body swallowed, dead-code regression
+     reproduced) instead of carrying `"bad key"`. Restored; full `test_transport.py` (13 tests)
+     green again.
+  2. **The §4.3 strip-then-normalize order** (`modelconfig.py`): swapped `_normalize_base_url` to
+     normalize-then-strip (the exact bug the plan's §4.3 prose warns a literal transcription
+     produces). `test_v1_normalization_table[http://host:1234/-...]` and
+     `test_v1_rule_reports_source_rule_vs_verbatim` both failed, for exactly the predicted reason
+     (`http://host:1234` instead of `http://host:1234/v1`, and `source="rule"` where `"verbatim"`
+     was expected). Restored; full `test_modelconfig.py` (51 tests) green again.
+  Both target the two places prior design-review passes found real defects in (B-1/B-2's
+  ancestor holes); both are now caught by a dedicated, targeted offline test.
+- Manually drove the three consumer bindings that have **no** automated test through a
+  hand-rolled recording `ModelGateway` stub (`WorkflowExecutor._run_agent_node`,
+  `AgentResponder.maybe_respond`, `GraphragRetrieveTool.run`) to check the actual wiring, since
+  no shipped test does this — see Major 2 below. All three called `.llm()`/`.embedder()` with the
+  correct `kind`/`requested`/`ws` arguments; no defect found, only a coverage gap.
+
+**Verdict: approve with suggestions.** No blocker. The core deliverable — `transport.py`'s ladder,
+`modelconfig.py`'s resolver, the five rewired consumer bindings, the FR-20 cutover, the docs — is
+well-built, matches the plan closely (including the specific places prior review passes found
+real bugs during design), and the offline suite is genuinely green with no dependency on any
+developer's real `~/.config/opencode/opencode.json`. Two majors, both **test-coverage gaps
+against the plan's own named done-conditions**, not behavior defects (I confirmed the underlying
+code is correct for both, by hand, since the suite itself doesn't).
+
+### Majors
+
+**Major 1 — The AC-13 legacy-env-var tripwire (`config.assert_no_legacy_model_env`) has zero
+automated test coverage**, despite being an explicit named acceptance criterion and a stated
+done-condition in two places in the plan (L1-5: *"Setting a legacy var fails with the tripwire
+message (AC-13)"*; §10 test-strategy item 14: *"Setting any legacy env var aborts startup with
+the tripwire message"*).
+
+Grepped the whole diff for `assert_no_legacy_model_env`/`LEGACY_MODEL_ENV_VARS` in `server/tests/`
+— the only hits are the definitions in `config.py` itself. The one test filed under the
+"AC-13 tripwire" heading in `test_modelconfig.py`
+(`test_from_env_requires_opencode_config_path`) tests a *different* thing — a missing
+`FALKORCHAT_OPENCODE_CONFIG` — never a legacy var actually being *set*. I confirmed by hand that
+the function itself is correct (`FALKORCHAT_LLM_MODEL=x` → `assert_no_legacy_model_env()` raises
+naming it, verified interactively against the installed package), so this is a coverage gap, not
+a bug — but it means a future edit that silently breaks the tripwire (e.g. someone "cleaning up"
+`config.py` and dropping the call from `ModelGateway.from_env()`) would ship undetected by the
+suite, on the one behavior AC-13 exists to guarantee.
+
+**Suggested fix:** add, in `test_modelconfig.py` near the existing AC-13 section, a test that sets
+one (or each) of `config.LEGACY_MODEL_ENV_VARS` via `monkeypatch.setenv` and asserts
+`ModelGateway.from_env()` (or `config.assert_no_legacy_model_env()` directly) raises naming the
+var and pointing at the two replacement files — mirroring the existing
+`test_env_apikey_missing_raises_naming_variable_and_file` pattern already in the same file.
+
+---
+
+**Major 2 — Three of the five rewired consumer bindings have no automated test of the actual
+gateway-resolution wiring; the plan's own L1-4 done-condition names one of them explicitly and
+it's absent.**
+
+`server/tests/test_executor_agent.py`, `server/tests/test_responder.py` and
+`server/tests/test_tools.py` were **not touched by this diff at all** (`git diff --stat` shows
+zero lines changed in any of the three), despite all three being named in the plan's own §5 file
+list as modules to extend. Concretely:
+
+- **`WorkflowExecutor._run_agent_node`'s `step`-kind resolution** — no test constructs a
+  `WorkflowExecutor(..., models=<gateway>)` and asserts `.llm("step", requested=config.get(
+  "model"), ws=ctx.ws)` is called with the right arguments. Every existing/surviving test in
+  `test_executor_agent.py` uses the pre-K-042 `llm=<stub>` kwarg (the `StaticModelGateway` sugar
+  path), which proves backward compatibility, not that the new per-step resolution wiring is
+  correct.
+- **`AgentResponder.maybe_respond`'s `agent`+`embedding`-kind resolution** — same gap;
+  `test_responder.py` is entirely unmodified.
+- **`GraphragRetrieveTool.run`'s `embedding`-kind resolution — the M-3 fix itself.** This is the
+  most concrete instance: plan §6 L1-4's own done-condition text lists *"the retrieval tool
+  resolves through the gateway"* as one of the new offline tests Landing 1 must ship, and
+  `test_tools.py` has zero new tests and zero uses of the `models=` kwarg anywhere
+  (`grep -n "models=" server/tests/test_tools.py` → no hits) — every `GraphragRetrieveTool`/
+  `build_builtin_registry` construction in the file still passes a bare `embedder=`, which is the
+  FR-4 *sugar* path (`StaticModelGateway`), not the real seam M-3 exists to test. The behavior
+  change M-3 was filed to fix — "one LLM consumer does not resolve through the seam" — has, as
+  shipped, no test that would fail if that regressed back to a bound-at-construction embedder.
+
+I manually verified (see "What I executed" above) that all three call sites are in fact wired
+correctly — `kind`, `requested`, and `ws` all reach `.llm()`/`.embedder()` as the plan specifies —
+so there is no known behavior defect here today. The gap is that nothing in the shipped suite
+would catch a regression at any of these three sites (a swapped kind string, a dropped `ws=`
+forward, a `requested=` source that silently stops reading `config.get("model")`), and one of the
+three is a named, explicit item on the plan's own done-condition list.
+
+**Suggested fix:** add, in each of the three untouched test files, at least one test that
+constructs the consumer with a `models=` gateway double (a small recording stub is enough, as
+demonstrated above — no real `ModelGateway`/file/network required) and asserts the kind/requested/
+ws forwarded on the call that would otherwise be invisible: one `WorkflowExecutor` test per step
+naming its own model (this is also the natural home for §10 item 8's "two workflow steps naming
+different models produce two different (url, model) pairs (AC-4, Landing-1 half)" — the existing
+`test_two_steps_naming_different_models_hit_different_urls_and_models` in `test_modelconfig.py`
+tests the gateway in isolation, never through the executor); one `AgentResponder` test asserting
+both `embedder("embedding", ws=...)` and `llm("agent", ws=...)` are called in the right order; one
+`GraphragRetrieveTool` test asserting `embedder("embedding", ws=ctx.ws)` is called inside `run()`
+rather than bound at construction — the exact regression M-3 exists to prevent.
+
+### Minors
+
+**Minor 1 — `EmbeddingWorker.embed_message` resolves twice per call** (`embedding.py`): once via
+`self._models.embedder("embedding", ws=ws)` (which internally calls `resolve()` to build the
+client) and, when `expected_dim` wasn't given at construction, a second, independent
+`self._models.resolve("embedding", ws=ws)` just to read `.primary.dim`. For the real
+`ModelGateway` both are cheap, offline, no-I/O dict lookups (verified by reading `resolve()` —
+`NullWorkspaceOverrides.get` is a no-op, the rest is dict lookups), so this is not the "extra
+network round-trip" the plan's own §3.1 "resolve is a cheap per-call lookup" framing would need
+to worry about, and it's not a correctness risk today (`NullWorkspaceOverrides` is deterministic,
+so both calls always resolve identically). It is, however, two independent resolutions of the
+same ref inside one method, which becomes a latent correctness risk the moment Landing 2's
+workspace-override read stops being a pure function of nothing (§7 L2-3) — a future edit could
+have the client-building resolve and the dim-reading resolve observe different overrides mid-call
+if the two ever stop being trivially idempotent. *(architect/coder, `embedding.py`
+`embed_message`.)* **Suggested fix:** call `self._models.resolve("embedding", ws=ws)` once, read
+`.dim` off the result, and build the embedder from `resolution.primary` directly (mirroring what
+`ModelGateway.embedder()` already does internally) instead of calling both `.embedder()` and
+`.resolve()` independently.
+
+**Minor 2 — `server/.env.example`'s `FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/
+opencode.json` line only expands correctly under `source`, not under a `.env`-file loader.** The
+file's own header says *"copy this file to `.env` (and `source` it) ... if you run uvicorn by
+hand"* (unchanged wording, still accurate for a bash `source`), so this is consistent with how
+the file is documented to be used — not a defect — but worth a one-line comment note if this file
+is ever consumed by a non-shell `.env` loader (e.g. `python-dotenv`), which would treat
+`$HOME` as a literal string rather than expanding it. *(devops, `server/.env.example`, low
+priority.)*
+
+### What's solid
+
+- **The §4.9 exception ladder** (`transport.py`) is implemented exactly as specified, in the
+  exact order, with the exact rung-3 `(TimeoutError, OSError)` naming and the string-or-object
+  body-error renderer — confirmed both by reading and by a mutation test that reproduces the
+  precise B-2 dead-code regression when the order is reverted.
+- **The §4.3 `/v1` rule** — validate → strip → normalize, in that order, with the per-provider
+  override escape hatch and the startup INFO line — matches every row of the plan's table,
+  confirmed by a mutation test that reproduces the exact double-slash-adjacent bug the plan warns
+  a literal (normalize-then-strip) transcription would produce.
+- **The §4.10 `guard`-carrier fix (B-1)** is exactly as specified: `_drive` stamps `run["ws"]`
+  outside `_drive_loop`, `evaluate_guard` forwards `run=`/`model=` only conditionally (zero-churn,
+  verified against both directions by `test_guards.py`'s four new tests), and `app._LlmGuardJudge`
+  is a small object with `accepts_run = True` rather than the closure it used to be — no new
+  signature surface, matching the plan's claim that this "activates existing-but-previously-dead
+  `run=` plumbing" rather than adding new plumbing.
+- **`StaticModelGateway`** genuinely absorbs all 38 `llm=`/24 `guard_judge=` (plus every
+  `embedder=`) test injection unmodified — confirmed by the full suite staying green with zero
+  test-file changes required in `test_executor_agent.py`, `test_responder.py`, `test_tools.py`,
+  `test_guards.py`'s pre-existing tests, or `test_services.py`.
+- **The FR-4 AST enforcement test** (`test_fr4_only_modelconfig_constructs_openai_compatible_
+  clients_directly`) is real, not aspirational — it walks every top-level `*.py` in
+  `server/falkorchat/` (a flat package, confirmed no subdirectories exist to miss) and would fail
+  on any direct `OpenAICompatibleLLM`/`OpenAICompatibleEmbedder(...)` call outside
+  `modelconfig.py`.
+- **Secret hygiene (§4.8)** is enforced and tested, not just documented: `Secret.__repr__`/
+  `__str__` render `***`, and `test_secret_never_appears_in_repr_log_or_error` checks the literal
+  secret against `repr()`, `str()`, every log record, and a raised exception's message in one
+  test.
+- **The two real config-file fixtures are byte-identical to the real files** (`opencode_
+  severino_sample.json`, `opencode_stakeholder_sample.json`) — confirmed by diff — so AC-1's
+  "both real files parse unmodified" claim is grounded in the actual files, not a paraphrase, and
+  `test_stakeholder_sample_resolves_the_declared_v1_gap` exercises §4.4's "resolve on the
+  provider, not the models map" rule against the real stakeholder file specifically.
+- **`docs/DESIGN.md` §14.8, §1.3, §14.2, the §14.7 hazard bullet, `docs/HISTORY.md`'s dated entry,
+  and `docs/BACKLOG.md`'s M4 row** are all present, read in full, and accurate — the `HISTORY.md`
+  suite-count claim (778 passed, 51+13 new tests) matches what I independently ran.
+- **`coder`'s three self-flagged deviations all check out**: the `Dockerfile`/`compose.yaml`
+  additions are justified and match `config.py`'s real path-resolution convention (not
+  build-verified here — no Docker in this environment, carried as a residual open item, not a
+  finding); the two doc-only edits outside L1-5's stated sites (`docs/BACKLOG.md`,
+  `falkor-chat/AGENTS.md`) are exactly what keeps the unfiltered legacy-env-var grep clean, and I
+  re-ran that grep myself with the same result `coder` reported; the two-gateway-calls-per-embed
+  concern is real but harmless today (Minor 1 above), not the "extra network call" shape it might
+  look like at a glance.
+- **Landing 2 scope leakage: none found.** `services.py`, `repository.py`, `schemas.py`, `api.py`
+  are untouched (`git diff --stat` shows zero changes to all four); grepped the whole diff for
+  `FallbackClient`/`resolved_model`/`modelSource`/`modelFallback`/`record_step_and_advance` —
+  the only hits are docstring/comment references to what Landing 2 will add, never an
+  implementation. `roles`/`agents` overlay keys are parsed-and-logged only, never resolved to
+  anything. §6.1's six "seams Landing 1 must leave open" all check out as left open, not
+  half-built.
+
+### Open questions
+
+1. **Docker build/run of `Dockerfile`/`compose.yaml`'s K-042 changes is unverified in this
+   environment** (no Docker available here, per this review's constraints) — carried forward as a
+   residual item for whoever next has a Docker-capable box, not a finding against the diff itself.
+2. **Both majors above are test-coverage gaps, not defects** — I confirmed by hand that the three
+   untested consumer bindings and the tripwire function are all behaviorally correct today. Worth
+   deciding explicitly whether closing them is a condition of dispatching Landing 1, or a fast-
+   follow before Landing 2 implementation starts (which will build on top of exactly these
+   bindings via `ws`/`overrides` threading) — my recommendation is the latter is too late, since
+   Landing 2 adds real behavior at these same call sites and would then be the first thing to
+   exercise them.

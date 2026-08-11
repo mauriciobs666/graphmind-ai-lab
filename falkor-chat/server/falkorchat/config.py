@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 # ── M1 single hardcoded tenant (DESIGN §14.1) ──────────────────────────────────
 WS_ID: str = os.environ.get("FALKORCHAT_WS_ID", "acme")
@@ -33,20 +34,50 @@ FALKORDB_SOCKET_TIMEOUT: float = float(os.environ.get("FALKORDB_SOCKET_TIMEOUT",
 # model-neutral bootstrap default (1536); real M2 GraphRAG workspaces are created
 # at 1024 (Qwen3-Embedding-0.6B) — set FALKORCHAT_EMBEDDING_DIM to match, because
 # a wrong-dim vecf32 write is silently accepted and then drops out of ANN.
+#
+# NOT touched by K-042/FR-20: this is DDL-time/write-path input (§4.5), a different
+# thing from a model's own declared output width (which the overlay's per-model
+# `dim` now carries, authoritative when present — this stays the fallback).
 EMBEDDING_DIM: int = int(os.environ.get("FALKORCHAT_EMBEDDING_DIM", "1536"))
-# LM Studio, OpenAI-compatible /v1/embeddings (the embedding worker's default
-# backend). Kept off the message write path — computed out-of-band (DESIGN §9).
-EMBEDDING_BASE_URL: str = os.environ.get("FALKORCHAT_EMBEDDING_BASE_URL", "http://localhost:1234/v1")
-EMBEDDING_MODEL: str = os.environ.get(
-    "FALKORCHAT_EMBEDDING_MODEL", "text-embedding-qwen3-embedding-0.6b"
+
+# ── LLM/embedding provider & model config (K-042, FR-1/FR-2/FR-11/FR-20) ───────
+# Model choice is no longer an env var (FR-20) — see `modelconfig.ModelGateway`.
+# Two files: the pristine shared OpenCode file (no product default — a home-dir
+# default is the "works on my box" failure mode; `scripts/start_server.sh` supplies
+# the dev convenience default) and falkor-chat's own overlay (in-repo default).
+OPENCODE_CONFIG_PATH: str | None = os.environ.get("FALKORCHAT_OPENCODE_CONFIG")
+_DEFAULT_MODEL_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "models.json"
+MODEL_CONFIG_PATH: str = os.environ.get(
+    "FALKORCHAT_MODEL_CONFIG", str(_DEFAULT_MODEL_CONFIG_PATH)
 )
-# LM Studio chat model (K-013 AI responder). OpenAI-compatible /v1/chat/completions,
-# same backend as the embedder. Default is the non-thinking Qwen3-4B (NOT the
-# `-thinking-` variant). Kept off the guarded write path — the responder calls the
-# LLM before posting, so latency/failure never corrupts the thread (failure
-# isolation by ordering).
-LLM_BASE_URL: str = os.environ.get("FALKORCHAT_LLM_BASE_URL", "http://localhost:1234/v1")
-LLM_MODEL: str = os.environ.get("FALKORCHAT_LLM_MODEL", "qwen/qwen3-4b-2507")
+
+# AC-13 tripwire: the four env vars K-042 replaced. Kept as a tuple (not inlined into
+# the function below) so a test can assert against the exact list.
+LEGACY_MODEL_ENV_VARS: tuple[str, ...] = (
+    "FALKORCHAT_LLM_BASE_URL", "FALKORCHAT_LLM_MODEL",
+    "FALKORCHAT_EMBEDDING_BASE_URL", "FALKORCHAT_EMBEDDING_MODEL",
+)
+
+
+def assert_no_legacy_model_env() -> None:
+    """FR-20/AC-13: refuse to start if a legacy model-config env var is set.
+
+    Called from `ModelGateway.from_env()` — i.e. only when an LLM consumer is
+    actually being wired (§4.1's "required only when wired" rule), so a library
+    import with no consumer enabled never trips this. Names every legacy var that
+    is set (not just the first) and points at the two replacement files.
+    """
+    present = [name for name in LEGACY_MODEL_ENV_VARS if name in os.environ]
+    if present:
+        raise RuntimeError(
+            "legacy model configuration env var(s) " + ", ".join(present) +
+            " are set, but K-042 replaced them with two config files: "
+            "FALKORCHAT_OPENCODE_CONFIG (providers, no product default) and "
+            f"FALKORCHAT_MODEL_CONFIG (falkor-chat overlay, default "
+            f"{MODEL_CONFIG_PATH}). Unset the legacy var(s) and configure models "
+            "via those two files instead — see config/opencode.example.json and "
+            "config/models.json."
+        )
 
 # ── AI agent participant (K-013/K-014, DESIGN §M2) ─────────────────────────────
 # The workspace Agent the responder posts as. `AGENT_ID` must match the `agentId`

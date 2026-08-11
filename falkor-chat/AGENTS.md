@@ -78,6 +78,17 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
 
+**Model/provider configuration is two hand-edited files, not env vars (K-042).** Every LLM/
+embedding consumer resolves through `falkorchat.modelconfig.ModelGateway` — the pristine, shared
+`FALKORCHAT_OPENCODE_CONFIG` (providers only; no product default, `scripts/start_server.sh` sets
+the dev convenience default) and falkor-chat's own overlay, `FALKORCHAT_MODEL_CONFIG` (per-kind
+defaults/timeouts, per-model settings; defaults to the shipped `config/models.json`). The four
+legacy per-provider/per-model env vars K-042 replaced are gone —
+`config.assert_no_legacy_model_env()` (see `config.LEGACY_MODEL_ENV_VARS`) refuses to start if
+any is still set. See
+`docs/plans/llm-provider-config.md` §4 for the design and `config/opencode.example.json` /
+`config/models.json` for the shipped shapes.
+
 **`node` is not on `PATH` on the usual dev box (WSL2).** The web unit tests are bare-`node`
 scripts (`node web/tests/run-select.test.js`), so find a working interpreter before assuming the
 suite is unrunnable: a Playwright-bundled Node binary, or the Windows `node.exe` reachable from
