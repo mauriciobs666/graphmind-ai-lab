@@ -14,6 +14,28 @@
 
 ---
 
+> **⚠️ Correction — 2026-08-11 (K-042, both landings complete).** This note was written
+> 2026-07-18, before K-042 ("LLM Provider & Model Configuration") existed. K-042 replaced the
+> four env vars `FALKORCHAT_LLM_BASE_URL` / `FALKORCHAT_LLM_MODEL` / `FALKORCHAT_EMBEDDING_BASE_URL`
+> / `FALKORCHAT_EMBEDDING_MODEL` with two hand-edited config files (a shared `opencode.json` +
+> falkor-chat's own overlay, `config/models.json`), resolved through one seam
+> (`falkorchat.modelconfig.ModelGateway`). Setting any of the four now **fails startup outright**
+> (`config.assert_no_legacy_model_env()`, K-042 AC-13) — it no longer takes effect.
+>
+> Every place below this note shows `FALKORCHAT_LLM_MODEL=<value>` or
+> `FALKORCHAT_EMBEDDING_MODEL=<value>` as "the free config change": read that as **edit
+> `config/models.json`'s chat- (or embedding-) kind `defaults`/`models` entry to `<value>`** —
+> or, since K-042 Landing 2, declare/edit an admin **role** with an ordered fallback chain. It
+> is still a config-only change, still no code/re-bootstrap needed; only the file/key changed,
+> not the substance of any recommendation (which model, why, the RAM math all stand unchanged).
+> `FALKORCHAT_EMBEDDING_DIM` is a **different, still-live** env var — it was never one of the
+> four K-042 retired, so its uses below are unaffected by this correction.
+>
+> Current mechanism's design: `falkor-chat/AGENTS.md` (search "K-042") and
+> `docs/plans/llm-provider-config.md` §4.
+
+---
+
 ## TL;DR recommendation
 
 **Keep both current models. The downgrade does not force a model change — it forces discipline on
@@ -95,15 +117,16 @@ tighter than assumed — otherwise keep 4B):
 | Rank | Model | Quant → weights (est.) | Trade-off vs Qwen3-4B |
 |---|---|---|---|
 | **1 (fallback)** | `qwen/qwen3-4b-2507` @ **Q3_K_M** | ~2.0 GB | Same model, ~0.5 GB less, measurable quality/format-validity loss at Q3. Prefer shrinking **context/KV** before quant — Q4_K_M is the quality/size knee. |
-| 2 | Qwen3-1.7B-Instruct | Q4_K_M ~1.1 GB | Saves ~1.4 GB weights but tool-calling reliability drops toward the 2B tier (~43 %). Only if the executor is demoted to structured-output-only prompting. Same family = same prompt behaviour, easiest swap (`FALKORCHAT_LLM_MODEL` only). |
+| 2 | Qwen3-1.7B-Instruct | Q4_K_M ~1.1 GB | Saves ~1.4 GB weights but tool-calling reliability drops toward the 2B tier (~43 %). Only if the executor is demoted to structured-output-only prompting. Same family = same prompt behaviour, easiest swap (`config/models.json` chat default only — see top-of-doc correction). |
 | 3 | Gemma-3-4B-it | Q4_K_M ~2.6 GB | Comparable size to Qwen3-4B, no RAM win; different tool-call formatting → would need the §2.2 dual-shape parser re-verified. **No reason to switch given no RAM benefit.** |
 
 Ranking rationale: staying in the **Qwen3 family** preserves the prompt/tool-call behaviour the
 executor's dual-shape parser (`llm.py` `chat`) and the guard prompts were built and tested against.
 Cross-family swaps re-open the D4 tool-calling risk for zero RAM benefit.
 
-Swapping the chat model is a **free config change** (`FALKORCHAT_LLM_MODEL`) — no migration — so this
-slot can be tuned freely if measurement disagrees with the estimates here.
+Swapping the chat model is a **free config change** (edit `config/models.json`'s chat-kind default
+— see top-of-doc correction; historically `FALKORCHAT_LLM_MODEL`, retired by K-042) — no migration
+— so this slot can be tuned freely if measurement disagrees with the estimates here.
 
 ---
 
@@ -163,15 +186,20 @@ resident simultaneously** — budget for the sum, not the max.
 ## 5. Concrete recommended configuration
 
 ```
-# Chat (free to change — FALKORCHAT_LLM_MODEL)
-FALKORCHAT_LLM_MODEL=qwen/qwen3-4b-2507        # unchanged
+# NOTE (2026-08-11, K-042): FALKORCHAT_LLM_MODEL / FALKORCHAT_EMBEDDING_MODEL below are the
+# retired env-var names this note was written against — setting them now fails startup. Apply
+# the values via config/models.json's chat/embedding-kind defaults instead. See top-of-doc
+# correction. FALKORCHAT_EMBEDDING_DIM is unaffected (still a live env var).
+
+# Chat (free to change — config/models.json chat-kind default)
+FALKORCHAT_LLM_MODEL=qwen/qwen3-4b-2507        # unchanged (value; apply via config/models.json)
   quant:    Q4_K_M                              # ~2.5 GB weights
   context:  8192                                # LM Studio context length
   KV cache: Q8                                  # halves KV footprint; set in LM Studio
 
 # Embedder (do NOT change — forces ws:acme re-bootstrap + re-embed)
-FALKORCHAT_EMBEDDING_MODEL=text-embedding-qwen3-embedding-0.6b   # unchanged
-FALKORCHAT_EMBEDDING_DIM=1024                                    # MUST match ws:acme bootstrap
+FALKORCHAT_EMBEDDING_MODEL=text-embedding-qwen3-embedding-0.6b   # unchanged (value; apply via config/models.json)
+FALKORCHAT_EMBEDDING_DIM=1024                                    # MUST match ws:acme bootstrap (still a live env var)
   quant: Q8                                     # ~0.64 GB weights
 
 # LM Studio: keep BOTH models loaded (disable/lengthen idle auto-unload)
@@ -370,12 +398,15 @@ you want an 8B-class Mistral before returning to Qwen.
 
 ### 7.6 Concrete config if Ministral 3 3B is adopted
 
-Swapping the chat model is a **free config change** — `FALKORCHAT_LLM_MODEL` only, no re-bootstrap, no
-re-embed, **zero migration cost** (unlike the embedder, §3). So this can be trialed and reverted at
-will. Slotting into §5's recommended-config block, the chat line becomes:
+Swapping the chat model is a **free config change** — edit `config/models.json`'s chat-kind default
+only (historically `FALKORCHAT_LLM_MODEL`, retired by K-042 — see top-of-doc correction), no
+re-bootstrap, no re-embed, **zero migration cost** (unlike the embedder, §3). So this can be
+trialed and reverted at will. Slotting into §5's recommended-config block, the chat line becomes:
 
 ```
 # Chat — Ministral 3 3B trial (free swap; revert by restoring the Qwen line)
+# NOTE: FALKORCHAT_LLM_MODEL is retired (K-042) — set this value via config/models.json's
+# chat-kind default instead. See top-of-doc correction.
 FALKORCHAT_LLM_MODEL=mistralai/ministral-3-3b-instruct-2512   # verify exact LM Studio model id at download
   GGUF repo: bartowski/mistralai_Ministral-3-3B-Instruct-2512-GGUF (or mistralai/…-GGUF)
   quant:    Q4_K_M                                            # ~2.0 GB weights (VERIFY actual size in LM Studio)
