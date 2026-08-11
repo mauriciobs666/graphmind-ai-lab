@@ -158,6 +158,13 @@ bootstrap_workspace() {
   echo "[index] StepRun.status"
   gquery "$g" "CREATE INDEX FOR (n:StepRun) ON (n.status)"
 
+  # WorkspaceConfig: workspace-level configuration singleton (K-042 Landing 2,
+  # FR-16/FR-17 — the model-override hard cap). One row per workspace
+  # (workspaceConfigId: 'default'); index first so the UNIQUE constraint below can
+  # attach. `docs/plans/llm-provider-config-graph.md` §2.2/§4.
+  echo "[index] WorkspaceConfig.workspaceConfigId"
+  gquery "$g" "CREATE INDEX FOR (n:WorkspaceConfig) ON (n.workspaceConfigId)"
+
   # ── uniqueness constraints ───────────────────────────────────
   echo "[constraint] User unique {userId}"
   gconstraint "$g" UNIQUE NODE User PROPERTIES 1 userId
@@ -200,6 +207,9 @@ bootstrap_workspace() {
 
   echo "[constraint] ReadCursor unique {cursorId}"
   gconstraint "$g" UNIQUE NODE ReadCursor PROPERTIES 1 cursorId
+
+  echo "[constraint] WorkspaceConfig unique {workspaceConfigId}"
+  gconstraint "$g" UNIQUE NODE WorkspaceConfig PROPERTIES 1 workspaceConfigId
 
   # ── full-text index ─────────────────────────────────────────
   echo "[fulltext] Message.text"

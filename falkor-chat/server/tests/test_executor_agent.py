@@ -613,18 +613,34 @@ def test_no_implicit_post_when_final_text_is_empty():
 #
 # Every test above injects `llm=<stub>` — the pre-K-042 `StaticModelGateway` sugar
 # path, which proves backward compatibility but never exercises `_run_agent_node`'s
-# own `self._models.llm("step", requested=config.get("model"), ws=ctx.ws)` call. These
-# use a small recording `models=` double instead, so a regression at that one call
-# site (a swapped kind string, a dropped `ws=`, a `requested=` source that silently
-# stops reading `config.get("model")`) would fail here even though it is invisible to
-# every other test in this file.
+# own `self._models.resolve_llm("step", requested=config.get("model"), ws=ctx.ws,
+# overrides=run.get("modelOverrides"))` call. These use a small recording `models=`
+# double instead, so a regression at that one call site (a swapped kind string, a
+# dropped `ws=`/`overrides=`, a `requested=` source that silently stops reading
+# `config.get("model")`) would fail here even though it is invisible to every other
+# test in this file.
+
+
+class _FakeResolution:
+    """Just enough of `modelconfig.Resolution` for `_run_agent_node` to read
+    `.source` off — no real chain/provider machinery needed for this double."""
+
+    def __init__(self, *, source: str) -> None:
+        self.source = source
+
 
 class RecordingGateway:
-    """A minimal `ModelGateway`-shaped double: records every `.llm()` call's
-    `(kind, requested, ws)` and returns a distinct `StubChatLLM` per `requested` ref
-    (so two differently-modeled steps are provably answered by two different
-    clients — the executor-level half of AC-4/§10 item 8, without any real
-    `ModelGateway`/config file/network)."""
+    """A minimal `ModelGateway`-shaped double: records every `.resolve_llm()` call's
+    `(kind, requested, ws, overrides)` and returns a distinct `StubChatLLM` per
+    resolved ref (so two differently-modeled steps are provably answered by two
+    different clients — the executor-level half of AC-4/§10 item 8, without any real
+    `ModelGateway`/config file/network).
+
+    K-042 L2-3: mirrors the real gateway's three-rung precedence just enough to drive
+    `_run_agent_node`'s `_MODEL_SOURCE_LABEL` mapping — a workspace override (read off
+    `overrides["agentModel"]`, the `step`-kind crosswalk key, `-graph.md` §8.4) beats
+    `requested`, which beats the (fixed) default ref.
+    """
 
     def __init__(self):
         self.calls: list[dict] = []
@@ -633,13 +649,20 @@ class RecordingGateway:
     def has_chat(self) -> bool:
         return True
 
-    def llm(self, kind, *, requested=None, ws=None, overrides=None):
-        self.calls.append({"kind": kind, "requested": requested, "ws": ws})
-        if requested not in self._clients:
-            self._clients[requested] = StubChatLLM(
-                [ChatResult(text=f"answer from {requested}")]
-            )
-        return self._clients[requested]
+    def resolve_llm(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append(
+            {"kind": kind, "requested": requested, "ws": ws, "overrides": overrides}
+        )
+        override = (overrides or {}).get("agentModel") if kind == "step" else None
+        if override:
+            ref, source = override, "workspace"
+        elif requested is not None:
+            ref, source = requested, "requested"
+        else:
+            ref, source = requested, "default"
+        if ref not in self._clients:
+            self._clients[ref] = StubChatLLM([ChatResult(text=f"answer from {ref}")])
+        return self._clients[ref], _FakeResolution(source=source)
 
     def embedder(self, kind, *, requested=None, ws=None, overrides=None):
         raise AssertionError("_run_agent_node must never resolve an embedder")
@@ -655,7 +678,10 @@ def test_run_agent_node_resolves_step_kind_with_the_steps_own_model_and_ws():
     )
 
     assert gateway.calls == [
-        {"kind": "step", "requested": "lmstudio/qwen3-4b", "ws": CTX.ws}
+        {
+            "kind": "step", "requested": "lmstudio/qwen3-4b", "ws": CTX.ws,
+            "overrides": None,
+        }
     ]
 
 
@@ -669,7 +695,9 @@ def test_run_agent_node_requests_no_model_when_the_step_names_none():
 
     ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
 
-    assert gateway.calls == [{"kind": "step", "requested": None, "ws": CTX.ws}]
+    assert gateway.calls == [
+        {"kind": "step", "requested": None, "ws": CTX.ws, "overrides": None}
+    ]
 
 
 def test_two_steps_naming_different_models_resolve_to_different_clients_through_the_executor():
@@ -694,6 +722,23 @@ def test_two_steps_naming_different_models_resolve_to_different_clients_through_
     assert result_a.output == "answer from lmstudio/model-a"
     assert result_b.output == "answer from lmstudio/model-b"
     assert result_a.output != result_b.output
+
+
+def test_run_agent_node_threads_run_model_overrides_to_the_gateway():
+    # L2-3's other half of the same call site: `run["modelOverrides"]` (stamped by
+    # `_drive`, §4.10/§2.6) must reach `resolve_llm` as `overrides=`, not just `ws=`.
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    gateway = RecordingGateway()
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+    run = {**RUN, "modelOverrides": {"agentModel": None, "guardModel": None,
+                                      "embeddingModel": None, "responderModel": None}}
+
+    ex._run_agent_node(CTX, run, STEP, _config(model="lmstudio/qwen3-4b"), {"threadId": "t1"})
+
+    assert gateway.calls[0]["overrides"] == {
+        "agentModel": None, "guardModel": None, "embeddingModel": None,
+        "responderModel": None,
+    }
 
 
 # ── K-042 Landing 2 (L2-2, FR-8): resolvedModel/modelSource/modelFallback ─────────
@@ -797,3 +842,103 @@ def test_last_answering_model_wins_across_iterations():
     assert result.output == "final answer"
     assert result.resolvedModel == "lmstudio/model-b"
     assert result.modelFallback is True
+
+
+# ── K-042 Landing 2 (L2-3, FR-16/FR-17): the workspace override hard cap ──────────
+#
+# These drive `_run_agent_node` through a REAL `ModelGateway` (not the recording/
+# static doubles above) because the precedence itself — and specifically the
+# resolver-sourced `modelSource` reshape — lives in `ModelGateway.resolve()`, not in
+# the executor. `RecordingGateway`'s tests above only pin the *call site* (kind/
+# requested/ws/overrides reach the gateway); these pin the *behavior* the gate
+# required as an explicit done-condition for this unit.
+
+def _real_gateway(*, providers, overlay_doc):
+    from falkorchat.modelconfig import ModelGateway, Overlay, ProviderCatalog
+
+    catalog = ProviderCatalog(providers, path="opencode.json")
+    overlay = Overlay(overlay_doc, path="models.json")
+    return ModelGateway(catalog, overlay)
+
+
+def test_workspace_override_beats_the_steps_own_explicit_choice(monkeypatch):
+    # AC-10, driven at the executor level: the step names its own model, the
+    # workspace overrides kind `step` to a different one — the workspace's model
+    # runs (never even calling the step's declared one) and `modelSource` reports
+    # `'workspace'`, not `'step'`.
+    gateway = _real_gateway(
+        providers={"lmstudio": {"options": {"baseURL": "http://host:1/v1"}}},
+        overlay_doc={"defaults": {"step": "lmstudio/kind-default"}},
+    )
+    calls: list[str] = []
+
+    def fake_make_http_transport(*, timeout, headers=None, opener=None, provider="?", model="?"):
+        def _transport(url, payload):
+            calls.append(payload.get("model"))
+            return {"choices": [{"message": {"content": "answer"}}]}
+        return _transport
+
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", fake_make_http_transport
+    )
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+    # `agentModel` is the workspace-override crosswalk key for kind `step`
+    # (`-graph.md` §8.4 — `modelconfig._KIND_TO_OVERRIDE_KEY`), stamped by `_drive`
+    # in production; supplied directly here as `_run_agent_node` is unit-tested
+    # below `_drive`.
+    run = {**RUN, "modelOverrides": {"agentModel": "lmstudio/workspace-model"}}
+
+    result = ex._run_agent_node(
+        CTX, run, STEP, _config(model="lmstudio/step-declared-model"), {"threadId": "t1"},
+    )
+
+    assert calls == ["workspace-model"]  # the step's declared model was never called
+    assert result.resolvedModel == "lmstudio/workspace-model"
+    assert result.modelSource == "workspace"
+
+
+def test_workspace_override_naming_a_role_that_falls_back_reports_workspace_and_fallback_true(
+    monkeypatch,
+):
+    # The exact bug class the U8 gate's "naive fix" warning named: a workspace
+    # override targets a ROLE, and that role's first element fails and falls back to
+    # its second. A local `config.get('model')`-truthiness mirror (or a bolted-on
+    # `if run.get("modelOverrides",{}).get("step"): "workspace"` patch) cannot see
+    # this interaction — only the resolver, which is already walking the fallback
+    # chain, knows both facts at once. `modelSource == 'workspace'` AND
+    # `modelFallback is True` must hold on the SAME row.
+    from falkorchat.transport import ProviderCallError
+
+    gateway = _real_gateway(
+        providers={
+            "lmstudio": {"options": {"baseURL": "http://host:1/v1"}},
+            "second": {"options": {"baseURL": "http://host:2/v1"}},
+        },
+        overlay_doc={
+            "defaults": {"step": "lmstudio/never-used"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a", "second/model-b"]}},
+        },
+    )
+
+    def fake_make_http_transport(*, timeout, headers=None, opener=None, provider="?", model="?"):
+        def _transport(url, payload):
+            if provider == "lmstudio":
+                raise ProviderCallError(f"{provider}/{model}: simulated outage")
+            return {"choices": [{"message": {"content": "from second"}}]}
+        return _transport
+
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", fake_make_http_transport
+    )
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = WorkflowExecutor(None, None, models=gateway, tool_registry=reg, guard_judge=None)
+    run = {**RUN, "modelOverrides": {"agentModel": "cheap"}}  # a ROLE, not a direct ref
+
+    result = ex._run_agent_node(
+        CTX, run, STEP, _config(model="lmstudio/step-declared-model"), {"threadId": "t1"},
+    )
+
+    assert result.modelSource == "workspace"
+    assert result.modelFallback is True
+    assert result.resolvedModel == "second/model-b"

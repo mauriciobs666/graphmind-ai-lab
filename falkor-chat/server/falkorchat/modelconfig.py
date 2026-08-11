@@ -24,14 +24,34 @@ A directly-injected client (the `llm=`/`embedder=` constructor kwargs every cons
 still accepts) is sugar `__init__` wraps into a `StaticModelGateway` — dependency
 injection for tests, never a configuration route (§3, A-4).
 
-Landing-2 status (§6.1): `ws=`/`overrides=` are accepted and threaded through but not
-yet applied (`WorkspaceOverrides` still resolves to a null port — L2-3); the overlay's
-`agents` key is parsed and logged, not honoured (a separate, not-yet-built unit). A ref
-with **no** `/` now resolves as a **role name** (FR-7) — `Overlay.roles[name]` — to an
-ordered, settings-applied fallback chain (FR-18): on a `ProviderCallError` from one
-chain element, `FallbackClient` (`llm.py`) tries the next, naming every model tried if
-all fail. The answering model (and whether it came from a fallback) travels on the
-return value, `ChatResult.model`/`.fallback` — never on any client-held state.
+Landing-2 status (§6.1): a ref with **no** `/` resolves as a **role name** (FR-7) —
+`Overlay.roles[name]` — to an ordered, settings-applied fallback chain (FR-18): on a
+`ProviderCallError` from one chain element, `FallbackClient` (`llm.py`) tries the next,
+naming every model tried if all fail. The answering model (and whether it came from a
+fallback) travels on the return value, `ChatResult.model`/`.fallback` — never on any
+client-held state. The overlay's `agents` key is parsed and logged, not honoured (a
+separate, not-yet-built unit).
+
+`resolve()` now implements FR-16/FR-17's real precedence (L2-3), first-match-wins:
+**workspace override → the caller's own `requested=` choice → the per-kind default**.
+The workspace override is a **hard cap** — it wins even over an explicit `requested=`
+choice, and it is resolved through the *same* role-expansion / provider-lookup path as
+any other ref, so a failing workspace override fails loudly (`ModelResolutionError`,
+FR-10) rather than silently falling through to a lower rung. `Resolution.source` names
+which rung won: `"workspace"` | `"requested"` | `"default"` — callers that persist a
+rung name (the executor's `StepRun.modelSource`) translate this generic vocabulary into
+their own terms locally; this module stays kind-and-caller-agnostic.
+
+Two ways a caller supplies the workspace override, matched to the two shapes `-graph.md`
+§2.6 identifies: a caller that already did one per-drive read (the executor, via
+`run["modelOverrides"]`) passes the pre-fetched `{agentModel, guardModel,
+embeddingModel, responderModel}` dict as `overrides=`, so `resolve()` never re-reads the
+graph; a caller with no such per-drive read (the `@mention` responder, the embedding
+worker) passes `ws=` and `resolve()` reads fresh via the injected `WorkspaceOverrides`
+port (`GraphWorkspaceOverrides` in production, `NullWorkspaceOverrides` — Landing 1's
+no-op — by default). `_KIND_TO_OVERRIDE_KEY` is the crosswalk between this module's
+`kind` strings and `-graph.md`'s `WorkspaceConfig` property names, which do **not**
+match 1:1 by name (see its own docstring).
 """
 
 from __future__ import annotations
@@ -65,6 +85,26 @@ _DEFAULT_TIMEOUT_FALLBACK = 180.0
 # The four closed consumer kinds (§3.1). Adding a fifth means adding its own override
 # property (FR-17's hard cap) — not a change to this set casually.
 KINDS: frozenset[str] = frozenset({"agent", "step", "embedding", "guard"})
+
+# The crosswalk between this module's `kind` strings and `-graph.md` §2.2's
+# `WorkspaceConfig` property names (surfaced by `repository.read_model_overrides` as
+# `{agentModel, guardModel, embeddingModel, responderModel}`, §6.1). **These do NOT
+# match 1:1 by name** — verified against `-graph.md` §8.4's own worked example
+# ("the real requirement behind 'this workspace's assistant should use a different
+# model' is FR-16, and §2.2's `responderModelOverride` covers it"): `-graph.md`'s
+# "responder" is this module's kind `"agent"` (`AgentResponder`, the `@mention`
+# responder — plan §3.1's "agent" consumer row); by elimination `-graph.md`'s "agent"
+# (its property `agentModelOverride`) is this module's kind `"step"` (the workflow
+# engine's `type:'agent'` node, plan §3.1's "step" consumer row). `-graph.md` names its
+# properties after the WORKFLOW NODE TYPE ("agent") vs. the chat RESPONDER CLASS
+# ("responder") — a distinction this module's own `kind` enum does not make the same
+# way. `guard`/`embedding` match by name on both sides, no crosswalk needed.
+_KIND_TO_OVERRIDE_KEY: dict[str, str] = {
+    "agent": "responderModel",
+    "step": "agentModel",
+    "guard": "guardModel",
+    "embedding": "embeddingModel",
+}
 
 _ENV_RE = re.compile(r"\{env:([^{}]+)\}")
 _FILE_RE = re.compile(r"\{file:([^{}]+)\}")
@@ -162,10 +202,19 @@ class ResolvedModel:
 class Resolution:
     """The outcome of one `resolve()` call. `chain` is a tuple — length 1 for a direct
     `provider/model` ref, potentially multi-element for a role-backed ref (FR-7/FR-18,
-    Landing 2): an ordered, settings-applied fallback chain, ordered first-to-last-try."""
+    Landing 2): an ordered, settings-applied fallback chain, ordered first-to-last-try.
+
+    `source` (L2-3, FR-16/FR-17) names which precedence rung produced `chain`:
+    `"workspace"` — a workspace override (the hard cap) won, even over an explicit
+    caller choice; `"requested"` — the caller's own `requested=` ref won, no override
+    was in effect; `"default"` — neither an override nor a caller choice was given, the
+    per-kind default won. This is deliberately the generic three-rung vocabulary, not
+    any one caller's persisted terminology (e.g. `StepRun.modelSource`'s `'step'` for
+    the middle rung) — callers that persist a rung name translate locally."""
 
     kind: str
     chain: tuple[ResolvedModel, ...]
+    source: str
 
     @property
     def primary(self) -> ResolvedModel:
@@ -197,6 +246,35 @@ class NullWorkspaceOverrides:
 
     def get(self, ws: str, kind: str) -> str | None:
         return None
+
+
+class GraphWorkspaceOverrides:
+    """The Landing-2 `WorkspaceOverrides` implementation (FR-16/FR-17): reads the
+    per-workspace `WorkspaceConfig` singleton via the injected repository's
+    `read_model_overrides(ws)` (`-graph.md` §2.5/§6.1).
+
+    `repo` is duck-typed (`Any`, not imported as `Repository`) so `modelconfig.py`
+    never depends on `repository.py` — the two only ever meet at the wiring site
+    (`app.py`), keeping the resolver importable with no graph driver at all (the
+    offline-import guarantee `test_importing_modelconfig_touches_no_file_and_no_network`
+    pins).
+
+    Used only on the two per-call-read paths that have no `run` dict to carry a
+    pre-fetched `overrides=` (§2.6) — the `@mention` responder and the embedding
+    worker/retrieval tool. The executor and the guard judge instead read once per
+    drive (`executor._drive`) and pass the pre-fetched dict as `overrides=`, so this
+    class's `.get()` is never called from either of those two paths.
+    """
+
+    def __init__(self, repo: Any) -> None:
+        self._repo = repo
+
+    def get(self, ws: str, kind: str) -> str | None:
+        key = _KIND_TO_OVERRIDE_KEY.get(kind)
+        if key is None:  # pragma: no cover — kind outside the closed KINDS set
+            return None
+        value = self._repo.read_model_overrides(ws).get(key)
+        return value if isinstance(value, str) and value else None
 
 
 # ── {env:}/{file:} substitution (FR-12, §4.8) ──────────────────────────────────────
@@ -539,9 +617,20 @@ class ModelGateway:
         self._overlay = overlay
         self._providers = _build_providers(catalog, overlay)
         self._ws_overrides = workspace_overrides or NullWorkspaceOverrides()
+        # Minor 3 (U8 gate): warn once per (kind, ref) when `embedder()` silently
+        # drops every fallback-chain element beyond the primary.
+        self._embedder_fallback_warned: set[tuple[str, str]] = set()
 
     @classmethod
-    def from_env(cls) -> "ModelGateway":
+    def from_env(
+        cls, *, workspace_overrides: WorkspaceOverrides | None = None
+    ) -> "ModelGateway":
+        """Parse both config files (FR-15, no reload path). `workspace_overrides`
+        (L2-3) is the production seam for FR-16/FR-17: the caller (`app.py`) builds a
+        `GraphWorkspaceOverrides(repo)` bound to the same `Repository`/connection the
+        rest of the app shares and passes it here; omitted, every workspace resolves
+        as override-free (`NullWorkspaceOverrides`, Landing 1's behavior, still the
+        default for offline construction and every existing caller)."""
         from . import config as _config
 
         _config.assert_no_legacy_model_env()
@@ -555,7 +644,7 @@ class ModelGateway:
         overlay_path = _config.MODEL_CONFIG_PATH
         catalog = ProviderCatalog.load(opencode_path)
         overlay = Overlay.load(overlay_path)
-        return cls(catalog, overlay)
+        return cls(catalog, overlay, workspace_overrides=workspace_overrides)
 
     def has_chat(self) -> bool:
         return True
@@ -616,14 +705,44 @@ class ModelGateway:
             for m in role.models
         )
 
+    def _workspace_override_ref(
+        self, kind: str, *, ws: str | None, overrides: Any
+    ) -> str | None:
+        """FR-16/FR-17: the workspace override ref for `kind`, or `None` when there
+        isn't one. Two mutually-exclusive sources (§2.6), `overrides` preferred so a
+        caller that already did a per-drive read never triggers a second graph round
+        trip: a pre-fetched `{agentModel, guardModel, embeddingModel, responderModel}`
+        dict (`overrides=`, translated via `_KIND_TO_OVERRIDE_KEY`), or a fresh
+        per-call read through the injected `WorkspaceOverrides` port (`ws=`, only when
+        `overrides` was not given). An empty string is never treated as an override
+        (`-graph.md` §2.4: `''` is a value, never "no override") — this is a defensive
+        backstop, not a substitute for the write path never producing one."""
+        if overrides is not None:
+            key = _KIND_TO_OVERRIDE_KEY.get(kind)
+            value = overrides.get(key) if key else None
+        elif ws is not None:
+            value = self._ws_overrides.get(ws, kind)
+        else:
+            value = None
+        return value if isinstance(value, str) and value else None
+
     def resolve(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,
         overrides: Any = None,
     ) -> Resolution:
-        # FR-16/FR-17 seam (Landing 2): the read happens, the result is unused — a
-        # graph-backed WorkspaceOverrides swaps in with no call-site change (§6.1 item 2).
-        if ws is not None:
-            self._ws_overrides.get(ws, kind)
+        """FR-16/FR-17's real precedence (L2-3), first-match-wins: **workspace
+        override → `requested` → the per-kind default**. The workspace override is a
+        hard cap: when present it wins outright, even over an explicit `requested=`
+        choice (AC-10) — and it resolves through the exact same `_resolve_ref` path as
+        any other ref (role expansion, provider lookup), so an override naming a model
+        or role the config does not declare fails loudly here (`ModelResolutionError`,
+        FR-10/§6.3) rather than silently falling through to `requested` or the
+        default. A hard cap that silently degrades to the thing it caps would be worse
+        than no cap at all."""
+        override_ref = self._workspace_override_ref(kind, ws=ws, overrides=overrides)
+        if override_ref:
+            chain = self._resolve_ref(override_ref, kind=kind)
+            return Resolution(kind=kind, chain=chain, source="workspace")
 
         ref = requested or self._overlay.default_for(kind)
         if not ref:
@@ -632,13 +751,10 @@ class ModelGateway:
                 f"{self._overlay.path} and none was requested"
             )
         chain = self._resolve_ref(ref, kind=kind)
-        return Resolution(kind=kind, chain=chain)
+        source = "requested" if requested else "default"
+        return Resolution(kind=kind, chain=chain, source=source)
 
-    def llm(
-        self, kind: str, *, requested: str | None = None, ws: str | None = None,
-        overrides: Any = None,
-    ) -> Any:
-        resolution = self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
+    def _client_for_chain(self, resolution: Resolution) -> Any:
         if len(resolution.chain) == 1:
             return _build_llm(resolution.primary)
         from .llm import FallbackClient
@@ -647,12 +763,52 @@ class ModelGateway:
         refs = tuple(r.ref for r in resolution.chain)
         return FallbackClient(clients, refs)
 
+    def resolve_llm(
+        self, kind: str, *, requested: str | None = None, ws: str | None = None,
+        overrides: Any = None,
+    ) -> tuple[Any, Resolution]:
+        """Like `.llm()`, but also returns the `Resolution` that produced the client —
+        for a caller that needs to know which precedence rung won (FR-8's
+        `modelSource`, §7 L2-3's `-graph.md` §6.2 binding requirement 3), in **one**
+        gateway call rather than a separate `.resolve()` + `.llm()` pair (so a
+        call-counting test double records exactly one entry per logical resolution,
+        same as `.llm()` always has). `.llm()` is the simple form for callers that
+        only need the client (`guard`, `agent`/responder, `embedding`)."""
+        resolution = self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
+        return self._client_for_chain(resolution), resolution
+
+    def llm(
+        self, kind: str, *, requested: str | None = None, ws: str | None = None,
+        overrides: Any = None,
+    ) -> Any:
+        return self.resolve_llm(kind, requested=requested, ws=ws, overrides=overrides)[0]
+
     def embedder(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,
         overrides: Any = None,
     ) -> Any:
         resolution = self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
+        if len(resolution.chain) > 1:
+            self._warn_embedder_fallback_ignored(kind, resolution)
         return _build_embedder(resolution.primary)
+
+    def _warn_embedder_fallback_ignored(self, kind: str, resolution: Resolution) -> None:
+        """Minor 3 (U8 gate): `embedder()` only ever builds `resolution.primary` — a
+        role resolving to more than one model for kind `embedding` has its fallback
+        elements silently ignored (no error, no `FallbackClient` wrapping, unlike
+        `llm()`). Warn once per `(kind, primary ref)` — mirrors
+        `StaticModelGateway`'s existing once-per-`(kind, ref)` WARNING shape."""
+        key = (kind, resolution.primary.ref)
+        if key in self._embedder_fallback_warned:
+            return
+        self._embedder_fallback_warned.add(key)
+        _log.warning(
+            "embedder() for kind %r resolved a %d-element fallback chain but only "
+            "the primary %r is ever used — embedder() honours no fallback (Landing 2 "
+            "Minor 3); llm() wraps a multi-element chain in FallbackClient, "
+            "embedder() does not",
+            kind, len(resolution.chain), resolution.primary.ref,
+        )
 
 
 # The degenerate `ResolvedModel` a `StaticModelGateway` reports — never used to build a
@@ -702,18 +858,29 @@ class StaticModelGateway:
         overrides: Any = None,
     ) -> Resolution:
         self._warn_once(kind, requested if requested is not None else "(default)")
-        return Resolution(kind=kind, chain=(_STATIC_RESOLVED,))
+        # A static gateway has no workspace-override concept (it bypasses config
+        # entirely) — `.source` only ever distinguishes "the caller named a model" from
+        # "it didn't", mirroring the pre-L2-3 behavior every existing `llm=`/`embedder=`
+        # injection test already depends on (`requested` truthy ⇒ that choice "won").
+        source = "requested" if requested is not None else "default"
+        return Resolution(kind=kind, chain=(_STATIC_RESOLVED,), source=source)
+
+    def resolve_llm(
+        self, kind: str, *, requested: str | None = None, ws: str | None = None,
+        overrides: Any = None,
+    ) -> tuple[Any, Resolution]:
+        resolution = self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
+        if self._llm is None:
+            raise ModelResolutionError(
+                f"no static llm client was injected for kind {kind!r}"
+            )
+        return self._llm, resolution
 
     def llm(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,
         overrides: Any = None,
     ) -> Any:
-        self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
-        if self._llm is None:
-            raise ModelResolutionError(
-                f"no static llm client was injected for kind {kind!r}"
-            )
-        return self._llm
+        return self.resolve_llm(kind, requested=requested, ws=ws, overrides=overrides)[0]
 
     def embedder(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,

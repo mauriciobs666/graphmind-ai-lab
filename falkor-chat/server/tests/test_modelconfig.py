@@ -19,6 +19,7 @@ import pytest
 from falkorchat import config
 from falkorchat.modelconfig import (
     KINDS,
+    GraphWorkspaceOverrides,
     ModelConfigError,
     ModelGateway,
     ModelResolutionError,
@@ -60,10 +61,12 @@ _LMSTUDIO = {
 }
 
 
-def _gateway(tmp_path: Path, *, providers=None, overlay_doc=None) -> ModelGateway:
+def _gateway(
+    tmp_path: Path, *, providers=None, overlay_doc=None, workspace_overrides=None,
+) -> ModelGateway:
     catalog = _catalog(tmp_path, providers if providers is not None else _LMSTUDIO)
     overlay = _overlay(tmp_path, overlay_doc)
-    return ModelGateway(catalog, overlay)
+    return ModelGateway(catalog, overlay, workspace_overrides=workspace_overrides)
 
 
 # ── {env:}/{file:} substitution (FR-12, §4.8) ──────────────────────────────────────
@@ -450,6 +453,291 @@ def test_gateway_llm_role_chain_falls_back_end_to_end(tmp_path, monkeypatch):
     assert result.model == "second/model-b"
     assert result.fallback is True
     assert len(calls) == 2
+
+
+# ── K-042 Landing 2 (L2-3, FR-16/FR-17): workspace override precedence ────────────
+#
+# `resolve()`'s real precedence, first-match-wins: workspace override -> `requested`
+# -> the per-kind default. `.source` names which rung won. Parametrized across every
+# kind in the closed `KINDS` set (not just `step`/`agent`) — B-1 existed precisely so
+# `guard` isn't the one kind this can't reach; proving the crosswalk (`_gateway`'s
+# `overrides=` key differs per kind) is itself part of what this pins.
+
+_KIND_OVERRIDE_KEYS = {
+    "agent": "responderModel", "step": "agentModel",
+    "guard": "guardModel", "embedding": "embeddingModel",
+}
+
+
+@pytest.mark.parametrize("kind", sorted(KINDS))
+def test_three_rungs_and_the_hard_cap_direction_for_every_kind(tmp_path, kind):
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={"defaults": {kind: "lmstudio/model-a"}},
+    )
+    override_key = _KIND_OVERRIDE_KEYS[kind]
+
+    # rung 3: no requested choice, no override -> the per-kind default
+    res = gw.resolve(kind)
+    assert res.source == "default"
+    assert res.primary.ref == "lmstudio/model-a"
+
+    # rung 2: an explicit requested= choice beats the default
+    res = gw.resolve(kind, requested="second/model-b")
+    assert res.source == "requested"
+    assert res.primary.ref == "second/model-b"
+
+    # rung 1 / the hard cap: a workspace override beats an explicit requested=
+    # choice outright — AC-10's scenario, for every kind (the whole point of B-1).
+    res = gw.resolve(
+        kind, requested="second/model-b",
+        overrides={override_key: "lmstudio/model-a"},
+    )
+    assert res.source == "workspace"
+    assert res.primary.ref == "lmstudio/model-a"
+
+
+def test_overrides_dict_present_but_this_kinds_key_unset_falls_through_to_requested(
+    tmp_path,
+):
+    # A `read_model_overrides`-shaped dict with OTHER kinds set but this one absent
+    # must not be mistaken for "this kind is overridden" — only its own crosswalk
+    # key matters.
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"step": "lmstudio/default-model"}})
+    overrides = {
+        "agentModel": None, "guardModel": "lmstudio/other-kind-override",
+        "embeddingModel": None, "responderModel": None,
+    }
+    res = gw.resolve("step", requested="lmstudio/requested-model", overrides=overrides)
+    assert res.source == "requested"
+    assert res.primary.ref == "lmstudio/requested-model"
+
+
+def test_workspace_override_naming_an_undeclared_model_fails_loudly_not_silently(
+    tmp_path,
+):
+    # §6.3: a graph-stored override is NOT config-validated at write time — it
+    # resolves through the normal path and, on failure, must fail loudly (FR-10),
+    # never silently fall through to `requested` or the default. A hard cap that
+    # silently degrades to the thing it caps is worse than no cap at all.
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"step": "lmstudio/default-model"}})
+    with pytest.raises(ModelResolutionError) as excinfo:
+        gw.resolve(
+            "step", requested="lmstudio/requested-model",
+            overrides={"agentModel": "no-such-provider/some-model"},
+        )
+    assert "no-such-provider" in str(excinfo.value)
+
+
+def test_workspace_override_may_name_a_role_not_just_a_direct_ref(tmp_path):
+    # §6.1: "a value may be a concrete ref OR a role name" — resolved through the
+    # same `_resolve_ref` path as any other ref (role expansion included).
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"step": "lmstudio/default-model"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a", "second/model-b"]}},
+        },
+    )
+    res = gw.resolve("step", overrides={"agentModel": "cheap"})
+    assert res.source == "workspace"
+    assert [r.ref for r in res.chain] == ["lmstudio/model-a", "second/model-b"]
+
+
+def test_ws_triggered_override_read_used_when_no_overrides_dict_given(tmp_path):
+    # The other of the two §2.6 shapes: a caller with no per-drive `run` dict (the
+    # responder, the embedding worker) passes `ws=` instead, and `resolve()` reads
+    # fresh through the injected `WorkspaceOverrides` port.
+    class StubWorkspaceOverrides:
+        def __init__(self, mapping):
+            self._mapping = mapping
+            self.calls: list[tuple] = []
+
+        def get(self, ws, kind):
+            self.calls.append((ws, kind))
+            return self._mapping.get((ws, kind))
+
+    stub = StubWorkspaceOverrides({("acme", "embedding"): "second/embed-override"})
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={"defaults": {"embedding": "lmstudio/embed-default"}},
+        workspace_overrides=stub,
+    )
+
+    res = gw.resolve("embedding", ws="acme")
+
+    assert res.source == "workspace"
+    assert res.primary.ref == "second/embed-override"
+    assert stub.calls == [("acme", "embedding")]
+
+
+def test_overrides_dict_takes_precedence_over_ws_triggered_read_no_double_read(
+    tmp_path,
+):
+    # §2.6: a caller that already did a per-drive read passes the pre-fetched dict
+    # so `resolve()` never triggers a SECOND graph round trip via `ws=`.
+    class ExplodingWorkspaceOverrides:
+        def get(self, ws, kind):
+            raise AssertionError(
+                "must not read ws-triggered when an overrides dict was given"
+            )
+
+    gw = _gateway(
+        tmp_path, overlay_doc={"defaults": {"step": "lmstudio/default-model"}},
+        workspace_overrides=ExplodingWorkspaceOverrides(),
+    )
+    res = gw.resolve(
+        "step", ws="acme", overrides={"agentModel": "lmstudio/default-model"}
+    )
+    assert res.source == "workspace"
+
+
+def test_static_model_gateway_resolve_source_is_requested_or_default_never_workspace():
+    # A static gateway has no workspace-override concept (FR-4 sugar bypasses config
+    # entirely) — `.source` only ever distinguishes "a model was requested" from not,
+    # matching the pre-L2-3 behavior every `llm=`/`embedder=` injection test relies on.
+    class StubLLM:
+        pass
+
+    gw = StaticModelGateway(llm=StubLLM())
+    assert gw.resolve("step", requested="a/b").source == "requested"
+    assert gw.resolve("step").source == "default"
+
+
+def test_static_model_gateway_resolve_llm_returns_client_and_resolution():
+    class StubLLM:
+        pass
+
+    stub = StubLLM()
+    gw = StaticModelGateway(llm=stub)
+    client, resolution = gw.resolve_llm("step", requested="a/b")
+    assert client is stub
+    assert resolution.source == "requested"
+
+
+def test_real_gateway_resolve_llm_returns_client_and_resolution(tmp_path, monkeypatch):
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(calls)
+    )
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"agent": "lmstudio/qwen/qwen3-4b-2507"}})
+
+    client, resolution = gw.resolve_llm("agent")
+    client.complete([{"role": "user", "content": "hi"}])
+
+    assert resolution.source == "default"
+    assert resolution.primary.ref == "lmstudio/qwen/qwen3-4b-2507"
+    assert calls[0]["model"] == "qwen/qwen3-4b-2507"
+
+
+# ── K-042 Landing 2: `GraphWorkspaceOverrides` — the kind<->property crosswalk ────
+#
+# `-graph.md` §8.4 names its `WorkspaceConfig` properties after the WORKFLOW NODE
+# TYPE ("agent") vs. the chat RESPONDER CLASS ("responder") — which does NOT match
+# this module's own `kind` strings 1:1 (`_KIND_TO_OVERRIDE_KEY`). These pin the
+# crosswalk directly against a fake repository, independent of `ModelGateway`.
+
+class _FakeRepo:
+    def __init__(self, overrides: dict) -> None:
+        self._overrides = overrides
+        self.calls: list[str] = []
+
+    def read_model_overrides(self, ws):
+        self.calls.append(ws)
+        return dict(self._overrides)
+
+
+def test_graph_workspace_overrides_kind_step_reads_the_agentModel_property():
+    # -graph.md §8.4: `agentModelOverride` governs the WORKFLOW's agent-type step
+    # node — this module's kind "step", not "agent".
+    repo = _FakeRepo({
+        "agentModel": "lmstudio/step-override", "guardModel": None,
+        "embeddingModel": None, "responderModel": None,
+    })
+    ov = GraphWorkspaceOverrides(repo)
+    assert ov.get("acme", "step") == "lmstudio/step-override"
+    assert repo.calls == ["acme"]
+
+
+def test_graph_workspace_overrides_kind_agent_reads_the_responderModel_property():
+    # -graph.md §8.4: `responderModelOverride` governs the chat/@mention responder
+    # (`AgentResponder`) — this module's kind "agent", not "step".
+    repo = _FakeRepo({
+        "agentModel": None, "guardModel": None,
+        "embeddingModel": None, "responderModel": "lmstudio/chat-override",
+    })
+    ov = GraphWorkspaceOverrides(repo)
+    assert ov.get("acme", "agent") == "lmstudio/chat-override"
+
+
+def test_graph_workspace_overrides_kind_guard_and_embedding_match_by_name():
+    repo = _FakeRepo({
+        "agentModel": None, "guardModel": "lmstudio/guard-override",
+        "embeddingModel": "lmstudio/embed-override", "responderModel": None,
+    })
+    ov = GraphWorkspaceOverrides(repo)
+    assert ov.get("acme", "guard") == "lmstudio/guard-override"
+    assert ov.get("acme", "embedding") == "lmstudio/embed-override"
+
+
+def test_graph_workspace_overrides_returns_none_when_kind_unset():
+    repo = _FakeRepo({
+        "agentModel": None, "guardModel": None,
+        "embeddingModel": None, "responderModel": None,
+    })
+    ov = GraphWorkspaceOverrides(repo)
+    assert ov.get("acme", "step") is None
+
+
+def test_graph_workspace_overrides_never_treats_empty_string_as_an_override():
+    # Defensive backstop (§2.4's own warning: '' is a value, never "no override") —
+    # even if the write path ever produced one, the read side must not honour it.
+    repo = _FakeRepo({
+        "agentModel": "", "guardModel": None,
+        "embeddingModel": None, "responderModel": None,
+    })
+    ov = GraphWorkspaceOverrides(repo)
+    assert ov.get("acme", "step") is None
+
+
+# ── K-042 U8-gate Minor 3: embedder() silently drops fallback beyond the primary ──
+
+def test_embedder_warns_once_per_kind_role_when_chain_has_more_than_one_element(
+    tmp_path, monkeypatch, caplog,
+):
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(calls)
+    )
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"embedding": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/embed-a", "second/embed-b"]}},
+        },
+    )
+
+    with caplog.at_level(logging.WARNING):
+        gw.embedder("embedding")
+        gw.embedder("embedding")  # same (kind, primary ref) — must not double-warn
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "embedding" in warnings[0].message
+
+
+def test_embedder_does_not_warn_for_a_direct_ref_length_one_chain(tmp_path, monkeypatch, caplog):
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(calls)
+    )
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"embedding": "lmstudio/qwen/qwen3-4b-2507"}})
+
+    with caplog.at_level(logging.WARNING):
+        gw.embedder("embedding")
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == []
 
 
 # ── both real sample files parse unmodified (AC-1) ─────────────────────────────────

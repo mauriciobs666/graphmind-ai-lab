@@ -80,6 +80,15 @@ MODEL_CORRECTABLE_TOOL_ERRORS: tuple[type[ServiceError], ...] = (
 # judges nothing and is deliberately absent.
 TRACED_GUARD_KINDS: frozenset[str] = frozenset({"llm"}) | CMP_KINDS
 
+# K-042 L2-3: `ModelGateway.Resolution.source` is the generic, kind-agnostic rung
+# vocabulary (`"workspace"` / `"requested"` / `"default"`); `StepRun.modelSource`
+# is this module's own persisted terminology, unchanged since Landing 1
+# (`'step'` for "the step named its own model", not `'requested'`). This is the one
+# place that translates between them — the resolver itself must stay caller-agnostic.
+_MODEL_SOURCE_LABEL: dict[str, str] = {
+    "workspace": "workspace", "requested": "step", "default": "default",
+}
+
 
 # ── defaults ─────────────────────────────────────────────────────────────────
 
@@ -117,9 +126,14 @@ class StepResult:
 
     `resolvedModel`/`modelSource`/`modelFallback` (K-042 Landing 2, FR-8/P2-B) carry the
     concrete model that answered this step's LLM call(s), which precedence rung named it
-    (`'step'` — the node's own `config.model`/role won; `'default'` — the kind default
-    was used, no explicit choice on the step; `'workspace'` is L2-3, not reachable yet),
-    and whether that answer came from an FR-18 fallback. All three default to `None` —
+    (`'workspace'` — a workspace override hard-capped the resolution, L2-3; `'step'` —
+    no override, the node's own `config.model`/role won; `'default'` — no override and
+    no explicit choice, the kind default was used), and whether that answer came from
+    an FR-18 fallback. `modelSource` is read off `ModelGateway.resolve_llm()`'s
+    `Resolution.source` (`_MODEL_SOURCE_LABEL`), never derived from a local
+    `config.get('model')` truthiness mirror — only the resolver knows which rung won,
+    including when a workspace override targets a role that itself falls back. All
+    three default to `None` —
     a non-LLM step (`decision`/`human`/`wait`, the offline `agent`-without-LLM stub)
     never sets them. For a multi-iteration `agent` node (`_run_agent_node`), the
     **last** successful `chat()` call's values win — overwritten together each
@@ -389,6 +403,15 @@ class WorkflowExecutor:
         # safe under the anyio threadpool / mcp.py daemon threads. Never stored on
         # `self` — the executor is a process-wide singleton.
         run["ws"] = ctx.ws
+        # K-042 §2.6 (`-graph.md`, L2-3/FR-16/FR-17): one per-drive read of the
+        # workspace's model overrides, also OUTSIDE the lock, alongside `run["ws"]`
+        # above — never per resolution, never on `self` (same per-drive-dict carrier
+        # §4.10 established for `ws`). `read_model_overrides` is a single cheap
+        # `RO_QUERY` (`-graph.md` §2.5, ~0.008ms); reading it once here and passing it
+        # as `overrides=` at every resolution point inside this drive (`step`, `guard`)
+        # avoids a repeat graph round trip per LLM call and gives the override a
+        # stable value for the whole drive.
+        run["modelOverrides"] = self._repo.read_model_overrides(ctx.ws)
         try:
             return self._drive_loop(ctx, run)
         except HumanHandoffSignal:
@@ -592,15 +615,20 @@ class WorkflowExecutor:
 
         K-042 FR-4/FR-5: resolves the `step`-kind LLM client **once per node
         execution** (not per iteration) through the gateway — `config.get("model")`
-        is the step's own model choice if it named one, else the kind default.
+        is the step's own model choice if it named one, else the kind default, else
+        (L2-3) the workspace's hard-cap override beats either.
 
         K-042 Landing 2 (FR-8, `-graph.md` §1.5/§1.6): `resolvedModel`/`modelSource`/
         `modelFallback` are captured off each successful `chat()` call's `ChatResult`
         and **overwritten together every iteration** — the "last answering model wins"
         rule — so a mid-loop fallback re-engagement on a later iteration is what
         `StepResult` reports, not the first iteration's values. `modelSource` is
-        `'step'`/`'default'` depending only on whether the step named its own model —
-        that choice is fixed for the whole node execution (the client is resolved once,
+        derived from the **resolver's own** `Resolution.source` (`_MODEL_SOURCE_LABEL`),
+        never from a local `config.get("model")` truthiness mirror — the U8 gate's
+        finding: only `resolve()` knows whether a workspace override capped an
+        explicit step choice (L2-3), and a local check has no way to observe that,
+        especially when the override targets a *role* that itself falls back. Which
+        rung won is fixed for the whole node execution (the client is resolved once,
         above), so it does not itself vary per iteration; it is still assigned inside
         the loop, alongside `resolvedModel`/`modelFallback`, so all three are read from
         one place after the loop exits rather than split across two code paths.
@@ -609,8 +637,11 @@ class WorkflowExecutor:
         default rung.
         """
         requested_model = config.get("model")
-        model_source_rung = "step" if requested_model else "default"
-        llm = self._models.llm("step", requested=requested_model, ws=ctx.ws)
+        llm, resolution = self._models.resolve_llm(
+            "step", requested=requested_model, ws=ctx.ws,
+            overrides=run.get("modelOverrides"),
+        )
+        model_source_rung = _MODEL_SOURCE_LABEL[resolution.source]
         granted = list(config.get("tools", []))
         granted_set = set(granted)
         offered = [self._tools.schema(name) for name in granted]

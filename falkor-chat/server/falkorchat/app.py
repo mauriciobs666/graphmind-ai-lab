@@ -164,10 +164,10 @@ def create_app(
     A production wiring constructs them explicitly and passes them in, e.g.::
 
         from falkorchat.embedding import EmbeddingWorker
-        from falkorchat.modelconfig import ModelGateway
+        from falkorchat.modelconfig import GraphWorkspaceOverrides, ModelGateway
         from falkorchat.responder import AgentResponder
 
-        models = ModelGateway.from_env()
+        models = ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))
         worker = EmbeddingWorker(repo, models=models)
         responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
         app = create_app(services, responder=responder, embed_worker=worker)
@@ -266,10 +266,18 @@ def _build_default_app() -> FastAPI:
     # Imported lazily so the disabled path carries no import-time weight and the
     # dependency surface for offline imports stays minimal.
     from .embedding import EmbeddingWorker
-    from .modelconfig import ModelGateway
+    from .modelconfig import GraphWorkspaceOverrides, ModelGateway
     from .responder import AgentResponder
 
-    models = ModelGateway.from_env()
+    # K-042 L2-3 (FR-16/FR-17): the same `repo`/connection every other collaborator
+    # here shares, not a second connection — a graph-backed `WorkspaceOverrides`
+    # reading the workspace's `WorkspaceConfig` singleton (`-graph.md` §2.2/§2.5) per
+    # call for the two consumers with no per-drive `run` dict (`agent`/`embedding`,
+    # below); the executor/guard path instead reads once per drive in `_drive` and
+    # never touches this port (§2.6).
+    models = ModelGateway.from_env(
+        workspace_overrides=GraphWorkspaceOverrides(repo)
+    )
     worker = EmbeddingWorker(repo, models=models)
     responder = AgentResponder(
         services, worker=worker, agent_id=config.AGENT_ID, models=models
@@ -405,7 +413,13 @@ class _LlmGuardJudge:
         model=None, run=None,
     ):  # noqa: ANN001
         ws = run.get("ws") if isinstance(run, dict) else None
-        llm = self._models.llm("guard", requested=model, ws=ws)
+        # K-042 L2-3 (FR-16/FR-17, B-1's payoff): the per-drive workspace-override
+        # read `_drive` stamps onto `run["modelOverrides"]` (§2.6) — the same carrier
+        # `ws` already rides, since `evaluate_guard`'s `ctx=` here is the run-ctx
+        # dict, not a `CallContext` (§4.10). Passed as `overrides=` so `resolve()`
+        # uses the pre-fetched dict rather than a second graph round trip.
+        overrides = run.get("modelOverrides") if isinstance(run, dict) else None
+        llm = self._models.llm("guard", requested=model, ws=ws, overrides=overrides)
         user = _render_judge_user(condition, understanding, recent_turns)
         text = llm.complete([
             {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},

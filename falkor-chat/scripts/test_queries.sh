@@ -1218,6 +1218,69 @@ gq "$WS" 'MATCH (r:WorkflowRun {defKey:"post_success_probe"}) DETACH DELETE r' >
 gq "$WS" 'MATCH (sr:StepRun {stepRunId:"psp_sr1"}) DETACH DELETE sr' > /dev/null
 gq "$WS" 'MATCH (m:Message {msgId:"psp_msg1"}) DETACH DELETE m' > /dev/null
 
+echo ""
+echo "▶ §13 workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)"
+
+# §13.2 read_model_overrides BEFORE any write: every existing workspace's starting
+# state is zero rows, and that must read back as "no override at any kind" — the
+# same answer §13.2's all-NULL-row case below produces. One code path, both cases.
+# (Column headers print unconditionally in redis-cli's GRAPH.QUERY reply regardless
+# of row count, so "zero rows" is checked via count(c), not by grepping RMO's own
+# header names — the same idiom §12.1/§12.3's zero-row checks use elsewhere.)
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN count(c) AS cnt')
+assert_contains "§13.2 read before any write: zero WorkspaceConfig nodes exist yet" "0" "$out"
+
+RMO='MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN c.agentModelOverride AS agentModel, c.guardModelOverride AS guardModel, c.embeddingModelOverride AS embeddingModel, c.responderModelOverride AS responderModel'
+out=$(gq "$WS" "$RMO")
+assert_not_contains "§13.2 read before any write: no override value present" "lmstudio" "$out"
+
+# §13.1 write_model_overrides: first write sets only agent + guard, leaves
+# embedding/responder unset (NULL — never '').
+WMO='MERGE (c:WorkspaceConfig {workspaceConfigId:"default"}) SET c.agentModelOverride=$agent, c.guardModelOverride=$guard, c.embeddingModelOverride=$embedding, c.responderModelOverride=$responder, c.modelOverrideUpdatedAt=$at, c.modelOverrideUpdatedBy=$by RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard, c.embeddingModelOverride AS embedding, c.responderModelOverride AS responder'
+out=$(gq "$WS" "CYPHER agent=\"lmstudio/agent-a\" guard=\"lmstudio/guard-a\" embedding=null responder=null at=1000 by=\"u1\" $WMO")
+assert_contains "§13.1 first write returns the written agent value" "lmstudio/agent-a" "$out"
+assert_contains "§13.1 first write returns the written guard value" "lmstudio/guard-a" "$out"
+
+out=$(gq "$WS" "$RMO")
+assert_contains "§13.2 after first write: agent override present" "lmstudio/agent-a" "$out"
+assert_contains "§13.2 after first write: guard override present" "lmstudio/guard-a" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN keys(c) AS k')
+assert_contains "§13.1 first write: keys() has agentModelOverride" "agentModelOverride" "$out"
+assert_contains "§13.1 first write: keys() has guardModelOverride" "guardModelOverride" "$out"
+assert_not_contains "§13.1 first write: keys() omits embeddingModelOverride (NULL param)" "embeddingModelOverride" "$out"
+assert_not_contains "§13.1 first write: keys() omits responderModelOverride (NULL param)" "responderModelOverride" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig) RETURN count(c)')
+assert_contains "§13.1 exactly one WorkspaceConfig node after first write" "1" "$out"
+
+# Regression case: a SECOND write sets embedding and explicitly CLEARS guard
+# (guard=NULL) — "NULL in SET clears" (-graph.md §2.4), distinct from "omitted at
+# CREATE". agent is re-set to the same value (still present).
+out=$(gq "$WS" "CYPHER agent=\"lmstudio/agent-a\" guard=null embedding=\"lmstudio/embed-a\" responder=null at=2000 by=\"u2\" $WMO")
+assert_contains "§13.1 second write returns the newly-set embedding value" "lmstudio/embed-a" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig {workspaceConfigId:"default"}) RETURN keys(c) AS k')
+assert_not_contains "§13.1 second write CLEARS a previously-set kind (guardModelOverride gone)" "guardModelOverride" "$out"
+assert_contains "§13.1 second write: agentModelOverride still present (re-set)" "agentModelOverride" "$out"
+assert_contains "§13.1 second write: embeddingModelOverride now present" "embeddingModelOverride" "$out"
+
+out=$(gq "$WS" 'MATCH (c:WorkspaceConfig) RETURN count(c)')
+assert_contains "§13.1 still exactly one WorkspaceConfig node (constraint-backed MERGE, no dupe)" "1" "$out"
+
+# §13.2 read again: guard is back to NULL (cleared), agent/embedding present — a
+# PARTIALLY-set node, read the same way as the zero-row case above (one code path).
+out=$(gq "$WS" "$RMO")
+assert_contains "§13.2 after clear: agent still present" "lmstudio/agent-a" "$out"
+assert_contains "§13.2 after clear: embedding now present" "lmstudio/embed-a" "$out"
+
+# PROFILE: no label scan, anchors on the WorkspaceConfig index.
+prof=$(gp "$WS" "$RMO")
+assert_index_scan "§13.2 read_model_overrides anchors on WorkspaceConfig index" "$prof"
+
+# cleanup this section's fixture
+gq "$WS" 'MATCH (c:WorkspaceConfig) DETACH DELETE c' > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

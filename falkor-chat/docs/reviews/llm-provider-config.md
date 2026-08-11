@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 5
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 6
 
 ## 1. Scope & verdict
 
@@ -1442,3 +1442,205 @@ gating this unit.)*
    `falkor-chat/AGENTS.md`'s key-scripts table documents this hazard for `test_queries.sh` but not
    for a bare `pytest -q` run against a live instance; worth a doc note at some point, per
    `coder`'s own observation — not a finding against this diff.
+
+## Landing 2 — U9 (L2-3) code review — 2026-08-11
+
+**Scope: this is a diff-scoped code review, not a design re-review.** Baseline is the approved
+plan (`docs/plans/llm-provider-config.md` `Version: 4`) §4.10 (the B-1 fix) and §7's L2-3 row
+(workspace override + precedence, FR-16/FR-17), and `docs/plans/llm-provider-config-graph.md`
+(`Version: 3`) §2 in full (§2.1–§2.6), §4, §6.1, §6.3. `HEAD` is `719db6f`; U8 (L2-1/L2-2) is
+already committed (`17c20dc`) and out of scope for re-review beyond a scope-leakage check.
+Baseline against `tdd-engineer`'s **uncommitted** working-tree diff, read directly (`git
+status --short` / `git diff`), nothing mutated in the diff itself.
+
+**What I executed** (mutating steps are copy-aside → edit → run → confirm → restore from copy,
+never `git checkout`/`restore`; live-FalkorDB steps use the documented remedies from
+`falkor-chat/AGENTS.md`):
+
+- `git status --short` / `git diff --stat` → exactly the expected 10 files, +1018/-61:
+  `docs/QUERIES.md`, `scripts/bootstrap_schema.sh`, `scripts/test_queries.sh`,
+  `server/falkorchat/{app,executor,modelconfig,repository}.py`, and three
+  `server/tests/test_*.py` files. **Zero diff** on `services.py`, `schemas.py`, `api.py`
+  (L2-4 territory), `guards.py`, `responder.py`, `embedding.py`, `tools.py` — confirmed by their
+  absence from `git diff --stat`.
+- Read `responder.py`, `embedding.py`, `tools.py`, `guards.py` directly (not just their absence
+  from the diff) to verify the zero-change claim: `responder.py:101,106` and
+  `embedding.py:119,123` and `tools.py:299` already call `.embedder("embedding", ws=...)` /
+  `.llm("agent", ws=...)` unmodified — since `resolve()`'s new precedence logic lives entirely
+  inside `modelconfig.py` and activates automatically whenever `ws=` is passed, these four
+  modules genuinely need no edits for their `ws=` sites to start honouring the hard cap.
+  `guards.py:181,230,241` already threads `run=` via the `accepts_run` protocol built in
+  Landing 1 (U8's own predecessor); U9 only needed `app.py`'s `_LlmGuardJudge.__call__` to read
+  `run.get("modelOverrides")` and pass it through — confirmed present. **No scope leakage into
+  L2-4/L2-5/L2-6/L2-7 found**, and no leakage into the four untouched consumer modules either.
+- **DDL** — read `git diff scripts/bootstrap_schema.sh`: adds `CREATE INDEX FOR (n:WorkspaceConfig)
+  ON (n.workspaceConfigId)` inside the index block, then `UNIQUE NODE WorkspaceConfig PROPERTIES
+  1 workspaceConfigId` inside the constraint block below it — index-before-constraint, matching
+  `-graph.md` §4 verbatim, in the file's own established ordering. No unrelated edits.
+- **Storage** — read `repository.py`'s new `write_model_overrides`/`read_model_overrides` and
+  diffed the Cypher against `-graph.md` §2.4/§2.5 by eye: property names, the `MERGE`/`SET`
+  shape, the `NULL`-in-`SET`-clears vs. `NULL`-in-`CREATE`-omits distinction (both land on
+  "property absent"), and the zero-rows/all-null-row equivalence (`read_model_overrides` returns
+  the identical all-`None` dict for both cases, one code path, no branching) — all match exactly.
+  `docs/QUERIES.md` §13 and `scripts/test_queries.sh`'s new §13 block cover the same ground,
+  including a live-verified `SET`-clears-a-previously-set-kind regression case and a `keys(c)`
+  check that a `NULL` parameter genuinely omits the property. Ran `./scripts/test_queries.sh`
+  myself: **315/315 passed**. Reseeded per the documented remedy afterward:
+  `./scripts/bootstrap_schema.sh acme` → `./scripts/seed_demo.sh acme` →
+  `./scripts/seed_workflows.sh acme` → `./scripts/verify_workflows.sh acme` →
+  **`RESULT: OK — 2 defs in sync`**.
+- **The kind↔property crosswalk (item 3, load-bearing) — independently re-derived, not just
+  checked against `teco`'s reasoning.** Re-read `-graph.md` §8.4 myself in full. Its own words:
+  *"the real requirement behind 'this workspace's assistant should use a different model' is
+  FR-16, and §2.2's `responderModelOverride` covers it"* — and §8.4 is explicitly about *"the chat
+  agent's model"*, glossing it earlier in the same passage as an `AgentResponder`-shaped concern
+  (created by `seed_demo.sh`/`ensure_agent` as a workspace member, the same `@mention` consumer
+  the plan's §2.1 table lists as consumer **#1**, kind `agent`). So `responderModelOverride` ↔
+  kind `agent` is the plan's own textually-stated mapping, not an inference. By elimination (the
+  four `WorkspaceConfig` properties are `agent`/`guard`/`embedding`/`responder`, and `guard`/
+  `embedding` already match their kinds by name with no ambiguity), `agentModelOverride` must be
+  the property for the *other* chat-model consumer — the workflow executor's `type:'agent'` step
+  nodes, which the plan's own kind taxonomy calls `step` (§3.1's row: `step` → executor
+  `type:'agent'` nodes → `_run_agent_node`). This reading is corroborated, not merely permitted, by
+  `-graph.md`'s own vocabulary: it consistently distinguishes the **workflow node type** ("agent
+  node") from the **chat responder class** ("the chat agent" / "responder"), and names its
+  properties after exactly that split. I searched `-graph.md` end to end for any other passage
+  bearing on this (`grep -n "responderModelOverride\|agentModelOverride"`) and found nothing that
+  contradicts it — every other mention is the schema declaration itself (§2.2/§2.4/§2.5) or a
+  restatement of §8.4's conclusion.
+  **Verdict: the shipped crosswalk (`_KIND_TO_OVERRIDE_KEY = {"agent": "responderModel", "step":
+  "agentModel", "guard": "guardModel", "embedding": "embeddingModel"}`) is correct.** No
+  escalation to `graph-dba` needed — I reached this independently, not merely by re-confirming
+  the diff's own docstring reasoning, and found no passage in `-graph.md` that reads the other
+  way. The diff documents this crosswalk redundantly and well: a `modelconfig.py` module
+  docstring, a `_KIND_TO_OVERRIDE_KEY` inline comment, a `repository.py` method docstring, and
+  `docs/QUERIES.md` §13's own crosswalk note all state the same mapping with the same §8.4
+  citation — consistent everywhere I checked, no drift between the four restatements.
+- **`resolve()`'s precedence** — read `modelconfig.py::ModelGateway.resolve()`: the workspace
+  override is computed first (`_workspace_override_ref`) and, when present, resolved and returned
+  **immediately** (`if override_ref: ... return Resolution(..., source="workspace")`) — `requested`
+  is never even inspected on that path, structurally, not merely "preferred". A failing override
+  is not wrapped in any `try`/`except` inside `resolve()` — `_resolve_ref` propagates
+  `ModelResolutionError` uncaught, confirmed by grepping `executor.py`/`modelconfig.py`/`app.py`
+  for any catch of `ModelResolutionError` (none found), and by the shipped
+  `test_workspace_override_naming_an_undeclared_model_fails_loudly_not_silently`, which asserts
+  exactly this.
+  **Mutation-tested myself**, per the brief: copied `modelconfig.py` aside, inverted the hard-cap
+  check to `ref = requested or override_ref or self._overlay.default_for(kind)` (so an explicit
+  `requested=` beats the override), ran
+  `pytest -k test_three_rungs_and_the_hard_cap_direction_for_every_kind` — **all four
+  parametrized kinds failed** (`agent`, `step`, `guard`, `embedding`), each with
+  `AssertionError: assert 'requested' == 'workspace'`. `guard` failing here is the literal B-1
+  payoff. Restored from the copy (`cp` back, diffed clean); full offline suite re-run green
+  afterward.
+- **The `modelSource` reshape** — read `executor.py::_run_agent_node`: `requested_model =
+  config.get("model")` is now only used as the `requested=` argument to
+  `self._models.resolve_llm("step", requested=requested_model, ws=ctx.ws,
+  overrides=run.get("modelOverrides"))`, and `model_source_rung =
+  _MODEL_SOURCE_LABEL[resolution.source]` reads the rung off the returned `Resolution`, not off
+  local truthiness — the exact U8 gate requirement, closed as stated, not as a bolted-on `elif`.
+  The specific scenario the gate demanded is present and passes:
+  `test_workspace_override_naming_a_role_that_falls_back_reports_workspace_and_fallback_true`
+  (`server/tests/test_executor_agent.py:901`) — a workspace override on kind `step` naming a
+  *role* whose first element fails and falls back to its second, asserting
+  `result.modelSource == "workspace"` and `result.modelFallback is True` on the same row. Ran it
+  directly: passes.
+  `RecordingGateway` (the executor-level test double) was updated consistently: it now implements
+  `resolve_llm()` (not `llm()`), returns `(client, _FakeResolution(source=...))`, and mirrors the
+  real three-rung precedence just enough to drive `_run_agent_node`'s label translation; the two
+  pre-existing call-recording assertions (`test_run_agent_node_resolves_step_kind_with_the_steps_
+  own_model_and_ws`, `test_run_agent_node_requests_no_model_when_the_step_names_none`) were updated
+  in lockstep to include the new `overrides` key — no orphaned/stale assertions found.
+- **The SHA lock** — recomputed via `docs/DESIGN.md` §6.2's documented method:
+  `71055f756280`, an exact match, confirming the lock is intact. Read every hunk in `git diff
+  server/falkorchat/executor.py` by eye: the touched regions are the `_MODEL_SOURCE_LABEL` table
+  and `StepResult`'s docstring (module level), `_drive` (`run["ws"] = ctx.ws` immediately followed
+  by the new `run["modelOverrides"] = self._repo.read_model_overrides(ctx.ws)`, both **outside**
+  the lock, sitting together exactly where the plan specifies), and `_run_agent_node`'s body
+  (also outside) — zero hunks inside the locked `_drive_loop` body.
+- **All four consumer kinds wired** — `guard`: read `app.py`'s `_LlmGuardJudge.__call__`, which now
+  reads `run.get("modelOverrides")` and passes it as `overrides=` to `self._models.llm("guard",
+  ...)`; the new `test_build_llm_judge_workspace_override_beats_the_guards_own_declared_model`
+  drives this through a real `ModelGateway` and confirms the workspace override beats even the
+  guard's own explicitly-declared `model=`, not just the kind default — exactly B-1's payoff for
+  the one consumer that had no carrier before Landing 1. `agent`/`embedding` (the two run-less
+  consumers): confirmed both read fresh per call — `GraphWorkspaceOverrides.get()` calls
+  `self._repo.read_model_overrides(ws)` on every invocation with no memoization, no TTL, no
+  instance-level cache of any kind. This matches `-graph.md` §2.6's explicit "no cache needed for
+  Landing 2, don't build one speculatively" guidance; **no cache found, nothing to flag.**
+- **Minor 3** — read `modelconfig.py::ModelGateway.embedder()`/`_warn_embedder_fallback_ignored()`:
+  a `logging.warning` fires once per `(kind, primary ref)` when `embedder()` observes a
+  multi-element chain, mirroring `StaticModelGateway`'s existing once-per-`(kind, ref)` pattern.
+  Two dedicated tests exist and pass:
+  `test_embedder_warns_once_per_kind_role_when_chain_has_more_than_one_element` (fires once, not
+  twice, across two calls) and `test_embedder_does_not_warn_for_a_direct_ref_length_one_chain`
+  (silent on the common case). This is a real fix present in the diff, not a comment referencing
+  one.
+- Two items `tdd-engineer` flagged in its own report, independently re-checked: (a) read `app.py`
+  directly — the `ModelGateway.from_env(...)` mention at `~:166` is inside the `create_app`
+  docstring's illustrative code block (inside `::` / indented prose, never executed), and the only
+  real call site is `_build_default_app` at `~:272`, confirmed by reading both locations in full,
+  not just their line numbers. (b) the crosswalk — see above, independently re-derived, same
+  conclusion.
+- `.venv/bin/python -m pytest -q` from `server/`, run myself: **845 passed, 1 deselected** — an
+  exact match to `tdd-engineer`'s and `teco`'s reported counts.
+
+**Verdict: approve.** No blockers, no majors. The unit closes B-1 cleanly: the hard cap is
+structural (the override branch returns before `requested` is even inspected), reaches all four
+consumer kinds including the one (`guard`) that had no carrier before Landing 1, fails loudly on
+an unresolvable override rather than degrading, and the mutation test I ran independently
+reproduces the exact regression B-1 exists to prevent for all four kinds. The `modelSource`
+reshape genuinely replaces the local-truthiness derivation with a resolver-sourced one, closing
+the U8 gate's binding requirement as stated rather than as an implicit side effect, and the exact
+scenario the gate named (a workspace override naming a role that itself falls back) is tested and
+passes. Minor 3 is a real fix, not a stub. The SHA lock holds. No scope leakage. The
+kind↔property crosswalk — the item this gate exists to adjudicate — is correct, confirmed by an
+independent re-read of `-graph.md` §8.4 that reached the same conclusion by the same textual
+argument, with no contradicting passage found anywhere else in that document.
+
+### What's solid
+
+- **The hard cap is structural, not "preferred."** `resolve()` returns from inside the
+  `if override_ref:` branch — `requested` is dead code on that path, not merely outranked. This
+  is the strongest form of "wins outright" the brief asked me to confirm, and the mutation test
+  (inverting the check, all four kinds failing including `guard`) is direct evidence of it.
+- **The crosswalk is documented four times, consistently.** `modelconfig.py`'s module docstring,
+  the `_KIND_TO_OVERRIDE_KEY` dict's own comment, `repository.write_model_overrides`'s docstring,
+  and `docs/QUERIES.md` §13's crosswalk note all state the identical mapping with the identical
+  `-graph.md` §8.4 citation — no drift between restatements, which matters for a mapping this
+  non-obvious (four graph property names, none of which is `stepModelOverride`).
+- **The `run["modelOverrides"]` stamp sits exactly where the plan says**, immediately after
+  `run["ws"] = ctx.ws` in `_drive`, both outside the SHA lock, both new code, both per-drive
+  (never on `self`) — one `RO_QUERY` per drive, not per resolution.
+- **Test coverage genuinely targets the hard cap's direction**, not just its presence:
+  `test_three_rungs_and_the_hard_cap_direction_for_every_kind` is parametrized across all four
+  kinds (not just `step`), and the role-fallback interaction test
+  (`test_workspace_override_naming_a_role_that_falls_back_reports_workspace_and_fallback_true`) is
+  exactly the scenario a naive `elif`-bolted-on fix would get wrong — present, passing, and
+  independently re-run by me.
+- **`repository.py`'s new methods and `docs/QUERIES.md` §13 are unusually well cross-referenced**:
+  the `write_model_overrides` docstring explicitly disclaims crosswalk knowledge ("that's
+  `modelconfig`'s concern, not this method's"), keeping the storage layer honestly ignorant of the
+  kind-naming mismatch it stores values for.
+- **`GraphWorkspaceOverrides` has no cache**, matching `-graph.md` §2.6's explicit instruction not
+  to build one speculatively — confirmed by reading the class, not just trusting its docstring's
+  claim.
+
+### Minors
+
+**Minor — no REST/admin write path for `write_model_overrides` in this diff.** The plan's own
+scope statement ("editing config through a UI/API" is explicitly out of scope, and `-graph.md`
+§2.3's rejected-alternative discussion names "a seed script or an admin query" as the intended
+write path) means this is expected, not an omission — flagging only so the gap between "the
+repository method exists" and "an operator can actually set an override without a raw Cypher
+session" is visible to whoever picks up the admin-tooling follow-on. *(Not gating; consistent
+with stated scope.)*
+
+### Open questions
+
+1. **None blocking.** The one item this gate existed specifically to adjudicate — the
+   kind↔property crosswalk — has a clear, independently-reached verdict above: correct, no
+   `graph-dba` escalation needed.
+2. **Whether/when an admin write path for `WorkspaceConfig` overrides is wanted** is a product
+   question, not a code-review finding — noted above as a minor for visibility, not routed
+   anywhere by this review.

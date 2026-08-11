@@ -456,6 +456,45 @@ def test_build_llm_judge_honours_a_guard_declared_model_override(monkeypatch):
     assert captured["model"] == "special-model"
 
 
+def test_build_llm_judge_workspace_override_beats_the_guards_own_declared_model(
+    monkeypatch,
+):
+    # K-042 L2-3 / AC-10, `guard` kind — the B-1 payoff: this is the one consumer
+    # that had no workspace carrier before Landing 1's `run["ws"]` stamp, so proving
+    # the hard cap reaches it (and beats the guard's OWN declared `model=`, not just
+    # the kind default) is what B-1 existed to make possible.
+    from falkorchat.app import _build_llm_judge
+    from falkorchat.modelconfig import ModelGateway, Overlay, ProviderCatalog
+
+    catalog = ProviderCatalog(
+        {"lmstudio": {"options": {"baseURL": "http://host:1/v1"}}}, path="opencode.json"
+    )
+    overlay = Overlay({"defaults": {"guard": "lmstudio/kind-default"}}, path="models.json")
+    models = ModelGateway(catalog, overlay)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(captured)
+    )
+
+    judge = _build_llm_judge(models)
+    verdict = judge(
+        "enough info?", understanding={}, recent_turns=[], ctx={}, step_output="",
+        model="lmstudio/guard-declared-model",
+        run={
+            "ws": "acme",
+            "modelOverrides": {
+                "agentModel": None, "guardModel": "lmstudio/workspace-model",
+                "embeddingModel": None, "responderModel": None,
+            },
+        },
+    )
+
+    assert verdict["decision"] is True
+    # the guard's own declared model was never called — the override wins outright
+    assert captured["model"] == "workspace-model"
+
+
 def test_web_ui_served_at_root_without_shadowing_rest(tmp_path, conn):
     web = tmp_path / "web"
     web.mkdir()

@@ -1681,6 +1681,93 @@ class Repository:
             for row in res.result_set
         ]
 
+    # ── K-042 Landing 2 U9 (FR-16/FR-17): workspace model overrides ─────────────
+    #
+    # A distinct topic from workflow execution above — workspace-level configuration,
+    # not a run/step-run/trace. `docs/plans/llm-provider-config-graph.md` §2.2/§2.4/
+    # §2.5/§6.1 owns the design; QUERIES.md §13 documents the same Cypher.
+
+    def write_model_overrides(
+        self, ws: str, *, agent: str | None = None, guard: str | None = None,
+        embedding: str | None = None, responder: str | None = None,
+        at: int, by: str,
+    ) -> dict[str, Any]:
+        """Write the workspace's per-kind model-override singleton (FR-16/FR-17,
+        `-graph.md` §2.2/§2.4). `docs/QUERIES.md` §13.1.
+
+        Constraint-backed `MERGE` on `WorkspaceConfig.workspaceConfigId` (the
+        `bootstrap_schema.sh` `UNIQUE` constraint — the standing "every `MERGE` must
+        be backed by a uniqueness constraint" rule) — safe under concurrent writers.
+        Each of `agent`/`guard`/`embedding`/`responder` is a `"<provider>/<model-id>"`
+        ref, a role name, or `None`. A `None` in `SET` **clears** that kind's
+        override — unlike `CREATE`, where a `None` param merely omits the key — so
+        "never set" and "explicitly cleared" land on the identical representation
+        (the property absent), which is also what §2.5's read treats as "no
+        override at that kind". **Callers must never pass `''`** — an empty string
+        is a value ("a model literally named empty"), never "no override"; that
+        representation is reserved for `None` alone (`-graph.md` §2.4's explicit
+        warning).
+
+        Property-name crosswalk against this repo's own `kind` strings is NOT this
+        method's concern — it only knows the graph's four property names
+        (`agentModelOverride`/`guardModelOverride`/`embeddingModelOverride`/
+        `responderModelOverride`). The kind↔property mapping (which is **not** a
+        1:1 name match — `-graph.md` §8.4) lives in `modelconfig._KIND_TO_OVERRIDE_KEY`,
+        the resolver's own concern.
+
+        Returns the four values as written (post-`SET`, so a caller can confirm a
+        clear actually landed).
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:WorkspaceConfig {workspaceConfigId: 'default'}) "
+            "SET c.agentModelOverride     = $agent, "
+            "    c.guardModelOverride     = $guard, "
+            "    c.embeddingModelOverride = $embedding, "
+            "    c.responderModelOverride = $responder, "
+            "    c.modelOverrideUpdatedAt = $at, "
+            "    c.modelOverrideUpdatedBy = $by "
+            "RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard, "
+            "       c.embeddingModelOverride AS embedding, "
+            "       c.responderModelOverride AS responder",
+            {
+                "agent": agent, "guard": guard, "embedding": embedding,
+                "responder": responder, "at": at, "by": by,
+            },
+        )
+        row = res.result_set[0]
+        return {"agent": row[0], "guard": row[1], "embedding": row[2], "responder": row[3]}
+
+    def read_model_overrides(self, ws: str) -> dict[str, str | None]:
+        """Read the workspace's per-kind model overrides (FR-16/FR-17, `-graph.md`
+        §2.5/§6.1). `docs/QUERIES.md` §13.2 (RO).
+
+        Returns `{agentModel, guardModel, embeddingModel, responderModel}` — the
+        exact shape `-graph.md` §6.1 names. **Zero rows (the `WorkspaceConfig` node
+        was never written) and a one-row all-`NULL` result (written, but this
+        particular kind was never set) are the SAME answer — "no override at that
+        kind" — and both are returned as the identical all-`None` dict here, one
+        code path, per §2.5's own live-verified note.** Every existing workspace is
+        the zero-row case, so this must stay the cheap, silent, non-exceptional
+        default, never an error.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:WorkspaceConfig {workspaceConfigId: 'default'}) "
+            "RETURN c.agentModelOverride     AS agentModel, "
+            "       c.guardModelOverride     AS guardModel, "
+            "       c.embeddingModelOverride AS embeddingModel, "
+            "       c.responderModelOverride AS responderModel"
+        )
+        if not res.result_set:
+            return {
+                "agentModel": None, "guardModel": None,
+                "embeddingModel": None, "responderModel": None,
+            }
+        row = res.result_set[0]
+        return {
+            "agentModel": row[0], "guardModel": row[1],
+            "embeddingModel": row[2], "responderModel": row[3],
+        }
+
     @staticmethod
     def _status_row(res) -> dict[str, Any] | None:
         """`{runId, status}` for the §12 state-move CAS queries, or `None` (zero rows)."""

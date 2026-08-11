@@ -1638,3 +1638,116 @@ confirmed live (`CALL db.indexes()` on both `ws:test` and `ws:acme` returns exac
 `[runId, status, startedAt]` for `WorkflowRun`, no `defKey`). `WorkflowRun` cardinality is tiny per
 workspace (same argument §12.9/§12.14 already accepted), so an unindexed residual `Filter` on
 `defKey`/`defVersion` costs nothing worth adding an index for.
+
+---
+
+## 13. Workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)
+
+A different topic from §12 above: this is workspace-level **configuration**, not an
+execution/trace record — a distinct topic gets its own top-level section rather than a strained
+§12.N slot. Design: `docs/plans/llm-provider-config-graph.md` §2 (schema §2.2, alternatives §2.3,
+write §2.4, read §2.5, placement/timing §2.6); resolver-facing contract §6.1/§6.3. DDL: §4 of the
+same document, `scripts/bootstrap_schema.sh` (`bootstrap_workspace()`, index-before-constraint).
+
+A singleton `(:WorkspaceConfig {workspaceConfigId: 'default'})` node per workspace, one nullable
+scalar property per consumer kind (`agentModelOverride`, `guardModelOverride`,
+`embeddingModelOverride`, `responderModelOverride`) plus two provenance fields. No edges — a
+workspace-scoped singleton, not a traversal participant, so it adds no adjacency matrix (rule 7 is
+moot here: there is nothing to filter by `workspaceId`, the graph key already *is* the scope).
+
+**Property-name crosswalk, load-bearing and easy to get backwards:** `-graph.md` §8.4 names its
+four properties after the **workflow node type** ("agent") vs. the **chat responder class**
+("responder") — which does **not** match this server's own `kind` strings 1:1.
+`agentModelOverride` governs the executor's `kind="step"` consumer (the workflow's `type:'agent'`
+node); `responderModelOverride` governs `kind="agent"` (`AgentResponder`, the `@mention`
+responder). `guardModelOverride`/`embeddingModelOverride` match their kinds by name. The crosswalk
+lives once, in code, at `server/falkorchat/modelconfig.py`'s `_KIND_TO_OVERRIDE_KEY` — this
+section documents the graph's own property names only.
+
+### 13.1 `write_model_overrides` — set/clear the per-kind overrides
+
+```cypher
+// [verified] MERGE on the singleton, backed by the WorkspaceConfig.workspaceConfigId
+// UNIQUE constraint (§4 below / bootstrap_schema.sh). GRAPH.QUERY.
+// $agent/$guard/$embedding/$responder may each be a "<provider>/<model-id>" ref, a
+// role name, or NULL (= leave unset / CLEAR an existing override at that kind).
+MERGE (c:WorkspaceConfig {workspaceConfigId: 'default'})
+SET c.agentModelOverride     = $agent,
+    c.guardModelOverride     = $guard,
+    c.embeddingModelOverride = $embedding,
+    c.responderModelOverride = $responder,
+    c.modelOverrideUpdatedAt = $at,
+    c.modelOverrideUpdatedBy = $by
+RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard,
+       c.embeddingModelOverride AS embedding, c.responderModelOverride AS responder
+```
+
+**[verified] `NULL` in `SET` clears the property** (unlike `CREATE`, where a `NULL` param merely
+omits the key) — confirmed live against a throwaway probe workspace (`ws:u9probe`, torn down after):
+a first write set `agentModelOverride`/`guardModelOverride` only (`Properties set: 5` — the two
+overrides + the two provenance fields + `workspaceConfigId` from the `MERGE`/`CREATE`; the two
+`NULL` overrides cost nothing), `keys(c)` confirmed `guardModelOverride`/`embeddingModelOverride`/
+`responderModelOverride` absent. A **second** write then set `embeddingModelOverride` and passed
+`guardModelOverride = NULL` — `Properties removed: 3`, and the follow-up read's `keys(c)` no longer
+included `guardModelOverride` at all: the previously-set kind was genuinely cleared, not merely set
+to an empty value. `MATCH (c:WorkspaceConfig) RETURN count(c)` stayed `1` across both writes — the
+constraint-backed `MERGE` never duplicates the node.
+
+**Never write `''`** — an empty string is a *value* ("a model literally named empty"), never "no
+override"; that representation is `NULL`/property-absent alone (§2.4's own explicit warning). Not
+enforced in Cypher or in `repository.write_model_overrides` — a caller discipline, same as the
+"nullable, absent by default" contract §12.2's `resolvedModel`/`modelSource`/`modelFallback`
+already rely on.
+
+### 13.2 `read_model_overrides` — the per-kind overrides, one code path for "unset"
+
+```cypher
+// [verified] Node By Index Scan | (c:WorkspaceConfig) — 0.008ms (PROFILE, below).
+// GRAPH.RO_QUERY (replica-safe).
+MATCH (c:WorkspaceConfig {workspaceConfigId: 'default'})
+RETURN c.agentModelOverride     AS agentModel,
+       c.guardModelOverride     AS guardModel,
+       c.embeddingModelOverride AS embeddingModel,
+       c.responderModelOverride AS responderModel
+```
+
+**[verified] zero rows and an all-`NULL` row are the same answer — "no override at any kind" —
+and `repository.read_model_overrides` returns the identical all-`None` dict for both, one code
+path, no branching on which case fired.** Confirmed live: before any write, the read returned zero
+rows (every existing workspace's starting state); after a write that set only two of the four
+kinds, the read returned exactly one row with the other two columns `NULL`. Either way the
+resolver's precedence (`modelconfig.ModelGateway.resolve()`, §6.1: "the graph never enforces
+precedence — precedence is entirely the resolver's, workspace → own choice → per-kind default")
+sees "no override" and falls through to the next rung.
+
+PROFILE (live, `ws:u9probe`):
+
+```
+Results | Records produced: 1, Execution time: 0.000160 ms
+    Project | Records produced: 1, Execution time: 0.002256 ms
+        Node By Index Scan | (c:WorkspaceConfig) | Records produced: 1, Execution time: 0.008047 ms
+```
+
+No label scan (rule 3) — anchors on the `WorkspaceConfig.workspaceConfigId` index (`bootstrap_schema.sh`,
+§4 below), the same index the write's `MERGE` uses to find its match.
+
+### 13.3 DDL
+
+```bash
+# ── workspace-level configuration singleton (K-042 / FR-16), bootstrap_workspace() ──
+echo "[index] WorkspaceConfig.workspaceConfigId"
+gquery "$g" "CREATE INDEX FOR (n:WorkspaceConfig) ON (n.workspaceConfigId)"
+
+# … alongside the other constraints, after all indexes:
+echo "[constraint] WorkspaceConfig unique {workspaceConfigId}"
+gconstraint "$g" UNIQUE NODE WorkspaceConfig PROPERTIES 1 workspaceConfigId
+```
+
+**[verified]** on the same probe: the index creates (`Indices created: 1`), the constraint attaches
+with no error (index-before-constraint — the standing ordering rule), and the write/read above both
+behave exactly as documented against it.
+
+**RAM (rule 6): effectively zero.** One node per workspace, six scalar properties, one range index,
+one constraint over a single row — below `GRAPH.MEMORY USAGE`'s 1 MB resolution (`-graph.md` §5).
+No new relationship type, no new adjacency matrix. `reference` and `identity` are untouched — this
+is workspace-scoped state, per DESIGN §1/§3's single-store philosophy.
