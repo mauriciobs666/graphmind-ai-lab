@@ -15,6 +15,7 @@ from redis.exceptions import ResponseError
 
 from falkorchat import config
 from falkorchat.config import CallContext
+from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.repository import MessageWriteStatus
 from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
@@ -293,10 +294,10 @@ class StubExecutor:
         return self._resume_status
 
 
-def make_service(repo, *, now=1000, executor=None):
+def make_service(repo, *, now=1000, executor=None, models=None):
     ids = (f"id{n}" for n in itertools.count(1))
     return Services(repo, clock=lambda: now, id_gen=lambda: next(ids),
-                    executor=executor)
+                    executor=executor, models=models)
 
 
 # ── create_channel / create_thread ─────────────────────────────────────────────
@@ -1163,6 +1164,200 @@ def test_publish_workflow_def_removed_transition_raises_nothing_written():
         _publish(svc, repo, transitions=fewer_transitions)
 
     assert repo.published == []
+
+
+# ── K-042 L2-4 — publish-time model-resolvability check (FR-9) ──────────────────
+#
+# `_check_models_resolvable` runs LAST inside `publish_workflow_def`, immediately
+# before the repository write and AFTER `_check_no_structural_conflict` (§2.7,
+# M-4): a candidate that both changes topology and names an unresolvable model
+# must return the K-034 409, never this check's 400. A `Services` built without a
+# gateway (`models=None`, the default) skips the pass entirely but WARNs when the
+# def declares a model (m-7) — the skip must never itself block a publish.
+
+
+class FakeModels:
+    """Minimal `ModelGateway`-shaped double: `.resolve(kind, *, requested=None,
+    ws=None, overrides=None)` records every call and raises `ModelResolutionError`
+    for any `requested` not in `known`. Also asserts `ws=`/`overrides=` are never
+    passed — publish-time validation must never see workspace state
+    (`-graph.md` §6.3), and this double is the enforcement point for that rule."""
+
+    def __init__(self, known=()):
+        self.known = set(known)
+        self.calls: list[tuple[str, str | None]] = []
+
+    def resolve(self, kind, *, requested=None, ws=None, overrides=None):
+        assert ws is None and overrides is None, (
+            "L2-4 must resolve with no ws=/overrides= — a def is published to the "
+            "global reference graph and must never see a workspace override"
+        )
+        self.calls.append((kind, requested))
+        if requested not in self.known:
+            raise ModelResolutionError(f"unknown ref {requested!r}")
+        return object()
+
+
+def _agent_step(key, *, model=None, start=False):
+    step = {"key": key, "type": "agent", "config": {"model": model} if model else {}}
+    if start:
+        step["start"] = True
+    return step
+
+
+def test_publish_workflow_def_rejects_unresolvable_step_model():
+    repo = FakeRepo()
+    models = FakeModels(known=set())
+    svc = make_service(repo, models=models)
+    steps = [
+        _agent_step("start", model="nope/thing", start=True),
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "start", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefSpecError, match=r"step 'start'.*nope/thing"):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+    assert models.calls == [("step", "nope/thing")]
+
+
+def test_publish_workflow_def_rejects_unresolvable_guard_model():
+    repo = FakeRepo()
+    models = FakeModels(known=set())
+    svc = make_service(repo, models=models)
+    steps = [
+        {"key": "start", "type": "decision", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [
+        {"from": "start", "to": "done", "on": "go", "order": 0,
+         "guard": {"kind": "llm", "text": "is it ready?", "model": "nope/thing"}},
+    ]
+
+    with pytest.raises(
+        WorkflowDefSpecError, match=r"transition 'start'->'done' on 'go'.*nope/thing"
+    ):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+    assert models.calls == [("guard", "nope/thing")]
+
+
+def test_publish_workflow_def_non_llm_guard_with_model_key_is_not_checked():
+    # a `{"kind":"cmp", ...}` (or any non-"llm") guard's stray "model" key, if one
+    # ever appeared, is not this check's concern — only `{"kind":"llm"}` guards
+    # that actually name a model are checked.
+    repo = FakeRepo()
+    models = FakeModels(known=set())
+    svc = make_service(repo, models=models)
+    steps = [
+        {"key": "start", "type": "decision", "start": True},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [
+        {"from": "start", "to": "done", "on": "go", "order": 0,
+         "guard": {"kind": "expr", "expr": "x>0", "model": "nope/thing"}},
+    ]
+
+    _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert len(repo.published) == 1
+    assert models.calls == []
+
+
+def test_publish_workflow_def_with_valid_role_succeeds():
+    repo = FakeRepo()
+    models = FakeModels(known={"nightly"})
+    svc = make_service(repo, models=models)
+    steps = [
+        _agent_step("start", model="nightly", start=True),
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "start", "to": "done", "on": "go", "order": 0}]
+
+    _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert len(repo.published) == 1
+    assert models.calls == [("step", "nightly")]
+
+
+def test_publish_workflow_def_with_no_declared_models_never_calls_gateway():
+    repo = FakeRepo()
+    models = FakeModels(known=set())
+    svc = make_service(repo, models=models)
+
+    _publish(svc, repo)  # VALID_STEPS/VALID_TRANSITIONS name no model
+
+    assert len(repo.published) == 1
+    assert models.calls == []
+
+
+def test_publish_workflow_def_topology_conflict_wins_over_model_resolution_m4():
+    """M-4 regression (§2.7): a candidate that both changes topology (K-034) and
+    names an unresolvable model must fail with the 409 (`WorkflowDefConflictError`),
+    never the 400 the model check would raise — and the model check must never even
+    run. Proven by asserting the gateway was never called, not just by the
+    exception type, so this test actually exercises the ordering."""
+    repo = FakeRepo()
+    repo.def_structures[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_keys": ["start"],
+        "steps": [
+            {"key": "start", "type": "human", "config": '{"waitsForHuman":true}'},
+            {"key": "done", "type": "message", "config": ""},
+        ],
+        "transitions": [
+            {"from": "start", "to": "done", "on": "go", "order": 0, "guard": ""},
+        ],
+    }
+    models = FakeModels(known=set())  # "nope/thing" would fail resolution too
+    svc = make_service(repo, models=models)
+    steps = [
+        {"key": "start", "type": "human", "config": {"waitsForHuman": True},
+         "start": True},
+        {"key": "done", "type": "message"},
+        _agent_step("extra", model="nope/thing"),  # new step key AND bad model
+    ]
+    transitions = [{"from": "start", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefConflictError):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+    assert models.calls == []  # the model check never ran — ordering, proven
+
+
+def test_publish_workflow_def_without_gateway_skips_check_and_warns(caplog):
+    repo = FakeRepo()
+    svc = make_service(repo, models=None)  # no gateway wired (m-7)
+    steps = [
+        _agent_step("start", model="nope/thing", start=True),
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "start", "to": "done", "on": "go", "order": 0}]
+
+    with caplog.at_level("WARNING", logger="falkorchat.services"):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    # the skip must never itself block publish — that would be worse than the
+    # silence m-7 exists to fix.
+    assert len(repo.published) == 1
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert any(
+        "onboarding" in r.getMessage() and "nope/thing" in r.getMessage()
+        for r in warnings
+    )
+
+
+def test_publish_workflow_def_without_gateway_and_no_declared_model_is_silent(caplog):
+    repo = FakeRepo()
+    svc = make_service(repo, models=None)
+
+    with caplog.at_level("WARNING", logger="falkorchat.services"):
+        _publish(svc, repo)  # VALID_STEPS/VALID_TRANSITIONS name no model
+
+    assert len(repo.published) == 1
+    assert [r for r in caplog.records if r.levelname == "WARNING"] == []
 
 
 def test_materialize_def_two_phase_reads_reference_then_writes_workspace():

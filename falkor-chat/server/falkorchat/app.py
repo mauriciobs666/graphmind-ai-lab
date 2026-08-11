@@ -168,6 +168,7 @@ def create_app(
         from falkorchat.responder import AgentResponder
 
         models = ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))
+        services.set_models(models)  # K-042 L2-4: publish-time model-resolvability check
         worker = EmbeddingWorker(repo, models=models)
         responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
         app = create_app(services, responder=responder, embed_worker=worker)
@@ -278,6 +279,12 @@ def _build_default_app() -> FastAPI:
     models = ModelGateway.from_env(
         workspace_overrides=GraphWorkspaceOverrides(repo)
     )
+    # K-042 L2-4 (FR-9): `services` was already constructed above (line 262) — this
+    # gateway is only built when `config.ENABLE_AGENT` is on, so it cannot be passed
+    # at `Services.__init__` without unconditionally reading the two config files
+    # (plan §4.1's "required only when a consumer is wired" rule). Late-bind, same
+    # pattern as `set_executor` below.
+    services.set_models(models)
     worker = EmbeddingWorker(repo, models=models)
     responder = AgentResponder(
         services, worker=worker, agent_id=config.AGENT_ID, models=models

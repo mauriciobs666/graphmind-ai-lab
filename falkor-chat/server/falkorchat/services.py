@@ -25,6 +25,7 @@ from redis.exceptions import ResponseError
 from . import config, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
+from .modelconfig import ModelConfigError, ModelResolutionError
 
 # `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
 # re-exported (redundant-alias idiom) as part of the service error surface: the
@@ -48,6 +49,8 @@ from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
 # module (pydantic only), so this import adds no cycle and no layering inversion:
 # the constant flows boundary → service, never logic service → boundary.
 from .schemas import MAX_CONFIG_LEN, MAX_DIFF_PREVIEW
+
+_log = logging.getLogger(__name__)
 
 # ── §11 workflow spec whitelists (plan §B5 / DESIGN §6.1) ───────────────────────
 WORKFLOW_KINDS: frozenset[str] = frozenset({"conversation", "process"})
@@ -396,6 +399,94 @@ def _check_no_structural_conflict(
         )
 
 
+# ── K-042 L2-4 (FR-9) — publish-time model-resolvability check ──────────────────
+# `_declared_model_refs` collects every model/role a def *names*; `_check_models_
+# resolvable` resolves each through the gateway. Split so the "what did this def
+# declare" question is independently testable/readable from "is it resolvable".
+
+
+def _declared_model_refs(
+    *, steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+) -> list[tuple[str, str, str]]:
+    """Every `(kind, locator, ref)` a spec declares — a step's `config.model` (kind
+    `'step'`, matching the gateway's per-kind vocabulary — this is the executor's
+    `type:'agent'` node resolution point, not the `agent`/chat-participant kind) and
+    an `{"kind":"llm"}` guard's `model` (kind `'guard'`). Uses `_normalize_opaque`
+    so a REST-published def (`config`/`guard` arrive as JSON strings) is covered
+    the same as a service/MCP caller passing dicts directly (M-7) — the exact gap a
+    prior defect existed to close. A step with no `config.model`, or a guard that
+    is not `{"kind":"llm"}` or names no model, declares nothing and is skipped —
+    silently, not an error.
+    """
+    declared: list[tuple[str, str, str]] = []
+    for step in steps:
+        cfg = _normalize_opaque(step.get("config"))
+        if not isinstance(cfg, dict):
+            continue
+        ref = cfg.get("model")
+        if isinstance(ref, str) and ref:
+            declared.append(("step", f"step {step['key']!r}", ref))
+    for tr in transitions:
+        guard = _normalize_opaque(tr.get("guard"))
+        if not isinstance(guard, dict) or guard.get("kind") != "llm":
+            continue
+        ref = guard.get("model")
+        if isinstance(ref, str) and ref:
+            locator = (
+                f"transition {tr['from']!r}->{tr['to']!r} on {tr.get('on')!r}"
+            )
+            declared.append(("guard", locator, ref))
+    return declared
+
+
+def _check_models_resolvable(
+    models: Any, *, steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
+    key: str, version: str,
+) -> None:
+    """FR-9: reject a publish naming an unresolvable model/role — a typo'd
+    *provider/role* is caught here, at publish time; a typo'd *model id* is only
+    caught at call time (§4.4's deliberate asymmetry). Called from
+    `publish_workflow_def` **immediately before `self._repo.publish_def(...)`,
+    after `_check_no_structural_conflict`** (§2.7 — M-4): a republish that both
+    changes topology and names an unresolvable model must return K-034's 409, not
+    this check's 400 — the 409 is the diagnostically important one (publish a new
+    version, don't fix a typo). Nothing is written by either check, so running this
+    one last costs nothing.
+
+    Resolves each declared ref with `models.resolve(kind, requested=ref)` — no
+    `ws=`/`overrides=`. This is a hard boundary (`-graph.md` §6.3): a def is
+    published into the global `reference` graph, and a workspace override is
+    per-workspace state that has no business gating a global publish.
+
+    `models` may be `None` — a `Services` built without a gateway (e.g. a
+    config-validation-only tool, or an app builder that never wires one). The
+    pass is then **skipped**, which is intentional, but if the def declares any
+    model/role, a WARNING is logged naming the def and the unchecked identifiers
+    (m-7) — so "validation didn't run" is never silently invisible to whoever
+    reads the logs. The skip must never itself block a publish.
+    """
+    declared = _declared_model_refs(steps=steps, transitions=transitions)
+    if not declared:
+        return
+
+    if models is None:
+        idents = ", ".join(f"{locator}: {ref!r}" for _, locator, ref in declared)
+        _log.warning(
+            "publish_workflow_def %r v%r: no ModelGateway wired — skipping the "
+            "FR-9 model-resolvability check for %s",
+            key, version, idents,
+        )
+        return
+
+    for kind, locator, ref in declared:
+        try:
+            models.resolve(kind, requested=ref)
+        except (ModelResolutionError, ModelConfigError) as exc:
+            raise WorkflowDefSpecError(
+                f"{locator} names an unresolvable model {ref!r}: {exc}"
+            ) from exc
+
+
 # ── FR-10 workspace readiness (web-api-coverage plan §3.1c / U2) ────────────────
 # `check_demo_readiness` is the HTTP form of `scripts/verify_workflows.sh`: same
 # expected pairs, same `diff_def_snapshot` + structure-read composition, same
@@ -442,6 +533,7 @@ class Services:
         clock: Callable[[], int] = _default_clock,
         id_gen: Callable[[], str] = _default_id,
         executor: Any = None,
+        models: Any = None,
     ) -> None:
         self._repo = repo
         self._clock = clock
@@ -453,10 +545,25 @@ class Services:
         # bound late via `set_executor` when the app wires both (avoids a
         # construction cycle). Off by default so the M1/M2 surface is untouched.
         self._executor = executor
+        # The `ModelGateway` (K-042 L2-4, FR-9) — used only by
+        # `publish_workflow_def`'s model-resolvability pass. Injected, and may be
+        # late-bound via `set_models` for the same reason `executor` is:
+        # `app._build_default_app` builds `Services(repo)` before the gateway
+        # exists (the gateway is only constructed when `config.ENABLE_AGENT` is
+        # on), so unconditionally requiring it at `Services.__init__` would force
+        # every disabled-agent deployment to read the two config files it is
+        # documented never to touch (plan §4.1). `None` here (the default, and
+        # every existing `Services(...)` construction site) means the FR-9 pass is
+        # skipped — see `_check_models_resolvable`.
+        self._models = models
 
     def set_executor(self, executor: Any) -> None:
         """Late-bind the workflow executor (Phase-4 app wiring — see `__init__`)."""
         self._executor = executor
+
+    def set_models(self, models: Any) -> None:
+        """Late-bind the `ModelGateway` (K-042 L2-4 — see `__init__`)."""
+        self._models = models
 
     def _next_ts(self) -> int:
         """Monotonic per-process ms clock — makes same-ms message ties impossible
@@ -928,6 +1035,14 @@ class Services:
                 "steps": repo_steps, "transitions": repo_transitions,
             },
             key=key, version=version, resource="workflow def",
+        )
+        # K-042 L2-4 (FR-9) — deliberately LAST, after the K-034 conflict check
+        # above and immediately before the write (§2.7, M-4): a republish that
+        # both changes topology and names an unresolvable model must return the
+        # 409 above, not this check's 400.
+        _check_models_resolvable(
+            self._models, steps=steps, transitions=transitions,
+            key=key, version=version,
         )
         return self._repo.publish_def(
             key=key, version=version, name=name, kind=kind, start_key=start_key,

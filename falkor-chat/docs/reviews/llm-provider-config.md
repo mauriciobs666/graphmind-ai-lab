@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 6
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 7
 
 ## 1. Scope & verdict
 
@@ -1644,3 +1644,160 @@ with stated scope.)*
 2. **Whether/when an admin write path for `WorkspaceConfig` overrides is wanted** is a product
    question, not a code-review finding — noted above as a minor for visibility, not routed
    anywhere by this review.
+
+## Landing 2 — U10 (L2-4) code review — 2026-08-11
+
+**Scope: this is a diff-scoped code review, not a design re-review.** Baseline is the approved
+plan (`docs/plans/llm-provider-config.md` `Version: 4`) §2.7 (the corrected publish-time
+validation placement rationale) and §7's L2-4 row (publish-time model rejection, FR-9), and
+`docs/plans/llm-provider-config-graph.md` (`Version: 3`) §6.3's second bullet (publish-time
+validation must never see workspace overrides — a hard boundary). `HEAD` is `64f387e`; U8
+(L2-1/L2-2, `17c20dc`) and U9 (L2-3, `0801b3c`) are already committed and out of scope beyond a
+scope-leakage check. Baseline against `coder`'s **uncommitted** working-tree diff, read directly
+(`git status --short` / `git diff`), nothing mutated in the diff itself.
+
+**What I executed** (mutating steps are copy-aside → edit → run → confirm → restore from copy,
+never `git checkout`/`restore`):
+
+- `git status --short` / `git diff --stat` → exactly the expected three files, +320/-3:
+  `server/falkorchat/app.py` (+7), `server/falkorchat/services.py` (+115), and
+  `server/tests/test_services.py` (+199/-3). `docs/plans/llm-provider-config-coordination.md`
+  showed as modified in the initial `git status` I ran but carried **zero diff** on inspection
+  (`git diff` against it returned nothing) — a stale index entry, not a real change; re-checked
+  and confirmed the working tree matches `HEAD` for that file. **Zero changes** to `executor.py`,
+  `modelconfig.py`, `repository.py`, `schemas.py`, `api.py`, `guards.py`, `responder.py`,
+  `embedding.py`, `tools.py`, any Cypher, `docs/QUERIES.md`, `scripts/test_queries.sh`,
+  `scripts/bootstrap_schema.sh` — confirmed by their absence from `git diff --stat`. This unit is
+  pure Python-side publish validation with zero graph reads, as scoped. **No leakage into
+  L2-5/L2-6/L2-7 territory, and nothing touching L2-1/L2-2/L2-3's already-committed files.**
+
+- **Ordering (the M-4 regression) — read directly, then mutation-tested.** Read
+  `Services.publish_workflow_def` (`services.py:985-1050`) top to bottom: `_validate_def_spec` →
+  serialize → `read_def_structure` → `_check_no_structural_conflict` (`:1031`) →
+  `_check_models_resolvable` (`:1043`, with an inline comment reiterating "deliberately LAST,
+  after the K-034 conflict check above") → `self._repo.publish_def(...)` (`:1047`). Matches §2.7
+  exactly. Read the shipped
+  `test_publish_workflow_def_topology_conflict_wins_over_model_resolution_m4`: it asserts **both**
+  `pytest.raises(WorkflowDefConflictError)` **and** `models.calls == []` with the comment "the
+  model check never ran — ordering, proven" — the second assertion is genuinely present, not
+  merely implied by the exception type.
+  **Mutation-tested myself**: copied `services.py` aside (`cp` to `/tmp`), swapped the two calls'
+  order (ran `_check_models_resolvable` before `_check_no_structural_conflict`), ran
+  `pytest -k test_publish_workflow_def_topology_conflict_wins_over_model_resolution_m4` — **it
+  failed**, exactly as predicted: `falkorchat.repository.WorkflowDefSpecError: step 'extra' names
+  an unresolvable model 'nope/thing': unknown ref 'nope/thing'` instead of the expected 409, and
+  the test's `models.calls == []` assertion is what catches it (the raise happens before that
+  assertion is even reached). Restored from the copy (`cp` back, `diff -q` confirmed byte-identical
+  to the pre-mutation file), then re-ran the full suite green.
+
+- **The workspace-override boundary.** Read the call site (`services.py:1000` inside
+  `_check_models_resolvable`): `models.resolve(kind, requested=ref)` — exactly two arguments,
+  `kind` positional and `requested` keyword, no `ws=`/`overrides=` anywhere in the call. Read the
+  shipped `FakeModels.resolve` test double
+  (`test_services.py`): it does not merely omit `ws=`/`overrides=` from its own signature's
+  defaults — its **body** opens with `assert ws is None and overrides is None, ("L2-4 must
+  resolve with no ws=/overrides= — ...")`, so a future edit that accidentally threads workspace
+  state through would fail loudly in every one of the eight new tests, not just silently pass
+  `None` through unchecked. This is the actual enforcement point for `-graph.md` §6.3's hard
+  boundary, confirmed by reading the assertion's body, not just its presence.
+
+- **REST-published defs covered (the M-7 gap).** Read `_declared_model_refs` (`services.py:403-436`):
+  both the step loop and the transition loop call `_normalize_opaque(step.get("config"))` /
+  `_normalize_opaque(tr.get("guard"))` before reading `.model` — the same existing helper
+  `_validate_def_spec` already uses for the identical dict-vs-JSON-string ambiguity
+  (`services.py:190-208`), not a bespoke `json.loads`. This is the exact mechanism M-7 needed:
+  REST's string-shaped `config`/`guard` and a service/MCP caller's dict-shaped ones both parse
+  identically before the `.model`/`.get("model")` read.
+  **Minor gap in the diff's own test coverage**, noted below — none of the eight new tests
+  actually publish a JSON-string-encoded `config`/`guard` through this specific check, so the
+  REST-shape equivalence is verified here by code reading (shared helper, already exercised
+  elsewhere) rather than by a dedicated test in this diff.
+
+- **Kind selection.** Read `_declared_model_refs`: a step's `config.model` is collected with
+  `("step", ...)` and resolved via `_check_models_resolvable`'s loop as `models.resolve("step",
+  requested=ref)`; a `{"kind":"llm"}` guard's `model` is collected with `("guard", ...)` and
+  resolved as `models.resolve("guard", requested=ref)` — not swapped, not both using one kind.
+  Read `ModelGateway.resolve()`/`_resolve_ref()`/`_workspace_override_ref()`
+  (`modelconfig.py:729-756`, `:688-706`, `:708-727`) to independently verify the claim that this
+  doesn't produce a false pass/fail either way: with `ws=None`/`overrides=None` (this call's
+  shape), `_workspace_override_ref` returns `None` unconditionally, so `resolve()` falls straight
+  to `ref = requested or default_for(kind)` — since `requested` is truthy here, the per-kind
+  default is never consulted, and `kind` only affects per-model *settings* (timeout, etc.) inside
+  `_resolve_element`, never whether a ref/role is found. Confirmed by reading the code, not
+  trusting the plan's own assertion.
+
+- **The skip-with-WARNING path (m-7).** Read
+  `test_publish_workflow_def_without_gateway_skips_check_and_warns`: asserts both the WARNING
+  (`caplog`, matching the def key and the offending ref) **and** `len(repo.published) == 1` — the
+  skip demonstrably never blocks publish. Its sibling,
+  `test_publish_workflow_def_without_gateway_and_no_declared_model_is_silent`, asserts the inverse
+  — a def with no declared model produces zero WARNING records when `models=None`. Both halves
+  tested, both pass.
+
+- **`Services`/`app.py` late-bind wiring.** Read `app.py` directly rather than trusting the
+  report: `_build_default_app` (`app.py:244`) constructs `repo = Repository(...)` then
+  `services = Services(repo)` at `:263`, **before** the `if not config.ENABLE_AGENT:` early-return
+  at `:264` — so `Services(repo)` genuinely is built unconditionally, ahead of the
+  `ENABLE_AGENT`-gated block that builds `ModelGateway.from_env(...)` at `:279-281`.
+  `services.set_models(models)` is called at `:287`, inside that gated block, immediately after
+  the gateway is constructed — confirmed by reading the actual line numbers, not the diff's own
+  comment. The second `ModelGateway.from_env(...)` site is the `create_app` docstring's
+  illustrative code block (`app.py:170`, inside a `::`-fenced example, never executed) —
+  `services.set_models(models)` appears there too (`:171`), keeping the documented usage pattern
+  consistent with the real wiring. Both sites confirmed by direct reading.
+
+- **Existing publish tests unaffected — ran the offline suite myself.**
+  `.venv/bin/python -m pytest -q` from `server/` → **853 passed, 1 deselected** (the `live`
+  marker) — exactly 8 more than U9's independently-confirmed **845 passed, 1 deselected**, matching
+  the diff's eight new tests one-for-one. No other test's pass/fail status changed.
+
+**Verdict: approve with suggestions.** The unit closes L2-4 cleanly against §2.7's corrected
+ordering and `-graph.md` §6.3's workspace-override boundary: the ordering is not just present but
+mutation-tested by me and genuinely fails when inverted; the boundary is not just respected but
+actively enforced by an assertion in the test double that fails loudly on regression; REST-shape
+coverage uses the correct shared helper; the skip-with-WARNING path is tested in both directions;
+and the `app.py` late-bind wiring claim checked out against the actual file, not just the diff's
+own comments. One non-blocking gap: no test in this diff exercises the JSON-string (REST) shape of
+`config`/`guard` through the new check specifically — see minor below.
+
+### What's solid
+
+- **The ordering fix is structural and mutation-tested, not merely commented.** Swapping the two
+  checks' call order in a copy of `services.py` makes
+  `test_publish_workflow_def_topology_conflict_wins_over_model_resolution_m4` fail with the exact
+  wrong-status-code regression M-4 exists to prevent, and the test's own `models.calls == []`
+  assertion — not just the exception type — is what catches it.
+- **The workspace-override boundary is enforced, not just observed.** `FakeModels.resolve` asserts
+  `ws is None and overrides is None` inside its own body, so any future edit that threads
+  workspace state into the publish-time check fails every one of the eight new tests loudly,
+  rather than silently accepting and ignoring the extra arguments.
+- **The skip path is tested in both directions** — declares-a-model-and-warns, and
+  declares-nothing-and-is-silent — with `len(repo.published) == 1` pinned in the warn case so the
+  skip provably never blocks a publish.
+- **`_declared_model_refs` reuses the existing `_normalize_opaque` helper**, the same one
+  `_validate_def_spec` already relies on for the identical dict-vs-JSON-string ambiguity, rather
+  than inventing a parallel parsing path that could drift from it.
+- **The `app.py` late-bind wiring claim survives independent verification.** `Services(repo)` is
+  built at `:263`, one line before the `ENABLE_AGENT` gate at `:264`; `set_models` is called at
+  both the real wiring site (`:287`) and the docstring's illustrative example (`:171`).
+
+### Minors
+
+**Minor — no test in this diff exercises the REST (JSON-string) shape of `config`/`guard` through
+`_check_models_resolvable`.** All eight new tests build `steps`/`transitions` with dict-shaped
+`config`/`guard` (the service/MCP caller's shape). The mechanism that covers the REST shape
+(`_normalize_opaque`) is verified by reading its shared, already-exercised definition, but the
+diff does not add a test that actually publishes a JSON-string-encoded `config={"model": "nope/thing"}`
+or `guard={"kind":"llm","model":"nope/thing"}` through `publish_workflow_def` and confirms the
+check still fires — which is precisely the shape the M-7 defect this check exists to close
+originally escaped through. Low risk (the helper is shared and independently tested), but a
+one-line addition (e.g. `config=json.dumps({"model": "nope/thing"})` in place of the dict in one of
+the existing rejection tests) would make the REST-coverage claim self-evident from the test suite
+rather than resting on code reading alone. *(Not gating — suggestion, not a blocker.)*
+
+### Open questions
+
+None blocking. The `docs/plans/llm-provider-config-coordination.md` diff observed in the initial
+`git status` but absent from `git diff` is noted above as a non-issue (stale index entry, working
+tree matches `HEAD`); flagging only so a future reviewer isn't puzzled by the same transient
+`git status` reading.
