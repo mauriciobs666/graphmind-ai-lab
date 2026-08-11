@@ -1277,6 +1277,56 @@ def test_advance_round_trips_input_and_output_verbatim(wf_repo):
     assert trail[0]["status"] == "done"
 
 
+# ── K-042 Landing 2 (FR-8, `-graph.md` §1.4/§1.7): resolvedModel/modelSource/
+# modelFallback ride the same atomic CREATE and the same read projection ──────────
+
+def test_advance_with_no_model_params_omits_the_three_properties(wf_repo):
+    # The default (non-LLM step) case: no branching, no extra bytes — a NULL param
+    # omits the property entirely rather than writing a literal null.
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert trail[0]["resolvedModel"] is None
+    assert trail[0]["modelSource"] is None
+    assert trail[0]["modelFallback"] is None
+
+
+def test_advance_writes_resolved_model_source_and_fallback_when_given(wf_repo):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.record_step_and_advance(
+        "test", run_id="r1", step_run_id="sr1", step_status="done",
+        started_at=1001, ended_at=1002, input="in", output="out",
+        to_step_uid=_uid("research"),
+        resolved_model="lmstudio/qwen3-4b", model_source="step", model_fallback=True,
+    )
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert trail[0]["resolvedModel"] == "lmstudio/qwen3-4b"
+    assert trail[0]["modelSource"] == "step"
+    assert trail[0]["modelFallback"] is True
+
+
+def test_advance_writes_model_fallback_false_is_never_produced_by_none_param(wf_repo):
+    # The omission contract: modelFallback is either True (a fallback fired) or
+    # absent/None (unknown/not-applicable) — never a written `false`.
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    wf_repo.record_step_and_advance(
+        "test", run_id="r1", step_run_id="sr1", step_status="done",
+        started_at=1001, ended_at=1002, input="in", output="out",
+        to_step_uid=_uid("research"),
+        resolved_model="lmstudio/qwen3-4b", model_source="default", model_fallback=None,
+    )
+
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert trail[0]["resolvedModel"] == "lmstudio/qwen3-4b"
+    assert trail[0]["modelSource"] == "default"
+    assert trail[0]["modelFallback"] is None
+
+
 # ── §12.3 / §12.4 suspend / resume CAS ───────────────────────────────────────
 
 def test_suspend_run_flips_running_to_waiting_and_denorms_thread(wf_repo):

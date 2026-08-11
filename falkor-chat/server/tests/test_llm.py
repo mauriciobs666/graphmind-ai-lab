@@ -12,7 +12,8 @@ import json
 
 import pytest
 
-from falkorchat.llm import OpenAICompatibleLLM
+from falkorchat.llm import ChatResult, FallbackClient, OpenAICompatibleLLM
+from falkorchat.transport import ProviderCallError, make_http_transport
 
 
 def test_lmstudio_llm_parses_content_and_posts_expected_payload():
@@ -634,3 +635,142 @@ def test_complete_still_omits_tools_field():
         "model": "m",
         "messages": [{"role": "user", "content": "hello"}],
     }
+
+
+# ── FallbackClient (K-042 Landing 2, FR-18) ────────────────────────────────────────
+
+
+def test_chat_result_fallback_defaults_to_none():
+    # A directly-constructed ChatResult (no FallbackClient involved) must never read
+    # as "confirmed no fallback" (False) — absent (None) is the only non-fallback value.
+    assert ChatResult(text="hi").fallback is None
+
+
+class _ScriptedClient:
+    """A minimal LLM-shaped stub: raises on `chat`/`complete` if `fail` is set, else
+    returns a scripted `ChatResult`/string. Used to drive `FallbackClient` in
+    isolation, without a real provider."""
+
+    def __init__(self, *, ref: str, fail: bool = False, text: str = "ok"):
+        self.ref = ref
+        self._fail = fail
+        self._text = text
+        self.calls = 0
+
+    def chat(self, messages, tools):
+        self.calls += 1
+        if self._fail:
+            raise ProviderCallError(f"{self.ref}: simulated failure")
+        return ChatResult(text=self._text, model=self.ref)
+
+    def complete(self, messages):
+        self.calls += 1
+        if self._fail:
+            raise ProviderCallError(f"{self.ref}: simulated failure")
+        return self._text
+
+
+def test_fallback_client_primary_answers_reports_fallback_none():
+    primary = _ScriptedClient(ref="lmstudio/a", text="from a")
+    secondary = _ScriptedClient(ref="lmstudio/b", text="from b")
+    client = FallbackClient([primary, secondary], ["lmstudio/a", "lmstudio/b"])
+
+    result = client.chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "lmstudio/a"
+    assert result.fallback is None
+    assert secondary.calls == 0  # never tried — the primary answered
+
+
+def test_fallback_client_falls_through_to_second_element_on_provider_call_error():
+    primary = _ScriptedClient(ref="lmstudio/a", fail=True)
+    secondary = _ScriptedClient(ref="lmstudio/b", text="from b")
+    client = FallbackClient([primary, secondary], ["lmstudio/a", "lmstudio/b"])
+
+    result = client.chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "lmstudio/b"
+    assert result.fallback is True
+    assert primary.calls == 1
+    assert secondary.calls == 1
+
+
+def test_fallback_client_falls_through_on_timeout_error_via_real_transport():
+    # The B-2 hole this closes: a bare TimeoutError must fall through the chain just
+    # like any other ProviderCallError — proven here through the REAL transport
+    # ladder (not a stub raising ProviderCallError directly), so the whole path from
+    # a hung socket to "the chain advanced" is exercised.
+    def timing_out_opener(req, timeout):
+        raise TimeoutError("timed out")
+
+    def ok_opener(req, timeout):
+        class _Resp:
+            def read(self_inner):
+                return json.dumps(
+                    {"choices": [{"message": {"content": "from b"}}]}
+                ).encode("utf-8")
+
+            def close(self_inner):
+                pass
+
+        return _Resp()
+
+    primary = OpenAICompatibleLLM(
+        "http://a/v1", "model-a",
+        transport=make_http_transport(
+            timeout=1.0, opener=timing_out_opener, provider="p", model="model-a",
+        ),
+        ref="lmstudio/a",
+    )
+    secondary = OpenAICompatibleLLM(
+        "http://b/v1", "model-b",
+        transport=make_http_transport(
+            timeout=1.0, opener=ok_opener, provider="p", model="model-b",
+        ),
+        ref="lmstudio/b",
+    )
+    client = FallbackClient([primary, secondary], ["lmstudio/a", "lmstudio/b"])
+
+    result = client.chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "lmstudio/b"
+    assert result.fallback is True
+
+
+def test_fallback_client_all_elements_fail_names_every_model_tried():
+    a = _ScriptedClient(ref="lmstudio/a", fail=True)
+    b = _ScriptedClient(ref="lmstudio/b", fail=True)
+    client = FallbackClient([a, b], ["lmstudio/a", "lmstudio/b"])
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        client.chat([{"role": "user", "content": "hi"}], [])
+
+    message = str(excinfo.value)
+    assert "lmstudio/a" in message
+    assert "lmstudio/b" in message
+
+
+def test_fallback_client_complete_also_falls_through():
+    primary = _ScriptedClient(ref="lmstudio/a", fail=True)
+    secondary = _ScriptedClient(ref="lmstudio/b", text="answer")
+    client = FallbackClient([primary, secondary], ["lmstudio/a", "lmstudio/b"])
+
+    assert client.complete([{"role": "user", "content": "hi"}]) == "answer"
+
+
+def test_fallback_client_has_no_mutable_last_used_state():
+    # M-5: the answering model travels on the ChatResult return value, never on any
+    # client-held state. `__slots__` makes "no such field exists" structural, not
+    # just documented — asserted both statically (the slot list) and dynamically (no
+    # `__dict__` to smuggle a field into, even across repeated calls).
+    a = _ScriptedClient(ref="lmstudio/a", text="from a")
+    b = _ScriptedClient(ref="lmstudio/b", text="from b")
+    client = FallbackClient([a, b], ["lmstudio/a", "lmstudio/b"])
+
+    assert FallbackClient.__slots__ == ("_clients", "_refs")
+    assert not hasattr(client, "__dict__")
+
+    client.chat([{"role": "user", "content": "hi"}], [])
+    a._fail = True  # now force the next call to fall back to b
+    client.chat([{"role": "user", "content": "hi"}], [])
+    assert not hasattr(client, "__dict__")

@@ -24,10 +24,14 @@ A directly-injected client (the `llm=`/`embedder=` constructor kwargs every cons
 still accepts) is sugar `__init__` wraps into a `StaticModelGateway` — dependency
 injection for tests, never a configuration route (§3, A-4).
 
-Landing-2 seams intentionally left as no-ops/stubs here (§6.1): `ws=`/`overrides=` are
-accepted and threaded through but not yet applied (`WorkspaceOverrides` resolves to a
-null port); `roles`/`agents` overlay keys are parsed and logged, not honoured; a ref
-with no `/` is rejected naming Landing 2 rather than silently misresolving.
+Landing-2 status (§6.1): `ws=`/`overrides=` are accepted and threaded through but not
+yet applied (`WorkspaceOverrides` still resolves to a null port — L2-3); the overlay's
+`agents` key is parsed and logged, not honoured (a separate, not-yet-built unit). A ref
+with **no** `/` now resolves as a **role name** (FR-7) — `Overlay.roles[name]` — to an
+ordered, settings-applied fallback chain (FR-18): on a `ProviderCallError` from one
+chain element, `FallbackClient` (`llm.py`) tries the next, naming every model tried if
+all fail. The answering model (and whether it came from a fallback) travels on the
+return value, `ChatResult.model`/`.fallback` — never on any client-held state.
 """
 
 from __future__ import annotations
@@ -156,9 +160,9 @@ class ResolvedModel:
 
 @dataclass(frozen=True)
 class Resolution:
-    """The outcome of one `resolve()` call. `chain` is a tuple — length 1 in Landing 1
-    — so FR-18's ordered fallback chain (Landing 2) is a wrapper swap, not a signature
-    change (§6.1 item 1)."""
+    """The outcome of one `resolve()` call. `chain` is a tuple — length 1 for a direct
+    `provider/model` ref, potentially multi-element for a role-backed ref (FR-7/FR-18,
+    Landing 2): an ordered, settings-applied fallback chain, ordered first-to-last-try."""
 
     kind: str
     chain: tuple[ResolvedModel, ...]
@@ -166,6 +170,18 @@ class Resolution:
     @property
     def primary(self) -> ResolvedModel:
         return self.chain[0]
+
+
+@dataclass(frozen=True)
+class RoleSpec:
+    """One `roles.<name>` overlay entry (FR-7): an ordered fallback chain of
+    `<provider>/<model-id>` refs (never another role name — rejected at load, §Overlay),
+    plus an optional role-level `timeout` fallback. Precedence for an element's timeout:
+    its own `models.<ref>.timeout` first, else this role's `timeout`, else the kind
+    default (`ModelGateway._resolve_element`)."""
+
+    models: tuple[str, ...]
+    timeout: float | None = None
 
 
 class WorkspaceOverrides(Protocol):
@@ -307,10 +323,11 @@ class ProviderCatalog:
 
 class Overlay:
     """The parsed falkor-chat overlay file: per-kind `defaults`, per-kind `timeouts`,
-    per-model `models.<ref>` settings, per-provider `providers.<id>` overrides, and
-    (reserved, Landing 2) `roles`/`agents`. Unknown top-level keys are accepted and
-    logged, never rejected (§4.1) — an admin's Landing-2-ready file never fails a
-    Landing-1 build."""
+    per-model `models.<ref>` settings, per-provider `providers.<id>` overrides, `roles`
+    (FR-7, Landing 2 — honoured), and (still reserved, Landing 2's `agents[<agentId>]`
+    resolution is a separate, not-yet-built unit) `agents`. Unknown top-level keys are
+    accepted and logged, never rejected (§4.1) — an admin's Landing-2-ready file never
+    fails a Landing-1 build."""
 
     _KNOWN_KEYS = frozenset(
         {"defaults", "timeouts", "models", "providers", "roles", "agents"}
@@ -322,12 +339,8 @@ class Overlay:
         self.timeouts = _as_dict(doc.get("timeouts"))
         self.models = _as_dict(doc.get("models"))
         self.providers = _as_dict(doc.get("providers"))
+        self.roles = _build_roles(_as_dict(doc.get("roles")), path=path)
 
-        if "roles" in doc:
-            _log.info(
-                "overlay %s declares 'roles' — reserved, parsed, not honoured until "
-                "Landing 2 (FR-7)", path,
-            )
         if "agents" in doc:
             _log.info(
                 "overlay %s declares 'agents' — reserved, parsed, not honoured until "
@@ -366,6 +379,43 @@ class Overlay:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+# ── roles: ordered fallback chains (FR-7/FR-18, §7 L2-1) ──────────────────────────
+
+def _build_roles(raw_roles: dict[str, Any], *, path: str) -> dict[str, RoleSpec]:
+    """Parse + validate the overlay's `roles` map at **load** time (not deferred to
+    first use): a role name must not contain `/` (that syntax is reserved for a direct
+    `provider/model` ref), each role must declare a non-empty `models` list, and every
+    element of that list must itself be a direct `provider/model` ref — a chain element
+    with no `/` would be another role name, and role-resolves-to-role is rejected here
+    rather than left to recurse at resolve time."""
+    roles: dict[str, RoleSpec] = {}
+    for name, raw_spec in raw_roles.items():
+        if "/" in name:
+            raise ModelConfigError(
+                f"{path}: role name {name!r} must not contain '/' — that syntax is "
+                f"reserved for a direct '<provider>/<model-id>' reference"
+            )
+        spec = _as_dict(raw_spec)
+        models = spec.get("models")
+        if not isinstance(models, list) or not models or not all(
+            isinstance(m, str) and m for m in models
+        ):
+            raise ModelConfigError(
+                f"{path}: role {name!r} must declare a non-empty 'models' list of "
+                f"'<provider>/<model-id>' strings"
+            )
+        for m in models:
+            if "/" not in m:
+                raise ModelConfigError(
+                    f"{path}: role {name!r} chain element {m!r} has no provider "
+                    f"prefix — a role cannot resolve to another role"
+                )
+        raw_timeout = spec.get("timeout")
+        timeout = float(raw_timeout) if isinstance(raw_timeout, (int, float)) else None
+        roles[name] = RoleSpec(models=tuple(models), timeout=timeout)
+    return roles
 
 
 # ── provider resolution (shared file + overlay override, merged) ──────────────────
@@ -513,13 +563,13 @@ class ModelGateway:
     def has_embedder(self) -> bool:
         return True
 
-    def _resolve_ref(self, ref: str, *, kind: str) -> ResolvedModel:
-        if "/" not in ref:
-            raise ModelConfigError(
-                f"model reference {ref!r} (kind={kind!r}) has no provider prefix — "
-                f"bare role names are not available until Landing 2 (FR-7); use "
-                f"'<provider>/<model-id>'"
-            )
+    def _resolve_element(
+        self, ref: str, *, kind: str, role_timeout: float | None = None
+    ) -> ResolvedModel:
+        """Resolve one direct `provider/model` ref to a `ResolvedModel`. `role_timeout`
+        is the role-level `timeout` fallback (§ `RoleSpec`) — used only when this
+        element has no `models.<ref>.timeout` of its own; irrelevant for a direct
+        (non-role) resolution, where it is always `None`."""
         provider_id, model_id = ref.split("/", 1)
         spec = self._providers.get(provider_id)
         if spec is None:
@@ -531,7 +581,10 @@ class ModelGateway:
         settings = dict(self._overlay.model_settings(ref))
         timeout = settings.pop("timeout", None)
         if not isinstance(timeout, (int, float)):
-            timeout = self._overlay.timeout_for_kind(kind)
+            timeout = (
+                role_timeout if role_timeout is not None
+                else self._overlay.timeout_for_kind(kind)
+            )
         dim = settings.pop("dim", None)
         settings.pop("protocol", None)  # reserved; provider-level protocol governs L1
         params = {_camel_to_snake(k): v for k, v in settings.items()}
@@ -541,6 +594,26 @@ class ModelGateway:
             api_key=spec.api_key, headers=spec.headers, protocol=spec.protocol,
             timeout=float(timeout), params=params,
             dim=dim if isinstance(dim, int) else None,
+        )
+
+    def _resolve_ref(self, ref: str, *, kind: str) -> tuple[ResolvedModel, ...]:
+        """Resolve one ref to an ordered chain. A direct `provider/model` ref (has a
+        `/`) is a length-1 chain, unchanged from Landing 1. A ref with **no** `/` is a
+        role name (FR-7): looked up in the overlay's `roles` map and expanded to its
+        ordered, settings-applied fallback chain (FR-18) — the role's own load-time
+        validation (`_build_roles`) already guarantees every chain element has a `/`,
+        so this never recurses."""
+        if "/" in ref:
+            return (self._resolve_element(ref, kind=kind),)
+        role = self._overlay.roles.get(ref)
+        if role is None:
+            raise ModelResolutionError(
+                f"unknown role {ref!r} (kind={kind!r}) — declare it in "
+                f"{self._overlay.path}'s roles map, or use '<provider>/<model-id>'"
+            )
+        return tuple(
+            self._resolve_element(m, kind=kind, role_timeout=role.timeout)
+            for m in role.models
         )
 
     def resolve(
@@ -558,15 +631,21 @@ class ModelGateway:
                 f"no model configured for kind {kind!r}: no default in "
                 f"{self._overlay.path} and none was requested"
             )
-        resolved = self._resolve_ref(ref, kind=kind)
-        return Resolution(kind=kind, chain=(resolved,))
+        chain = self._resolve_ref(ref, kind=kind)
+        return Resolution(kind=kind, chain=chain)
 
     def llm(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,
         overrides: Any = None,
     ) -> Any:
         resolution = self.resolve(kind, requested=requested, ws=ws, overrides=overrides)
-        return _build_llm(resolution.primary)
+        if len(resolution.chain) == 1:
+            return _build_llm(resolution.primary)
+        from .llm import FallbackClient
+
+        clients = tuple(_build_llm(r) for r in resolution.chain)
+        refs = tuple(r.ref for r in resolution.chain)
+        return FallbackClient(clients, refs)
 
     def embedder(
         self, kind: str, *, requested: str | None = None, ws: str | None = None,

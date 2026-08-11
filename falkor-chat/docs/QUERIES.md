@@ -1133,13 +1133,18 @@ step, and bumps `stepCount`. **All atomic (rule 4).**
 ```cypher
 // $runId; $stepRunId (server-minted); $stepStatus (e.g. 'done'); $startedAt,$endedAt;
 // $input,$output (opaque strings); $toStepUid = the destination Step's stepUid (executor
-// resolves it app-side from the firing transition = "{defKey}:{version}:{toKey}")
+// resolves it app-side from the firing transition = "{defKey}:{version}:{toKey}");
+// $resolvedModel,$modelSource,$modelFallback (K-042 Landing 2, FR-8) — NULL for a
+// non-LLM step (decision/human/wait, the offline agent-without-LLM stub)
 MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step)
 MATCH (to:Step {stepUid: $toStepUid})
 OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun)
 CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key, status: $stepStatus,
                     startedAt: $startedAt, endedAt: $endedAt,
-                    input: $input, output: $output})
+                    input: $input, output: $output,
+                    resolvedModel: $resolvedModel,
+                    modelSource: $modelSource,
+                    modelFallback: $modelFallback})
 CREATE (r)-[:HAS_STEP_RUN]->(sr)
 CREATE (sr)-[:RAN]->(cur)
 FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END | CREATE (p)-[:NEXT]->(sr))
@@ -1164,6 +1169,22 @@ one tail, two `HAS_STEP_RUN`, `RAN` edges to the correct def steps. Zero rows = 
 > act on an optionally-present node/edge without collapsing the row (quirks KB) — used here twice (NEXT
 > append; tail-edge delete). `DELETE` inside `FOREACH` and top-level `DELETE atRel` + re-`CREATE` of the
 > same edge type are both live-verified on this build.
+
+**K-042 Landing 2 (FR-8, `docs/plans/llm-provider-config-graph.md` §1.4).**
+`resolvedModel`/`modelSource`/`modelFallback` ride the same `CREATE` as three additional,
+nullable `StepRun` properties, written by the executor's `_run_agent_node`/`_record` for
+an LLM-executing step and passed as `NULL` for every non-LLM step. **[verified]** A `NULL`
+parameter **omits** the property entirely — `CREATE (s:StepRun {..., resolvedModel: $rm})`
+with `rm=NULL` reports one fewer `Properties set` than a non-null case and `keys(s)` does
+not include `resolvedModel`. One query shape serves LLM and non-LLM steps alike: no
+branching, no extra bytes on a `decision`/`human`/`wait` StepRun. `modelSource ∈
+{'workspace', 'step', 'default'}` names the precedence rung that won (`'workspace'` is
+L2-3, not yet reachable); `modelFallback` is `true` only when `resolvedModel` is not the
+first model in the chain the winning rung named, and is **omitted** (never written `false`)
+on the common, non-fallback path — same "nullable, absent by default" contract as the other
+two. No backfill: a `StepRun` written before Landing 2 reads back `NULL` for all three,
+permanently — a historical run's model is genuinely unknown, never re-derived from today's
+config.
 
 ### 12.3 `suspend_run` — guarded CAS `running → waiting`
 
@@ -1265,13 +1286,22 @@ OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr)
 WITH sr, pv WHERE pv IS NULL                    // the head = the one StepRun with no NEXT predecessor
 MATCH (sr)-[:NEXT*0..]->(x:StepRun)
 RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, x.status AS status,
-       x.startedAt AS startedAt, x.endedAt AS endedAt, x.input AS input, x.output AS output
+       x.startedAt AS startedAt, x.endedAt AS endedAt, x.input AS input, x.output AS output,
+       x.resolvedModel AS resolvedModel, x.modelSource AS modelSource,
+       x.modelFallback AS modelFallback
 ORDER BY x.startedAt
 ```
 *Anchors on `Node By Index Scan | (r:WorkflowRun)`, finds the chain head via **`OPTIONAL MATCH` +
 `IS NULL`** (never the broken `exists()`-in-pattern check — quirks KB), then walks `NEXT*0..`. Ordered by
 the executor's monotonic `startedAt` (same lock-guarded clock as messages — ties impossible at source),
 which coincides with `NEXT` order. Route via `GRAPH.RO_QUERY`.*
+
+**K-042 Landing 2 (FR-8, `docs/plans/llm-provider-config-graph.md` §1.7).** The three new
+columns project `null` for a `StepRun` that never had them written — a non-LLM step, or a
+pre-Landing-2 row; both read back identically (no backfill). This is the read surface behind
+`GET /workflow-runs/{id}/step-runs`, which serializes the returned dicts verbatim — no
+`schemas.py` pydantic model gates this route, so the three keys reach the client with no
+further code change once the repository projects them.
 
 ### 12.9 `find_waiting_run_for_thread` — the resume lookup (index-anchored)
 

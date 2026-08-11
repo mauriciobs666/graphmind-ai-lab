@@ -446,3 +446,74 @@ def test_human_handoff_signal_suspends_the_run(wf_repo):
     run = wf_repo.get_run("test", run_id="r1")
     assert run["status"] == "waiting"
     assert run["waitingThreadId"] == "t1"       # denormed for the resume lookup
+
+
+# ── K-042 Landing 2 (L2-2, FR-8): resolvedModel/modelSource/modelFallback reach the
+# graph end-to-end — `_run_agent_node` → `StepResult` → `_record` →
+# `record_step_and_advance` → `read_step_runs`, driven through a real `ex.run(...)`
+# against a live `ws:test` graph (not a fake repo double).
+
+_SOLO_STEPS = [
+    {"key": "solo", "type": "agent", "config": "{}"},
+    {"key": "end", "type": "agent", "config": "{}"},  # terminal — no outgoing
+]
+# A snapshot needs >=1 transition (`materialize_snapshot`'s `UNWIND` over an empty
+# transitions list collapses the whole write to zero rows — the empty-UNWIND
+# row-collapse quirk, `falkor-chat/AGENTS.md`), so "solo" is not itself terminal;
+# "end" (no outgoing) is where the run actually completes, OUTCOME C.
+_SOLO_TRANSITIONS = [{"from": "solo", "to": "end", "on": "done", "guard": "", "order": 0}]
+
+
+class _ModelledLLM:
+    """A minimal chat stub whose `ChatResult` carries `model`/`fallback` — the FR-8
+    carriers `OpenAICompatibleLLM`/`FallbackClient` set for real."""
+
+    def __init__(self, model: str, *, fallback: bool | None = None):
+        self._model = model
+        self._fallback = fallback
+
+    def chat(self, messages, tools):
+        from falkorchat.llm import ChatResult
+        return ChatResult(text="node answer", model=self._model, fallback=self._fallback)
+
+
+def test_resolved_model_and_fallback_reach_the_stored_step_run_end_to_end(wf_repo):
+    _start_run(wf_repo, steps=_SOLO_STEPS, transitions=_SOLO_TRANSITIONS, start_key="solo")
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = WorkflowExecutor(
+        None, wf_repo, llm=_ModelledLLM("lmstudio/qwen3-4b", fallback=True),
+        guard_judge=StubJudge([]), id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert [s["stepKey"] for s in trail] == ["solo", "end"]
+    assert trail[0]["resolvedModel"] == "lmstudio/qwen3-4b"
+    assert trail[0]["modelSource"] == "default"     # the step named no model of its own
+    assert trail[0]["modelFallback"] is True
+
+
+def test_non_llm_offline_stub_step_leaves_model_fields_absent_end_to_end(wf_repo):
+    # No `llm=` injected ⇒ StaticModelGateway.has_chat() is False ⇒ the deliberate
+    # offline-stub path (§2.3 executor.py docstring) — no chat() call is ever made,
+    # so all three fields must read back None, not some other default.
+    _start_run(wf_repo, steps=_SOLO_STEPS, transitions=_SOLO_TRANSITIONS, start_key="solo")
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(1000)
+    ex = WorkflowExecutor(
+        None, wf_repo, guard_judge=StubJudge([]),
+        id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    trail = wf_repo.read_step_runs("test", run_id="r1")
+    assert len(trail) == 2
+    for step_run in trail:
+        assert step_run["resolvedModel"] is None
+        assert step_run["modelSource"] is None
+        assert step_run["modelFallback"] is None

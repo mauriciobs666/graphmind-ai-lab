@@ -694,3 +694,106 @@ def test_two_steps_naming_different_models_resolve_to_different_clients_through_
     assert result_a.output == "answer from lmstudio/model-a"
     assert result_b.output == "answer from lmstudio/model-b"
     assert result_a.output != result_b.output
+
+
+# ── K-042 Landing 2 (L2-2, FR-8): resolvedModel/modelSource/modelFallback ─────────
+#
+# `_run_agent_node` must carry the answering model, which precedence rung named it,
+# and whether it came from a fallback, out on `StepResult` — for `_record` to forward
+# to `repo.record_step_and_advance(...)` (§8.1/§1.5 `-graph.md`: the value must ride
+# `StepResult`, the only carrier the SHA-locked `_drive_loop` call site passes to
+# `_record`). This unit's reachable outcomes are only `modelSource ∈ {'step',
+# 'default'}` — `'workspace'` is L2-3, not yet built.
+
+def test_step_naming_its_own_model_records_step_as_the_source():
+    llm = StubChatLLM([ChatResult(text="answer", model="lmstudio/qwen3")])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _config(model="lmstudio/qwen3"), {"threadId": "t1"}
+    )
+
+    assert result.resolvedModel == "lmstudio/qwen3"
+    assert result.modelSource == "step"
+    assert result.modelFallback is None
+
+
+def test_step_naming_no_model_records_default_as_the_source():
+    llm = StubChatLLM([ChatResult(text="answer", model="lmstudio/kind-default")])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}))
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert result.resolvedModel == "lmstudio/kind-default"
+    assert result.modelSource == "default"
+    assert result.modelFallback is None
+
+
+def test_fallback_flag_carried_from_chat_result_onto_step_result():
+    llm = StubChatLLM([ChatResult(text="answer", model="lmstudio/b", fallback=True)])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}))
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert result.resolvedModel == "lmstudio/b"
+    assert result.modelFallback is True
+
+
+def test_offline_stub_with_no_model_on_chat_result_leaves_all_three_fields_none():
+    # The pre-K-042 `llm=<stub>` pattern used by every other test in this file never
+    # sets `ChatResult.model` — a non-answer, not an unset default rung. Confirms the
+    # three new fields are additive/default-safe against every pre-existing test.
+    llm = StubChatLLM([ChatResult(text="here is the answer")])
+    ex = _executor(llm=llm, registry=StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA}))
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    assert result.resolvedModel is None
+    assert result.modelSource is None
+    assert result.modelFallback is None
+
+
+def test_max_iterations_exhaustion_still_carries_the_last_resolved_model():
+    # AlwaysToolLLM (never emits a final text, drives exhaustion) never sets
+    # ChatResult.model — a small local variant does, so the exhaustion path (the
+    # OTHER StepResult return statement) is covered too.
+    class _ModelledAlwaysToolLLM:
+        def __init__(self, call):
+            self._call = call
+
+        def chat(self, messages, tools):
+            return ChatResult(
+                text="thinking", tool_calls=[self._call], model="lmstudio/looping",
+            )
+
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    call = ToolCall("c1", "graphrag_retrieve", {"query": "x"})
+    ex = _executor(llm=_ModelledAlwaysToolLLM(call), registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(maxIterations=2), {"threadId": "t1"})
+
+    assert result.resolvedModel == "lmstudio/looping"
+    assert result.modelSource == "default"
+
+
+def test_last_answering_model_wins_across_iterations():
+    # -graph.md §1.6 "last answering model wins" (m-6): a node that calls the LLM more
+    # than once must report the LAST successful call's resolvedModel/modelSource/
+    # modelFallback, not the first. Iteration 1 answers on model A with no fallback
+    # (a tool call, so the loop continues); iteration 2 answers on model B WITH a
+    # fallback flag, and ends the node on a final text.
+    llm = StubChatLLM([
+        ChatResult(
+            text="thinking", tool_calls=[ToolCall("c1", "graphrag_retrieve", {"query": "x"})],
+            model="lmstudio/model-a", fallback=None,
+        ),
+        ChatResult(text="final answer", model="lmstudio/model-b", fallback=True),
+    ])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(maxIterations=4), {"threadId": "t1"})
+
+    assert result.output == "final answer"
+    assert result.resolvedModel == "lmstudio/model-b"
+    assert result.modelFallback is True

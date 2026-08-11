@@ -113,13 +113,27 @@ class StepResult:
     carried out so the transition guard can judge against the live conversation (DS §Q1
     RECENT-TURNS fallback) **without a second read** (m-C neutral). Empty for the offline
     stub path and for non-agent steps; `evaluate_guard` then degrades to the
-    `understanding`-only path."""
+    `understanding`-only path.
+
+    `resolvedModel`/`modelSource`/`modelFallback` (K-042 Landing 2, FR-8/P2-B) carry the
+    concrete model that answered this step's LLM call(s), which precedence rung named it
+    (`'step'` — the node's own `config.model`/role won; `'default'` — the kind default
+    was used, no explicit choice on the step; `'workspace'` is L2-3, not reachable yet),
+    and whether that answer came from an FR-18 fallback. All three default to `None` —
+    a non-LLM step (`decision`/`human`/`wait`, the offline `agent`-without-LLM stub)
+    never sets them. For a multi-iteration `agent` node (`_run_agent_node`), the
+    **last** successful `chat()` call's values win — overwritten together each
+    iteration, read once after the loop exits (`-graph.md` §1.6's "last answering
+    model wins" rule, extended to guard-free step nodes)."""
 
     output: str = ""
     on: str = "done"
     trace: list[tuple[str, str]] = field(default_factory=list)
     emissions: list[str] = field(default_factory=list)
     thread: list[dict[str, Any]] = field(default_factory=list)
+    resolvedModel: str | None = None
+    modelSource: str | None = None
+    modelFallback: bool | None = None
 
 
 @dataclass
@@ -579,8 +593,24 @@ class WorkflowExecutor:
         K-042 FR-4/FR-5: resolves the `step`-kind LLM client **once per node
         execution** (not per iteration) through the gateway — `config.get("model")`
         is the step's own model choice if it named one, else the kind default.
+
+        K-042 Landing 2 (FR-8, `-graph.md` §1.5/§1.6): `resolvedModel`/`modelSource`/
+        `modelFallback` are captured off each successful `chat()` call's `ChatResult`
+        and **overwritten together every iteration** — the "last answering model wins"
+        rule — so a mid-loop fallback re-engagement on a later iteration is what
+        `StepResult` reports, not the first iteration's values. `modelSource` is
+        `'step'`/`'default'` depending only on whether the step named its own model —
+        that choice is fixed for the whole node execution (the client is resolved once,
+        above), so it does not itself vary per iteration; it is still assigned inside
+        the loop, alongside `resolvedModel`/`modelFallback`, so all three are read from
+        one place after the loop exits rather than split across two code paths.
+        `resolvedModel`/`modelFallback` stay `None` when the answering client never sets
+        `ChatResult.model` (e.g. an offline test double) — a non-answer, not an unset
+        default rung.
         """
-        llm = self._models.llm("step", requested=config.get("model"), ws=ctx.ws)
+        requested_model = config.get("model")
+        model_source_rung = "step" if requested_model else "default"
+        llm = self._models.llm("step", requested=requested_model, ws=ctx.ws)
         granted = list(config.get("tools", []))
         granted_set = set(granted)
         offered = [self._tools.schema(name) for name in granted]
@@ -595,6 +625,9 @@ class WorkflowExecutor:
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
         last_text = ""
+        resolved_model: str | None = None
+        model_source: str | None = None
+        model_fallback: bool | None = None
 
         for iteration in range(1, max_iter + 1):
             trace.append(
@@ -605,6 +638,10 @@ class WorkflowExecutor:
             trace.append(("llm_response", _describe_result(result)))
             if result.text:
                 last_text = result.text
+            if result.model is not None:
+                resolved_model = result.model
+                model_source = model_source_rung
+                model_fallback = result.fallback
 
             if not result.is_tool_call:
                 if "post_message" in granted_set and result.text and not emissions:
@@ -640,7 +677,9 @@ class WorkflowExecutor:
                     )
                 return StepResult(output=result.text or "", on="done",
                                   trace=trace, emissions=emissions,
-                                  thread=thread_msgs)
+                                  thread=thread_msgs, resolvedModel=resolved_model,
+                                  modelSource=model_source,
+                                  modelFallback=model_fallback)
 
             messages.append(_assistant_turn(result))
             for call in result.tool_calls:
@@ -657,7 +696,9 @@ class WorkflowExecutor:
                           f"with best current text")
         )
         return StepResult(output=last_text, on="done", trace=trace,
-                          emissions=emissions, thread=thread_msgs)
+                          emissions=emissions, thread=thread_msgs,
+                          resolvedModel=resolved_model, modelSource=model_source,
+                          modelFallback=model_fallback)
 
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
@@ -844,13 +885,21 @@ class WorkflowExecutor:
         """Atomically record the just-run step's `StepRun` and relink `AT_STEP` to
         `to_key` (§12.2). `to_key == cur_key` is the advance-to-self record used by
         the suspend / re-loop / terminal paths (records + bumps the budget without
-        moving position). Zero rows = the run vanished mid-drive → not-found."""
+        moving position). Zero rows = the run vanished mid-drive → not-found.
+
+        K-042 Landing 2 (FR-8): forwards `result.resolvedModel`/`.modelSource`/
+        `.modelFallback` straight through to the repository — `None` for every
+        non-LLM step type (the dataclass defaults), which the query (`-graph.md`
+        §1.4) turns into an omitted property, not a written `null`."""
         started = self._clock()
         rec = self._repo.record_step_and_advance(
             ctx.ws, run_id=run["runId"], step_run_id=self._id(),
             step_status="done", started_at=started, ended_at=self._clock(),
             input=run["ctx"], output=result.output,
             to_step_uid=self._uid(run, to_key),
+            resolved_model=result.resolvedModel,
+            model_source=result.modelSource,
+            model_fallback=result.modelFallback,
         )
         if rec is None:
             raise WorkflowRunNotFoundError(run["runId"])

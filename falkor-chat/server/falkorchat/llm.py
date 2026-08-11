@@ -59,11 +59,18 @@ class ChatResult:
     Additive and default-safe (`None` for any pre-K-042 construction). Landing 2's
     `FallbackClient` reads this off the return value instead of any mutable
     per-client "last used" state (M-5) — never on `self`.
+
+    `fallback` (K-042 P2-B, `-graph.md` §1.3/§6.2) is `True` iff the answering chain
+    element's index in the resolved fallback chain (FR-18) is `> 0` — set by
+    `FallbackClient` at the same point it already resolves `model`. It is `None`
+    (never `False`) on a length-1 (non-fallback) chain or when the primary element
+    answers: the property's *presence* is the operator-visible signal, not its value.
     """
 
     text: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     model: str | None = None
+    fallback: bool | None = None
 
     @property
     def is_tool_call(self) -> bool:
@@ -166,6 +173,59 @@ class OpenAICompatibleLLM:
                 f"{self._ref} @ {self._base_url}: response missing choices: {exc}"
             ) from exc
         return replace(_parse_chat_message(message), model=self._ref)
+
+
+class FallbackClient:
+    """An ordered fallback chain of `LLM`-shaped clients (K-042 Landing 2, FR-18):
+    built by `ModelGateway.llm()` when a role (FR-7) resolves to more than one model.
+
+    `.chat(...)`/`.complete(...)` try `clients[0]`, then `clients[1]`, … on a
+    `ProviderCallError`, in order; the first success answers. When **every** element
+    fails, raises `ProviderCallError` naming every model tried — not just the last —
+    so an operator sees the whole chain that failed. A `TimeoutError` at the transport
+    layer is already converted to `ProviderCallError` by `transport.make_http_transport`
+    (the B-2 fix), so it falls through the chain exactly like any other provider error.
+
+    **No mutable "last used" state (M-5).** `_clients`/`_refs` are set once at
+    construction and never reassigned — `__slots__` makes that structural, not just
+    documented. The answering model (and whether it came from a fallback) travels on
+    the `ChatResult` return value (`.model`/`.fallback`), never on `self`.
+    """
+
+    __slots__ = ("_clients", "_refs")
+
+    def __init__(self, clients: Any, refs: Any) -> None:
+        clients = tuple(clients)
+        refs = tuple(refs)
+        if len(clients) != len(refs) or not clients:
+            raise ValueError("FallbackClient needs at least one (client, ref) pair")
+        self._clients = clients
+        self._refs = refs
+
+    def _errors_message(self, errors: list[str]) -> str:
+        return "all models in fallback chain failed: " + "; ".join(errors)
+
+    def chat(
+        self, messages: list[ChatMessage], tools: list[dict[str, Any]]
+    ) -> ChatResult:
+        errors: list[str] = []
+        for index, client in enumerate(self._clients):
+            try:
+                result = client.chat(messages, tools)
+            except ProviderCallError as exc:
+                errors.append(f"{self._refs[index]}: {exc}")
+                continue
+            return replace(result, fallback=True if index > 0 else None)
+        raise ProviderCallError(self._errors_message(errors))
+
+    def complete(self, messages: list[ChatMessage]) -> str:
+        errors: list[str] = []
+        for index, client in enumerate(self._clients):
+            try:
+                return client.complete(messages)
+            except ProviderCallError as exc:
+                errors.append(f"{self._refs[index]}: {exc}")
+        raise ProviderCallError(self._errors_message(errors))
 
 
 def _parse_chat_message(message: dict[str, Any]) -> ChatResult:

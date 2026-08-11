@@ -1301,6 +1301,8 @@ class Repository:
     def record_step_and_advance(
         self, ws: str, *, run_id: str, step_run_id: str, step_status: str,
         started_at: int, ended_at: int, input: str, output: str, to_step_uid: str,
+        resolved_model: str | None = None, model_source: str | None = None,
+        model_fallback: bool | None = None,
     ) -> dict[str, Any] | None:
         """The M4 tail-anchored atomic advance. QUERIES.md §12.2.
 
@@ -1312,6 +1314,13 @@ class Repository:
         Returns `{stepCount, stepRunId, ranStepKey}`, or `None` when the run is
         missing, already terminal (no `AT_STEP`), or `$toStepUid` is not a step in
         this workspace.
+
+        K-042 Landing 2 (FR-8, `-graph.md` §1.4): `resolved_model`/`model_source`/
+        `model_fallback` ride the same `CREATE` as three additional, nullable
+        `StepRun` properties. A `None` param **omits** the property entirely
+        ([verified] `-graph.md` §1.4/§8) — the non-LLM step types (`decision`/
+        `human`/`wait`, the offline `agent`-without-LLM stub) pass all three as
+        `None` and cost zero extra bytes, no branching needed.
         """
         res = self._graph(ws).query(
             "MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step) "
@@ -1319,7 +1328,10 @@ class Repository:
             "OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) "
             "CREATE (sr:StepRun {stepRunId: $stepRunId, stepKey: cur.key, "
             "                    status: $stepStatus, startedAt: $startedAt, "
-            "                    endedAt: $endedAt, input: $input, output: $output}) "
+            "                    endedAt: $endedAt, input: $input, output: $output, "
+            "                    resolvedModel: $resolvedModel, "
+            "                    modelSource: $modelSource, "
+            "                    modelFallback: $modelFallback}) "
             "CREATE (r)-[:HAS_STEP_RUN]->(sr) "
             "CREATE (sr)-[:RAN]->(cur) "
             "FOREACH (p  IN CASE WHEN prevSR  IS NULL THEN [] ELSE [prevSR]  END | "
@@ -1336,6 +1348,8 @@ class Repository:
                 "runId": run_id, "stepRunId": step_run_id, "stepStatus": step_status,
                 "startedAt": started_at, "endedAt": ended_at, "input": input,
                 "output": output, "toStepUid": to_step_uid,
+                "resolvedModel": resolved_model, "modelSource": model_source,
+                "modelFallback": model_fallback,
             },
         )
         if not res.result_set:
@@ -1500,6 +1514,11 @@ class Repository:
         Finds the chain head via `OPTIONAL MATCH` + `IS NULL` (never the broken
         `exists()`-in-pattern check), then walks `NEXT*0..`, ordered by the
         executor's monotonic `startedAt` (coincides with NEXT order).
+
+        K-042 Landing 2 (FR-8, `-graph.md` §1.7): projects `resolvedModel`/
+        `modelSource`/`modelFallback` alongside the existing columns — `None` for a
+        `StepRun` that never had them written (a non-LLM step, or a pre-Landing-2
+        row; both read back identically, no backfill).
         """
         res = self._graph(ws).ro_query(
             "MATCH (r:WorkflowRun {runId: $runId})-[:HAS_STEP_RUN]->(sr:StepRun) "
@@ -1508,7 +1527,10 @@ class Repository:
             "MATCH (sr)-[:NEXT*0..]->(x:StepRun) "
             "RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, "
             "       x.status AS status, x.startedAt AS startedAt, "
-            "       x.endedAt AS endedAt, x.input AS input, x.output AS output "
+            "       x.endedAt AS endedAt, x.input AS input, x.output AS output, "
+            "       x.resolvedModel AS resolvedModel, "
+            "       x.modelSource AS modelSource, "
+            "       x.modelFallback AS modelFallback "
             "ORDER BY x.startedAt",
             {"runId": run_id},
         )
@@ -1516,7 +1538,8 @@ class Repository:
             {
                 "stepRunId": row[0], "stepKey": row[1], "status": row[2],
                 "startedAt": row[3], "endedAt": row[4], "input": row[5],
-                "output": row[6],
+                "output": row[6], "resolvedModel": row[7], "modelSource": row[8],
+                "modelFallback": row[9],
             }
             for row in res.result_set
         ]

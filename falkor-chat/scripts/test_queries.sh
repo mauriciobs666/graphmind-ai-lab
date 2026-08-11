@@ -859,10 +859,14 @@ assert_contains "§12.1 WorkflowRun.runId constraint blocks duplicate" "unique c
 echo ""
 echo "▶ §12.2 record_step_and_advance (M4 tail-anchored atomic advance)"
 
-ADV='MATCH (r:WorkflowRun {runId:$runId})-[atRel:AT_STEP]->(cur:Step) MATCH (to:Step {stepUid:$toStepUid}) OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) CREATE (sr:StepRun {stepRunId:$stepRunId, stepKey:cur.key, status:$stepStatus, startedAt:$startedAt, endedAt:$endedAt, input:$input, output:$output}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:RAN]->(cur) FOREACH (p IN CASE WHEN prevSR IS NULL THEN [] ELSE [prevSR] END | CREATE (p)-[:NEXT]->(sr)) FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | DELETE lr) CREATE (r)-[:LAST_STEP_RUN]->(sr) DELETE atRel CREATE (r)-[:AT_STEP]->(to) SET r.stepCount = r.stepCount + 1 RETURN "sc="+toString(r.stepCount)+" ran="+cur.key+" sr="+sr.stepRunId AS s'
+# resolvedModel/modelSource/modelFallback (K-042 Landing 2, FR-8, -graph.md §1.4) ride the
+# same CREATE as three additional nullable properties — NULL for the pre-existing
+# advance1/advance2 calls below (a non-LLM step's shape, unchanged), real values on the
+# dedicated advance3 case further down.
+ADV='MATCH (r:WorkflowRun {runId:$runId})-[atRel:AT_STEP]->(cur:Step) MATCH (to:Step {stepUid:$toStepUid}) OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun) CREATE (sr:StepRun {stepRunId:$stepRunId, stepKey:cur.key, status:$stepStatus, startedAt:$startedAt, endedAt:$endedAt, input:$input, output:$output, resolvedModel:$resolvedModel, modelSource:$modelSource, modelFallback:$modelFallback}) CREATE (r)-[:HAS_STEP_RUN]->(sr) CREATE (sr)-[:RAN]->(cur) FOREACH (p IN CASE WHEN prevSR IS NULL THEN [] ELSE [prevSR] END | CREATE (p)-[:NEXT]->(sr)) FOREACH (lr IN CASE WHEN lastRel IS NULL THEN [] ELSE [lastRel] END | DELETE lr) CREATE (r)-[:LAST_STEP_RUN]->(sr) DELETE atRel CREATE (r)-[:AT_STEP]->(to) SET r.stepCount = r.stepCount + 1 RETURN "sc="+toString(r.stepCount)+" ran="+cur.key+" sr="+sr.stepRunId AS s'
 
 # advance 1: start ran -> move to gather (first advance: seeds the tail, no NEXT)
-out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"start out\" toStepUid=\"wf_review:1:gather\" $ADV")
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"start out\" toStepUid=\"wf_review:1:gather\" resolvedModel=null modelSource=null modelFallback=null $ADV")
 assert_contains "§12.2 advance 1: start ran, stepCount 1" "sc=1 ran=start sr=wsr1" "$out"
 
 # state after advance 1: AT_STEP moved to gather (exactly one), tail=wsr1, zero NEXT
@@ -872,7 +876,7 @@ out=$(gq "$WS" 'MATCH (:StepRun)-[n:NEXT]->(:StepRun) RETURN count(n) AS n')
 assert_contains "§12.2 after adv1: zero NEXT edges (first step-run)" "0" "$out"
 
 # advance 2: gather ran -> move to decide (tail relink: NEXT wsr1->wsr2, tail moves)
-out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"gather out\" toStepUid=\"wf_review:1:decide\" $ADV")
+out=$(gq "$WS" "CYPHER runId=\"wr1\" stepRunId=\"wsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"gather out\" toStepUid=\"wf_review:1:decide\" resolvedModel=null modelSource=null modelFallback=null $ADV")
 assert_contains "§12.2 advance 2: gather ran, stepCount 2" "sc=2 ran=gather sr=wsr2" "$out"
 
 # state after advance 2: AT_STEP=decide, NEXT wsr1->wsr2, exactly one tail=wsr2, 2 HAS_STEP_RUN
@@ -888,9 +892,45 @@ out=$(gq "$WS" 'MATCH (sr:StepRun)-[:RAN]->(s:Step) RETURN collect(sr.stepRunId+
 assert_contains "§12.2 RAN edges: wsr1 ran start" "wsr1:start" "$out"
 assert_contains "§12.2 RAN edges: wsr2 ran gather" "wsr2:gather" "$out"
 
+# resolvedModel/modelSource/modelFallback (K-042 Landing 2, FR-8) — a dedicated throwaway
+# run (never touches wr1's stepCount/AT_STEP narrative the rest of this file pins on).
+gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_model", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
+
+# advance with real resolvedModel/modelSource/modelFallback values — the LLM-executing-step shape
+out=$(gq "$WS" "CYPHER runId=\"wr_model\" stepRunId=\"wmsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" resolvedModel=\"lmstudio/qwen3-4b\" modelSource=\"step\" modelFallback=true $ADV")
+assert_contains "§12.2 wr_model advance 1: start ran, stepCount 1" "sc=1 ran=start sr=wmsr1" "$out"
+
+# a StepRun created WITH resolvedModel/modelSource/modelFallback returns them, and keys()
+# includes all three
+out=$(gq "$WS" 'MATCH (sr:StepRun {stepRunId:"wmsr1"}) RETURN "rm="+sr.resolvedModel+" ms="+sr.modelSource+" mf="+toString(sr.modelFallback) AS s, keys(sr) AS k')
+assert_contains "§12.2 wmsr1 (LLM step) carries resolvedModel/modelSource/modelFallback" "rm=lmstudio/qwen3-4b ms=step mf=true" "$out"
+assert_contains "§12.2 wmsr1 keys() includes resolvedModel" "resolvedModel" "$out"
+assert_contains "§12.2 wmsr1 keys() includes modelSource" "modelSource" "$out"
+assert_contains "§12.2 wmsr1 keys() includes modelFallback" "modelFallback" "$out"
+
+# advance 2 in the SAME throwaway run with NULL model params — the non-LLM-step shape.
+# OMITS the three properties entirely, never writes a literal null (-graph.md §1.4's
+# verified NULL-omits-property behaviour, the regression case for FalkorDB's generic
+# `CREATE {prop: NULL}` handling)
+out=$(gq "$WS" "CYPHER runId=\"wr_model\" stepRunId=\"wmsr2\" stepStatus=\"done\" startedAt=7003 endedAt=7004 input=\"{}\" output=\"o2\" toStepUid=\"wf_review:1:decide\" resolvedModel=null modelSource=null modelFallback=null $ADV")
+assert_contains "§12.2 wr_model advance 2: gather ran, stepCount 2" "sc=2 ran=gather sr=wmsr2" "$out"
+out=$(gq "$WS" 'MATCH (sr:StepRun {stepRunId:"wmsr2"}) RETURN keys(sr) AS k')
+assert_contains "§12.2 wmsr2 (NULL model params) keys() query succeeds" "k" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits resolvedModel" "resolvedModel" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits modelSource" "modelSource" "$out"
+assert_not_contains "§12.2 wmsr2 (NULL model params) keys() omits modelFallback" "modelFallback" "$out"
+
+# §12.8 read_step_runs-shaped projection surfaces the three new columns too (not just a
+# raw MATCH on the node) — checked here, before wr_model's teardown.
+out=$(gq "$WS" 'CYPHER runId="wr_model" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.resolvedModel AS resolvedModel, x.modelSource AS modelSource, x.modelFallback AS modelFallback ORDER BY x.startedAt')
+assert_contains "§12.8 wr_model read projection surfaces resolvedModel" "lmstudio/qwen3-4b" "$out"
+assert_contains "§12.8 wr_model read projection surfaces modelSource" "step" "$out"
+
+gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_model"}) OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(sr) DETACH DELETE r, sr' > /dev/null
+
 # advance is edge-anchored: index scan on WorkflowRun + Step, no label scan (profiled on a throwaway run)
 gq "$WS" 'MATCH (snap:WorkflowDefSnapshot {key:"wf_review", version:"1"})-[:START]->(start:Step) MATCH (trigger:Message {msgId:"m1"}) CREATE (r:WorkflowRun {runId:"wr_prof", defKey:"wf_review", defVersion:"1", status:"running", startedAt:7000, ctx:"{}", trace:false, maxSteps:12, stepCount:0, waitingThreadId:""}) CREATE (r)-[:OF_DEF]->(snap) CREATE (r)-[:AT_STEP]->(start) CREATE (r)-[:TRIGGERED_BY]->(trigger)' > /dev/null
-prof=$(gp "$WS" "CYPHER runId=\"wr_prof\" stepRunId=\"wpsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" $ADV")
+prof=$(gp "$WS" "CYPHER runId=\"wr_prof\" stepRunId=\"wpsr1\" stepStatus=\"done\" startedAt=7001 endedAt=7002 input=\"{}\" output=\"o\" toStepUid=\"wf_review:1:gather\" resolvedModel=null modelSource=null modelFallback=null $ADV")
 assert_index_scan "§12.2 record_step_and_advance is edge/index-anchored" "$prof"
 gq "$WS" 'MATCH (r:WorkflowRun {runId:"wr_prof"}) OPTIONAL MATCH (r)-[:HAS_STEP_RUN]->(sr) DETACH DELETE r, sr' > /dev/null
 
@@ -999,11 +1039,16 @@ echo "▶ §12.7/§12.8 get_run + read_step_runs (NEXT-ordered audit trail)"
 out=$(gq "$WS" 'CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId}) OPTIONAL MATCH (r)-[:AT_STEP]->(cur:Step) OPTIONAL MATCH (r)-[:OF_DEF]->(snap:WorkflowDefSnapshot) RETURN "status="+r.status+" sc="+toString(r.stepCount)+" at="+cur.key+" def="+snap.key AS s')
 assert_contains "§12.7 get_run returns status, stepCount, atStep, def" "status=running sc=2 at=decide def=wf_review" "$out"
 
-# 12.8 read_step_runs: NEXT-ordered (head-find via OPTIONAL MATCH + IS NULL, then walk)
-RSR='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey ORDER BY x.startedAt'
+# 12.8 read_step_runs: NEXT-ordered (head-find via OPTIONAL MATCH + IS NULL, then walk).
+# Projects resolvedModel/modelSource/modelFallback too (K-042 Landing 2, FR-8) — all
+# NULL here since wr1's advances above passed NULL model params (the non-LLM-step
+# shape); wr_model above already pins the WITH-values case through this same
+# query shape.
+RSR='CYPHER runId="wr1" MATCH (r:WorkflowRun {runId:$runId})-[:HAS_STEP_RUN]->(sr:StepRun) OPTIONAL MATCH (pv:StepRun)-[:NEXT]->(sr) WITH sr, pv WHERE pv IS NULL MATCH (sr)-[:NEXT*0..]->(x:StepRun) RETURN x.stepRunId AS stepRunId, x.stepKey AS stepKey, x.resolvedModel AS resolvedModel, x.modelSource AS modelSource, x.modelFallback AS modelFallback ORDER BY x.startedAt'
 out=$(gq "$WS" "$RSR")
 assert_contains "§12.8 read_step_runs returns wsr1 (start)" "wsr1" "$out"
 assert_contains "§12.8 read_step_runs returns wsr2 (gather)" "wsr2" "$out"
+assert_not_contains "§12.8 read_step_runs: wr1's steps carry no resolvedModel (NULL params)" "lmstudio" "$out"
 wsr1_line=$(echo "$out" | grep -n "wsr1" | head -1 | cut -d: -f1)
 wsr2_line=$(echo "$out" | grep -n "wsr2" | head -1 | cut -d: -f1)
 if [ -n "$wsr1_line" ] && [ -n "$wsr2_line" ] && [ "$wsr1_line" -lt "$wsr2_line" ]; then

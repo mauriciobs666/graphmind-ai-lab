@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 4
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 5
 
 ## 1. Scope & verdict
 
@@ -1224,3 +1224,221 @@ priority.)*
    bindings via `ws`/`overrides` threading) — my recommendation is the latter is too late, since
    Landing 2 adds real behavior at these same call sites and would then be the first thing to
    exercise them.
+
+---
+
+## Landing 2 — U8 (L2-1/L2-2) code review — 2026-08-11
+
+**Scope: this is a diff-scoped code review, not a design re-review.** Baseline is the approved
+plan (`docs/plans/llm-provider-config.md` `Version: 4`) §7's L2-1 (roles + ordered fallback
+chains, FR-7/FR-18) and L2-2 (record resolved model/source/fallback on `StepRun`, FR-8) rows,
+and `docs/plans/llm-provider-config-graph.md` (`Version: 3`) §1 (the storage/query design) and
+§6.2 (the resolver-facing write contract). Baseline against `coder`'s **uncommitted**
+working-tree diff (`git status --short` / `git diff` read directly, nothing since `d7136ec`
+committed, nothing mutated in the diff itself). I did not re-open Landing 1 or judge Landing-2
+units beyond L2-1/L2-2 on their merits — only checked for scope leakage.
+
+**What I executed** (all mutating steps below are copy-aside → edit → run → confirm → restore
+from copy, never `git checkout`/`restore`; the two live-FalkorDB steps are documented remedies
+from `falkor-chat/AGENTS.md`, applied in full):
+
+- `git status --short` / `git diff --stat` → 12 files, +958/-55: `docs/QUERIES.md`,
+  `docs/plans/llm-provider-config-coordination.md`, `scripts/test_queries.sh`,
+  `server/falkorchat/{executor,llm,modelconfig,repository}.py`, and five `server/tests/test_*.py`
+  files. **Zero changes** to `services.py`, `schemas.py`, `api.py`, `guards.py`, `responder.py`,
+  `embedding.py`, `tools.py` — confirmed by their absence from `git diff --stat`, and by grepping
+  the whole diff for `FallbackClient`/`resolved_model`/`modelSource`/`modelFallback`/
+  `record_step_and_advance`, whose only hits outside the six touched production files are
+  docstring/comment references. **No Landing-2 scope leakage found.**
+- `.venv/bin/python -m pytest -q` from `server/` → **822 passed, 1 deselected**, matching
+  `coder`'s and `teco`'s reported counts exactly.
+- Recomputed the `_drive_loop` SHA lock myself, per `docs/DESIGN.md` §6.2's documented method
+  (`awk '/^    def _drive_loop/{f=1} /^    # ── seams/{f=0} f' server/falkorchat/executor.py | sed
+  -e :a -e '/^\n*$/{$d;N;};/\n$/ba' | sha256sum | cut -c1-12`) → **`71055f756280`**, an exact
+  match to the documented lock. Read every hunk in `git diff server/falkorchat/executor.py` by
+  eye and confirmed none falls inside the locked body (lines 403–464): the touched regions are
+  `StepResult`'s docstring/fields (~line 113), `_run_agent_node` (~line 593 on), and `_record`
+  (~line 885 on) — all outside.
+- Diffed `repository.py`'s new `record_step_and_advance`/`read_step_runs` Cypher and
+  `docs/QUERIES.md` §12.2/§12.8 against `-graph.md` §1.4/§1.7 by eye: property names, `CREATE`
+  shape, `NULL`-omits-property framing, and the read projection's column order/aliasing all
+  match exactly, including the `coalesce`-free "absent means unknown, never confirmed-false"
+  framing for `modelFallback`.
+- Confirmed `GET /workflow-runs/{id}/step-runs` (`api.py:285`, `services.py:1540`) has no
+  `schemas.py`/pydantic `response_model` gating it — `services.read_workflow_step_runs` returns
+  `repo.read_step_runs(...)`'s dicts verbatim — so the two new-projected columns reach the client
+  with no code change beyond the repository, as `coder`'s report and `docs/QUERIES.md`'s new note
+  both claim.
+- **Live FalkorDB steps** (instance was up throughout): ran `./scripts/test_queries.sh` myself →
+  **295/295 passed**, independently confirming `coder`'s/`teco`'s reported count. My own prior
+  `pytest -q` run (above) had already wiped the shared `reference` graph's `WorkflowDef` nodes via
+  `conftest.py`'s `wf_repo` fixture (`verify_workflows.sh acme` failed with "not published in
+  `reference`" *before* I ran `test_queries.sh` at all — see the offline-suite finding below), and
+  `test_queries.sh` wipes both `reference` and `ws:test` again at teardown by design. Reseeded per
+  `falkor-chat/AGENTS.md`'s documented remedy: `./scripts/bootstrap_schema.sh acme` →
+  `./scripts/seed_demo.sh acme` → `./scripts/seed_workflows.sh acme` →
+  `./scripts/verify_workflows.sh acme` → **`RESULT: OK — 2 defs in sync`**. `ws:acme`/`reference`
+  left in sync.
+- **Mutation-tested two pieces of logic myself** (copy-aside via `cp` to `/tmp`, edit, run, confirm
+  red, restore via `cp` back, re-run full suite green):
+  1. **`FallbackClient.chat`'s advance-on-failure logic** (`llm.py`): changed
+     `enumerate(self._clients)` to `enumerate([self._clients[0]])`, i.e. only ever try the first
+     element. `pytest tests/test_llm.py -k fallback` went from 8 passed to **4 failed / 4 passed**
+     — `test_fallback_client_falls_through_to_second_element_on_provider_call_error`,
+     `..._falls_through_on_timeout_error_via_real_transport`,
+     `..._all_elements_fail_names_every_model_tried` (asserting `"lmstudio/b"` is in the message —
+     it no longer is, because element 2 was never tried), and
+     `..._has_no_mutable_last_used_state` all failed with the exact predicted shape (a
+     `ProviderCallError` naming only `lmstudio/a`, never reaching `lmstudio/b`). Restored; full
+     `test_llm.py` green again (822/822 suite-wide after restore).
+  2. **The "last answering model wins" overwrite** (`executor.py::_run_agent_node`): changed
+     `if result.model is not None:` to `if result.model is not None and resolved_model is None:`
+     — set-once instead of overwrite-every-iteration. `test_last_answering_model_wins_across_
+     iterations` failed exactly as predicted: `assert 'lmstudio/model-a' == 'lmstudio/model-b'`
+     (iteration 1's model recorded instead of iteration 2's, the terminal one). Restored; full
+     suite green again.
+
+**Verdict: approve with suggestions.** No blocker. `FallbackClient`, the role-parsing/validation
+work in `modelconfig.py`, and the `StepRun` trace-recording wiring in `executor.py`/
+`repository.py` are all implemented exactly as the plan and `-graph.md` specify, confirmed by
+reading, by diffing the shipped Cypher against `-graph.md` byte-for-byte, and by two independent
+mutation tests that reproduce the exact regressions the plan's own design-review history warned
+about (M-5's no-mutable-state requirement, `-graph.md` §1.6's "last wins" rule). One minor, plus
+the self-flagged `modelSource` design question below, judged and given a clear verdict as the
+brief asked.
+
+### The self-flagged `modelSource` design gap — judged
+
+**What's shipped:** `_run_agent_node` (`executor.py`) computes `model_source_rung = "step" if
+requested_model else "default"` from **local** `config.get("model")` truthiness, *before* calling
+`self._models.llm(...)`, rather than reading it off `Resolution`/`ModelGateway.resolve()`. The
+stated reason (confirmed genuine, not a rationalization): `test_executor_agent.py`'s
+`RecordingGateway` test double implements only `.llm()` and its regression-guard assertions
+(`server/tests/test_executor_agent.py:657,672,691`) pin `gateway.calls` to **exactly one** call
+per node execution; reading `modelSource` off a `Resolution` would require either a second
+`.resolve()` call (breaking that count) or changing `ModelGateway.llm()`'s return shape (a wider,
+Landing-1-touching change).
+
+**Verdict: acceptable as shipped for L2-1/L2-2's own scope, but it is a genuine forward-
+compatibility risk for L2-3, and L2-3's brief must require closing it as part of that unit, not
+merely note it.**
+
+- **Correct today.** Only `{'step', 'default'}` are reachable outcomes before L2-3 lands — no
+  workspace rung exists yet (`StepResult`'s own docstring says so: *"`'workspace'` is L2-3, not
+  reachable yet"*), and `config.get("model")` truthiness is a **complete** description of which of
+  those two rungs won, because nothing else can currently override a step's explicit choice.
+  Verified by reading: `resolve()`'s own precedence today is exactly
+  `ref = requested or self._overlay.default_for(kind)` — the same fact the executor's local
+  check observes. Every shipped test (`test_step_naming_its_own_model_records_step_as_the_
+  source`, `test_step_naming_no_model_records_default_as_the_source`) is behaviorally correct.
+- **But the shape does not survive L2-3 unchanged, and `-graph.md` §6.2 says so explicitly.**
+  Binding requirement 3 there: *"`modelSource` must be set by whichever rung actually won,
+  including `'workspace'` when a hard cap overruled an explicit step choice"* — stated as the
+  **resolver's** obligation, not the caller's. A local `config.get("model")` truthiness check has
+  **no way to observe** a workspace override: `resolve()`'s own internals are the only place that
+  will know, once L2-3 wires `run["modelOverrides"]` into `resolve()`'s precedence chain, whether
+  the workspace capped an explicit step choice. This is not a hypothetical edge case — it is
+  precisely AC-10's scenario (*"a step that explicitly names a different model runs in that
+  workspace, then the workspace's model is used, and the trace shows it — not the step's declared
+  choice"*), and a `config.get("model")`-only check reads the step's *declared* choice, never the
+  workspace's overruling one.
+- **So this is not "extend the existing shape," it is "replace it."** L2-3 cannot ship
+  `modelSource='workspace'` by adding a third `elif` to the executor's local truthiness check —
+  the executor has no workspace-override value in scope at all at that point (only `_drive` does,
+  per §4.10's carrier). The correct fix is architectural: either `ModelGateway.llm()` grows a
+  return shape that also exposes which rung won (e.g. returning `(client, resolution)`, or a
+  thin wrapper object), or `_run_agent_node` switches from `.llm()` to `.resolve()` +
+  `_build_llm(resolution.primary_or_chain)` and `RecordingGateway`/its call-count assertions are
+  updated to match the new call shape. Either is a real design decision, not a follow-on
+  refinement, and it touches the same call site L2-3 is already scoped to change.
+- **Recommendation, concrete:** U9's brief should state this explicitly as a done-condition —
+  *"replace `_run_agent_node`'s local `config.get('model')`-truthiness `modelSource` derivation
+  with a resolver-sourced value that can also report `'workspace'`"* — rather than leaving it as
+  an implicit consequence of adding the override read. Left implicit, the path of least resistance
+  for L2-3 is bolting a third local condition onto the existing truthiness check (`if
+  run.get("modelOverrides", {}).get("step"): "workspace" elif requested_model: "step" else:
+  "default"`), which would compile, pass a naively-written test, and be **wrong** the moment a
+  workspace override targets a *role* that itself falls back (the resolver knows; the executor's
+  local mirror of "did something override me" cannot see it) — silently reintroducing exactly the
+  bug class FR-17/AC-10 exist to make visible.
+
+### Minor
+
+**Minor 3 — `ModelGateway.embedder()` silently discards every fallback-chain element beyond the
+primary when a role resolves to more than one model for kind `embedding`.** `resolve()` treats
+`embedding` no differently from any other kind — a role with a multi-element `models` list
+produces a multi-element `Resolution.chain` regardless of kind (verified directly:
+`gw.resolve("embedding")` against a role `{"models": ["lmstudio/embed-a", "second/embed-b"]}`
+returns a 2-element chain). But `embedder()` (`modelconfig.py`) is `return
+_build_embedder(resolution.primary)` — only element 0 is ever used; element 1 is silently
+dropped, with no warning logged and no error raised, and no test exercises this combination
+(`grep -n "embedder" server/tests/test_modelconfig.py` has no role-chain case). `llm()`, by
+contrast, correctly wraps a multi-element chain in `FallbackClient` for every kind that reaches it
+— including `guard`, confirmed by reading `app.py:408`'s `self._models.llm("guard", ...)`.
+
+Neither the plan nor any AC requires embedding fallback (AC-9 is scoped to "a step using that
+role"; FR-18's own AC only exercises the chat path), so this is not a defect against L2-1/L2-2's
+stated scope. But it is silent, not documented, and asymmetric with the other three kinds — an
+admin who configures a role with two embedding models, expecting FR-18's stated behavior ("an
+ordered fallback chain of models... the next model in the chain is tried"), gets no error and no
+fallback, just quiet single-model behavior with the second entry doing nothing. **Suggested fix:**
+either log a WARNING once per `(kind, role)` when `embedder()` observes `len(resolution.chain) >
+1` (mirroring `StaticModelGateway.resolve()`'s existing once-per-`(kind, ref)` WARNING pattern),
+or state explicitly in `modelconfig.py`'s `Overlay`/`RoleSpec` docstring that a role's fallback
+chain is honoured for `llm()` only, never `embedder()`. *(`coder`/`architect`, low priority — not
+gating this unit.)*
+
+### What's solid
+
+- **`FallbackClient`** (`llm.py`) matches M-5/§7 L2-1 exactly: `__slots__ = ("_clients",
+  "_refs")` makes "no mutable last-used state" structural, confirmed by a mutation test that
+  reproduces the exact regression the plan's own history (M-5) exists to prevent; advances on
+  `ProviderCallError` in order; names every model tried on total failure; `.fallback` is `True`
+  iff the answering index is `> 0` and `None` — never `False` — otherwise, matching the v3
+  wording fix (`d7136ec`) exactly, checked in the code, not just against old plan text.
+- **The B-2 `TimeoutError` hole is genuinely closed, not just asserted.**
+  `test_fallback_client_falls_through_on_timeout_error_via_real_transport` drives a bare
+  `TimeoutError` through the **real** `transport.make_http_transport` ladder (not a stub raising
+  `ProviderCallError` directly), proving the whole path — hung socket → `ProviderCallError` →
+  chain advance — end to end, exactly the gap §9.2/§10.11 of the plan flags.
+- **Role parsing/validation happens at load time, not deferred to first use**, confirmed by
+  reading `_build_roles` and by direct construction: a role name containing `/`, a chain element
+  with no `/` (nested-role rejection), and an empty/missing `models` list all raise
+  `ModelConfigError` at `Overlay` construction — verified interactively, not just via the shipped
+  tests.
+- **The `-graph.md` §1.4/§1.7 Cypher matches exactly** in `repository.py`, `docs/QUERIES.md`, and
+  `scripts/test_queries.sh` — property names, `NULL`-omits-property behavior (re-verified live via
+  `keys(sr)` assertions in the new `test_queries.sh` cases), and the read projection's column
+  order/aliasing all check out, both by eye and by the independently-run 295/295 live suite.
+- **The "last answering model wins" rule** (`-graph.md` §1.6) is correctly implemented — all three
+  fields (`resolvedModel`/`modelSource`/`modelFallback`) are overwritten together every iteration
+  and read once after the loop, confirmed both by the shipped
+  `test_last_answering_model_wins_across_iterations` and by my own mutation test breaking exactly
+  that overwrite.
+- **The SHA lock holds.** `_drive_loop` is untouched; the resolved-model value rides `StepResult`
+  exactly as §1.5/§8.1 of `-graph.md` prescribe, with zero edits inside the locked body.
+- **No Landing-2 scope leakage.** `services.py` (L2-4), `schemas.py`/`api.py` (L2-2's read surface
+  needed no change, confirmed above), `guards.py`/`responder.py`/`embedding.py`/`tools.py`
+  (untouched by L2-1/L2-2 by design) are all zero-diff.
+- **The self-flagged `modelSource` deviation was reported honestly and precisely**, including the
+  exact test-double lines that constrain it (`test_executor_agent.py:622,657,672,691`) — the
+  report's own citation checked out on inspection.
+
+### Open questions
+
+1. **U9's brief should explicitly require reshaping `_run_agent_node`'s `modelSource` derivation**
+   (see the dedicated section above) as a stated done-condition, not an implicit side effect of
+   adding the workspace-override read — the risk is a locally-correct-looking `elif` that
+   silently mis-reports a role-shaped workspace override.
+2. **Minor 3 (embedding-kind role fallback silently ignored) is not gating** — no AC requires it,
+   but it's cheap to close (a WARNING) and worth folding into whichever unit next touches
+   `modelconfig.py`'s `embedder()`, most naturally U9 or U11 if either passes through that method.
+3. **The offline pytest suite wiping the shared `reference` graph is confirmed real and
+   pre-existing**, not introduced by this diff (`conftest.py` is untouched — `git status --short`
+   confirms it's absent from this diff's file list). I hit this directly: running the plain
+   `pytest -q` suite against the live FalkorDB instance left `reference` without its
+   `WorkflowDef` nodes, and `verify_workflows.sh acme` failed until I re-seeded (documented
+   remedy applied, `reference`/`ws:acme` back in sync — see "What I executed" above).
+   `falkor-chat/AGENTS.md`'s key-scripts table documents this hazard for `test_queries.sh` but not
+   for a bare `pytest -q` run against a live instance; worth a doc note at some point, per
+   `coder`'s own observation — not a finding against this diff.

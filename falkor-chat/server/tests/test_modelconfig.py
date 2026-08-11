@@ -1,4 +1,5 @@
-"""Unit tests for the model-resolution seam (K-042 Landing 1, FR-1..FR-6/FR-11..FR-15).
+"""Unit tests for the model-resolution seam (K-042 Landing 1 FR-1..FR-6/FR-11..FR-15;
+Landing 2 L2-1 roles/ordered fallback chains, FR-7/FR-18).
 
 Entirely offline: two hand-edited JSON files in, a `Resolution`/client out — no
 network, no FalkorDB. Fixtures live in `tests/data/`; the `_model_config_env`
@@ -27,6 +28,8 @@ from falkorchat.modelconfig import (
     _camel_to_snake,
     _normalize_base_url,
 )
+from falkorchat.llm import FallbackClient
+from falkorchat.transport import ProviderCallError
 
 _DATA = Path(__file__).resolve().parent / "data"
 
@@ -246,12 +249,207 @@ def test_ref_splits_on_first_slash_only(tmp_path):
     assert resolved.ref == "lmstudio/qwen/qwen3-4b-2507"
 
 
-def test_ref_with_no_slash_is_rejected_with_landing_2_message(tmp_path):
-    gw = _gateway(tmp_path, overlay_doc={"defaults": {"agent": "just-a-role-name"}})
-    with pytest.raises(ModelConfigError) as excinfo:
+def test_ref_with_no_slash_and_no_matching_role_raises_resolution_error(tmp_path):
+    # K-042 Landing 2 (FR-7): a no-'/' ref is now a role reference, not an outright
+    # rejection — but a role the overlay never declared is still unresolvable, at
+    # resolve time (ModelResolutionError), not load time.
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"agent": "not-a-declared-role"}})
+    with pytest.raises(ModelResolutionError) as excinfo:
         gw.resolve("agent")
-    message = str(excinfo.value).lower()
-    assert "landing 2" in message or "role" in message
+    assert "not-a-declared-role" in str(excinfo.value)
+
+
+# ── roles: ordered fallback chains (K-042 Landing 2, FR-7/FR-18) ──────────────────
+
+_TWO_PROVIDERS = {
+    "lmstudio": _LMSTUDIO["lmstudio"],
+    "second": {
+        "npm": "@ai-sdk/openai-compatible",
+        "options": {"baseURL": "http://second-host:5000/v1"},
+    },
+}
+
+
+def test_role_resolves_to_its_first_model_as_the_primary(tmp_path):
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/qwen/qwen3-4b-2507", "second/x"]}},
+        },
+    )
+    resolution = gw.resolve("agent")
+    assert resolution.primary.ref == "lmstudio/qwen/qwen3-4b-2507"
+    assert [r.ref for r in resolution.chain] == [
+        "lmstudio/qwen/qwen3-4b-2507", "second/x",
+    ]
+
+
+def test_direct_ref_stays_a_length_one_chain(tmp_path):
+    # Unchanged from Landing 1: a direct provider/model ref never becomes a chain.
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"agent": "lmstudio/qwen/qwen3-4b-2507"}})
+    resolution = gw.resolve("agent")
+    assert len(resolution.chain) == 1
+
+
+def test_role_remapping_changes_resolution_with_no_republish(tmp_path):
+    # AC-6: editing the overlay's role mapping (a restart, no workflow-def republish)
+    # changes which model resolves — modelled here as two independently-constructed
+    # gateways reading two different overlay files, since ModelGateway parses config
+    # once at construction (FR-15, no live reload).
+    v1_dir = tmp_path / "v1"
+    v2_dir = tmp_path / "v2"
+    v1_dir.mkdir()
+    v2_dir.mkdir()
+    gw_v1 = _gateway(
+        v1_dir,
+        providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a"]}},
+        },
+    )
+    gw_v2 = _gateway(
+        v2_dir,
+        providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["second/model-b"]}},
+        },
+    )
+    assert gw_v1.resolve("agent").primary.ref == "lmstudio/model-a"
+    assert gw_v2.resolve("agent").primary.ref == "second/model-b"
+
+
+def test_role_settings_are_applied_per_element(tmp_path):
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a", "second/model-b"]}},
+            "models": {"lmstudio/model-a": {"timeout": 7.5}},
+        },
+    )
+    resolution = gw.resolve("agent")
+    assert resolution.chain[0].timeout == 7.5
+    # element 2 has no per-model timeout — falls back to the kind default
+    assert resolution.chain[1].timeout == gw._overlay.timeout_for_kind("agent")
+
+
+def test_role_level_timeout_used_when_element_has_no_own_timeout(tmp_path):
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {
+                "cheap": {"models": ["lmstudio/model-a", "second/model-b"], "timeout": 42},
+            },
+        },
+    )
+    resolution = gw.resolve("agent")
+    assert resolution.chain[0].timeout == 42.0
+    assert resolution.chain[1].timeout == 42.0
+
+
+def test_per_model_timeout_still_wins_over_role_level_timeout(tmp_path):
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a"], "timeout": 42}},
+            "models": {"lmstudio/model-a": {"timeout": 5}},
+        },
+    )
+    assert gw.resolve("agent").primary.timeout == 5.0
+
+
+def test_role_name_must_not_contain_slash_rejected_at_load(tmp_path):
+    with pytest.raises(ModelConfigError) as excinfo:
+        _gateway(
+            tmp_path,
+            overlay_doc={"roles": {"bad/name": {"models": ["lmstudio/model-a"]}}},
+        )
+    assert "bad/name" in str(excinfo.value)
+
+
+def test_role_chain_element_without_slash_rejected_at_load_not_deferred(tmp_path):
+    # A chain element with no '/' looks like another role name — nested roles are
+    # rejected at LOAD time (Overlay construction), never deferred to first use.
+    with pytest.raises(ModelConfigError) as excinfo:
+        _gateway(
+            tmp_path,
+            overlay_doc={"roles": {"outer": {"models": ["inner-role-name"]}}},
+        )
+    message = str(excinfo.value)
+    assert "inner-role-name" in message
+    assert "outer" in message
+
+
+def test_role_with_empty_models_list_rejected_at_load(tmp_path):
+    with pytest.raises(ModelConfigError):
+        _gateway(tmp_path, overlay_doc={"roles": {"empty": {"models": []}}})
+
+
+def test_role_with_no_models_key_rejected_at_load(tmp_path):
+    with pytest.raises(ModelConfigError):
+        _gateway(tmp_path, overlay_doc={"roles": {"broken": {}}})
+
+
+def test_gateway_llm_wraps_multi_element_chain_in_fallback_client(tmp_path, monkeypatch):
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(calls)
+    )
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a", "second/model-b"]}},
+        },
+    )
+    client = gw.llm("agent")
+    assert isinstance(client, FallbackClient)
+
+
+def test_gateway_llm_direct_ref_is_not_wrapped_in_fallback_client(tmp_path, monkeypatch):
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", _fake_transport_factory(calls)
+    )
+    gw = _gateway(tmp_path, overlay_doc={"defaults": {"agent": "lmstudio/qwen/qwen3-4b-2507"}})
+    client = gw.llm("agent")
+    assert not isinstance(client, FallbackClient)
+
+
+def test_gateway_llm_role_chain_falls_back_end_to_end(tmp_path, monkeypatch):
+    # Drives ModelGateway.llm() all the way through a role → FallbackClient → two
+    # OpenAICompatibleLLM clients, proving the whole L2-1 wiring (not just
+    # FallbackClient in isolation, which test_llm.py covers).
+    calls: list[dict] = []
+
+    def fake_make_http_transport(*, timeout, headers=None, opener=None, provider="?", model="?"):
+        def _transport(url, payload):
+            calls.append({"url": url, "model": payload.get("model")})
+            if provider == "lmstudio":
+                raise ProviderCallError(f"{provider}/{model}: simulated outage")
+            return {"choices": [{"message": {"content": "from second"}}]}
+        return _transport
+
+    monkeypatch.setattr(
+        "falkorchat.transport.make_http_transport", fake_make_http_transport
+    )
+    gw = _gateway(
+        tmp_path, providers=_TWO_PROVIDERS,
+        overlay_doc={
+            "defaults": {"agent": "cheap"},
+            "roles": {"cheap": {"models": ["lmstudio/model-a", "second/model-b"]}},
+        },
+    )
+    result = gw.llm("agent").chat([{"role": "user", "content": "hi"}], [])
+
+    assert result.model == "second/model-b"
+    assert result.fallback is True
+    assert len(calls) == 2
 
 
 # ── both real sample files parse unmodified (AC-1) ─────────────────────────────────
@@ -311,18 +509,21 @@ def test_overlay_unknown_top_level_keys_accepted_and_logged(tmp_path, caplog):
     assert any("someFutureThing" in m for m in messages)
 
 
-def test_overlay_roles_and_agents_reserved_and_logged(tmp_path, caplog):
+def test_overlay_agents_still_reserved_and_logged(tmp_path, caplog):
+    # K-042 Landing 2: `roles` is now honoured (see the roles/fallback-chain section
+    # below) — only `agents` (the FR-5 `agents[<agentId>]` resolution, a separate,
+    # not-yet-built unit) remains reserved + logged.
     with caplog.at_level(logging.INFO):
         _gateway(
             tmp_path,
             overlay_doc={
-                "roles": {"cheap": {"models": ["lmstudio/x"]}},
+                "roles": {"cheap": {"models": ["lmstudio/qwen/qwen3-4b-2507"]}},
                 "agents": {"assistant": "lmstudio/qwen/qwen3-4b-2507"},
             },
         )
     messages = [r.getMessage() for r in caplog.records]
-    assert any("roles" in m and "Landing 2" in m for m in messages)
     assert any("agents" in m and "Landing 2" in m for m in messages)
+    assert not any("roles" in m and "Landing 2" in m for m in messages)
 
 
 # ── per-kind defaults (AC-5) ─────────────────────────────────────────────────────
