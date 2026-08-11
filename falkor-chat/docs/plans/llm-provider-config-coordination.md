@@ -53,7 +53,8 @@ This document, not any agent's context window, is the state of record.
 | U2v3 | `graph-dba` | `a59fa97de2ef0a511` | accepted | graph note v3 — fix stale §6.5 language | Pass 3 → approve with suggestions |
 | U3c | `analyst` | `a87afc398f73067b8` | accepted | `docs/reviews/llm-provider-config.md` (Pass 3) | approve with suggestions — design phase closed |
 | U4 | `coder` | `ab38a5f2c9766f810` | delivered (uncommitted) | Landing 1 implementation (L1-1..L1-6, plan §6) — 778 passed offline; mutation-tests on §4.9 ladder + `/v1` rule all caught; `teco` independently re-verified | `analyst` diff-scoped re-gate — **dispatched 2026-08-10** |
-| U4-gate | `analyst` | `a3b8fcad7a0088cfd` | in-flight | new section on `docs/reviews/llm-provider-config.md` (→ `Version: 4`) | — |
+| U4-gate | `analyst` | `a3b8fcad7a0088cfd` | accepted | `docs/reviews/llm-provider-config.md` `## Landing 1 code review` (`Version: 4`) | approve with suggestions — 2 majors (coverage gaps), 2 minors, no blocker |
+| U4-fix | `coder` (resumed) | `ab38a5f2c9766f810` | in-flight | close Major 1 (AC-13 tripwire test) + Major 2 (3 untested consumer bindings) | re-check by `teco` on return, no full re-gate (narrow, additive test-only fix) |
 | U5+ | TBD | — | queued | Landing 2 implementation (L2-1..L2-7, plan §7) — **prereq:** architect's one-line "None/False"→"None" fix on §5/§7-L2-1/§12, tracked below | `analyst` re-gate |
 | U6 | `qa-engineer` | — | queued | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md` (AC-1, AC-4 partial, AC-5, AC-12, AC-13; AC-2/AC-3 structural per stakeholder decision 3) | — |
 | U7 | `qa-engineer` | — | queued | Landing 2 acceptance pass — remaining ACs | — |
@@ -256,6 +257,40 @@ credits available but not unlimited): the `analyst` diff-scoped re-gate itself, 
 `qa-engineer`'s acceptance pass. `compose.yaml`/`Dockerfile` remain unverified against a real
 `docker build`/`docker compose` (no Docker in this environment either) — still an open item for
 whichever step next has Docker access.
+
+## Diff-scoped gate (`U4-gate`) and fix-forward (`U4-fix`) — 2026-08-10/11
+
+`analyst` (`a3b8fcad7a0088cfd`) gated the actual Landing 1 diff (not just the design docs):
+**approve with suggestions, no blocker.** Mutation-tested the §4.9 ladder and the §4.3
+strip-then-normalize rule itself (copy-aside, never `git checkout`), both reproduced the exact
+regressions the design-phase review had already found; suite reproduced at 778 passed, twice
+(normal + empty-`HOME`); unfiltered legacy-env-var grep re-confirmed clean; both real config
+fixtures confirmed byte-identical to the actual files on disk. `teco` independently re-verified
+both majors before acting on them (`git diff --stat` on the three named test files → zero
+changes; `grep` for `assert_no_legacy_model_env`/`LEGACY_MODEL_ENV_VARS` under `server/tests/` →
+no hits). **2 majors** (both test-coverage gaps against the plan's own named done-conditions, not
+behavior defects — reviewer hand-verified correctness for both): AC-13 tripwire untested; three
+of five rewired consumer bindings (`test_executor_agent.py`, `test_responder.py`,
+`test_tools.py`) untouched despite being named in plan §5's file list, one of them (the
+`GraphragRetrieveTool`/M-3 binding) an explicit L1-4 done-condition. 2 minors (latent double-
+resolve in `EmbeddingWorker`; an `.env.example` portability note), no Landing-2 scope leakage.
+
+Stakeholder decision: fix now, same delegate. Sent via `SendMessage` to `coder`
+(`ab38a5f2c9766f810`, resumed from its own transcript) — scope narrowed to exactly the two
+majors' missing tests, explicitly no new scope, diff stays uncommitted. In flight.
+
+**Stakeholder directive, standing for the rest of this feature: "please never again create a
+landing so big."** Landing 1 (one `coder` dispatch covering plan §6's L1-1..L1-6, ~10 files, six
+sequenced steps) cost ~830k subagent tokens across its two dispatches (458k initial + the
+in-flight fix-forward), separate from the ~370k it had already burned mid-run before that count
+was even taken. **Binding for Landing 2's dispatch:** do not repeat a single-mega-unit dispatch
+against plan §7's L2-1..L2-7 table. Split by the plan's own step boundaries — one `coder`/
+`tdd-engineer` unit per step or small adjacent-step cluster (e.g. L2-1+L2-2 together since
+`modelFallback` spans both; L2-3 alone; L2-4 alone; L2-5+L2-6 together; L2-7 docs-only) — sequenced
+as dependent dispatches (chained `SendMessage` continuations or fresh `Agent` calls handed the
+prior step's diff state), not one brief covering the whole landing. See
+`claude/teco/kaizen/inbox.md`'s 2026-08-10 entry, now confirmed by the stakeholder rather than
+just a `teco`-side observation.
 
 ## Log
 
