@@ -468,6 +468,15 @@ more than one reader's eyes.
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
 
+## `-graph.md` §3.2 fix delivered and committed — 2026-08-11
+
+`graph-dba` (`a48838941fcb2c773`) corrected §3.2's `User` edge-case row (zero rows, not "one row,
+`dim = NULL`"), re-verifying live against `ws:test` independently (not just re-stating the finding)
+and adding a footnote naming the actual precondition for the genuine `NULL`-row shape. Document
+bumped to `Version: 4`. `teco` independently reproduced the same live query before accepting —
+zero rows, exact match. No behavior/code change (both shapes already collapse to `None` at the
+repository layer). **Committed `5b28c65`.**
+
 ## Resumed (2026-08-11) — pause lifted, residual items folded in
 
 Stakeholder: "resume, pause is lifted... keep full rigor for the remaining units, so no shortcuts
