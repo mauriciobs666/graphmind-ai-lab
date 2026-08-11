@@ -26,6 +26,7 @@ from . import config, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 from .modelconfig import ModelConfigError, ModelResolutionError
+from .transport import ProviderCallError
 
 # `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
 # re-exported (redundant-alias idiom) as part of the service error surface: the
@@ -1579,12 +1580,23 @@ class Services:
         and break exactly the audit property DESIGN §6.3 exists to prove.
 
         Two deliberate limits:
-          * Only `NotImplementedError` (the typed-handler seam) and
-            `WorkflowConfigError` (a malformed guard reaching evaluation) are caught,
-            and only out of the drive call. Faults raised *before* anything is
-            written keep their own status codes. **Budget exhaustion is not here and
-            must never be** — `_fail_budget` *returns* `"failed"` through the normal
-            path and raises nothing (plan m-11).
+          * Only faults the executor's M-1 net has **already `fail_run`-stamped
+            before re-raising** are caught here, and only out of the drive call
+            itself. Four types qualify today: `NotImplementedError` (the
+            typed-handler seam), `WorkflowConfigError` (a malformed guard reaching
+            evaluation), `ModelResolutionError` (a step/guard/agent/embedding ref or
+            role that does not resolve at drive time — e.g. a role removed from the
+            overlay after the def that names it was published, FR-15's no-reload-path
+            scenario, D-2) and `ProviderCallError` (a resolved model — or an
+            exhausted `FallbackClient` fallback chain — that fails at call time,
+            AC-8's "fails at call time" half, distinct from `ModelResolutionError`'s
+            "never resolves" half; D-2). Faults raised *before* anything is written
+            keep their own status codes. **Budget exhaustion is not here and must
+            never be** — `_fail_budget` *returns* `"failed"` through the normal path
+            and raises nothing (plan m-11). `ModelConfigError` (a malformed config
+            file — bad overlay JSON, a bad `baseURL`) is deliberately **not** here:
+            config is parsed once at `ModelGateway.from_env()` construction, before
+            any run starts, so it has no drive-time occurrence to catch.
           * The reported status comes from that re-read, never a guess. If the graph
             says the run is still `running` (or the run has vanished), the fault
             escaped before `fail_run` landed — re-raise, because a 500 is a better
@@ -1600,7 +1612,10 @@ class Services:
         """
         try:
             return drive(), None, None
-        except (NotImplementedError, WorkflowConfigError) as exc:
+        except (
+            NotImplementedError, WorkflowConfigError,
+            ModelResolutionError, ProviderCallError,
+        ) as exc:
             logging.getLogger(__name__).exception(
                 "workflow drive fault for run %s", run_id
             )

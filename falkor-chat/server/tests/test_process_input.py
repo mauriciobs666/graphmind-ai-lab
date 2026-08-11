@@ -24,12 +24,14 @@ from fastapi.testclient import TestClient
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
+from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.services import (
     Services,
     WorkflowInputRejectedError,
     WorkflowRunNotFoundError,
     WorkflowRunNotWaitingError,
 )
+from falkorchat.transport import ProviderCallError
 
 CTX = CallContext(ws="test", actor="u1")
 
@@ -72,14 +74,17 @@ APPROVAL_TRANSITIONS = [
 ]
 
 
-def _make_services(repo):
-    """Real service + real engine, deterministic ids/clocks, no LLM."""
+def _make_services(repo, *, llm=None, models=None):
+    """Real service + real engine, deterministic ids/clocks. `llm`/`models` default to
+    None (no LLM, the offline stub path — `executor._execute_step`'s F-3 affordance)
+    — pass one to exercise a drive-time model-resolution/call fault (D-2's
+    `ModelResolutionError`/`ProviderCallError` REST-envelope tests, below)."""
     ids = (f"id{n}" for n in itertools.count(1))
     services = Services(repo, clock=lambda: 1000, id_gen=lambda: next(ids))
     sr_ids = (f"sr{n}" for n in itertools.count(1))
     sr_clock = itertools.count(2000)
     services.set_executor(WorkflowExecutor(
-        services, repo, llm=None, guard_judge=None,
+        services, repo, llm=llm, guard_judge=None, models=models,
         id_gen=lambda: next(sr_ids), clock=lambda: next(sr_clock),
     ))
     return services
@@ -639,6 +644,145 @@ def test_budget_exhaustion_reaches_the_same_envelope_without_raising(svc, wf_rep
     assert out["status"] == "failed"
     assert "error" not in out
     assert wf_repo.get_run("test", run_id=out["runId"])["status"] == "failed"
+
+
+# ── D-2 — the two other drive-time LLM fault classes must ALSO reach the envelope ──
+#
+# `_drive_or_fault`'s catch tuple only named `NotImplementedError`/`WorkflowConfigError`
+# (the two cases proven above). K-042 Landing 2 introduced two more drive-time fault
+# classes that reach the exact same M-1 net (`executor._drive`'s bare `except
+# Exception`) and get `fail_run`-stamped identically, but escaped this REST-layer
+# translation uncaught — a raw 500 instead of the documented envelope (D-2, found by
+# the K-042 M4 Landing-2 QA pass): `ModelResolutionError` (a ref/role that never
+# resolves) and `ProviderCallError` (a resolved model — or an exhausted `FallbackClient`
+# chain — that fails at call time; AC-8's "fails at call time" half, distinct from
+# `ModelResolutionError`'s "never resolves" half). Same one-test-per-call-site density
+# as the `NotImplementedError` cases above.
+
+AGENT_STEPS = [
+    {"key": "approval", "type": "human", "config": APPROVAL_CONFIG},
+    {"key": "call", "type": "agent", "config": "{}"},
+    {"key": "granted", "type": "decision", "config": "{}"},
+]
+AGENT_TRANSITIONS = [
+    {"from": "approval", "to": "call", "on": "approved", "guard": GUARD_APPROVED,
+     "order": 0},
+    {"from": "call", "to": "granted", "on": "done", "guard": "", "order": 0},
+]
+# A def whose START is the agent step — the fault happens on the first drive.
+AGENT_START_STEPS = [
+    {"key": "call", "type": "agent", "config": "{}"},
+    {"key": "granted", "type": "decision", "config": "{}"},
+]
+
+
+class _UnresolvableModelGateway:
+    """A `ModelGateway`-shaped double whose `.resolve_llm()` raises
+    `ModelResolutionError` — the REST/service-altitude counterpart to
+    `test_executor.py`'s `_UnresolvableGateway` (which pins that the executor's own
+    M-1 net catches this type; this proves the layer above, `_drive_or_fault`, now
+    translates it into the documented envelope instead of letting it escape as a
+    500). `has_chat() -> True` so `_execute_step` takes the real agent-node path
+    (F-3's offline stub only fires when there is no chat capability at all)."""
+
+    def has_chat(self):
+        return True
+
+    def resolve_llm(self, kind, *, requested=None, ws=None, overrides=None):
+        raise ModelResolutionError(
+            f"unknown role 'vanishRole' (kind={kind!r}) — declare it in "
+            f".../models-v2.json's roles map, or use '<provider>/<model-id>'"
+        )
+
+    def llm(self, kind, *, requested=None, ws=None, overrides=None):
+        raise AssertionError("llm() should never be reached — resolve_llm() failed first")
+
+    def embedder(self, kind, *, requested=None, ws=None, overrides=None):
+        raise AssertionError("embedder() should never be called by an agent step")
+
+
+class _AlwaysFailingLLM:
+    """A `.chat()` that always raises `ProviderCallError` — the call-time drive fault
+    class (a resolved model, or an exhausted `FallbackClient` chain, failing at
+    call time), as opposed to `ModelResolutionError`'s never-resolves fault."""
+
+    def chat(self, messages, tools):
+        raise ProviderCallError(
+            "lmstudio/qwen3-4b @ http://127.0.0.1:1234/v1/chat/completions: "
+            "connection failed: [Errno 111] Connection refused"
+        )
+
+
+def _client_with(repo, **kw):
+    services = _make_services(repo, **kw)
+    return TestClient(create_app(services, context_provider=lambda: CTX,
+                                 mount_mcp=False))
+
+
+def test_model_resolution_fault_on_start_returns_201_with_a_failed_envelope(wf_repo):
+    _materialize(wf_repo, steps=AGENT_START_STEPS,
+                 transitions=[{"from": "call", "to": "granted", "on": "done",
+                               "guard": "", "order": 0}],
+                 start_key="call")
+    client = _client_with(wf_repo, models=_UnresolvableModelGateway())
+
+    r = client.post("/workflow-runs",
+                    json={"defKey": "access-request", "version": "1"})
+
+    assert r.status_code == 201          # the run resource WAS created
+    assert r.json()["status"] == "failed"
+    assert "ModelResolutionError" in r.json()["error"]
+    assert wf_repo.get_run("test", run_id=r.json()["runId"])["status"] == "failed"
+
+
+def test_model_resolution_fault_on_input_returns_200_with_a_failed_envelope(wf_repo):
+    _materialize(wf_repo, steps=AGENT_STEPS, transitions=AGENT_TRANSITIONS,
+                 start_key="approval")
+    client = _client_with(wf_repo, models=_UnresolvableModelGateway())
+    run_id = client.post("/workflow-runs",
+                         json={"defKey": "access-request", "version": "1"}
+                         ).json()["runId"]
+
+    r = client.post(f"/workflow-runs/{run_id}/input",
+                    json={"input": {"decision": "approve"}})
+
+    assert r.status_code == 200          # NOT 500 — the run is correctly terminal
+    assert r.json()["status"] == "failed"
+    assert "ModelResolutionError" in r.json()["error"]
+    assert wf_repo.get_run("test", run_id=run_id)["status"] == "failed"
+
+
+def test_provider_call_fault_on_start_returns_201_with_a_failed_envelope(wf_repo):
+    _materialize(wf_repo, steps=AGENT_START_STEPS,
+                 transitions=[{"from": "call", "to": "granted", "on": "done",
+                               "guard": "", "order": 0}],
+                 start_key="call")
+    client = _client_with(wf_repo, llm=_AlwaysFailingLLM())
+
+    r = client.post("/workflow-runs",
+                    json={"defKey": "access-request", "version": "1"})
+
+    assert r.status_code == 201
+    assert r.json()["status"] == "failed"
+    assert "ProviderCallError" in r.json()["error"]
+    assert wf_repo.get_run("test", run_id=r.json()["runId"])["status"] == "failed"
+
+
+def test_provider_call_fault_on_input_returns_200_with_a_failed_envelope(wf_repo):
+    _materialize(wf_repo, steps=AGENT_STEPS, transitions=AGENT_TRANSITIONS,
+                 start_key="approval")
+    client = _client_with(wf_repo, llm=_AlwaysFailingLLM())
+    run_id = client.post("/workflow-runs",
+                         json={"defKey": "access-request", "version": "1"}
+                         ).json()["runId"]
+
+    r = client.post(f"/workflow-runs/{run_id}/input",
+                    json={"input": {"decision": "approve"}})
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "failed"
+    assert "ProviderCallError" in r.json()["error"]
+    assert wf_repo.get_run("test", run_id=run_id)["status"] == "failed"
 
 
 # ── §7 U3.12 / U3.13 — the remaining two handlers ───────────────────────────────

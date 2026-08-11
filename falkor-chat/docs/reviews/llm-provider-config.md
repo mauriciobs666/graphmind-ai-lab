@@ -1,6 +1,6 @@
 # LLM Provider & Model Configuration — Design Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 9
+> **Status:** active · **Owner:** `analyst` · **Tracks:** K-042 (M4) · **Version:** 10
 
 ## 1. Scope & verdict
 
@@ -2288,3 +2288,168 @@ below; no finding rises to minor-or-above.
 
 None. Every factual claim named in the unit's brief was independently verified against the shipped
 code or an independent suite run; no claim required escalation or further investigation.
+
+## D-2 fix — code review — 2026-08-11
+
+**Scope note.** Diff-scoped gate on `tdd-engineer`'s uncommitted fix for D-2 (found by the
+Landing-2 QA acceptance pass, U7): `POST /workflow-runs` (and, by code inspection, `.../input`)
+returned a raw `500` traceback instead of the documented `{"status":"failed","error":...}`
+envelope for a drive-time `ModelResolutionError`, because `services._drive_or_fault`'s
+caught-exception tuple predated Landing 2's new drive-time fault classes. `teco` independently
+widened the fix's scope beyond QA's own suggested one-line patch (which named only
+`ModelResolutionError`) to also add `ProviderCallError` — the literal *other half* of AC-8's own
+wording ("fails at call time... no fallback chain applies", vs. `ModelResolutionError`'s "never
+resolves" half). This gate's job was to verify both additions are genuinely justified and
+complete, not just that the four new tests pass. Baseline: `docs/plans/llm-provider-config-coordination.md`'s
+"U7 delivered, D-2 adjudicated and routed to fix-forward" section (`teco`'s own reasoning for
+fixing now and widening scope) and `docs/test-reports/llm-provider-config2-report.md`'s `### D-2`
+section (QA's original writeup). Diff under review: `server/falkorchat/services.py`
+(`_drive_or_fault`'s docstring + except clause) and `server/tests/test_process_input.py` (four new
+tests) — read directly via `git diff`; no artifact under review was mutated in the course of this
+check.
+
+**What I executed:**
+
+- **Traced both exception types' actual reachability of `executor._drive`'s fault net**
+  (`executor.py:415-424`, a bare `except Exception as exc:` that calls `_fail_with_note`
+  — the `fail_run` stamp — then re-raises), rather than accepting the docstring's claim on its
+  word:
+  - `ModelResolutionError`: raised by `ModelGateway.resolve()`/`.resolve_llm()`
+    (`modelconfig.py:749`, `:874`, `:891`) when a ref/role does not resolve. `_run_agent_node`
+    calls `self._models.resolve_llm("step", ...)` directly (`executor.py:640`), uncaught locally.
+    The `guard` kind resolves the same way inside `_LlmGuardJudge` (`app.py:366-`, confirmed it
+    resolves through the gateway on every evaluation) called from `guards.evaluate_guard`, which
+    has **no try/except** around the judge call (confirmed by reading `guards.py` — no
+    `try:`/`except` bracketing `judge(...)`) — so a resolution failure there propagates
+    identically. Both paths run inside `_drive_loop`, called from `_drive`. Genuinely reaches the
+    net.
+  - `ProviderCallError`: raised by a single client's `.chat()`/`.complete()` on a transport
+    failure (`transport.py:112-144`, converting `URLError`/`HTTPError`/malformed-request/timeout
+    into `ProviderCallError`) and by `FallbackClient.chat`/`.complete` on total chain exhaustion
+    (`llm.py:178-228`, catching only `ProviderCallError` per element and re-raising a joined
+    message naming every element on exhaustion, `:219`/`:228`). `_run_agent_node` calls
+    `llm.chat(messages, offered)` (`executor.py:668`) uncaught locally; the guard-judge path calls
+    the same gateway-resolved client. Also genuinely reaches the net, and is structurally the
+    *only* way a resolved-but-unreachable model surfaces — there is no other exception type for
+    "resolved fine, failed at the wire."
+  - Confirmed the pre-existing `NotImplementedError`/`WorkflowConfigError` pair takes the
+    identical path (same bare `except Exception`, same `_fail_with_note` stamp) — the new pair is
+    not a special case, it's the same mechanism Landing 2 introduced two new occurrences of.
+
+- **Checked the docstring's stated `ModelConfigError` exclusion for correctness**, not just
+  internal consistency. Grepped every `raise ModelConfigError` site in `modelconfig.py` (11
+  sites: `:292,304,318,358,365,367` inside `_read_json`/`Overlay.load`/`ProviderCatalog`-adjacent
+  parsing helpers, `:474,483,489,516,538` inside `_build_provider_spec`, `:639` inside
+  `ModelGateway.from_env`). Traced the call graph: `ProviderCatalog.load`/`Overlay.load` are
+  called only from `ModelGateway.from_env` (`:645-646`), which is called only once at app-wiring
+  time (`app.py`, when the `ModelGateway` singleton is constructed), never per-request or
+  per-drive. `_build_provider_spec` is called only from `_build_providers`, called only from
+  `ModelGateway.__init__` (`:618`), reached only via `from_env`. **No raise site is reachable from
+  inside a drive** — confirmed correct, not just asserted.
+  - Also checked `EmbeddingDimensionError` (`repository.py:20`, raised at `:693`; also raised in
+    `embedding.py:167,182`) as a candidate third type, since AC-10 covers an `embedding` kind.
+    `grep -n "embedder\|embedding" server/falkorchat/executor.py` returns **zero hits** — the
+    workflow executor's drive loop never touches embedding at all; that kind is wired through
+    `AgentResponder`/message-posting, an entirely separate consumer outside `_drive`'s fault net.
+    Correctly out of scope; not a gap.
+
+- **Confirmed both REST call sites are covered, unmocked, real integration.** Read
+  `start_workflow_run` (`services.py:1325-1391`) and `submit_workflow_input`
+  (`services.py:1395-`): both route their drive through `self._drive_or_fault(ctx, run_id=run_id,
+  drive=lambda: executor.run(...)/executor.resume(...))` — no test-double substitution of
+  `_drive_or_fault` itself anywhere in the diff. Read all four new tests
+  (`test_process_input.py:672-786`): each builds a real `Services`+`WorkflowExecutor` over `wf_repo`
+  (live FalkorDB, `ws:test`), a real FastAPI `TestClient`, and drives the actual `POST
+  /workflow-runs` / `POST /workflow-runs/{id}/input` routes. The fault-injection doubles
+  (`_UnresolvableModelGateway`, `_AlwaysFailingLLM`) are handed to the executor exactly where a
+  real `ModelGateway`/`FallbackClient` would sit (`models=`/`llm=` constructor args) — not a mock
+  of `_drive_or_fault`, `services.py`, or `executor.py` itself. `_UnresolvableModelGateway.llm()`
+  and `.embedder()` both raise `AssertionError` if called, structurally proving `resolve_llm()`'s
+  raise is what's actually exercised, not a downstream call. Confirmed status codes: `start` tests
+  assert `201` (`api.py:253` decorates `POST /workflow-runs` with `status_code=201`), `input`
+  tests assert `200` (`POST /workflow-runs/{id}/input`, `api.py:262`, no decorator ⇒ FastAPI
+  default `200`) — matches. Both tests per exception type assert the envelope shape
+  (`status=="failed"`, `error` contains the exception's own message text) and cross-check the
+  graph state independently (`wf_repo.get_run(...)["status"] == "failed"`) — not "didn't raise,"
+  a genuine reproduction of D-2's exact symptom for both call sites.
+
+- **Mutation-tested independently** (not trusting `tdd-engineer`'s or `teco`'s claimed result).
+  `cp server/falkorchat/services.py /tmp/services.py.bak`, edited the live file to revert **only**
+  the except tuple to the original two-item form (`except (NotImplementedError,
+  WorkflowConfigError) as exc:`), leaving the new tests, the `ProviderCallError` import, and the
+  docstring untouched. Ran `.venv/bin/python -m pytest -q -k "model_resolution_fault or
+  provider_call_fault"`: **all four new tests failed**, each with the exact "uncaught exception
+  escapes the REST layer" shape — the traceback surfaces through
+  `api.py::submit_workflow_input`/`start_workflow_run` → `services.py::_drive_or_fault`'s
+  `return drive(), None, None` → `executor.py::_drive`/`_drive_loop`/`_execute_step`/
+  `_run_agent_node` → the fault-injection double's own raise, exactly reproducing D-2's original
+  symptom (uncaught `ModelResolutionError`/`ProviderCallError` instead of a translated envelope).
+  Restored via `cp /tmp/services.py.bak server/falkorchat/services.py`; `diff -q` confirmed
+  byte-identical to pre-mutation state; re-ran the same four tests — all four passed; `git diff
+  --stat -- server/falkorchat/services.py` afterward showed the same 22 insertions/7 deletions as
+  before the mutation, confirming the restore was clean (never used `git checkout`/`restore`).
+
+- **Read the "Two deliberate limits" docstring section for explanatory quality**, not just
+  presence of the new type names. It now: (1) names all four caught types and, for each, states
+  *why* it belongs — `ModelResolutionError` with a concrete scenario (role removed from overlay
+  post-publish, FR-15's no-reload path, tied to D-2), `ProviderCallError` with its AC-8-half
+  framing distinguishing it from `ModelResolutionError`'s half; (2) keeps the pre-existing budget-
+  exhaustion exclusion note verbatim (`_fail_budget` returns rather than raises); (3) adds a new,
+  explicit `ModelConfigError` exclusion with its own reasoning (parsed once at construction,
+  before any run starts, no drive-time occurrence path) — matching what I independently verified
+  above via the call-graph trace, not merely restating the exclusion without support. A future
+  maintainer reading this before adding a fifth drive-time fault class has both the pattern
+  (only faults already `fail_run`-stamped before re-raising) and a worked example of applying it
+  to rule a type *out* (`ModelConfigError`), not just examples of ruling types in.
+
+- **Scope check.** `git status --short` / `git diff --stat` against the working tree: the D-2 fix
+  diff touches exactly `server/falkorchat/services.py` (+22/-7) and
+  `server/tests/test_process_input.py` (+150/-0) — matching the brief's named file list exactly.
+  The working tree also shows `docs/test-plans/llm-provider-config.md` (+1/-1, the
+  `Extended by:` header-pointer edit), and untracked `docs/test-plans/llm-provider-config2.md` /
+  `docs/test-reports/llm-provider-config2-report.md` — read the `llm-provider-config.md` diff
+  directly and confirmed it is the header-pointer line only, owned `qa-engineer`, U7's own
+  deliverable predating this fix, not touched by `tdd-engineer`'s work. No leakage either
+  direction.
+
+- **Offline suite**, run independently from `server/`: `.venv/bin/python -m pytest -q` →
+  **870 passed, 1 deselected** — exact match to the expected post-fix baseline (866 + 4 new).
+
+**Verdict: approve.**
+
+**Blockers:** none.
+
+**Majors:** none.
+
+**Minors:** none.
+
+**What's solid:**
+
+- Both exception types independently confirmed to reach `_drive`'s fault net through a real code
+  path (not asserted, traced), including the `guard`-kind path neither QA's original writeup nor
+  the coordination log's summary called out by name.
+- The `ModelConfigError` exclusion is not just consistent with the docstring's own logic — it is
+  actually true, verified by tracing every one of its 11 raise sites to construction-time-only
+  call paths.
+- All four new tests are genuine, unmocked integration reproductions through the real REST routes,
+  each independently asserting status code, envelope shape, and underlying graph state.
+- My own from-scratch mutation test reproduced the exact original failure shape for all four
+  tests, then a clean, verified restore — independent confirmation, not a re-read of someone
+  else's claimed result.
+- The docstring's rewritten "Two deliberate limits" section explains the *why* for every member of
+  the now-four-type set, including the one deliberately excluded — genuinely useful to whoever
+  touches this method next, not just an updated list.
+- Scope is exactly the two named files; QA's own uncommitted U7 deliverables (both new documents
+  plus the header-pointer edit) sit alongside in the working tree untouched by this diff.
+
+**Ruling on the `ProviderCallError` scope-widening: correct and complete.** `teco`'s reasoning —
+that `ProviderCallError` is literally the other half of AC-8's own two-part wording and would hit
+the identical uncaught-exception gap — holds up under independent tracing of the actual call
+graph, not just the textual argument. I looked for a third candidate drive-time fault type
+(`EmbeddingDimensionError`, the other named exception class re-exported in `services.py`'s error
+surface) specifically because AC-10 covers an `embedding` kind, and confirmed it is structurally
+unreachable from `_drive` — the executor never touches embedding at all, so there is no third type
+to add. The two-type widening is the complete set for this fault net as it exists today.
+
+**Open questions:** none. Every claim in the brief was independently traced against the shipped
+code, reproduced via an independent mutation test, or confirmed via a clean independent suite run.
