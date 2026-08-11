@@ -58,7 +58,7 @@ This document, not any agent's context window, is the state of record.
 | **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
 | U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
-| U9 | `tdd-engineer` | `a6012b2f9de191b86` | in-flight | L2-3 (workspace override + precedence — closes B-1) — carries the `modelSource` reshape + Minor 3 forward from the U8 gate | `analyst` diff-scoped gate |
+| U9 | `tdd-engineer` | `a6012b2f9de191b86` | delivered (uncommitted) | L2-3 (workspace override + precedence — closes B-1) — carries the `modelSource` reshape + Minor 3 forward from the U8 gate. 845 passed, 1 deselected (23 new); `teco` independently re-ran, exact match. Live `test_queries.sh` 315/315, `ws:acme`/`reference` reseeded and verified in sync | `analyst` diff-scoped gate — dispatched `a9efb77759f3bf495` |
 | U10 | `coder` | — | queued | L2-4 (publish-time rejection) | `analyst` diff-scoped gate |
 | U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
@@ -430,6 +430,43 @@ running) and picked the message up from its own transcript, which preserves what
 read/understood. If a second termination happens with still-empty `git diff`, the next resume should
 just re-send the same continuation; if a diff exists by then, switch to a state-recovery brief
 (inspect `git diff`, continue from actual state) per the standing transient-failure guardrail.
+
+## U9 delivered — 2026-08-11
+
+`tdd-engineer` (`a6012b2f9de191b86`, resumed) delivered L2-3 in full: `WorkspaceConfig` DDL
+(`bootstrap_schema.sh`), `write_model_overrides`/`read_model_overrides` (`repository.py`, matching
+`-graph.md` §2.4/§2.5 exactly), real three-rung precedence with the workspace override as a
+structural hard cap (`modelconfig.py::ModelGateway.resolve()`), the mandatory `modelSource` reshape
+via a new `resolve_llm()` returning `(client, Resolution)` (closing the U8 gate's requirement —
+`executor.py` now reads `resolution.source` through a local `_MODEL_SOURCE_LABEL` translation
+table, never a `config.get("model")` truthiness mirror), all four consumer kinds wired including
+`guard` (`app.py`'s `_LlmGuardJudge` now threads `run.get("modelOverrides")`), and the Minor-3
+`embedder()` fallback-chain warning.
+
+`teco` independently verified before dispatching the gate: `git diff --stat` matches the reported
+file list exactly (10 files, +1018/-61); offline suite re-run from scratch, **845 passed, 1
+deselected**, exact match; live `./scripts/test_queries.sh` re-run, **315/315**, reseeded
+(`bootstrap_schema.sh acme` → `seed_demo.sh acme` → `seed_workflows.sh acme` →
+`verify_workflows.sh acme` → `OK`); recomputed the `_drive_loop` SHA lock myself — **`71055f756280`**,
+unchanged; read the `app.py`/`executor.py`/`modelconfig.py` diffs by eye against `-graph.md` §2 and
+confirmed the reshape matches what the U8 gate required; **ran my own mutation test** on the
+hard-cap direction (inverted the precedence check so `requested` beats the workspace override) and
+confirmed `test_three_rungs_and_the_hard_cap_direction_for_every_kind` fails for **all four
+parametrized kinds, `guard` included** — the literal B-1 payoff — then restored cleanly.
+
+**The self-flagged kind↔property crosswalk** (`_KIND_TO_OVERRIDE_KEY = {"agent":
+"responderModel", "step": "agentModel", "guard": "guardModel", "embedding": "embeddingModel"}` —
+non-obvious because `-graph.md`'s `WorkspaceConfig` properties are named `agent`/`guard`/
+`embedding`/`responder`, with no `step` property at all) was independently checked against
+`-graph.md` §8.4, which explicitly ties "the chat agent's model" (i.e. the `@mention`
+`AgentResponder` consumer, the plan's kind `agent`) to `responderModelOverride` — confirming the
+shipped mapping is the textually-supported reading, not a guess. Sent to the `analyst` gate for a
+second, independent confirmation regardless, since it's load-bearing for FR-17's hard cap and worth
+more than one reader's eyes.
+
+`analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
+the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
+`graph-dba` if real doubt remains after that re-read.
 
 ## U8 gated and committed — 2026-08-11
 
