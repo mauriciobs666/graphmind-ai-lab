@@ -99,7 +99,47 @@
   completed) — the fact worth capturing is the token/duration cost signal itself, independent of
   outcome quality.
 
-## 2026-08-11 — Update: the oversized-landing entry above is now stakeholder-confirmed, and the outcome cost is in
+## 2026-08-11 — "The coordinator sent a message while you were working" resume prompts can describe a state several steps stale by the time they're processed; verify against git/the coordination doc before acting on their specifics
+
+- **Evidence:** across the K-042 Landing-2 session, at least three separate resume/pause
+  instructions delivered this way described the coordination as being at an earlier point than it
+  actually was — e.g. a "pause now, don't dispatch U10/U11/U12/U7" instruction arrived after U9,
+  U10 *and* U11 had already been dispatched, verified, gated, and committed; a later "resume, check
+  gate `a3f70162fd74bf9c9`'s status" instruction arrived describing the ledger as still saying
+  "delivered (uncommitted)" when in fact the gate had already returned and the fix was already
+  committed (`b3c3019`) — just the ledger row hadn't been updated to say so yet, which was real and
+  worth fixing, but the message's framing ("no recorded verdict yet") was itself already stale.
+  Each time, re-reading `git log --oneline`/`git status` plus the coordination doc's own ledger
+  before acting surfaced the actual state, which the message's own generalized principle ("finish
+  only what's safe at the current boundary," "verify, don't assume") already told me to do.
+- **Context:** these prompts appear to be queued/delivered asynchronously relative to actual
+  background-agent completions, so by the time one is processed, several more `Agent`
+  dispatch-and-verify cycles may have already run to completion in the interim. The prompt's
+  *intent* (pause here / resume from there) is still authoritative; its *specific factual claims*
+  about current state are not to be trusted over a fresh `git log`/coordination-doc read.
+- **Suggested home:** prompt (a standing instruction: on any "coordinator sent a message" resume
+  prompt, re-verify its factual state claims against git/the coordination doc before acting on
+  them, not just before acting on genuinely stale pause directives).
+
+## 2026-08-11 — A QA-suggested "one-line fix" for a defect is worth independently tracing before dispatching it verbatim — the real fix was two exception types, not one, and the second was the literal other half of the same AC's wording
+
+- **Evidence:** K-042 Landing 2's QA acceptance pass (U7) found D-2 (`services._drive_or_fault`
+  missing a new drive-time fault type from its caught-exception tuple) and suggested adding
+  `ModelResolutionError` only. Reading `_drive_or_fault`'s own docstring ("faults the executor's
+  M-1 net has already `fail_run`-stamped before re-raising belong here") and AC-8's actual
+  requirements wording ("a model that resolves at publish but fails at call time... no fallback
+  chain applies") made it clear a *second* type, `ProviderCallError` — the transport/
+  fallback-exhaustion failure mode, distinct from "never resolves" — hits the identical gap and
+  wasn't even imported into the file. QA's own report had reproduced only the `ModelResolutionError`
+  half live and explicitly flagged the other call site as "likely also affected, not verified" —
+  a hint the narrower fix might be incomplete, worth reading past the suggested-fix section itself.
+  Both the coordinator and the independent `analyst` gate on the fix confirmed the widened scope was
+  correct and complete (the gate additionally ruled out a third candidate, `EmbeddingDimensionError`,
+  on its own initiative).
+- **Context:** adjudicating a QA-found defect and dispatching its fix-forward unit.
+- **Suggested home:** prompt (a standing instruction: when dispatching a fix for a QA-found defect,
+  read the defect's own root-cause docstring/contract and the AC it violates, not just the
+  suggested-fix line — a live reproduction proves one path is broken, not that it's the only one).
 
 - **Evidence:** the same K-042 Landing 1 unit finished at **458k subagent tokens / 222 tool calls
   / ~45 min** for the initial dispatch (on top of the ~370k already burned mid-run at the time of
