@@ -58,7 +58,7 @@ This document, not any agent's context window, is the state of record.
 | **committed** | `teco` | — | **`a2b8aa9`** | Landing 1 full diff (38 files, +3347/-193) | — |
 | U5-prereq | `architect` | `a1893af3fc6cffdbd` | accepted | plan `Version: 4` — 3× `` `None`/`False` `` → `` `None` `` (§5, §7 L2-1, §12.1) + dated revision note | none (trivial wording fix, scope-verified by `teco` diff read) — committed `d7136ec` |
 | U8 | `coder` | `aa36e66470469ff6d` | accepted | L2-1 + L2-2 (roles + ordered fallback chains; record resolved model/source/fallback on `StepRun`) — folds in the QUERIES.md/test_queries.sh gap. Committed `17c20dc` | `analyst` (`a5469d493547b45ca`) → **approve with suggestions**, no blocker |
-| U9 | `tdd-engineer` | — | queued | L2-3 (workspace override + precedence — closes B-1) | `analyst` diff-scoped gate |
+| U9 | `tdd-engineer` | `a6012b2f9de191b86` | in-flight | L2-3 (workspace override + precedence — closes B-1) — carries the `modelSource` reshape + Minor 3 forward from the U8 gate | `analyst` diff-scoped gate |
 | U10 | `coder` | — | queued | L2-4 (publish-time rejection) | `analyst` diff-scoped gate |
 | U11 | `coder` | — | queued | L2-5 + L2-6 (loud use-time failure + embedding-dim guard) | `analyst` diff-scoped gate |
 | U12 | `coder` | — | queued | L2-7 (docs + close) | — |
