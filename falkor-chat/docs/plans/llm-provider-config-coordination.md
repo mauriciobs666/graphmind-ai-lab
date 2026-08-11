@@ -63,8 +63,8 @@ This document, not any agent's context window, is the state of record.
 | U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
 | U12 | `coder` | `ac3a30856c37f943c` | accepted | L2-7 (docs + close) + D-1 fixture fix. Committed `c4cf5ad` | `analyst` (`a04f9a7d6e04f4a70`) → **approve**, no blockers, no majors |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
-| U7 | `qa-engineer` | `a8a683efb479866dd` | delivered (uncommitted) | Landing 2 acceptance pass — **PASS**, all 7 in-scope ACs hold live. 1 defect (D-2, Major) found and routed to fix-forward before final acceptance | terminal gate for Landing 2 — held pending D-2 fix |
-| U7-fix | `tdd-engineer` | `a028652ec0fbb156b` | delivered (uncommitted) | Fix D-2 — `services._drive_or_fault` now catches `ModelResolutionError` **and** `ProviderCallError` (the AC-8 "fails at call time" half QA hadn't live-reproduced). 870 passed, 1 deselected (4 new); `teco` independently re-ran, exact match; `teco`'s own mutation test on all 4 new tests confirmed | `analyst` diff-scoped gate — dispatched `a3f70162fd74bf9c9` |
+| U7 | `qa-engineer` | `a8a683efb479866dd` | delivered (uncommitted) | Landing 2 acceptance pass — **PASS**, all 7 in-scope ACs hold live. 1 defect (D-2, Major) found and routed to fix-forward before final acceptance. Deliverables: `docs/test-plans/llm-provider-config2.md`, `docs/test-reports/llm-provider-config2-report.md` | terminal gate for Landing 2 — accepted as-is (D-2's own fix is a separate unit, U7-fix; the report stays the honest as-found record, same precedent as Landing 1's D-1) |
+| U7-fix | `tdd-engineer` | `a028652ec0fbb156b` | accepted | Fix D-2 — `services._drive_or_fault` now catches `ModelResolutionError` **and** `ProviderCallError` (the AC-8 "fails at call time" half QA hadn't live-reproduced). 870 passed, 1 deselected (4 new); `teco` independently re-ran, exact match; `teco`'s own mutation test on all 4 new tests confirmed. Committed `b3c3019` | `analyst` (`a3f70162fd74bf9c9`) → **approve**, no blockers/majors/minors — independently confirmed the two-type widening correct and complete (also ruled out `EmbeddingDimensionError` as a third candidate) |
 
 **U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
 `.env.example`, `compose.yaml`, `start_server.sh`, README, AGENTS.md) is core resolver-coupled
@@ -468,6 +468,40 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## D-2 fix gated and committed; U7 accepted — 2026-08-11
+
+`analyst` (`a3f70162fd74bf9c9`) verdict: **approve, no blockers, no majors, no minors**
+(`docs/reviews/llm-provider-config.md` `Version: 10`, `## D-2 fix — code review`). Independently
+traced both `ModelResolutionError` and `ProviderCallError` through the actual call graph (not just
+re-reading `tdd-engineer`'s claim), confirmed the `ModelConfigError` exclusion is factually correct
+(all 11 raise sites trace only to `ModelGateway.from_env()` construction), and additionally checked
+`EmbeddingDimensionError` as a plausible third candidate on its own initiative — ruled out,
+`executor.py` never touches the embedding path at all. Ran its own independent mutation test
+(revert-the-tuple, confirm all four new tests fail with the original escape shape, restore),
+matching `teco`'s own prior mutation test exactly. Offline suite reproduced at 870/1 deselected.
+
+**Committed `b3c3019`** (the fix + the review doc's new section, same bundling pattern used
+throughout this coordination).
+
+**`teco`'s explicit decision, recorded rather than silently skipped: no fresh live-server
+re-verification of the fixed D-2 path.** The fix's own four new tests exercise the real FastAPI
+app object through `TestClient` (not a mock of `_drive_or_fault`), a real `WorkflowExecutor`, and
+live FalkorDB — and post-fix, `_drive_or_fault` no longer lets the exception escape *at all*, so
+there is no exception-to-500-response translation left for a live round trip to prove that the
+test-level assertion (`response.status_code`/body) doesn't already prove identically. Weighed
+against the cost of standing up a live server + FalkorDB + LM Studio session to repeat QA's own
+repro recipe for marginal additional confidence, given two independent reviewers (`teco` and
+`analyst`) already traced the exact code path and independently mutation-tested it. Judged
+sufficient rigor for this fix's shape — a live re-verification remains available as a cheap
+follow-up if anyone wants belt-and-braces before a real deployment.
+
+**U7 itself (the Landing-2 acceptance pass) is accepted as originally delivered** — its report
+stays the honest as-found record (PASS, with D-2 found and now separately fixed), the same
+precedent Landing 1's D-1 set (found by QA, fixed later, original report never amended). Both
+of U7's deliverables (`docs/test-plans/llm-provider-config2.md`,
+`docs/test-reports/llm-provider-config2-report.md`, plus the `Extended by:` header-pointer edit
+to the Landing-1 plan) are committed next, alongside this ledger update.
 
 ## U7 delivered, D-2 adjudicated and routed to fix-forward — 2026-08-11
 
