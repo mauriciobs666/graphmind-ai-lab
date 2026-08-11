@@ -68,3 +68,33 @@
   deserves re-probing before a design is built on it. Possibly a convention of stamping each
   quirks entry with the module version it was verified against; graph-dba's file now does this
   for the corrected entry.
+
+## 2026-08-10 — A single "Landing 1" implementation unit spanning 6 sequenced plan steps and ~10 files ran past 370k subagent tokens and was still writing files
+
+- **Evidence:** dispatched falkor-chat K-042's Landing 1 (plan `docs/plans/llm-provider-config.md`
+  §6, steps L1-1..L1-6: new `transport.py`, new `modelconfig.py`, generalizing two client classes,
+  rewiring five consumer bindings across `executor.py`/`guards.py`/`responder.py`/`embedding.py`/
+  `tools.py`/`app.py`, an env-var cutover across 6 more files, plus docs) to one `coder` agent as
+  a single unit, reasoning that the plan's own steps were tightly sequenced/file-coupled and
+  splitting would add handoff friction. `/context` showed the background agent past 370k tokens
+  and still mid-flight (before its own completion report was even seen) — for comparison, the
+  architect/graph-dba design-doc units in the same coordination each ran 100-300k tokens for a
+  *single document*, not six code modules plus rewiring plus docs.
+- **Context:** decomposition judgment call for an implementation unit sized directly off an
+  architect's plan's own step table, on the assumption that "the plan already sequenced it, so
+  one coder should execute the sequence" (per the routing table's coder guidance). The step table
+  being internally well-sequenced is not the same signal as the unit being small enough for one
+  agent run.
+- **Suggested home:** prompt — the "Delegate with complete briefs" / dispatch step. A plan's own
+  step table (L1-1..L1-6, U1-U9, etc.) sequencing several files per step across 6+ steps is a
+  signal to **split the dispatch to match the plan's own step boundaries** (one coder unit per
+  step or small step-cluster, sequenced via chained briefs or SendMessage continuations) rather
+  than handing the entire table to one agent as "a single coherent diff" — even when every step
+  touches files touched by an adjacent step, which reads like an argument for one agent but in
+  practice just produces one very long, hard-to-checkpoint run. Candidate rule: if a plan's step
+  table has more than ~3 steps or spans more than ~5 files, treat that as the decomposition unit
+  boundary, not "the whole landing," and sequence the resulting units as dependent (same-file)
+  dispatches rather than one mega-brief. Not yet verified whether the eventual result was actually
+  deficient because of the size (unconfirmed at the time of this entry — the run had not yet
+  completed) — the fact worth capturing is the token/duration cost signal itself, independent of
+  outcome quality.
