@@ -63,7 +63,8 @@ This document, not any agent's context window, is the state of record.
 | U11 | `coder` | `af1650a97aa6a0278` | accepted | L2-5 + L2-6 (loud use-time failure + embedding-dim guard). Committed `44494d5` | `analyst` (`a71f25eedc144778d`) → **approve**, no blockers, no majors |
 | U12 | `coder` | `ac3a30856c37f943c` | accepted | L2-7 (docs + close) + D-1 fixture fix. Committed `c4cf5ad` | `analyst` (`a04f9a7d6e04f4a70`) → **approve**, no blockers, no majors |
 | U6 | `qa-engineer` | `a55e67da7ed500591` | accepted | Landing 1 acceptance pass — `docs/test-plans/llm-provider-config.md` + `-report.md`, committed `20d0262` | **PASS**, 1 minor defect (D-1) — `teco` independently re-verified (791 passed re-run, D-1 reproduced by direct read of `config/opencode.example.json`) |
-| U7 | `qa-engineer` | `a8a683efb479866dd` | in-flight | Landing 2 acceptance pass — AC-6..AC-11 + AC-4's trace half | terminal gate for Landing 2 (mirrors U6's role for Landing 1) |
+| U7 | `qa-engineer` | `a8a683efb479866dd` | delivered (uncommitted) | Landing 2 acceptance pass — **PASS**, all 7 in-scope ACs hold live. 1 defect (D-2, Major) found and routed to fix-forward before final acceptance | terminal gate for Landing 2 — held pending D-2 fix |
+| U7-fix | `tdd-engineer` | `a028652ec0fbb156b` | in-flight | Fix D-2 (drive-time fault envelope gap in `services._drive_or_fault`) | `analyst` diff-scoped gate |
 
 **U6/U7 renumbered from the original devops placeholder:** L1-5's env-var cutover (config.py,
 `.env.example`, `compose.yaml`, `start_server.sh`, README, AGENTS.md) is core resolver-coupled
@@ -467,6 +468,40 @@ more than one reader's eyes.
 `analyst` diff-scoped gate dispatched (`a9efb77759f3bf495`), with an explicit instruction to give
 the crosswalk a genuinely independent read (not just check `teco`'s reasoning) and escalate to
 `graph-dba` if real doubt remains after that re-read.
+
+## U7 delivered, D-2 adjudicated and routed to fix-forward — 2026-08-11
+
+`qa-engineer` (`a8a683efb479866dd`) ran the Landing-2 acceptance pass against the real running
+system: `falkordb-dev` (untouched), real LM Studio, two throwaway workspaces, four server restarts
+to genuinely exercise FR-15's no-reload-path for AC-6/AC-8. **Verdict: PASS** — all seven in-scope
+ACs hold live (AC-4's trace half, AC-6, AC-7 incl. the M-4 409-beats-400 ordering, AC-8, AC-9, AC-10
+across **all four kinds including `guard`** — the actual point of B-1 — and AC-11). Offline suite
+independently reproduced: **866 passed, 1 deselected**, exact match. Deliverables (uncommitted):
+`docs/test-plans/llm-provider-config2.md` (new, `Extends:` the Landing-1 plan per root `AGENTS.md`'s
+document-family rules — headers correctly formed, verified by `teco`) and
+`docs/test-reports/llm-provider-config2-report.md` (new), plus the Landing-1 plan's header gaining
+`Extended by:`.
+
+**One defect, D-2 (Major):** `POST /workflow-runs` (and, by code inspection, `.../input`) returns a
+raw `500` traceback instead of the documented `{"status":"failed","error":...}` envelope for a
+drive-time `ModelResolutionError` — `services._drive_or_fault`'s catch tuple
+(`(NotImplementedError, WorkflowConfigError)`) predates Landing 2's new drive-time fault class and
+was never extended. The underlying run state is correct in the graph (confirmed via a follow-up
+`GET`) — a REST-layer translation gap, not a correctness/data defect.
+
+**`teco`'s adjudication: fix now, not deferred** — a departure from Landing 1's D-1 precedent
+(Minor, deferred), justified by severity: D-1 was a fixture/doc gap, D-2 is a genuine break in the
+primary REST contract for exactly the scenario Landing 2's own AC-8 exists to prove, and the
+stakeholder's standing "keep full rigor" instruction for these closing units weighs toward fixing a
+Major over shipping around it. **Scope independently widened beyond QA's own suggested one-line
+fix**: QA's writeup named only `ModelResolutionError`; `teco` read `_drive_or_fault`'s docstring and
+`executor._drive`'s fault net directly and found `ProviderCallError` (raised by `FallbackClient`
+chain-exhaustion or a single client's call failure — literally AC-8's own "fails at call time... no
+fallback chain applies" wording, the *other* half of the same AC from the `ModelResolutionError`
+half QA happened to reproduce) is not imported into `services.py` at all and would escape the same
+narrow catch tuple identically. Routed to `tdd-engineer` (`a028652ec0fbb156b`) with both exception
+types named for investigation, reproduction-test-first, per this coordination's standing bug-fix
+routing (`tdd-engineer`, not `coder`, for a defect fix).
 
 ## U7 dispatched — 2026-08-11
 
