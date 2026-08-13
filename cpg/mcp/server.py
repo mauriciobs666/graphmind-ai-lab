@@ -19,7 +19,8 @@ contract). The short version:
   materialise a key for a mistyped graph name.
 * **Display-only truncation.** The full result set is materialised before
   formatting; the caps below shape the *rendering*, so the reported row count is
-  always exact and memory/latency are bounded by the query, not by the caps.
+  exact below FalkorDB's ``RESULTSET_SIZE`` (default 10000), at or above which
+  it is itself a cap.
 
 Operational constraints this module obeys, all load-bearing for a stdio server:
 importing it must not connect; nothing is ever written to stdout (the transport

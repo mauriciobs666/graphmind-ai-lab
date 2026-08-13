@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-11 — Dispatch-sizing standing rule + 4 smaller promotions from the inbox distillation (stakeholder's "never a landing this big again" directive)
+
+- **What:** `cobb` distilled all six entries in `teco/kaizen/inbox.md` (§5), triggered by a
+  stakeholder report of several sessions blowing past 400k tokens. Five promoted into `teco.md`,
+  one discarded as already self-resolved.
+- **Diagnosis (the actual ask):** verified verbosity vs. orchestration as the cause, not assumed.
+  Agent prompt bodies are 42–274 lines (already through two team-wide slimming passes,
+  2026-07-11/2026-07-24); `coder.md` is ~1.4k tokens, `teco.md` ~5.7k. The cited incident — K-042
+  Landing 1, one `coder` dispatch covering 6 plan steps / ~10 files, **458k tokens / 222 tool
+  calls / ~45 min**, per `/context` — is context-length growth from the sheer volume of file
+  reads/diffs/test-run output accumulated across one unbroken 6-step, 10-file session, not from a
+  large system prompt (which is a small, roughly-constant fraction of that context, not something
+  resent 222 times). The same unit's `analyst` gate then found 3 of the 11 test files the plan
+  names — 3 of the 5 rewired consumer bindings — silently dropped from its own stated scope — a
+  correctness cost, not just a token cost, from the same oversizing. **Verdict: orchestration
+  (dispatch sizing), not verbosity, is what's driving these specific blowouts.** No verbosity
+  contributor found worth a further slimming pass.
+- **Promoted into `teco.md`'s "Delegate with complete briefs" (§3):**
+  1. **Dispatch-sizing rule** (the core promotion) — a plan step table spanning more than ~3 steps
+     or 5 files is the decomposition boundary: one unit per step/small cluster, sequenced as
+     dependent same-file briefs, never one landing-wide mega-brief. Tied explicitly to the
+     stakeholder's own words, quoted in the prompt, so the rule can't silently erode.
+  2. QA-found-defect fix briefs: read the defect's own root-cause docstring/AC, not just the
+     suggested-fix line (a live repro proves one path broken, not the only one).
+  3. Documentation-impact scan: for a rename/removal blast radius, sweep unfiltered
+     (`grep -rn <token> .`), not `--include='*.ext'` — extension globs silently miss dotfile
+     config (`.env.example`).
+  4. Track-what's-in-flight: `SendMessage` a premise-invalidating finding to a still-running
+     sibling immediately, don't hold it.
+  5. Track-what's-in-flight: an incoming resume/pause message's *intent* is authoritative, its
+     *factual state claims* are not — re-verify against `git log`/the ledger before acting on them.
+- **Discarded:** the "specialist's own knowledge base can be stale in a build-version-specific
+  way" entry — already fully self-corrected: `claude/graph-dba/falkordb-quirks.md`'s
+  `db.indexes()` entry already carries the "corrects the earlier claim... verified 2026-08-10"
+  note the inbox entry was asking for, written by `graph-dba` itself during the same run.
+- **Why:** stakeholder-reported context blowouts across recent sessions; the stakeholder's own
+  quote ("please never again create a landing so big") had been sitting as an unpromoted inbox
+  entry since 2026-08-10 despite being an explicit standing directive.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean before and after (diff, not a bare
+  gate). No personal identifiers introduced.
+- **Bookkeeping note for the next distillation pass:** the inbox held **6 headed (`## `) entries**
+  plus one **headless continuation block** — a stray `- **Evidence:**` bullet with no `## ` heading
+  of its own, sitting directly under the "K-042 Landing 1... ran past 370k tokens" entry and
+  narrating the same unit's *completed* numbers (458k tokens / 222 calls / the dropped-test-files
+  finding). Treating it as part of that preceding entry (not a 7th, separately-dispositioned one)
+  is correct — don't re-count it as a separate entry in a future pass.
+- **Docs touched:** `claude/teco/teco.md` · `claude/teco/kaizen/{history,inbox}.md`.
+
 ## 2026-08-10 — Coordination state moves out of the context window: canonical ledger, in-flight tracking, `agentId`-addressed continuation
 
 - **What:** the largest structural pass on `teco.md` since its creation, from a `cobb` review of

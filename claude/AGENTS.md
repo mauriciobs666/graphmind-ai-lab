@@ -10,12 +10,21 @@ Roster — behavior source is always `<name>/<name>.md`, kaizen at `<name>/kaize
 does and when to use it lives in the injected descriptions and [`README.md`](./README.md):
 
 `teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`) ·
-`architect` · `coder` · `tdd-engineer` · `frontend-engineer` · `qa-engineer` · `analyst` ·
-`data-scientist` · `graph-dba` (carries two on-demand knowledge bases: `falkordb-quirks.md`,
+`architect` · `coder` · `tdd-engineer` · `frontend-engineer` ·
+`qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
+tooling techniques such as the WSL2 browser-automation fallback, driving an interactive TUI, and
+CLI health-check gotchas) ·
+`analyst` (carries an on-demand knowledge base: `review-techniques.md` — review-methodology
+techniques consulted on demand) ·
+`data-scientist` (carries an on-demand knowledge base: `lm-studio-model-notes.md` —
+live-verified small-model realism notes for this lab's LM Studio stack) ·
+`graph-dba` (carries two on-demand knowledge bases: `falkordb-quirks.md`,
 live-verified and perishable — re-verify on upgrades — and `falkordb-reference.md`; also drives
 Joern via the `joern-cpg` skill, on demand, to build a repo's CPG and export/load it into
-FalkorDB as Cypher — a rare capability, not a proactive default) · `devops` (user-scoped —
-runs in every project) · `cobb` (team maintainer: `agent-maintenance`/`agent-standards` skills,
+FalkorDB as Cypher — a rare capability, not a proactive default) ·
+`devops` (user-scoped — runs in every project; carries an on-demand knowledge base:
+`ops-quirks.md` — live-verified Docker/BuildKit/Bash-scripting traps) ·
+`cobb` (team maintainer: `agent-maintenance`/`agent-standards` skills,
 `scripts/audit-team.sh`, testing standards in `cobb/TESTING.md`).
 
 ## Hook machinery

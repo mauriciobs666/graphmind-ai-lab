@@ -1019,6 +1019,37 @@ count with no FalkorDB connection and no writes — the correct way to check a p
   (FR-15, no reload path), so a bare `monkeypatch.setenv` alone never reaches
   `ModelGateway.from_env()` once the module is already imported.
 
+**QA/acceptance-testing gotchas, black-box-observed (distinct from the pytest hazards above):**
+
+- **A `verify_workflows.sh` FAIL for `reference` (def MISSING) does not, by itself, block a live
+  `@mention`-triggered workflow run.** `start_workflow_run`'s trigger/execute path never reads
+  `db.reference_graph` — only the observability/diff endpoints (`get_workflow_def_structure`,
+  `diff_def_snapshot`) do. Three independent `@mention` triggers all started and completed
+  `triage@v1` runs against `ws:acme` while `reference` was MISSING throughout. Check which code
+  path actually reads `reference` before treating a `verify_workflows.sh FAIL` as an environment
+  blocker for a *behavioral* test.
+- **A `WorkflowRun` parked `waiting` (`waitsForHuman`) resumes on the *next message posted to its
+  thread*, whether or not that message `@mention`s the assistant.** A plain, non-mention message
+  into a thread with an open `waiting` run silently resumes it. Only a fresh thread with **no**
+  open run correctly exercises "an ordinary message never triggers a workflow" — reusing a thread
+  from an earlier test item in the same pass will confound this check.
+- **`POST /workflow-runs/{id}/input`'s own response does not carry the `error` reason when that
+  submission is what causes the run to fail** — only a follow-up `GET /workflow-runs/{id}` does
+  (the reason lands in that run's `ctx`, not in the triggering call's response body). A caller that
+  inspects only the `/input` response on a fault sees `status:"failed"` with no explanation.
+- **MCP `send_message` never schedules the responder/workflow trigger — only the REST
+  `POST /threads/{id}/messages` route does.** `api.py`'s REST handler is the only place
+  `background.add_task(_safe_run_workflow/_safe_respond, ...)` is scheduled (via FastAPI's
+  `BackgroundTasks`); `mcp.py`'s `send_message` tool has no such scheduling. A message posted via a
+  real MCP client produces zero reply and zero `WorkflowRun`, confirmed live. Any black-box check of
+  "does `@mention` produce a reply" must specify REST vs. MCP — they are not equivalent front doors.
+- **`ModelGateway`/`modelconfig.py` requires an explicit `options.baseURL` for every provider —
+  there is no implicit per-npm-package default** (unlike OpenCode's own `@ai-sdk/openai`, which
+  has one). An example/fixture `opencode.json` that omits `baseURL` on an `openai`-kind entry
+  parses fine but fails to *resolve* (`ModelConfigError: ... no options.baseURL ...`). Any example
+  or fixture file authored for this seam should be re-**resolved** once via `ModelGateway.resolve`,
+  not just parsed, before being called documented or shipped.
+
 ### 14.8 The model-resolution seam (K-042 Landing 1 + Landing 2)
 
 **The FR-4 rule, in one sentence:** every LLM/embedding consumer holds a `ModelGateway` and asks

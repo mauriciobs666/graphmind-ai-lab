@@ -960,9 +960,9 @@ MATCH (d:WorkflowDef {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[t
 RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: tr.order}) AS transitions
 ```
 *Both anchor on `Node By Index Scan | (d:WorkflowDef)` and traverse `HAS_STEP` outward — verified no
-`Node By Label Scan`. `collect(DISTINCT …)` after the `OPTIONAL MATCH` fan-out collapses to one row;
-`start.key` is constant across the fan-out so the grouping is well-defined. A def with no transitions
-returns `transitions: []` (11.2b yields zero rows → the app treats absence as empty). Route via
+`Node By Label Scan`. `start.key` is a grouping key, not an engine-level constant: the one-row
+collapse is a cardinality **premise**, see the callout below. A def with no transitions returns
+`transitions: []` (11.2b yields zero rows → the app treats absence as empty). Route via
 `GRAPH.RO_QUERY`.*
 
 > **⚠️ The one-row collapse is CONDITIONAL — it holds only while the root has exactly one `START`

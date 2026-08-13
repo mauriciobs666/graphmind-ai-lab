@@ -2,6 +2,33 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 13 entries — new `ops-quirks.md` knowledge base (9 entries), 2 to `skills/joern-cpg/SKILL.md`, 1 folded into `claude/cobb/TESTING.md`, 1 discarded as already covered
+
+- **What:** `cobb` processed all 13 entries in `devops/kaizen/inbox.md` (§5). (A prior version of
+  this entry's header said "9 entries" — undercounted by 4, though every entry was in fact already
+  described in the prose below; caught by `analyst`'s review, M-1 in
+  `docs/reviews/kaizen-distillation-2026-08.md`.)
+- **Promoted:** new on-demand knowledge base `claude/devops/ops-quirks.md`, pointed to from
+  `devops.md`'s "Core expertise" header, carrying 7 written entries (9 raw inbox facts — the
+  `.mcp.json` verification pair and the `CreatedSince`/image-ID-verification pair are each
+  bundled into one written entry): `.mcp.json`/`claude mcp list`
+  verification, `docker run` stdout-cleanliness, BuildKit's registry round trip for `FROM`
+  metadata despite a full cache hit, `SIGTERM` being ignored by a bare-interpreter PID 1, build
+  resumability after an interrupted `docker build`, `docker run -e VAR` deleting (not
+  falling through to) an image's `ENV` default, and `set -euo pipefail` turning a legitimate
+  early-exiting pipe consumer's SIGPIPE into a silent kill or a false "producer failed" — plus the
+  `docker image ls` `CreatedSince` staleness-illusion trap, filed in the same entry as the image-ID
+  verification rule it motivates. One more entry — the stdin-EOF stdio-MCP response-loss race —
+  was folded into `claude/cobb/TESTING.md` instead (a testing-technique fact, not an ops fact).
+- **Also promoted (Joern-specific, not Docker):** `pysrc2cpg` ships with no cold-start download,
+  and a release's `.sha512` sidecar carries a build-relative path → `skills/joern-cpg/SKILL.md`
+  Gotchas.
+- **Discarded:** `joern-parse --version` throwing a stack trace — the skill already tells readers
+  to use `joern --version` instead (line 18), so the negative case needed no separate callout.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/devops/{devops.md,ops-quirks.md,kaizen/{history,inbox}.md}` ·
+  `skills/joern-cpg/SKILL.md` · `claude/cobb/TESTING.md`.
+
 ## 2026-08-09 — Learnings-inbox entry promoted: `.mcp.json` approval scoping (C-319, cobb)
 - **What:** The 2026-07-25 inbox entry "Claude Code MCP: `.mcp.json` discovery walks up to the
   repo root, but project-approval scope is keyed on the session's cwd" was verified (re-checked

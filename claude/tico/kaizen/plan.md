@@ -14,6 +14,34 @@
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
+| K-008 | 2026-08-11 | — | 🔵 | **Needs a stakeholder decision, not a cobb guess** — relax tico's write/`Agent` scope? See below. |
+
+### K-008 — Stakeholder pushback on tico's write-scope and `Agent`-routing guardrails
+- **Status:** 🔵 proposed, **held for stakeholder decision**
+- **Rationale:** on 2026-07-31, in the same session as the `version`/`defVersion` manual fix, the
+  stakeholder hit tico's boundaries twice doing something that felt entirely reasonable to them:
+  (1) asked tico to "call the architect" to route a QA finding as a design question — declined,
+  since routing a design decision to `architect` isn't one of tico's three sanctioned `Agent` uses
+  (Explore, an offered manual-verification pass, an offered demo); (2) had tico file the finding
+  as a one-off `docs/BACKLOG.md` entry (human-approved outside tico's normal directories), then
+  asked tico to commit it too — declined, since the git-commit allowance is scoped to the *same*
+  two directories (`docs/requirements/`, `docs/manuals/`), not to whatever `Write`/`Edit` the
+  harness happened to let through that session. Stakeholder's reply to the second decline: "we
+  need to relax these rules."
+- **Two shapes on the table, neither self-evidently right (from tico's own inbox entry, not
+  decided here):**
+  (a) the commit allowance could track whatever the Write/Edit guard already let through *this
+  session* (a human-approved one-off `BACKLOG.md` edit becomes committable), rather than being
+  pinned to the two directories regardless of what was actually written — risk: this starts to
+  look like `git add -A`'s blast radius by another route.
+  (b) routing an already-written, fully-formed finding to a named next-agent could be a fourth
+  sanctioned `Agent` use, distinct from tico *designing* a solution — risk: tico drifts toward
+  being a delegation hub instead of a stakeholder-facing writer.
+- **Why cobb didn't just pick one:** this is a scope-of-authority question the 2026-07-30
+  "tico/teco commit rights, deliberately not extended further" stakeholder decision
+  (`claude/AGENTS.md` "Git-commit authority") didn't settle — that decision was about *other
+  agents* not getting commit rights, not about *widening tico's own*. Recorded here per the
+  distillation SOP's instruction to flag rather than guess on a genuine judgment call.
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed

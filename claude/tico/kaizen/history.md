@@ -2,6 +2,37 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 4 entries — 1 prompt addition, 1 discarded as superseded, 1 discarded as already tracked, 1 moved to plan.md pending a stakeholder decision
+
+- **What:** `cobb` processed all 4 entries in `tico/kaizen/inbox.md` (§5). (A prior version of this
+  entry's header said "3 entries" and omitted the `version`/`defVersion` entry below entirely —
+  caught by `analyst`'s review, M-1 in `docs/reviews/kaizen-distillation-2026-08.md`.)
+- **Promoted:** the prior-decision-provenance check — grep `docs/requirements/` and `docs/plans/`
+  status logs for a decision the new request might reverse, before the first interview question —
+  into "Running the conversation → Do your homework silently." This entry had been sitting **held**
+  since 2026-07-25 (a note on the entry itself deferred it explicitly to "the next distillation
+  pass" — this is that pass).
+  - Note: this held-note's own mechanics ("check whether X already landed before trusting a
+    holding claim") became a *second*, independently-surfaced finding, this time in `analyst`'s
+    inbox — promoted separately into `analyst.md`'s Guardrails, same distillation pass.
+- **Discarded as superseded:** the "tico can't honour a commit request on a dirty unrelated tree"
+  entry (2026-07-19) — tico's write/commit guardrails were substantially reworked since (the
+  2026-07-30 stakeholder decision on git-commit authority, `claude/AGENTS.md`), and the current
+  prompt's Guardrails already scope commits tightly enough that this specific scenario can't recur
+  as described.
+- **Discarded — already tracked:** the 2026-07-31 entry recording that falkor-chat's
+  `POST /workflow-runs` request field is `version` while the `WorkflowRun` node property (and most
+  conversational docs) say `defVersion` — its suggested project-doc callout
+  (`DESIGN.md` §14.4 or `QUERIES.md` §12.12) is already tracked as **K-040** in
+  `falkor-chat/docs/BACKLOG.md:1210`, so no new doc edit or backlog item was needed.
+- **Not promoted — moved to `plan.md` K-008, flagged for the stakeholder:** the entry recording
+  the stakeholder pushing back twice on tico's write/`Agent` boundaries and asking to relax them.
+  Two shapes were on the table in the entry itself, neither self-evidently right; this is a
+  genuine scope-of-authority judgment call the maintainer shouldn't make unilaterally, so it's
+  recorded as an open plan item instead of guessed at.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/tico/{tico.md,kaizen/{history,inbox,plan}.md}`.
+
 ## 2026-08-09 — K-007 closed: live check confirms the no-`initialPrompt` opening works (language mirroring + mode inference)
 - **What:** Ran three genuinely fresh `claude --agent tico -p "<opener>"` one-shot sessions (no `--continue`/`--resume`, no prior context) to validate the same-day removal of `initialPrompt` and the language-mirror rule (previous entry, below):
   1. **English, Mode-2-shaped opener** ("How does the write-guard hook system work for the doc-scoped agents in this repo?") → tico answered fully in English, entered Mode 2 directly (no canned greeting, no forced "which job is this" menu), grounded the answer in the real files (quoted its own frontmatter hook wiring, `guard-tico-doc-writes.sh`'s actual allowed-glob string, the shared `guard-doc-writes.sh` core, even cross-referencing `architect`'s K-003 rationale for why `Bash` isn't covered), included a Mermaid sequence diagram, and closed with a Mode-2-style check-in ("Does that land, or do you want me to go one level deeper on...").

@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 3 entries — 1 prompt addition, 2 to `python-web-quirks`/project docs
+
+- **What:** `cobb` processed all 3 entries in `analyst/kaizen/inbox.md` (§5).
+- **Promoted:**
+  - The "held-note staleness" finding (a sibling document's "held pending X" claim can go stale
+    when X lands via a *different* agent's files) → new clause on the Guardrails "Evidence over
+    vibes" bullet: cross-check sibling kaizen history before trusting a holding document's own
+    claim about a pending follow-up.
+  - `urllib` timeout taxonomy → `skills/python-web-quirks/SKILL.md`.
+  - LM Studio `/v1` 200-envelope quirk — merged with `architect`'s duplicate finding of the same
+    fact; the falkor-chat-specific half was **already** fully documented in
+    `falkor-chat/docs/DESIGN.md` §14.8 ("The `/v1` normalization rule"), so only the general,
+    reusable half went to `python-web-quirks.md`.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/analyst/{analyst.md,kaizen/{history,inbox}.md}` ·
+  `skills/python-web-quirks/SKILL.md`.
+
 ## 2026-08-09 — Independent safety recheck cleared; `review-techniques.md` marker removed
 - **What:** Removed the "⚠️ Pending an independent analyst safety recheck before first use"
   callout from technique (b) (scratch-copy + reverse-patch) in `claude/analyst/review-techniques.md`.

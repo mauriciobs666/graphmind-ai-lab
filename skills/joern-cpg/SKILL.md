@@ -161,6 +161,11 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
 - **Overlays matter:** taint/data-flow queries need the default overlays (call
   graph, control/data flow) that `joern-parse` applies — don't pass `--nooverlays`
   if you'll query flow.
+- **`pysrc2cpg` ships in the `joern-cli` zip — no cold-start runtime download.** A parse
+  immediately after unzip succeeds in seconds; there's no first-run stall to pre-warm.
+- **A release's `.sha512` sidecar carries a build-relative path** (`<hash>  target/joern-cli.zip`),
+  not the local filename — `sha512sum -c` against it fails on the path mismatch even for a valid
+  download. Compare the hash column only (`awk '{print $1}'`).
 - **`FILENAME` is relative to the parse root you hand `joern-parse`, not the repo
   root.** A CPG built from `<repo>/app` emits bare basenames like `services.py`,
   so any query filtering `FILENAME STARTS WITH 'app/'` silently matches nothing —

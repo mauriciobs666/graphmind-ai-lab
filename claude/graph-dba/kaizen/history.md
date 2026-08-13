@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 7 entries — 3 promoted to `falkordb-quirks.md`, 2 discarded as already self-corrected, 2 discarded as already covered in `cpg-model.md`
+
+- **What:** `cobb` processed all 7 entries in `graph-dba/kaizen/inbox.md` (§5).
+- **Promoted:**
+  - `redis-cli`'s `CYPHER` preamble needing quoted literals (not `k=v` trailing args), and a
+    non-aggregated `OPTIONAL MATCH` fan-out key being a real grouping key (not a safe-to-assume
+    constant) beside `collect(DISTINCT …)` → two new entries in `claude/graph-dba/
+    falkordb-quirks.md`. The second one also **fixed an incorrect invariant claim** in
+    `falkor-chat/docs/QUERIES.md` §11.2's own footnote, which asserted `start.key` is constant "so
+    the grouping is well-defined" as if it were an engine property — it's a schema-level premise
+    (exactly one `START` edge) that K-034 is what actually keeps true.
+  - `pipeline.sh --reset` running `GRAPH.DELETE` invisibly to the destructive-ops `PreToolUse`
+    guard — **checked against the live guard script before writing this up, and the gap this
+    entry reported (2026-07-30) was already closed 2026-08-08 (C-311)**: `guard-destructive-ops.sh`
+    now basename+flag-matches `pipeline.sh ... --reset` directly (per `claude/AGENTS.md`'s "Hook
+    machinery" section, which already documented the fix). Rewrote the `falkordb-quirks.md` entry
+    to state the fix + the generalizable lesson (a command-string guard needs an explicit clause
+    per destructive wrapper script) instead of re-filing an already-closed gap as an open one. This
+    is the third `falkordb-quirks.md` entry, closing out the "3 promoted" count above.
+- **Discarded — already covered in `skills/joern-cpg/references/cpg-model.md` (2, both 2026-07-19):**
+  the `pysrc2cpg` call-graph directional-asymmetry finding (caller matching by `CALL.NAME`, not the
+  resolved `CALL` edge — already in "Consumer-query facts" `:116`/`:121`) and the `FILENAME`/`AST`
+  vs. `CONTAINS`/`REACHING_DEF` intraprocedural-scope finding (already in the same section, `:140`).
+  Both were re-checked against the live file, not assumed stale.
+- **Discarded (already self-corrected in-run, before this pass):** the `db.indexes()`
+  vector-dimension entry — this one actually came from **`teco`'s** inbox, not `graph-dba`'s (see
+  `claude/teco/kaizen/history.md`'s own 2026-08-11 entry for its disposition; removed from this
+  entry, which previously double-claimed it — nit n-2 in `docs/reviews/kaizen-distillation-2026-08.md`).
+  The reachability-sandbox correction pair (two entries narrating the same finding, both
+  `graph-dba`'s own) — already self-corrects in the second entry's own text; folded as one line
+  into `skills/cpg-analysis/SKILL.md`'s query-usage guidance ("probe reachability, don't assume").
+- **Also folded in from other agents' inboxes (not counted in this entry's "7 entries," logged in
+  those agents' own history entries):** the FalkorDB `RESULTSET_SIZE` silent-cap finding
+  (`qa-engineer`'s inbox) → `falkordb-quirks.md`, `cpg/mcp/README.md` (corrected an overclaim —
+  "the `rows=` figure is always the true total" was false above 10k rows), and
+  `skills/cpg-analysis/SKILL.md`'s gotcha list (new #6). The **no-string-repetition-operator**
+  finding is `coder`'s own inbox entry and its promotion is logged solely in `coder`'s history
+  entry — this entry previously double-claimed it too (nit n-1); removed here.
+- **M-4 follow-up, verified closed:** `cpg/mcp/server.py`'s module docstring ("Display-only
+  truncation" bullet, `:20-22`) carried the same now-corrected `rows=`-is-always-exact overclaim as
+  `cpg/mcp/README.md`, in the most authoritative of the three sites (flagged by `analyst`'s review,
+  M-4). `teco` fixed it directly — confirmed present and reads correctly: "the reported row count
+  is exact below FalkorDB's `RESULTSET_SIZE` (default 10000), at or above which it is itself a
+  cap." All three sites (`falkordb-quirks.md`, `cpg/mcp/README.md`, `cpg/mcp/server.py`) are now
+  consistent; `skills/cpg-analysis/SKILL.md` was always correct on this point.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean. `db.indexes()` correction and
+  `RESULTSET_SIZE` figures cross-checked against the entries' own cited commands/outputs, not
+  re-run live (no FalkorDB access from this session).
+- **Docs touched:** `claude/graph-dba/{kaizen/{history,inbox,plan},falkordb-quirks.md}` ·
+  `falkor-chat/docs/QUERIES.md` · `cpg/mcp/README.md` · `skills/cpg-analysis/SKILL.md`.
+
 ## 2026-07-28 — `joern` agent retired; CPG generation folded in as an on-demand capability
 - **What:** The standalone `joern` subagent (CPG specialist) was retired at the user's
   request — CPG generation work is genuinely rare, not frequent enough to justify a

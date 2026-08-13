@@ -74,5 +74,16 @@
 | K-015 | 2026-07-31 | medium | 🔵 | `analyst/kaizen/inbox.md` has a substantial backlog of already-verified, "suggested home: prompt" entries never distilled (stub-package HEAD-vs-working-tree import, review-safe pytest subset, isolatable snapshot side, byte-identity AST hash, line-number-invariance re-gate, exclude_unset nested-model gotcha, scratch-copy-reverse-patch). Run a full §5 pass: verify each still holds, promote the prompt-worthy ones into `analyst.md` (or a knowledge base for the FastAPI/FalkorDB/MCP-version-sensitive ones), log in `analyst/kaizen/history.md`, clear the inbox. |
 
 ## Parking lot / ideas
+- From the 2026-08-12 corrective pass fixing `analyst`'s gate on the 2026-08-11 distillation
+  (`docs/reviews/kaizen-distillation-2026-08.md`): a raw inbox entry can leak the maintainer's
+  home path/username into a tracked file the moment an agent *appends* it — before any
+  distillation ever runs, since `kaizen/inbox.md` is itself a tracked file and an entry's
+  `**Evidence:**` line often quotes a live shell command's literal output (`ls -la ~/.claude/
+  agents` prints the real symlink target). Caught here only because `audit-team.sh` check 7 was
+  re-run incidentally, not because anything in the distillation-review workflow prompts for it.
+  Worth deciding whether check 7 (or a lighter version of it) should run as part of *any* agent's
+  closing protocol when it appends an inbox entry that quotes command output, not just at
+  distillation time — candidate for `agent-maintenance` §5 or the "Learning capture" boilerplate
+  itself.
 - Maintain a small catalog of agents/skills Cobb has authored, cross-linking their kaizen files.
 - The §7 prompt-lint is judgment-only by design; if a *deterministic* pre-check for a single artifact ever proves cheap (frontmatter valid, description non-empty, no personal identifiers), consider a small script assist — but keep the six semantic dimensions in the skill, not a grep. *(Noted 2026-07-16 during the §7 build; the composition load-set enumerator the design floated was skipped as not-cheap-enough.)*

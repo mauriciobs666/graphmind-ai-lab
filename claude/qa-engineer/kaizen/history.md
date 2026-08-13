@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 15 entries — new `qa-testing-techniques.md` knowledge base (3 entries), 2 to falkor-chat/AGENTS.md, 5 to falkor-chat/DESIGN.md §14.7, 4 folded into graph-dba/cpg-analysis work already in flight, 1 discarded as already covered elsewhere
+
+- **What:** `cobb` processed all 15 entries in `qa-engineer/kaizen/inbox.md` (§5).
+- **Promoted:**
+  - New on-demand knowledge base `claude/qa-engineer/qa-testing-techniques.md` (pointed to from
+    `qa-engineer.md`'s opening section): the WSL2-no-native-browser-automation / Windows Chrome +
+    raw CDP fallback, `tmux` for driving a genuinely interactive TUI, and "doctor"/health-check
+    subcommands not being guaranteed read-only.
+  - `falkor-chat/AGENTS.md`: the `ENABLE_AGENT`/`WORKFLOW_ENABLED` flag-dependency trap, and the
+    `pytest -m live` vs. default-run `reference`-wipe marker distinction.
+  - `falkor-chat/docs/DESIGN.md` §14.7: **five** new "QA/acceptance-testing gotchas" bullets — a
+    `verify_workflows.sh` `reference`-MISSING FAIL not blocking live execution, a `waitsForHuman`
+    run resuming on *any* next thread message (not just an `@mention`), `/input`'s response not
+    carrying its own failure's `error` reason, **MCP `send_message` never scheduling the
+    responder/workflow trigger (only the REST route does)**, and `ModelGateway` requiring an
+    explicit `baseURL` with no implicit per-package default. (A prior version of this entry said
+    "four" and left the MCP one unnamed — caught by `analyst`'s review, M-1/m-3 in
+    `docs/reviews/kaizen-distillation-2026-08.md`.) The MCP `send_message` asymmetry is a product
+    gap, not just a testing gotcha — it is already tracked as **K-041** in
+    `falkor-chat/docs/BACKLOG.md:1242`, delivered 2026-08-01, so no new backlog item was filed.
+  - The `RESULTSET_SIZE` silent-cap finding (this entry corroborated `graph-dba`'s independent
+    capture of the same mechanism) and the `METHOD.CODE`-is-narrow / `redis-cli --no-raw` flat-
+    stream-parsing / boolean-quoting-not-casing entries (3 more) → folded into `skills/cpg-analysis/
+    SKILL.md` and `cpg/mcp/README.md` as part of the same edit that processed `graph-dba`'s
+    matching entries (see that agent's 2026-08-11 history entry for the full list).
+- **Discarded — already covered elsewhere (1):** the Bash-tool backgrounding entry
+  ("`cmd &` backgrounded manually inside a Bash call can stall the tool for its full timeout, and
+  its `cd` doesn't persist to the next call") — already landed in
+  `skills/agent-standards/claude-code.md`. Missed in the first pass of this entry; added here on
+  `analyst`'s review (M-1).
+- **Skipped (folded into the KB instead, not a project-doc target):** the `kiro-cli doctor`
+  mutation note's suggested project-doc target (`kiro/docs/plans/kiro-demo-agent.md` §2.3) is now
+  `Status: archived` — per the repo's doc convention, an archived document is immutable except for
+  header-pointer metadata, so this fact was captured only in the new `qa-testing-techniques.md`
+  knowledge base instead.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/qa-engineer/{qa-engineer.md,qa-testing-techniques.md,
+  kaizen/{history,inbox}.md}` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md`.
+
 ## 2026-07-29 — New verification target: a tico-authored user manual's walkthroughs
 - **What:** `tico` gained a new doc kind, user manuals (`<component>/docs/manuals/<slug>.md`), and the team certification pass flagged manuals as the one doc kind with no independent-review gate. User decision: split the review — `qa-engineer` drives the running app through the manual's walkthroughs (the behavioral half), `analyst` checks the rest. Added a short section after the intro paragraph: the manual's own walkthroughs *are* the spec, each step is a test item, scale the test plan/report to the manual's size (not full feature-QA ceremony), same topic slug as the manual. Explicitly excludes the manual's factual/architectural claims — `analyst`'s half, don't duplicate. Frontmatter `description` updated to name the new target and the analyst/qa-engineer split.
 - **Why:** user ruling following the 2026-07-29 team certification's open observation (logged in `cobb/kaizen/plan.md`, now resolved). Routed through `teco`'s existing "independent review" default (its own kaizen carries the matching entry).

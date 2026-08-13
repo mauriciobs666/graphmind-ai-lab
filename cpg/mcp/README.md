@@ -167,10 +167,16 @@ Newlines and tabs inside a cell are escaped so one row is always one line. Pipes
 still prints the stats line and column names plus `(no rows)`, so "ran, matched nothing" is
 distinguishable from "failed".
 
-> **Truncation is display-only.** The full result set is materialised before formatting, so the
-> caps below bound the *rendering*, not the query — memory and latency are bounded by the Cypher
-> you wrote, and the `rows=` figure is always the **true** total. Do not read the caps as a safety
-> limit: `MATCH (n) RETURN n` on a CPG still fetches tens of thousands of rows.
+> **Truncation is display-only — with one caveat below this tool's own control.** The full result
+> set this tool sees is materialised before formatting, so the caps below bound the *rendering*,
+> not the query as this tool executes it, and this tool's own row-cap/char-cap accounting is
+> exact. Do not read the caps as a safety limit: `MATCH (n) RETURN n` on a CPG still fetches tens
+> of thousands of rows. **But** FalkorDB itself enforces a server-side `RESULTSET_SIZE` (default
+> 10000, `GRAPH.CONFIG GET RESULTSET_SIZE`) beneath this tool, silently, even against an explicit
+> larger `LIMIT` — verified 2026-07-30: a graph with 110k+ matching rows reports `rows=10000` with
+> no indication that figure is itself a cap rather than the true count. Below 10,000 true rows the
+> `rows=` figure is exact; at or above it, treat it as "at least this many," not "exactly this
+> many," and re-query with an explicit narrowing predicate to get the real total.
 
 When anything is cut, a notice line is emitted **twice** — as the first *and* the last line of the
 payload, byte-identical — naming which cap bound, how many rows are shown of how many, and warning

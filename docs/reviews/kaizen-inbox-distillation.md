@@ -1,6 +1,6 @@
 # Kaizen inbox distillation — cross-agent review (scope: everything except `analyst`)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Extended by:** `docs/reviews/kaizen-inbox-distillation2.md`
 
 ## Scope & verdict
 

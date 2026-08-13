@@ -75,14 +75,16 @@ mcp__cpg__query(
 - ⚠ **Divergence to remember:** the `EXPLAIN` prefix is a convention of this
   tool. Copy the same string into `redis-cli GRAPH.QUERY` and it **executes**.
 
-**Truncation is display-only.** Long results are capped for rendering — a
-maximum number of rows, a per-cell character cap, and a total-size cap (the
-current defaults and their env overrides live in the repo's `cpg/mcp/README.md`,
-next to the server). The query itself always
-runs in full and the reported row count is exact; when a cap binds, the output
-says which one and how many rows of how many are shown. Because a truncated
-sample of an **unordered** result set is arbitrary, narrow deliberately — add
-`ORDER BY`, a projection, a `LIMIT`, or an aggregate — rather than reasoning from
+**Truncation is display-only — with one FalkorDB-level exception.** Long results are capped for
+rendering — a maximum number of rows, a per-cell character cap, and a total-size cap (the current
+defaults and their env overrides live in the repo's `cpg/mcp/README.md`, next to the server). The
+query itself always runs in full, and below 10,000 true rows the reported row count is exact; when
+one of this tool's own caps binds, the output says which one and how many rows of how many are
+shown. **But** FalkorDB's own server-side `RESULTSET_SIZE` (default 10000) silently caps the result
+*beneath* this tool, even against an explicit larger `LIMIT` — at or above 10k rows, treat `rows=`
+as "at least this many," not the true total, and re-query with a narrowing predicate to get an
+exact count. Because a truncated sample of an **unordered** result set is arbitrary, narrow
+deliberately — add `ORDER BY`, a projection, a `LIMIT`, or an aggregate — rather than reasoning from
 the first N rows.
 
 **Fallback — `redis-cli`.** Use it outside Claude Code or when the tool is
@@ -107,6 +109,14 @@ argument, so quotes/`$`/newlines must be defended; and `GRAPH.QUERY` against a
 **non-existent** graph *materialises* that key — check `GRAPH.LIST` first, or use
 `GRAPH.RO_QUERY`, which does not.
 
+**Parsing `--no-raw` output yourself (e.g. to diff it against the MCP tool's rendering):**
+`--no-raw` prints a **flat, one-scalar-per-line stream** — header names, then every row's cells in
+order, no RESP nesting or per-row grouping — followed by two stats lines. Regroup by dropping the
+first *N* lines (N = column count) and the last 2, then chunking the remainder into N-tuples. The
+trap: a `null` cell and an empty-string cell **both render as a blank line**, so filtering blank
+lines out before regrouping silently drops cells and shifts every later row into the wrong column
+— don't filter; count positionally instead.
+
 > **Coverage boundary — verified Python-only.** Every recipe here was
 > live-verified against a **Python** CPG (`pysrc2cpg`, the `cpg_falkorchat` graph);
 > the JS/TS frontends were **not** exercised. The queries are label/property-driven
@@ -128,7 +138,9 @@ Full detail in `cpg-model.md`; the minimum you trip on:
 1. **Property keys are UPPER_CASE**, only `id` is lowercase. `m.name` returns
    `null` silently — use `m.NAME`, `m.FULL_NAME`, `m.FILENAME`, `m.LINE_NUMBER`,
    `m.IS_EXTERNAL`, `c.CODE`.
-2. **Booleans are real booleans**: `WHERE m.IS_EXTERNAL = false` (not `'false'`).
+2. **Booleans are real booleans**: the hazard is **quoting**, not case — `WHERE m.IS_EXTERNAL =
+   false` and `= False` both work (FalkorDB accepts Cypher boolean literals case-insensitively);
+   `= 'false'` is what breaks, because it's a string comparison, never true against a real boolean.
 3. **`CALL` is a call-*site* node, not a method→method edge.** Callee =
    `(:CALL)-[:CALL]->(:METHOD)`; caller = `(:METHOD)-[:CONTAINS]->(:CALL)`.
 4. **`FILENAME` is reliable only on `METHOD`/`TYPE_DECL`.** `CALL`, `IDENTIFIER`,
@@ -137,6 +149,19 @@ Full detail in `cpg-model.md`; the minimum you trip on:
 5. **`REACHING_DEF` (data flow) is intraprocedural** — it stops at call-site
    arguments and does not cross into a callee. Crossing calls is a deliberate,
    sparser step (see the interprocedural note below and the rca/code-review recipes).
+6. **`rows=` in the `cpg` MCP tool's own accounting is exact below 10,000 true rows, but
+   FalkorDB's server-side `RESULTSET_SIZE` (default 10000) silently caps it above that** —
+   even against an explicit larger `LIMIT`, with no marker distinguishing "the true count" from
+   "the cap." At/above 10k, re-query with a narrowing predicate rather than trusting the figure.
+   Also: `METHOD.CODE` holds only short signatures — the wide source text lives on `LITERAL`/
+   `BLOCK`/`CALL` nodes (docstrings are `LITERAL`), so a payload-size probe against `METHOD.CODE`
+   binds far too early to exercise a char-cap.
+
+**A query that returns nothing may mean "no graph loaded" or "can't reach FalkorDB at all," and
+those look identical from inside a subagent** — a connectivity failure (container down/restarting)
+and an absent graph both surface as an error with no data. Probe reachability explicitly (a
+short-`timeout` `GRAPH.LIST`/`RETURN 1`) before concluding a graph is simply missing, and report
+which one it actually was rather than silently treating "no data" as the answer.
 
 ## 3. Shared traversal idioms (the building blocks every recipe reuses)
 

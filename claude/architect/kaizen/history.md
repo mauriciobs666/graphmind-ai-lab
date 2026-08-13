@@ -2,6 +2,18 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 1 entry, merged with analyst's duplicate finding — no prompt change
+
+- **What:** `cobb` processed the single entry in `architect/kaizen/inbox.md` (§5) — the LM Studio
+  `/v1` missing-prefix / 200-envelope quirk, independently captured by both `architect` and
+  `analyst` during the same K-042 work.
+- **Disposition:** the falkor-chat-specific half was already fully documented in
+  `falkor-chat/docs/DESIGN.md` §14.8 before this pass; the general, reusable half (the 200+envelope
+  shape, and the `urlparse` schemeless-base-URL trap) was promoted once, from `analyst`'s copy of
+  the same finding, into `skills/python-web-quirks/SKILL.md` — no separate action needed here.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/architect/kaizen/{history,inbox}.md`.
+
 ## 2026-08-09 — Held entries 15/16 promoted: consolidated Kiro-facts edit landed
 `cobb` closed out the two held-for-consolidated-follow-up entries (exact-CWD-only local-agent
 discovery, no upward walk; and the `mcpServers` remote-entry schema using `url` with no `type`

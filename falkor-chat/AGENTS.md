@@ -78,6 +78,18 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace.
 
+**`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
+are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without
+`ENABLE_AGENT` also set, `POST /workflow-runs` 503s (`WorkflowEngineDisabledError`) even though the
+flags read as independent. Both flags are needed to exercise a workflow end-to-end, including the
+LLM-free `access-request@v1` proof flow.
+
+**A default (offline) `pytest` run wipes the `reference` graph at teardown (see `test_queries.sh`
+above); `pytest -m live` does not** — the live-only marker deselects every offline test, so the
+`wf_repo` fixture that clears `reference` never runs, and the live test seeds its own throwaway
+`ws:live` instead. The re-seed obligation (`seed_workflows.sh`) attaches to a **default** `pytest`
+run, not to a `-m live`-only one.
+
 **Model/provider configuration is two hand-edited files, not env vars (K-042).** Every LLM/
 embedding consumer resolves through `falkorchat.modelconfig.ModelGateway` — the pristine, shared
 `FALKORCHAT_OPENCODE_CONFIG` (providers only; no product default, `scripts/start_server.sh` sets

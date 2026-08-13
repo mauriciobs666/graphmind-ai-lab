@@ -38,6 +38,23 @@ the script's own logic.
 the two disagree, the gotcha is live; re-check after any harness update, since it depends on how
 this environment wraps `grep`, not on anything in this repo.
 
+### Gotcha — a stdio MCP server smoke-tested by closing stdin immediately loses replies in flight, and it's a race, not "always the last one"
+
+**Fact:** driving a FastMCP/`mcp` 1.28.x stdio server with `subprocess.run(input=<newline-delimited
+JSON-RPC>)` — sending `initialize` → `notifications/initialized` → real calls, then letting stdin
+close on process exit — silently drops whatever reply hadn't flushed by the time EOF tears the
+anyio session down. On the host venv this is usually just the trailing reply; through `docker run
+-i --rm` (extra attach/teardown latency widens the race window) it can drop **more than one**
+trailing reply, and repeated runs of an identical probe show it isn't deterministic (host venv: 3/5
+runs clean; same probe through a container: 1/5). Padding the probe with one throwaway trailing
+message (e.g. `{"method":"ping"}`) reliably surfaces the response that would otherwise be lost.
+
+**Consequence:** never assert on a fixed reply count from a stdio MCP smoke test, and never treat
+"the last reply" as the deterministic loss point. Pad with a trailing throwaway call and assert
+only on the substantive ids you actually need — that's what makes a stdio MCP probe reliable
+instead of flaky. (Refines an earlier, narrower capture of this same gotcha that stated the loss as
+deterministically "the last reply, always.")
+
 ### Standard 1 — pytest (deterministic code)
 
 Canonical exemplar: `excel_extractor/`.

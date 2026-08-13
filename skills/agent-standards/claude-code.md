@@ -14,6 +14,8 @@
 > not doc-sourced (no official page documents this; see that section for the evidence).
 > **`initialPrompt` language gotcha** — **observed 2026-08-09**, not doc-sourced (see the
 > main-session section below).
+> **Subagent tool-set/definition-load/AutoMem-index facts** — **observed 2026-08-10**, not
+> doc-sourced (see "What loads into a subagent" and "Bash tool environment").
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -165,6 +167,27 @@ conversational agent**:
   for speed (not configurable). A **fork** is the opposite — it inherits the
   entire parent conversation.
 
+- **A subagent's runtime tool set can be narrower than its frontmatter `tools:` list, silently
+  — the field is a request, not a guarantee.** A live probe of a `teco` run whose frontmatter
+  declared `Read, Grep, Glob, Bash, Agent, SendMessage, Write, Edit` reported exactly `Read, Bash,
+  Agent, SendMessage, Write, Edit` when asked to enumerate its own available tools — `Grep`/`Glob`
+  were simply absent, no error or deferred-tool notice, reproduced on a second probe. Don't write
+  prompt logic that assumes a declared tool is actually present; verify with a live probe on a
+  **fresh session** first (see next bullet).
+- **Custom agent definitions resolve into context at parent-session start; editing an agent
+  mid-session does not reach a subagent spawned later in that same session.** Adding a tool to an
+  agent's frontmatter, then spawning that agent from the *same* session to verify the change, is
+  inconclusive by construction — the session's own context already resolved the pre-edit
+  definition before the edit happened. Any verification of an agent-definition edit needs a fresh
+  session, never the session that made the edit.
+- **User-scoped AutoMem (`~/.claude/projects/<repo>/memory/MEMORY.md`) reaches a subagent as an
+  *index* only, not the entry bodies.** A subagent's injected context carried every memory entry's
+  title and a short gloss, inside a system-reminder labeled "user's auto-memory" — but the agent
+  reported seeing only that, not the linked file's actual content, and could not act on facts that
+  lived only in the entry body. Corollary: **behavior an agent must exhibit belongs in its
+  committed prompt**, never left in user-scoped memory, which is untracked, index-only to
+  subagents, and invisible to a team-coherence audit script.
+
 ### `memory:` frontmatter ≠ `CLAUDE.md`
 
 A **separate** persistent learning store. `memory: user|project|local` gives the
@@ -235,6 +258,18 @@ the always-loaded project memory (`CLAUDE.md`).
   hook entry point) rather than trusting a bare command typed at this shell's
   prompt — the two are not guaranteed equivalent here. (Observed
   graphmind-ai-lab, 2026-07-26 and 2026-08-08.)
+
+- **A command manually backgrounded inside a Bash call (`cmd &`) is not the same as the tool's own
+  `run_in_background` parameter, and the difference bites twice.** (1) A compound command ending in
+  `&` can still stall the Bash tool call for its full timeout even after the backgrounded process
+  itself has already exited — the tool is waiting on the *shell*, not the child process, so a
+  crashed-in-1s server can still eat the full 120s. (2) After a `cd X && ... &` call is reported as
+  auto-backgrounded, the **next foreground Bash call's cwd does not stay at `X`** — it reverts to
+  whatever it was before that call, not to inside the backgrounded command's `cd`. Prefer the Bash
+  tool's own `run_in_background: true` (one command per call) over hand-rolled `&`/`nohup` for
+  launching a long-running local process — it avoids both the stall and the cwd surprise, and gives
+  a clean task-id/notification instead. (Observed graphmind-ai-lab, 2026-08-11, launching/killing a
+  throwaway `uvicorn` instance for black-box QA.)
 
 ## MCP
 

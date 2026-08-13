@@ -85,6 +85,31 @@ to the general fact here.
 
 ## Cypher dialect & query behavior
 
+- **No string-repetition operator** — `CREATE (:T {code: 'x' * 400})` fails with
+  `Type mismatch: expected Integer, Float, or Null but was String` (verified v4.18.11,
+  falkordb-py 1.6.2). Build wide test-fixture strings in the client and pass them as a
+  parameter (`{code: $c}`, `params={"c": "x"*400}`) instead of trying to construct them
+  in-query. Second-order trap: the **failed** `GRAPH.QUERY` still materializes the graph
+  key, leaving a junk empty graph behind that has to be deleted by hand.
+- **`redis-cli GRAPH.QUERY`'s `CYPHER` preamble needs Cypher *literals*, not bare
+  `k=v` pairs** — `CYPHER key=$key ...` bound via `redis-cli`'s trailing `k=v` args
+  (`... key=triage`) fails `Failed to parse query parameter 'key' value`; those trailing
+  args are not a binding channel at all, and an unquoted bare word in the preamble parses
+  as an expression. Write `CYPHER key='triage' version='v1' MATCH …` — quoted literals in
+  the preamble — for any shell-driven maintenance query. The Python client's `params=`
+  dict is unaffected; this is a `redis-cli`-only trap.
+- **A non-aggregated key from an `OPTIONAL MATCH` fan-out is a real grouping key beside a
+  `collect(DISTINCT …)`, not a constant you can assume away** — `RETURN d.name, start.key
+  AS startKey, collect(DISTINCT {...}) AS steps` returns **one row per distinct `start.key`**
+  value reachable by the fan-out, each carrying the *full* aggregate, not one row with the
+  aggregate collapsed as the "constant key beside an aggregate" idiom usually assumes
+  (verified v4.18.11: 2 `START` edges on one node → 2 rows, `steps` identical on both). A
+  consumer doing `result_set[0]` doesn't fail on this — it silently returns an arbitrary
+  row. The invariant only holds when the schema guarantees the grouping key has exactly one
+  value per match (falkor-chat's `WorkflowDef`→`START` relies on this and is why K-034 exists
+  — a `MERGE` with a changed endpoint creates a **second** edge rather than moving the first).
+  Treat "a scalar returned beside `collect()` is constant across the fan-out" as a premise to
+  verify against the schema's actual cardinality guarantee, not an engine property.
 - **Cross-graph edges silently no-op** — no error, `MATCH` just returns 0 rows.
   There is nothing to catch.
 - **`(:A | :B)` union-label syntax** in a pattern is unverified on this build —
@@ -235,6 +260,24 @@ to the general fact here.
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
+- **`RESULTSET_SIZE` (default 10000) silently caps *every* result set, including one with an
+  explicit larger `LIMIT`** — `GRAPH.CONFIG GET RESULTSET_SIZE` → `10000`; a query with `LIMIT
+  50000` against a graph holding 110k+ matching rows still returns only ~10,000, with nothing in
+  the response marking it as capped rather than exact. Any tool reporting a result count (a
+  wrapper, an MCP tool, a manual script) needs to either raise `RESULTSET_SIZE` for the session or
+  document that its reported row count can itself be a silent cap, not the true total — a claim
+  like "the reported total is always exact" is false against this default. (Verified 2026-07-30,
+  v4.18.11, via the `cpg` MCP tool vs. raw `GRAPH.RO_QUERY`.)
+- **A destructive op run through a wrapper script used to be invisible to `guard-destructive-ops.sh`
+  — fixed 2026-08-08 (C-311), don't assume it's still open.** `pipeline.sh --reset` runs
+  `redis-cli ... GRAPH.DELETE` *inside* the script, so the literal string never appeared in the
+  outer Bash command the guard inspects (observed 2026-07-30 refreshing `cpg_falkorchat`, even
+  backgrounded/`nohup`ed). The guard now also basename+flag-matches `pipeline.sh ... --reset`
+  directly (`claude/scripts/guard-destructive-ops.sh`), closing this specific gap. General lesson
+  that outlasts this one fix: a Bash-command-string guard is blind to anything a wrapper script
+  does *internally* unless the wrapper's own invocation is pattern-matched too — when adding a new
+  destructive wrapper script, check whether the guard needs a matching clause for it, don't assume
+  the existing `GRAPH.DELETE`/`FLUSHALL` patterns cover it by transitivity.
 - **A read via `GRAPH.QUERY` materializes an empty graph key** — running e.g.
   `MATCH (n) RETURN count(n)` against a *non-existent* graph creates the key (it
   then shows up in `GRAPH.LIST` with 0 nodes). `GRAPH.RO_QUERY` on the same

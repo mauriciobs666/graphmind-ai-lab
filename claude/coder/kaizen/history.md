@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation, corrected: 8 entries routed (5 promoted, 1 discarded as redundant, 2 promoted late after an `analyst` review caught them missing)
+
+- **What:** `cobb` processed all 8 entries in `coder/kaizen/inbox.md` (§5), triggered by a
+  stakeholder report of context blowouts and teco's explicit request to sweep this inbox. **This
+  entry replaces a first version that mis-credited two entries to `coder` that actually came from
+  `analyst`'s and `architect`'s inboxes** (the `urllib` timeout taxonomy and the LM Studio `/v1`
+  200-envelope quirk — both correctly logged in *those* agents' own history entries) and, as a
+  result, left two real `coder` entries with no logged disposition at all. Caught by `analyst`'s
+  independent review (`docs/reviews/kaizen-distillation-2026-08.md`, B-1).
+- **The 8 real entries and their dispositions:**
+  1. FastAPI `response_model_exclude_unset=True` omit-vs-null — **discarded**, already fully
+     covered by `python-web-quirks.md`'s pre-existing "nested models" entry.
+  2. A `pytest --collect-only` baseline moving under you mid-run (concurrent agent on the same
+     tree) — **promoted**: `coder.md` step 5 ("Verify and report") now says to report the
+     *attributed* delta (own diff's contribution) alongside entry→exit counts when the tree may be
+     shared.
+  3. A green pytest exit code isn't evidence an integration suite ran; read the skip count —
+     **promoted**: `coder.md` step 5 now carries the same skip/deselected-count clause
+     `tdd-engineer.md`'s "Verify honestly" step already had — this was a live asymmetry (the agent
+     that filed the learning didn't have it yet).
+  4. FastMCP/`mcp` stdio EOF-response-loss — **promoted**, merged with `devops`'s 2026-07-26
+     refinement (which corrects this entry's "always the last reply" framing to "a race, can drop
+     more than one") → `claude/cobb/TESTING.md` (new gotcha subsection).
+  5. FalkorDB no string-repetition operator — **promoted** → `claude/graph-dba/falkordb-quirks.md`
+     (this is the only agent/history pair that owns this promotion; an earlier version of
+     `graph-dba`'s own history entry also claimed it and has been corrected).
+  6. `audit-team.sh`'s `grep -c FAIL` overcount-by-one — **promoted** → `skills/agent-maintenance/
+     SKILL.md` §4.
+  7. `monkeypatch.setenv` no-op against an import-time-frozen module constant — **promoted** →
+     `skills/python-web-quirks/SKILL.md` (general Python fact; the falkor-chat-specific instance
+     was already independently captured in `falkor-chat/docs/DESIGN.md` §14.7).
+  8. Function-local deferred-import monkeypatch timing — **promoted** → same skill file.
+- **On coder/tdd-engineer convergence (flagged as a judgment call in the review's open questions):**
+  made the call to converge on suite-reporting discipline specifically — both are implementers
+  whose "done" claim rests on the same suite, and a skip-count blind spot is exactly the kind of
+  gap that should not differ by which implementer happened to touch the code. Did **not** merge
+  their broader disciplines (TDD-cycle narration, the attributed-delta clause's fuller framing,
+  etc.) — those reflect genuinely different working styles (red-green-refactor vs. plan-execution)
+  that shouldn't converge just because one prompt happens to be shorter.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean. No personal identifiers introduced.
+- **Docs touched:** `claude/coder/{coder.md,kaizen/{history,inbox}.md}` ·
+  `skills/python-web-quirks/SKILL.md` · `claude/cobb/TESTING.md` ·
+  `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}` · `skills/agent-maintenance/SKILL.md`.
+
 ## 2026-08-09 — Description gained a `python-web-quirks` skill routing clause
 - **What:** Frontmatter `description` gained one clause: in a Python web/async codebase, the
   agent consults the new `skills/python-web-quirks/SKILL.md` for asyncio/FastAPI/Starlette/

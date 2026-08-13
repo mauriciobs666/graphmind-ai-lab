@@ -2,6 +2,137 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-12 — Fixed every Blocker/Major/Minor/Nit from `analyst`'s gate on the 2026-08-11 distillation
+
+- **What:** worked `docs/reviews/kaizen-distillation-2026-08.md`'s full findings list (verdict:
+  needs changes — B-1, M-1..M-5, m-1..m-4, n-1/n-2) directly in the still-uncommitted working
+  tree from the 2026-08-11 distillation, without opening a new diff.
+- **B-1 (coder inbox entries dropped with no disposition):** found `coder/{coder.md,kaizen/
+  history.md}` already carrying a corrected version (both learnings promoted to `coder.md` step 5
+  — attributed-delta reporting and the skip-count clause mirroring `tdd-engineer.md:42` — and the
+  history entry's promoted list already scoped to real `coder`-inbox entries). Fixed the one thing
+  still wrong: the header arithmetic ("6 promoted, 1 discarded, 1 promoted late" → **"5 promoted,
+  1 discarded, 2 promoted late"**, since both B-1 gap entries were late promotions, not one).
+- **M-1 (5 more unlogged dispositions, 4 miscounted history headers):** `graph-dba` — added
+  discard dispositions for the two 2026-07-19 CPG-topology entries ("already covered in
+  `skills/joern-cpg/references/cpg-model.md`"), fixed the header 5→7. `qa-engineer` — added
+  discards for the MCP `send_message` asymmetry (already in `DESIGN.md` §14.7, already tracked as
+  **K-041**) and the Bash-tool-backgrounding entry (already in `skills/agent-standards/
+  claude-code.md`); header was already 15 but two dispositions were missing from the prose.
+  `devops` — fixed header 9→13 (all 13 were already described). `tico` — fixed header 3→4, added
+  the missing 2026-07-31 `version`/`defVersion` discard ("already tracked as **K-040**"). Also
+  logged, per the review's note: `teco`'s inbox held 6 headed entries + one headless continuation
+  block correctly folded into the preceding entry — flagged in `teco/kaizen/history.md` so a
+  future pass doesn't re-count it.
+- **M-2 (`python-web-quirks` description didn't cover 5 of its 8 entries):** extended the
+  frontmatter `description` to name all 8 topics; kept the char count under the 1024-char cap
+  (`skills/README.md`'s own stated limit). **Judgment call:** widened the skill's stated scope
+  ("mostly web/async, plus two general pytest/import-timing traps") rather than splitting the two
+  non-web entries (`monkeypatch.setenv` timing, function-local import binding) into a new skill —
+  both surfaced in the same Python web codebase, the consumer roster is identical
+  (`coder`/`tdd-engineer`/`architect`/`analyst`), and a 2-entry skill for a narrow pytest-timing
+  niche isn't worth the new-`SKILL.md`/catalog-row overhead yet. Updated `skills/README.md`'s
+  catalog row to match.
+- **M-3 (3 new agent KBs not annotated in `claude/AGENTS.md`):** added the parenthetical KB
+  annotation (pattern already used for `graph-dba`) to `devops`, `qa-engineer`,
+  `data-scientist`, and `analyst`'s pre-existing `review-techniques.md` (never annotated before).
+- **M-4 (verify-only):** confirmed `teco`'s direct fix to `cpg/mcp/server.py`'s module docstring
+  is present and reads correctly (`RESULTSET_SIZE` framing, matching the other 3 corrected sites).
+  Did not re-edit `server.py`. Updated `graph-dba/kaizen/history.md`'s entry to record the
+  `server.py` fix alongside the `README.md` one it previously listed alone.
+- **M-5 (sizing rule placement):** added a one-sentence forward pointer in `teco.md` step 2
+  ("Decompose & sequence") to the full rule already stated in step 3, per the review's suggested
+  wording.
+- **m-1 (wrong test-file count):** fixed "3 of ~15 plan-named test files" → "3 of the 11 test
+  files the plan names — 3 of the 5 rewired consumer bindings" in `teco.md`, `teco/kaizen/
+  history.md`, and this file's own 2026-08-11 entry (three sites, same source typo).
+- **m-2 (`QUERIES.md` §11.2 duplicated the callout below it):** collapsed the new prose to one
+  forward-pointing sentence and dropped the "the schema guarantees" overstatement in the same
+  edit (the rewrite no longer states the claim at all, so it can't overstate it).
+- **m-3 (`DESIGN.md` §14.7 re-parented the K-042 bullet into the new QA list):** moved the new
+  5-bullet block to *after* the K-042 bullet, restoring its original adjacency to the "Verifying a
+  claimed test count safely" paragraph. Fixed `qa-engineer/kaizen/history.md`'s "four new …
+  bullets" → "five," naming the MCP `send_message` one as the fifth (done together with M-1's
+  `qa-engineer` fix, same entry).
+- **m-4 (~180 words of K-042 forensics in `teco.md`, take-or-leave):** **judgment call: kept as
+  is.** After the m-1 wording fix the sizing bullet is tighter than the review measured, and the
+  review's own counter-argument — the stakeholder's verbatim quote is what keeps the rule from
+  eroding — is the one I find more persuasive for an always-loaded orchestration rule tied to a
+  standing user directive. Not a hill worth re-litigating if a future pass disagrees.
+- **n-1/n-2 (double-logged promotions):** removed the no-string-repetition promotion and the
+  `db.indexes()` discard from `graph-dba/kaizen/history.md` (both actually `coder`'s and `teco`'s
+  own inbox entries respectively, each already correctly logged in *those* agents' histories).
+- **Open question 2 (MCP `send_message` wants a backlog item) — moot, not acted on:** already
+  filed as **K-041**, delivered 2026-08-01 (`falkor-chat/docs/BACKLOG.md:1242`); noted as
+  "already tracked" in the `qa-engineer` disposition instead of filing anything new.
+- **Not touched, per instructions:** open question 1 (the review document's own rename/collision
+  fix — `analyst`'s call) and open question 3 (`coder.md`/`tdd-engineer.md` convergence — left
+  open for the stakeholder).
+- **Incidental fix, not in the findings list:** `bash claude/scripts/audit-team.sh` initially
+  **FAILed** check 7 (personal-info leak) — the review document itself
+  (`docs/reviews/kaizen-distillation-2026-08.md:7`) and a new `analyst`-inbox entry it prompted
+  (`claude/analyst/kaizen/inbox.md:26`, appended by `analyst` *during* the review, dated
+  2026-08-11, not yet distilled) both quoted the live absolute repo path verbatim. Genericized
+  both to `/home/<user>/prg/graphmind-ai-lab`. Left `analyst`'s two new 2026-08-11 inbox entries
+  otherwise unprocessed — they postdate the distillation this review gated and are legitimate
+  material for the *next* §5 pass, not this corrective one.
+- **Verified:** `bash claude/scripts/audit-team.sh` → `RESULT: PASS` (deterministic checks clean)
+  after all fixes above, including the incidental PII leak.
+- **Docs touched:** `claude/coder/kaizen/history.md` · `claude/graph-dba/kaizen/history.md` ·
+  `claude/qa-engineer/kaizen/history.md` · `claude/devops/kaizen/history.md` ·
+  `claude/tico/kaizen/history.md` · `claude/teco/{teco.md,kaizen/history.md}` ·
+  `claude/analyst/kaizen/inbox.md` · `claude/AGENTS.md` ·
+  `skills/python-web-quirks/SKILL.md` · `skills/README.md` ·
+  `falkor-chat/docs/{QUERIES.md,DESIGN.md}` · `docs/reviews/kaizen-distillation-2026-08.md`.
+
+## 2026-08-11 — Full-team inbox distillation triggered by a 400k-token context-blowout report; diagnosed orchestration (not verbosity) as the cause
+
+- **What:** stakeholder reported several recent sessions (teco included) blowing past 400k tokens
+  of context, floating two hypotheses ("too verbose" vs. "orchestration not good"). Diagnosed
+  using evidence already in the team's kaizen files rather than assuming, then ran a full §5
+  distillation sweep across every agent inbox with unprocessed entries (teco, coder, analyst,
+  architect, cobb's own, data-scientist, devops, graph-dba, qa-engineer, tico —
+  frontend-engineer/tdd-engineer were already empty).
+- **Diagnosis:** prompt bodies are 42–274 lines, already through two team-wide slimming passes
+  (2026-07-11/2026-07-24); `coder.md` ≈1.4k tokens, `teco.md` ≈5.7k — small, roughly-constant
+  additions to context, not something resent 222 times in a way that explains a six-figure total.
+  The cited incident (K-042 Landing 1: one `coder` dispatch covering 6 plan steps/~10 files,
+  458k tokens/222 tool calls/~45 min per `/context`) is context growth from the sheer volume of
+  file reads/diffs/test-run output accumulated across one unbroken multi-step session — an
+  orchestration/dispatch-sizing problem, not a prompt-size problem. The same oversized unit's
+  `analyst` gate also found 3 of the 11 test files the plan names — 3 of the 5 rewired consumer
+  bindings — silently dropped from its own stated scope — a correctness cost from the same cause,
+  not just a token cost. **Verdict: orchestration,
+  not verbosity.** No verbosity contributor found worth a further pass.
+- **Delivered:** promoted a dispatch-sizing standing rule into `teco.md` (tied explicitly to the
+  stakeholder's own "please never again create a landing so big" directive, quoted in the prompt
+  so it can't silently erode) plus 4 smaller promotions from the same inbox; swept the other 9
+  non-empty inboxes per §5 — 3 new on-demand knowledge bases created (`claude/devops/
+  ops-quirks.md`, `claude/qa-engineer/qa-testing-techniques.md`,
+  `claude/data-scientist/lm-studio-model-notes.md`), ~20 entries folded into existing knowledge
+  bases (`skills/python-web-quirks/SKILL.md`, `claude/graph-dba/falkordb-quirks.md`,
+  `skills/cpg-analysis/SKILL.md`, `claude/cobb/TESTING.md`), several project-doc corrections
+  (including fixing two now-incorrect "the reported total is always exact" claims in
+  `cpg/mcp/README.md` and `skills/cpg-analysis/SKILL.md`, and an incorrect invariant claim in
+  `falkor-chat/docs/QUERIES.md` §11.2), and small prompt additions to `analyst.md`, `tico.md`, and
+  `data-scientist.md`. My own 3 inbox entries (subagent tool-set narrower than frontmatter,
+  agent-definition edits needing a fresh session to verify, AutoMem index-only-to-subagents) went
+  into `skills/agent-standards/claude-code.md`.
+- **Left unresolved, flagged to the stakeholder (not guessed at):** `tico`'s inbox carried a
+  2026-07-31 entry recording the stakeholder pushing back twice on tico's Agent/write-scope
+  guardrails and asking to relax them — two shapes proposed, neither self-evidently right. Moved
+  to `claude/tico/kaizen/plan.md` as an open item pending a stakeholder decision rather than
+  promoted or discarded.
+- **Caught one stale finding before promoting it:** `graph-dba`'s inbox reported (2026-07-30) that
+  `pipeline.sh --reset` bypasses the destructive-ops guard. Cross-checking `claude/AGENTS.md`'s
+  hook-machinery section before writing this up showed the gap was already closed 2026-08-08
+  (C-311) — the guard now pattern-matches that wrapper directly. Rewrote the knowledge-base entry
+  to state the fix instead of re-filing an already-closed gap as new work.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean before and after. No personal
+  identifiers introduced across ~25 edited/created files.
+- **Docs touched:** see each agent's own 2026-08-11 `history.md` entry for its file list; this
+  entry is the team-wide summary.
+
 ## 2026-08-10 — Reviewed and reworked `teco`'s coordination/tracking/continuation machinery (§7 lint + §5 distillation)
 
 - **Scope:** user asked for a review of how `teco` coordinates, keeps track of tasks, and routes

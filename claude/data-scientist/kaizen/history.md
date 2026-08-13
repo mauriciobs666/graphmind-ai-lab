@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-11 — Inbox distillation: 4 entries — 1 prompt addition, 1 new knowledge base, 1 to `python-web-quirks`, 1 discarded as stale
+
+- **What:** `cobb` processed all 4 entries in `data-scientist/kaizen/inbox.md` (§5).
+- **Promoted:**
+  - Bias-to-suspend judges need class-conditional gating (false-advance/advance-recall), not
+    κ/accuracy → new clause in "Core expertise → LLM systems → LLM-as-judge".
+  - Ministral-3B vs. Qwen3-4B tool-calling reliability → new on-demand knowledge base,
+    `claude/data-scientist/lm-studio-model-notes.md`, pointed to from "Core expertise → Model
+    selection".
+  - Bare `json.loads` on an LLM judge's output being fence-fragile → `skills/python-web-quirks/
+    SKILL.md` (general knowledge; the project-specific instance already has an open tracking item,
+    K-027, in `falkor-chat/docs/BACKLOG.md`, so no new backlog action needed).
+- **Discarded:** `read_thread`'s `authorType` being a list, not a string — the flagged gap was in a
+  since-completed M3 plan doc's prose; the live query itself (`labels(author) AS authorType`) is
+  self-documenting (`labels()` obviously returns a list) and is already cross-referenced correctly
+  in `falkor-chat/docs/HISTORY.md`.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean.
+- **Docs touched:** `claude/data-scientist/{data-scientist.md,lm-studio-model-notes.md,
+  kaizen/{history,inbox}.md}` · `skills/python-web-quirks/SKILL.md`.
+
 ## 2026-07-27 — Unpinned from `model: opus` (team-wide)
 - **What:** Removed the `model: opus` frontmatter line. The field is now absent, so the agent runs on Claude Code's default — `model` **defaults to `inherit`** (re-verified 2026-07-27 against `code.claude.com/docs/en/sub-agents`), i.e. the model the session/system default selects. No other frontmatter or body change.
 - **Why:** User no longer wants the team locked to Opus. Model choice belongs at the session level (one decision, changeable with `/model`), not duplicated across 13 frontmatter files where it silently overrides whatever the user picked.

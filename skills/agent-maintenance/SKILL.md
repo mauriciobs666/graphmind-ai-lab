@@ -272,6 +272,10 @@ runtime (the personal-info rule, §2). Fix any FAIL before judging the rest.
 > line** appears after it. (Origin: 2026-07-25, reworking
 > `docs/plans/cpg-query-access.md`, whose v1 used the bare form.)
 
+> **Counting FAIL lines from the raw output:** `grep -c FAIL` over-counts by one — it also matches
+> the trailing `RESULT: FAIL — fix the items above, then re-run.` summary line. Anchor with
+> `grep -c '^FAIL'` for the exact count of individual failing checks.
+
 **Judgment half — checklist (what the script can't see):**
 
 1. **Roster accuracy** — the orchestrator's roster describes each specialist's
