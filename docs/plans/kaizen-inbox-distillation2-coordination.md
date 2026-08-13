@@ -1,6 +1,6 @@
 # Kaizen inbox distillation (2026-08) — fix-and-regate coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (no backlog id; stakeholder-triggered `cobb` sweep)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (no backlog id; stakeholder-triggered `cobb` sweep)
 
 ## Context
 
@@ -55,3 +55,13 @@ asked — the broad convergence question stays open for the stakeholder, per the
 
 U2 depends on U1's diff (still uncommitted, in the working tree). U3 depends on U2 landing, then
 re-gates the whole working-tree diff. Commit follows a clean U3 verdict.
+
+## Close (teco, 2026-08-12)
+
+U3's Pass-2 verdict was **approve**. Committed `db39ade` (50 files, +1544/−519) — explicit-path
+`git add`, no `-A`, staged list matched `git status` exactly before commit. Not committed: the
+two open questions carried to this report rather than acted on. **Open question 2 is resolved**
+(K-041 already covers the MCP `send_message` gap, confirmed at dispatch — no new backlog item
+needed). **Open question 3 stays open for the stakeholder**: whether `coder.md` and
+`tdd-engineer.md` should converge more broadly on suite-reporting/verification discipline beyond
+the narrow skip-count clause `cobb` already promoted under B-1.
