@@ -204,6 +204,17 @@ POST /workflow-defs
 }
 ```
 
+> **`config` and `guard` travel as JSON-encoded *strings*, not nested objects.** Every example in
+> this section shows the *parsed meaning* of a step's `config` or a transition's `guard` — as a
+> plain JSON object, for readability — but on the actual wire each one is a single **string**:
+> `"config": "{\"waitsForHuman\":true}"`, not `"config": {"waitsForHuman":true}`. Sending a
+> nested object where a string is expected gets a `422` with a cryptic `"Input should be a valid
+> string"` — not one of the friendly, named errors below. A fully correct request body, stringified:
+> ```json
+> { "from": "route", "to": "approval", "on": "needs_approval", "order": 0,
+>   "guard": "{\"kind\":\"cmp\",\"path\":\"ctx.request.role\",\"op\":\"in\",\"value\":[\"contractor\",\"exec\"]}" }
+> ```
+
 A few rules the server checks **before writing anything** — get one wrong and you get a clear
 error back, with nothing half-published:
 
@@ -215,6 +226,9 @@ error back, with nothing half-published:
 - A `human` or `wait` step (below) **must** set `config.waitsForHuman: true`, or it can never
   actually pause — a run that reaches it will eventually be stopped for taking too many steps
   instead.
+- If any step's `config.model`, or any `{"kind":"llm"}` guard's `model` (below), names a
+  provider or role the server can't resolve, the whole publish is rejected — see `model` under
+  the `agent` config, next.
 
 Rough size limits, so you recognize one rather than guessing: up to 200 steps and 500
 transitions per definition; each step's `config` and each transition's `guard` is capped at
@@ -240,7 +254,8 @@ flowchart TD
 | `decision` | A pure branch: no action of its own — its outgoing transitions decide where the run goes next. With no outgoing transition, it's an ending. | Yes |
 | `prompt`, `tool`, `message` | Reserved for a future release. | **No** — publishing one is accepted, but a run that reaches it fails outright. Don't use these yet. |
 
-What each type's `config` understands:
+What each type's `config` understands (shown **parsed**, as JSON, for readability — stringify it
+before sending; see the callout above):
 
 **`agent`**
 ```json
@@ -248,7 +263,8 @@ What each type's `config` understands:
   "systemPrompt": "Plain-language instructions for the assistant at this step.",
   "tools": ["post_message", "graphrag_retrieve"],
   "maxIterations": 4,
-  "waitsForHuman": true
+  "waitsForHuman": true,
+  "model": "reasoning"
 }
 ```
 - `systemPrompt` — the instructions this step's turn runs with. Write it like briefing a new,
@@ -261,12 +277,23 @@ What each type's `config` understands:
   - `graphrag_retrieve` — search the workspace for grounding context.
   - `human_handoff` — shipped, but not used by any published definition yet; treat it as
     unproven if you reach for it.
+  A name the server doesn't recognize is **not** caught at publish time — it only fails the
+  *run*, the first time that step actually tries to call it, so a typo here surfaces much later
+  than the other mistakes on this page.
 - `maxIterations` — how many back-and-forth turns (model ⇄ tools) this step gets before it's cut
   off and forced to wrap up with whatever it has. Defaults to 4 if omitted.
 - `waitsForHuman` — optional here (unlike `human`/`wait`, not mandatory). Set it `true` when this
   step should pause for the person's next chat reply after its turn instead of moving straight
   on — that's how the shipped `triage` flow's first step waits for the user to finish answering
   clarifying questions before research begins.
+- `model` — optional; pins this step to a specific `provider/model` (e.g.
+  `"lmstudio/qwen/qwen3-4b-2507"`) or a named **role** (e.g. `"reasoning"` above — a stable name
+  that can point at a fallback chain of models, defined once and reused across defs) instead of
+  the default for this kind of step. Naming a provider/role the server has never heard of is
+  rejected **at publish time** (the rule above); naming a real provider but a bad model id on it
+  is only caught when the step actually runs. Full picture — how roles/fallback/overrides work,
+  and the same `model` key on an `{"kind":"llm"}` guard (next) — is its own manual:
+  `docs/manuals/llm-provider-config.md`.
 
 **`human`**
 ```json
@@ -298,6 +325,13 @@ What each type's `config` understands:
 - Still **no timer** — a `wait` step sits parked exactly like a `human` step until that signal
   actually arrives.
 
+⚠️ **`waitsForHuman` doesn't guarantee a pause — a firing transition wins first.** Both `human`
+and `wait` share this: if the step's own outgoing transition would fire anyway (most commonly,
+an unconditional `""` default guard), the run advances straight past it and never parks, no
+matter what `waitsForHuman` says. Give a `human`/`wait` step's outgoing transition a guard that
+depends on data it's genuinely waiting for — e.g. `{"kind":"cmp","path":"ctx.decision","op":"exists"}`
+— never an unconditional one, or the pause is silently defeated.
+
 **`decision`**
 ```json
 {}
@@ -309,12 +343,20 @@ an unconditional fallback transition or make sure its conditions are genuinely e
 
 #### Writing transitions and guards
 
-A transition connects one step to another and decides *when* it's taken via its `guard`:
+A transition connects one step to another and decides *when* it's taken via its `guard` (again
+shown **parsed** below — it's a JSON-encoded string on the wire, same as `config`):
 
 ```json
 { "from": "route", "to": "approval", "on": "needs_approval", "order": 0,
   "guard": { "kind": "cmp", "path": "ctx.request.role", "op": "in",
              "value": ["contractor", "exec"] } }
+```
+
+The same transition, correctly stringified for an actual `POST /workflow-defs` call:
+
+```json
+{ "from": "route", "to": "approval", "on": "needs_approval", "order": 0,
+  "guard": "{\"kind\":\"cmp\",\"path\":\"ctx.request.role\",\"op\":\"in\",\"value\":[\"contractor\",\"exec\"]}" }
 ```
 
 - `from` / `to` — the step keys this transition connects.
@@ -328,6 +370,10 @@ A transition connects one step to another and decides *when* it's taken via its 
 | **Default** | `""` (empty) | Always — use it for an "otherwise, just continue" branch. |
 | **AI-judged** | `{"kind": "llm", "text": "the user has provided enough information to research their request"}` | An AI judges, in plain language, whether the condition in `text` currently holds. |
 | **Rule-based** | `{"kind": "cmp", "path": "ctx.decision", "op": "eq", "value": "approve"}` | A precise, deterministic check against data the run is carrying — no AI involved. |
+
+An AI-judged guard also accepts an optional `model` key (e.g. `{"kind":"llm","text":"…","model":"reasoning"}`)
+— same meaning, same publish-time resolvability check, as the `agent` step's `model` (previous
+section).
 
 **Which one to reach for:** a rule-based guard is exact and free — it's what the `access-request`
 process definition (§4's worked example) uses throughout, needing no AI at all. An AI-judged
@@ -358,13 +404,22 @@ with a two-way rule-based branch, and a `wait` step releasing on a signal.
 
 #### Changing a definition later
 
-Once a `(key, version)` has been published, its **structure is locked**: re-publishing the same
-key/version to update *text* — a step's `systemPrompt`, a definition's `name`, a guard's wording
-— works and takes effect. Adding or removing a step, rewiring a transition, or changing which
-step is `start`, on the other hand, is **rejected** (a clear error, nothing written) once that
-exact version has already been published with different structure. To change the shape of a
-flow, **publish a new version** (`v2`, and so on) and materialize that — the old version keeps
-running exactly as it did for anyone already partway through it.
+Once a `(key, version)` has been published, treat it as **frozen — not just structurally, but
+entirely**. There are two ways re-publishing the same `key`/`version` can go, and neither one
+gets you a live edit:
+
+- **A structural change** — adding or removing a step, rewiring a transition, or changing which
+  step is `start` — is **rejected outright**: a clear `409` error, nothing written. This is the
+  one re-publish outcome you'll actually notice.
+- **A text-only change** — a different `systemPrompt`, a definition's `name`, a guard's wording,
+  even just its `model` — is **accepted** (a normal `201`) but **silently has no effect**: the
+  version already exists, so the new text is discarded and the old content keeps running. Nothing
+  in the response tells you this happened — the only way to know is to read the definition back
+  (§3, or `GET /workflow-defs/{key}/versions/{version}`) and see your edit isn't there.
+
+Either way, the fix is the same: **publish a new version** (`v2`, and so on) and materialize
+that — the old version keeps running exactly as it did for anyone already partway through it.
+There is no in-place edit of an already-published version, for text or for structure.
 
 ## FAQ / troubleshooting
 
@@ -409,11 +464,18 @@ be **materialized** into this workspace (§5) before any run can use it here. Se
 deployment, chosen by a server-level setting — publishing and materializing a new one doesn't
 change what `@mention` starts until that setting is repointed at it (§5).
 
-**I re-published a definition with an extra/removed step and nothing happened (or I got an
-error).**
+**I re-published a definition with an extra/removed step and got an error.**
 That's expected — a version's structure (its steps and how they connect) is locked once
-published; you can only change *text* (prompts, names, guard wording) on the same version. Publish
-the changed shape as a **new version** instead (§5, "Changing a definition later").
+published; changing it on the same `(key, version)` is rejected outright. Publish the changed
+shape as a **new version** instead (§5, "Changing a definition later").
+
+**I re-published a definition with just a wording/prompt change, under the same version — no
+error, but the change isn't there when I read it back.**
+Also expected, and easy to miss precisely because there's no error: only a *structural* change
+(adding/removing a step, etc.) is rejected. A text-only change is silently discarded — the
+version already exists, so nothing about it actually updates, success response notwithstanding
+(§5, "Changing a definition later"). Publish it as a **new version** to make a wording change
+take effect.
 
 **What happens if I `@mention` the assistant again while it's already waiting on my reply in that
 thread?**
