@@ -164,6 +164,208 @@ flowchart TD
 If you submit something the run isn't currently waiting for, or the run isn't parked at all, the
 API tells you so rather than silently doing nothing (you'll get a clear error, not a hang).
 
+### 5. Creating and configuring a workflow definition (API — operator/admin)
+
+Publishing a brand-new definition, or a new version of one, is also API-only today — same
+audience as the walkthrough above: whoever administers a workspace, not a typical chat user.
+It's a two-step process:
+
+```mermaid
+flowchart LR
+    Write["Write the definition\n(steps + transitions)"] -- "POST /workflow-defs" --> Pub["Published\n(global — not tied to a workspace yet)"]
+    Pub -- "POST /workflow-defs/{key}/versions/{version}/materialize" --> Mat["Materialized into this workspace\n(now actually runnable here)"]
+```
+
+1. **Publish** — `POST /workflow-defs` writes the definition once, globally.
+2. **Materialize** — `POST /workflow-defs/{key}/versions/{version}/materialize` copies it into
+   *this* workspace's own copy, which is what a run actually walks. **A definition that's
+   published but not materialized here can't be run in this workspace** — it'll show up in
+   `GET /workflow-defs`, but starting a run against it (or `@mention`-ing it, for a conversation
+   definition) won't work until this step is done.
+
+> **A conversation definition needs one more thing before `@mention` will start it.** Only one
+> conversation definition is "live" for `@mention` at a time, per deployment — which one is set
+> by whoever started the server (a server setting, not something this API controls). Publishing
+> and materializing a new conversation-kind definition makes it startable directly
+> (`POST /workflow-runs`), but it will **not** intercept `@mention`s until whoever runs the
+> server points the live setting at it. Ask them if you're not the one running the server.
+
+#### The shape of a definition
+
+```
+POST /workflow-defs
+{
+  "key": "access-request",     // stable id — combined with "version" to address this def
+  "version": "v1",             // definitions are versioned; a new version never touches an old one
+  "name": "Access request",    // display name (what people see, e.g. in the defs viewer, §3)
+  "kind": "process",           // "conversation" (started by @mention) or "process" (API-started)
+  "steps": [ ... ],            // at least 1
+  "transitions": [ ... ]       // at least 1 — see why below
+}
+```
+
+A few rules the server checks **before writing anything** — get one wrong and you get a clear
+error back, with nothing half-published:
+
+- Every step needs a unique `key` within the definition.
+- **Exactly one** step must be marked `"start": true` — that's where a run begins.
+- Every transition's `from`/`to` must name a step that's actually declared.
+- The definition needs **at least one transition** — model an ending as a step with no
+  *outgoing* transition, not as a definition with zero transitions overall.
+- A `human` or `wait` step (below) **must** set `config.waitsForHuman: true`, or it can never
+  actually pause — a run that reaches it will eventually be stopped for taking too many steps
+  instead.
+
+Rough size limits, so you recognize one rather than guessing: up to 200 steps and 500
+transitions per definition; each step's `config` and each transition's `guard` is capped at
+8000 characters.
+
+#### Choosing a step type
+
+```mermaid
+flowchart TD
+    Q1{Does it call an AI\nor use a tool?} -- yes --> agent["agent"]
+    Q1 -- no --> Q2{Does it pause for\na person to answer?}
+    Q2 -- yes --> human["human"]
+    Q2 -- no --> Q3{Does it pause for an\nexternal system's signal?}
+    Q3 -- yes --> wait["wait"]
+    Q3 -- no --> decision["decision\n(a pure branch or ending)"]
+```
+
+| Type | What it does | Works today? |
+|---|---|---|
+| `agent` | Runs an AI assistant turn — it reads its instructions, may call the tools you allow, and produces an answer or asks a question. | Yes |
+| `human` | Parks the run until a person submits an answer. | Yes |
+| `wait` | Parks the run until an external system sends a signal. Mechanically identical to `human` — only the label shown to whoever's watching differs. | Yes |
+| `decision` | A pure branch: no action of its own — its outgoing transitions decide where the run goes next. With no outgoing transition, it's an ending. | Yes |
+| `prompt`, `tool`, `message` | Reserved for a future release. | **No** — publishing one is accepted, but a run that reaches it fails outright. Don't use these yet. |
+
+What each type's `config` understands:
+
+**`agent`**
+```json
+{
+  "systemPrompt": "Plain-language instructions for the assistant at this step.",
+  "tools": ["post_message", "graphrag_retrieve"],
+  "maxIterations": 4,
+  "waitsForHuman": true
+}
+```
+- `systemPrompt` — the instructions this step's turn runs with. Write it like briefing a new,
+  very literal-minded colleague — be explicit about what it must do (e.g. "you must call
+  `post_message` to speak; text you merely write is never seen by anyone").
+- `tools` — which of the built-in tools this step may call. Leaving one out is how you keep a
+  step from doing something it shouldn't (an author-set fence, not a permission the model can
+  talk its way around). Available today:
+  - `post_message` — speak into the thread (ask a question, or deliver an answer).
+  - `graphrag_retrieve` — search the workspace for grounding context.
+  - `human_handoff` — shipped, but not used by any published definition yet; treat it as
+    unproven if you reach for it.
+- `maxIterations` — how many back-and-forth turns (model ⇄ tools) this step gets before it's cut
+  off and forced to wrap up with whatever it has. Defaults to 4 if omitted.
+- `waitsForHuman` — optional here (unlike `human`/`wait`, not mandatory). Set it `true` when this
+  step should pause for the person's next chat reply after its turn instead of moving straight
+  on — that's how the shipped `triage` flow's first step waits for the user to finish answering
+  clarifying questions before research begins.
+
+**`human`**
+```json
+{
+  "waitsForHuman": true,
+  "prompt": "Approve or reject this access request",
+  "fields": ["decision"],
+  "expects": {"decision": ["approve", "reject"]},
+  "assignee": "manager"
+}
+```
+- `waitsForHuman: true` — **required**.
+- `prompt` — shown to whoever needs to answer (surfaced in the run panel's form, §2).
+- `fields` — which top-level answer keys this step accepts; anything else submitted is rejected
+  — a typo in the field name is a clear error, not a silently ignored answer. Omit it entirely
+  to accept anything (not recommended — you lose that safety net).
+- `expects` — optionally restricts one of those fields to a fixed set of values (like
+  `approve`/`reject` above); anything else is rejected before it's written.
+- `assignee` — a label for who this is waiting on (shown in the run panel/API so people know who
+  to chase — see the FAQ entry above on a run stuck `waiting`).
+
+**`wait`**
+```json
+{ "waitsForHuman": true, "signal": "provisioned" }
+```
+- `waitsForHuman: true` — **required**.
+- `signal` — the one key name an external system must submit to release this step (e.g.
+  `{"provisioned": true}`). Unlike `human`'s `fields`, this is always exactly one key.
+- Still **no timer** — a `wait` step sits parked exactly like a `human` step until that signal
+  actually arrives.
+
+**`decision`**
+```json
+{}
+```
+No configuration — its behaviour lives entirely in its outgoing transitions (next). ⚠️ If every
+outgoing transition is conditional and none of them ever fires, the run just sits there
+re-trying the same step until it's stopped for taking too long — give a `decision` step either
+an unconditional fallback transition or make sure its conditions are genuinely exhaustive.
+
+#### Writing transitions and guards
+
+A transition connects one step to another and decides *when* it's taken via its `guard`:
+
+```json
+{ "from": "route", "to": "approval", "on": "needs_approval", "order": 0,
+  "guard": { "kind": "cmp", "path": "ctx.request.role", "op": "in",
+             "value": ["contractor", "exec"] } }
+```
+
+- `from` / `to` — the step keys this transition connects.
+- `on` — a human-readable label for what this transition means (e.g. `"approved"`) — for people
+  reading the definition later; the engine itself doesn't act on it.
+- `order` — a tie-breaker, see below.
+- `guard` — decides whether this transition fires. Three kinds:
+
+| Guard | Looks like | Fires when |
+|---|---|---|
+| **Default** | `""` (empty) | Always — use it for an "otherwise, just continue" branch. |
+| **AI-judged** | `{"kind": "llm", "text": "the user has provided enough information to research their request"}` | An AI judges, in plain language, whether the condition in `text` currently holds. |
+| **Rule-based** | `{"kind": "cmp", "path": "ctx.decision", "op": "eq", "value": "approve"}` | A precise, deterministic check against data the run is carrying — no AI involved. |
+
+**Which one to reach for:** a rule-based guard is exact and free — it's what the `access-request`
+process definition (§4's worked example) uses throughout, needing no AI at all. An AI-judged
+guard is for when the condition is genuinely fuzzy — "has the user given us enough to go on?" —
+something no fixed rule could reliably check. **A step's outgoing transitions are tried
+conditional-first** (in the `order` you gave them), and the default guard, if there is one, is
+only tried last — that's what makes "a specific condition beats the fallback" work without you
+having to order things by hand.
+
+Rule-based (`cmp`) guards read one of two places:
+- `ctx.<key>` — data the run is carrying: whatever was passed as the run's starting context, plus
+  anything submitted while it was parked (§4's `POST /workflow-runs/{runId}/input`) — merged in
+  flat, so a submitted `decision` key becomes `ctx.decision`.
+- `output` (the current step's raw result) or `output.<key>` (a key inside it, when it's JSON).
+
+compared with one of: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `in` (the value is in a list at the
+path), `contains` (the path holds a list/string containing the value), `exists` (the path has
+any value), `truthy`. Combine several with `{"kind": "all", "of": [...]}` /
+`{"kind": "any", "of": [...]}`, or negate one with `{"kind": "not", "of": [...]}` (exactly one
+child). **A missing value never errors** — a guard whose path isn't there simply evaluates to
+"does not fire," so a step with no matching branch just doesn't advance rather than crashing the
+run. There are sanity caps to stop a guard from getting out of hand (5 levels of nesting, 32
+conditions total, 8 branches per `all`/`any`) — you won't hit them writing an ordinary flow.
+
+See the `access-request` flowchart in §4 for a complete worked example: a `human` step, a pure
+`decision` branch with a conditional-plus-default pair of transitions, a second `human` step
+with a two-way rule-based branch, and a `wait` step releasing on a signal.
+
+#### Changing a definition later
+
+Once a `(key, version)` has been published, its **structure is locked**: re-publishing the same
+key/version to update *text* — a step's `systemPrompt`, a definition's `name`, a guard's wording
+— works and takes effect. Adding or removing a step, rewiring a transition, or changing which
+step is `start`, on the other hand, is **rejected** (a clear error, nothing written) once that
+exact version has already been published with different structure. To change the shape of a
+flow, **publish a new version** (`v2`, and so on) and materialize that — the old version keeps
+running exactly as it did for anyone already partway through it.
+
 ## FAQ / troubleshooting
 
 **I `@mention`-ed the assistant and nothing happened.**
@@ -195,7 +397,23 @@ above (`GET /workflow-runs/{runId}` and `/step-runs`) to check on it instead.
 
 **Can I edit a workflow definition?**
 Not from the web UI — the defs viewer is read-only. Publishing or changing a definition is done
-through the API by whoever administers the workspace.
+through the API by whoever administers the workspace — see §5 above for the shape of a
+definition, what each step type needs, and what "changing" actually means once a version has
+been published.
+
+**I published a new definition — why doesn't `GET /workflow-defs` let me run it / why doesn't
+`@mention` pick it up?**
+Two separate steps are easy to miss. First, publishing only writes it globally — it also needs to
+be **materialized** into this workspace (§5) before any run can use it here. Second, for a
+*conversation* definition specifically, `@mention` only ever starts **one** definition per
+deployment, chosen by a server-level setting — publishing and materializing a new one doesn't
+change what `@mention` starts until that setting is repointed at it (§5).
+
+**I re-published a definition with an extra/removed step and nothing happened (or I got an
+error).**
+That's expected — a version's structure (its steps and how they connect) is locked once
+published; you can only change *text* (prompts, names, guard wording) on the same version. Publish
+the changed shape as a **new version** instead (§5, "Changing a definition later").
 
 **What happens if I `@mention` the assistant again while it's already waiting on my reply in that
 thread?**
