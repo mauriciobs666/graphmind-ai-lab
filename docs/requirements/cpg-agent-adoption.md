@@ -65,3 +65,8 @@ _To be captured._
   a specific review that took longer than it should have, a bug impact-analysis
   would plausibly have caught, and the standing discomfort of an expensive capability
   sitting dormant. Stakeholder did not single one out as primary.
+- 2026-08-15 — What does "solved" look like? → **All four** candidate outcomes matter:
+  (1) more agents consult the CPG beyond the current three, (2) the already-wired
+  agents actually reach for it in real tasks (not just carry the wiring), (3) staleness
+  is knowable/managed, (4) coverage extends past `falkor-chat`/`salesperson`. This is a
+  broad feature — the FR list will need to cover all four without conflating them.
