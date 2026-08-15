@@ -94,3 +94,6 @@ _To be captured._
   **Default step.** A code-level-work agent should check whether a relevant CPG exists
   as part of its normal orientation (like reading `AGENTS.md` today), without needing
   to be reminded. This is the mechanism that actually closes lever 2.
+- 2026-08-15 — Overhead of a default check coming up empty (most components have no
+  CPG today) — does that matter? → **No, acceptable cost.** A quick no-op check on
+  components without a CPG is fine; not a constraint to design around.
