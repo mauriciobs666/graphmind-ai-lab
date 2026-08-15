@@ -90,3 +90,7 @@ _To be captured._
   every component. The change is that on-demand gets *invoked more often* in practice
   (more agents actually asking `graph-dba` to build one when it'd help), not that the
   model itself changes to proactive.
+- 2026-08-15 — Discovery trigger: default/unprompted step, or reminder-driven? →
+  **Default step.** A code-level-work agent should check whether a relevant CPG exists
+  as part of its normal orientation (like reading `AGENTS.md` today), without needing
+  to be reminded. This is the mechanism that actually closes lever 2.
