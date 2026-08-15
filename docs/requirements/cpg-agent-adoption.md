@@ -79,3 +79,9 @@ _To be captured._
   **Spot-checking is enough for now** — no recurring/automated usage metric required.
   Being able to look at a task transcript that plausibly touched CPG-covered code and
   see the agent considered/used the graph is sufficient evidence.
+- 2026-08-15 — Lever 3 (trustworthy/freshness): marker vs. auto-refresh? → **Show +
+  suggest, not automatic.** The consuming agent should be able to tell how stale the
+  loaded graph might be (a marker of some kind) and, if it looks stale, surface a
+  suggestion to refresh it — not silently trust it, and not silently auto-rebuild
+  either. Rebuilding stays a deliberate, on-demand action (consistent with
+  `graph-dba`'s existing "rare, not proactive" CPG-generation stance).
