@@ -2,6 +2,55 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-15 — Review-only pass: filed K-015 (validate the dispatch-sizing rule live)
+
+- **What:** no prompt change. Stakeholder asked what's next for `teco`, specifically flagging
+  the "big work packages" episode from the last end-to-end run. Reviewed `plan.md`/`history.md`/
+  `inbox.md` (one undistilled entry remains, 2026-08-12 — see below) and confirmed the dispatch-sizing
+  rule that answers that exact episode (K-042 Landing 1, 2026-08-11 entry) has shipped in
+  `teco.md` §3 but has **zero live-run evidence since** — no coordination has exercised it under
+  real conditions. Filed as **K-015** (high priority) in `plan.md`, cross-linked to close
+  alongside the still-open **K-012** (`ListAgents` fresh-session probe) and **K-013**
+  (`SendMessage` continuation) on the same next live run, since one end-to-end coordination can
+  produce evidence for all three at once.
+- **Why:** per the kaizen convention, a review-only pass still records ideas surfaced during
+  review rather than letting them evaporate at the end of the conversation.
+- **Plan items:** K-015 filed (🔵 proposed).
+
+## 2026-08-15 — Distilled the 2026-08-12 inbox entry: discarded from teco (suggested home didn't fit), redirected to `cobb`'s own kaizen
+
+- **What:** ran the agent-maintenance skill §5 procedure on the sole entry in `teco/kaizen/inbox.md`
+  (2026-08-12, "a review-gated unit with no coordination doc is nearly unrecoverable after a
+  mid-session credit crash").
+- **Verified — incident is real, not embellished:** `docs/plans/kaizen-inbox-distillation2-coordination.md`
+  (Owner: `teco`, `Tracks: — (no backlog id; stakeholder-triggered cobb sweep)`) and
+  `docs/reviews/kaizen-inbox-distillation2.md` confirm it exactly: `cobb` ran a 39-file team-wide
+  kaizen distillation directly (not via `teco`), `analyst` gated it "needs changes," the fix pass
+  had to be resumed cold (`U1` row: `agentId (prior session, not resumable)`), and the recovering
+  session (operating as `teco`) reconstructed state from the review alone, confirmed **K-041**
+  already covered one of the review's "open questions" (matches the inbox entry's claim exactly),
+  and closed cleanly (commit `db39ade`). The entry's cited filename
+  (`kaizen-distillation-2026-08.md`) was the doc's pre-rename name — `analyst`'s own U3 renamed it
+  to `kaizen-inbox-distillation2.md`, noted in the coordination doc; not a fabrication, a stale
+  filename from before the rename.
+- **Why the suggested home ("teco.md step 2/3: open the ledger at first dispatch for any
+  review-gated sequence") doesn't fit teco:** that rule **already existed** — step 2 has opened a
+  coordination doc whenever *any* unit carries a review gate (not only at the 3-unit threshold)
+  since the 2026-08-10 ledger pass, which **predates** this incident. The incident's `U1` (the
+  original `cobb` sweep + `analyst` gate) never had a ledger because it was **never coordinated by
+  teco at all** — direct stakeholder → `cobb` → `analyst`, by design (`cobb` is meant to be
+  directly invokable for agent-maintenance work, per its own `description`). Teco's existing rule
+  had no chance to apply; there is no teco-side gap to close.
+- **Disposition: discard from teco's inbox, redirect the underlying observation to `cobb`'s own
+  kaizen** (`claude/cobb/kaizen/plan.md`, parking lot) as a self-directed note — the actual
+  mitigation that saved the recovery (the review's self-sufficient baseline-commit + explicit
+  scope list) is already `analyst`'s standing review-header practice, so this is confirmed-good-
+  practice-under-fire, not a new rule; logged as a soft parking-lot idea, not a prompt change, per
+  §5's "highest bar: every session pays for it" for anything landing in an always-loaded prompt —
+  one data point, no repeat, no runtime-behavior gap identified.
+- **Plan items:** none advanced in teco's own plan (K-012/013/014/015 unaffected); see
+  `claude/cobb/kaizen/{plan,history}.md` for the redirected entry.
+
 ## 2026-08-11 — Dispatch-sizing standing rule + 4 smaller promotions from the inbox distillation (stakeholder's "never a landing this big again" directive)
 
 - **What:** `cobb` distilled all six entries in `teco/kaizen/inbox.md` (§5), triggered by a

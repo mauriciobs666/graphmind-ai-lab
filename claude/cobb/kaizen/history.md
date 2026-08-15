@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-15 — Distillation redirect: teco's 2026-08-12 credit-crash-recovery entry lands here as a parking-lot idea, not a prompt change
+
+- **What:** processing `teco/kaizen/inbox.md`'s sole entry (agent-maintenance §5) found its
+  suggested home (`teco.md` step 2/3) didn't fit — the coordination-ledger rule it asked for
+  already existed and predated the incident, because the incident's original unit (a 39-file
+  team-wide kaizen sweep I ran directly, gated "needs changes" by `analyst`) was never routed
+  through `teco` at all. Discarded from `teco`'s inbox; the underlying observation — a
+  directly-invoked review-gated sweep survived a mid-run credit crash only because the review
+  doc was self-sufficient (baseline commit + explicit scope) — is about *my own* operating
+  pattern, not teco's, so it's logged here instead: `plan.md` parking lot, no prompt change (one
+  data point, no repeat, and the safety net that saved it is already `analyst`'s standing
+  practice).
+- **Why:** no directly-invoked agent should let a durable-but-unpromoted observation about its
+  own risk pattern evaporate, even when it doesn't clear the bar for a prompt change.
+- **Verified:** `docs/plans/kaizen-inbox-distillation2-coordination.md` and
+  `docs/reviews/kaizen-inbox-distillation2.md` cross-checked against the inbox entry's claims —
+  matched exactly (K-041 cross-reference, no-backlog-id header, `agentId (prior session, not
+  resumable)` row).
+- **Plan items:** none promoted; parking-lot idea added (see `plan.md`).
+
 ## 2026-08-12 — Fixed every Blocker/Major/Minor/Nit from `analyst`'s gate on the 2026-08-11 distillation
 
 - **What:** worked `docs/reviews/kaizen-distillation-2026-08.md`'s full findings list (verdict:

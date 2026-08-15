@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-10
+> Last reviewed: 2026-08-15
 
 ## Active
 
@@ -11,6 +11,28 @@
 | K-012 | 2026-08-10 | high | 🔵 | Verify `ListAgents` actually materializes in a teco run |
 | K-013 | 2026-08-10 | med | 🔵 | Exercise the `SendMessage` continuation loop once, for real |
 | K-014 | 2026-08-10 | low | 🔵 | Nothing enforces that the ledger's `agentId` cell gets filled |
+| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — zero live-run evidence since it shipped |
+
+### K-015 — validate the dispatch-sizing rule on a real oversized plan
+- **Status:** 🔵 proposed · **Priority:** high
+- **Rationale:** the 2026-08-11 change (step 3, "Delegate with complete briefs") added the
+  step-table sizing rule — split a dispatch at ~3 steps/5 files instead of handing a whole
+  landing to one agent — directly in response to the stakeholder's "please never again create a
+  landing so big" after K-042 Landing 1 (458k tokens / 222 tool calls, 3 of 11 test files and 3
+  of 5 rewired bindings silently dropped from scope). **The rule has never fired in a live run
+  since** — it is a prompt-level instruction with no observed instance of it actually splitting a
+  plan. A rule that's only ever been read, never followed under real conditions, is a claim, same
+  epistemic shape as K-013's unexercised `SendMessage` loop.
+- **Proposed change:** on the next goal whose architect plan produces a step table crossing the
+  ~3-step/5-file boundary, deliberately watch teco's step-2 decomposition: does it actually draw
+  per-step (or small-cluster) units instead of one mega-unit, and does the resulting per-unit
+  token/tool-call cost look sane relative to K-042's 458k/222 baseline? Record the datapoint here
+  — first real instance either confirms the rule holds under pressure or shows it needs
+  reinforcement (e.g., a self-check line at dispatch time, not just at decomposition time).
+- **Synergy:** the same live run is the natural place to also close **K-012** (fresh-session
+  `ListAgents` probe) and attempt **K-013** (deliberate `SendMessage` continuation) — one
+  end-to-end coordination can produce evidence for three open items instead of three separate
+  runs.
 
 ### K-012 — verify `ListAgents` actually materializes
 - **Status:** 🔵 proposed · **Priority:** high

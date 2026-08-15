@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `cobb` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-16
+> Last reviewed: 2026-08-15
 
 ## Active
 
@@ -17,6 +17,17 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
 ## Parking lot / ideas
+- **Redirected from `teco`'s 2026-08-12 inbox entry (distilled 2026-08-15):** a directly-invoked
+  (non-`teco`-coordinated) large sweep I ran — the 39-file full-team kaizen-inbox distillation,
+  gated "needs changes" by `analyst` — had no coordination ledger, and the session that ran it hit
+  a mid-run credit exhaustion before the fix pass was dispatched. Recovery only worked because the
+  review (`docs/reviews/kaizen-inbox-distillation2.md`) was self-sufficient: explicit baseline
+  commit + explicit file scope, `analyst`'s standing review-header practice. **Not filed as a
+  prompt change** — one data point, no repeat, and the safety net that saved it is already
+  standard practice, not a gap. Parking here as a reminder: if I (`cobb`) ever run another large,
+  review-gated, directly-invoked (not `teco`-routed) sweep, keep that same discipline (explicit
+  baseline + scope in whatever review/report anchors the work) rather than assuming it'll survive
+  on vibes — and if this pattern repeats, it graduates from parking lot to an actual guardrail.
 - From the 2026-08-09 self-review during the C-308/C-312/C-319 skill-review pass
   (`docs/reviews/cpg-followups-skills-impl.md`): the C-319 promotion compressed two independently
   true, parallel "cwd-independent" facts (`.mcp.json` discovery walk-up; `${CLAUDE_PROJECT_DIR}`
