@@ -2,7 +2,15 @@
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-08-15
 
 ## Intent
-_To be captured through the interview._
+Turn the CPG from a narrowly-wired, largely dormant capability into something any
+agent doing code-level work routinely benefits from — without turning any of the
+machinery around it into something automatic or proactive. Concretely: widen who can
+reach it beyond the original three consumers, make *discovering* it a normal, default
+step in an agent's orientation rather than something that has to be pointed out, give
+agents a way to judge (and flag) how stale a loaded graph might be, and let broader
+component coverage happen through the existing on-demand model, just exercised more
+often. The MCP access path, auto-rebuild, proactive build-out, and usage dashboards
+are all explicitly not part of this — see Out of scope.
 
 ## Problem & current state
 The `cpg-analysis` skill (reads a Joern Code Property Graph loaded in FalkorDB) was
@@ -42,19 +50,89 @@ Investigation ahead of this interview (tico, 2026-08-15) found, concretely:
   falkor-chat has had substantial commits since with no recorded CPG refresh tied to them.
 
 ## User stories
-_To be captured._
+- As an agent doing code-level work (not limited to `analyst`/`architect`/`qa-engineer`),
+  I want to discover whether a relevant CPG exists as part of my normal task
+  orientation, so that I can use it without being told or already knowing it's there.
+- As the stakeholder, I want to be able to spot-check a task's transcript and see
+  evidence the agent considered or used the CPG when it plausibly applied, so that I
+  can trust the wiring isn't just decorative.
+- As an agent consulting a loaded CPG, I want to know how current the graph might be,
+  so that I don't treat possibly-stale results as ground truth.
+- As an agent that notices a stale-looking CPG, I want to be able to surface a
+  suggestion to refresh it, so that refreshing stays a deliberate, on-demand action
+  rather than something silently trusted or silently auto-triggered.
+- As the stakeholder, I want the existing on-demand CPG-build model to get invoked
+  more often in practice, so that coverage grows organically without a costly
+  proactive build-out project.
 
 ## Functional requirements
-_To be captured._
+- **FR-1** — Any agent doing code-level work (not limited to the three agents wired
+  today) must be able to determine whether a CPG relevant to its current task exists.
+- **FR-2** — That determination must happen as a normal part of the agent's task
+  orientation, not only when a CPG's existence is pointed out by the user or another
+  agent.
+- **FR-3** — When a relevant, available CPG is found, the agent must be able to use it
+  for its task (impact analysis, RCA, review, test-gap, or other code-level reasoning)
+  rather than defaulting straight to reading files individually.
+- **FR-4** — A discovery check that comes up empty (component has no CPG loaded) must
+  not introduce noticeable friction or noise to the task.
+- **FR-5** — An agent consulting a loaded CPG must be able to obtain some indication of
+  how current the graph is relative to the code it describes.
+- **FR-6** — When a CPG appears stale, the agent must be able to surface a suggestion
+  to refresh it. It must not silently treat a stale graph as current, and must not
+  trigger a rebuild on its own.
+- **FR-7** — Refreshing/building a CPG remains a deliberate, on-demand action, unchanged
+  from the existing model — this feature increases how often that action gets invoked
+  in practice, not the model itself.
+- **FR-8** — This feature must not change the CPG read path (`mcp__cpg__query`, its
+  parameters, or the `redis-cli` fallback) established by `cpg-query-access.md` (M3).
+- **FR-9** — Whatever downstream document/plan implements this must reconcile
+  explicitly with the consumer-scope boundary set at M2
+  (`docs/plans/m2-cpg-analysis-skill.md`) and M3 (`docs/requirements/cpg-query-access.md`),
+  recording this as an **extension** of that scope, not a silent divergence from it.
 
 ## Out of scope
-_To be captured._
+- **MCP tool / access path changes** — `mcp__cpg__query`'s shape, parameters, or the
+  `redis-cli` fallback. Settled at M3; untouched here.
+- **Automatic/unattended CPG rebuild.** Refresh stays a suggested, deliberately
+  triggered action (FR-6) — never silent, never agent-initiated on its own.
+- **Proactive, wholesale CPG build-out** across every component. Coverage grows only
+  through the existing on-demand model, just exercised more often (FR-7).
+- **Recurring or automated usage-tracking / dashboards.** Verification stays manual
+  spot-checking (a stakeholder reviewing a transcript), not a tracking system.
+- **Authentication / access-control changes to FalkorDB.** Already out of scope per
+  `cpg-query-access.md`; unchanged here.
+- **The actual design** — which agents qualify, prompt/skill/hook wording, how
+  discovery and staleness signaling are implemented. That's the downstream design
+  pass's job (`cobb` for agent/skill wiring, `graph-dba` for freshness mechanics), not
+  this document's.
 
 ## Acceptance criteria
-_To be captured._
+- **AC-1** — Given a code-level-work agent beyond the original three (exact roster
+  decided at design time) starting a task that touches a component with a loaded CPG,
+  when it orients on the task, then it discovers the CPG's existence without being
+  told, and consults it when relevant to the task.
+- **AC-2** — Given a stakeholder spot-checks a task's transcript for work that
+  plausibly touched CPG-covered code, when they look for evidence, then they can see
+  either that the agent considered/used the CPG, or an explicit, reasoned "not
+  relevant here."
+- **AC-3** — Given an agent consults a loaded CPG, when it reports back or acts on the
+  results, then it also communicates some signal of how current the graph is.
+- **AC-4** — Given that signal indicates the graph may be stale, when the agent
+  proceeds, then it surfaces a suggestion to refresh — not a silent rebuild, not
+  silent continued use as if current.
+- **AC-5** — Given a component with no loaded CPG, when an agent's default discovery
+  check runs, then the task proceeds with no material delay or noise attributable to
+  that check.
+- **AC-6** — Given the downstream plan for this feature, when read against
+  `m2-cpg-analysis-skill.md` and `cpg-query-access.md`, then it states explicitly that
+  it *extends* — not silently overrides — the consumer-scope boundary those documents
+  set.
 
 ## Open questions
-_To be captured._
+None outstanding. The exact agent roster (FR-1/AC-1) and the discovery/staleness
+mechanism (FR-2, FR-5, FR-6) are deliberately left to the downstream design pass —
+not open questions here, but explicit deferrals the stakeholder confirmed.
 
 ## Decision log
 - 2026-08-15 — Session opened from a Mode-2 explanation ("why aren't the Claude agents
@@ -97,3 +175,6 @@ _To be captured._
 - 2026-08-15 — Overhead of a default check coming up empty (most components have no
   CPG today) — does that matter? → **No, acceptable cost.** A quick no-op check on
   components without a CPG is fine; not a constraint to design around.
+- 2026-08-15 — Out-of-scope confirmation → **All four confirmed out**: MCP tool/access
+  path changes, automatic rebuild, proactive full-repo build-out, and any
+  usage-tracking dashboard.
