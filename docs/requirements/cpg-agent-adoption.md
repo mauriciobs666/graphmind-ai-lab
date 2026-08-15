@@ -70,3 +70,8 @@ _To be captured._
   agents actually reach for it in real tasks (not just carry the wiring), (3) staleness
   is knowable/managed, (4) coverage extends past `falkor-chat`/`salesperson`. This is a
   broad feature — the FR list will need to cover all four without conflating them.
+- 2026-08-15 — Lever 1 (more agents consult it): which agents? → **Not a fixed list** —
+  "any agent doing code-level work" is the target, not a named set like
+  `coder`/`tdd-engineer` specifically. The design pass downstream of this doc decides
+  exactly who qualifies; this doc records the need (a code-level-work agent should be
+  able to reach the CPG when one's relevant to its task), not the roster.
