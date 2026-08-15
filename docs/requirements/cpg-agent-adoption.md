@@ -85,3 +85,8 @@ _To be captured._
   suggestion to refresh it — not silently trust it, and not silently auto-rebuild
   either. Rebuilding stays a deliberate, on-demand action (consistent with
   `graph-dba`'s existing "rare, not proactive" CPG-generation stance).
+- 2026-08-15 — Lever 4 (coverage): every component, or the busy ones? Proactive build-out
+  or on-demand? → **On-demand stays the model** — no wholesale build-out of CPGs for
+  every component. The change is that on-demand gets *invoked more often* in practice
+  (more agents actually asking `graph-dba` to build one when it'd help), not that the
+  model itself changes to proactive.
