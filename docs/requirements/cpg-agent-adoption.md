@@ -75,3 +75,7 @@ _To be captured._
   `coder`/`tdd-engineer` specifically. The design pass downstream of this doc decides
   exactly who qualifies; this doc records the need (a code-level-work agent should be
   able to reach the CPG when one's relevant to its task), not the roster.
+- 2026-08-15 — Lever 2 (used, not just wired): how would you verify it's working? →
+  **Spot-checking is enough for now** — no recurring/automated usage metric required.
+  Being able to look at a task transcript that plausibly touched CPG-covered code and
+  see the agent considered/used the graph is sufficient evidence.
