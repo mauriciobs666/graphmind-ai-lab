@@ -61,3 +61,7 @@ _To be captured._
   benefiting from the CPG, how can we improve them") that surfaced enough of a gap to
   warrant a requirements interview. Stakeholder chose to proceed with the interview
   (Mode 1) over going straight to a `cobb` design pass.
+- 2026-08-15 — What triggered this now? → **All three** surfaced reasons apply at once:
+  a specific review that took longer than it should have, a bug impact-analysis
+  would plausibly have caught, and the standing discomfort of an expensive capability
+  sitting dormant. Stakeholder did not single one out as primary.
