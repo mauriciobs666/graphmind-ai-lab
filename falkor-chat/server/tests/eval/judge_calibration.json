@@ -1,0 +1,265 @@
+{
+  "generatedAt": "2026-08-15T20:59:21.421188+00:00",
+  "agentUnderTestModel": "qwen/qwen3-4b-2507",
+  "judgeModel": "qwen/qwen3-4b-2507",
+  "sameModelAsAgentUnderTest": true,
+  "calibration": {
+    "sampleSize": 10,
+    "faithfulnessAgreement": 0.9,
+    "relevanceAgreement": 0.7,
+    "parseFailures": 0,
+    "items": [
+      {
+        "id": "jc-01",
+        "expectedFaithfulness": true,
+        "expectedRelevance": true,
+        "judgedFaithfulness": true,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-02",
+        "expectedFaithfulness": false,
+        "expectedRelevance": true,
+        "judgedFaithfulness": false,
+        "judgedRelevance": false,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": false
+      },
+      {
+        "id": "jc-03",
+        "expectedFaithfulness": true,
+        "expectedRelevance": true,
+        "judgedFaithfulness": true,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-04",
+        "expectedFaithfulness": true,
+        "expectedRelevance": false,
+        "judgedFaithfulness": true,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": false
+      },
+      {
+        "id": "jc-05",
+        "expectedFaithfulness": null,
+        "expectedRelevance": true,
+        "judgedFaithfulness": null,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-06",
+        "expectedFaithfulness": false,
+        "expectedRelevance": true,
+        "judgedFaithfulness": false,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-07",
+        "expectedFaithfulness": true,
+        "expectedRelevance": true,
+        "judgedFaithfulness": true,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-08",
+        "expectedFaithfulness": true,
+        "expectedRelevance": false,
+        "judgedFaithfulness": null,
+        "judgedRelevance": false,
+        "parseFailed": false,
+        "faithfulnessAgree": false,
+        "relevanceAgree": true
+      },
+      {
+        "id": "jc-09",
+        "expectedFaithfulness": null,
+        "expectedRelevance": false,
+        "judgedFaithfulness": null,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": false
+      },
+      {
+        "id": "jc-10",
+        "expectedFaithfulness": true,
+        "expectedRelevance": true,
+        "judgedFaithfulness": true,
+        "judgedRelevance": true,
+        "parseFailed": false,
+        "faithfulnessAgree": true,
+        "relevanceAgree": true
+      }
+    ]
+  },
+  "generation": {
+    "sampleSize": 20,
+    "faithfulTrue": 20,
+    "faithfulFalse": 0,
+    "faithfulAbstained": 0,
+    "relevantTrue": 20,
+    "relevantFalse": 0,
+    "parseFailures": 0,
+    "items": [
+      {
+        "id": "gr-01",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-02",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-03",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-04",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-05",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-06",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-07",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-08",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-09",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-10",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-11",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-12",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-13",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-14",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-15",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-16",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-17",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-18",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-19",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      },
+      {
+        "id": "gr-20",
+        "seedCount": 10,
+        "faithfulness": true,
+        "relevance": true,
+        "parseFailed": false
+      }
+    ]
+  }
+}

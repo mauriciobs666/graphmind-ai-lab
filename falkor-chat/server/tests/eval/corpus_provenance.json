@@ -1,0 +1,7 @@
+{
+  "message_count": 121,
+  "thread_count": 12,
+  "embedding_model_ref": "lmstudio/text-embedding-qwen3-embedding-0.6b",
+  "embedding_dim": 1024,
+  "seeded_at": "2026-08-15T16:30:18Z"
+}
