@@ -1,5 +1,5 @@
 # CPG agent adoption — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-08-15
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-08-15
 
 ## Intent
 Turn the CPG from a narrowly-wired, largely dormant capability into something any
