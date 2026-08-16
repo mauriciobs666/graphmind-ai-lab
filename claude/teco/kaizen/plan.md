@@ -2,16 +2,14 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-15
+> Last reviewed: 2026-08-16
 
 ## Active
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-012 | 2026-08-10 | high | 🔵 | Verify `ListAgents` actually materializes in a teco run |
-| K-013 | 2026-08-10 | med | 🔵 | Exercise the `SendMessage` continuation loop once, for real |
-| K-014 | 2026-08-10 | low | 🔵 | Nothing enforces that the ledger's `agentId` cell gets filled |
-| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — zero live-run evidence since it shipped |
+| K-012 | 2026-08-10 | high | 🔵 | Verify `ListAgents` actually materializes in a teco run — still no evidence |
+| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — still no evidence (K-026's dispatches all stayed single-unit) |
 
 ### K-015 — validate the dispatch-sizing rule on a real oversized plan
 - **Status:** 🔵 proposed · **Priority:** high
@@ -29,10 +27,13 @@
   token/tool-call cost look sane relative to K-042's 458k/222 baseline? Record the datapoint here
   — first real instance either confirms the rule holds under pressure or shows it needs
   reinforcement (e.g., a self-check line at dispatch time, not just at decomposition time).
-- **Synergy:** the same live run is the natural place to also close **K-012** (fresh-session
-  `ListAgents` probe) and attempt **K-013** (deliberate `SendMessage` continuation) — one
-  end-to-end coordination can produce evidence for three open items instead of three separate
-  runs.
+- **Synergy (partially realized 2026-08-16):** K-026's own coordination produced real evidence
+  for **K-013** (SendMessage continuation, ✅ done — see history.md) and **K-014** (agentId ledger
+  discipline, ✅ done — see history.md) without a dedicated push, confirming the "one coordination,
+  several datapoints" premise. **K-012** (`ListAgents` probe) still has no evidence — nothing in
+  that coordination invoked it. This item (K-015 itself) also stayed untested: every K-026 unit,
+  including its closing ones (qa-engineer acceptance pass, doc closeout), stayed single-unit and
+  never crossed the ~3-step/5-file boundary that would exercise the sizing rule.
 
 ### K-012 — verify `ListAgents` actually materializes
 - **Status:** 🔵 proposed · **Priority:** high
@@ -51,22 +52,19 @@
   runtime tool set explicitly. If a fresh-session probe shows `ListAgents` still absent, drop the
   frontmatter grant as decoration; if present, add the enumeration step back to step 5.
 
-### K-013 — exercise the `SendMessage` continuation loop for real
-- **Status:** 🔵 proposed · **Priority:** medium
-- **Rationale:** the mechanism has been prompt-level since 2026-07-29 and has **never fired**
-  (0 occurrences in any confirmed teco run vs. 42 repo-wide). The 2026-08-10 pass made it
-  addressable (`agentId` in the ledger) but still unexercised; an unexercised path is a claim.
-- **Proposed change:** on the next coordination with a review gate, deliberately route the
-  re-check through `SendMessage` and record the first datapoint here — did resuming actually
-  preserve the delegate's context, and what did it save vs. a cold respawn?
-
-### K-014 — the `agentId` ledger cell has no enforcement
-- **Status:** 🔵 proposed · **Priority:** low
-- **Rationale:** the whole continuation path now depends on a cell teco fills by self-discipline;
-  no hook or script checks it. Same enforcement-parity shape as the milestone-close freeze below.
-- **Proposed change:** decide from evidence after a few coordinations — if the cell gets skipped,
-  a cheap `audit`-style checker over `*-coordination.md` files is the fix; if it doesn't, leave it.
-
+> **K-013 — exercise the `SendMessage` continuation loop for real — ✅ done 2026-08-16** (moved
+> to history.md). K-026's own coordination ledger (Unit 2b needs-changes → fix → re-gate cycle)
+> resumed the same `analyst` agent by its `agentId` for the re-gate; it re-verified its own
+> earlier findings without being re-briefed on them — context genuinely preserved, not a cold
+> respawn.
+>
+> **K-014 — the `agentId` ledger cell has no enforcement — ✅ done 2026-08-16** (moved to
+> history.md). De-risked by evidence, not by adding a checker: every unit row in K-026's
+> multi-session, ~20-unit coordination has its `agentId` filled, with exactly one explicitly-
+> justified exception (a unit inherited from a prior session with genuinely no id to carry
+> forward). Self-discipline held under real, sustained load — no checker needed per K-014's own
+> stated criterion.
+>
 > **K-006 — review-default list has no reviewer for agent-engineering deliverables — ✅ done
 > 2026-07-29** (moved to history.md). Disposition: made explicit in the existing "Work ships
 > independently reviewed" defaults clause rather than a new row — `plans and code (including

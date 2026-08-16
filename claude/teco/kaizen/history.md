@@ -2,6 +2,37 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-16 — K-013 ✅ and K-014 ✅ closed by real evidence from K-026's own coordination (review-only, no prompt change)
+
+- **What:** reviewing `teco/kaizen/plan.md`'s active table against the just-closed K-026
+  GraphRAG-eval coordination ledger (`falkor-chat/docs/plans/graphrag-eval-coordination.md`)
+  found two of the four open items had actually been exercised, live, during that coordination —
+  the datapoints just hadn't been written back yet.
+  - **K-013 (exercise `SendMessage` continuation for real) — closed.** The ledger's `U2b-gate`/
+    `U2b-fix` rows show `analyst` gated Unit 2b "needs changes" (Blocker B-1, Major M-1) → a fix
+    dispatched to `tdd-engineer` → the re-gate row reads `analyst (resume a4b2370c17130742d,
+    re-gate)` — `teco` resumed the *same* analyst by its own ledger `agentId` instead of a fresh
+    spawn, and that analyst "independently re-verified both fixes itself... re-ran suites...
+    checked `GRAPH.LIST` directly for B-1" without being re-briefed on its own earlier findings.
+    Real evidence context is preserved across a `SendMessage` resume, not just a claim.
+  - **K-014 (agentId ledger cell has no enforcement) — closed, no checker added.** Every one of
+    ~20 unit rows in K-026's multi-session coordination has its `agentId` cell filled, with
+    exactly one explicitly-justified exception (`U-bug`, inherited from a prior session with
+    genuinely no id to carry forward — noted as unresolvable, not silently blank). Self-discipline
+    held under sustained real load; per K-014's own stated criterion ("if it doesn't get skipped,
+    leave it"), no checker is warranted from this evidence.
+  - **K-012 (`ListAgents` materializes) and K-015 (dispatch-sizing rule) — still open.** Neither
+    got exercised: nothing in the K-026 coordination invoked `ListAgents`, and every unit
+    (including the closing qa-engineer/doc-closeout ones) stayed single-unit, never crossing the
+    ~3-step/5-file boundary that would test the sizing rule.
+- **Why:** the user asked directly, mid-session, what became of "the teco improvement item we were
+  testing" — prompted this reconciliation rather than letting the evidence sit unlogged in a
+  component's coordination doc where it would never surface again.
+- **Verified:** read the coordination doc's ledger rows directly (not a relayed summary) before
+  crediting either closure.
+- **Plan items:** K-013 ✅, K-014 ✅ (moved to plan.md's done-notes block); K-012, K-015 remain
+  active, both updated with a 2026-08-16 "still no evidence" note.
+
 ## 2026-08-16 — Step 4 gains a misrouting-vs-staleness distinction for incoming messages (cobb, cross-session peer-addressing near-miss)
 
 - **What:** one new bullet in step 4 ("Track what's in flight"), right after the existing
