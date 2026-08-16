@@ -154,6 +154,37 @@ conversational agent**:
   subagent into this. Prefer teams/background over hand-rolled nested delegation
   for parallel/long-running multi-agent work.
 
+### Cross-session peer addressing (`SendMessage` + `ListAgents`) — verified 2026-08-16
+
+- **`SendMessage`/`ListAgents` now also reach independently-launched peer sessions, not only
+  Agent-Teams teammates.** The live tool descriptions (fetched via `ToolSearch` in a running
+  session) document address classes beyond in-process subagents: "other local Claude sessions on
+  this machine," "your Claude sessions running in the cloud," and (when Remote Control is
+  connected) "your account's other sessions." This is broader than — and current docs don't yet
+  visibly reconcile with — the Agent-Teams-gated description above
+  (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, re-verified 2026-06-21); treat the tool's own live
+  description as the more current source until the two are reconciled against fresh official docs.
+- **Bare-name addressing is ambiguous when two independently-launched sessions share the same
+  agent name.** `SendMessage`'s own description states name resolution is "latest wins" among
+  same-named live agents; `ListAgents` may list only one row for a name even when the ambiguity is
+  real (observed: two separate `--agent teco` invocations, on different tasks, with only one
+  visible to the probing session). Nothing in the address itself proves which task the target
+  session is actually running.
+- **Incident (2026-08-16):** an orchestrating session sent a full multi-paragraph resume brief for
+  one coordination ("K-026") to a peer named `teco`, found via `ListAgents` and assumed — from
+  stale prior-session context — to be that coordination's session. It was actually a different,
+  independently-launched `teco` session mid-coordination on an unrelated task. That session's own
+  human caught the mismatch; by then the session had already done a small amount of read-only
+  "safe" work (a test re-run, a state-restoring reseed) before declining — harmless here, but not
+  free, and worse mixing is possible with a less careful peer.
+- **Practice:** before sending a substantive brief to a bare-named peer you did not yourself
+  spawn (i.e. its identity/task isn't already known from a ledger `agentId` or this session's own
+  spawn record), send a cheap identity-confirming probe first ("what are you currently
+  coordinating?") and read the reply before committing the real brief. If there's any doubt and the
+  task has a persistent state artifact (a coordination-doc ledger), prefer a fresh subagent that
+  reads that artifact over resuming an unverified peer — slower, but structurally can't misfire
+  onto someone else's work.
+
 ### What loads into a subagent (verified 2026-06-20)
 
 - The body **replaces** the default system prompt — a subagent receives **only**

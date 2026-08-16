@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-16 — Step 4 gains a misrouting-vs-staleness distinction for incoming messages (cobb, cross-session peer-addressing near-miss)
+
+- **What:** one new bullet in step 4 ("Track what's in flight"), right after the existing
+  "incoming resume/pause message: intent authoritative, facts aren't" rule: a message describing
+  a task/coordination **absent from this session's own ledger or active context** is a
+  *misrouting* signal, not merely a staleness one — `SendMessage` addresses peers by bare agent
+  name, which resolves ambiguously when more than one independently-launched session shares that
+  name, so the sender may simply have the wrong `teco`. Pause and confirm identity with your own
+  user before doing *anything* in response, even read-only verification.
+- **Why:** a live incident, not a hypothetical — a `teco` session (a different one, mid-coordination
+  on `cpg-agent-adoption`) received a full K-026 resume brief from `cobb`, who had picked it off
+  `ListAgents` assuming (wrongly, from stale prior-session context) it was the K-026 coordinator.
+  That session's own human caught the mismatch; by then it had already done a small amount of safe
+  read-only work (a test re-run, a state-restoring reseed) before declining — harmless here, but
+  exactly the kind of spend this bullet now heads off explicitly instead of leaving to luck/a human
+  catch. Full mechanism writeup lives in `skills/agent-standards/claude-code.md`'s new "Cross-session
+  peer addressing" section (`cobb`'s companion promotion, same run).
+- **Verified:** `bash claude/scripts/audit-team.sh` clean before and after.
+- **Plan items:** none opened — direct fix from a live incident, not a backlog item.
+
 ## 2026-08-15 — Review-only pass: filed K-015 (validate the dispatch-sizing rule live)
 
 - **What:** no prompt change. Stakeholder asked what's next for `teco`, specifically flagging

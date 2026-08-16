@@ -2,6 +2,44 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-16 — Cross-session peer-addressing near-miss: same-run promotion into `agent-standards/claude-code.md` + `teco.md`
+
+- **What:** in this session, resuming a paused K-026 GraphRAG-eval coordination, I called
+  `ListAgents`, saw one row named `teco`, and sent it a full multi-paragraph resume brief on the
+  assumption — from stale prior-session summary context — that it was the K-026 coordinator. It
+  was actually a different, independently-launched `teco` session mid-coordination on an
+  unrelated task (`cpg-agent-adoption`). That session's own human caught the mismatch and it
+  stepped back cleanly, having done only a small amount of safe read-only work (a test re-run, a
+  state-restoring reseed) first. No K-026 harm done, but a wasted round-trip and a real near-miss:
+  bare-name `SendMessage` addressing is ambiguous whenever more than one independently-launched
+  session shares an agent name, and `ListAgents` showing one row is not proof there's only one.
+- **Why same-run promotion (not just an inbox entry):** this is a durable, non-obvious
+  Claude-Code-mechanism fact (SendMessage/ListAgents cross-session peer addressing), squarely in
+  scope for the `agent-standards` skill I already maintain, and the fix needed enforcing
+  immediately (I was about to repeat the same pattern to actually dispatch K-026's next steps).
+- **Where it landed:**
+  1. **`skills/agent-standards/claude-code.md`** — new "Cross-session peer addressing (`SendMessage`
+     + `ListAgents`)" subsection, verified 2026-08-16: documents that `SendMessage`/`ListAgents` now
+     reach independently-launched peer sessions (not just Agent-Teams teammates, which is what the
+     skill's existing, older Agent-Teams section describes — flagged as not yet reconciled, not
+     overwritten), the bare-name ambiguity, this incident as evidence, and the practice (identity
+     probe before a substantive brief to an unverified peer; prefer a fresh subagent reading
+     persistent state when in doubt).
+  2. **`claude/teco/teco.md`** step 4 — one new bullet next to the existing "incoming
+     resume/pause message" rule: a message describing a task absent from the session's own ledger
+     is a *misrouting* signal, not just a staleness one — pause and confirm identity with the user
+     before doing *anything*, even read-only checks, rather than only re-verifying the claimed
+     facts. (This teco session's own good behavior — decline + minimal safe work + explicit
+     transparency — is exactly what this bullet now asks for explicitly, rather than leaving it to
+     the receiving human to catch.)
+- **Verified:** `bash claude/scripts/audit-team.sh` clean before and after (98+ PASS, 0 FAIL). No
+  personal identifiers introduced. Practice fix applied immediately in this same session: the
+  actual K-026 resume was then re-sent only after independently confirming (via the correcting
+  peer's own message) which session was *not* it, and no further bare-name dispatch was attempted
+  without that confirmation.
+- **Plan items:** none opened in `cobb`'s own plan — this was a direct fix, not a backlog item.
+  Counterpart: `teco/kaizen/history.md` gets its own entry for the `teco.md` edit.
+
 ## 2026-08-15 — Distillation redirect: teco's 2026-08-12 credit-crash-recovery entry lands here as a parking-lot idea, not a prompt change
 
 - **What:** processing `teco/kaizen/inbox.md`'s sole entry (agent-maintenance §5) found its
