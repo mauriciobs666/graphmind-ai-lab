@@ -91,3 +91,174 @@ Evidence — `pipeline.sh:61` derives its own default graph name from `basename 
 
 1. **`data-scientist`'s exclusion (cobb §1) is a defensible judgment call, not an obvious miss — but worth a stakeholder sanity-check if the discipline's task shape ever grows deep pipeline-code correctness reads** (e.g. verifying an eval harness's chunking/retrieval logic structurally, not just methodologically). Today's routing — general-correctness code reading goes to `analyst`, which is CPG-wired — is sound as designed; flagging only because the brief asked whether any plausible in-scope agent was excluded without good reason, and this is the one exclusion that's a genuine judgment call rather than a structural fact (unlike `devops`'s Joern-can't-parse-infra reasoning, which is closer to a fact).
 2. **MAJ-1's fix is mechanical** (add four missing tags, correct one sentence) and doesn't require a design change — recommend it land before U4b writes `docs/BACKLOG.md`, so the section that ships is the one `qa-engineer` will actually trace AC-3/AC-4/AC-5/FR-4 against at U6.
+
+---
+
+## Pass 2 — Diff-scoped code gate (U5)
+
+**Scope.** The delivered diff for `cpg-agent-adoption` (M4), commits `35b108f` (U1–U4a: design
+docs + freshness-marker mechanics) and `50f9aaa` (U4b-1..5: six-agent CPG-consumer wiring +
+catalog/doc sync), reviewed against the already-approved plans
+([`../plans/cpg-agent-adoption.md`](../plans/cpg-agent-adoption.md) §2.4/§3/§4/§6,
+[`../plans/cpg-agent-adoption-graph.md`](../plans/cpg-agent-adoption-graph.md)) and the
+requirements baseline ([`../requirements/cpg-agent-adoption.md`](../requirements/cpg-agent-adoption.md),
+FR-1…FR-9/AC-1…AC-6). This is a **conformance check** — does the diff do what the gated plan
+said, not a re-litigation of the design itself (Pass 1 already gated that, approve with
+suggestions, all three findings fixed in place per U2-fix). Read both commits directly via
+`git show`, not a paraphrase; read all six touched agent files and their `kaizen/history.md`
+entries in full (not just the diff hunks) for in-context coherence; cross-checked
+`docs/BACKLOG.md`, `docs/HISTORY.md`, `claude/README.md`, `skills/README.md`,
+`skills/cpg-analysis/SKILL.md`, root `AGENTS.md`, and the coordination ledger. Ran
+`bash claude/scripts/audit-team.sh` myself (not trusting the ledger's earlier claim of a clean
+run) and `bash -n` on `pipeline.sh`. Live-verified one freshness query against `cpg_falkorchat`.
+No files were mutated.
+
+**Verdict: approve.** Zero blockers, zero majors, zero minors. One nit (all in-scope YAML
+frontmatter quirk was found pre-existing, not diff-introduced — noted for completeness, not
+actionable here). The diff is a faithful, complete, well-scoped implementation of the gated
+plan — every one of the six agent edits verbatim-matches what §2.4 specified, the evidence-trail
+convention landed exactly where §3 said, FR-8 holds by simple absence, and the milestone
+bookkeeping is honest about what's actually done versus still queued.
+
+`CPG: not applicable — this diff is agent/skill-prompt markdown and a shell script; no source
+tree with a loaded CPG is under review here (the freshness-recipe correctness was verified
+directly against the live `cpg_falkorchat` graph instead, see Grounding below).`
+
+### Findings
+
+None at blocker, major, or minor severity.
+
+**n-1 (nit) — `tdd-engineer.md` and `frontend-engineer.md`'s YAML frontmatter fails a strict
+`yaml.safe_load` parse (a bare colon inside an unquoted `description:` plain scalar), but this is
+pre-existing, not introduced by this diff.** Evidence: `python3 -c "import yaml; yaml.safe_load(...)"`
+against both files' frontmatter raises `mapping values are not allowed here` at the first
+`: ` inside a clause (e.g. "the efficient path: a bug fix" in `tdd-engineer.md`). Re-ran the same
+parse against `git show 50f9aaa^:claude/tdd-engineer/tdd-engineer.md` (the pre-diff version) —
+identical failure, so the diff neither caused nor worsened it. `claude/scripts/audit-team.sh`
+(which is grep-based, not a YAML parser) doesn't catch this shape, and Claude Code's own
+frontmatter reader evidently tolerates it in practice (both agents were already deployed and
+working before this diff). Recorded for completeness, not as an action item on this diff; if it
+matters, it's a `cobb`/`agent-standards` question about the harness's actual frontmatter grammar,
+not something U4b introduced or should have caught.
+
+### Point-by-point
+
+1. **Fidelity to the plan (§2.4/§3/§6).** Verified file-by-file against the plan's task table.
+   Every one of the six agents got exactly the three edits specified — description reword,
+   orientation-step addition (with the freshness-check bundling from §2.3), and the `CPG:`
+   evidence-trail line in the deliverable skeleton — with the wording lifted near-verbatim from
+   §2.2/§2.3/§3's own suggested phrasing. `skills/cpg-analysis/SKILL.md` got the frontmatter
+   `description` widened to six consumers (983 chars, confirmed by direct count — under the 1024
+   budget the plan flagged), the §1 `cpg_<component>` discovery paragraph, and the §4 nav-table
+   impact-analysis row gaining `coder`/`tdd-engineer`/`frontend-engineer` (m-2's Pass-1 fix,
+   correctly carried through — the other three recipe rows were correctly left untouched, per the
+   plan's own "no stated reason to widen them" call). No drift found anywhere.
+2. **Consistency across the six agents.** Five of six open with the verbatim-identical clause
+   "Checks whether a relevant CPG exists as part of its normal orientation and, when one does,
+   uses…" — confirmed by direct read of all six files, not just the diff hunks.
+   `frontend-engineer`'s "Checks for a relevant Joern CPG (`cpg_salesperson` today) as part of
+   that orientation and uses…" is the one flagged variance. I agree with the ledger's own
+   assessment: same default-orientation semantics (explicitly *not* the old conditional "With a
+   loaded Joern CPG…" framing that `coder`/`tdd-engineer` briefly shipped in and were corrected
+   out of, per their kaizen addenda), and the plan's own §2.1/§2.4 mandates the *reframing*, not
+   verbatim-identical prose — naming `cpg_salesperson` concretely is arguably clearer given
+   `frontend-engineer`'s single-graph reality today. Non-blocking, confirmed.
+3. **AC-1…AC-6, mapped against the diff.**
+   - **AC-1** (default-orientation discovery) — satisfied structurally: all six agents' body
+     prompts now carry an unconditional discovery step, not a reminder-gated one.
+   - **AC-2** (spot-checkable evidence) — satisfied: the `CPG:` line convention landed in all six
+     deliverable skeletons, verbatim to §3's three allowed shapes.
+   - **AC-3/AC-4** (freshness signal + stale-surfacing) — satisfied at the prompt level: every
+     orientation-step edit bundles the freshness check and instructs "note what it says… surface
+     a refresh suggestion — not a silent rebuild — if it looks stale," matching §2.3's mandated
+     wording almost word-for-word across all six files.
+   - **AC-5** (no-noise-on-a-miss) — satisfied by construction: the discovery mechanic added to
+     `SKILL.md` §1 is one cheap query with a defined miss path (fallback enumeration, then stop);
+     nothing in the six agent edits adds ceremony beyond that.
+   - **AC-6** (explicit extends-not-overrides statement) — re-confirmed independently. Plan §4
+     states, in its own words: *"This plan **extends** — it does not override, narrow, or
+     silently diverge from — the consumer-scope boundary `m2-cpg-analysis-skill.md` (M2) and
+     `cpg-query-access.md` (M3) drew,"* with four concrete bullets backing the claim (M2's recipe
+     count untouched, M3's read path untouched, only the consumer list/default-ness widens, both
+     prior docs remain historically accurate as-written). This satisfies AC-6's literal wording,
+     as Pass 1 already found — re-verified here because AC-6 is specifically a claim *about the
+     plan document*, and the plan document delivered is the one gated (no drift between the
+     gated §4 text and what's on disk).
+   AC-1 through AC-5 are all prompt-level commitments, not runtime-observable from a static diff
+   read — genuine behavioral confirmation (does an agent actually discover and use the CPG on a
+   real task, does the evidence trail actually show up in a real deliverable) is U6's job, not
+   this gate's. That's a scope boundary, not a gap in this review.
+4. **FR-8 (no read-path change).** Confirmed independently: `git diff --stat` and `git log` for
+   both commits against `cpg/mcp/server.py` and `.mcp.json` are empty — neither file is touched,
+   named, or referenced for modification anywhere in either commit.
+5. **No scope creep.** Both commits' own file lists (`git show --stat`) match the plan's §6 task
+   list and the coordination ledger's per-unit deliverable list exactly. `35b108f` additionally
+   touches `claude/graph-dba/kaizen/inbox.md` (two learnings-capture entries from the design/
+   implementation work) — legitimate process artifact of U1/U4a, already in scope of the U4a spot
+   check, not new scope for this U5 gate. `50f9aaa` touches exactly: `claude/README.md`, the six
+   agent files + their `kaizen/history.md`, `docs/BACKLOG.md`, `docs/HISTORY.md`,
+   `docs/plans/cpg-agent-adoption-coordination.md`, `skills/README.md`,
+   `skills/cpg-analysis/SKILL.md` — nothing beyond that.
+6. **`docs/BACKLOG.md`/`docs/HISTORY.md` accuracy.** Both documents are honest about gate state.
+   `BACKLOG.md`'s milestone-map row reads 🟡 (not ✅) and says explicitly "Implementation (C-401…
+   C-407) complete; U5 (`analyst` re-gate) and U6 (`qa-engineer` acceptance pass) still queued."
+   `HISTORY.md`'s entry has its own "**Not yet closed as of this entry**" paragraph naming both
+   remaining gates by unit number, and a closing note confirming no agent-prompt/`SKILL.md`/
+   `pipeline.sh` file was touched in U4b-5's own scope (correct — those are U4a's/U4b-1..4's
+   work, cataloged not re-edited). The Requirements-coverage block's FR/AC tagging matches
+   Pass 1's U2-fix exactly (FR-4/AC-3/AC-4/AC-5 now tagged, MAJ-1 closed). `C-401`…`C-407` numbers
+   are free of collision (highest prior item C-323; verified by grep).
+7. **Prompt-quality regressions.** Ran `bash claude/scripts/audit-team.sh` directly. All
+   agent-specific checks for the six touched agents PASS — kaizen triple present, deployed,
+   catalog entries, boundary-pair symmetry (`coder`↔`tdd-engineer`, `coder`↔`frontend-engineer`,
+   `analyst`↔`qa-engineer`, `tdd-engineer`↔`qa-engineer` all still route correctly post-edit), no
+   commit-authority leakage. The overall script exit is `FAIL`, but the two failing checks
+   (username/home-path leak) point at `falkor-chat/docs/test-reports/graphrag-eval-report.md` — a
+   file neither `35b108f` nor `50f9aaa` touches; it belongs to the separate, in-flight K-026
+   coordination the ledger's own Notes section already flagged as "not touched by this
+   coordination." Out of scope for this gate; noted so the verdict isn't misread as resting on a
+   clean tool run when the tool actually reported FAIL for an unrelated reason. Direct full-file
+   reads of `coder.md`, `tdd-engineer.md`, `frontend-engineer.md`, and `qa-engineer.md` (not just
+   diff hunks) found no orphaned sentences, no frontmatter/body contradictions, and no awkward
+   insertion points — each new sentence lands as a natural continuation of its surrounding
+   paragraph.
+
+### Grounding & soundness — what I verified
+
+- **Live-verified**: `MATCH (b:CpgBuildInfo) RETURN …` against `cpg_falkorchat` returns 0 rows
+  today, consistent with the "no backfill of the two live graphs" design decision and with U4a's
+  own live-verification claim — nothing in U4b silently changed that.
+- **`skills/cpg-analysis/SKILL.md` frontmatter `description` is 983 characters**, independently
+  counted (not trusting the ledger's figure), confirming the 1024-char budget held.
+- **All six agents' YAML frontmatter parses under Claude Code's actual loader** (inferred from
+  deployment + `audit-team.sh`'s catalog/deployment checks passing) even though two files
+  (`tdd-engineer.md`, `frontend-engineer.md`) fail a strict `pyyaml.safe_load` — and that gap
+  pre-dates this diff (see n-1).
+- **`pipeline.sh` passes `bash -n`** — no syntax regression from U4a's stamping-step insertion.
+- **`git diff`/`git log` confirm zero touch to `cpg/mcp/server.py` and `.mcp.json`** across both
+  commits, independently re-verified rather than taken from the commit message's own claim.
+- **Root `AGENTS.md`'s `cpg-analysis` bullet was independently re-read**: "`cpg-analysis` (the
+  consumer side)" — already consumer-agnostic, confirming U4b-5's "checked, correctly left
+  unchanged" claim rather than an unverified assertion.
+
+### What's solid
+
+- **The two-commit split (design+U4a, then U4b) is legible and each commit is independently
+  reviewable** — `35b108f`'s stat and `50f9aaa`'s stat both match their stated scope with no
+  surprises.
+- **The kaizen `history.md` entries are unusually good evidence, not decoration** — each one
+  states the exact before/after wording of the frontmatter clause and body sentence, which made
+  cross-checking the actual file against the stated change fast and unambiguous; the two
+  same-day addenda (`coder`/`tdd-engineer`'s conditional-framing correction) are honest about a
+  real first-pass miss rather than silently smoothed over.
+- **The coordination ledger's own self-reported friction (session-limit failures, the
+  conditional-framing miss, the frontend-engineer wording variance) all independently checked out
+  exactly as narrated** — nothing in the ledger's account of what happened needed correcting.
+- **The `CPG:` evidence-trail convention is genuinely uniform** — all six agents use the identical
+  three-shape line (`used <graph> — <clause>` / `considered, not relevant — <clause>` / `not
+  applicable — <clause>`), placed in each agent's natural existing deliverable section rather than
+  as a bolted-on new one, exactly as §3 specified.
+
+### Open questions
+
+None. Nothing in this diff needed the caller's input to resolve.
