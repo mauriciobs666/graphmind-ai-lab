@@ -1,6 +1,6 @@
 # GraphRAG Eval Harness — Test Report (K-026)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-026 (M2.5-quality)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-026 (M2.5-quality)
 
 ## Summary
 

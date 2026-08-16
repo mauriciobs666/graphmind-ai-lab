@@ -1,6 +1,6 @@
 # GraphRAG retrieval + generation evaluation harness — method note (data-scientist)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-026 (M2.5-quality) · **Version:** 2 ·
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-026 (M2.5-quality) · **Version:** 2 ·
 > proposed method note (M2.5-quality track). Advisory deliverable — implementation
 > routes to `coder`/`tdd-engineer`; any in-graph query change routes to `graph-dba`.
 > **Author:** data-scientist · **Date:** 2026-07-10

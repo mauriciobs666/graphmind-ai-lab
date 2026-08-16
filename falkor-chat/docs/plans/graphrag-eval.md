@@ -1,6 +1,6 @@
 # GraphRAG retrieval + generation evaluation harness — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-026 (M2.5-quality) · **Version:** 4
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-026 (M2.5-quality) · **Version:** 4
 
 **Revision note (v4, 2026-08-15):** stakeholder-directed, coordinator-relayed design change made
 *after* Pass 3 approval — **not** a reopened review finding (v3 was `analyst`-approved, Pass 3,

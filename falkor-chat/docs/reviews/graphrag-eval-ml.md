@@ -1,6 +1,6 @@
 # GraphRAG retrieval + generation evaluation harness — same-model judge methodology review
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-026 (M2.5-quality)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-026 (M2.5-quality)
 
 ## Baseline sign-off (retrieval_baseline.json, n=38) — 2026-08-16
 

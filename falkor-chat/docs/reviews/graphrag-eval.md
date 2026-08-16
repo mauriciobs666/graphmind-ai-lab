@@ -1,6 +1,6 @@
 # GraphRAG retrieval + generation evaluation harness — plan gate review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-026 (M2.5-quality)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-026 (M2.5-quality)
 
 ## Scope & verdict
 
