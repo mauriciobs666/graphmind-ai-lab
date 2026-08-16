@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-16 — M4 cpg-agent-adoption: wired as a new `cpg-analysis` consumer
+
+- **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§6 step 3 (`cobb`-owned
+  design, U4b implementation unit). **Description:** added "With a loaded Joern CPG, uses the
+  `cpg-analysis` skill for RCA and impact analysis before writing a reproduction test — the
+  actual call path to the symptom, what else exercises the function — and for test-gap analysis
+  when scoping what to test next." **Step 1 "Understand first":** added a check for a relevant
+  CPG (first-guess `cpg_<component>` naming per `skills/cpg-analysis/SKILL.md` §1) bundled with
+  the freshness check (`skills/cpg-analysis/references/freshness.md`) in the same step, noting
+  the result in the report and surfacing a refresh suggestion — never a silent rebuild — if
+  stale. **Step 5 "Verify honestly":** added the `CPG:` evidence-trail line (plan §3 — `used
+  <graph> — <clause>` / `considered, not relevant — <clause>` / `not applicable — <clause>`).
+- **Why:** M4 widens the `cpg-analysis` roster from three consumers (`analyst`, `architect`,
+  `qa-engineer`) to six — `tdd-engineer` is a new consumer because its reproduction-test-first
+  work benefits directly from RCA/impact recipes ("what's the actual call path to the symptom,"
+  "what else exercises this function"), and test-gap analysis is a natural companion to "what
+  should I be testing." Plan §1's `tdd-engineer` row has the full roster reasoning.
+- **Plan items:** none (design-driven, not backlog-driven).
+- **Addendum (same day):** the description clause initially shipped in the conditional "With a
+  loaded Joern CPG, uses…" framing (matched to `coder`'s clause per the dispatch instruction).
+  The coordinator caught that this left `coder`/`tdd-engineer` as the only two of the six wired
+  agents not on plan §2.1's mandated default-orientation framing — the sibling unit's
+  `analyst`/`architect`/`qa-engineer`/`frontend-engineer` edits all use "Checks whether a relevant
+  CPG exists as part of its normal orientation and, when one does, uses…". Reworded to match:
+  "Checks whether a relevant CPG exists as part of its normal orientation and, when one does,
+  uses the `cpg-analysis` skill for RCA and impact analysis before writing a reproduction test —
+  the actual call path to the symptom, what else exercises the function — and for test-gap
+  analysis when scoping what to test next." Body-prompt and evidence-trail additions were already
+  correct and untouched.
+
 ## 2026-08-09 — Description gained a `python-web-quirks` skill routing clause
 - **What:** Frontmatter `description` gained one clause: in a Python web/async codebase, the
   agent consults the new `skills/python-web-quirks/SKILL.md` for asyncio/FastAPI/Starlette/

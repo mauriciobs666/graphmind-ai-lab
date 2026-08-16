@@ -7,8 +7,9 @@ description: >-
   without reading files: impact analysis (callers/callees + transitive reach),
   root-cause analysis (data-flow slices + cross-file symbol def/ref), code review
   (input to risky-sink taint), and test-gap analysis (prod code no test reaches).
-  Use when analyst, architect, or qa-engineer need call-graph or data-flow answers
-  over a codebase. Each task is a copy-adaptable recipe under references/ — change
+  Use when analyst, architect, qa-engineer, coder, tdd-engineer, or frontend-engineer
+  need call-graph or data-flow answers over a codebase. Each task is a copy-adaptable
+  recipe under references/ — change
   one parameter (the target FULL_NAME or NAME) and run. The single CPG schema lives
   in skills/joern-cpg/references/cpg-model.md; this skill does not restate it.
   Requires a CPG already built and loaded by the joern-cpg pipeline; building or
@@ -53,9 +54,18 @@ mcp__cpg__query(
   `DELETE` against a shared analysis graph.
 - **Finding the graph name.** It comes from whoever loaded the CPG. There is
   deliberately **no `list_graphs` tool** (the surface is one tool, two
-  parameters), so discover names either from the `redis-cli GRAPH.LIST` fallback
-  below, or by sending a query with the wrong name — the tool's not-found error
-  lists the graphs currently loaded.
+  parameters). Before falling back to discovery, try a **first guess**: both
+  live graphs today follow the pattern **`cpg_<component>`**, the
+  component-directory name with hyphens stripped (`falkor-chat` →
+  `cpg_falkorchat`, `salesperson` → `cpg_salesperson`). Send a cheap query
+  against that guessed name — e.g. `MATCH (n) RETURN count(n)`, or the
+  freshness recipe itself, which doubles as an existence probe (see
+  [`references/freshness.md`](references/freshness.md)). A **hit** means the
+  CPG exists and hands you its freshness in the same call. A **miss** falls
+  back to the two remaining paths: the `redis-cli GRAPH.LIST` fallback below,
+  or sending a query with the wrong name so the tool's not-found error lists
+  the graphs currently loaded — check that list for a differently named match
+  before concluding there is none.
 - **No graph listed, or FalkorDB is down?** This skill only *queries* an
   already-loaded CPG — it does not build or load one. Building a CPG from source
   and loading it into FalkorDB is **`graph-dba`'s** job, on demand, via the
@@ -242,7 +252,7 @@ approximation.
 
 | You need to… | Consumer | Open |
 |---|---|---|
-| Find callers/callees of a function and what a change transitively reaches | analyst, architect | [`references/impact-analysis.md`](references/impact-analysis.md) |
+| Find callers/callees of a function and what a change transitively reaches | analyst, architect, coder, tdd-engineer, frontend-engineer | [`references/impact-analysis.md`](references/impact-analysis.md) |
 | Trace a bad value back to its definitions; find a symbol's defs + cross-file refs | analyst | [`references/rca.md`](references/rca.md) |
 | Check whether external input can reach a risky sink (taint) | analyst | [`references/code-review.md`](references/code-review.md) |
 | List production code no test structurally reaches | qa-engineer | [`references/test-gap.md`](references/test-gap.md) |

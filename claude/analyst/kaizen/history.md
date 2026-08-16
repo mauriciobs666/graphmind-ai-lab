@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-16 — M4 cpg-agent-adoption: discovery wording defaulted, freshness-check bundled, evidence-trail line added
+- **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§3 (U4b). (1) Frontmatter
+  `description` reworded from "With a loaded Joern CPG, uses the `cpg-analysis` skill instead of
+  reading files" to "Checks whether a relevant CPG exists as part of its normal orientation and,
+  when one does, uses the `cpg-analysis` skill instead of reading files" — conditional →
+  default-orientation framing. (2) "How you work" step 2 ("Read the real thing") gained a
+  sentence: check whether a relevant CPG exists (first guess `cpg_<component>`, per
+  `skills/cpg-analysis/SKILL.md` §1), and when one is found and used, also run the freshness
+  check (`skills/cpg-analysis/references/freshness.md`) as part of the same step, noting what it
+  says in the findings and surfacing a refresh suggestion — not a silent rebuild — if it looks
+  stale. (3) The review skeleton's item 1 ("Scope & verdict") gained the one-line `CPG:`
+  evidence-trail convention (`CPG: used <graph> — <clause>` / `CPG: considered, not relevant —
+  <clause>` / `CPG: not applicable — <clause>`).
+- **Why:** M4 (`cpg-agent-adoption`) widens CPG discovery from a conditional check to a default
+  orientation step across the three already-wired consumers (`analyst`, `architect`,
+  `qa-engineer`), bundles the freshness recipe into that same step (FR-6's surfacing half), and
+  adds a spot-checkable `CPG:` evidence trail (AC-2). Per `docs/plans/cpg-agent-adoption.md`
+  §2.1-2.3, §3, §6 step 2.
+- **Plan items:** none.
+
 ## 2026-08-11 — Inbox distillation: 3 entries — 1 prompt addition, 2 to `python-web-quirks`/project docs
 
 - **What:** `cobb` processed all 3 entries in `analyst/kaizen/inbox.md` (§5).

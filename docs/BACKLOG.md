@@ -45,6 +45,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified | `joern` agent + `joern-cpg` skill — delivered 2026-07-17, commit `b2b9a6e` (see [`HISTORY.md`](./HISTORY.md)) |
 | **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
 | **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cpg__query(graph, cypher)` (`cpg/mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
+| **M4 — CPG agent adoption** 🟡 | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; U5 (`analyst` re-gate) and U6 (`qa-engineer` acceptance pass) still queued | **C-401 → C-407** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -433,6 +434,77 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   in place. **Do not schedule this.** Un-defer only on a measured, repeated failure to resolve one
   of these citations. Cost analysis: `docs/plans/doc-reference-convention.md` §1.2, §2.1 and §12
   *"Not scheduled"*. Owner: unassigned.
+
+## M4 — CPG agent adoption
+
+Widens which agents discover and use a loaded CPG (roster: `coder`, `tdd-engineer`,
+`frontend-engineer` added to `analyst`/`architect`/`qa-engineer`), makes discovery a default
+orientation step instead of a conditional one, and lets a consulting agent judge/flag graph
+staleness via graph-dba's new `:CpgBuildInfo` freshness marker. Requirements:
+[`requirements/cpg-agent-adoption.md`](./requirements/cpg-agent-adoption.md) (FR-1…FR-9 /
+AC-1…AC-6) · plans: [`plans/cpg-agent-adoption-graph.md`](./plans/cpg-agent-adoption-graph.md)
+(freshness mechanics, graph-dba) + [`plans/cpg-agent-adoption.md`](./plans/cpg-agent-adoption.md)
+(roster/discovery/evidence-trail, cobb) · coordination:
+[`plans/cpg-agent-adoption-coordination.md`](./plans/cpg-agent-adoption-coordination.md).
+
+**Extends, does not override, M2/M3.** See `plans/cpg-agent-adoption.md` §4 — the MCP read path
+and the skill's four recipes are unchanged; only the consumer list and the default-ness of
+discovery widen.
+
+### Items
+
+- **C-401 — Freshness marker mechanics.** ✅ `:CpgBuildInfo` singleton node (BUILT_AT/SOURCE_PATH/
+  SOURCE_COMMIT/SOURCE_DIRTY), stamped at the end of `skills/joern-cpg/scripts/pipeline.sh`'s
+  `--load` branch after verification passes; new `skills/cpg-analysis/references/freshness.md`
+  recipe; one nav-table row in `SKILL.md`. FR-5/FR-6 (mechanical)/FR-7/FR-8. Owner: `graph-dba`
+  (unit U4a).
+- **C-402 — `cpg-analysis` SKILL.md: broaden + discovery mechanic.** ✅ Frontmatter `description`
+  widened to six consumers; `cpg_<component>` naming-convention paragraph (the one-query,
+  no-noise-on-a-miss discovery mechanic) added to §1; Navigation-table Consumer column (§4)
+  updated — the impact-analysis row now lists `analyst, architect, coder, tdd-engineer,
+  frontend-engineer` (rca/code-review/test-gap rows left as-is, no stated reason to widen them).
+  FR-1 (skill-side), **FR-4 / AC-5**. Owner: `cobb` (unit U4b-1).
+- **C-403 — Wire `analyst`/`architect`/`qa-engineer`: default-orientation reword.** ✅ Description +
+  orientation-step + evidence-trail-line edits on the three already-wired agents, including the
+  freshness-check bundling (run the freshness recipe as part of the same default step, note it,
+  surface a refresh suggestion if stale). FR-2, FR-6 (surfacing integration) / AC-1, **AC-3, AC-4**.
+  Owner: `cobb` (unit U4b-2).
+- **C-404 — Wire `coder`/`tdd-engineer` as new consumers.** ✅ Description clause + orientation
+  sentence (including the freshness-check bundling) + evidence-trail line. FR-1, FR-2, FR-3 /
+  AC-1, **AC-3, AC-4**. Owner: `cobb` (unit U4b-3).
+- **C-405 — Wire `frontend-engineer` as a new consumer.** ✅ Same shape as C-404, grounded in
+  `cpg_salesperson`/`chatbot.py`. FR-1, FR-2, FR-3 / AC-1, **AC-3, AC-4**. Owner: `cobb`
+  (unit U4b-4).
+- **C-406 — Evidence-trail convention.** ✅ The `CPG: used | considered, not relevant | not
+  applicable` one-line convention landed in all six wired agents' deliverable skeletons, including
+  the freshness signal the deliverable reports when the CPG was actually consulted. **AC-2**, and
+  reinforces **AC-3** (the freshness signal surfaces in the deliverable, not just inside the
+  agent's reasoning). Owner: `cobb` (folded into units U4b-2…U4b-4).
+- **C-407 — Catalog & doc sync.** ✅ `claude/README.md` (all six agent rows reworded to
+  default-orientation framing; `coder`/`tdd-engineer`/`frontend-engineer` rows gained their first
+  CPG mention), `skills/README.md` (`cpg-analysis` row widened from three to six named consumers).
+  Root `AGENTS.md`'s `skills/` bullet checked — already consumer-agnostic ("the consumer side",
+  no named-consumer list), so left unchanged. This backlog → `HISTORY.md`. Owner: `cobb`
+  (unit U4b-5).
+
+### Requirements coverage
+
+FR-1…FR-8 and AC-1…AC-5 each carry an explicit tag on at least one of C-401…C-406 above (see each
+item's FR/AC line — C-401 for FR-5/FR-7/FR-8 and FR-6's mechanical half, C-402 for FR-1/FR-4/AC-5,
+C-403 for FR-2/FR-6's surfacing half/AC-1/AC-3/AC-4, C-404/C-405 for FR-1/FR-2/FR-3/AC-1/AC-3/AC-4,
+C-406 for AC-2/AC-3. **FR-9 and AC-6 are the one deliberate exception**, carried by no backlog
+item because they aren't implementation work — AC-6's "states explicitly that it extends" is a
+property of `plans/cpg-agent-adoption.md` §4 itself (already written, already satisfied), not a
+task C-407 or any other item performs. `C-407` (catalog/doc sync) is untagged for the same reason
+each catalog-sync item was in M2/M3's own backlog sections — it is process bookkeeping, not a
+requirement-bearing deliverable.
+
+**Gate status (per the coordination ledger).** C-401…C-407 are implementation-complete. Two gates
+remain queued: **U5**, the `analyst` diff-scoped re-gate (distinct from the design-level U3
+plan-gate already passed), and **U6**, the `qa-engineer` acceptance pass against AC-1…AC-6 — see
+[`plans/cpg-agent-adoption-coordination.md`](./plans/cpg-agent-adoption-coordination.md). Per
+M2/M3's own precedent (the milestone-map row flips to ✅ only once acceptance-tested, not merely
+implemented), this milestone stays 🟡 in-progress until both close.
 
 ## Follow-ups (post-M2)
 

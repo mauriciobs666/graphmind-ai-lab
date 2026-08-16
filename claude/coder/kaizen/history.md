@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-16 — M4 cpg-agent-adoption: wired as a new `cpg-analysis` consumer
+
+- **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§6 step 3 (`cobb`-owned
+  design, U4b implementation unit). **Description:** added "With a loaded Joern CPG, uses the
+  `cpg-analysis` skill for impact analysis before changing a function — what calls it, what else
+  would break — instead of grepping by hand." **Step 1 "Orient":** added a check for a relevant
+  CPG (first-guess `cpg_<component>` naming per `skills/cpg-analysis/SKILL.md` §1) bundled with
+  the freshness check (`skills/cpg-analysis/references/freshness.md`) in the same step, noting
+  the result in the report and surfacing a refresh suggestion — never a silent rebuild — if
+  stale. **Step 5 "Verify and report":** added the `CPG:` evidence-trail line (plan §3 — `used
+  <graph> — <clause>` / `considered, not relevant — <clause>` / `not applicable — <clause>`).
+- **Why:** M4 widens the `cpg-analysis` roster from three consumers (`analyst`, `architect`,
+  `qa-engineer`) to six — `coder` is a new consumer because its "what calls this / what would
+  break" question before changing a function is exactly the impact-analysis recipe's target, and
+  both live CPGs (`cpg_falkorchat`, `cpg_salesperson`) are Python codebases `coder` already works
+  in. Plan §1's `coder` row has the full roster reasoning.
+- **Plan items:** none (design-driven, not backlog-driven).
+- **Addendum (same day):** the description clause initially shipped in the conditional "With a
+  loaded Joern CPG, uses…" framing (carried over from a state-recovery instruction that locked it
+  as already-landed). The coordinator caught that this left `coder`/`tdd-engineer` as the only two
+  of the six wired agents not on plan §2.1's mandated default-orientation framing — the sibling
+  unit's `analyst`/`architect`/`qa-engineer`/`frontend-engineer` edits all use "Checks whether a
+  relevant CPG exists as part of its normal orientation and, when one does, uses…". Reworded to
+  match: "Checks whether a relevant CPG exists as part of its normal orientation and, when one
+  does, uses the `cpg-analysis` skill for impact analysis before changing a function — what calls
+  it, what else would break — instead of grepping by hand." Body-prompt and evidence-trail
+  additions were already correct and untouched.
+
 ## 2026-08-11 — Inbox distillation, corrected: 8 entries routed (5 promoted, 1 discarded as redundant, 2 promoted late after an `analyst` review caught them missing)
 
 - **What:** `cobb` processed all 8 entries in `coder/kaizen/inbox.md` (§5), triggered by a

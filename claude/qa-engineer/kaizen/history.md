@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-16 — M4 cpg-agent-adoption: discovery wording defaulted, freshness-check bundled, evidence-trail line added
+- **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§3 (U4b). (1) Frontmatter
+  `description` reworded from "With a loaded Joern CPG, uses the `cpg-analysis` skill for
+  test-gap analysis (production code no test reaches)" to "Checks whether a relevant CPG exists
+  as part of its normal orientation and, when one does, uses the `cpg-analysis` skill for
+  test-gap analysis (production code no test reaches)" — conditional → default-orientation
+  framing. (2) Phase 1 REASON's "Read the sources of truth" bullet gained a sentence: check
+  whether a relevant CPG exists for the code under test (first guess `cpg_<component>`, per
+  `skills/cpg-analysis/SKILL.md` §1) — useful here for test-gap analysis specifically — and when
+  one is found and used, also run the freshness check
+  (`skills/cpg-analysis/references/freshness.md`) as part of the same step, noting what it says
+  in the report and surfacing a refresh suggestion — not a silent rebuild — if it looks stale.
+  (3) The test report's "Summary" section gained the one-line `CPG:` evidence-trail convention
+  (`CPG: used <graph> — <clause>` / `CPG: considered, not relevant — <clause>` / `CPG: not
+  applicable — <clause>`).
+- **Why:** M4 (`cpg-agent-adoption`) widens CPG discovery from a conditional check to a default
+  orientation step across the three already-wired consumers (`analyst`, `architect`,
+  `qa-engineer`), bundles the freshness recipe into that same step (FR-6's surfacing half), and
+  adds a spot-checkable `CPG:` evidence trail (AC-2). Per `docs/plans/cpg-agent-adoption.md`
+  §2.1-2.3, §3, §6 step 2.
+- **Plan items:** none.
+
 ## 2026-08-11 — Inbox distillation: 15 entries — new `qa-testing-techniques.md` knowledge base (3 entries), 2 to falkor-chat/AGENTS.md, 5 to falkor-chat/DESIGN.md §14.7, 4 folded into graph-dba/cpg-analysis work already in flight, 1 discarded as already covered elsewhere
 
 - **What:** `cobb` processed all 15 entries in `qa-engineer/kaizen/inbox.md` (§5).

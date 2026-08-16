@@ -5,6 +5,54 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-16 — M4: CPG agent adoption ✅ (implementation) — C-401…C-407
+
+Widens which agents discover and use a loaded CPG, and makes that discovery a default
+orientation step instead of a conditional one. Roster: `coder`, `tdd-engineer`, and
+`frontend-engineer` join `analyst`/`architect`/`qa-engineer` as named `cpg-analysis` consumers —
+six, up from three — each excluded/included call reasoned explicitly (`devops`/`cobb`/
+`data-scientist`/`teco`/`tico` stay out, each for a stated code-shape reason). A consulting agent
+can now judge/flag graph staleness via `graph-dba`'s new `:CpgBuildInfo` freshness marker, bundled
+into the same default discovery step rather than a separate pass, and a `CPG: used | considered,
+not relevant | not applicable` one-line evidence-trail convention landed in all six agents'
+deliverable skeletons.
+
+- **`skills/cpg-analysis/references/freshness.md`** (new) — the freshness-marker read recipe;
+  **`skills/joern-cpg/scripts/pipeline.sh`** gained the stamping step at the end of its `--load`
+  branch. Owner: `graph-dba` (unit U4a).
+- **`skills/cpg-analysis/SKILL.md`** — frontmatter `description` widened to six consumers; §1
+  gained the `cpg_<component>` naming-convention paragraph (the one-query, no-noise-on-a-miss
+  discovery guess); §4's nav-table impact-analysis row gained `coder`/`tdd-engineer`/
+  `frontend-engineer`. Owner: `cobb` (unit U4b-1).
+- **`claude/{analyst,architect,qa-engineer,coder,tdd-engineer,frontend-engineer}/*.md`** — all six
+  reworded/wired: discovery moved from conditional ("with a loaded CPG…") to default-orientation
+  framing, freshness-check bundling added, `CPG:` evidence-trail line added to each deliverable
+  skeleton, dated `kaizen/history.md` entries. `coder`/`tdd-engineer`/`frontend-engineer` are new
+  consumers; the other three were reworded, not newly wired. Owner: `cobb` (units U4b-2…U4b-4).
+- **Catalog & doc sync** — `claude/README.md` (all six agents' capability lines reworded to
+  default-orientation framing), `skills/README.md` (`cpg-analysis` row widened to name all six
+  consumers), this backlog (new `## M4 — CPG agent adoption` section, C-401…C-407, milestone-map
+  row). Root `AGENTS.md`'s `skills/` bullet was checked and left unchanged — its `cpg-analysis`
+  description was already consumer-agnostic ("the consumer side"), never named the old
+  three-consumer roster, so nothing there needed correcting. Owner: `cobb` (unit U4b-5).
+
+**Reviews:** `analyst` U3 plan-gate — **approve with suggestions, zero blockers** (1 Major on
+§7's FR/AC-tagging gap, 2 minor; all three addressed in a same-day U2-fix, independently
+re-verified). Design: `docs/plans/cpg-agent-adoption.md` (`cobb`'s roster/discovery/evidence-trail
+slice) + `docs/plans/cpg-agent-adoption-graph.md` (`graph-dba`'s freshness mechanics). Requirements:
+`docs/requirements/cpg-agent-adoption.md` (FR-1…FR-9 / AC-1…AC-6). Coordination:
+`docs/plans/cpg-agent-adoption-coordination.md`.
+
+**Not yet closed as of this entry.** Per the coordination ledger, two gates remain queued: **U5**
+(`analyst`'s diff-scoped re-gate, distinct from the design-level U3 plan-gate already passed) and
+**U6** (`qa-engineer`'s acceptance pass against AC-1…AC-6). `docs/BACKLOG.md`'s M4 milestone-map
+row is marked 🟡 in-progress, not ✅, until both close — matching M2/M3's own precedent of flipping
+✅ only once acceptance-tested, not merely implemented.
+
+**No agent prompt file, `skills/cpg-analysis/SKILL.md`, or `skills/joern-cpg/scripts/pipeline.sh`
+touched in this entry's own scope (U4b-5)** — those are the five sibling units' (U4a, U4b-1…U4b-4)
+already-delivered, already-verified work, cataloged here, not re-edited.
+
 ## 2026-08-09 — CPG backlog follow-ups closed (C-308, C-312, C-314, C-315, C-318, C-319, C-321)
 
 Closeout phase of a `teco`-coordinated round of follow-up backlog items from M3 and the M3
