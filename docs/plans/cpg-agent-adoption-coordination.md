@@ -2,27 +2,12 @@
 
 > **Status:** active · **Owner:** `teco` · **Tracks:** cpg-agent-adoption (M4, proposed — C-4xx TBD in `docs/BACKLOG.md`)
 
-> **PAUSED 2026-08-16 (user: "pause when possible, out of credits").** Stopped dispatching new
-> work immediately. U6 (`qa-engineer`, agentId `a4e1114544491d778`) was already in-flight at pause
-> time — not cancelled (no cancel mechanism used), so it may complete and notify after this
-> session ends. **Whoever resumes: check U6's result first** (its agentId still resolves via
-> `SendMessage` if it hasn't already notified) before re-dispatching anything for U6.
->
-> **State at pause: everything through U5 is delivered, independently verified, and committed**
-> (`35b108f`: U1-U4a; `50f9aaa`: U4b-1..5; `c84815c`: U5 review). Nothing uncommitted except this
-> ledger edit itself. U5's diff-scoped code gate came back **approve**, zero blockers/majors/
-> minors. Only U6 (acceptance pass against AC-1…AC-6) remains before this coordination closes —
-> its own deliverables (`docs/test-plans/cpg-agent-adoption.md` +
-> `docs/test-reports/cpg-agent-adoption-report.md`) are not yet written.
->
-> **To resume:** read this ledger top to bottom, reconcile against `git status`/`git log` (should
-> match exactly — nothing changed since `c84815c`, unless U6 notified and its deliverable files
-> exist on disk uncommitted), check whether U6's agentId still resolves, then: independently spot-
-> check U6's test plan/report against the actual observed behavior it claims (per standing
-> practice — never accept a summarized verdict on its word alone), update the ledger, commit U6's
-> verified deliverables, and close the coordination (flip this document's own `Status:` to
-> `archived` per root `AGENTS.md`'s doc-lifecycle table — `teco` is the owner of its own
-> coordination doc's archival flip).
+> **RESUMED 2026-08-16.** U6's FAIL verdict independently spot-checked (quoted plan/agent-file
+> wording — `not a separate, optional pass`, the `CPG:` line spec, `silence is what this
+> convention rules out` — confirmed verbatim against the actual files, not just trusted from the
+> report). Verdict stands: real, reproducible, three-way defect. U6's deliverables committed
+> (`43878d2`). Coordination is **not closed** — a fix round (U7, `cobb`) is now in flight; see
+> ledger below for current state.
 
 ## Goal & definition of done
 
@@ -56,7 +41,8 @@ be coherent, so it runs second, reading graph-dba's delivered note by path.
 | U4b-4 | `cobb` | ~~`a2e79f6e358cd6e14`~~ → `a1c8fd7429130a580` | delivered | `claude/frontend-engineer/frontend-engineer.md` (Orient-first item 4, grounded in `cpg_salesperson`/`chatbot.py`; evidence-trail line in Step 4) + `kaizen/history.md` dated entry — teco spot-checked `git diff`: content correct, no scope creep, description/body consistent | — |
 | U4b-5 | `cobb` | `a165aa58317311e30` | delivered | `claude/README.md` (6 rows reworded to default-orientation framing, verified verbatim against each agent's landed frontmatter/body), `skills/README.md` (`cpg-analysis` row widened to 6 consumers), `docs/BACKLOG.md` (new M4 section, C-401…C-407, milestone-map row marked 🟡 pending U5/U6 — matches M2/M3 precedent), `docs/HISTORY.md` (dated M4 entry, explicitly notes U5/U6 still queued) — teco spot-checked all four diffs, correct and honest about gate state. Root `AGENTS.md` deliberately left unchanged (`git diff` confirms zero touch) — its `skills/` bullet was already consumer-agnostic, no stale claim to fix. | — |
 | U5 | `analyst` | `a89295ef21d32b51d` | accepted | `docs/reviews/cpg-agent-adoption.md` §"Pass 2 — Diff-scoped code gate (U5)" — teco spot-checked: SKILL.md description independently recounted at 983 chars (matches); scope/FR-8/consistency claims read as thoroughly grounded (live `mcp__cpg__query`, direct full-file reads, `audit-team.sh`, `bash -n`). One nit noted (pre-existing YAML strict-parse quirk on `tdd-engineer.md`/`frontend-engineer.md`, confirmed pre-diff, not actionable). `audit-team.sh`'s overall FAIL traced to an unrelated K-026 file untouched by either commit — correctly out of scope here. | code gate: **approve** |
-| U6 | `qa-engineer` | `a4e1114544491d778` | delivered (unverified — landed during pause) | `docs/test-plans/cpg-agent-adoption.md` + `docs/test-reports/cpg-agent-adoption-report.md` — **verdict as reported: FAIL.** AC-1/AC-6 hold; AC-2/AC-3/AC-4 each broke differently across 3 live subagent dispatches: DEF-1 (moderate, `coder`) discovered/used the CPG correctly but never emitted the `CPG:` line; DEF-2 (major, `architect`) used the CPG, emitted the line, but skipped the mandated freshness check; DEF-3 (major, `tdd-engineer`, no-CPG task) emitted zero CPG mention at all — indistinguishable from the discovery step never running. Not yet independently spot-checked by teco (session paused on arrival — see header note) — treat as delegate-reported until verified. | acceptance: **FAIL (as reported)** |
+| U6 | `qa-engineer` | `a4e1114544491d778` | accepted | `docs/test-plans/cpg-agent-adoption.md` + `docs/test-reports/cpg-agent-adoption-report.md` (committed `43878d2`) — **verdict: FAIL, independently verified by teco.** AC-1/AC-6 hold; AC-2/AC-3/AC-4 each broke differently across 3 live subagent dispatches: DEF-1 (moderate, `coder`) discovered/used the CPG correctly but never emitted the `CPG:` line; DEF-2 (major, `architect`) used the CPG, emitted the line, but skipped the mandated freshness check; DEF-3 (major, `tdd-engineer`, no-CPG task) emitted zero CPG mention at all — indistinguishable from the discovery step never running. teco spot-check: grepped `docs/plans/cpg-agent-adoption.md` and the three cited agent files for the report's direct quotes ("not a separate, optional pass", the `CPG:` line spec, "silence is what this convention rules out") — all verbatim-confirmed present exactly as the report describes, corroborating the wiring is worded as claimed and the gap is purely behavioral. | acceptance: **FAIL (verified)** |
+| U7 | `cobb` | `a86ed8ee3420ef600` | in-flight | Tighten the freshness-check-bundling sentence and the `CPG:` evidence-trail-line instruction, uniformly, across all six wired agent files (`claude/{analyst,architect,qa-engineer,coder,tdd-engineer,frontend-engineer}/*.md`) to close DEF-1/DEF-2/DEF-3 — narrow wording fix, not a restructure. Briefed to read `docs/test-reports/cpg-agent-adoption-report.md` directly and update each agent's `kaizen/history.md`. | code gate: `analyst` (U8) → — |
 
 ## Notes
 
