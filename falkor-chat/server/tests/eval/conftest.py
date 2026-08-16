@@ -15,6 +15,17 @@ posture but without the rebuild.
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+# `tests/eval/__init__.py` (added to fix the `conftest.py` module-name collision
+# with `tests/conftest.py` under pytest's default `--import-mode=prepend`) makes
+# this directory a package, which moves pytest's own sys.path insertion point up
+# to `tests/` instead of `tests/eval/`. `judge.py`/`metrics.py` are test-only
+# helper modules imported bare (`from judge import ...`) by the sibling
+# `test_*.py` files in this directory, not part of the `falkorchat` package, so
+# they need this directory back on `sys.path` explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pytest
 
