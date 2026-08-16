@@ -28,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pytest
+from redis.exceptions import ResponseError
 
 from falkorchat import db, modelconfig
 from falkorchat.repository import Repository
@@ -42,10 +43,32 @@ EVAL_WS = os.environ.get("EVAL_WS", "eval")
 _MIN_MESSAGE_COUNT = 50
 
 
-def _falkordb_reachable() -> bool:
+def _falkordb_reachable(ws: str = EVAL_WS) -> bool:
+    """True iff FalkorDB responds for `ws:{ws}` — never materializes the graph
+    key as a side effect, even when it doesn't exist yet (B-1,
+    `docs/reviews/graphrag-eval.md`).
+
+    Routed via `ro_query` (`GRAPH.RO_QUERY`), never `.query` (`GRAPH.QUERY`):
+    per `claude/graph-dba/falkordb-quirks.md` ("A read via `GRAPH.QUERY`
+    materializes an empty graph key"), a write-mode query against a
+    nonexistent graph key silently creates it, which is exactly the side
+    effect this module's own docstring says its probes never have. Mirrors
+    `Repository.read_index_dimension`'s own `ro_query` + "empty key"
+    except-clause pattern (`falkorchat/repository.py`) two call-sites away in
+    the same fixture body.
+
+    A `ResponseError` containing "empty key" means the server responded but
+    `ws:{ws}` doesn't exist yet — that still counts as *reachable*, just not
+    yet seeded; the caller's next check (`read_index_dimension`) already
+    produces the more specific "not seeded" skip reason for that case.
+    """
     try:
-        db.connect().select_graph(f"ws:{EVAL_WS}").query("RETURN 1")
+        db.connect().select_graph(f"ws:{ws}").ro_query("RETURN 1")
         return True
+    except ResponseError as exc:
+        if "empty key" in str(exc):
+            return True
+        return False
     except Exception:
         return False
 

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from metrics import mrr, recall_at_k
+from metrics import check_regression, mrr, recall_at_k
 
 # ── recall_at_k ─────────────────────────────────────────────────────────────
 
@@ -123,3 +123,70 @@ def test_mrr_multi_relevant_uses_earliest_matching_rank() -> None:
 def test_mrr_raises_on_empty_relevant_set() -> None:
     with pytest.raises(ValueError):
         mrr(["a", "b"], set())
+
+
+# ── check_regression ────────────────────────────────────────────────────────
+#
+# D6's regression gate (`docs/plans/graphrag-eval.md` §3 D6): recall@10 must
+# never drop below baseline (zero-tolerance); MRR may drop up to a relative
+# tolerance before it counts as a regression. `test_retrieval_eval.py`'s
+# `test_retrieval_metrics_meet_or_beat_baseline` exercises this in an
+# integration setting where `current` and `baseline` are always computed from
+# the same live corpus and therefore (outside a real retrieval-code
+# regression) always equal — that proves the harness runs, not that the gate
+# actually fires on a genuine regression. These tests fabricate `current`/
+# `baseline` dicts directly so the comparison arithmetic itself is proven,
+# with no `ws_eval`/FalkorDB dependency (`docs/reviews/graphrag-eval.md`
+# finding M-1).
+
+_TOLERANCE = 0.05
+
+
+def test_check_regression_recall_at_10_below_baseline_fires() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    current = {"recall_at_10": 0.80, "mrr": 0.60}  # mrr unchanged, recall down
+    reasons = check_regression(current, baseline, mrr_tolerance=_TOLERANCE)
+    assert reasons, "a recall@10 drop below baseline must fire — zero tolerance"
+    assert any("recall" in r.lower() for r in reasons)
+
+
+def test_check_regression_mrr_regression_within_tolerance_passes() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    # 4% relative drop — inside the 5% tolerance.
+    current = {"recall_at_10": 0.90, "mrr": 0.60 * 0.96}
+    reasons = check_regression(current, baseline, mrr_tolerance=_TOLERANCE)
+    assert reasons == [], (
+        "an MRR drop within the tolerance band must not be treated as a "
+        "regression"
+    )
+
+
+def test_check_regression_mrr_regression_beyond_tolerance_fires() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    # 10% relative drop — beyond the 5% tolerance.
+    current = {"recall_at_10": 0.90, "mrr": 0.60 * 0.90}
+    reasons = check_regression(current, baseline, mrr_tolerance=_TOLERANCE)
+    assert reasons, "an MRR drop beyond the tolerance must fire"
+    assert any("mrr" in r.lower() for r in reasons)
+
+
+def test_check_regression_equal_to_baseline_passes() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    current = {"recall_at_10": 0.90, "mrr": 0.60}
+    assert check_regression(current, baseline, mrr_tolerance=_TOLERANCE) == []
+
+
+def test_check_regression_both_metrics_regressing_reports_both_reasons() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    current = {"recall_at_10": 0.80, "mrr": 0.60 * 0.90}
+    reasons = check_regression(current, baseline, mrr_tolerance=_TOLERANCE)
+    assert len(reasons) == 2, (
+        "both a recall@10 drop and an out-of-tolerance MRR drop should each "
+        "surface their own reason, not short-circuit on the first"
+    )
+
+
+def test_check_regression_improvement_over_baseline_passes() -> None:
+    baseline = {"recall_at_10": 0.90, "mrr": 0.60}
+    current = {"recall_at_10": 0.95, "mrr": 0.70}
+    assert check_regression(current, baseline, mrr_tolerance=_TOLERANCE) == []

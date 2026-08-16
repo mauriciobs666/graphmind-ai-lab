@@ -51,3 +51,46 @@ def mrr(retrieved_msg_ids: list[str], relevant: set[str]) -> float:
         if msg_id in relevant:
             return 1.0 / rank
     return 0.0
+
+
+def check_regression(
+    current: dict[str, float],
+    baseline: dict[str, float],
+    *,
+    mrr_tolerance: float,
+) -> list[str]:
+    """D6's regression-detection gate (`docs/plans/graphrag-eval.md` §3 D6):
+    compare `current` retrieval metrics against a committed `baseline`.
+
+    Two independent checks, both applied (never short-circuits on the first
+    hit, so a run regressing on both axes reports both):
+
+    - **recall@10 — zero tolerance.** `current["recall_at_10"]` must be
+      `>= baseline["recall_at_10"]`; any drop is a regression.
+    - **MRR — relative tolerance.** `current["mrr"]` must be
+      `>= baseline["mrr"] * (1 - mrr_tolerance)`; a drop within that band is
+      accepted as noise, not a regression.
+
+    Returns a list of human-readable regression-reason strings — empty means
+    "no regression, the gate passes." Pure and network-free: operates only on
+    the two dicts given, no FalkorDB/corpus dependency, so it's fully
+    unit-testable in isolation from the live `ws_eval` integration path that
+    `test_retrieval_eval.py` drives this same logic through.
+    """
+    reasons: list[str] = []
+
+    if current["recall_at_10"] < baseline["recall_at_10"]:
+        reasons.append(
+            f"recall@10 regressed: {current['recall_at_10']:.4f} < baseline "
+            f"{baseline['recall_at_10']:.4f}"
+        )
+
+    mrr_floor = baseline["mrr"] * (1 - mrr_tolerance)
+    if current["mrr"] < mrr_floor:
+        reasons.append(
+            f"MRR regressed more than {mrr_tolerance:.0%} relative: "
+            f"{current['mrr']:.4f} < floor {mrr_floor:.4f} (baseline "
+            f"{baseline['mrr']:.4f})"
+        )
+
+    return reasons

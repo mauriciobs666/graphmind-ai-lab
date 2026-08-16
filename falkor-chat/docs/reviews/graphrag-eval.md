@@ -730,3 +730,687 @@ itself is unconditional and correctly triggered regardless of sign-off state), a
 scope-or-mechanism fix, not a redesign. **v4 is dispatchable as written** — Unit 3 can proceed with
 the current text; the sign-off-status gap is worth a follow-up line in the plan before
 `generate_report.py` is actually implemented, not a reason to hold anything now.
+
+---
+
+## Unit 2b code/content review (retrieval metrics) — 2026-08-16
+
+**Scope.** A code/content gate on Unit 2b's delivered files (`tdd-engineer`, agent id
+`a9852ea01e244962f`, per the coordination ledger's U3c row): `server/tests/eval/metrics.py`,
+`test_metrics.py`, `conftest.py`, `test_retrieval_eval.py`, and the committed
+`retrieval_baseline.json`. This is a static review plus running what already exists — not a
+qa-engineer acceptance pass. I read the plan's Unit 2b section (§5) and D2/D6/D7 in full, read
+every file under review line-by-line, cross-checked call signatures/docstrings against
+`Services.hybrid_search` and `Repository.read_index_dimension`
+(`server/falkorchat/services.py:852`, `server/falkorchat/repository.py:704-747`), ran
+`cd server && .venv/bin/python -m pytest tests/eval/test_metrics.py tests/eval/test_retrieval_eval.py
+tests/eval/test_golden_set_integrity.py -q -s` against the live, already-seeded `ws:eval`
+(137 passed; the retrieval test printed `recall@10=0.9737 recall@5=0.8947 mrr=0.6259`, an exact
+match to the committed `retrieval_baseline.json`), independently re-derived the per-query
+recall/MRR breakdown against the live corpus to sanity-check the aggregate numbers (see below),
+ran `ruff check` on the four Unit 2b Python files, and live-probed a FalkorDB behavior claim
+against this exact instance (details in B-1). I did not re-review `test_golden_set_integrity.py`'s
+content (that's Unit 2a, already gated) beyond confirming it still runs green in the same suite.
+
+### Blocker
+
+**B-1. `conftest.py`'s `_falkordb_reachable()` (`:45-50`) uses a write-mode `GRAPH.QUERY`, not
+`GRAPH.RO_QUERY` — on a not-yet-seeded `ws:eval`, it silently materializes an empty graph key,
+which is exactly the side effect this fixture's own docstring says it never has.**
+
+```python
+def _falkordb_reachable() -> bool:
+    try:
+        db.connect().select_graph(f"ws:{EVAL_WS}").query("RETURN 1")
+        return True
+    except Exception:
+        return False
+```
+
+`.query(...)` is FalkorDB's write-mode `GRAPH.QUERY`, not the read-only `GRAPH.RO_QUERY`. I
+live-verified against this exact FalkorDB instance that a write-mode `GRAPH.QUERY` on a
+non-existent graph key materializes an empty graph as a side effect, even for a query with no
+`MATCH`/`CREATE` at all:
+
+```
+$ redis-cli GRAPH.LIST                                   # before: no such key
+... (ws:eval, ws:acme, cpg_salesperson, cpg_falkorchat, ws:qa-tico-workflows-manual, reference, ws:test)
+$ redis-cli GRAPH.QUERY "ws:analyst-probe-test-nonexistent" "RETURN 1"
+1) 1) "1"
+2) ...
+$ redis-cli GRAPH.LIST                                    # after: the key now exists
+... ws:analyst-probe-test-nonexistent
+```
+
+(Cleaned up with `GRAPH.DELETE` immediately after confirming — no lasting state left from this
+probe.) This is not a novel finding — it's a **live-verified, already-documented fact in this
+lab's own knowledge base**, `claude/graph-dba/falkordb-quirks.md`: "A read via `GRAPH.QUERY`
+materializes an empty graph key... `GRAPH.RO_QUERY` on the same non-existent graph instead returns
+`ERR Invalid graph operation on empty key` and creates nothing." **And this exact module already
+knows the rule and follows it two call-sites away**: `Repository.read_index_dimension`'s own
+docstring (`server/falkorchat/repository.py:704-729`) explains it routes via `ro_query` "never a
+write... so a nonexistent graph key is never implicitly created as a side effect of this check" —
+the fixture's `_falkordb_reachable()` doesn't follow the same rule for its own reachability probe,
+called immediately before `read_index_dimension` in the same fixture body.
+
+**Why this matters for real, not just in theory.** `conftest.py`'s module docstring states the
+design invariant this bug breaks directly: "`ws_eval` fixture below is **probe-only**: it never
+bootstraps, never seeds, never writes... only checks readiness." D2's entire rationale for making
+`ws:eval` persistent (§3 D2) depends on nothing outside `seed_eval_corpus.sh` ever mutating it. In
+this environment `ws:eval` already exists, so the bug is latent here — every `_falkordb_reachable()`
+call this session ran against an already-existing graph, so no new key was created. But on a fresh
+environment (CI, a new dev box, or after a deliberate `GRAPH.DELETE ws:eval` before a `RESEED=1`
+re-run) the very first `pytest tests/eval` collection would silently create an empty `ws:eval` graph
+key as a side effect of merely checking reachability — not destructive to anything, but exactly the
+"junk empty graph key, needs manual `GRAPH.DELETE`" operational hazard the quirks doc calls out, and
+a real violation of this fixture's own stated contract.
+
+**Suggested fix:** switch to `.ro_query("RETURN 1")` and mirror `read_index_dimension`'s own
+except-clause pattern — catch `redis.exceptions.ResponseError`, check `"empty key" in str(exc)`, and
+treat that case as **reachable** (the server responded; there's just no such graph yet — the
+dimension check immediately below already produces the correct, more specific skip reason via
+`read_index_dimension`'s own `None`-on-missing-key handling), while still returning `False` for a
+genuine connection failure (broad `except Exception` around everything else, as today). A bare
+swap of `.query` → `.ro_query` without this distinction would work but degrade the skip *message*
+for the "not yet seeded" case to the misleading "FalkorDB not reachable" — worth getting the
+except-clause right rather than just the method name.
+
+### Major
+
+**M-1. D6's regression-detection logic — the actual "gate" half of the baseline gate — has zero
+test coverage of its own branching, only ever integration-tested implicitly against a live
+`ws:eval` that (in every environment I can observe) only ever compares against itself.**
+
+`test_retrieval_metrics_meet_or_beat_baseline` (`test_retrieval_eval.py:113-157`) inlines both of
+D6's branches — first-run establish-and-write, and subsequent compare-and-fail (`recall@10 ≥
+baseline`, `mrr ≥ baseline*(1-0.05)`) — directly against a live `_aggregate_metrics(ws_eval)` call.
+I read the comparison logic and it's correct (`assert current["recall_at_10"] >= baseline[...]`,
+`mrr_floor = baseline["mrr"] * (1 - _MRR_REGRESSION_TOLERANCE)`, `assert current["mrr"] >=
+mrr_floor` — both directions right), but nothing in this suite ever exercises the **failure** path:
+no test constructs a `current` dict that's worse than a fabricated `baseline` and confirms the
+assertion actually fires, and no test confirms the establish-mode branch (file absent →
+write-and-pass) behaves correctly in isolation. Every real run in this environment hits "baseline
+exists, current == baseline exactly" (confirmed by my own re-run above, byte-for-byte identical to
+the committed file) — trivially satisfies both assertions regardless of whether the comparison
+logic is even correct, so the live integration run gives false confidence that the gate itself has
+been proven to work. D6 explicitly frames this file as "a real regression gate from day one, not
+just a record" (§3 D6) — the one property that actually matters is "does it fail when it should,"
+and that's exactly what's untested. **Suggested fix:** extract the compare/establish branching into
+a small pure function, e.g. `_check_regression(current: dict, baseline: dict) -> list[str]`
+returning failure-reason strings (or raising), and add it to `test_metrics.py` (genuinely
+network-free, no `ws_eval` needed) with fabricated dicts covering: recall@10 regression fires;
+MRR regression beyond 5% fires; MRR regression within the 5% tolerance passes; equal-to-baseline
+passes. `test_retrieval_metrics_meet_or_beat_baseline` then becomes a thin integration wrapper
+calling the extracted function, still exercised end-to-end against the live corpus as today.
+
+### Minor
+
+**N-1. `retrieval_baseline.json` is already committed to `main`** (`06ab133`, the Units 1/2a/2b/3
+WIP checkpoint) **before the D6-required `data-scientist` methodology sign-off has happened** — the
+coordination ledger's U3c row correctly still shows this gate as pending (`analyst` +
+`data-scientist` → `—`), so the coordination is aware and tracking it, but the plan's own Unit 2b
+"Done when" text is more literal than what actually happened: "the file is committed only after
+that review, per D6" (§5 Unit 2b, and repeated in §7 item 9 as "part of Unit 2b's done-condition,
+not optional follow-up work"). Not a code defect, and not asserting the numbers themselves are
+wrong — flagging so the sequencing gap is explicit rather than silently glossed over once
+sign-off eventually happens after the fact.
+
+**N-2. `generate_report.py`'s `[pending / not yet reviewed]` sign-off placeholder is a permanent
+literal, not a state that anything in this design ever flips.** Confirmed by reading the code
+(details under "Item 2" below) — the placeholder is correct and matches the documented teco
+decision today, but nothing in `generate_report.py`, `judge_calibration.json`, or any sidecar file
+ever updates it once a `data-scientist` sign-off actually happens; a report regenerated next month,
+after real sign-off, would still literally say "not yet reviewed," silently contradicting the
+coordination ledger. This was accepted deliberately (sign-off tracking stays in the ledger, not the
+generated file) and I'm not relitigating that call — but the specific wording risks reading as a
+live status rather than a permanent disclaimer. Cheap fix if the coordinator wants it: reword to
+something that can't go stale, e.g. "see `docs/plans/graphrag-eval-coordination.md` for current
+sign-off status" instead of a literal pending/reviewed dichotomy.
+
+### Nit
+
+**N-3.** `ruff check` on the four Unit 2b files reports two `I001` (unsorted import block)
+findings, both from the `from __future__ import annotations` / blank-line / import-group ordering
+in `test_metrics.py:19-23` and `test_retrieval_eval.py:19-31` — both `ruff --fix`-able,
+zero-behavior-change. `AGENTS.md` documents ruff as not a wired gate in this suite, so this is
+take-or-leave, noted only for completeness.
+
+**N-4.** `recall@5` is computed and stored in every `retrieval_baseline.json`/report but never
+compared against a regression floor by `test_retrieval_metrics_meet_or_beat_baseline` — only
+recall@10 and MRR gate. This matches the method note's own acceptance rule exactly (§3 D6, "recall@10
+≥ baseline and MRR not down > 5% relative" — recall@5 is not in that rule), so this is not a defect,
+just worth naming explicitly since a future reader of the baseline file could otherwise assume all
+three numbers are load-bearing.
+
+### Correctness of the recall@k / MRR math
+
+`metrics.py`'s `recall_at_k`/`mrr` (`:15-53`) are correct by inspection and by the parametrized unit
+tests in `test_metrics.py` (18 cases covering full/no/multi-relevant hits, hit position within the
+top-k window, a hit outside the window, `hybrid_search`'s documented fewer-than-`k` non-guarantee,
+and the empty-`relevant`-set `ValueError`). I re-derived the standard formulas independently and
+found no deviation: `recall_at_k` = `|top-k ∩ relevant| / |relevant|` (not `/ k`, correctly — a
+golden pair with 2 relevant ids and only 1 retrieved within k correctly scores 0.5, verified by
+`test_recall_at_k_multi_relevant_partial_hit`), `mrr` = reciprocal rank (1-indexed) of the first hit,
+`0.0` on no hit including the empty-list case. Both raise on an empty `relevant` set rather than
+silently scoring 0 — a deliberate, documented, correct choice (a golden pair with no
+`relevant_msgIds` is a fixture defect, and `test_golden_set_integrity.py:79` independently confirms
+that invariant is actually enforced elsewhere, not just asserted in a docstring — I checked, not
+took the citation on faith).
+
+### Test coverage and quality
+
+`test_metrics.py` is genuinely thorough for the pure-function layer: every edge case plan §6 calls
+out by name is covered (multi-relevant, ANN returning fewer than `k`, hit position varied across
+first/middle/last rather than only ever at rank 0 — which the file's own docstring correctly notes
+would leave the positional slicing/rank-counting logic unproven). `test_retrieval_eval.py`'s two
+integration tests correctly reuse the `ws_eval` skip fixture (verified: both take `ws_eval` as a
+parameter, so a fixture-level `pytest.skip` propagates to both without either needing its own guard)
+and correctly do one `hybrid_search` round-trip per golden query with recall@5 sliced from the same
+ordered recall@10 result rather than a second call (confirmed by reading `_aggregate_metrics`: a
+single `services.hybrid_search(ctx, q_vec=q_vec, k=_K, limit=_K)` call per row, both recall scores
+computed from the same `retrieved` list) — exactly matching the plan's explicit performance
+instruction. The one real gap is M-1 above (the regression-gate branching itself untested) — test
+coverage for the metrics math and the corpus-integrity check is otherwise solid.
+
+### Plausibility of `retrieval_baseline.json`'s numbers
+
+I independently re-ran retrieval for all 38 golden pairs against the live `ws:eval` (a read-only
+script using the same `Services.hybrid_search`/cached-embedding path the test uses) and confirmed
+the aggregate numbers are not just internally consistent but individually plausible given the
+corpus/golden-set design already approved in the Unit 1/2a content reviews above: **recall@10 =
+37/38** — exactly one golden pair (`gr-31`'s neighbor in the enumeration is not the miss; the actual
+miss is `gr-16`, targeting `eval-oauth-token-refresh-bug-008`) misses its target entirely within the
+top 10, retrieving five other `oauth-token-refresh-bug`/`session-timeout-policy` messages instead —
+a plausible outcome given that pair is one of the four near-miss pairs the Unit 1 corpus review
+already flagged as "genuinely confusable." **recall@5 = 34/38** and **MRR = 0.6259** are consistent
+with a corpus deliberately built around near-miss pairs and topically-clustered threads: most hits
+land somewhere in the top 10 (driving recall@10 to 97%), but frequently not at rank 1 (many of the
+per-query reciprocal ranks I computed were 0.2–0.5, i.e. the target message often shares its own
+thread with 4–9 other messages that retrieve ahead of it), which is exactly what pulls MRR down to
+~0.63 despite near-perfect recall@10 — a coherent, explicainable pattern, not a suspicious or
+internally-inconsistent one. I also confirmed the committed file reproduces byte-for-byte
+(`recall_at_10: 0.9736842105263158`, `recall_at_5: 0.8947368421052632`, `mrr: 0.6258771929824561`,
+`n: 38`) via a fresh `pytest` run against the same live `ws:eval` today — the harness is
+deterministic in this environment, not just "close."
+
+### Item 1 — `gr-31` reword: confirmed genuinely resolved, not just changed
+
+Read `server/tests/eval/golden_retrieval.jsonl` line 31 directly:
+
+```json
+{"id": "gr-31", "query": "What's the required data-retention window for financial audits?",
+ "relevant_msgIds": ["eval-database-backup-policy-003"], "topic": "database-backup-policy",
+ "target_text": "Finance needs point-in-time recovery for any date within the last 90 days, for
+ audit purposes.", ...}
+```
+
+The Unit 2a content review flagged the *previous* query as a near-verbatim clause reuse — stripping
+its "How far back does"/"?" wrapper left "finance need point-in-time recovery ... for audit
+purposes," the target sentence's own opening and closing clauses reused almost word-for-word — and
+suggested, as one concrete fix, exactly the wording now in place: "What's the required
+data-retention window for financial audits?" The new query no longer reuses "point-in-time
+recovery" or "for audit purposes" as contiguous phrases at all — it's built from independent
+vocabulary ("data-retention window" vs. "point-in-time recovery," "financial audits" vs. "for audit
+purposes"), reads as a genuine paraphrase on the same standard the other 37 pairs were held to in
+the Unit 2a review, and still targets the same `target_text`/`relevant_msgIds`. **Confirmed: this
+is a real fix, not a superficial edit that merely changes the surface text while preserving the
+clause-reuse problem.**
+
+### Item 2 — `generate_report.py`'s sign-off-status omission: confirmed sound and matching its own documented rationale
+
+Read `server/tests/eval/generate_report.py:26-34` directly (the module docstring's "Dropped
+sub-clause" paragraph) against the actual rendering code (`:60-79`, `_SAME_MODEL_CAVEAT_TEMPLATE`;
+`:226-233`, the `if same_model:` branch in `_render_judge_section`). The documented rationale is
+accurate to what the code does: `judge_calibration.json` is written unconditionally on every
+completed live run (per Unit 3's own spec, "only on an actual completed live run — never on skip" —
+i.e. presence means "ran," not "signed off"), unlike D6's baseline file whose *committed presence*
+is itself the sign-off signal — so, correctly, this module makes no attempt to infer a sign-off
+status from `judge_calibration.json`'s presence or content. It emits the caveat's
+`[pending / not yet reviewed]` sub-line as a **literal string constant**, unconditionally, whenever
+`sameModelAsAgentUnderTest` is true — never computed, never silently dropped. This matches the
+ledger's U-d1-gate row exactly ("drop it, sign-off tracking stays in this coordination ledger,
+folded into Unit 3's brief") and the design is sound for the reason given. **Confirmed: the code
+matches its own documented rationale, and the design choice itself still holds** — with the one
+caveat already raised as N-2 above (the literal placeholder can't self-update once sign-off
+actually happens, which is an accepted consequence of the decision, not a mismatch between code and
+rationale).
+
+### What's solid
+
+- The recall@k/MRR math is textbook-correct, defensively guards its one real edge case (empty
+  `relevant`), and is exercised by a thorough, well-targeted unit-test suite that specifically
+  varies hit position rather than only testing rank-0 hits.
+- `test_retrieval_eval.py` correctly reuses the shared skip fixture, correctly avoids a second
+  `hybrid_search` round-trip for recall@5, and correctly scores the full `relevant_msgIds` set
+  (not just the first id) for both metrics — matching the plan's multi-relevant edge case exactly.
+- D7 mechanism 1 (`Overlay.load(DEFAULT_MODEL_CONFIG_PATH)`) is applied correctly and consistently
+  in `conftest.py`'s `_expected_embedding_dim()`, with clear assertion messages if the config is
+  ever malformed — no `ModelGateway.from_env()` leakage into this pytest-context code anywhere I
+  checked.
+- The baseline numbers are plausible on independent re-derivation, not just self-consistent, and the
+  harness reproduces them deterministically against the live corpus.
+- Both items the brief asked me to fold in check out on direct inspection, not just on the prior
+  session's word for it.
+
+### Verdict: needs changes
+
+**Needs changes** — one Blocker (B-1: the reachability probe's write-mode query can silently
+materialize a stray `ws:eval` graph key on a fresh environment, violating this fixture's own
+documented no-side-effects contract) and one Major (M-1: the regression-gate's actual pass/fail
+branching has no test coverage of its own, only incidental coverage from a live run that always
+compares the baseline against itself). Both are narrow, mechanical fixes — B-1 is a several-line
+change mirroring a pattern this exact module already uses correctly one function away; M-1 is an
+extract-and-unit-test refactor of logic that's already correct by inspection, just unproven by a
+test. Neither implicates the recall@k/MRR math (verified correct), the baseline numbers (verified
+plausible and reproducible), or the two items the brief specifically asked me to confirm (both
+genuinely resolved). Once B-1 and M-1 are addressed, this unit should re-gate cleanly — I'd expect
+an **Approve with suggestions** on the two Minor/Nit items outstanding.
+
+### Open questions
+
+- N-1 (baseline already committed ahead of the D6 sign-off gate): does the coordinator want this
+  treated as "already satisfied in spirit, sign-off just needs to land next" or does the commit
+  itself need to be reworked (e.g., a follow-up commit note) to match the plan's literal wording?
+  Not this review's call.
+- N-2 (the permanent "[pending / not yet reviewed]" placeholder): worth the coordinator's explicit
+  confirmation that a report regenerated after real sign-off happens is acceptable to still read
+  "not yet reviewed" indefinitely, per the accepted teco decision — flagging in case that consequence
+  wasn't fully in view when the decision was made.
+
+---
+
+### Re-gate (2026-08-16) — B-1/M-1 fixes
+
+**Scope.** A targeted re-check of `tdd-engineer`'s fixes for B-1 and M-1 only, per `teco`'s relay —
+not a from-scratch re-review (the rest of this section's findings/verdict components stand). I read
+the actual diffs myself (`git diff` / `git status` against `server/tests/eval/`) rather than taking
+the relay's description on faith, then re-ran the suites independently.
+
+**B-1 — genuinely fixed, verified two ways.**
+
+1. **Code read directly.** `conftest.py:46-73`'s `_falkordb_reachable(ws: str = EVAL_WS)` now calls
+   `.ro_query("RETURN 1")` (not `.query(...)`), imports `redis.exceptions.ResponseError` (the same
+   exception type `repository.py:15` imports for the identical purpose), and catches it specifically:
+   `"empty key" in str(exc)` → `return True` ("responded, just no such graph yet — reachable"),
+   anything else → falls through to the existing broad `except Exception: return False`. This is
+   exactly the fix I suggested (mirror `read_index_dimension`'s except-clause pattern rather than a
+   bare method-name swap that would degrade the skip message) — not a coincidence; the new
+   docstring (`:47-63`) cites this review's B-1 finding by name and explains the reasoning in the
+   same terms.
+2. **New test, independently re-run.** `test_conftest_probe.py` (new) probes a genuinely
+   nonexistent graph key (`ws:b1-reachability-probe-does-not-exist`), asserts
+   `_falkordb_reachable()` still returns `True` for it, and asserts `GRAPH.LIST` (via
+   `conn.list_graphs()`) shows no trace of that key afterward — the exact property this bug broke.
+   I ran `cd server && .venv/bin/python -m pytest tests/eval/ -q -s` myself (164 passed, 1
+   deselected — the live-marker test) and then independently checked `redis-cli GRAPH.LIST` against
+   the live instance directly: no stray `ws:b1-reachability-probe-does-not-exist` key present,
+   confirming the test's own cleanup ran and, more importantly, that nothing leaked in the first
+   place (the `finally` block is defensive-only; the assertions inside the `try` already require the
+   key to be absent for the test to pass at all). I did not myself revert the fix to mutation-test it
+   (editing source outside `docs/reviews/` is outside this role's write scope) — but the fix's
+   correctness doesn't depend on trusting that claim: I independently reproduced the original bug
+   against a live throwaway key with raw `GRAPH.QUERY` in my first pass, read the exact except-clause
+   the fix now uses, and confirmed by direct test run that the documented contract now holds.
+   **B-1 is closed.**
+
+**M-1 — genuinely fixed, verified two ways.**
+
+1. **Code read directly.** `metrics.py:56-96`'s new `check_regression(current, baseline, *,
+   mrr_tolerance)` is a pure function, network-free, matching the original inline logic exactly
+   (same two comparisons: `recall_at_10` zero-tolerance, `mrr` relative-tolerance floor) but now
+   returning a list of reasons instead of asserting directly — and, correctly, **never
+   short-circuits**: both checks always run, so a run regressing on both axes reports both reasons
+   (I confirmed this by reading the function body — no `return` between the two `if` blocks).
+   `test_retrieval_eval.py:154-160` is now the thin wrapper the relay described: `reasons =
+   check_regression(...)`, `assert not reasons`. The MRR-floor arithmetic and the recall@10
+   direction are both unchanged from what I already verified correct in the original pass.
+2. **New tests, independently re-run.** `test_metrics.py`'s diff adds exactly six new tests (I read
+   the diff, not just counted a claim): recall@10-below-baseline fires; MRR within the 5% tolerance
+   passes; MRR beyond the 5% tolerance fires; equal-to-baseline passes; both metrics regressing
+   reports **two** reasons (`len(reasons) == 2`, correctly proving the no-short-circuit claim, not
+   just asserting truthiness); improvement-over-baseline passes. All fabricate `current`/`baseline`
+   dicts directly — genuinely network/`ws_eval`-free, exactly closing the gap M-1 named (the old
+   suite only ever exercised "current equals baseline exactly" via a live corpus that compares
+   against itself). I re-ran the full `tests/eval/` suite myself (see above, 164 passed) — all six
+   new tests are in that count and none skipped. **M-1 is closed.**
+
+**Independent full-suite re-verification.** I ran `cd server && .venv/bin/python -m pytest -q`
+myself (not relying on the relay's reported count): **1034 passed, 2 deselected** — an exact match
+to both the relay's claim and `teco`'s own independent count. `ruff check` on the touched files
+still reports the same pre-existing `I001` import-sort nits as before (N-3, unchanged, still
+out of scope for this fix, still take-or-leave).
+
+**The one item flagged as out-of-scope (root `server/tests/conftest.py`'s own
+`_falkordb_reachable()` having the identical write-mode-query shape)** — I did not review this,
+per the relay's own framing that it's out of scope for this re-gate and will become a `BACKLOG.md`
+follow-up at doc closeout. Noting for the record that if it *is* filed, it should probably cite this
+finding (B-1) and its fix as the precedent to mirror, since the fix here is a directly reusable
+pattern (`ro_query` + catch-`ResponseError`-check-"empty key"), not a novel design each site has to
+re-derive independently.
+
+### Updated verdict (2026-08-16)
+
+**Approve with suggestions.** Both gating findings from the prior pass — B-1 (Blocker) and M-1
+(Major) — are verified closed, independently, against the actual code and by independently re-running
+the tests (not by trusting the fix report). Nothing new surfaced in this narrow re-check. The
+remaining items from the original pass are unchanged and non-blocking: N-1 (the baseline was already
+committed ahead of the D6 `data-scientist` sign-off — still pending, still tracked correctly in the
+coordination ledger), N-2 (the permanent "[pending / not yet reviewed]" placeholder — an accepted
+design choice with a foreseeable staleness consequence, worth the coordinator's awareness, not a
+defect), N-3 (pre-existing `ruff` import-sort nits, not a wired gate), N-4 (recall@5 intentionally
+non-gating, matches the method note). **Unit 2b is ready to proceed to the remaining gates
+(`data-scientist` baseline sign-off, `qa-engineer` acceptance) as far as this code/content review is
+concerned.**
+
+---
+
+## Unit 3 code review (judge layer) — 2026-08-16
+
+**Scope.** A code/content gate on Unit 3's delivered files (`tdd-engineer`, agent id
+`a0e4a58ce94c05c8f`, per the coordination ledger's U3d row): `server/tests/eval/judge.py`,
+`test_judge.py`, `test_judge_live.py`, `generate_report.py`, `golden_judge_calibration.jsonl`, and
+the already-produced live outputs `server/tests/eval/judge_calibration.json` and
+`docs/test-reports/graphrag-eval-2026-08-15.md`. This is a static review plus running what already
+exists — not a `qa-engineer` acceptance pass, and not a re-run of the live LLM (I did not invoke
+`pytest -m live`; the live numbers under review were produced by the prior session's real run and
+are treated as fixed input, cross-checked for internal consistency rather than reproduced).
+
+I read the plan's Unit 3 section (§5) and D1/D4/D5/D7 in full, the `data-scientist`'s
+`docs/reviews/graphrag-eval-ml.md` methodology sign-off (D1 scope and its M-1 finding) in full, then
+read every file under review line-by-line, cross-checked call signatures/docstrings against
+`Services.hybrid_search`/`Repository.hybrid_search` (`server/falkorchat/services.py:852`,
+`server/falkorchat/repository.py:748`), `AgentResponder.__init__`/`_build_prompt`
+(`server/falkorchat/responder.py:36-83`), `llm.extract_own_line_json_object`
+(`server/falkorchat/llm.py:530`), and `guards._coerce_verdict` (`server/falkorchat/guards.py:466`,
+the precedent `judge.py` claims to mirror). I ran `cd server && .venv/bin/python -m pytest
+tests/eval/test_judge.py -q` (20 passed) and the full default suite (`pytest -q`: 1034 passed, 2
+deselected, matching the coordination ledger's last-known count exactly — no regression from Unit
+3's files), ran `ruff check` on all four Unit 3 Python files, hand-recomputed the calibration/
+generation aggregates in `judge_calibration.json` against the numbers rendered in the generated
+report, safely exercised `generate_report.py`'s two untested branches myself (see M-1 below) via a
+read-only, no-write Python probe that monkeypatched module-level path constants in-process (never
+touched a file on disk), and programmatically diffed the delivered `_SAME_MODEL_CAVEAT_TEMPLATE`
+against the `data-scientist`'s M-1 recommended text character-by-character (see the confirmation
+section below) rather than eyeballing them.
+
+### Major
+
+**M-1 (review). `generate_report.py` has zero automated test coverage of its own rendering/branching
+logic, despite its own docstring stating it was deliberately structured to be unit-testable.**
+
+The module's `build_report()` docstring says explicitly: "Kept separate from `main()`'s I/O so this
+is unit-testable without touching the filesystem beyond the read-only loads above"
+(`generate_report.py:274-278`). No `test_generate_report.py` (or any test anywhere in `tests/eval/`)
+exists. Four branches this file's own logic depends on are therefore proven correct only by my
+manual, ad hoc verification during this review, not by anything in the delivered suite:
+
+- `_load_retrieval_baseline()`'s `ReportError` path (baseline file absent) — the plan's own Unit 3
+  "Done when" text requires this to fail clearly; nothing asserts it does.
+- `_render_judge_section()`'s "not run" branch (`judge_calibration.json` absent) — the plan's Unit 3
+  "Done when" explicitly names this as one of the two cases `generate_report.py` must render
+  correctly ("with an explicit not-run marker in the second"); the coordination ledger's U3d row
+  only records confirmation of the *present* case ("Report's mandatory same-model caveat block
+  confirmed present verbatim"), never the absent case.
+- `_render_judge_section()`'s `same_model` branch selection (the mandatory caveat vs. the "differs
+  from the agent-under-test" sentence) — only the `True` branch has ever been exercised, by the one
+  real live run that happened to collapse both models onto the same ref.
+- `_self_retrieval_guard_failures()` — a hand-reimplementation (by design, per its own docstring) of
+  `test_golden_set_integrity.py`'s self-retrieval check, used to render the report's PASS/FAIL guard
+  line; nothing constructs a golden row with a leaking `target_text`/`query` pair to confirm the
+  `FAIL` branch actually fires and names the right id.
+
+I independently ran all four paths myself, read-only, via `sys.path.insert` + monkeypatching the
+module's own path constants in a throwaway interpreter session (never writing to any file in the
+repo): the `ReportError` path raises the expected message; the "not run" marker renders correctly
+when `judge_calibration.json` is hidden from the loader. **All four behave correctly today** — this
+is a test-coverage gap, not a live defect — but it is exactly the shape of gap this same
+coordination already treated as Major and fix-worthy once this session, for the same underlying
+reason (Unit 2b's M-1: "correct by inspection, unproven by a test," `check_regression`'s branching).
+The consequence of a latent regression here is more contained than Unit 2b's M-1 (this file is
+explicitly non-gating, D1), but it is the file that renders the sign-off-gated self-preference-bias
+caveat a future reader depends on to interpret Unit 3's numbers correctly — a rendering bug in the
+`same_model` branch selection would be exactly the kind of silent failure D1's whole gate exists to
+prevent from reaching a reader unnoticed.
+
+**Suggested fix:** add `test_generate_report.py`, network/`ws_eval`-free (fabricate small
+`baseline`/`judge`/`provenance`/`golden_rows` dicts and call `build_report()`'s section-rendering
+helpers directly, or monkeypatch the module's path constants the way I did for this review), covering
+at minimum: baseline-missing raises `ReportError`; judge-calibration-missing renders the "not run"
+marker; `sameModelAsAgentUnderTest=True` renders the mandatory caveat containing the verbatim
+sign-off placeholder; `sameModelAsAgentUnderTest=False` renders the "differs" sentence and omits the
+caveat; a golden row with a leaking `target_text`/`query` pair is correctly flagged `FAIL` with the
+right id in `_self_retrieval_guard_failures()`.
+
+### Minor
+
+**N-1 (review). Two of the ten calibration items' faithfulness axis is structurally guaranteed to
+agree with its human label, regardless of what the judge model actually outputs — the reported 90%
+faithfulness-agreement number is not fully an unforced measurement of judge quality, and nothing
+discloses this.**
+
+`jc-05` and `jc-09` (`golden_judge_calibration.jsonl`) both have `"context": []` — by design, since
+they exist to probe the abstain/general-knowledge case. `judge_triple`'s empty-context override
+(`judge.py:157-158`) forces `faithfulness=None` unconditionally whenever `context` is empty,
+*regardless of what the judge model said* — this is a deliberate, correctly-implemented, and
+correctly-tested code invariant (D5; `test_judge.py`'s
+`test_empty_context_forces_faithfulness_none_even_if_judge_said_true/false`), not a bug. But both
+`jc-05` and `jc-09`'s own `expected_faithfulness` label is also `null` (correctly, since a human
+labeler would reach the same conclusion) — so the code's override and the human label are guaranteed
+to coincide on these two rows independent of the judge model's actual behavior. Confirmed against
+`judge_calibration.json`: both rows show `"faithfulnessAgree": true` with `"judgedFaithfulness":
+null`, exactly as the override guarantees they must, for any judge model whatsoever. The result: of
+the 9/10 faithfulness "agreements" behind the reported 90%, 2 are code-guaranteed rather than judge-
+quality signal — the *effective* N for what this number is actually testing (the judge model's own
+rubric-following on the faithfulness axis) is 8, not 10 (7/8 = 87.5% on the genuinely-measured
+subset, close to but not identical to the reported 90%). This doesn't affect the relevance axis
+(unaffected by the override; `jc-05`/`jc-09` are genuine relevance-agreement data points) and doesn't
+contradict anything the report currently says — D4's small-N caveat already tells a reader not to
+treat either number as statistically defensible — but it's a distinct, more specific reason than "N
+is small" that a reader interpreting "90% faithfulness agreement" at face value would not otherwise
+know. **Suggested improvement:** either exclude empty-context rows from the faithfulness-agreement
+denominator and report them separately (they test a different, code-enforced property, not judge
+quality), or add one sentence to D4's caveat naming this (e.g., "N of the calibration set's rows have
+empty context, where faithfulness agreement is code-guaranteed rather than judge-scored — see
+`judge.py`'s override"). Not blocking; the existing small-N caveat already establishes the right
+posture of not over-trusting this number.
+
+### Nit
+
+**N-2.** `_SAME_MODEL_CAVEAT_TEMPLATE` (`generate_report.py:60-79`) is documented as emitted
+"VERBATIM" against the `data-scientist`'s M-1 recommended text (`docs/reviews/graphrag-eval-ml.md`
+M-1) — confirmed correct in substance and structure (see the confirmation section below), but a
+programmatic, whitespace-normalized diff against the recommendation surfaces one literal
+transcription artifact: the delivered template reads "...the bias risk concentrates in
+**borderline/subjective** calls..." (no space after the slash — one run-together word), while the
+recommended text's line-wrapped markdown source reads "...borderline/\nsubjective calls..." (a soft
+line break, which renders as a space in the recommended text but was flattened without one when
+copied into the Python string literal). Purely cosmetic — doesn't change meaning, and every other
+line matches exactly — but worth a one-character fix (`"borderline/ subjective"`) if the module's own
+"never paraphrased" claim is meant literally down to the space.
+
+**N-3.** `ruff check` on the four Unit 3 files reports the same `I001` (unsorted import block) nit
+already flagged non-blocking for Unit 2b (N-3 there): `test_judge.py:10-14` and
+`test_judge_live.py:54-72`, both from the module docstring immediately preceding
+`from __future__ import annotations` with no blank-line separation ruff wants. `judge.py` and
+`generate_report.py` are clean. `AGENTS.md` documents ruff as not a wired gate — take-or-leave,
+noted only for completeness, consistent with how this document has already treated the identical
+pattern once this session.
+
+**N-4.** `conftest.py`'s `_message_count()` (Unit 2b) and `test_judge_live.py`'s `_message_count(ws)`
+are the same one-line `MATCH (m:Message) RETURN count(m)` query, duplicated with a slightly different
+signature (global `EVAL_WS` vs. an explicit `ws` parameter) rather than the live test importing the
+Unit 2b helper. Harmless — both are correct, and `test_judge_live.py` genuinely does want a
+parameterized version since it receives `ws` from its own fixture rather than reading the module
+global — but worth collapsing into one shared helper if `tests/eval/` grows a third caller.
+
+### Correctness of `judge.py`'s scoring/parsing logic
+
+Correct by inspection and by a thorough offline test suite (20 tests, independently re-run: `cd
+server && .venv/bin/python -m pytest tests/eval/test_judge.py -q` → `20 passed` — matches the
+coordination ledger's claimed count exactly). Specifically verified:
+
+- **The prompt builder** (`build_judge_prompt`) renders context as bullets and explicitly marks empty
+  context with a `(none — ...)` sentinel rather than a blank section — necessary so the judge can
+  distinguish "genuinely no context" from "context omitted by accident," and tested
+  (`test_prompt_marks_empty_context_explicitly`).
+- **The parser** correctly reuses `llm.extract_own_line_json_object` verbatim (not reimplemented,
+  matching the plan's explicit instruction and K-027's precedent), with `require_key="relevance"` —
+  the one axis that's never legitimately absent from a clean verdict, unlike `faithfulness` which may
+  be a genuine `null`. I traced `require_key`'s actual disambiguation behavior against
+  `llm.py:530-554`'s docstring and confirmed `judge.py`'s two tests exercising it
+  (`test_own_line_object_missing_relevance_key_is_filtered_by_require_key`,
+  `test_require_key_disambiguates_among_multiple_own_line_objects`) match what that function
+  actually does, not just what its docstring claims.
+- **`_coerce_verdict`'s conservative typing** mirrors `guards._coerce_verdict`'s "only the real bool
+  advances" posture correctly: `relevance` accepts only literal `True` (missing key, `"true"`, `1`,
+  `False` all resolve to `False`); `faithfulness` accepts literal `True`/`False`/JSON `null`, anything
+  else (a string, a number, a missing key) resolves to `None`. Both directions are tested
+  (`test_non_bool_relevance_resolves_false_but_not_a_parse_failure`,
+  `test_non_bool_faithfulness_resolves_none_but_not_a_parse_failure`).
+- **The empty-context override** (`judge_triple:157-158`) forces `faithfulness=None` unconditionally
+  whenever `context` is empty, regardless of what the judge said — correctly implemented as a code
+  invariant rather than left to the model's own discretion (matching plan §6's edge case exactly:
+  "faithfulness must resolve to `None`... never scored against non-existent context"), and correctly
+  leaves `relevance` unaffected. Four dedicated tests cover both directions (judge said `true`, judge
+  said `false`, judge already correctly abstained, non-empty context is *not* overridden).
+- **`parse_failed` vs. legitimate abstain are kept genuinely distinct** — a parse failure sets
+  `parse_failed=True` with `faithfulness=None, relevance=False`; a legitimate abstain (empty context,
+  clean parse) sets `parse_failed=False` with `faithfulness=None`. Five parametrized unparseable-input
+  cases (prose, truncated JSON, mid-sentence-quoted JSON, empty string, whitespace-only) all correctly
+  resolve conservative and flag `parse_failed=True`; the two-ambiguous-candidate-objects case (the
+  exact false-advance shape `extract_own_line_json_object`'s own docstring names as its reason to
+  exist) is also covered.
+- **Call-signature grounding**: `judge_triple(judge_llm, question=..., context=..., answer=...)`'s
+  usage in `test_judge_live.py` (both sub-passes) matches the function's actual signature exactly, and
+  `AgentResponder._build_prompt(question, seeds)` / `Services.hybrid_search(ctx, q_vec=..., k=10,
+  channel_id=None)` (the `limit` kwarg correctly omitted since it defaults to `10`, verified against
+  `services.py:852-854`) are both called with the real signatures, not an assumed shape.
+
+### Test coverage and quality (offline vs. live split)
+
+The offline/live split matches the plan's own design intent — `test_judge.py` genuinely exercises
+`judge.py`'s parsing/scoring logic against a scripted `StubJudgeLLM`, not just import/construction
+smoke tests: every edge case plan §6 names by name (unparseable JSON, the empty-context abstain
+override, fenced JSON) has a dedicated test, plus several cases the plan doesn't explicitly enumerate
+but that follow directly from `extract_own_line_json_object`'s own documented behavior (the
+own-line/require_key disambiguation cases) — showing the tests were written against the actual parser
+semantics, not just the plan's bullet list. `test_judge_live.py` correctly reuses the shared
+`ws_eval` probe fixture (via its own `live_models` wrapper, which additionally probes both distinct
+model refs — deduped via set literal, so the common same-model-default case issues exactly one model
+probe, not two) and correctly asserts the D2 read-only invariant (`ws:eval` message count unchanged
+before/after) rather than merely documenting it in a comment. The one real gap is M-1 above
+(`generate_report.py`'s own logic, not `judge.py`'s) — `judge.py` and its 20 offline tests are, on
+their own, a solid piece of work.
+
+### `docs/test-reports/graphrag-eval-2026-08-15.md`'s numbers — internally consistent, verified by
+hand, not just trusted
+
+I independently recomputed every reported number directly from `judge_calibration.json` rather than
+trusting the report's own arithmetic:
+
+- **Calibration faithfulness agreement**: `faithfulnessAgree` is `true` for jc-01/02/03/04/05/06/07/09/10
+  and `false` only for jc-08 → 9/10 = **90.0%**, matches the report exactly.
+- **Calibration relevance agreement**: `true` for jc-01/03/05/06/07/08/10, `false` for jc-02/04/09 →
+  7/10 = **70.0%**, matches the report exactly.
+- **Generation sub-pass**: all 20 items show `"faithfulness": true, "relevance": true, "parseFailed":
+  false` → 20/20/0 on every axis, matches the report's "20 true / 0 false / 0 abstained" and "20 true
+  / 0 false" lines and the "0/20" parse-failure line exactly.
+- `retrieval_baseline.json`'s numbers (recall@10/recall@5/MRR/n) and `corpus_provenance.json`'s
+  numbers (121 messages / 12 threads / dim 1024 / seeded-at timestamp) both reproduce byte-for-byte in
+  the "Retrieval baseline" and "Corpus & golden set" sections — already independently verified in the
+  Unit 2b review above, re-confirmed here as unchanged.
+
+**One observation, not a defect, worth the `data-scientist` sign-off's attention when it happens:**
+the generation sub-pass is a perfect 20/20 on both axes — every single live-generated answer was
+judged faithful and relevant, with zero abstains despite the corpus's own recall@10 sitting at 97.4%
+(i.e., not literally 100% — at least one of these 20 sampled queries, per Unit 2b's own miss analysis,
+plausibly retrieves imperfect context). A perfect score is exactly the pattern the same-model
+self-preference-bias caveat exists to warn a reader against over-trusting — not evidence of a defect
+in the harness (the numbers are correctly computed and correctly reported, caveat included), but
+worth naming as the first real data point illustrating why D1's gate exists, for whoever performs the
+still-pending `data-scientist` sign-off.
+
+### M-1 caveat-language confirmation (per the brief's explicit ask)
+
+**Confirmed: `generate_report.py`'s `_SAME_MODEL_CAVEAT_TEMPLATE` (`:60-79`) matches the
+`data-scientist`'s M-1 recommended language (`docs/reviews/graphrag-eval-ml.md` M-1 block-quote)
+almost verbatim, and does make the exact distinction M-1 required.** I did not eyeball this — I
+extracted the template's Python string literal, formatted it with the real judge model ref, and
+diffed it programmatically (whitespace-normalized) against the review's recommended block-quote text.
+The two are identical except for the one cosmetic artifact already flagged as N-2 above (a missing
+space at "borderline/subjective," a copy-transcription line-wrap merge, not a substantive change).
+Specifically, the delivered caveat:
+
+- States the same-model fact plainly, naming the actual judge model ref via `.format(...)` (derived
+  at report-generation time from the real `judge_calibration.json`, not hardcoded).
+- **Distinguishes the calibration sub-pass from the generation sub-pass explicitly**, in the same two
+  bullets M-1 asked for: calibration numbers are "largely unaffected by self-preference bias — the
+  judge did not generate the content it's scoring," generation-sub-pass numbers "are structurally
+  exposed to self-preference bias... not independent validation."
+- Carries M-1's strongest sentence verbatim: **"A passing calibration number does not license
+  trusting these — they are two different validity claims"** — the exact "dangerous reading" M-1
+  named as the thing the caveat must foreclose.
+- Includes the gross-failures-still-catchable caveat and the `data-scientist` sign-off placeholder,
+  both verbatim.
+- Is gated correctly (`_render_judge_section`'s `if same_model:` branch, `generate_report.py:226`) on
+  `judge_calibration.json`'s `sameModelAsAgentUnderTest` field, computed at run time from the two
+  resolved model refs (`test_judge_live.py:239`) rather than a hardcoded assumption — so the caveat
+  would correctly disappear if a future run overrides `FALKORCHAT_LIVE_JUDGE_MODEL` to a distinct
+  model, per D1's own design intent.
+- Is placed adjacent to the judge numbers in the generated report (directly after the "Generation
+  sub-pass" bullet list, before "Corpus & golden set"), not in a trailing footnote — matching the
+  `m3-guard-calibration.md` precedent both the plan and the ml review cite for this rule.
+
+Confirmed present in the actual generated report (`docs/test-reports/graphrag-eval-2026-08-15.md:38-42`)
+exactly as rendered by the template, not hand-edited afterward. **The M-1 item is closed as far as
+this code review can confirm it**; the actual `data-scientist` sign-off the caveat's own placeholder
+still names as pending is, correctly, not something this review can grant.
+
+### What's solid
+
+- `judge.py`'s design and its 20-test offline suite are careful, correct, and specifically targeted at
+  the parser's real semantics (not just the plan's bullet list) — no findings against the scoring/
+  parsing logic itself.
+- The `golden_judge_calibration.jsonl` set (10 items) is thoughtfully constructed, not a set of easy
+  positives: it includes a flat contradiction (jc-02), a faithful-but-off-question case (jc-04), a
+  faithful-but-mismatched-context case (jc-08), two abstain/empty-context cases (jc-05, jc-09), and a
+  deliberately borderline honest-but-substance-free reply (jc-09's `label_rationale` names this
+  explicitly) — real variety, not filler.
+- The M-1 same-model caveat is genuinely, verifiably present with the exact required distinction,
+  confirmed by a programmatic diff rather than a visual read.
+- `test_judge_live.py` correctly implements D1's dedup-by-resolved-ref probing, D2's read-only
+  invariant (asserted, not just claimed), D7 mechanism 2 (both LLM clients constructed from env-var
+  literals, no `ModelGateway`/`StaticModelGateway` leakage), and reuses `AgentResponder._build_prompt`
+  rather than duplicating the production prompt-construction logic.
+- The generated report's numbers are internally consistent with `judge_calibration.json` on every
+  axis I recomputed by hand — no discrepancy found anywhere.
+- No regression to the rest of the suite: full `pytest -q` still passes at 1034/2 deselected, the same
+  count the prior Unit 2b re-gate independently confirmed.
+
+### Verdict: Approve with suggestions
+
+**No blockers.** One Major (M-1 in this section: `generate_report.py`'s branching logic — the
+not-run marker, the same-model/differs-model selection, the self-retrieval-guard-failure path, and
+the missing-baseline error — has zero automated test coverage, though I independently verified all
+four behave correctly today). Two Minor findings (N-1: two calibration rows' faithfulness "agreement"
+is code-guaranteed rather than judge-scored, slightly overstating the reported 90% without
+disclosure; N-2: a one-character transcription artifact in the "verbatim" same-model caveat) and two
+Nits (N-3: the same non-blocking `ruff` import-sort pattern already noted for Unit 2b; N-4: minor
+helper duplication). **The explicit M-1 item this review was asked to confirm is confirmed**: the
+report's mandatory same-model caveat correctly distinguishes the calibration sub-pass from the
+generation sub-pass, using language matching the `data-scientist`'s recommendation almost verbatim.
+Recommend `generate_report.py` gain `test_generate_report.py` (M-1 above) before this unit is treated
+as fully closed at doc closeout — a self-contained, low-risk addition given the logic is already
+correct — but nothing here should block dispatching the remaining gates (`data-scientist`'s D1
+numbers sign-off, `qa-engineer` acceptance).
+
+### Open questions
+
+- Whether the coordinator wants M-1's test-coverage gap fixed before or after `qa-engineer`'s
+  acceptance pass — it doesn't block QA (the module is already verified correct), but doc closeout's
+  own bar elsewhere in this coordination (Unit 2b) treated an equivalent gap as worth fixing before
+  moving on, so consistency argues for the same treatment here.
+- N-1 (two calibration rows' code-guaranteed faithfulness agreement) is a methodology framing
+  question, not a code defect — whether it's worth a report-text change or is adequately covered by
+  the existing small-N caveat is arguably closer to the `data-scientist`'s remit (the still-pending D1
+  numbers sign-off) than this review's own call to make unilaterally.

@@ -37,3 +37,28 @@
   "when judge collapses onto agent-under-test, the caveat must distinguish content the judge
   generated itself from content it didn't; only the former carries self-preference risk" is reusable
   well beyond this one K-026 baseline and beyond falkor-chat.
+
+## 2026-08-16 — A zero-tolerance "current >= baseline" regression gate on a golden-set metric at n≈38 is stricter than the sample supports, and the arithmetic to show it is cheap
+
+- **Evidence:** `falkor-chat/server/tests/eval/test_retrieval_eval.py`
+  (`test_retrieval_metrics_meet_or_beat_baseline`) hard-fails on any `recall_at_10` drop below the
+  committed baseline (0.9737, n=38), no slack, while allowing MRR a 5%-relative floor. At n=38 a
+  single golden pair flipping hit→miss moves recall@10 by exactly 1/38 ≈ 2.6 points — about a fifth
+  of the metric's own Wilson 95% CI width (≈13 points) at that n, and the baseline's sum-of-scores
+  (0.97368... × 38 = 37.0 exactly) shows it is literally one pair-flip from both the ceiling (1.0)
+  and the gate's failure floor. A metric already near ceiling with zero slack below it will fail on
+  ANN tie-breaking noise or index-rebuild nondeterminism as readily as on a genuine regression — and
+  it also cannot register a genuinely better change (no room to move up). Cheap diagnostic: compute
+  `1/n` as the "one-pair delta" and compare it against a naive Wilson/Wald CI at the reported n
+  *before* signing off on any hard pass/fail gate built on a golden set this size — if the one-pair
+  delta is a large fraction of the CI width, the gate needs either a tolerance band (mirroring
+  whatever slack the paired metric already gets) or an explicit "route first failure to manual
+  triage" policy instead of an unconditional hard fail. Also worth checking whether the golden
+  pairs are drawn independently or clustered (e.g., k pairs per source thread/document) — clustering
+  means the true variance is understated by treating n as the pair count, not the corrected count.
+- **Context:** M-4 baseline sign-off on K-026's `retrieval_baseline.json`
+  (`falkor-chat/docs/reviews/graphrag-eval-ml.md`, "Baseline sign-off" section).
+- **Suggested home:** prompt (data-scientist's evaluation-engineering / golden-set section) — the
+  "compute the one-unit delta and compare it to the CI width before blessing a hard gate" check is a
+  reusable pre-sign-off habit for any small-golden-set regression gate, not specific to retrieval or
+  to this repo.

@@ -14,6 +14,15 @@ Edge cases exercised by the real corpus/golden-set (plan §6):
   - `hybrid_search` returning fewer than `k` rows (ANN's documented non-guarantee,
     `repository.py`'s `hybrid_search` docstring) — `_aggregate_metrics` below never
     assumes a fixed-length result; `recall_at_k`/`mrr` handle a short list directly.
+
+D6's compare-or-establish branching itself (the actual regression *gate*, not
+the recall/MRR math) is factored into `metrics.check_regression` precisely so
+it has its own network-free unit coverage in `test_metrics.py` — proving the
+gate fails when it should, not just that it runs against a live corpus that
+(in every real run here) compares against itself
+(`docs/reviews/graphrag-eval.md` finding M-1).
+`test_retrieval_metrics_meet_or_beat_baseline` below is a thin integration
+wrapper: real `current`/`baseline` in, `check_regression` out.
 """
 
 from __future__ import annotations
@@ -28,7 +37,7 @@ from falkorchat.config import CallContext
 from falkorchat.repository import Repository
 from falkorchat.services import Services
 
-from metrics import mrr, recall_at_k
+from metrics import check_regression, mrr, recall_at_k
 
 _EVAL_DIR = Path(__file__).resolve().parent
 _GOLDEN_PATH = _EVAL_DIR / "golden_retrieval.jsonl"
@@ -142,16 +151,10 @@ def test_retrieval_metrics_meet_or_beat_baseline(ws_eval: str) -> None:
     with _BASELINE_PATH.open(encoding="utf-8") as f:
         baseline = json.load(f)
 
-    assert current["recall_at_10"] >= baseline["recall_at_10"], (
-        f"recall@10 regressed: {current['recall_at_10']:.4f} < baseline "
-        f"{baseline['recall_at_10']:.4f} — set UPDATE_EVAL_BASELINE=1 to accept "
-        f"a deliberate retrieval change"
+    reasons = check_regression(
+        current, baseline, mrr_tolerance=_MRR_REGRESSION_TOLERANCE
     )
-
-    mrr_floor = baseline["mrr"] * (1 - _MRR_REGRESSION_TOLERANCE)
-    assert current["mrr"] >= mrr_floor, (
-        f"MRR regressed more than {_MRR_REGRESSION_TOLERANCE:.0%} relative: "
-        f"{current['mrr']:.4f} < floor {mrr_floor:.4f} (baseline "
-        f"{baseline['mrr']:.4f}) — set UPDATE_EVAL_BASELINE=1 to accept a "
-        f"deliberate retrieval change"
+    assert not reasons, (
+        "; ".join(reasons)
+        + " — set UPDATE_EVAL_BASELINE=1 to accept a deliberate retrieval change"
     )
