@@ -123,4 +123,22 @@ if [ -n "$LOAD" ]; then
       exit 1
     fi
   fi
+
+  # Freshness marker (cpg-agent-adoption M4, FR-5/FR-6) — written only after the
+  # load and any --verify-prefix checks have fully succeeded, so a stamped graph
+  # means "built successfully at this time," never "an attempt was made." One
+  # singleton node per graph; MERGE (no property in the pattern) keeps it that
+  # way across both --reset (fresh graph) and --append (existing graph) loads —
+  # freshness tracks "when was this graph's content last touched," not "when was
+  # it first created."
+  BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  STAMP="MERGE (b:CpgBuildInfo) SET b.BUILT_AT = \"$BUILT_AT\", b.SOURCE_PATH = \"$SRC\""
+  if command -v git >/dev/null 2>&1 && git -C "$SRC" rev-parse --short HEAD >/dev/null 2>&1; then
+    SHA="$(git -C "$SRC" rev-parse --short HEAD)"
+    DIRTY=false
+    [ -n "$(git -C "$SRC" status --porcelain 2>/dev/null)" ] && DIRTY=true
+    STAMP="$STAMP, b.SOURCE_COMMIT = \"$SHA\", b.SOURCE_DIRTY = $DIRTY"
+  fi
+  redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null
+  echo "pipeline: stamped '$GRAPH' — BUILT_AT=$BUILT_AT SOURCE_PATH=$SRC" >&2
 fi

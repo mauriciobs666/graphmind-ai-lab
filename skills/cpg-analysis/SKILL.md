@@ -246,6 +246,7 @@ approximation.
 | Trace a bad value back to its definitions; find a symbol's defs + cross-file refs | analyst | [`references/rca.md`](references/rca.md) |
 | Check whether external input can reach a risky sink (taint) | analyst | [`references/code-review.md`](references/code-review.md) |
 | List production code no test structurally reaches | qa-engineer | [`references/test-gap.md`](references/test-gap.md) |
+| Judge how current a loaded CPG is before trusting it | any consuming agent | [`references/freshness.md`](references/freshness.md) |
 
 Each recipe states its purpose, the one parameter to change, the parameterized
 Cypher, the expected shape of results, and its known limits. Recipes assume the
