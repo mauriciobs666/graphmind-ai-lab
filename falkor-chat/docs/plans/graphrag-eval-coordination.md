@@ -1,6 +1,6 @@
 # K-026 — GraphRAG eval harness: coordination log
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-026 (M2.5-quality)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-026 (M2.5-quality)
 
 > **PAUSED 2026-08-15 (user: "out of credits pause asap").** Stopped dispatching new work
 > immediately on this instruction. Unit 2a (`ab8434008dc3d5521`, `tdd-engineer`) was already
@@ -223,7 +223,8 @@ report for the user to confirm none of this reflects a legitimate instruction I 
 | U-archive-review | `analyst` | `a18049741c3d1086a` | accepted | `docs/reviews/graphrag-eval.md` `Status:` → `archived` | — (independently re-read by teco: diff is exactly the one `Status:` token) |
 | U-archive-ml | `data-scientist` | `ae62087729e32efb4` | accepted | `docs/plans/graphrag-eval-ml.md` + `docs/reviews/graphrag-eval-ml.md` `Status:` → `archived` (both) | — (independently re-read by teco: both diffs are exactly the one `Status:` token) |
 | U-archive-qa | `qa-engineer` | `a2d9b6710d884d7c0` | accepted | `docs/test-plans/graphrag-eval.md` + `docs/test-reports/graphrag-eval-report.md` `Status:` → `archived` (both) | — (independently re-read by teco: both diffs are exactly the one `Status:` token; confirmed the two dated harness-output artifacts `graphrag-eval-2026-08-15.md`/`-2026-08-16.md` were correctly left untouched) |
-| U-docs | `tdd-engineer` | `ac3da0d9a19f65462` | in-flight | `HISTORY.md` entry, `BACKLOG.md` K-026 flip + two new follow-up items (root-conftest write-mode pattern, `generate_report.py` test-coverage gap) | — |
+| U-docs | `tdd-engineer` | `ac3da0d9a19f65462` | accepted | `HISTORY.md` entry (`## 2026-08-16 — K-026...`), `BACKLOG.md` K-026 header flip to delivered, two new follow-up items **K-046**/**K-047** | — (independently re-read by teco: `HISTORY.md` entry's every cited number checked against `docs/test-reports/graphrag-eval-report.md` and matches; `BACKLOG.md` diff is exactly the K-026 header-line change plus two new, correctly-placed, accurately-cited item sections — nothing else disturbed; K-045 was confirmed still the highest pre-existing number) |
+| U-archive-coord | `teco` (self) | — | accepted | `docs/plans/graphrag-eval-coordination.md` `Status:` → `archived` (this document, per the routing table's `plans/<slug>-coordination.md` → `teco` row) | — |
 
 > **RESUMED 2026-08-16 session — closing note.** U-bug independently re-confirmed and flipped to
 > `done` (1027 passed, 2 deselected, matches commit `dbd2cdf`'s own claim). All three remaining
@@ -277,6 +278,31 @@ exactly the `gr-31` reword and nothing else disturbed, and that U3d's report doe
 > drift. All three remaining gates (U2b-gate, U2b-ml-signoff, U3-gate) confirmed closed at
 > "Approve with suggestions," no outstanding "needs changes." **Unblocked. Dispatching
 > `qa-engineer` for the K-026 acceptance pass.**
+
+> **CLOSED 2026-08-16, same session — full closeout complete.** `qa-engineer` acceptance pass
+> landed **PASS** (all 11 test-plan items, no new defects) — every material claim (suite counts,
+> `retrieval_baseline.json`/`judge_calibration.json` numbers, the independently-confirmed `ws:eval`
+> count of 121, the fresh report's mandatory same-model caveat) independently re-verified by `teco`
+> against on-disk state, not taken on the delegate's word (commit `1a9d659`). Doc closeout then ran
+> as five parallel units: `architect`/`analyst`/`data-scientist`/`qa-engineer` each flipped their
+> own K-026 document(s) to `Status: archived` (six files total — plan, review, ml plan, ml review,
+> test plan, test report), each independently re-read by `teco` and confirmed to be exactly the
+> one-line `Status:` change with nothing else disturbed (commit `1578af3`); `tdd-engineer` wrote the
+> `docs/HISTORY.md` closing entry and flipped `docs/BACKLOG.md`'s K-026 header to delivered, filing
+> two new non-blocking follow-up items — **K-046** (root `server/tests/conftest.py`'s
+> `_falkordb_reachable()` carries the identical write-mode-`GRAPH.QUERY` bug pattern Unit 2b's B-1
+> fix already corrected in the eval subtree; independently re-confirmed present by `teco` reading
+> both files directly before dispatch) and **K-047** (`generate_report.py` has no dedicated
+> automated test file for its own rendering/branching logic, per the Unit 3 `analyst` gate's M-1,
+> re-confirmed correct-but-untested by `qa-engineer`'s acceptance pass) — every cited number in that
+> entry independently checked against `docs/test-reports/graphrag-eval-report.md` and confirmed to
+> match. Finally `teco` flipped this coordination document's own `Status` to `archived`, per the
+> routing table's `plans/<slug>-coordination.md` → `teco` row. **K-026 is fully delivered,
+> QA-accepted, and closed.** Standing recommendation for the user, not yet acted on by anyone in
+> this pipeline: personally spot-check the ~10-example `golden_judge_calibration.jsonl` set before
+> treating the judge-human agreement numbers (90% faithfulness / 70% relevance) as more than
+> directional — carried in both the coordination Notes below and the final HISTORY.md entry, not a
+> new ask.
 
 ## Notes
 

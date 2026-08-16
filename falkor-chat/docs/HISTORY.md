@@ -5,6 +5,71 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-16 — K-026: GraphRAG retrieval + generation evaluation harness — QA-accepted, delivered
+
+**What:** Delivered the K-026 evaluation harness for GraphRAG (`server/tests/eval/`): a retrieval-
+metrics layer (recall@10/recall@5/MRR against a committed, `data-scientist`-signed-off baseline)
+plus a calibrated LLM-as-judge layer over generation faithfulness/relevance, per the
+`data-scientist` method note `docs/plans/graphrag-eval-ml.md`.
+
+**Result: PASS** (`qa-engineer` acceptance pass, `docs/test-reports/graphrag-eval-report.md`, all
+eleven test-plan items pass, no new defects). Numbers, quoted exactly as reported:
+- Retrieval baseline (n=38): `recall@10=0.9737 recall@5=0.8947 mrr=0.6259`, exact-matching the
+  committed `retrieval_baseline.json`.
+- Judge–human calibration (fresh live run, N=10): "faithfulness agreement 90.0% (9/10), relevance
+  agreement 70.0% (7/10)."
+- Generation sub-pass (N=20): "20/20 faithful=true, 20/20 relevant=true, 0 parse failures" —
+  flagged in the report itself as the exact pattern the same-model self-preference-bias caveat
+  exists to warn a reader against over-trusting, not treated as an unqualified positive.
+- Suite counts: default suite `1034 passed, 2 deselected`; live suite `2 passed, 1034 deselected in
+  175.92s`; a second, independent `pytest tests/eval -q` re-run afterward reproduced `164 passed, 1
+  deselected` identically, confirming re-runnability.
+
+**Delivery chain (multi-session, `teco`-coordinated, per `docs/plans/graphrag-eval-coordination.md`):**
+`architect` plan v1 → v4, gated by `analyst` across four passes (Pass 1 needs-changes: 1 Critical/2
+Major/1 self-contradiction; Pass 2 needs-changes, narrower; Pass 3 **Approve**; a further v4 revision
+for decision **D1** — collapsing agent-under-test and judge onto the single local model
+`qwen/qwen3-4b-2507`, a stakeholder hardware-constraint call carrying a required self-preference-bias
+limitation note — re-gated **Approve with suggestions**, Pass 4). Implementation ran as four units
+across `coder`/`tdd-engineer`: corpus seed (Unit 1), golden-set authoring (Unit 2a, 38 pairs with
+real embeddings), retrieval metrics (Unit 2b), and the judge layer (Unit 3). A genuine regression
+surfaced and was fixed mid-run: **U-bug** — a `conftest` bare-module-name collision under pytest's
+default `--import-mode=prepend` broke the repo-wide default suite's collection once the eval
+subtree's own `conftest.py` was added; fixed by packaging `tests/eval/` (`__init__.py`) plus an
+explicit `sys.path.insert` for the sibling bare imports the package-ize step broke (commit
+`dbd2cdf`), independently re-verified green afterward. Two `analyst` code gates followed: **Unit
+2b** first returned needs-changes (Blocker B-1 — `conftest.py`'s `_falkordb_reachable()` used
+write-mode `GRAPH.QUERY`, silently materializing an empty `ws:eval` key on a fresh environment;
+Major M-1 — the regression-detection branches had zero dedicated test coverage), both fixed
+(`ro_query`+"empty key" pattern; an extracted `check_regression()` pure function with 6 new tests)
+and re-gated **Approve with suggestions**; **Unit 3** gated **Approve with suggestions, no
+blockers** on its first pass (a non-blocking Major on `generate_report.py`'s missing test coverage,
+carried forward as a follow-up below). Two `data-scientist` sign-offs closed the methodology side:
+the D1 self-preference-bias limitation note, and the `retrieval_baseline.json` (n=38) baseline
+itself (Approve with suggestions — a non-blocking note that the zero-tolerance recall@10 gate sits
+close to the noise floor at this n). `qa-engineer`'s final acceptance pass then verified everything
+above by real execution rather than static review, and found no new defects.
+
+**Document paths delivered:** plan `docs/plans/graphrag-eval.md` (v4); review
+`docs/reviews/graphrag-eval.md`; ML method note `docs/plans/graphrag-eval-ml.md` (v2) + ML review
+`docs/reviews/graphrag-eval-ml.md`; test plan `docs/test-plans/graphrag-eval.md`; test report
+`docs/test-reports/graphrag-eval-report.md`; coordination log
+`docs/plans/graphrag-eval-coordination.md`.
+
+**Follow-ups filed at close, both non-blocking:** **K-046** (root `server/tests/conftest.py` carries
+the same latent write-mode-`GRAPH.QUERY` bug pattern the Unit 2b B-1 fix corrected in the eval
+subtree's own conftest) and **K-047** (`server/tests/eval/generate_report.py` has no dedicated
+automated test file for its own rendering/branching logic — all branches manually verified correct
+at the Unit 3 gate and independently re-confirmed correct by `qa-engineer`'s acceptance pass via
+direct execution).
+
+**Standing recommendation, reiterated not newly discovered:** the coordination ledger's own Notes
+section records that golden-set "human verification" (the method note's non-negotiable validity
+anchor) was substituted throughout this all-agent pipeline with independent `analyst` review, not a
+literal human — the ledger explicitly recommends the user personally spot-check the ~10-example
+`golden_judge_calibration.jsonl` set before fully trusting the judge–human agreement numbers above
+at face value. The QA report repeats this same recommendation. Not a blocker for this PASS verdict.
+
 ## 2026-08-11 — K-042 Landing 2: QA acceptance pass (U7) + D-2 fix — closes M4
 
 **What:** First execution-based (black-box) verification of Landing 2, driven against the real

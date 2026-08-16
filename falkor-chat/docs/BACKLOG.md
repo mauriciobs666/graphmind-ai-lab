@@ -1429,6 +1429,50 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Risks/RAM:** none — documentation only.
 - **Test strategy:** N/A (docs).
 
+### K-046 — Root `server/tests/conftest.py`'s `_falkordb_reachable()` has the same latent write-mode-`GRAPH.QUERY` bug already fixed in the eval subtree (🔵 proposed — filed out of K-026 close, 2026-08-16)
+
+> **Why it exists.** K-026's Unit 2b `analyst` gate found a Blocker (B-1) in `server/tests/eval/conftest.py`'s
+> `_falkordb_reachable()`: it used write-mode `GRAPH.QUERY` as a reachability probe, silently
+> materializing an empty `ws:eval` graph key on a fresh environment. Fixed by switching to
+> `.ro_query("RETURN 1")` plus an "empty key" tolerance pattern (`server/tests/eval/conftest.py:66`,
+> mirroring `Repository.read_index_dimension`'s own pattern). The root suite's own
+> `server/tests/conftest.py`'s `_falkordb_reachable()` (line ~39: `conn.select_graph("ws:test")
+> .query("RETURN 1")`) has the identical pattern — flagged as a candidate follow-up by the U2b-fix
+> implementer at the time, and independently re-confirmed present by reading both files directly
+> during this closeout.
+- **Owner:** **`tdd-engineer`** — apply the identical fix shape already proven in
+  `server/tests/eval/conftest.py`: switch the root conftest's probe to `.ro_query("RETURN 1")` with
+  the same "empty key" tolerance.
+- **Scope:** `server/tests/conftest.py`'s `_falkordb_reachable()` only; no other change.
+- **Why lower urgency than B-1 was:** the vulnerable path only fires when `ws:test` doesn't exist
+  yet, and in practice `ws:test` is always bootstrapped (the session-scoped `_schema` fixture rebuilds
+  it) by the time this probe runs — unlike the eval subtree, where a genuinely fresh environment
+  without `ws:eval` was the exact scenario B-1 caught.
+- **Risks/RAM:** none — a test-fixture-only change, no production code, no graph/DDL surface.
+- **Test strategy:** mirror `test_conftest_probe.py`'s approach — a mutation-tested probe test
+  confirming correct behavior against both an existing and a missing `ws:test` graph key.
+
+### K-047 — `server/tests/eval/generate_report.py` has zero automated test coverage of its own rendering/branching logic (🔵 proposed — filed out of K-026 close, 2026-08-16)
+
+> **Why it exists.** K-026's Unit 3 `analyst` code gate flagged (Major M-1, non-blocking — rated a
+> suggestion rather than a blocker because this file is non-gating per decision D1) that
+> `generate_report.py` has no dedicated automated test file for its own rendering/branching logic:
+> the not-run marker (`judge_calibration.json` absent), the same-model/differs caveat selection, the
+> self-retrieval-guard failure path, and the missing-baseline error. All four were verified correct
+> by manual/static inspection at the gate. `qa-engineer`'s acceptance pass independently re-exercised
+> three of the four branches (not-run marker, missing-baseline `ReportError`, self-retrieval-guard on
+> a fabricated leaking row) via direct read-only execution in a throwaway interpreter session and
+> confirmed all three still correct (`docs/test-reports/graphrag-eval-report.md`, "Exploratory
+> findings (TP-011)") — a second, independent confirmation via execution rather than code-reading
+> alone, not a fix.
+- **Owner:** **`tdd-engineer`** — a dedicated test file for `generate_report.py` covering the four
+  branches above.
+- **Scope:** `server/tests/eval/generate_report.py`'s rendering/branching logic only.
+- **Risks/RAM:** none — test-only, no production/graph surface.
+- **Test strategy:** unit tests per branch, following the same shape as Unit 2b's `check_regression()`
+  extraction-plus-tests pattern (that gate's own M-1, already closed) — this item is that same fix
+  shape, applied to the still-open twin.
+
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
 > QA-accepted** (HISTORY.md). Baselines: pytest 156 / query suite 149/149.
@@ -1560,7 +1604,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 
 ### — M2.5-quality track (retrieval evaluation; parallel to M2.5 hardening, off the M3 critical path) —
 
-### K-026 — GraphRAG retrieval + generation evaluation harness (🔵 proposed — M2.5-quality)
+### K-026 — GraphRAG retrieval + generation evaluation harness (✅ delivered 2026-08-16 — verdict PASS → HISTORY.md)
 
 - **Owner:** **`data-scientist`** method note ✅ (`docs/plans/graphrag-eval-ml.md`) → **`coder`/`tdd-engineer`**
   (harness + golden-set fixture) → **`graph-dba`** only if a retrieval query change is later measured through it.
