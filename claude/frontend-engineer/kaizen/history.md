@@ -24,6 +24,24 @@
   threshold, still no self-triggered rebuild, still a suggestion not a hard rule about *when*
   something counts as stale — only the sequencing and the anchoring got tightened.
 - **Plan items:** none new; closes U7.
+- **Same-day addendum (U8 diff-gate follow-up):** `analyst`'s U8 diff gate
+  (`docs/reviews/cpg-agent-adoption.md`, Pass 3 — approve with suggestions, zero blockers)
+  found this file's own freshness sentence was missing the "tool call/" qualifier the other five
+  files carried ("…in that same step…" vs. their "…in that same tool call/step…"), undercutting
+  the U7 ledger row's and commit message's "identically" claim — the divergence wasn't
+  deliberate, just a copy-seam miss. The same review also flagged, across all six files: (b) the
+  trailing "this is not a separate, optional judgment call" had an ambiguous pronoun referent —
+  a literal reading could bind "this" to the cross-verification *decision* rather than the
+  freshness *query itself*, exactly the room DEF-2's `architect` dispatch used to reason past a
+  softer version of this sentence; (c) nit — "query the freshness check" mismatched a
+  reference-doc noun with a query verb, when the actual queried object is the `:CpgBuildInfo`
+  marker (the report's own recommendation said "marker"). Fixed all three: the sentence now
+  reads "…query the freshness marker (per `skills/cpg-analysis/references/freshness.md`) in
+  that same tool call/step, before you decide whether the CPG's answer needs further
+  cross-verification — running the freshness check itself is not optional, and skipping it in
+  favor of a substitute check (e.g. grep agreement) doesn't satisfy this." — byte-identical
+  across all six files now, closing the (a) gap this file specifically had. The `CPG:`-line
+  wording from the original U7 pass was untouched (U8 raised no finding against it).
 
 ## 2026-08-16 — Wired as a new `cpg-analysis` consumer (M4 cpg-agent-adoption)
 - **What:** Frontmatter `description` gained a clause naming the `cpg_salesperson` CPG check and the `cpg-analysis` skill as part of orientation before changing shared UI code. Body: "Orient first" numbered list gained item 4 — check for a relevant CPG (first-guess `cpg_<component>` naming, `skills/cpg-analysis/SKILL.md` §1; concretely `cpg_salesperson` for `salesperson/chatbot.py` today), and when found/used, run the freshness check (`skills/cpg-analysis/references/freshness.md`) as part of the same step, noting it and surfacing a refresh suggestion (never a silent rebuild) if stale. Step 4 "Verify in the running UI" gained a one-line `CPG:` evidence-trail convention (`used <graph> — <clause>` / `considered, not relevant — <clause>` / `not applicable — <clause>`) in the final report.

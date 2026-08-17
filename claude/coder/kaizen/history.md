@@ -25,6 +25,22 @@
   threshold, still no self-triggered rebuild, still a suggestion not a hard rule about *when*
   something counts as stale — only the sequencing and the anchoring got tightened.
 - **Plan items:** none new; closes U7.
+- **Same-day addendum (U8 diff-gate follow-up):** `analyst`'s U8 diff gate
+  (`docs/reviews/cpg-agent-adoption.md`, Pass 3 — approve with suggestions, zero blockers)
+  flagged two minors and a nit against this same freshness sentence: (a) `frontend-engineer.md`
+  was missing the "tool call/" qualifier the other five files carried, undercutting the U7
+  ledger row's and commit message's "identically" claim; (b) the trailing "this is not a
+  separate, optional judgment call" had an ambiguous pronoun referent — a literal reading could
+  bind "this" to the cross-verification *decision* rather than the freshness *query itself*,
+  exactly the room DEF-2's `architect` dispatch used to reason past a softer version of this
+  sentence; (c) nit — "query the freshness check" mismatched a reference-doc noun with a query
+  verb, when the actual queried object is the `:CpgBuildInfo` marker (the report's own
+  recommendation said "marker"). Fixed all three: the sentence now reads "…query the freshness
+  marker (per `skills/cpg-analysis/references/freshness.md`) in that same tool call/step, before
+  you decide whether the CPG's answer needs further cross-verification — running the freshness
+  check itself is not optional, and skipping it in favor of a substitute check (e.g. grep
+  agreement) doesn't satisfy this." — byte-identical across all six files now. The `CPG:`-line
+  wording from the original U7 pass was untouched (U8 raised no finding against it).
 
 ## 2026-08-16 — M4 cpg-agent-adoption: wired as a new `cpg-analysis` consumer
 
