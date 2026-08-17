@@ -5,6 +5,93 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-16 — K-027 item 2: terminal-node-must-post engine contract — delivered
+
+**What:** An engine-level guarantee that a must-communicate `agent`-typed step either dispatches
+its required tool before ending its turn, or the run records a visible, diagnosable reason it
+didn't — closing K-027 item 2 ("Terminal-node-must-post engine contract") together with its own
+"Addendum from the K-025 QA pass" (`docs/BACKLOG.md`, search `### K-027`), which broadened the
+scope from terminal-node-only to any node whose contract is "post" (the non-terminal `intake` node
+hit the identical failure, in the worse "clarifying question never reached the thread" shape).
+Plan: `docs/plans/must-post-engine-contract.md`.
+
+**Mechanism:** A new opaque `config.requiredTools: [<tool name>, ...]` declaration on `agent`-typed
+steps — a subset of the node's own `config.tools` that must be successfully dispatched at least
+once before the node may end its turn; absent/empty means no obligation, byte-identical to prior
+behaviour. Enforced inside `server/falkorchat/executor.py`'s `_run_agent_node`, at both of its own
+existing exit points: the non-tool-call-text branch (checked *after* the already-shipped K-039
+implicit-dispatch fallback has had its chance) and the `maxIterations`-exhaustion fall-through,
+which K-039 never covered at all. On a missing required tool: an unconditional `_log.warning`
+naming the run id, step key, and missing tool(s) (mirroring the existing `_link_emissions`
+"PRODUCED link gap" warning shape), plus — on a debug/traced run only — a new
+`("must_post_violation", "...")` trace entry appended to the existing `trace` list (zero changes to
+`_trace_step`, `StepResult`'s shape, or any repository call). The run is never failed or parked —
+trace-and-continue was chosen over fail/park/retry alternatives (plan §3.3), each considered and
+rejected. `post_message`'s satisfaction is read off the existing `emissions` list (the richer "a
+`Message` actually got created" signal — accurate even when a dispatch reaches
+`PostMessageTool.run` and returns a decline string without raising, e.g. no thread bound); any
+other required tool uses a new `satisfied: set[str]`, threaded through `_handle_tool_call`'s two
+call sites (one new parameter, no public-surface change). A fourth, deliberately-LAST invariant in
+`server/falkorchat/services.py`'s `_validate_def_spec` — inserted between the existing
+`waitsForHuman` loop and the `cmp`-family `validate_cmp` loop, matching the plan's specified
+ordering — rejects at publish (nothing written) a `config.requiredTools` that isn't a list of
+strings, is declared on a non-`agent` step, or names a tool absent from that step's own
+`config.tools`. `scripts/seed_workflows.sh`'s `triage@v1` `intake`/`answer` steps now declare
+`"requiredTools": ["post_message"]`, with an inline comment citing the K-034 re-publish caveat
+below.
+
+**Relationship to K-039:** layers on top of, and does not modify, the already-shipped K-039
+implicit-dispatch fallback (`executor.py:677-713`, confirmed byte-for-byte unchanged) — K-039
+remains the fast, narrow, best-effort *recovery* attempt for the one tool shape it can safely
+synthesize; this item is the general-purpose *detector* that runs regardless of whether K-039
+fired, applies to any declared tool, and never leaves a violation with zero signal.
+
+**SHA-lock:** the `_drive_loop` byte-identity lock (`71055f756280`) is unchanged — every change in
+this item lands in `_run_agent_node`/`_handle_tool_call` (both already outside the lock) plus
+`services._validate_def_spec` (a different module entirely, publish-time only). Independently
+reconfirmed unchanged four separate times across this item's units (both implementer units, `teco`,
+and the `analyst` diff-scoped re-gate) using the documented line-number-independent recipe
+(`docs/DESIGN.md` §6.2) — no re-lock ceremony needed.
+
+**Tests:** 13 new offline tests — 9 in `server/tests/test_executor_agent.py` (8 from the plan's
+§10 items 1-8, plus one supplementary test the implementer added on its own initiative after
+mutation-testing found a real gap in the plan's own test list —
+`test_compliant_node_dispatching_a_non_post_message_required_tool_leaves_no_violation_trace`), 4 in
+`server/tests/test_services.py` (plan §10 items 9-12). Full offline suite: **1064 passed, 2
+deselected, 0 failures** (`cd server && .venv/bin/python -m pytest -q`).
+
+**Review gates:** design plan-gate — `docs/reviews/must-post-engine-contract.md`, verdict *approve
+with suggestions* (all four findings folded into the plan's Version 2 in place: a §11 note that a
+non-debug run's only signal is the process log, two added tests, two clarifying notes). Diff-scoped
+re-gate — `docs/reviews/must-post-engine-contract-impl.md`, verdict *approve*, no blockers, no
+majors.
+
+**Known, deliberately deferred limitation — `ws:acme` snapshot drift:** the shared dev box's
+`ws:acme` workspace's `triage@v1` **snapshot** is now out of sync with the freshly-republished
+`reference` def — `reference` carries the new `requiredTools` config, `ws:acme`'s pre-existing
+snapshot does not, because a config-only re-publish onto an already-published `(key, version)` is a
+documented, deliberate no-op (K-034/K-031: `MERGE … ON CREATE SET` only writes on first creation).
+`./scripts/verify_workflows.sh acme` reports this divergence. **Nothing is behaviourally broken** —
+the workspace snapshot is what actually executes, so `ws:acme`'s live triage runs are unaffected and
+continue exactly as before this item landed. This is the exact rollout question the plan's §8/§11
+flagged as an open, stakeholder-level decision (wipe-and-reseed `reference` vs. a `triage@v1`
+version bump); the stakeholder's initial decision, recorded in
+`docs/plans/must-post-engine-contract-coordination.md` (row U9), was **"leave as-is for now,
+tracked follow-up, not blocking."** Not resolved by this item — this item only documents the
+divergence, it does not touch it; see the coordination doc's ledger for the current status of any
+separate follow-up unit tracking reconciliation. Not a defect either way: `ws:acme`'s live triage
+behaviour is unaffected regardless of when/whether the snapshot is reconciled.
+
+**Update, same day (2026-08-16):** the divergence above was resolved, via the drop-and-re-materialize
+path rather than a `triage@v1` version bump — `graph-dba` dropped `ws:acme`'s stale `triage@v1`
+snapshot and re-materialized it fresh from `reference` (which already carried the new
+`requiredTools` config), with the stakeholder explicitly authorizing skipping the live/parked-run
+check since `ws:acme` is a dev database. A follow-on gap found in the process — a concurrent
+`pytest -q` run had wiped `reference` completely, including `access-request@v1` — was closed with
+the standard, documented, idempotent re-seed remedy. Final state, independently verified:
+`./scripts/verify_workflows.sh acme` now reports **both** `triage@v1` and `access-request@v1` in
+sync (`RESULT: OK`).
+
 ## 2026-08-16 — K-046: root `server/tests/conftest.py`'s `_falkordb_reachable()` write-mode probe bug — fixed
 
 **What:** `server/tests/conftest.py`'s `_falkordb_reachable()` used write-mode `GRAPH.QUERY`

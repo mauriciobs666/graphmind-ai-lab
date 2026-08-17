@@ -356,12 +356,35 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
      **Item 3 (calibration) is unaffected and still open** — this fixes the transport of a verdict,
      not its quality, and its false-advance metric (D9) is only meaningful against this settled
      parse.
-  2. **Terminal-node-must-post engine contract** — the structural fix for **Defect C**. Today's
+  2. ✅ **Terminal-node-must-post engine contract** (**delivered 2026-08-16** — see
+     [`HISTORY.md`](./HISTORY.md)) — the structural fix for **Defect C**. Today's
      mitigation is prompt-level and **does not hold on a 4B**: the `answer` node emits a good grounded
      answer as plain text with no tool call, so no `PRODUCED` edge (AC-4 measured ~2/8, then 0/3 after
      a strengthened prompt, then 2/3 in the probe replay). A second measured mechanism: the folded
      `"{displayName}: {text}"` thread context leaks a display name into `mentions` → the §4 write
      rejects → the model "recovers" by dropping the tool. Needs an engine-level guarantee, not a prompt.
+     **Delivered as:** a new opaque `config.requiredTools` declaration on `agent`-typed steps
+     (`waitsForHuman`'s sibling — same opaque-config convention), enforced inside `_run_agent_node`
+     at both its exit points — the non-tool-call-text branch, after the K-039 implicit-dispatch
+     fallback has had its chance, and the `maxIterations`-exhaustion fall-through, which K-039 never
+     covered — via an unconditional `_log.warning` naming the missing tool(s) plus, on a debug/traced
+     run only, a `must_post_violation` trace entry; the run is never failed or parked
+     (trace-and-continue, chosen over fail/park/retry — plan §3.3). `post_message`'s satisfaction
+     reads off the existing `emissions` list (the richer "a `Message` actually landed" signal, not
+     merely "the dispatch didn't raise"); any other required tool uses a new `satisfied: set[str]`
+     threaded through `_handle_tool_call`'s two call sites. A fourth, deliberately-LAST publish-time
+     invariant in `services._validate_def_spec` rejects (at publish, nothing written) a
+     `config.requiredTools` that isn't a list of strings, is declared on a non-`agent` step, or names
+     a tool absent from that step's own `config.tools`. `scripts/seed_workflows.sh`'s `triage@v1`
+     `intake`/`answer` steps now declare `requiredTools: ["post_message"]` (see the addendum below
+     for this item's own broadened scope, and `HISTORY.md`'s 2026-08-16 entry for the `ws:acme`
+     rollout note — a deliberately deferred, tracked follow-up, not a defect). Layers on top of, and
+     does not modify, the already-shipped K-039 fallback (`executor.py:677-713`, byte-for-byte
+     unchanged); the `_drive_loop` byte-identity SHA-lock (`71055f756280`) is unchanged. 13 new
+     offline tests (9 in `server/tests/test_executor_agent.py`, 4 in `server/tests/test_services.py`);
+     full offline suite 1064 passed, 2 deselected. Plan: `docs/plans/must-post-engine-contract.md`;
+     reviews: `docs/reviews/must-post-engine-contract.md` (plan-gate, approve with suggestions),
+     `docs/reviews/must-post-engine-contract-impl.md` (diff-scoped re-gate, approve, no blockers).
   3. **Judge calibration (D9/D10)** — run the protocol in `docs/archive/plans/m3-guard-calibration.md` §4:
      **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ is a **reported diagnostic**, not a
      gate (an always-suspend judge scores a perfect 0% FAR, so the original κ-based gate could be
@@ -395,8 +418,11 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   reached the thread while the run parked correctly and looked healthy from the outside — a worse
   user-visible symptom than the terminal case, because nobody was ever shown the question the run is
   waiting on. Two consequences for this item: **(a)** item 2's terminal-node scope is too narrow —
-  the engine-level guarantee must cover any node whose contract is "post" — **still open, and now
-  the *only* remaining part of (a): the parse-layer half is delivered** (below); **(b)** ✅
+  the engine-level guarantee must cover any node whose contract is "post" — ✅ **delivered
+  2026-08-16** (see item 2 above and `HISTORY.md`'s 2026-08-16 entry): `_run_agent_node`'s
+  enforcement lands at both of its exit points, so `intake` (non-terminal, parks) and `answer`
+  (terminal) get the identical guarantee, generalized past the one tool name `post_message` to any
+  tool a def author declares required; **(b)** ✅
   **delivered 2026-07-24, slice A** — this is the exact structural twin of **item 1** (a parse layer
   intolerant of the shapes small local models actually emit), so `_parse_content_tool_calls` now
   recovers bare `name({json})` / `name()` call syntax as a second probe *after* the JSON probe

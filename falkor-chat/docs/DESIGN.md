@@ -317,6 +317,16 @@ A definition is a directed graph of steps; a run is an execution trace that walk
 `{mode, systemPrompt, tools[], permissions{}, waitsForHuman, maxIterations}`; `waitsForHuman:true` is the
 explicit suspend signal for a node that parks awaiting a human reply (only intake, in the triage flow).
 
+`config.requiredTools: [<tool name>, ...]` (K-027 item 2, `docs/plans/must-post-engine-contract.md`)
+is `waitsForHuman`'s sibling in the same opaque config, and the same authoring convention: an
+`agent`-typed step names a subset of its own `config.tools` that must be successfully dispatched at
+least once before the node's turn ends. Absent/empty ⇒ no obligation (every def shipped before this
+item, unchanged). Enforced inside `_run_agent_node` at both of its own exit points — never inside
+`_drive_loop` — with a violation trace-and-continuing rather than failing or parking the run: an
+unconditional `_log.warning`, plus a `must_post_violation` trace entry on debug/traced runs only.
+Validated at publish by a fourth invariant in `services._validate_def_spec`, mirroring the
+`waitsForHuman` check's own shape (list-of-strings, `agent`-only, and a subset of `config.tools`).
+
 **`TRANSITION.guard` is LLM-native *and* deterministic (K-022 + K-024, supersedes the old
 "expression" wording — §13 resolved).** The guard string is one of:
 - **empty `""`** — an unconditional/default transition (**lowest** priority; fires whenever reached);
@@ -335,7 +345,10 @@ built here (the deterministic family is deliberately named `cmp` to keep that li
 **Two corrections to earlier wording (K-024 finding F-1):**
 1. **`on` is descriptive only.** `TRANSITION.on` and `StepResult.on` are **vestigial** — nothing in
    the engine reads either. `on` is a human-readable outcome label, *not* "the event that fires the
-   transition"; the guard alone decides.
+   transition"; the guard alone decides. This is exactly the fact `docs/plans/must-post-engine-contract.md`
+   leans on to justify a must-post violation as trace-and-continue rather than a new `StepResult.on`
+   outcome — a design that changed `on` conditionally on violation would be inventing meaning for a
+   field the engine has never read.
 2. **Guards are not evaluated in plain `TRANSITION.order`.** The sort key is
    `(guard == "", order)` — i.e. **conditional guards first**, with `order` as a tie-break *within*
    each class, then first-firing wins. That is what makes "conditional beats unconditional" work and
