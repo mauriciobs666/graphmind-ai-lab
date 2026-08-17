@@ -14,6 +14,9 @@
   "models": {
     "lmstudio/text-embedding-qwen3-embedding-0.6b": {
       "dim": 1024
+    },
+    "lmstudio/qwen/qwen3-4b-2507": {
+      "temperature": 0
     }
   }
 }

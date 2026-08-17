@@ -385,15 +385,47 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
      full offline suite 1064 passed, 2 deselected. Plan: `docs/plans/must-post-engine-contract.md`;
      reviews: `docs/reviews/must-post-engine-contract.md` (plan-gate, approve with suggestions),
      `docs/reviews/must-post-engine-contract-impl.md` (diff-scoped re-gate, approve, no blockers).
-  3. **Judge calibration (D9/D10)** — run the protocol in `docs/archive/plans/m3-guard-calibration.md` §4:
-     **false-advance ≤ 10% (screen) AND advance-recall ≥ 0.80**; κ is a **reported diagnostic**, not a
-     gate (an always-suspend judge scores a perfect 0% FAR, so the original κ-based gate could be
-     passed by a judge that never advances). Gate failure ⇒ **block the wiring** — no override, no
-     compensating with `maxSteps`. **D10 is binding:** at N=26 a pass means *"no blocker found at a
-     sample size that could only have found a large one"* — the §8 verbatim caveat must travel with
-     every verdict line. Diagnostic already on record: on clean golden inputs Qwen's judge passes both
-     arms (recall 0.818, false-advance 0.067), so the live 3/10 is a **generator-half** problem, not a
-     judge problem.
+  3. ✅ **Judge calibration (D9/D10)** (**delivered 2026-08-17** — see
+     [`HISTORY.md`](./HISTORY.md)) — ran the protocol in
+     `docs/archive/plans/m3-guard-calibration.md` §4 (**false-advance ≤ 10% (screen) AND
+     advance-recall ≥ 0.80**; κ a **reported diagnostic**, not a gate — an always-suspend
+     judge scores a perfect 0% FAR, so the original κ-based gate could be passed by a
+     judge that never advances) against the shipped local `lmstudio/qwen/qwen3-4b-2507`,
+     using the current-code addendum in `docs/plans/guard-judge-calibration-ml.md` (the
+     `run` construction fix, so the harness exercises the same code branch production
+     does, plus a new `config/models.json` temperature-pin entry,
+     `"lmstudio/qwen/qwen3-4b-2507": {"temperature": 0}`, for reproducibility).
+     Harness: `server/tests/eval/guard_calibration.py` (fixture assembly, `RecordingJudge`,
+     the metric functions) + `server/tests/eval/test_guard_calibration.py` (24 offline unit
+     tests, mutation-tested) + `server/tests/eval/test_guard_calibration_live.py` (the live
+     k=3×26-case run, behind `pytest.mark.live` — never touches the default network-free
+     suite). **Result: G1 false-advance = 0.0% (0/30 calls, n=10 `clear_suspend` cases) ·
+     G2 advance-recall = 81.8% (9/11 `clear_advance` cases) — both gates pass · VERDICT:
+     wire.** κ = 0.811, reported strictly as a **diagnostic, not a gate**. Full report:
+     `docs/test-reports/guard-judge-calibration-2026-08-17.md`. Gated by two independent
+     reviews, both **approve with suggestions, no blocker**:
+     `docs/reviews/guard-judge-calibration.md` (`analyst`, harness/implementation
+     correctness — hand-recomputed every number from the report's own per-case table and
+     independently re-ran the mutation-test claims) and
+     `docs/reviews/guard-judge-calibration-ml.md` (`data-scientist`, methodology —
+     independently re-derived the same numbers a second way). Both reviews converged on
+     the same non-blocking finding: the judge's two G2 misses (`ca-04`, `ca-08`) are
+     themselves the fixture's designed materiality probes, and their rationales echo the
+     `missing` field almost verbatim rather than reasoning about research-sufficiency — a
+     real qualitative pattern, but it does not trip the protocol's bloc-AND blocker rule
+     (`ca-05` correctly advanced, `cs-04` correctly suspended), so it does not reopen the
+     "wire" verdict (full read in the report's own "Materiality-probe check" section).
+     **Per archived §6/§6.1, this is a one-sided screen at n=21 hand-labeled cases, not a
+     certification** — a pass means "no blocker found at a sample size that could only
+     have found a large one," never "the judge is calibrated"; only a failure would have
+     been decisive. ~~Diagnostic already on record: on clean golden inputs Qwen's judge
+     passes both arms (recall 0.818, false-advance 0.067), so the live 3/10 is a
+     **generator-half** problem, not a judge problem.~~ — **superseded 2026-08-17 by this
+     item's own live-calibration result above.** That number predates the item-1 parse
+     fix, bypassed `guards.evaluate_guard` entirely (it drove the judge callable directly
+     with fixed `understanding`/`turns` values), and used the wrong G1 denominator (15
+     cases — `clear_suspend` + `boundary` combined — not the gate's 10 `clear_suspend`
+     cases); full derivation in `docs/plans/guard-judge-calibration-ml.md` §3.
   4. **Golden-set expansion (D11)** — `server/tests/eval/golden_guards.jsonl` exists (**26 rows**,
      well-formed and labeled) but **nothing reads it yet** (gate nit **n-3**) — the file will rot
      unless this item consumes it. A real FAR ≤ 10% bound needs ~30 suspend cases at zero failures

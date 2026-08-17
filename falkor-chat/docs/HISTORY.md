@@ -5,6 +5,68 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-17 — K-027 item 3: judge calibration (D9/D10) — delivered
+
+**What:** Ran the guard-judge calibration protocol (`docs/archive/plans/m3-guard-calibration.md`
+§4) against the shipped local `lmstudio/qwen/qwen3-4b-2507`, closing K-027 item 3 ("Judge
+calibration (D9/D10)", `docs/BACKLOG.md`, search `### K-027`) — the last open question behind
+wiring the `intake → research` fuzzy guard's LLM-as-judge live. Current-code method note:
+`docs/plans/guard-judge-calibration-ml.md` (2026-08-17, confirms the archived protocol's method
+still sound, one `run`-construction addendum).
+
+**Result:** G1 false-advance = 0.0% (0/30 calls, n=10 `clear_suspend` cases) · G2 advance-recall =
+81.8% (9/11 `clear_advance` cases) — both gates pass · **VERDICT: wire**. κ = 0.811, reported
+strictly as a diagnostic, not a gate. Per archived §6/§6.1, this is a **one-sided screen at n=21
+hand-labeled cases, not a certification** — a pass means "no blocker found at a sample size that
+could only have found a large one." Full report:
+`docs/test-reports/guard-judge-calibration-2026-08-17.md` (provenance header, verdict line, κ with
+marginals/prevalence, per-path breakdown, coercion-flip rate, flip rate, materiality-probe check,
+full per-case table with raw/final decisions and rationales).
+
+**Mechanism:** New harness under `server/tests/eval/`: `guard_calibration.py` (fixture-row → real
+`guards.evaluate_guard(...)` call assembly per archived §5.1's table, with the ml-note's one
+addendum — `run = {"ws": "ws:golden-eval", "modelOverrides": {}}` rather than the archived doc's
+literal `run = {}`, which post-K-042 lands in a branch production never reaches; a `RecordingJudge`
+wrapper that records the evidence tier actually handed to the judge and asserts it matches the
+fixture's declared `path` on every replicate — archived §5.1's "not optional" assertion; the
+G1/G2/κ/coercion-flip/flip-rate/materiality-probe/per-path metric functions), plus
+`test_guard_calibration.py` (24 offline unit tests, network-free, driven by stub judges) and
+`test_guard_calibration_live.py` (the live k=3×26-case run — 78 real judge calls — behind the
+established `pytest.mark.live` marker; builds a real `ModelGateway` directly from
+`ProviderCatalog.load(...)`/`Overlay.load(...)` rather than `ModelGateway.from_env()`, since
+`server/tests/conftest.py`'s autouse `_model_config_env` fixture silently redirects `.from_env()`
+to the offline dim-4 test config for every pytest test — matches the already-established
+precedent `test_golden_set_integrity.py` documents as "D7 mechanism 1"). Also pins the guard/judge
+role's sampling: `config/models.json`'s `models` map gained a new entry,
+`"lmstudio/qwen/qwen3-4b-2507": {"temperature": 0}` — verified end-to-end (not assumed) that the
+setting flows through `modelconfig._resolve_element` into the resolved request params.
+
+**Tests:** 24 new offline tests in `server/tests/eval/test_guard_calibration.py`, mutation-tested
+twice: G1's per-call counting rule swapped to per-case-majority (2 tests went red on the swap,
+reverted, green again) and the path-was-taken assertion turned into a no-op (3 tests went red,
+reverted, green again). Full offline suite: **1088 passed, 3 deselected, 0 failures**
+(`cd server && .venv/bin/python -m pytest -q`, re-verified 2026-08-17) — up from 1064 passed / 2
+deselected before this item (the 24 new offline tests plus the new live test as the 3rd deselected
+entry).
+
+**Review gates:** both **approve with suggestions, no blocker** —
+`docs/reviews/guard-judge-calibration.md` (`analyst`, harness/implementation correctness:
+hand-recomputed every number in the report from its own per-case table, independently re-ran both
+mutation-test claims) and `docs/reviews/guard-judge-calibration-ml.md` (`data-scientist`,
+methodology: independently re-derived the same numbers a second way, confirmed "wire" is the
+correct verdict under the protocol's own decision table). Both reviews converged on the same
+non-blocking finding, since folded into the report's own "Materiality-probe check" section: the
+judge's two G2 misses (`ca-04`, `ca-08`) are themselves the fixture's designed materiality probes,
+and their rationales echo the `missing` field almost verbatim rather than reasoning about
+research-sufficiency — a real qualitative pattern, but not blocker-grade, since the protocol's
+bloc-AND rule (`ca-05` correctly advanced, `cs-04` correctly suspended) never triggers.
+
+**Supersedes a stale number:** `docs/BACKLOG.md` K-027 item 3 previously quoted a "recall 0.818,
+false-advance 0.067" diagnostic as "already on record" — that number predates the K-027 item 1
+parse fix, bypassed `guards.evaluate_guard` entirely, and used the wrong G1 denominator (15 cases,
+not the gate's 10); corrected in place in `docs/BACKLOG.md` (struck through, marked superseded,
+full derivation cited to `docs/plans/guard-judge-calibration-ml.md` §3).
+
 ## 2026-08-16 — K-027 item 2: terminal-node-must-post engine contract — delivered
 
 **What:** An engine-level guarantee that a must-communicate `agent`-typed step either dispatches

@@ -62,3 +62,57 @@
   "compute the one-unit delta and compare it to the CI width before blessing a hard gate" check is a
   reusable pre-sign-off habit for any small-golden-set regression gate, not specific to retrieval or
   to this repo.
+
+## 2026-08-17 — A live-run report's "provenance" fields (model/quant/temp/baseURL) can silently diverge from the repo's config on a per-box basis, and the mismatch is checkable read-only before the run
+
+- **Evidence:** `falkor-chat`'s model resolution is two hand-edited files, and the provider file
+  (`FALKORCHAT_OPENCODE_CONFIG`, defaulting to `$HOME/.config/opencode/opencode.json`) is a
+  **cross-project, machine-local** file outside the repo, not something `git blame`/`grep` can
+  verify. On the box this session ran on, that default file declared `lmstudio` at a LAN IP
+  (unreachable from the sandbox) listing only an unrelated model, while `config/models.json`'s
+  `defaults.guard` named `lmstudio/qwen/qwen3-4b-2507` — a model the default provider file never
+  mentions. `ProviderCatalog`/`_resolve_element` (`modelconfig.py`) validates only the **provider
+  id**, not the model id, against the file, so this kind of mismatch resolves silently (wrong/
+  unreachable `baseURL`) rather than failing loudly at construction. Separately, `localhost:1234`
+  *was* live and did serve the expected model — findable with two read-only curls:
+  `curl :1234/v1/models` (presence) and LM Studio's own `curl :1234/api/v0/models` (adds
+  `quantization` and `state: loaded|not-loaded` per model — the exact fields a calibration/eval
+  report's provenance header needs and the repo cannot supply from static config alone).
+- **Context:** `falkor-chat/docs/plans/guard-judge-calibration-ml.md` (K-027 item 3) — grounding
+  the archived protocol's §8 provenance requirements (model id/quant/temperature) against the
+  actually-shipped `config/models.json`, which sets **no** `temperature` key anywhere in the repo
+  for any kind — a genuine, not just unrecorded, uncontrolled variable for any determinism-sensitive
+  eval design that assumes temperature is pinned near 0.
+- **Suggested home:** prompt (data-scientist's evaluation-engineering section, provenance/
+  reproducibility sub-point) — two reusable habits: (1) before trusting a report's provenance
+  header on any project using a machine-local provider config, live-check the actually-reachable
+  endpoint (LM Studio's `/api/v0/models` for quant+state, or the provider's equivalent) rather than
+  reading only the repo's static config, since the two can diverge per-box with no loud failure;
+  (2) grep the whole repo for `temperature` (or the sampling-param equivalent) before writing any
+  non-determinism-handling section (k replicates, flip-rate, etc.) that assumes a pinned value —
+  an unset sampling parameter is a silent gap in exactly the kind of report that most needs it
+  pinned and recorded.
+
+## 2026-08-17 — A conjunctive "fails as a bloc" probe-set gate can pass while most of its individual probes fail, and the summary line hides that unless it's checked case-by-case
+
+- **Evidence:** `docs/archive/plans/m3-guard-calibration.md` §7 gates the guard-judge's
+  materiality-probe set (`ca-04`/`ca-05`/`ca-08` vs. `cs-04`) with an explicit AND across all three
+  advance-probe cases plus the adversarial suspend-probe. In the 2026-08-17 live run
+  (`docs/test-reports/guard-judge-calibration-2026-08-17.md`), 2 of the 3 individual probes
+  (`ca-04`, `ca-08`) failed — with rationales that echo the fixture's own `missing` field content
+  almost verbatim, i.e. exactly the pattern-matching failure mode the probes exist to catch — while
+  the third (`ca-05`) and the adversarial case (`cs-04`) both passed, so the bloc AND never
+  triggered and the report correctly wrote "Passed." A reader trusting the one-line summary would
+  see zero signal where there is in fact a 2-of-3 hit rate on a purpose-built diagnostic. The
+  bloc-AND design (my own, from the archived protocol) is defensible as a *gate* — a single miss
+  among plausible near-misses shouldn't block a wire decision — but it is the wrong granularity for
+  a *report summary line*, which should default to reporting the per-probe hit rate and only fold
+  it into a bloc/no-bloc verdict as a second sentence.
+- **Context:** methodology sign-off on the K-027 item 3 calibration report
+  (`docs/reviews/guard-judge-calibration-ml.md`).
+- **Suggested home:** prompt (data-scientist's evaluation-engineering section) — the general rule:
+  "when a probe *set* is gated with AND/OR logic for pass/fail purposes, still report the
+  per-probe outcome individually in prose, not just the boolean bloc result — the aggregate can
+  mask a real partial pattern at exactly the small-N scale where the qualitative read matters most."
+  Applies to any multi-case diagnostic probe (materiality probes here; likely recurs in any
+  LLM-as-judge calibration that uses small hand-built adversarial/materiality probe clusters).
