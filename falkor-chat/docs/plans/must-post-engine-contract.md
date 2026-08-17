@@ -1,6 +1,6 @@
 # `must-post-engine-contract` — engine-level "must-post" contract for agent nodes
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-027 (M3.5) · **Version:** 2 ·
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-027 (M3.5) · **Version:** 2 ·
 > **Reviews:** `docs/reviews/must-post-engine-contract.md`
 
 > **Revision note — 2026-08-16 (v1 → v2).** Revised in place against the `analyst` plan-gate
