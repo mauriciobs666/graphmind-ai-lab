@@ -250,6 +250,31 @@ def _dumps(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"), sort_keys=True)
 
 
+def _missing_required_tools(
+    required: set[str], satisfied: set[str], emissions: list[str]
+) -> set[str]:
+    """Which of an `agent` node's `config.requiredTools` (already intersected with the
+    node's granted set — see `_run_agent_node`) were never satisfied this execution
+    (`docs/plans/must-post-engine-contract.md` §3.2).
+
+    `post_message` is a special case: its satisfaction is read off `emissions` (buffered
+    by `_buffer_emission` only when a dispatched call's result envelope actually carried a
+    `"posted"` msgId), **not** the generic `satisfied` set — `PostMessageTool.run` can
+    return a string error result *without raising* (e.g. "no thread is bound to this
+    run"), which still reaches `_handle_tool_call`'s success path and would wrongly mark
+    the generic rule satisfied. Every other required tool name uses `satisfied`
+    membership, since no richer signal exists for a tool the engine doesn't otherwise
+    understand."""
+    missing: set[str] = set()
+    for name in required:
+        if name == "post_message":
+            if not emissions:
+                missing.add(name)
+        elif name not in satisfied:
+            missing.add(name)
+    return missing
+
+
 def _load_json_obj(raw: str | None) -> dict[str, Any]:
     """Deserialize an opaque `ctx`/`config` string to a dict (rule 8 is app-side).
 
@@ -635,6 +660,21 @@ class WorkflowExecutor:
         `resolvedModel`/`modelFallback` stay `None` when the answering client never sets
         `ChatResult.model` (e.g. an offline test double) — a non-answer, not an unset
         default rung.
+
+        **Engine-level must-post contract** (`docs/plans/must-post-engine-contract.md`):
+        a node may declare `config.requiredTools`, a subset of `config.tools` that must
+        be successfully dispatched at least once before the node ends its turn. This is
+        checked at both of this method's own return points — the non-tool-call-text
+        branch (after the K-039 implicit-`post_message`-dispatch fallback, unchanged, has
+        had its chance) and the `maxIterations`-exhaustion fall-through — via
+        `_missing_required_tools`. A violation never fails or parks the node (`on`/
+        `output` are unaffected): it is always logged (`_log.warning`, unconditional, not
+        tracer-gated) and, on a debug run, appended to `trace` as a `must_post_violation`
+        entry. `satisfied` (a per-node-execution `set[str]`, threaded through both
+        `_handle_tool_call` call sites below) tracks which granted tool names have
+        actually reached a successful dispatch; `post_message`'s own satisfaction is read
+        off the richer `emissions` list instead (see `_missing_required_tools`'s
+        docstring for why).
         """
         requested_model = config.get("model")
         llm, resolution = self._models.resolve_llm(
@@ -650,11 +690,17 @@ class WorkflowExecutor:
             for name, schema in zip(granted, offered)
         }
         max_iter = int(config.get("maxIterations", DEFAULT_MAX_ITERATIONS))
+        # `& granted_set` is defense-in-depth against a hand-crafted graph write that
+        # bypasses `services._validate_def_spec`'s publish-time check — a required tool
+        # name absent from the node's own granted set is silently dropped here, never
+        # raised or falsely flagged as a violation (plan §3.2).
+        required = set(_str_list(config.get("requiredTools", []))) & granted_set
 
         thread_msgs = self._read_thread_context(ctx, run_ctx)
         messages = self._assemble_messages(config, run_ctx, thread_msgs)
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
+        satisfied: set[str] = set()
         last_text = ""
         resolved_model: str | None = None
         model_source: str | None = None
@@ -704,8 +750,11 @@ class WorkflowExecutor:
                     ))
                     self._handle_tool_call(
                         implicit_call, granted_set, required_by, ctx, run, trace,
-                        emissions,
+                        emissions, satisfied,
                     )
+                missing = _missing_required_tools(required, satisfied, emissions)
+                if missing:
+                    self._note_must_post_violation(missing, run, step, trace)
                 return StepResult(output=result.text or "", on="done",
                                   trace=trace, emissions=emissions,
                                   thread=thread_msgs, resolvedModel=resolved_model,
@@ -715,7 +764,8 @@ class WorkflowExecutor:
             messages.append(_assistant_turn(result))
             for call in result.tool_calls:
                 content = self._handle_tool_call(
-                    call, granted_set, required_by, ctx, run, trace, emissions
+                    call, granted_set, required_by, ctx, run, trace, emissions,
+                    satisfied,
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": content}
@@ -726,6 +776,9 @@ class WorkflowExecutor:
             ("node_note", f"max iterations ({max_iter}) reached; terminating node "
                           f"with best current text")
         )
+        missing = _missing_required_tools(required, satisfied, emissions)
+        if missing:
+            self._note_must_post_violation(missing, run, step, trace)
         return StepResult(output=last_text, on="done", trace=trace,
                           emissions=emissions, thread=thread_msgs,
                           resolvedModel=resolved_model, modelSource=model_source,
@@ -734,7 +787,7 @@ class WorkflowExecutor:
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
         required_by: dict[str, list[str]], ctx: CallContext, run: dict[str, Any],
-        trace: list[tuple[str, str]], emissions: list[str],
+        trace: list[tuple[str, str]], emissions: list[str], satisfied: set[str],
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
@@ -745,7 +798,16 @@ class WorkflowExecutor:
         fault, and `HumanHandoffSignal` propagate — D16, see the `except` below. Every failed
         dispatch is logged unconditionally, tracer or not. A dispatch that posts a
         message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
-        onto `emissions` for post-record PRODUCED linking (Option B, K-023)."""
+        onto `emissions` for post-record PRODUCED linking (Option B, K-023).
+
+        `satisfied` (`docs/plans/must-post-engine-contract.md` §3.2) is bookkeeping for the
+        engine-level must-post contract: on the single success path that survives AC-6
+        rejection, malformed-arg rejection, and an absorbed model-correctable
+        `ServiceError` — i.e. a call that genuinely reached `self._tools.dispatch(...)` and
+        returned without raising — `call.name` is added to it. `_run_agent_node` reads it
+        (alongside `emissions`, for `post_message`'s richer signal) via
+        `_missing_required_tools` to know which declared `config.requiredTools` were
+        actually dispatched this node execution."""
         if call.name not in granted_set:  # AC-6 defensive rejection
             trace.append(("tool_call", f"REJECTED ungranted tool {call.name!r} (AC-6)"))
             return (f"error: tool {call.name!r} is not granted to this node "
@@ -791,6 +853,7 @@ class WorkflowExecutor:
             return (f"error: {call.name} failed: {type(exc).__name__}: {exc}; "
                     f"fix the arguments and retry, or continue without this tool")
         trace.append(("tool_result", _short(out)))
+        satisfied.add(call.name)
         content = out if isinstance(out, str) else str(out)
         self._buffer_emission(content, emissions)
         return content
@@ -804,6 +867,26 @@ class WorkflowExecutor:
         msg_id = obj.get("posted")
         if isinstance(msg_id, str) and msg_id:
             emissions.append(msg_id)
+
+    @staticmethod
+    def _note_must_post_violation(
+        missing: set[str], run: dict[str, Any], step: dict[str, Any],
+        trace: list[tuple[str, str]],
+    ) -> None:
+        """Make a must-post violation visible (`docs/plans/must-post-engine-contract.md`
+        §3.3): **always** (regardless of debug-run status) log it via `_log.warning`,
+        mirroring `_link_emissions`'s PRODUCED-gap warning — a diagnosable gap, logged,
+        never raised, never blocking. On a debug run, also append a `must_post_violation`
+        entry to `trace`, which `_trace_step` forwards to the tracer verbatim."""
+        names = ", ".join(sorted(missing))
+        _log.warning(
+            "must-post violation: run %s step %s never dispatched required tool(s): %s",
+            run.get("runId"), step.get("key"), names,
+        )
+        trace.append((
+            "must_post_violation",
+            f"required tool(s) never dispatched: {names}",
+        ))
 
     def _read_thread_context(
         self, ctx: CallContext, run_ctx: dict[str, Any]

@@ -2272,3 +2272,88 @@ def test_agent_step_type_is_accepted_by_publish_validation():
 
     assert repo.published[0]["key"] == "triage"
     assert repo.published[0]["steps"][0]["type"] == "agent"
+
+
+# K-027 item 2 -- must-post engine contract publish invariant.
+# docs/plans/must-post-engine-contract.md section 3.4/9/10 (tests 9-12): a fourth
+# "deliberately LAST" invariant alongside waitsForHuman -- config.requiredTools,
+# when present on a step, must be a list of strings, only on a type:'agent' step,
+# and a subset of that step's own config.tools.
+
+def test_publish_workflow_def_required_tool_not_granted_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    steps = [
+        {"key": "intake", "type": "agent", "start": True,
+         "config": {"tools": ["post_message"], "requiredTools": ["x"]}},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "intake", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefSpecError, match=r"requiredTools.*\['x'\]"):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_required_tools_on_non_agent_step_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    steps = [
+        # `tools` deliberately already contains `post_message` -- isolates the
+        # type=="agent" check from the separate ⊆ config.tools check below.
+        {"key": "intake", "type": "human", "start": True,
+         "config": {"waitsForHuman": True, "tools": ["post_message"],
+                    "requiredTools": ["post_message"]}},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "intake", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefSpecError, match="requiredTools"):
+        _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_required_tools_non_list_raises_nothing_written():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    steps_string = [
+        {"key": "intake", "type": "agent", "start": True,
+         "config": {"tools": ["post_message"], "requiredTools": "post_message"}},
+        {"key": "done", "type": "message"},
+    ]
+    steps_non_string_item = [
+        {"key": "intake", "type": "agent", "start": True,
+         "config": {"tools": ["post_message"], "requiredTools": [1]}},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "intake", "to": "done", "on": "go", "order": 0}]
+
+    with pytest.raises(WorkflowDefSpecError, match="list of strings"):
+        _publish(svc, repo, steps=steps_string, transitions=transitions)
+    assert repo.published == []
+
+    with pytest.raises(WorkflowDefSpecError, match="list of strings"):
+        _publish(svc, repo, steps=steps_non_string_item, transitions=transitions)
+    assert repo.published == []
+
+
+def test_publish_workflow_def_required_tools_subset_of_granted_succeeds():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    steps = [
+        {"key": "intake", "type": "agent", "start": True,
+         "config": {"tools": ["post_message", "graphrag_retrieve"],
+                    "requiredTools": ["post_message"]}},
+        {"key": "done", "type": "message"},
+    ]
+    transitions = [{"from": "intake", "to": "done", "on": "go", "order": 0}]
+
+    _publish(svc, repo, steps=steps, transitions=transitions)
+
+    assert len(repo.published) == 1
+    by_key = {s["key"]: s for s in repo.published[0]["steps"]}
+    assert by_key["intake"]["config"] == (
+        '{"requiredTools":["post_message"],"tools":["post_message","graphrag_retrieve"]}'
+    )

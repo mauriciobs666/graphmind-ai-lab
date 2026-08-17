@@ -893,13 +893,17 @@ class Services:
         service invariant that lets the repository's inner `MATCH (start/from/to
         …)` always resolve for a valid spec (QUERIES.md §11 note).
 
-        Three further invariants run **last**, after all of the above: a `human`/
+        Four further invariants run **last**, after all of the above: a `human`/
         `wait` step must declare `config.waitsForHuman: true` (K-024 U2); a
-        `cmp`-family transition guard must be structurally sound (K-024 U2,
-        `guards.validate_cmp` → `WorkflowConfigError`); and a def must carry **at
-        least one transition** (K-024 U4b, O-6). Running them last is
-        load-bearing: an older check must keep failing for its **own** reason, so a
-        new invariant can never mask — or make vacuous a test of — a pre-existing one.
+        step's `config.requiredTools`, when present, must be a list of strings
+        naming tools also present in that step's own `config.tools`, and may only
+        be declared on a step of type `"agent"` (K-027 item 2,
+        `docs/plans/must-post-engine-contract.md`); a `cmp`-family transition
+        guard must be structurally sound (K-024 U2, `guards.validate_cmp` →
+        `WorkflowConfigError`); and a def must carry **at least one transition**
+        (K-024 U4b, O-6). Running them last is load-bearing: an older check must
+        keep failing for its **own** reason, so a new invariant can never mask —
+        or make vacuous a test of — a pre-existing one.
         """
         if kind not in WORKFLOW_KINDS:
             raise WorkflowDefSpecError(
@@ -951,6 +955,37 @@ class Services:
                     f"step {step['key']!r} of type {step['type']!r} must declare "
                     f"config.waitsForHuman: true — a parking step without it "
                     f"self-loops until the step budget fails the run"
+                )
+
+        # ── K-027 item 2 — must-post engine contract (must-post-engine-contract.md
+        # §3.4) — also deliberately LAST, for the same reason as the check above.
+        for step in steps:
+            cfg = _normalize_opaque(step.get("config"))
+            if not isinstance(cfg, dict):
+                continue
+            required = cfg.get("requiredTools")
+            if not required:
+                continue
+            if not isinstance(required, list) or not all(
+                isinstance(t, str) for t in required
+            ):
+                raise WorkflowDefSpecError(
+                    f"step {step['key']!r} config.requiredTools must be a list "
+                    f"of strings, got {required!r}"
+                )
+            if step.get("type") != "agent":
+                raise WorkflowDefSpecError(
+                    f"step {step['key']!r} of type {step.get('type')!r} declares "
+                    f"config.requiredTools — only an 'agent' step has an executor "
+                    f"code path that can ever satisfy the obligation"
+                )
+            granted = set(_str_values(cfg.get("tools")))
+            missing = sorted(set(required) - granted)
+            if missing:
+                raise WorkflowDefSpecError(
+                    f"step {step['key']!r} declares config.requiredTools "
+                    f"{missing} not present in its own config.tools "
+                    f"{sorted(granted)}"
                 )
 
         for tr in transitions:

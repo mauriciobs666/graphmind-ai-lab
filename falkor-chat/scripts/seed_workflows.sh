@@ -196,6 +196,13 @@ STEPS = [
             ),
             "tools": ["post_message"],
             "maxIterations": 4,
+            # K-027 item 2 (docs/plans/must-post-engine-contract.md §8/§9 step 3):
+            # engine-level must-post contract. CAVEAT: property-only edit to an
+            # already-published (key, version) is a silent no-op on re-publish
+            # (K-034, MERGE ... ON CREATE SET) -- takes effect only on a FRESH
+            # publish (new workspace / a default `pytest -q` run / a from-scratch
+            # dev box), NOT on the shared dev box's already-seeded ws:acme.
+            "requiredTools": ["post_message"],
         },
     },
     {
@@ -241,6 +248,10 @@ STEPS = [
                 "still post it."
             ),
             "tools": ["post_message"],
+            # K-027 item 2 (docs/plans/must-post-engine-contract.md §8/§9 step 3):
+            # same requiredTools contract + K-034 no-op-on-republish caveat as the
+            # `intake` step above.
+            "requiredTools": ["post_message"],
         },
     },
 ]

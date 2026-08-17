@@ -609,6 +609,245 @@ def test_no_implicit_post_when_final_text_is_empty():
     assert result.emissions == []
 
 
+# ── must-post engine contract (K-027 item 2, `docs/plans/must-post-engine-contract.md`) ──
+#
+# A `type:'agent'` node may declare `config.requiredTools`, a subset of `config.tools`
+# that must be successfully dispatched at least once before the node ends its turn. A
+# violation never fails or parks the node — it is always logged (`_log.warning`,
+# unconditional, not tracer-gated) and, on a debug run, appended to `trace` as a
+# `must_post_violation` entry. This generalizes past the K-039 fallback above: it covers
+# any declared tool name (not just `post_message`), and it also covers the
+# `maxIterations`-exhaustion return path, which K-039 never touches.
+
+NOTIFY_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "notify_owner",
+        "parameters": {
+            "type": "object",
+            "properties": {"reason": {"type": "string"}},
+            "required": ["reason"],
+        },
+    },
+}
+
+
+def test_compliant_node_dispatching_required_tool_leaves_no_violation_trace():
+    # The common/compliant path: the model calls its required tool directly (the
+    # tool-call branch, not the K-039 fallback). Zero behavior change from today, and no
+    # must_post_violation trace entry.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c1", "post_message", {"text": "hi"})]),
+        ChatResult(text="done"),
+    ])
+    reg = StubRegistry(
+        {"post_message": POST_SCHEMA},
+        results={"post_message": '{"posted": "m1", "threadId": "t1"}'},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["post_message"], requiredTools=["post_message"]), {},
+    )
+
+    assert result.output == "done"
+    assert not any(k == "must_post_violation" for k, _ in result.trace)
+
+
+def test_compliant_node_dispatching_a_non_post_message_required_tool_leaves_no_violation_trace():
+    # Supplementary to the plan's 8 specified tests (found via this unit's own
+    # mutation-testing pass): the compliant-path test above only exercises
+    # `post_message`, whose satisfaction is read off `emissions`, never `satisfied` — so
+    # it cannot catch a regression in the `satisfied` threading at the MAIN dispatch-loop
+    # `_handle_tool_call` call site specifically (as opposed to the K-039 implicit-call
+    # site). This pins that a non-post_message required tool, dispatched directly via a
+    # real tool call, satisfies the contract with no violation.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "notify_owner", {"reason": "escalate"})]),
+        ChatResult(text="done, owner notified"),
+    ])
+    reg = StubRegistry({"notify_owner": NOTIFY_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["notify_owner"], requiredTools=["notify_owner"]), {},
+    )
+
+    assert result.output == "done, owner notified"
+    assert not any(k == "must_post_violation" for k, _ in result.trace)
+
+
+def test_plain_text_ending_with_required_post_message_recovers_via_k039_no_violation_logged():
+    # Mirrors test_plain_text_with_granted_post_message_is_posted_as_implicit_fallback
+    # above, but with requiredTools=["post_message"] declared: the K-039 implicit
+    # dispatch still fires exactly as before, and its success satisfies the contract via
+    # emissions — no violation.
+    llm = StubChatLLM([ChatResult(text="2 + 2 equals 4.")])
+    reg = StubRegistry(
+        {"post_message": POST_SCHEMA},
+        results={"post_message": '{"posted": "m99", "threadId": "t1"}'},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["post_message"], requiredTools=["post_message"]), {},
+    )
+
+    assert reg.dispatched == [("post_message", {"text": "2 + 2 equals 4."})]
+    assert result.emissions == ["m99"]
+    assert not any(k == "must_post_violation" for k, _ in result.trace)
+
+
+def test_required_non_post_message_tool_never_dispatched_logs_and_traces_a_visible_violation(
+    caplog,
+):
+    # The core new-behavior test (RCA §5 item 3's ask): a required tool with a shape
+    # K-039 cannot help with (not post_message), never called. The run is not failed
+    # (on == "done"), a must_post_violation names the missing tool, and the warning is
+    # logged even with no tracer configured — visibility does not depend on debug-run
+    # status.
+    llm = StubChatLLM([ChatResult(text="all done, nothing to escalate")])
+    reg = StubRegistry({"notify_owner": NOTIFY_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(
+            CTX, RUN, STEP,
+            _config(tools=["notify_owner"], requiredTools=["notify_owner"]), {},
+        )
+
+    assert result.on == "done"
+    assert any(
+        k == "must_post_violation" and "notify_owner" in p for k, p in result.trace
+    )
+    assert any("notify_owner" in r.getMessage() for r in caplog.records)
+
+
+def test_required_post_message_whose_own_implicit_dispatch_declines_still_logs_a_violation():
+    # The concrete gap found while reading tools.py: a registry double whose
+    # post_message dispatch returns an error string WITHOUT raising (mirroring
+    # PostMessageTool.run's "no thread bound" path) — the K-039 fallback "succeeds" at
+    # the dispatch layer but produces no "posted" envelope. Satisfaction is read off
+    # emissions, not off "the dispatch didn't raise".
+    llm = StubChatLLM([ChatResult(text="here is your answer")])
+    reg = StubRegistry(
+        {"post_message": POST_SCHEMA},
+        results={"post_message": "error: no thread is bound to this run; cannot post a message"},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["post_message"], requiredTools=["post_message"]), {},
+    )
+
+    assert result.emissions == []
+    assert any(
+        k == "must_post_violation" and "post_message" in p for k, p in result.trace
+    )
+
+
+def test_required_tool_never_dispatched_across_max_iterations_logs_and_traces_a_violation():
+    # The maxIterations-exhaustion exit point, which K-039 never covered at all: the
+    # model only ever calls a DIFFERENT granted tool every turn, never the required one,
+    # until the node's iteration budget exhausts. Existing exhaustion behavior is
+    # unchanged (on == "done", best-current-text output, the node_note exhaustion trace
+    # entry) and a must_post_violation is also present.
+    call = ToolCall("c1", "graphrag_retrieve", {"query": "loop"})
+    llm = AlwaysToolLLM(call)
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA, "notify_owner": NOTIFY_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["graphrag_retrieve", "notify_owner"],
+                requiredTools=["notify_owner"], maxIterations=2), {},
+    )
+
+    assert result.on == "done"
+    assert result.output == "thinking"
+    assert len(reg.dispatched) == 2
+    assert any(k == "node_note" for k, _ in result.trace)
+    assert any(
+        k == "must_post_violation" and "notify_owner" in p for k, p in result.trace
+    )
+
+
+def test_undeclared_required_tools_is_fully_backward_compatible():
+    # No requiredTools declared (every currently-shipped def and existing test fixture)
+    # — `required` is always the empty set, so `_missing_required_tools` always returns
+    # empty. Re-run a representative slice of the existing K-039/plain-tool-loop
+    # scenarios and pin zero new trace entries — the explicit compatibility pin for
+    # §7's claim, not just an implicit consequence of not touching those tests' own
+    # assertions.
+    llm = StubChatLLM([ChatResult(text="grounded answer")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+    assert not any(k == "must_post_violation" for k, _ in result.trace)
+
+    loop_call = ToolCall("c1", "graphrag_retrieve", {"query": "loop"})
+    llm2 = AlwaysToolLLM(loop_call)
+    reg2 = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex2 = _executor(llm=llm2, registry=reg2)
+    result2 = ex2._run_agent_node(CTX, RUN, STEP, _config(maxIterations=2), {})
+    assert not any(k == "must_post_violation" for k, _ in result2.trace)
+
+    llm3 = StubChatLLM([ChatResult(text="2 + 2 equals 4.")])
+    reg3 = StubRegistry(
+        {"post_message": POST_SCHEMA},
+        results={"post_message": '{"posted": "m99", "threadId": "t1"}'},
+    )
+    ex3 = _executor(llm=llm3, registry=reg3)
+    result3 = ex3._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+    assert not any(k == "must_post_violation" for k, _ in result3.trace)
+
+
+def test_required_tool_absent_from_granted_tools_is_silently_dropped_at_drive_time():
+    # Review finding M2.1: a node whose config.requiredTools names a tool that is NOT in
+    # config.tools (the hand-crafted-graph-write shape publish-time validation is meant
+    # to catch — this test bypasses it deliberately, exercising `_run_agent_node`
+    # directly). The `& granted_set` intersection silently drops it: no exception, no
+    # must_post_violation, and the node's output/on are unaffected.
+    llm = StubChatLLM([ChatResult(text="grounded answer")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _config(requiredTools=["notify_owner"]), {},
+    )
+
+    assert not any(k == "must_post_violation" for k, _ in result.trace)
+    assert result.output == "grounded answer"
+    assert result.on == "done"
+
+
+def test_required_post_message_node_ending_on_empty_text_still_logs_a_violation():
+    # Review finding M2.2: a node with requiredTools=["post_message"] whose model ends
+    # its turn via the non-tool-call branch with EMPTY result.text. K-039's implicit
+    # dispatch is gated on result.text being truthy, so it never even attempts here —
+    # this contract's check is the SOLE defense on this path, not a redundant
+    # restatement of an existing K-039 assertion.
+    llm = StubChatLLM([ChatResult(text="")])
+    reg = StubRegistry({"post_message": POST_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP,
+        _config(tools=["post_message"], requiredTools=["post_message"]), {},
+    )
+
+    assert reg.dispatched == []
+    assert result.emissions == []
+    assert any(
+        k == "must_post_violation" and "post_message" in p for k, p in result.trace
+    )
+
+
 # ── K-042 code review Major 2: the `step`-kind gateway resolution wiring ──────────
 #
 # Every test above injects `llm=<stub>` — the pre-K-042 `StaticModelGateway` sugar
