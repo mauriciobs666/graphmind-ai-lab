@@ -1,13 +1,20 @@
 # CPG agent adoption — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** cpg-agent-adoption (M4, proposed — C-4xx TBD in `docs/BACKLOG.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** cpg-agent-adoption (M4, C-401…C-407 in `docs/BACKLOG.md`)
 
-> **RESUMED 2026-08-16.** U6's FAIL verdict independently spot-checked (quoted plan/agent-file
-> wording — `not a separate, optional pass`, the `CPG:` line spec, `silence is what this
-> convention rules out` — confirmed verbatim against the actual files, not just trusted from the
-> report). Verdict stands: real, reproducible, three-way defect. U6's deliverables committed
-> (`43878d2`). Coordination is **not closed** — a fix round (U7, `cobb`) is now in flight; see
-> ledger below for current state.
+> **CLOSED 2026-08-16.** All nine units (U1…U9) delivered and accepted, both review altitudes
+> closed (U5 diff gate: approve; U8 diff gate on the fix round: approve w/ suggestions, findings
+> closed in U7-fix), and behavioral acceptance closed on re-pass (U9: PASS, one new minor residual
+> — DEF-4, a `CPG:` shape-selection nit, filed as a `docs/BACKLOG.md` follow-up rather than a
+> further fix-and-regate cycle, per U9's own "accept as low-severity edge case" option). U6's
+> original FAIL (DEF-1/DEF-2/DEF-3) is fully explained by this ledger's history: U7 + U7-fix
+> (`cobb`) tightened the wiring, U9 confirmed the fix generalizes to different target
+> functions/components, not just the original prompts. Milestone-map flip and follow-up items
+> routed to `cobb`; per-document `Status: archived` flips routed to each doc's owner per root
+> `AGENTS.md`'s archival table (`architect` for `plans/cpg-agent-adoption.md`, `graph-dba` for
+> `plans/cpg-agent-adoption-graph.md`, `analyst` for `reviews/cpg-agent-adoption.md`, `tico` for
+> `requirements/cpg-agent-adoption.md`, `qa-engineer` for the test-plan/report pair). This
+> document's own flip (above) is teco's, per the same table.
 
 ## Goal & definition of done
 
@@ -45,7 +52,7 @@ be coherent, so it runs second, reading graph-dba's delivered note by path.
 | U7 | `cobb` | `a86ed8ee3420ef600` | delivered | Tightened, identically across all six wired agent files: (1) freshness-check sentence hardened from "also run... as part of that same step" to "query... in that same tool call/step, before deciding whether the result needs further cross-verification — this is not a separate, optional judgment call" (closes DEF-2); (2) `CPG:` line instruction anchored with "written verbatim and required in all three cases including when the CPG isn't relevant — not paraphrased, not dropped" (closes DEF-1/DEF-3). teco spot-checked `git diff` on all 6 agent files + 6 kaizen histories: exactly the 2 targeted lines changed per agent file (4 diff lines each), no frontmatter/structure/roster touch, no scope creep — matches cobb's self-report exactly. | code gate: `analyst` (U8) → — |
 | U8 | `analyst` | `adb2e44fe3ceff7ee` | accepted | `docs/reviews/cpg-agent-adoption.md` §"Pass 3 — U7 fix-round diff gate" — teco read in full. Confirmed: scope exactly 13 files, no frontmatter/roster/restructure touch, fix wording traces near-verbatim to U6's own recommendations, design intent (§2.3/§3) untouched. Two minors: (a) `frontend-engineer.md`'s freshness sentence missing the "tool call/" qualifier the other five carry, contradicting the "identically" claim; (b) pronoun ambiguity in "...before deciding whether the result needs further cross-verification — this is not a separate, optional judgment call" (all 6 files) — "this" could misparse as modifying the cross-verification decision rather than the freshness-query requirement, in the exact clause meant to close DEF-2. One nit: "query the freshness check" vs. the report's own cleaner "query the freshness marker." | code gate: **approve w/ suggestions** |
 | U7-fix | `cobb` | `a86ed8ee3420ef600` | delivered | All 3 U8 findings folded into one sentence, applied byte-identically across all six agent files (teco spot-checked via grep: single `grep -o` pattern matches verbatim in all six; exactly 1 diff hunk per file confirming the `CPG:`-line instruction and everything else untouched). `frontend-engineer.md` now carries "tool call/" like the other five; pronoun ambiguity resolved by explicitly naming what's non-optional and foreclosing the grep-substitute rationalization; "freshness check" → "freshness marker" in the query clause. Kaizen: same-day addenda appended inside the existing U7 entry (no new heading). Committed `59af4df`. | — |
-| U9 | `qa-engineer` | `a7f40e415ffd90496` | in-flight | Live-dispatch re-pass ("U6b") re-running D1/D2/D3-equivalent tasks against `coder`/`architect`/`tdd-engineer` post-U7/U7-fix (HEAD `59af4df`) to confirm DEF-1/DEF-2/DEF-3 are actually behaviorally closed, not just re-worded. | acceptance: — |
+| U9 | `qa-engineer` | `a7f40e415ffd90496` | accepted | `docs/test-plans/cpg-agent-adoption.md` §10 (re-pass addendum, Version 2) + `docs/test-reports/cpg-agent-adoption-report.md` Pass 2 — teco read both in full. **Verdict: PASS, with one new minor finding (DEF-4).** DEF-1 CLOSED (D1′ emits a literal, correctly-shaped `CPG:` line as its closing line). DEF-2 CLOSED (D2′ demonstrably runs the freshness query *before* deciding on cross-verification — the exact inversion of the original skip). DEF-3's silence CLOSED (a `CPG:` line is now present) but D3′ picked the wrong one of the plan's three shapes (`not applicable` instead of `considered, not relevant`) — filed as new minor DEF-4 (AC-2 shape precision, not the anti-silence guarantee). teco spot-check: grepped the exact tightened freshness sentence in `claude/{coder,architect,tdd-engineer}/*.md` at HEAD `4780a3a` — byte-identical across all three, confirming the wiring under live test was exactly what U8 diff-gated at `59af4df`, no drift. | acceptance: **PASS (verified), DEF-4 minor residual** |
 
 ## Notes
 

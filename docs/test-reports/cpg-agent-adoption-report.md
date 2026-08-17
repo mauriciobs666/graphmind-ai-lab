@@ -2,6 +2,8 @@
 
 > **Status:** active · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
 
+## Pass 1 — Acceptance pass (U6)
+
 ## Summary
 
 Acceptance pass (U6) against `docs/test-plans/cpg-agent-adoption.md`, executed 2026-08-16 against
@@ -185,3 +187,212 @@ Plan: `docs/test-plans/cpg-agent-adoption.md` (TP-001…TP-007). Requirements: `
 cpg-agent-adoption.md` (AC-1…AC-6). Prior gates: `docs/reviews/cpg-agent-adoption.md` (Pass 1 plan
 gate — approve with suggestions; Pass 2 diff gate — approve). Coordination: `docs/plans/
 cpg-agent-adoption-coordination.md` (unit U6, this report).
+
+---
+
+## Pass 2 — Live-dispatch re-pass (U9)
+
+### Summary
+
+Follow-up live-dispatch acceptance re-pass (U9 of `docs/plans/cpg-agent-adoption-coordination.md`),
+executed 2026-08-16 against HEAD `4780a3a` — one commit ahead of `59af4df` (the U7-fix commit under
+test; the extra commit only adds the U9 dispatch row to the coordination ledger). Two prompt-wording
+fix rounds landed on the wiring Pass 1 tested: U7 (`bafc3a7`) and U7-fix (`59af4df`), both
+diff-gated by `analyst` (`docs/reviews/cpg-agent-adoption.md` Pass 3, "approve with suggestions").
+Re-confirmed via direct `grep` that `claude/{coder,architect,tdd-engineer}/*.md` carry the exact
+wording Pass 3 reviewed — no drift between the diff gate and this dispatch.
+
+Re-ran the §4-equivalent live grounding before dispatching (not assumed unchanged): `GRAPH.LIST`
+still shows `cpg_salesperson` and `cpg_falkorchat` loaded; `MATCH (b:CpgBuildInfo) RETURN
+b.BUILT_AT, b.SOURCE_PATH, b.SOURCE_COMMIT, b.SOURCE_DIRTY` against both still returns **zero
+rows**. Same "no marker at all" condition as Pass 1 — this re-pass again cannot exercise AC-4's
+positive/actionable branch (a genuinely stale, populated marker), only the harder "unknown, stale
+by convention" edge, which is in fact the more demanding case for DEF-2's specific failure mode.
+
+Three re-dispatches, same shape/difficulty as the originals, different specific target
+functions/questions per the task brief (an identical replay would be weaker evidence that a
+wording fix generalizes than a same-shape-different-specifics rerun): D1′ `coder` on
+`Repository.materialize_snapshot` (`falkor-chat/server`, `cpg_falkorchat`); D2′ `architect` on
+`handle_submit` (`salesperson/chatbot.py`, `cpg_salesperson`); D3′ `tdd-engineer` on the
+match-and-launch logic in `mcp_monitor/launcher.py` (`mcp-monitor/`, no loaded CPG). All three
+dispatch prompts were investigation-only, no-CPG-mention, no-file-edit, matching Pass 1's
+discipline; all three subagents confirmed no files were edited.
+
+`CPG: not applicable — this re-pass verifies agent-prompt wiring behavior, same reasoning as
+Pass 1 (§3 of the test plan); the two live CPGs are the targets the dispatched subagents were
+tested against, not something this pass itself queried for its own authoring.`
+
+**Overall verdict: PASS, with one new minor finding (DEF-4).** DEF-1 and DEF-2 close cleanly —
+both show a clear behavioral change in the *opposite* direction from the original failure, not
+just a differently-worded restatement of the same gap. DEF-3's core failure (total silence on
+CPG in any form) also closes — a `CPG:` line is now present — but the re-pass surfaces a new,
+narrower defect: the line's shape doesn't match the plan's own worked example for this exact
+scenario. This is the honest reading of a partial result, not a summary rounded up to "clean
+pass": two of three defects are unambiguously closed, the third trades a major silent-gap defect
+for a minor wording-precision one.
+
+### Results table
+
+| ID | Defect | Dispatch | Result | Evidence |
+|---|---|---|---|---|
+| DEF-1 re-check | `coder` omits literal `CPG:` line | D1′ (`coder`, falkor-chat) | **CLOSED** | See below — literal, correctly-shaped `CPG:` line present as the deliverable's closing line. |
+| DEF-2 re-check | `architect` skips freshness check | D2′ (`architect`, salesperson) | **CLOSED** | See below — freshness check demonstrably run *before* the cross-verification decision, reversing the original failure's exact sequencing. |
+| DEF-3 re-check | `tdd-engineer` zero CPG mention | D3′ (`tdd-engineer`, mcp-monitor) | **CLOSED (silence), new minor DEF-4 (shape)** | See below — a `CPG:` line is present (silence resolved) but uses the wrong one of the three convention shapes. |
+
+### DEF-1 re-check — `coder` (D1′) — CLOSED
+
+**Dispatch:** "In `falkor-chat/server`, `Repository.materialize_snapshot`... suppose we changed
+its signature — specifically, added a new required parameter. What would break?" (no CPG mention,
+investigation-only).
+
+**Evidence — D1′'s closing line, quoted verbatim:**
+
+> `CPG: considered, not relevant — cpg_falkorchat exists but has no freshness marker (zero
+> CpgBuildInfo rows), so direct source inspection was used instead of the graph for this trace.`
+
+This is a literal, correctly-shaped `CPG:` line, present as the deliverable's last line — exactly
+what DEF-1 found missing in Pass 1 (D1 had used the CPG internally but never emitted a matching
+literal line, e.g. writing "**CPG freshness note:**" instead of "`CPG:`"). D1′ took a different,
+and arguably more disciplined, path than D1: rather than using the CPG and grep-corroborating it
+while forgetting the evidence line, D1′ ran the discovery check, found the CPG present but with no
+freshness marker, judged that "a reason for caution" (per the freshness recipe's own documented
+guidance for the zero-row case), used direct source inspection instead, and explicitly surfaced a
+refresh suggestion: *"If this component gets a CPG-driven review again, it's a candidate for a
+`graph-dba` rebuild first."* This satisfies AC-2 (line present, correctly shaped, `grep`-able),
+AC-3 (freshness signal communicated), and AC-4 (refresh suggestion surfaced, no silent trust, no
+self-triggered rebuild) in one pass. DEF-1's specific failure mode — correct internal behavior,
+missing/mismatched literal line — does not reproduce.
+
+### DEF-2 re-check — `architect` (D2′) — CLOSED
+
+**Dispatch:** "In `salesperson/chatbot.py`... suppose we changed [`handle_submit`'s] signature —
+specifically, added a new required parameter... What would need to change elsewhere?" (no CPG
+mention, investigation/plan-sketch only).
+
+**Evidence — D2′'s closing "CPG" paragraph, quoted verbatim:**
+
+> `CPG: used cpg_salesperson — confirmed handle_submit has exactly one caller (chatbot.py:<module>,
+> i.e. the top-level script body at line 95) via MATCH (m:METHOD {NAME:"handle_submit"}) and a
+> CALL edge lookup, corroborating the rg grep. Ran the freshness check (MATCH (b:CpgBuildInfo)
+> RETURN ...) as required before trusting the graph: zero rows — this CPG predates the
+> freshness-stamping feature (or its build never reached that step), so there is no
+> builtAt/sourceCommit signal at all. Given that, I cross-verified the CPG's answer against rg
+> directly rather than relying on it alone, and the two agree. For anything beyond this
+> single-symbol lookup..., I'd suggest asking graph-dba to rebuild cpg_salesperson first so future
+> queries carry a real freshness signal.`
+
+This is the exact inversion of the original DEF-2 failure. D2 (Pass 1) explicitly *skipped* the
+freshness check and used grep/CPG agreement as a post-hoc rationale for not needing it ("I did not
+run a freshness check... a staleness gap here would have shown up as a grep/CPG mismatch, and
+there was none"). D2′ ran the freshness query first, as the tightened instruction requires ("query
+the freshness marker... in that same tool call/step, before you decide whether the CPG's answer
+needs further cross-verification"), found zero rows, and *then* used the cross-verification as the
+correct response to that signal — not a substitute for running it. It also surfaces an explicit
+refresh suggestion (AC-4). AC-2/AC-3/AC-4 all hold cleanly. DEF-2's specific failure mode — the
+freshness check treated as an optional, reasoned-around step — does not reproduce; the sequencing
+the U8 diff gate's pronoun-ambiguity fix was written to force ("skipping it in favor of a
+substitute check... doesn't satisfy this") held up against a real dispatch's own judgment call.
+
+### DEF-3 re-check — `tdd-engineer` (D3′) — CLOSED (silence), new minor DEF-4 (shape)
+
+**Dispatch:** "In `mcp-monitor/`, what test coverage exists for the match-and-launch logic in
+`mcp_monitor/launcher.py`... What gaps are there?" (no CPG mention, investigation-only).
+
+**Evidence — D3′'s closing line, quoted verbatim:**
+
+> `CPG: not applicable — this task is Python test-coverage investigation in a repo with no
+> cpg_mcp-monitor graph indicated by any project doc, and the question is answerable directly from
+> source/tests without call-graph or data-flow queries.`
+
+The original failure — D3's full response containing zero occurrences of "CPG" in any form — does
+not reproduce: a stakeholder running `grep -i "^CPG:"` against this transcript now gets a match.
+That is DEF-3's core mechanism (AC-2's anti-silence guarantee) working.
+
+However, this is the wrong one of the plan's three defined shapes. Per `docs/plans/
+cpg-agent-adoption.md` §3, `CPG: not applicable` is defined for "tasks with no code-level component
+at all" — and the plan's own worked example for the *opposite* case (a component that does have
+code, but no loaded CPG) is the `considered, not relevant` shape, verbatim: *"`CPG: considered, not
+relevant — this change is in opencode/, which has no loaded CPG`"*. D3′'s task — test-gap analysis
+of real production code in `mcp_monitor/launcher.py` — is unambiguously a code-level task; per the
+plan's own definition and its own nearly-identical worked example, this should have been `CPG:
+considered, not relevant — ...`, not `CPG: not applicable — ...`. Filed as new minor defect DEF-4
+below.
+
+### DEF-4 (new) — `tdd-engineer` selects the wrong `CPG:` shape for a no-CPG-loaded-component task
+
+**Severity:** Minor (the anti-silence mechanism AC-2 exists to guarantee is intact — a broad
+`grep "^CPG:"` finds a line; only a shape-specific spot-check, e.g. `grep "considered, not
+relevant"`, would miss it).
+
+**AC affected:** AC-2 (shape precision, not the presence/silence guarantee).
+
+**Steps to reproduce:** Dispatch `tdd-engineer` on a small, unprompted, read-only-safe,
+code-level task against a component with no loaded CPG (exact prompt used: "in `mcp-monitor/`...
+what test coverage exists for the match-and-launch logic in `mcp_monitor/launcher.py`... what
+gaps?", no CPG mention). Observe the final `CPG:` line's shape.
+
+**Expected result:** Per `docs/plans/cpg-agent-adoption.md` §3's own worked example for this exact
+scenario: `CPG: considered, not relevant — <clause>` (e.g. "mcp-monitor has no loaded CPG").
+
+**Actual result:** `CPG: not applicable — this task is Python test-coverage investigation in a
+repo with no cpg_mcp-monitor graph indicated by any project doc...` — the shape defined for tasks
+with *no code-level component at all*, which does not describe this task.
+
+**Evidence:** D3′'s full closing line, quoted above.
+
+### Coverage & gaps (Pass 2)
+
+**What this re-pass covered:** the same three AC-2/AC-3/AC-4 gaps Pass 1 found, on the same three
+agents, against comparable but not identical tasks — DEF-1 and DEF-2 confirmed closed with direct
+behavioral evidence (not just re-worded prompts); DEF-3 confirmed closed on its core failure mode
+(silence) but with a new, narrower shape-selection defect (DEF-4) discovered in the process.
+
+**What this re-pass did not cover (carried forward from Pass 1, still open):**
+- No scenario with a populated `:CpgBuildInfo` marker — both live graphs still return zero rows
+  (re-confirmed live, unchanged since Pass 1). AC-4's positive/actionable branch (an agent that
+  finds a genuinely stale marker and surfaces a concrete refresh suggestion naming the graph, as
+  distinct from the "no marker at all" case both this pass and Pass 1 exercised) has still never
+  been observed in a real dispatch, on this feature or any prior gate. This is the same coverage
+  gap Pass 1 flagged (Feedback #3) and it remains open — recommend the same follow-up once either
+  live graph picks up a real rebuild.
+- `qa-engineer` (self) and `frontend-engineer` were still not separately dispatched — same sampling
+  rationale as Pass 1 (§5 of the test plan); this residual risk is unchanged by this re-pass.
+- DEF-4 itself is new evidence that a residual "the untested two could show a distinct failure
+  mode" (Pass 1's own words) risk is not hypothetical — three re-dispatches surfaced a fourth
+  distinct defect shape not predicted by Pass 1's findings.
+
+### Feedback & recommendations (Pass 2)
+
+1. **DEF-1 and DEF-2's fixes generalize, not just replay.** Both re-dispatches used different
+   target functions than the originals and produced behavior that is the clear opposite of the
+   original failure mode, not a coincidental pass. This is reasonably strong evidence the U7/U7-fix
+   wording changes are doing real work, not just happening to match one specific prompt.
+2. **DEF-4 suggests the three-shape `CPG:` convention could use one more worked example.** The
+   plan's §3 gives one example each for `used` and `considered, not relevant`, and a
+   parenthetical scope note for `not applicable` ("rare... keeps the convention total") but no
+   worked example for it. An agent choosing between "considered, not relevant" and "not
+   applicable" for a component-with-no-CPG case has exactly one relevant example to pattern-match
+   against (the `opencode/` one, which does read as "considered, not relevant") — D3′ still
+   picked the other shape, suggesting the boundary between "no code-level component" and "code
+   component, but no CPG for it" isn't as self-evident from the current wording as the single
+   example assumes. Recommend `cobb` consider either tightening the `not applicable` definition
+   with a counter-example of what it is *not* for, or accepting this as a low-severity, rare
+   edge case not worth further prompt surface.
+3. **The "no populated freshness marker has ever been observed in a live dispatch" gap is now two
+   passes old.** Recommend this graduate from a report footnote to an actual follow-up trigger —
+   e.g. a note on the next `graph-dba` rebuild of either graph to ping `qa-engineer` for a
+   targeted AC-4-positive-branch dispatch while the marker is fresh, before it goes stale again.
+4. **Not a defect, but worth recording:** this re-pass is itself a second concrete demonstration of
+   the same principle Pass 1's Feedback #4 recorded — static diff review (Pass 3's gate) correctly
+   identified the fix wording as well-targeted and traceable to the report's own recommendations,
+   but could not and did not claim the fix would survive a live agent's own judgment call. It
+   didn't, not fully (DEF-4). Two data points now support treating "diff-gated" and
+   "behaviorally-confirmed" as genuinely separate claims for this class of feature, not a formality
+   layered on top of the same information.
+
+### Traceability (Pass 2)
+
+Plan: `docs/test-plans/cpg-agent-adoption.md` §10 (re-pass addendum). Requirements: `docs/
+requirements/cpg-agent-adoption.md` (AC-1…AC-6). Prior gates: `docs/reviews/
+cpg-agent-adoption.md` Pass 3 (U7 fix-round diff gate — approve with suggestions). This pass:
+`docs/plans/cpg-agent-adoption-coordination.md` unit U9.

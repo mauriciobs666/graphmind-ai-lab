@@ -1,6 +1,7 @@
 # CPG agent adoption — Test Plan
 
 > **Status:** active · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
+> **Version:** 2
 
 ## 1. Scope & objective
 
@@ -259,3 +260,47 @@ to find.
 - MCP tool contract, `redis-cli` fallback mechanics, `pipeline.sh` stamping logic — all mechanical
   concerns already covered by U4a's own live verification and the U5 diff gate; this pass takes
   the read path and the stamping mechanism as given (FR-8, confirmed untouched).
+
+## 10. Re-pass addendum (U9, 2026-08-16)
+
+The original run (below, unchanged) reached verdict **FAIL** — DEF-1/DEF-2/DEF-3, all in the
+AC-2/AC-3/AC-4 evidence-trail/freshness territory. Two fix rounds landed on top of the tested
+wiring (`bafc3a7` U7, `59af4df` U7-fix; both diff-gated by `analyst`,
+`docs/reviews/cpg-agent-adoption.md` Pass 3), targeting exactly those three defects. Per this
+repo's document-lifecycle convention (root `AGENTS.md`), this test plan has been "executed
+against" only in the loose sense that its findings drove a fix round elsewhere — the plan itself
+was never approved/gated/locked the way a spec is, so it is revised in place (this addendum,
+`Version: 2`) rather than superseded, mirroring how `docs/reviews/cpg-agent-adoption.md` itself
+handles repeat passes over the same feature (dated `## Pass N` sections, same document).
+
+**Scope of the re-pass:** re-execute the same three dispatch/behavioral questions TP-001…TP-006
+test — same agents (`coder`, `architect`, `tdd-engineer`), same component/CPG-presence shape per
+dispatch, comparable difficulty — but with different specific target functions/questions per
+dispatch, since an identical replay is weaker evidence that a wording fix generalizes than a
+same-shape-different-specifics rerun. TP-007 (AC-6, document check) is not re-run — nothing in
+the U7/U7-fix rounds touched `cpg-agent-adoption.md` §4, confirmed by the U8 diff gate's scope
+check (`docs/reviews/cpg-agent-adoption.md` Pass 3, "Scope check": `docs/plans/
+cpg-agent-adoption.md` untouched).
+
+| Dispatch | Agent | Target (was → now) | CPG state |
+|---|---|---|---|
+| D1′ | `coder` | `Services.post_message` → `Repository.materialize_snapshot` (`falkor-chat/server`) | `cpg_falkorchat`, re-confirmed zero `CpgBuildInfo` rows |
+| D2′ | `architect` | `write_message` → `handle_submit` (`salesperson/chatbot.py`) | `cpg_salesperson`, re-confirmed zero `CpgBuildInfo` rows |
+| D3′ | `tdd-engineer` | regex-matching in `config.py` → match-and-launch logic in `launcher.py` (`mcp-monitor/`) | no `cpg_mcp-monitor` graph, re-confirmed via `GRAPH.LIST` |
+
+**Live-environment re-grounding (re-run of §4 before dispatching, not assumed unchanged):**
+`GRAPH.LIST` still returns `cpg_salesperson`, `cpg_falkorchat` (plus the same four unrelated
+workspace graphs and `reference`); `MATCH (b:CpgBuildInfo) RETURN ...` against both target graphs
+still returns **zero rows** on both. This is the same "unknown/stale-equivalent" live condition
+§4 flagged originally — the re-pass again cannot exercise AC-4's positive/actionable branch (a
+populated, genuinely-stale marker), only the "no marker at all" edge, same coverage gap as before.
+
+**Target commit:** HEAD `4780a3a` at re-pass time — one commit ahead of `59af4df` (the U7-fix
+commit under test), adding only the U9 dispatch row to `docs/plans/
+cpg-agent-adoption-coordination.md`. Re-confirmed via direct `grep` against `claude/{coder,
+architect,tdd-engineer}/*.md` that the wired sentences are byte-identical to what Pass 3's diff
+gate reviewed at `59af4df` before dispatching — the wiring under test is exactly what was
+diff-gated, not something that drifted further.
+
+Results for D1′/D2′/D3′ are recorded in `docs/test-reports/cpg-agent-adoption-report.md`'s
+`## Pass 2 — Live-dispatch re-pass (U9)` section.
