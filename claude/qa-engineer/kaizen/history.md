@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-16 — U7 fix round: freshness-check sequencing hardened, `CPG:` line anchored (DEF-1/DEF-2/DEF-3)
+- **What:** Two wording tightenings per `docs/plans/cpg-agent-adoption-coordination.md` unit U7,
+  following this agent's own U6 live-dispatch acceptance pass
+  (`docs/test-reports/cpg-agent-adoption-report.md`), applied here to `qa-engineer`'s own wiring
+  by `cobb` as U7's fix. (1) The freshness-check sentence now reads "query the freshness check …
+  in that same tool call/step, before deciding whether the result needs further
+  cross-verification — this is not a separate, optional judgment call" (previously "also run the
+  freshness check … as part of that same step") — closes DEF-2 (`architect` reasoned its way past
+  the check with a grep/CPG-agreement substitute that doesn't rule out "stale but coincidentally
+  consistent"). (2) The `CPG:` line instruction now reads "written verbatim and required in all
+  three cases including when the CPG isn't relevant — not paraphrased, not dropped" — closes
+  DEF-1 (`coder`, loose prose instead of the literal line) and DEF-3 (`tdd-engineer`, dropped
+  entirely on the not-relevant branch). `qa-engineer` itself was not one of the three live-tested
+  dispatches in U6, but carries the same near-verbatim wiring pattern, so the fix is applied
+  identically here rather than assumed unnecessary — the report explicitly flags that untested
+  agents' compliance shouldn't be assumed by extension.
+- **Why:** U6's acceptance pass found the M4 wiring (U4b/U4b-2) was correctly worded but didn't
+  survive contact with a real dispatched agent's own judgment calls — all three live-tested
+  dispatches failed a different way (format, skip, silence). Design intent
+  (`docs/plans/cpg-agent-adoption.md` §2.3, §3) unchanged: still agent judgment on staleness
+  threshold, still no self-triggered rebuild, still a suggestion not a hard rule about *when*
+  something counts as stale — only the sequencing and the anchoring got tightened.
+- **Plan items:** none new; closes U7.
+
 ## 2026-08-16 — M4 cpg-agent-adoption: discovery wording defaulted, freshness-check bundled, evidence-trail line added
 - **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§3 (U4b). (1) Frontmatter
   `description` reworded from "With a loaded Joern CPG, uses the `cpg-analysis` skill for

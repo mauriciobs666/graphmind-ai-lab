@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-16 — U7 fix round: freshness-check sequencing hardened, `CPG:` line anchored (DEF-1/DEF-2/DEF-3)
+- **What:** Two wording tightenings per `docs/plans/cpg-agent-adoption-coordination.md` unit U7,
+  following U6's `qa-engineer` live-dispatch acceptance pass
+  (`docs/test-reports/cpg-agent-adoption-report.md`). (1) The freshness-check sentence now reads
+  "query the freshness check … in that same tool call/step, before deciding whether the result
+  needs further cross-verification — this is not a separate, optional judgment call" (previously
+  "also run the freshness check … as part of that same step") — closes DEF-2 (`architect`
+  reasoned its way past the check with a grep/CPG-agreement substitute that doesn't rule out
+  "stale but coincidentally consistent"). (2) The `CPG:` line instruction now reads "written
+  verbatim and required in all three cases including when the CPG isn't relevant — not
+  paraphrased, not dropped" — closes DEF-1 (`coder`, this agent, used the CPG correctly but wrote
+  loose prose ("**CPG freshness note:**…") instead of the literal line) and DEF-3 (`tdd-engineer`
+  dropped the line entirely on the not-relevant branch). Applied identically (phrasing pattern,
+  not restructuring) across all six wired agents; only `coder`/`architect`/`tdd-engineer` were
+  live-tested, but the near-verbatim wiring pattern means the same gap plausibly existed in
+  `analyst`/`qa-engineer`/`frontend-engineer` too.
+- **Why:** U6's acceptance pass found the M4 wiring (U4b/U4b-2) was correctly worded but didn't
+  survive contact with a real dispatched agent's own judgment calls — all three live-tested
+  dispatches failed a different way (format, skip, silence). Design intent
+  (`docs/plans/cpg-agent-adoption.md` §2.3, §3) unchanged: still agent judgment on staleness
+  threshold, still no self-triggered rebuild, still a suggestion not a hard rule about *when*
+  something counts as stale — only the sequencing and the anchoring got tightened.
+- **Plan items:** none new; closes U7.
+
 ## 2026-08-16 — M4 cpg-agent-adoption: wired as a new `cpg-analysis` consumer
 
 - **What:** Three edits per `docs/plans/cpg-agent-adoption.md` §2.4/§6 step 3 (`cobb`-owned

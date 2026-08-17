@@ -2,6 +2,29 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-08-16 — U7 fix round: freshness-check sequencing hardened, `CPG:` line anchored (DEF-1/DEF-2/DEF-3)
+- **What:** Two wording tightenings per `docs/plans/cpg-agent-adoption-coordination.md` unit U7,
+  following U6's `qa-engineer` live-dispatch acceptance pass
+  (`docs/test-reports/cpg-agent-adoption-report.md`). (1) The freshness-check sentence now reads
+  "query the freshness check … in that same step, before deciding whether the result needs
+  further cross-verification — this is not a separate, optional judgment call" (previously "also
+  run the freshness check … as part of the same step") — closes DEF-2 (`architect` reasoned its
+  way past the check with a grep/CPG-agreement substitute that doesn't rule out "stale but
+  coincidentally consistent"). (2) The `CPG:` line instruction now reads "written verbatim and
+  required in all three cases including when the CPG isn't relevant — not paraphrased, not
+  dropped" — closes DEF-1 (`coder`, loose prose instead of the literal line) and DEF-3
+  (`tdd-engineer`, dropped entirely on the not-relevant branch). `frontend-engineer` itself was
+  not one of the three live-tested dispatches in U6, but carries the same near-verbatim wiring
+  pattern, so the fix is applied identically here rather than assumed unnecessary — the report
+  explicitly flags that untested agents' compliance shouldn't be assumed by extension.
+- **Why:** U6's acceptance pass found the M4 wiring (U4b/U4b-2) was correctly worded but didn't
+  survive contact with a real dispatched agent's own judgment calls — all three live-tested
+  dispatches failed a different way (format, skip, silence). Design intent
+  (`docs/plans/cpg-agent-adoption.md` §2.3, §3) unchanged: still agent judgment on staleness
+  threshold, still no self-triggered rebuild, still a suggestion not a hard rule about *when*
+  something counts as stale — only the sequencing and the anchoring got tightened.
+- **Plan items:** none new; closes U7.
+
 ## 2026-08-16 — Wired as a new `cpg-analysis` consumer (M4 cpg-agent-adoption)
 - **What:** Frontmatter `description` gained a clause naming the `cpg_salesperson` CPG check and the `cpg-analysis` skill as part of orientation before changing shared UI code. Body: "Orient first" numbered list gained item 4 — check for a relevant CPG (first-guess `cpg_<component>` naming, `skills/cpg-analysis/SKILL.md` §1; concretely `cpg_salesperson` for `salesperson/chatbot.py` today), and when found/used, run the freshness check (`skills/cpg-analysis/references/freshness.md`) as part of the same step, noting it and surfacing a refresh suggestion (never a silent rebuild) if stale. Step 4 "Verify in the running UI" gained a one-line `CPG:` evidence-trail convention (`used <graph> — <clause>` / `considered, not relevant — <clause>` / `not applicable — <clause>`) in the final report.
 - **Why:** `docs/plans/cpg-agent-adoption.md` (M4, `cobb`-owned design) widened the `cpg-analysis` roster from three consumers (`analyst`/`architect`/`qa-engineer`) to six, adding `coder`/`tdd-engineer`/`frontend-engineer`. `frontend-engineer` was named in because this lab's frontend work today *is* `salesperson/chatbot.py`, already covered by `cpg_salesperson` — the same impact-analysis question (`who else calls this`) `coder` already asks. No `tools:` frontmatter change needed; the agent already omits `tools:` and inherits `mcp__cpg__query`.
