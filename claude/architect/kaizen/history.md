@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-16 — Inbox distillation (on-demand, cobb): 2 of 3 entries promoted to `cpg-analysis` skill, 1 already fixed
+- **What:** `cobb` processed the three same-day inbox entries at the stakeholder's explicit
+  request (not a periodic sweep). **Verified each against live state first:**
+  1. `mcp__cpg__query(graph="cpg_falkorchat", "MATCH (n) RETURN count(n)")` → 166,789 nodes (graph
+     exists); `graph="cpg_falkor-chat"` → not found, confirming the entry's evidence. **But**
+     `skills/cpg-analysis/SKILL.md` §1 already reads "the component-directory name with hyphens
+     stripped (`falkor-chat` → `cpg_falkorchat`, …)" — that exact fix landed *earlier the same day*
+     in commit `50f9aaa` (U4b-1..5, a different, already-merged unit of the `cpg-agent-adoption`
+     milestone), before this distillation pass ran. **Disposition: discard, no skill edit** — the
+     architect's dispatch hit the pre-fix skill text mid-flight; the fact it flagged is now fully
+     covered by wording that shipped independently the same day, verified by re-reading the file.
+  2. Live-reran the batch-`IN` query shape (`MATCH (m:METHOD) WHERE m.NAME IN [...]`) against
+     `cpg_falkorchat` — reproduces as described. Not previously documented as a general technique
+     (`IN [...]` appeared only inside `code-review.md`'s fixed sink list, never as a stated
+     lookup-efficiency habit). **Promoted** to `skills/cpg-analysis/SKILL.md` §3, as a new idiom
+     bullet after "Anchor a target method."
+  3. Live-reran both the `FILENAME`-scoped and unscoped variants of the caller query against
+     `cpg_falkorchat` — both execute as described (shapes match; exact row counts not
+     re-verified against the moving `executor.py`/`test_executor_agent.py` source, consistent
+     with this skill's own "Verified figures are dated evidence, not targets" policy). Not
+     previously named as a technique (`impact-analysis.md` Q1 only documented filtering tests
+     *out* via `STARTS WITH 'tests/'`, not the two-pass scoped-then-unscoped pattern for telling
+     the design answer apart from the test-surface answer). **Promoted** to
+     `skills/cpg-analysis/references/impact-analysis.md`, as a new callout + verified example
+     after Q1's existing paragraph.
+- **Why:** Stakeholder-requested, scoped to exactly these three entries (not a full inbox sweep).
+  Standing distillation duty (agent-maintenance skill §5).
+- **Docs touched:** `skills/cpg-analysis/SKILL.md`, `skills/cpg-analysis/references/impact-analysis.md`,
+  `claude/architect/kaizen/inbox.md` (cleared to the standard empty placeholder — no other entries
+  were pending).
+- **Plan items:** —
+
 ## 2026-08-16 — U7 fix round: freshness-check sequencing hardened, `CPG:` line anchored (DEF-1/DEF-2/DEF-3)
 - **What:** Two wording tightenings per `docs/plans/cpg-agent-adoption-coordination.md` unit U7,
   following U6's `qa-engineer` live-dispatch acceptance pass

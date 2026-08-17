@@ -196,6 +196,17 @@ MATCH (m:METHOD) WHERE m.NAME = 'post_message' AND m.FILENAME = 'falkorchat/serv
 RETURN m.FULL_NAME, m.LINE_NUMBER, m.IS_EXTERNAL
 ```
 
+**Already have a short, finite list of candidate names? Batch it into one query.**
+When the caller already knows the small set of symbol names it needs (e.g. every
+function named in a plan's "files to read" list), check all of them in a single
+`WHERE m.NAME IN [...]` rather than issuing one query per name — one round trip
+returns every match's `FILENAME`/`LINE_NUMBER` together, letting production vs.
+test-file definitions be told apart immediately:
+```cypher
+MATCH (m:METHOD) WHERE m.NAME IN ['_run_agent_node', '_handle_tool_call', '_execute_step']
+RETURN m.NAME, m.FILENAME, m.LINE_NUMBER
+```
+
 **Callers of a method — match call sites by NAME, caller is the container**
 (the reliable direction; inbound `CALL`-edge resolution is too sparse to trust):
 ```cypher

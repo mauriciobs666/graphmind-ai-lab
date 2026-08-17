@@ -35,6 +35,32 @@ callers** — the two production callers
 plus 19 `tests/…` callers. To keep only production callers, add
 `WHERE NOT caller.FILENAME STARTS WITH 'tests/'`.
 
+**Two purpose-built passes beat one broad query, when the change is confined to
+one production file.** Rather than a single query that mixes the design answer
+with the test/migration answer (needing manual sifting afterward), run Q1
+twice with different scope: first `AND caller.FILENAME = '<the file the change
+lives in>'` to get the design-relevant blast radius with zero test noise; then
+the same query with that `FILENAME` filter dropped entirely to get the full
+test/migration surface (production callers plus every test file that reaches
+the target). Two cheap queries answer two different questions — "what does this
+design change ripple into" and "what test file does the implementation plan
+need to point at" — more clearly than one query that answers both at once.
+```cypher
+// pass 1 — design-relevant blast radius, scoped to the file being changed
+MATCH (caller:METHOD)-[:CONTAINS]->(c:CALL) WHERE c.NAME IN ['<target>']
+AND caller.FILENAME = 'falkorchat/executor.py'
+RETURN caller.NAME, c.NAME
+// pass 2 — full surface incl. tests: same query, FILENAME filter dropped
+MATCH (caller:METHOD)-[:CONTAINS]->(c:CALL) WHERE c.NAME IN ['<target>']
+RETURN caller.NAME, c.NAME
+```
+**Verified** (`cpg_falkorchat`, targets `_handle_tool_call`/`_run_agent_node`,
+scope `falkorchat/executor.py`): pass 1 returned 3 rows, all inside
+`executor.py`; pass 2 (unscoped) returned 36 rows, all in
+`test_executor_agent.py` plus the one production call site — confirming
+`executor.py` has no production callers outside its own agent-node loop and
+that `test_executor_agent.py` is the sole existing test file reaching it.
+
 ## Q2 — Direct callees (AC-2)
 
 Two flavours — pick by what you need:
