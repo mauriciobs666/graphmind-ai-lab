@@ -1,6 +1,6 @@
 # CPG agent adoption — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
 
 ## Pass 1 — Acceptance pass (U6)
 

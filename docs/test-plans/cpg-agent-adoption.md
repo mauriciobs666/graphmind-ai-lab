@@ -1,6 +1,6 @@
 # CPG agent adoption — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** cpg-agent-adoption (M4)
 > **Version:** 2
 
 ## 1. Scope & objective
