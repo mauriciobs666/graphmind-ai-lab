@@ -45,7 +45,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified | `joern` agent + `joern-cpg` skill — delivered 2026-07-17, commit `b2b9a6e` (see [`HISTORY.md`](./HISTORY.md)) |
 | **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
 | **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cpg__query(graph, cypher)` (`cpg/mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
-| **M4 — CPG agent adoption** 🟡 | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; U5 (`analyst` re-gate) and U6 (`qa-engineer` acceptance pass) still queued | **C-401 → C-407** |
+| **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -499,12 +499,42 @@ task C-407 or any other item performs. `C-407` (catalog/doc sync) is untagged fo
 each catalog-sync item was in M2/M3's own backlog sections — it is process bookkeeping, not a
 requirement-bearing deliverable.
 
-**Gate status (per the coordination ledger).** C-401…C-407 are implementation-complete. Two gates
-remain queued: **U5**, the `analyst` diff-scoped re-gate (distinct from the design-level U3
-plan-gate already passed), and **U6**, the `qa-engineer` acceptance pass against AC-1…AC-6 — see
-[`plans/cpg-agent-adoption-coordination.md`](./plans/cpg-agent-adoption-coordination.md). Per
-M2/M3's own precedent (the milestone-map row flips to ✅ only once acceptance-tested, not merely
-implemented), this milestone stays 🟡 in-progress until both close.
+**Gate status (per the coordination ledger — full unit-by-unit detail there, not restated here).**
+C-401…C-407 are implementation-complete. **U5** (`analyst` diff-scoped re-gate, distinct from the
+design-level U3 plan-gate): **approve**. **U6** (`qa-engineer` acceptance pass against AC-1…AC-6,
+three live subagent dispatches): **FAIL** — AC-1/AC-6 held, but AC-2/AC-3/AC-4 broke a different
+way across all three dispatches (DEF-1 `coder`, DEF-2 `architect`, DEF-3 `tdd-engineer`). **U7 +
+U7-fix** (`cobb`): two wording-tightening rounds on the same six agent files, closing DEF-1/DEF-2/
+DEF-3; diff-gated by `analyst` at **U8** — **approve with suggestions** (two minors + a nit,
+folded into U7-fix). **U9** (`qa-engineer` live-dispatch re-pass, different target
+functions/components than the original dispatches): **PASS** — DEF-1 and DEF-2 confirmed closed
+with directly opposite behavior, DEF-3's silence failure closed, but a new minor, **DEF-4**
+(`CPG:` shape-selection nit), surfaced and was accepted as a low-severity residual rather than
+triggering a fourth fix-and-regate round (see Follow-ups below, C-408). Milestone **closed** — see
+[`plans/cpg-agent-adoption-coordination.md`](./plans/cpg-agent-adoption-coordination.md) for the
+full U1…U9 ledger.
+
+## Follow-ups (post-M4)
+
+- **C-408 — `CPG:` shape-selection ambiguity (DEF-4).** 🔵 The three-shape `CPG:` convention
+  (`docs/plans/cpg-agent-adoption.md` §3) gives one worked example each for `used` and
+  `considered, not relevant`, but none for `not applicable` — and U9's live re-pass found a real
+  dispatch (`tdd-engineer`, D3′) pick `not applicable` for a code-level task on a component with
+  no loaded CPG, where the plan's own definition and its `considered, not relevant` worked
+  example both point the other way (`docs/test-reports/cpg-agent-adoption-report.md` Pass 2,
+  DEF-4). Severity minor — AC-2's anti-silence guarantee is intact; only a shape-specific
+  spot-check (e.g. `grep "considered, not relevant"`) would miss it. Fix direction (per the
+  report's own feedback #2): either add a worked counter-example distinguishing `not applicable`
+  from `considered, not relevant`, or explicitly accept this as a low-severity, rare edge case not
+  worth further prompt surface. Owner: `cobb` (next time this doc's wiring is touched).
+- **C-409 — No live dispatch has observed AC-4's positive/actionable branch.** 🔵 Both live CPGs
+  (`cpg_falkorchat`, `cpg_salesperson`) still return zero `:CpgBuildInfo` rows as of U9
+  (`docs/test-reports/cpg-agent-adoption-report.md` Pass 1 and Pass 2 both re-confirmed live) —
+  so no dispatch has ever observed an agent finding a genuinely stale, populated marker and
+  surfacing a concrete refresh suggestion, only the "no marker at all" edge of AC-3/AC-4.
+  Recommend: next time either graph gets rebuilt, ping `qa-engineer` for a targeted follow-up
+  dispatch while the marker is fresh, before it goes stale again. Owner: `qa-engineer` (trigger),
+  `graph-dba` (the rebuild that unblocks it).
 
 ## Follow-ups (post-M2)
 

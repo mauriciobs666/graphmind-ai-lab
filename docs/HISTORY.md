@@ -53,6 +53,55 @@ row is marked 🟡 in-progress, not ✅, until both close — matching M2/M3's o
 touched in this entry's own scope (U4b-5)** — those are the five sibling units' (U4a, U4b-1…U4b-4)
 already-delivered, already-verified work, cataloged here, not re-edited.
 
+## 2026-08-16 — M4: CPG agent adoption — gate closure (U5…U9) ✅
+
+Closes the milestone the earlier same-day entry above left open pending two review gates. Full
+unit-by-unit detail lives in `docs/plans/cpg-agent-adoption-coordination.md` (archived, U1…U9
+ledger) and `docs/test-reports/cpg-agent-adoption-report.md` (Pass 1 + Pass 2); summarized here
+for the change log.
+
+- **U5** (`analyst`, diff-scoped code gate on the C-401…C-407 implementation, distinct from the
+  design-level U3 plan-gate already passed) — **approve**.
+- **U6** (`qa-engineer`, live-dispatch acceptance pass against AC-1…AC-6, three real subagent
+  dispatches) — **FAIL**. AC-1/AC-6 held; AC-2/AC-3/AC-4 each broke a different way: **DEF-1**
+  (moderate, `coder`) genuinely used the CPG and reasoned about freshness correctly but never
+  emitted the literal `CPG:` evidence-trail line; **DEF-2** (major, `architect`) used the CPG and
+  emitted the line, but explicitly declined to run the mandated freshness check, reasoning past
+  it with a grep/CPG-agreement substitute; **DEF-3** (major, `tdd-engineer`, no-CPG-loaded
+  component) produced a thorough deliverable with zero mention of "CPG" in any form —
+  indistinguishable from the discovery step never running.
+- **U7 + U7-fix** (`cobb`) — two same-feature wording-tightening rounds across all six wired agent
+  files (`claude/{analyst,architect,qa-engineer,coder,tdd-engineer,frontend-engineer}/*.md`): the
+  freshness-check sentence hardened into a same-tool-call/step sequencing rule with an explicit
+  "skipping it in favor of a substitute check... doesn't satisfy this" clause (closes DEF-2), and
+  the `CPG:` line instruction anchored as "written verbatim and required in all three cases
+  including when the CPG isn't relevant — not paraphrased, not dropped" (closes DEF-1/DEF-3).
+  U7-fix folded in three wording-precision findings (two minors, one nit) from U8 below.
+- **U8** (`analyst`, diff gate on the U7 fix round) — **approve with suggestions**. Two minors
+  (`frontend-engineer.md` missing the "tool call/" qualifier the other five carried; a pronoun
+  ambiguity in "...this is not a separate, optional judgment call" that could misparse which
+  clause was non-optional) and one nit ("query the freshness check" vs. the cleaner "query the
+  freshness marker") — all three folded into U7-fix.
+- **U9** (`qa-engineer`, live-dispatch re-pass against different target functions/components than
+  the original U6 dispatches — stronger evidence a fix generalizes than a replay) — **PASS, with
+  one new minor finding.** DEF-1 and DEF-2 closed cleanly, both showing behavior that is the clear
+  opposite of the original failure. DEF-3's silence failure also closed (a `CPG:` line is now
+  present where before there was none) — but the re-pass surfaced **DEF-4** (new, minor):
+  `tdd-engineer` selected `CPG: not applicable` for a code-level task on a component with no
+  loaded CPG, where the plan's own worked example (`docs/plans/cpg-agent-adoption.md` §3) calls
+  for `CPG: considered, not relevant`. Severity minor — AC-2's anti-silence guarantee is intact;
+  only a shape-specific spot-check would miss it.
+
+**Disposition of DEF-4:** logged as a `docs/BACKLOG.md` follow-up (**C-408**) rather than a fourth
+fix-and-regate round, per the U9 report's own "accept as low-severity edge case" option and
+`teco`'s coordination call. A second follow-up, **C-409**, records that no live dispatch has yet
+observed AC-4's positive/actionable branch (a genuinely stale, populated `:CpgBuildInfo` marker) —
+both live CPGs still return zero rows as of U9.
+
+**Milestone closed.** `docs/BACKLOG.md`'s M4 milestone-map row flips 🟡 → ✅ in this same entry.
+Per-document `Status: archived` flips on the plan/review/requirements/test-plan/test-report files
+are separate closing units, routed to each document's own owner.
+
 ## 2026-08-09 — CPG backlog follow-ups closed (C-308, C-312, C-314, C-315, C-318, C-319, C-321)
 
 Closeout phase of a `teco`-coordinated round of follow-up backlog items from M3 and the M3
