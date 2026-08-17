@@ -1429,7 +1429,7 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Risks/RAM:** none — documentation only.
 - **Test strategy:** N/A (docs).
 
-### K-046 — Root `server/tests/conftest.py`'s `_falkordb_reachable()` has the same latent write-mode-`GRAPH.QUERY` bug already fixed in the eval subtree (🔵 proposed — filed out of K-026 close, 2026-08-16)
+### K-046 — Root `server/tests/conftest.py`'s `_falkordb_reachable()` has the same latent write-mode-`GRAPH.QUERY` bug already fixed in the eval subtree (✅ delivered 2026-08-16 → HISTORY.md)
 
 > **Why it exists.** K-026's Unit 2b `analyst` gate found a Blocker (B-1) in `server/tests/eval/conftest.py`'s
 > `_falkordb_reachable()`: it used write-mode `GRAPH.QUERY` as a reachability probe, silently
@@ -1452,7 +1452,18 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Test strategy:** mirror `test_conftest_probe.py`'s approach — a mutation-tested probe test
   confirming correct behavior against both an existing and a missing `ws:test` graph key.
 
-### K-047 — `server/tests/eval/generate_report.py` has zero automated test coverage of its own rendering/branching logic (🔵 proposed — filed out of K-026 close, 2026-08-16)
+> **Delivered ✅ 2026-08-16** (`tdd-engineer`, teco-dispatched). Fix shape applied exactly as
+> scoped: `_falkordb_reachable()` parameterized as `(ws: str = TEST_WS)`, switched to
+> `.ro_query("RETURN 1")` with the same `ResponseError`/"empty key" tolerance as the eval twin.
+> New `server/tests/test_conftest_probe.py` mirrors `tests/eval/test_conftest_probe.py`'s proof
+> (ghost workspace, asserts no side-effect materialization). Mutation-tested: hand-reverted to the
+> old write-mode shape, new test correctly failed, restored, test passed again. Suite: **1034 → 1051
+> passed / 2 deselected** (shared with K-047, delivered concurrently in the same session — see its
+> entry below). Independent gate skipped as a genuinely trivial, test-fixture-only, no-production-
+> surface unit (teco's own call, not analyst-gated); teco independently re-ran the full suite and
+> confirmed 1051/2 before commit. See HISTORY.md 2026-08-16.
+
+### K-047 — `server/tests/eval/generate_report.py` has zero automated test coverage of its own rendering/branching logic (✅ delivered 2026-08-16 → HISTORY.md)
 
 > **Why it exists.** K-026's Unit 3 `analyst` code gate flagged (Major M-1, non-blocking — rated a
 > suggestion rather than a blocker because this file is non-gating per decision D1) that
@@ -1472,6 +1483,19 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 - **Test strategy:** unit tests per branch, following the same shape as Unit 2b's `check_regression()`
   extraction-plus-tests pattern (that gate's own M-1, already closed) — this item is that same fix
   shape, applied to the still-open twin.
+
+> **Delivered ✅ 2026-08-16** (`tdd-engineer`, teco-dispatched). New `server/tests/eval/
+> test_generate_report.py` (16 tests, network/DB-free), covering all four branches: not-run marker,
+> same-model/differs caveat selection (with a positional check the caveat lands adjacent to the
+> generation numbers, never a trailing footnote), self-retrieval-guard PASS/FAIL (parametrized over
+> leak position), and the missing-baseline `ReportError`/exit-code path. `generate_report.py` itself
+> untouched. Mutation-tested branches 2 and 4 (inverted the same-model branch, made the missing-
+> baseline case silently swallow instead of raise) — both correctly caught by the new tests, both
+> reverted clean. Suite: **1034 → 1051 passed / 2 deselected** (shared with K-046, delivered
+> concurrently in the same session — see its entry above). Independent gate skipped as a genuinely
+> trivial, test-only, no-production-surface unit (teco's own call, not analyst-gated); teco
+> independently reviewed both diffs and re-ran the full suite, confirming 1051/2 before commit. See
+> HISTORY.md 2026-08-16.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,
