@@ -1,6 +1,6 @@
 # CPG agent adoption — primary design
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** cpg-agent-adoption (M4)
 
 Design for the `cobb`-owned slice of
 [`../requirements/cpg-agent-adoption.md`](../requirements/cpg-agent-adoption.md) (Status: Ready

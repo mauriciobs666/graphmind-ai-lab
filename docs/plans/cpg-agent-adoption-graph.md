@@ -1,6 +1,6 @@
 # CPG freshness marker — design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** cpg-agent-adoption (M4)
 
 Design for the FR-5/FR-6/FR-7/FR-8 slice of
 [`../requirements/cpg-agent-adoption.md`](../requirements/cpg-agent-adoption.md):

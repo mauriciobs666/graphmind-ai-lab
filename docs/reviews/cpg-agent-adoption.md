@@ -1,6 +1,6 @@
 # Review — CPG agent adoption (plan gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** cpg-agent-adoption (M4)
 
 ## Pass 1 — Plan gate
 
