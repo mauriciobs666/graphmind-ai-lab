@@ -18,6 +18,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from redis.exceptions import ResponseError
 
 from falkorchat import config, db
 from falkorchat.repository import Repository
@@ -33,11 +34,26 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BOOTSTRAP = _REPO_ROOT / "scripts" / "bootstrap_schema.sh"
 
 
-def _falkordb_reachable() -> bool:
+def _falkordb_reachable(ws: str = TEST_WS) -> bool:
+    """True iff FalkorDB responds for `ws:{ws}` — never materializes the graph
+    key as a side effect, even when it doesn't exist yet (K-046, mirroring
+    `tests/eval/conftest.py`'s own `_falkordb_reachable`, fixed for the
+    identical bug at K-026 Unit 2b, B-1).
+
+    Routed via `ro_query` (`GRAPH.RO_QUERY`), never `.query` (`GRAPH.QUERY`):
+    per `claude/graph-dba/falkordb-quirks.md`, a write-mode query against a
+    nonexistent graph key silently materializes an empty graph key, which is
+    exactly the side effect a reachability probe must never have. A
+    `ResponseError` containing "empty key" means the server responded but
+    `ws:{ws}` doesn't exist yet — that still counts as *reachable*.
+    """
     try:
-        conn = db.connect()
-        conn.select_graph("ws:test").query("RETURN 1")
+        db.connect().select_graph(f"ws:{ws}").ro_query("RETURN 1")
         return True
+    except ResponseError as exc:
+        if "empty key" in str(exc):
+            return True
+        return False
     except Exception:
         return False
 

@@ -5,6 +5,88 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-16 — K-046: root `server/tests/conftest.py`'s `_falkordb_reachable()` write-mode probe bug — fixed
+
+**What:** `server/tests/conftest.py`'s `_falkordb_reachable()` used write-mode `GRAPH.QUERY`
+(`.query("RETURN 1")`) as a mere reachability probe against `ws:test` — per
+`claude/graph-dba/falkordb-quirks.md`, a `GRAPH.QUERY` read against a nonexistent graph key
+silently materializes an empty graph key as a side effect, which a reachability probe must never
+have. Identical bug shape to the one already fixed in `server/tests/eval/conftest.py` (found as
+Blocker B-1 at the K-026 Unit 2b `analyst` code gate) — closed the same way, filed as K-046 out of
+the K-026 closeout. In practice this rarely bit here because the session-scoped `_schema` fixture
+in the same file always rebuilds `ws:test` before the probe runs, but the latent bug was real.
+
+**Fix:** Switched to `.ro_query("RETURN 1")` (`GRAPH.RO_QUERY`, never materializes) with the same
+"empty key" `ResponseError` tolerance pattern as the eval-side twin (a `ResponseError` containing
+"empty key" still counts as *reachable* — the server responded, there's just no such graph yet).
+Also parameterized the function as `_falkordb_reachable(ws: str = TEST_WS)` (mirroring the eval
+version's `ws: str = EVAL_WS`) so it's testable against a throwaway ghost workspace without ever
+touching the real `ws:test` graph key.
+
+**Test:** New `server/tests/test_conftest_probe.py`, mirroring
+`tests/eval/test_conftest_probe.py`'s proof for the eval twin: picks a ghost workspace name
+guaranteed not to already exist (asserts the precondition), calls `_falkordb_reachable(ghost_ws)`
+and asserts it returns `True` (server responded), then asserts the ghost graph key was **not**
+materialized in `conn.list_graphs()` as a side effect, with defensive `finally` cleanup in case the
+bug is back. Imported via `from conftest import _falkordb_reachable` (root `tests/` has no
+`__init__.py`, so pytest's default `--import-mode=prepend` loads `tests/conftest.py` as a
+top-level module literally named `conftest` — the same pattern `test_tools.py`/`test_graphrag.py`
+already use for `TEST_EMBEDDING_DIM`), not the eval side's `from eval.conftest import ...` package
+path (that would resolve to the wrong module here).
+
+Mutation-tested: hand-reverted `_falkordb_reachable()` to the old write-mode `.query(...)` shape —
+the new test correctly failed (`AssertionError: _falkordb_reachable() materialized
+ws:k046-reachability-probe-does-not-exist as a side effect of merely probing it`). Restored the fix
+and confirmed the test passed again.
+
+**Suite counts:** Baseline (directly observed, before any change this session): `1034 passed, 2
+deselected`. After this fix + new test (directly observed): `1051 passed, 2 deselected` — the +17
+over baseline is +1 from this item's own new test plus +16 from K-047's `test_generate_report.py`,
+which landed concurrently in this same shared working tree during this session (see the K-047 entry
+below; its own before/after counts match). Several intermediate full-suite runs during this session
+showed unrelated, non-reproducing failures scattered across `test_repository.py`,
+`test_services_live.py`, `test_process_flow.py`, `test_graphrag.py`, etc. — traced to that
+concurrent session's own `pytest` runs contending for the same live, shared FalkorDB instance
+(different files failed on each run, and the suite passed cleanly again moments later with no
+change on this item's side); not caused by or related to this change, and out of this item's scope
+to fix.
+
+**Scope:** `server/tests/conftest.py`'s `_falkordb_reachable()` and the new
+`server/tests/test_conftest_probe.py` only — test-fixture-only, no production code, no graph/DDL
+surface, per the backlog item's own risk rating.
+
+## 2026-08-16 — K-047: `generate_report.py` rendering/branching test coverage — delivered
+
+**What:** Added `server/tests/eval/test_generate_report.py` (16 tests), the first dedicated
+automated test coverage for `server/tests/eval/generate_report.py`'s rendering/branching logic —
+previously verified only by manual/static read at the K-026 Unit 3 `analyst` code gate (Major
+M-1, non-blocking) and by `qa-engineer`'s acceptance-pass exploratory execution (TP-011). Covers
+the four branches flagged there: (1) the not-run marker when `judge_calibration.json` is absent,
+never fabricating numbers; (2) same-model-vs-differs judge caveat selection — the verbatim
+`_SAME_MODEL_CAVEAT_TEMPLATE` block adjacent to the generation numbers vs. the plain "differs"
+sentence, with a positional check that it lands where the module's own "never a trailing footnote"
+docstring requires; (3) the self-retrieval-inflation guard's PASS/FAIL rendering, including a
+parametrized check that a leaking golden row is caught whether it's first, middle, or last in the
+row list; (4) the missing-`retrieval_baseline.json` `ReportError`, propagated uncaught by
+`build_report()` and caught by `main()` (stderr `error: ...`, exit code `1`, no report file
+written). Test-only change — `generate_report.py` itself is untouched (`git diff` empty).
+
+Mutation-tested branches 2 and 4 per the task brief: inverting `if same_model:` to
+`if not same_model:` correctly failed both same-model-caveat tests; making
+`_load_retrieval_baseline` swallow the missing-file case (`return {}` instead of raising) correctly
+failed all three missing-baseline tests (the unit-level `_load_retrieval_baseline` test, the
+`build_report()`-propagation test, and the `main()`-level exit-code/stderr test). Both mutations
+reverted; `git diff` on `generate_report.py` confirmed empty afterward.
+
+**Suite counts:** `pytest tests/eval/test_generate_report.py -q` → 16 passed (network/DB-free, no
+FalkorDB dependency). Full suite: `1034 passed, 2 deselected` before → `1051 passed, 2 deselected`
+after (exactly +16, confirmed via `pytest --collect-only -q` with and without the new file: 1037
+vs. 1053 total collected, 2 deselected in both). Note: intermediate full-suite runs during this
+session intermittently showed unrelated failures in `tests/test_graphrag.py` (live-FalkorDB
+vector/ANN tests) that reproduced identically with the new test file entirely removed from disk and
+passed again in isolation — pre-existing environment flakiness in the shared live FalkorDB
+instance, not caused by or related to this change, and out of this item's scope to fix.
+
 ## 2026-08-16 — K-026: GraphRAG retrieval + generation evaluation harness — QA-accepted, delivered
 
 **What:** Delivered the K-026 evaluation harness for GraphRAG (`server/tests/eval/`): a retrieval-
