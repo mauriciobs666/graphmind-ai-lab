@@ -1,5 +1,5 @@
 # Generic Cypher MCP — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-08-17
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-08-17
 
 ## Intent
 The stakeholder wants FalkorDB to become a **knowledge plane** shared across the whole Claude
@@ -252,3 +252,5 @@ permanent-record split) are also an architecture concern, not quantified by the 
   a separate toy write (an unrelated fact attributed to `cobb` itself) still needed? → **The
   curator clearing is enough** — it's real, ongoing behavior (FR-9/AC-5), not a toy, so the
   earlier standalone toy-write proof was dropped as redundant.
+- 2026-08-17 — Readback delivered and confirmed. Stakeholder: "yes please." **Status → Ready for
+  design.** No material assumption left unconfirmed; Open questions is empty.
