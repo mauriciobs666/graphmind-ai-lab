@@ -262,3 +262,181 @@ not something U4b introduced or should have caught.
 ### Open questions
 
 None. Nothing in this diff needed the caller's input to resolve.
+
+---
+
+## Pass 3 — U7 fix-round diff gate
+
+**Scope.** `cobb`'s U7 fix round: a narrow wording-only patch to the same six wired agent
+files (`claude/{analyst,architect,qa-engineer,coder,tdd-engineer,frontend-engineer}/*.md`)
+plus their `kaizen/history.md` entries, targeting the three defects U6's live-dispatch
+acceptance pass found (`docs/test-reports/cpg-agent-adoption-report.md`: DEF-1 `coder`
+moderate, format; DEF-2 `architect` major, freshness check reasoned-around; DEF-3
+`tdd-engineer` major, silent no-CPG task). Baseline: this was reviewed as the repo's
+uncommitted working-tree diff against the prior HEAD (`f7e2d8f`), per the brief. Mid-review
+the tree was committed as `bafc3a7` ("fix(cpg-agent-adoption): U7 — harden freshness-check
+sequencing and CPG: line anchoring") by another process; I re-diffed `f7e2d8f..bafc3a7` and
+confirmed it is byte-identical to the working-tree diff I had already captured (`diff -q`
+empty), so this section's findings stand against the now-committed content unchanged. Read
+the six agent files in full (not just hunks), all six `kaizen/history.md` additions, the
+`docs/plans/cpg-agent-adoption-coordination.md` U7/U8 row edits, `docs/test-reports/
+cpg-agent-adoption-report.md` in full (defect text and the "Feedback & recommendations"
+section, which is where the actual fix wording traces from), and `docs/plans/
+cpg-agent-adoption.md` §2.3/§3 (design intent this fix must not violate). No files were
+mutated; `git diff`/`git show` and read-only `python3 -c "import yaml..."` frontmatter checks
+only.
+
+**Verdict: approve with suggestions.** Zero blockers. The fix is genuinely well-targeted —
+both tightened sentences trace directly to the test report's own "Feedback & recommendations"
+§1/§2 (nearly verbatim: "query the freshness marker in the same tool call/step... before
+deciding whether the answer needs cross-verification" → the freshness sentence; "requiring it
+verbatim rather than 'include a line matching this shape'" → the `CPG:` line sentence), design
+intent (§2.3/§3: agent judgment on staleness threshold, no self-triggered rebuild) is
+unchanged, and no scope creep occurred (see Findings below). Two minors and a nit, all
+wording-precision issues, not soundness issues.
+
+`CPG: not applicable — this diff is agent-prompt Markdown and a coordination-ledger doc; no
+source tree with a loaded CPG is under review here, same reasoning Pass 2 and the U6 test
+report both used for this same feature.`
+
+### Findings
+
+**Minor — `frontend-engineer.md`'s freshness-check sentence is missing the "tool call/"
+qualifier the other five files all carry, contradicting the U7 ledger row's and `cobb`'s own
+commit message's "identically" claim.**
+
+Evidence: `claude/frontend-engineer/frontend-engineer.md:18` reads "…query the freshness check
+(`skills/cpg-analysis/references/freshness.md`) **in that same step**, before deciding…",
+while `analyst.md:45`, `architect.md:36`, `coder.md:18`, `qa-engineer.md:28`, and
+`tdd-engineer.md:35` all read "…**in that same tool call/step**, before deciding…" — confirmed
+by direct grep across all six files. `frontend-engineer`'s own new `kaizen/history.md` entry
+quotes the shorter wording verbatim, so this isn't a copy error I introduced by reading — it's
+what actually landed. `docs/plans/cpg-agent-adoption-coordination.md`'s U7 row states the fix
+was "Tightened, identically across all six wired agent files," and `bafc3a7`'s commit message
+says "Applied identically across all six wired agents" — both overclaim for this one clause.
+Substantively this is low-stakes: `frontend-engineer` wasn't one of the three defect-carrying
+dispatches (D1/D2/D3 were `coder`/`architect`/`tdd-engineer`), and the hard-stop clause ("this
+is not a separate, optional judgment call") is present verbatim in `frontend-engineer.md` too
+— but the specific "bundle into the same MCP call" framing that the test report's
+recommendation #1 called out as the fix for DEF-2's exact rationalization ("a staleness gap
+here would have shown up as a grep/CPG mismatch") is weaker here than in the other five.
+
+*Suggested improvement:* add "tool call/" to `frontend-engineer.md:18` for literal consistency
+with the other five, or — if the shorter phrasing is intentional (e.g. because `frontend-
+engineer`'s discovery step isn't framed around a single `mcp__cpg__query` call the way the
+others are) — say so explicitly in the U7 ledger row and commit message rather than claiming
+uniform, identical treatment.
+
+**Minor — the trailing "this is not a separate, optional judgment call" has an ambiguous
+pronoun referent, in the exact sentence written to close a major defect (DEF-2) that was
+itself a reasoning-around-a-soft-instruction failure.**
+
+Evidence (all six files, e.g. `claude/architect/architect.md:36`): "…query the freshness check
+… in that same tool call/step, **before deciding whether the result needs further
+cross-verification** — this is not a separate, optional judgment call." "This" most
+immediately follows "the result needs further cross-verification," so a literal-minded reading
+could parse the non-optional part as *the cross-verification decision* rather than *running
+the freshness query itself*. That inversion would leave open exactly D2's actual move: D2 (per
+`docs/test-reports/cpg-agent-adoption-report.md` DEF-2) skipped the freshness query and
+substituted grep/CPG agreement as its own judgment call about whether cross-verification was
+needed — the intended fix is that *skipping the query* is what's forbidden, not that *the
+cross-verification decision itself* is mandatory. In context (read together with "in that same
+tool call/step" immediately before it) the intended reading is recoverable, and this is a
+genuine, well-targeted tightening either way — but the antecedent is doing more grammatical
+work than the sentence structure comfortably supports, in the one clause where residual
+ambiguity has the highest cost (this is the DEF-2 fix, and DEF-2 was already a case of an
+agent finding room to reason past a softer version of this same sentence).
+
+*Suggested improvement:* tighten the antecedent, e.g. "…query the freshness check in that same
+tool call/step, before you decide whether the CPG's answer needs further cross-verification —
+running the freshness check itself is not optional, and skipping it in favor of a substitute
+check (e.g. grep agreement) doesn't satisfy this." (The parenthetical directly forecloses D2's
+specific rationalization, which the current wording only does by implication.)
+
+**Nit — "query the freshness check" is an imprecise verb/object pairing; the test report's own
+recommended phrasing ("query the freshness marker") reads more cleanly.**
+
+Evidence: `skills/cpg-analysis/references/freshness.md` documents a Cypher query against a
+`:CpgBuildInfo` **marker node** — "the check" is the reference document itself (a recipe), not
+something you "query." `docs/test-reports/cpg-agent-adoption-report.md`'s own recommendation
+#1 phrased the same fix as "query the freshness **marker** in the same tool call/step" — the
+landed wording ("query the freshness **check**") swapped the cleaner noun for a slightly
+mismatched one across all six files (the parenthetical citation `(skills/cpg-analysis/
+references/freshness.md)` immediately after "the freshness check" makes clear what's meant,
+so this doesn't create real ambiguity — it's a polish-level nit, not a comprehension problem).
+
+*Suggested improvement:* "query the freshness marker (per `skills/cpg-analysis/references/
+freshness.md`)" would match the report's own recommended language and avoid the "querying a
+reference document" mismatch, but this is optional — low priority relative to the two minors
+above.
+
+### Consistency check (six files)
+
+Confirmed by direct grep and full-file reads: five of six files (`analyst`, `architect`,
+`coder`, `qa-engineer`, `tdd-engineer`) carry the **identical** phrasing pattern for both
+edits, adapted only for each file's pre-existing sentence joints (e.g. "Note what it says in
+your findings" / "…in your Context & findings" / "…in your report" — each matches that file's
+existing terminology, not a copy-paste seam). `frontend-engineer` matches the `CPG:`-line edit
+pattern exactly but diverges on the freshness-sentence edit per the minor finding above. No
+file shows a grammatical break, an orphaned clause, or an awkward insertion point — each
+edited sentence reads as a natural continuation of its surrounding paragraph, including
+`frontend-engineer.md`'s numbered-list item 4 and `qa-engineer.md`'s semicolon-joined
+"Read the sources of truth" bullet, both of which interpose extra clauses between the anchor
+phrase and the edit.
+
+### YAML frontmatter
+
+Confirmed via `python3 -c "import yaml; yaml.safe_load(...)"` against all six files: this
+round touched **zero** frontmatter lines (every diff hunk starts well past each file's `---`
+block — earliest is `coder.md`'s hunk at line 18, frontmatter ends at line 4). The pre-existing
+strict-parse failure on `tdd-engineer.md`/`frontend-engineer.md` (an unquoted colon inside the
+`description:` plain scalar) reproduces identically pre- and post-diff, confirming Pass 2's
+n-1 finding is still accurate and still not diff-introduced — moot for this gate, as expected.
+
+### Scope check
+
+`git diff --stat` against `f7e2d8f..bafc3a7` touches exactly 13 files: the six agent `.md`
+files (4 lines changed each, `+2/-2`, matching the ledger row's "4 diff lines each" claim),
+their six `kaizen/history.md` files (append-only, one new dated section each), and
+`docs/plans/cpg-agent-adoption-coordination.md` (the U7 row updated to `delivered` + a new U8
+row). Confirmed via `git diff --stat` with the six-file-plus-coordination-doc pathspec
+excluded that nothing else in the repo changed. No frontmatter, roster, `claude/README.md`,
+`skills/README.md`, `docs/BACKLOG.md`, `docs/HISTORY.md`, or `skills/cpg-analysis/*` touch —
+matches the brief's scope claim exactly.
+
+### Behavioral-confirmation caveat
+
+This is a **static review of a wording fix for a behavioral problem** (a live agent reasoning
+past a soft instruction, three different ways, across three live dispatches). Nothing in this
+pass can prove DEF-1/DEF-2/DEF-3 are actually closed — that requires a live re-dispatch of at
+least `coder`, `architect`, and `tdd-engineer` against comparable tasks, which is a `qa-engineer`
+acceptance-pass job, not this gate's. What this pass *can* and does confirm: the new wording is
+genuine (traces to the test report's own recommendations, not invented), well-targeted (each
+clause maps to a specific defect's specific failure mode), non-broken (all six files parse,
+read grammatically, and match the pre-existing agent's voice), and free of scope creep. Same
+altitude boundary Pass 2 flagged for AC-1…AC-5 ("prompt-level commitments, not
+runtime-observable from a static diff read") and the U6 report itself flagged for its own
+result ("static prompt-wiring review and live-dispatch behavior are genuinely different failure
+surfaces for this class of feature") — this pass doesn't attempt to cross that boundary, and a
+follow-up live-dispatch acceptance pass (an "U6b" of sorts, re-running D1/D2/D3-equivalent
+tasks) is the only way to close it.
+
+### What's solid
+
+- **The fix wording is traceable, not invented.** Both tightened clauses map near-verbatim to
+  the U6 test report's own "Feedback & recommendations" §1/§2 — this is evidence-driven
+  iteration, not a guess at what might help.
+- **Design intent is untouched.** `docs/plans/cpg-agent-adoption.md` §2.3/§3 (agent judgment on
+  staleness threshold, no self-triggered rebuild, "not a new section/checklist/ceremony") is
+  unchanged; confirmed the plan document itself isn't in this diff at all.
+- **Kaizen history entries are honest and specific**, same as Pass 2 found for U4b — each of the
+  six carries the exact before/after wording and an explicit defect-to-clause mapping, which is
+  what made this gate's consistency check fast and unambiguous.
+- **No scope creep, no frontmatter touch, no restructuring** — a genuinely narrow, well-scoped
+  wording round, exactly as the U7 brief specified.
+
+### Open questions
+
+None. Nothing in this diff needed the caller's input to resolve; the frontend-engineer wording
+gap and the pronoun-ambiguity finding are both concrete enough for `cobb` to act on directly if
+it chooses to.
