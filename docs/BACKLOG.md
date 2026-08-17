@@ -527,14 +527,28 @@ full U1…U9 ledger.
   report's own feedback #2): either add a worked counter-example distinguishing `not applicable`
   from `considered, not relevant`, or explicitly accept this as a low-severity, rare edge case not
   worth further prompt surface. Owner: `cobb` (next time this doc's wiring is touched).
-- **C-409 — No live dispatch has observed AC-4's positive/actionable branch.** 🔵 Both live CPGs
-  (`cpg_falkorchat`, `cpg_salesperson`) still return zero `:CpgBuildInfo` rows as of U9
-  (`docs/test-reports/cpg-agent-adoption-report.md` Pass 1 and Pass 2 both re-confirmed live) —
-  so no dispatch has ever observed an agent finding a genuinely stale, populated marker and
-  surfacing a concrete refresh suggestion, only the "no marker at all" edge of AC-3/AC-4.
-  Recommend: next time either graph gets rebuilt, ping `qa-engineer` for a targeted follow-up
-  dispatch while the marker is fresh, before it goes stale again. Owner: `qa-engineer` (trigger),
-  `graph-dba` (the rebuild that unblocks it).
+- **C-409 — No live dispatch had observed a populated `:CpgBuildInfo` marker.** ⚪ **Narrowed,
+  not fully closed** — `graph-dba` rebuilt `cpg_falkorchat` on request; `qa-engineer`'s targeted
+  follow-up (`docs/test-plans/cpg-agent-adoption2.md`, `docs/test-reports/
+  cpg-agent-adoption2-report.md`, 2026-08-17) dispatched `coder` against it and confirmed, live:
+  the freshness marker query now returns a real populated row (not zero rows); the agent correctly
+  falls back on `SOURCE_COMMIT`/`SOURCE_DIRTY` being absent (this graph's known `.git`-less
+  scratch-copy build pattern, `docs/plans/cpg-agent-adoption-graph.md` §6) without erroring or
+  misreading the absence; and it correctly avoids a false-positive stale claim on a genuinely
+  fresh marker (the mirror of AC-4's positive branch) — PASS, 4/4, zero defects. That closes two
+  of the three edges this item named: "no marker at all" (covered since Pass 1/Pass 2) and "fresh,
+  populated marker" (covered now). **What remains open, and why it's deferred rather than
+  re-triggered:** a *genuinely stale, populated* marker actually producing a concrete refresh
+  suggestion has still never been observed live — `cpg_falkorchat`'s marker was minutes old at
+  this follow-up's dispatch time, and there's no organic source drift to observe that branch
+  against without fabricating a stale timestamp/commit, which the follow-up correctly declined to
+  do. This edge is inherently time-dependent (needs either real elapsed time + independent commits
+  on a rebuilt graph, or a future rebuild that happens to land already behind current source) —
+  not something to chase with another proactive rebuild ping. Deferred as an accepted residual
+  risk; re-open only if a future dispatch happens to hit this condition organically, or if a
+  stakeholder decides the branch is worth deliberately engineering a real (not fabricated)
+  drift scenario for. Owner: `qa-engineer` (this pass, closed); no active trigger owner while
+  deferred.
 
 ## Follow-ups (post-M2)
 
