@@ -63,3 +63,9 @@ coverage, not patching one discovered hole.
 security/perf checklist step? → **Layer on top.** `analyst` keeps its lightweight security/perf
 check on every review as the first line of defense; the security expert is a separate, deeper
 pass invoked when security is the actual concern.
+2026-08-17 — Which components does the code-security side cover? → **All of them**, whatever's
+under review at the time — no component excluded by default (not scoped down to
+untrusted-input surfaces only).
+2026-08-17 — What does the agent/prompt-safety side review? → **All three**: kaizen inbox
+entries before promotion (the 2026-07-31 scenario), agent/skill prompt definitions themselves,
+and plans/requirements docs for security implications before they're acted on.
