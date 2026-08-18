@@ -46,6 +46,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
 | **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cpg__query(graph, cypher)` (`cpg/mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
 | **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
+| **M5 — Generic Cypher MCP** 🟡 | `mcp__cpg__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; step 5 (`qa-engineer` acceptance pass against AC-1…AC-8) still queued | **C-501 → C-506** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -549,6 +550,41 @@ full U1…U9 ledger.
   stakeholder decides the branch is worth deliberately engineering a real (not fabricated)
   drift scenario for. Owner: `qa-engineer` (this pass, closed); no active trigger owner while
   deferred.
+
+## M5 — Generic Cypher MCP
+
+`mcp__cpg__query` gains write capability — an optional `agent` parameter and two enforced write
+shapes (author-write, curator-clear) — and is piloted end to end on `graph-dba`'s kaizen working
+memory: the graph (`kaizen_graph_dba`) replaces `inbox.md` as the raw-capture layer, `history.md`
+stays unchanged, and `cobb`'s distillation workflow runs against the graph. Requirements:
+[`requirements/generic-cypher-mcp.md`](./requirements/generic-cypher-mcp.md) (FR-1…FR-11 /
+AC-1…AC-8) · plans: [`plans/generic-cypher-mcp-graph.md`](./plans/generic-cypher-mcp-graph.md)
+(data model, `graph-dba`) + [`plans/generic-cypher-mcp.md`](./plans/generic-cypher-mcp.md) (tool
+mechanism, `architect`) · coordination:
+[`plans/generic-cypher-mcp-coordination.md`](./plans/generic-cypher-mcp-coordination.md).
+
+### Items
+
+- **C-501 — MCP server write path.** ✅ `cpg/mcp/server.py` gains the optional `agent` parameter
+  and the write-detection/authorization branch (author-write vs. curator-clear);
+  `cpg/mcp/README.md` updated. Step 1. Owner: `coder`.
+- **C-502 — Requirements pointer.** ✅ `docs/requirements/cpg-query-access.md`'s header gains a
+  `**Note:**` pointing at this feature's AC-8 supersession of its "Non-CPG graphs / general agent
+  access to FalkorDB" out-of-scope line. Step 2. Owner: `coder`.
+- **C-503 — Migration + inbox freeze.** ✅ One-time import of `claude/graph-dba/kaizen/inbox.md`'s
+  six entries into `kaizen_graph_dba`, `entryId` index + uniqueness constraint, frozen-inbox note
+  prepended to `inbox.md`. Step 3. Owner: `graph-dba`.
+- **C-504 — Repo-wide catalog/backlog docs.** ✅ `claude/AGENTS.md`, `claude/README.md`, and this
+  backlog's M5 section describe `graph-dba`'s actual post-migration behavior — no remaining
+  unconditional claim that every agent appends to `inbox.md`. Step 4a. Owner: `cobb`.
+- **C-505 — Agents' operative-prompt + distillation-workflow docs.** ✅
+  `claude/graph-dba/graph-dba.md`'s Learning capture section and `claude/cobb/cobb.md`'s
+  distillation-duties bullet updated to match; `skills/agent-maintenance/SKILL.md` §5 gains the
+  graph-read-then-distill sequence for `graph-dba`, including the append-before-delete ordering
+  constraint (documented there only). Step 4b. Owner: `cobb`.
+- **C-506 — Acceptance pass.** 🔵 AC-1…AC-8 each exercised live; delivers
+  `docs/test-plans/generic-cypher-mcp.md` + `docs/test-reports/generic-cypher-mcp-report.md`.
+  Step 5. Owner: `qa-engineer`.
 
 ## Follow-ups (post-M2)
 

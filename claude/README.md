@@ -21,15 +21,22 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 
 Each agent carries a living improvement plan, a change log, **and an append-only
 learnings inbox** (`<name>/kaizen/inbox.md`) — the capture half of the team's
-self-improvement loop. During runs, each agent appends dated, evidence-backed
-observations of durable, non-obvious environment facts in its discipline (a
-"Learning capture" closing protocol in every prompt; the five doc-scoped write
-guards allowlist exactly that path). `cobb` periodically **distills** the inboxes
-(on request, and with every certification pass) per the
+self-improvement loop — **except `graph-dba`**, whose raw capture writes
+directly into the `kaizen_graph_dba` FalkorDB graph instead (`:KaizenEntry`
+nodes, attributed to itself via `mcp__cpg__query`); its own `kaizen/inbox.md`
+is a frozen historical snapshot, no longer written to
+(`docs/plans/generic-cypher-mcp.md`). During runs, every other agent appends
+dated, evidence-backed observations of durable, non-obvious environment facts
+in its discipline (a "Learning capture" closing protocol in every prompt; the
+five doc-scoped write guards allowlist exactly that path). `cobb` periodically
+**distills** the inboxes — and, for `graph-dba`, its graph entries — on
+request, and with every certification pass, per the
 [`agent-maintenance`](../skills/agent-maintenance/SKILL.md) skill §5: verify each
 entry → route it (agent prompt / on-demand knowledge base à la
 `graph-dba/falkordb-quirks.md` / project docs / discard) → log the promotion in
-`history.md` → clear the inbox. Agents never promote their own entries.
+`history.md` → clear (an inbox edit for a file-based agent, a curator-scoped
+graph delete — `agent='cobb'` — for `graph-dba`). Agents never promote their
+own entries.
 
 Plans and histories:
 

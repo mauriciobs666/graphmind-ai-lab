@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-inbox distillation procedure (verify → route → log → clear each agent's kaizen/inbox.md), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings inboxes.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-inbox distillation procedure (verify → route → log → clear each agent's raw capture — kaizen/inbox.md, or graph-dba's working-memory graph), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings inboxes.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -319,15 +319,30 @@ answerable from the log.
 The self-improvement loop for a stateless agent team: **capture is cheap and
 unreviewed; promotion is curated.** Each agent carries an append-only
 **learnings inbox** at `<agent>/kaizen/inbox.md` (sibling of plan/history — in
-graphmind-ai-lab, enforced by `audit-team.sh` check 1). During runs the agent
-appends dated, evidence-backed observations of **durable, non-obvious
-environment facts in its discipline** — tool quirks, undocumented behaviors,
-conventions that live only in the code. Agents never promote their own
-entries; the inbox is the only kaizen file an agent writes itself (the
-doc-scoped write guards allowlist exactly that path). The maintainer (cobb)
+graphmind-ai-lab, enforced by `audit-team.sh` check 1) — **except `graph-dba`**
+(graphmind-ai-lab, since `docs/plans/generic-cypher-mcp.md`): its raw capture
+writes directly into a working-memory FalkorDB graph, `kaizen_graph_dba`, as
+`:KaizenEntry` nodes (`entryId`, `date`, `fact`, `evidence`, `context`,
+`suggestedHome`, `author`, `createdAt`), each attributed to itself via
+`mcp__cpg__query(graph='kaizen_graph_dba', cypher=<CREATE ...>,
+agent='graph-dba')`. Its `kaizen/inbox.md` is a **frozen historical
+snapshot** — the pre-migration content, kept for reference, no longer written
+to. During runs, every other agent appends dated, evidence-backed observations
+of **durable, non-obvious environment facts in its discipline** — tool
+quirks, undocumented behaviors, conventions that live only in the code.
+Agents never promote their own entries. For a file-based agent, the inbox is
+the only kaizen file it writes itself (the doc-scoped write guards allowlist
+exactly that path); `graph-dba`'s equivalent capture-only privilege is
+enforced by the MCP tool itself — its author-write authorization only lets
+`graph-dba` create `:KaizenEntry` nodes attributed to itself, never edit or
+delete one, which requires the curator role below. The maintainer (cobb)
 distills — on request, and folded into every certification pass (§4):
 
-1. **Read every inbox** (`claude/*/kaizen/inbox.md`).
+1. **Read every inbox** (`claude/*/kaizen/inbox.md`), plus, for `graph-dba`,
+   a live read of its graph: `mcp__cpg__query(graph='kaizen_graph_dba',
+   cypher="MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.fact, e.evidence,
+   e.context, e.suggestedHome, e.author ORDER BY e.date")` — a plain read, no
+   `agent` needed (reads are unrestricted).
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
    system or docs; environment facts rot on upgrades. Unverifiable ≠ discard —
    date-stamp the doubt and keep or drop by value.
@@ -343,11 +358,33 @@ distills — on request, and folded into every certification pass (§4):
      private files where they drift out of sync.
    - **Discard** — stale, task-specific, or already documented.
 4. **Log & clear.** Every promotion gets a dated entry in the agent's
-   `history.md` (what, why, where it went); processed entries are then removed
-   from the inbox — the history entry is the durable record. Promotion into a
-   prompt or catalog is a normal agent edit: full §1/§2 bookkeeping applies.
+   `history.md` (what, why, where it went) — the history entry is the durable
+   record either way. For a **file-based** agent, the processed entry is then
+   removed directly from `inbox.md`. For **`graph-dba`**, the ordering is
+   **non-negotiable**: the `history.md` append must be confirmed durable
+   *before* the graph node is cleared — the two writes are independent tool
+   calls, not one transaction, so append-then-delete is the only sequence that
+   fails safe (a crash between the two leaves the entry harmlessly duplicated
+   in both places; delete-first risks losing it from both if the append never
+   lands). Concretely, for each `graph-dba` entry being promoted:
+   1. Read the raw entry (already done in step 1, or re-read by id):
+      `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
+      {entryId: '<id>'}) RETURN e.date, e.fact, e.evidence, e.context,
+      e.suggestedHome, e.author")` — a plain read, `agent` omitted.
+   2. Verify it (step 2, above).
+   3. `Edit` `claude/graph-dba/kaizen/history.md`, appending the promotion in
+      the existing format. **Confirm the edit succeeded** before the next
+      step — do not proceed on an error.
+   4. Only then: `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH
+      (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')` —
+      the one recognized curator-clear shape; `cobb` is a recognized curator
+      agent (`CPG_MCP_CURATOR_AGENTS`), so this is authorized.
+   Promotion into a prompt or catalog is a normal agent edit: full §1/§2
+   bookkeeping applies.
 
-**Inbox template** (seed on creation; keep the header, entries append below):
+**Inbox template** (seed on creation for a file-based agent; keep the header,
+entries append below — `graph-dba`'s entry schema instead lives in
+`docs/plans/generic-cypher-mcp-graph.md` §1):
 
 ```markdown
 # Kaizen — Learnings Inbox: {name}

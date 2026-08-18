@@ -2,6 +2,116 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-18 — generic-cypher-mcp U6 (steps 4a+4b): repo-wide catalog + both agents' operative prompts + `agent-maintenance` §5 retargeted from `inbox.md` to `graph-dba`'s working-memory graph
+
+- **What:** `teco`-coordinated delivery of `docs/plans/generic-cypher-mcp.md` §7 steps 4a+4b (unit
+  U6), following U5's real migration (`graph-dba/kaizen/inbox.md` frozen 2026-08-18, `kaizen_graph_dba`
+  live with 6 `:KaizenEntry` nodes, `entryId` index + uniqueness constraint both `OPERATIONAL`).
+  Seven files updated to describe `graph-dba`'s actual post-migration behavior — raw kaizen
+  capture now targets the graph, not `inbox.md` — while leaving the convention correct and
+  unchanged for every other agent, which still append to their own file-based `kaizen/inbox.md`:
+  1. **`claude/AGENTS.md`** (line 3) — the directory-level convention sentence gained the
+     `graph-dba` carve-out (writes `:KaizenEntry` nodes into `kaizen_graph_dba` via
+     `mcp__cpg__query`, `inbox.md` now frozen) alongside the unchanged generic statement for
+     everyone else.
+  2. **`claude/README.md`** (Kaizen section) — same carve-out, phrased for the human catalog;
+     distillation clause now states clear-by-inbox-edit vs. clear-by-curator-`DETACH DELETE`
+     (`agent='cobb'`) as the two dispositions.
+  3. **`docs/BACKLOG.md`** — added the `## M5 — Generic Cypher MCP` milestone-map row and section
+     (items `C-501`…`C-506`, one per §7 step 1/2/3/4a/4b/5), per plan §6 verbatim, inserted after
+     M4's own Follow-ups block and before the legacy `## Follow-ups (post-M2)` tail section.
+     **Corrected same day, post code re-gate:** `analyst`'s diff-scoped review (`docs/reviews/
+     generic-cypher-mcp.md`, "Code re-gate (U6, diff-scoped)") caught that the first draft marked
+     all six items 🔵 proposed, contradicting the M4 precedent (commit `50f9aaa`) where individual
+     items flip to ✅ as their steps land and the milestone-map row itself carries 🟡 with prose
+     naming what's still queued. Fixed to match: `C-501`…`C-505` (steps 1/2/3/4a/4b — U4/U4-fix,
+     U5, and this U6 are all delivered and gated) → ✅; `C-506` (step 5, `qa-engineer`'s acceptance
+     pass) stays 🔵 proposed, genuinely still queued; the milestone-map row → 🟡 with "Implementation
+     (C-501…C-505) complete; step 5 (`qa-engineer` acceptance pass against AC-1…AC-8) still queued",
+     mirroring M4's exact phrasing shape.
+  4. **`claude/graph-dba/graph-dba.md`** — "Learning capture" section's inbox-append instruction
+     replaced with the graph-write instruction (concrete `CREATE (...:KaizenEntry {...})` Cypher +
+     `mcp__cpg__query(..., agent='graph-dba')` call, matching the live-verified schema/pattern from
+     `docs/plans/generic-cypher-mcp-graph.md` §1 and U5's actual migration call). The
+     `falkordb-quirks.md` direct-home carve-out is untouched. Own `kaizen/history.md` entry added
+     (2026-08-18, this date).
+  5. **`claude/cobb/cobb.md`** — the "Learnings distillation" bullet's blanket "every agent (you
+     included) appends... to its `kaizen/inbox.md`" claim corrected: `graph-dba`'s raw capture is
+     now graph-based (cited: `:KaizenEntry` via `mcp__cpg__query`, attributed to itself), every
+     other agent's is still file-based, exactly as before. The clear-step clause now names both
+     dispositions (curator `DETACH DELETE` with `agent='cobb'` for `graph-dba`, an inbox edit for
+     everyone else) instead of only "clear the inbox."
+  6. **`skills/agent-maintenance/SKILL.md` §5** — the largest edit. The section intro now states
+     the `graph-dba` exception and its schema/attribution shape; step 1 ("Read every inbox") gained
+     the live graph-read query; step 4 ("Log & clear") now branches — a file-based agent's entry is
+     removed from `inbox.md` directly, while `graph-dba`'s entries follow a **non-negotiable**
+     four-step sequence (read the raw entry → verify → `Edit history.md` and confirm the write
+     succeeded → **only then** curator-clear via `mcp__cpg__query(..., cypher="MATCH (e:KaizenEntry
+     {entryId:'<id>'}) DETACH DELETE e", agent='cobb')`) — this is the **one and only place** the
+     append-before-delete ordering constraint is documented, per `docs/plans/generic-cypher-mcp.md`
+     §3.5's explicit resolution of the plan-gate's open question (deliberately **not** duplicated
+     into `graph-dba.md`, since `graph-dba` never runs the delete half). Also widened the inbox
+     template's lead-in to flag it as the file-based schema (`graph-dba`'s schema instead lives in
+     `docs/plans/generic-cypher-mcp-graph.md` §1), and lightly reworded the frontmatter
+     `description`'s "verify → route → log → clear each agent's kaizen/inbox.md" clause to "…each
+     agent's raw capture — kaizen/inbox.md, or graph-dba's working-memory graph" (889 → 940 chars,
+     still under the 1024-char cap) so the skill's own routing description doesn't itself overclaim.
+  7. **Root `AGENTS.md`** (line 34, the `claude/` component bullet) — added, per `teco`'s follow-up
+     direction after the initial six-file pass: this bullet's own "each with a `kaizen/` plan +
+     history + learnings inbox the agent appends to during runs" claim was the same stale-universal
+     shape FR-11/AC-7 targets, just one file the plan's step table hadn't named. Carved out
+     `graph-dba` with the same "except `graph-dba`, whose raw capture writes directly into the
+     `kaizen_graph_dba` FalkorDB graph instead" phrasing already used in `claude/AGENTS.md` and
+     `claude/README.md`, so all three carve-outs read consistently — a minimal, one-clause fix, not
+     a rewrite of the bullet.
+- **Close-out grep sweep (the plan's actual acceptance test, not a fixed file list):**
+  `grep -rln 'kaizen/inbox\.md\|append.*inbox' claude/ skills/agent-maintenance/SKILL.md` — **36
+  files, both before and after** (identical file list; no file gained or lost a hit). Triaged all
+  36: the six files above got the intended edit (confirmed by re-grepping each for its own
+  `graph-dba`-carve-out sentence, present in every case); the remaining 30 are legitimately
+  non-`graph-dba`-specific and correctly left untouched — every other agent's own
+  `Learning capture` closing-protocol sentence and its `kaizen/history.md`'s dated "Added
+  `kaizen/inbox.md`..." creation entries (11 agents × 1–3 hits each), the five doc-scoped write
+  guards' `.sh` scripts (their allowlisted-path comments, unrelated to *which* agent),
+  `audit-team.sh`'s kaizen-triple existence check (still correct — every agent, `graph-dba`
+  included, still carries an `inbox.md` file on disk, just a frozen one), `claude/docs/requirements/
+  security-expert.md` (a hypothetical future agent's requirements doc, out of scope), and
+  `claude/graph-dba/kaizen/history.md`'s own dated entries narrating *past* inbox-based work
+  (correctly left as an unedited historical record, not a live claim). Zero new false claims found,
+  zero files touched outside the intended six (plus each edited agent's own `kaizen/history.md`).
+  Root `AGENTS.md` was outside this sweep's path scope by design (the plan's grep command covers
+  `claude/` + `skills/agent-maintenance/SKILL.md` only) — its own stale claim (item 7 above) was
+  caught separately, by `teco`'s direct read, not by the sweep; re-running the sweep after fixing it
+  confirmed the file count was unaffected (still 36), as expected.
+- **Why:** `docs/requirements/generic-cypher-mcp.md` FR-11/AC-7 (every doc describing the standing
+  kaizen-inbox convention updated to describe `graph-dba`'s actual behavior, starting with
+  `claude/AGENTS.md`); `docs/plans/generic-cypher-mcp.md` §7's step table (4a/4b, split from a
+  single step 4 at the plan-gate's B1 finding specifically because the two agents' own *operative*
+  prompts were originally omitted) and its "Close-out done-condition for 4a+4b jointly" paragraph
+  (a grep sweep, not a fixed list, is the real acceptance test).
+- **Scope discipline:** the six files named in the original brief were edited, plus root
+  `AGENTS.md` (item 7 above — `teco`-approved same-day expansion, not a unilateral scope
+  widening: it named the plan's own author as not having foreseen that file, same spirit as the
+  plan-gate's B1 finding, and asked for the fix folded into this unit), plus the two edited agents'
+  own `kaizen/history.md` (this repo's standing "prompt edit → dated history entry" rule, confirmed
+  by precedent in both agents' existing history files before writing these entries). `inbox.md`/
+  `history.md` content from U5 (already done), `cpg/mcp/` (U4), and the requirements/plan/review/
+  coordination docs for this feature were not touched.
+- **Independent review:** `analyst`'s diff-scoped code re-gate (`docs/reviews/
+  generic-cypher-mcp.md`, "Code re-gate (U6, diff-scoped) — 2026-08-18") — **approve with
+  suggestions**, no blocker. One Major (M-B, the `docs/BACKLOG.md` status-marker convention gap,
+  fixed above) and one minor (m-B, this entry's missing mention of the root `AGENTS.md` edit —
+  fixed by this same update) closed same day, in place, no new review cycle.
+- **Verified:** re-read each of the seven edited files after the edit; `docs/BACKLOG.md`'s M5
+  table row and item list checked against the plan's §6 verbatim text and item mapping, then
+  against the M4 precedent's (`50f9aaa`) status-marker convention for the M-B fix;
+  `claude/scripts/audit-team.sh` clean before and after (96 PASS, same 2 pre-existing FAILs in an
+  unrelated `falkor-chat` file, no new failures).
+- **Docs touched:** `claude/AGENTS.md` · root `AGENTS.md` · `claude/README.md` · `docs/BACKLOG.md` ·
+  `claude/graph-dba/graph-dba.md` (+ its own `kaizen/history.md`) · `claude/cobb/cobb.md` ·
+  `skills/agent-maintenance/SKILL.md`.
+- **Plan items:** none opened or closed — not on the active K-list.
+
 ## 2026-08-16 — Cross-session peer-addressing near-miss: same-run promotion into `agent-standards/claude-code.md` + `teco.md`
 
 - **What:** in this session, resuming a paused K-026 GraphRAG-eval coordination, I called
