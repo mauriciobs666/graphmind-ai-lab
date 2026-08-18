@@ -1,5 +1,5 @@
 # Generic Cypher MCP — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-08-17
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-08-17
 
 ## Intent
 The stakeholder wants FalkorDB to become a **knowledge plane** shared across the whole Claude
