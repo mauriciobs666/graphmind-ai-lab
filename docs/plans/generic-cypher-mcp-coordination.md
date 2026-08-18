@@ -63,3 +63,20 @@ must describe graph-dba's actual, now-migrated behavior); U7 depends on all four
   **C-5xx** under a new `## M5 — …` section, per M4 precedent — folded into U2's step table as a
   proposal, actually added to BACKLOG.md by whichever implementation unit closes out docs (mirrors
   M4's U4b-5).
+
+## Milestone close (post-U7)
+
+U7 (`qa-engineer`) passed all 8 ACs with no defects — delivery is complete. Closing units mirror
+the M4 precedent exactly (`1101d07`, `4cd45ae`, `8517197`, `a1ebd9f`): per-document `Status:
+archived` flips routed to each doc's owner per root `AGENTS.md`'s by-kind table, then a
+`docs/BACKLOG.md`/`docs/HISTORY.md` close-summary commit.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict |
+|---|---|---|---|---|---|
+| C1 | `tico` | `a324675f67bf66538` | delivered | `docs/requirements/generic-cypher-mcp.md` — teco-verified via `git diff`: single-token `Status:` flip (`Ready for design`→`archived`), nothing else touched. | — (mechanical, no gate) |
+| C2 | `architect` | `a4df08b378d413d75` | delivered | `docs/plans/generic-cypher-mcp.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`), nothing else touched. | — (mechanical, no gate) |
+| C3 | `graph-dba` | `acec67709b24433b5` | delivered | `docs/plans/generic-cypher-mcp-graph.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`), nothing else touched. | — (mechanical, no gate) |
+| C4 | `analyst` | `a7345d743610a128c` | delivered | `docs/reviews/generic-cypher-mcp.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`), nothing else touched. | — (mechanical, no gate) |
+| C5 | `qa-engineer` | `a25a00ee86d9239fa` | delivered | `docs/test-plans/generic-cypher-mcp.md` + `docs/test-reports/generic-cypher-mcp-report.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`) on both, nothing else touched. | — (mechanical, no gate) |
+| C6 | `cobb` | `ad237c56b9bd79517` | in-flight | `docs/BACKLOG.md` (C-506 `🔵`→`✅`, M5 milestone-map row `🟡`→`✅`, gate-status prose updated to record the full U1…U7 sequence, mirroring `a1ebd9f`'s pattern) + `docs/HISTORY.md` (dated M5 close entry). | — |
+| C7 | `teco` | (self) | queued | `docs/plans/generic-cypher-mcp-coordination.md` — this file, flip `Status:` to `archived` once C1…C6 land. | — |
