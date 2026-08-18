@@ -28,6 +28,15 @@ or the whole thing (`cpg` = the modern full graph, `cpg14` = the legacy schema,
 `CONTROL_STRUCTURE`, `RETURN`, `TYPE`, `TYPE_DECL`, `NAMESPACE`,
 `NAMESPACE_BLOCK`, `FILE`, `META_DATA`, `METHOD_REF`, `TYPE_REF`, `MODIFIER`.
 
+> **Caveat (confirmed absent on `pysrc2cpg`-built graphs, re-verified 2026-08-18):**
+> `META_DATA`, `FILE`, `TYPE`, `NAMESPACE`, and `NAMESPACE_BLOCK` are listed above
+> as commonly-seen labels but are **not present at all** on either live
+> `pysrc2cpg`-built graph in this repo (`cpg_falkorchat`, `cpg_salesperson`) —
+> `CALL db.labels()` on both returns none of the five. This list is apparently
+> frontend/export-configuration-dependent, not a universal guarantee; treat it
+> as illustrative for `pysrc2cpg` + default `--repr cpg`, not as a checklist to
+> assert against on a freshly-loaded graph.
+
 Common properties: `CODE` (source text; `<empty>` is Joern's placeholder for an
 empty string, kept verbatim), `NAME`, `FULL_NAME`, `LINE_NUMBER`,
 `COLUMN_NUMBER`, `ORDER`, `ARGUMENT_INDEX`, `TYPE_FULL_NAME`,

@@ -2,6 +2,69 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-18 — Graph distillation: 1 entry promoted to `skills/joern-cpg/references/cpg-model.md` (`agent-maintenance` §5, cobb, U7 acceptance pass)
+
+- **What:** `cobb` read all 6 raw `:KaizenEntry` nodes in `kaizen_graph_dba` and promoted entry
+  `46825361-ff7a-4892-a7fc-71f04b407c5e` (2026-08-16, `graph-dba`): `META_DATA` (and
+  `FILE`/`TYPE`/`NAMESPACE`) are absent from both live `pysrc2cpg`-built graphs
+  (`cpg_falkorchat`, `cpg_salesperson`) despite being listed in `cpg-model.md`'s "Node labels
+  you'll see most" as commonly-seen. Routed to the on-demand knowledge base per the entry's own
+  `suggestedHome` — added a caveat block to `skills/joern-cpg/references/cpg-model.md` right
+  after that list, naming the confirmed-absent labels and the re-verification date.
+- **Why:** genuinely durable, non-obvious documentation gap — the reference doc's label list
+  reads as "always present" but is apparently frontend/export-configuration-dependent; a future
+  agent designing around `META_DATA` (as the original discovery run was doing) would otherwise
+  hit the same empirical surprise.
+- **Verified:** re-ran the check live before promoting, 2026-08-18 — `MATCH (n:META_DATA)
+  RETURN count(n)` → 0 on both `cpg_falkorchat` and `cpg_salesperson`; `CALL db.labels()` on
+  both graphs confirmed **none** of `META_DATA`/`FILE`/`TYPE`/`NAMESPACE`/`NAMESPACE_BLOCK`
+  appear (`cpg_falkorchat`: 21 labels including the new `CpgBuildInfo`/`CpgNode`/`IMPORT`/
+  `UNKNOWN`; `cpg_salesperson`: 20, same set minus `CpgBuildInfo`) — the original finding still
+  holds and is in fact broader than the entry stated (all five labels absent, not just
+  `META_DATA`).
+- **Not promoted (5 remaining entries), reasons noted for a future pass:** `58ad5ace…`
+  (`GRAPH.EXPLAIN` on a nonexistent graph key) and `7f0e3cf1…` (`pipeline.sh` | `tee` exit-code
+  trap) are both solid `falkordb-quirks.md`/`SKILL.md` candidates but weren't re-verified this
+  pass; `f8c28d75…` (falkor-chat `StepRun` decoupling) routes to `falkor-chat/docs/DESIGN.md`
+  and needs a source re-read to verify; `80ef4889…` (stale scaling worked-example) is a
+  low-value doc-refresh, not a quirk; `6e5d6451…` is explicitly self-flagged `unsure` (an
+  unreconciled relationship count) and is not yet promotable as stated.
+- **Docs touched:** `skills/joern-cpg/references/cpg-model.md` (knowledge base edit, above),
+  this `history.md` entry.
+- **Plan items:** none — not on this agent's active K-list; this is a `cobb`-run distillation
+  pass (`agent-maintenance` skill §5), not a `graph-dba` self-edit.
+
+## 2026-08-18 — Learning capture retargeted from `kaizen/inbox.md` to the `kaizen_graph_dba` graph (generic-cypher-mcp, U6 steps 4a+4b)
+- **What:** The "Learning capture" section (`graph-dba.md`) no longer instructs appending to
+  `kaizen/inbox.md` for non-FalkorDB-quirk learnings. It now instructs writing a new `:KaizenEntry`
+  node directly into the `kaizen_graph_dba` working-memory graph, attributed to `graph-dba`, via
+  `mcp__cpg__query(graph='kaizen_graph_dba', cypher=<CREATE ...>, agent='graph-dba')` — the same
+  `CREATE (...:KaizenEntry {..., author: 'graph-dba', ...})` shape `graph-dba` itself already used
+  live in U5 to run the one-time inbox migration (`write ok (labels_added=6, nodes_created=6,
+  properties_set=48)`). The `falkordb-quirks.md` direct-home carve-out (live-verified engine
+  quirks bypass both the inbox and the graph) is unchanged. No frontmatter, hook, or `description`
+  change. The append-before-delete ordering constraint that governs `cobb`'s later curator-clear of
+  a promoted entry is **not** documented here — per `docs/plans/generic-cypher-mcp.md` §3.5's
+  explicit resolution, it lives solely in `skills/agent-maintenance/SKILL.md` §5, because
+  `graph-dba` never runs the delete half of that sequence.
+- **Why:** `docs/requirements/generic-cypher-mcp.md` FR-2/FR-11, `docs/plans/generic-cypher-mcp.md`
+  §3.1–3.2/§7 step 4b, `docs/plans/generic-cypher-mcp-graph.md` §1–§2 (the `:KaizenEntry` schema
+  and `author` attribution this instruction now points at). `claude/graph-dba/kaizen/inbox.md` was
+  frozen in U5 (2026-08-18) after the real migration ran and was independently verified
+  (`kaizen_graph_dba`: 6 nodes, `entryId` index + uniqueness constraint both `OPERATIONAL`) — this
+  edit is the prompt-level follow-through so a fresh `graph-dba` run doesn't keep appending to a
+  now-frozen file.
+- **Verified:** re-read the edited "Learning capture" section after the change — no dangling
+  reference to appending `kaizen/inbox.md` remains; the `falkordb-quirks.md` carve-out sentence is
+  untouched. Cross-checked the Cypher example's field names (`entryId`, `date`, `fact`, `evidence`,
+  `context`, `suggestedHome`, `author`, `createdAt`) against `docs/plans/generic-cypher-mcp-graph.md`
+  §1's schema table — exact match.
+- **Docs touched (this unit, U6):** `claude/graph-dba/graph-dba.md`, `claude/AGENTS.md`,
+  `claude/README.md`, `docs/BACKLOG.md`, `claude/cobb/cobb.md` (own history entry separately),
+  `skills/agent-maintenance/SKILL.md` §5 — see `claude/cobb/kaizen/history.md`'s matching
+  2026-08-18 entry for the full six-file diff summary and the close-out grep-sweep triage.
+- **Plan items:** none opened or closed — not on this agent's active K-list.
+
 ## 2026-08-11 — Inbox distillation: 7 entries — 3 promoted to `falkordb-quirks.md`, 2 discarded as already self-corrected, 2 discarded as already covered in `cpg-model.md`
 
 - **What:** `cobb` processed all 7 entries in `graph-dba/kaizen/inbox.md` (§5).
