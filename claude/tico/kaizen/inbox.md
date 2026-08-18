@@ -24,3 +24,24 @@
 - **Evidence:** `falkor-chat/scripts/start_falkordb.sh` publishes `-p "${FALKORDB_WEB_PORT}:3000"` (default `3000`) alongside the `:6379` Redis/Cypher port, and prints `Web console: http://localhost:${FALKORDB_WEB_PORT}` on every start.
 - **Context:** `generic-cypher-mcp` requirements interview — stakeholder asked "can I use the web tool to monitor created nodes/relationships," which resolved a whole access-tier open question (deferring their own read/write access to a later phase) once confirmed this already exists today with zero new work.
 - **Suggested home:** unsure (candidate: a line in `tico`'s own explanation reflexes, or `cpg/mcp/README.md`'s troubleshooting/observability section, since agents debugging graph state might not know this console exists either).
+
+## 2026-08-17 — Introducing a new *agent* is a tico requirements interview too, filed under claude/docs/requirements/
+- **Fact:** A stakeholder request to add a new team member (a new Claude Code subagent, e.g.
+  "security expert") is not a special case that skips straight to `cobb` — it's a normal Mode 1
+  requirements interview, with `claude/` treated as the component. The doc landed at
+  `claude/docs/requirements/security-expert.md`. `claude/` had **no `docs/` directory at all**
+  before this — agents there previously only used `<name>/kaizen/{plan,history,inbox}.md` (per
+  `claude/AGENTS.md`), never the generic module-docs convention from root `AGENTS.md`
+  (`docs/requirements/`, `docs/plans/`, etc.). This session established the precedent that the
+  generic convention applies to `claude/` itself once the topic is the *team*, not a specific
+  existing agent's kaizen plan.
+- **Evidence:** Session where the stakeholder said "i want to introduce a new team member, the
+  security expert." Root `AGENTS.md`'s module-documentation-convention section is generic across
+  "modules"; `claude/` had never exercised the `docs/requirements/` branch of it before. WHAT/WHY
+  (the new agent's remit, boundaries with `analyst`/`cobb`/`devops`, the one destructive-shaped
+  capability) went through the normal interview; the actual agent design (name, prompt, tools,
+  hook) is explicitly left to `cobb` as the next step, not designed here.
+- **Suggested home:** `claude/AGENTS.md` or `claude/README.md` — worth a line noting that a
+  *new*-agent proposal gets a `claude/docs/requirements/<slug>.md` via `tico` before `cobb`
+  designs it, so this doesn't need re-deriving next time. Also worth `cobb` knowing this doc
+  exists as the WHAT/WHY input the next time it's asked to design the security-expert agent.
