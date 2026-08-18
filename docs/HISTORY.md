@@ -5,6 +5,55 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-18 — M5: Generic Cypher MCP — delivery & gate closure (U1…U7) ✅
+
+`mcp__cpg__query` gains write capability — an optional `agent` parameter and two enforced write
+shapes (author-write, curator-clear) — piloted end to end on `graph-dba`'s kaizen working memory:
+the graph (`kaizen_graph_dba`) replaces `inbox.md` as the raw-capture layer, `history.md` stays
+unchanged, `inbox.md` is frozen after a one-time import, and `cobb`'s distillation workflow now
+runs against the graph. Full unit-by-unit detail lives in
+`docs/plans/generic-cypher-mcp-coordination.md` (U1…U7 ledger) and
+`docs/test-reports/generic-cypher-mcp-report.md`; summarized here for the change log.
+
+- **U1** (`graph-dba`) — `docs/plans/generic-cypher-mcp-graph.md`: `:KaizenEntry` schema (5
+  markdown fields + `entryId`/`author`/`createdAt`), curator-clear as a hard `DETACH DELETE` by
+  `entryId` with append-before-delete ordering flagged non-negotiable, migration mapping for all 6
+  existing inbox entries.
+- **U2** (`architect`) — `docs/plans/generic-cypher-mcp.md`: extends `cpg/mcp/server.py` in place
+  (optional `agent` param), FR-8 enforcement via static regex on `author:` literals plus a
+  curator-clear skeleton, FR-4 frozen note, BACKLOG.md M5/C-501…505 proposal, 5-step
+  implementation table.
+- **U3 plan gate** (`analyst`, on U1+U2 combined) — three passes: Pass 1 **needs changes** (blocker
+  B1 — two agents' operative prompts missing from the close-out file list; majors M1/M2/M3 on the
+  write-detection/authorization regex); **U2-fix** closed all four. Pass 2 (**U3-regate**) —
+  **needs changes** again (a new major, M1-residual, on the CREATE-clause-location step not being
+  string-literal-aware); **U2-fix2** closed it. Pass 3 (**U3-regate2**) — **approve**. Plan gate
+  closed.
+- **U4** (`coder`, steps 1+2 — `cpg/mcp/server.py` write path + `cpg/mcp/tests/test_server.py`, 83
+  passed/7 deselected offline) — code re-gate (`analyst`) → **approve with suggestions**; fixed at
+  **U4-fix** (added the real M2 regression pin, independently confirmed by `teco`, suite green
+  **84 passed/7 deselected**).
+- **U5** (`graph-dba`, step 3 — live migration): real write against `kaizen_graph_dba`
+  (`labels_added=6, nodes_created=6, properties_set=48`), `inbox.md` frozen note prepended,
+  `history.md` untouched — independently verified by `teco` via direct `redis-cli`. A live
+  plan-text defect was found and worked around (this FalkorDB build's constraint keyword is
+  `NODE`, not `LABEL`), captured in `graph-dba`'s `falkordb-quirks.md`.
+- **U6** (`cobb`, steps 4a+4b — 9 files: repo-wide catalogs + agents' operative prompts +
+  `skills/agent-maintenance/SKILL.md` §5's distillation sequence) — code re-gate (`analyst`) →
+  **approve with suggestions**; fixed at **U6-fix** (BACKLOG.md C-501…C-505 flip, a kaizen-history
+  wording extension), independently confirmed by `teco`.
+- **U7** (`qa-engineer`, step 5 — acceptance pass, `docs/test-plans/generic-cypher-mcp.md`
+  TP-001…TP-008): **PASS** — all 8 acceptance criteria (AC-1…AC-8) hold under live exercise, no
+  defects found. AC-5 (the criterion requiring a real dispatch, not a stand-in) ran `cobb`'s actual
+  4-step distillation procedure on a real migrated entry, independently re-verified by both
+  `qa-engineer` and `teco` (graph count 6→5, `history.md` new entry, `cpg-model.md` knowledge-base
+  edit all present and correct).
+
+**Milestone closed.** `docs/BACKLOG.md`'s M5 milestone-map row flips 🟡 → ✅ in this same entry.
+Per-document `Status: archived` flips on the requirements/plan/graph-plan/review/test-plan/
+test-report files are separate closing units, routed to each document's own owner (`tico`,
+`architect`, `graph-dba`, `analyst`, `qa-engineer`) — handled in parallel, not performed here.
+
 ## 2026-08-16 — M4: CPG agent adoption ✅ (implementation) — C-401…C-407
 
 Widens which agents discover and use a loaded CPG, and makes that discovery a default

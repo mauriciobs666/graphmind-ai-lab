@@ -46,7 +46,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
 | **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cpg__query(graph, cypher)` (`cpg/mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
 | **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
-| **M5 — Generic Cypher MCP** 🟡 | `mcp__cpg__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; step 5 (`qa-engineer` acceptance pass against AC-1…AC-8) still queued | **C-501 → C-506** |
+| **M5 — Generic Cypher MCP** ✅ | `mcp__cpg__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -582,9 +582,43 @@ mechanism, `architect`) · coordination:
   distillation-duties bullet updated to match; `skills/agent-maintenance/SKILL.md` §5 gains the
   graph-read-then-distill sequence for `graph-dba`, including the append-before-delete ordering
   constraint (documented there only). Step 4b. Owner: `cobb`.
-- **C-506 — Acceptance pass.** 🔵 AC-1…AC-8 each exercised live; delivers
+- **C-506 — Acceptance pass.** ✅ AC-1…AC-8 each exercised live; delivers
   `docs/test-plans/generic-cypher-mcp.md` + `docs/test-reports/generic-cypher-mcp-report.md`.
   Step 5. Owner: `qa-engineer`.
+
+**Gate status (per the coordination ledger — full unit-by-unit detail there, not restated here).**
+C-501…C-505 are implementation-complete. **U3 plan gate** (`analyst`, on `graph-dba`'s U1
+data-model plan and `architect`'s U2 tool-mechanism plan): three passes — **needs changes** (Pass
+1: blocker B1 on the close-out file list + majors M1/M2/M3 on the write-detection/authorization
+regex), **needs changes** again (Pass 2, `U3-regate`, after `U2-fix` closed Pass 1's findings: a
+new major, M1-residual, on the CREATE-clause-location step not being string-literal-aware),
+**approve** (Pass 3, `U3-regate2`, after `U2-fix2` closed M1-residual) — plan gate closed. **U4**
+(`coder`, steps 1+2 — server write path + tests), code re-gate (`analyst`) → **approve with
+suggestions**, fixed at **U4-fix** (spot-checked and accepted by `teco`). **U5** (`graph-dba`, step
+3 — live migration to `kaizen_graph_dba`) — no formal gate, independently verified by `teco`
+directly against the running graph. **U6** (`cobb`, steps 4a+4b — doc sync), code re-gate
+(`analyst`) → **approve with suggestions**, fixed at **U6-fix** (spot-checked and accepted by
+`teco`). **U7** (`qa-engineer`, step 5 — acceptance pass): **PASS** — all 8 acceptance criteria
+(AC-1…AC-8) hold under live exercise, no defects found. Milestone **closed** — see
+[`plans/generic-cypher-mcp-coordination.md`](./plans/generic-cypher-mcp-coordination.md) for the
+full U1…U7 ledger.
+
+## Follow-ups (post-M5)
+
+- **C-507 — AC-5's append-before-delete ordering is enforced procedurally, not mechanically.** 🔵
+  `cobb`'s 4-step distillation sequence (append to `history.md`/knowledge base, confirm, only then
+  curator-clear) is a documented discipline, not a tool-enforced invariant — `mcp__cpg__query` has
+  no way to require or check the ordering of two independent write calls
+  (`docs/plans/generic-cypher-mcp.md` §9 names this explicitly as procedural, not mechanical,
+  enforcement). U7's acceptance pass could confirm only end-state consistency, not the raw sequence
+  of API-call timestamps (`docs/test-reports/generic-cypher-mcp-report.md`, "AC-5 detail" section
+  and Feedback & recommendations #1). U7's one real dispatch behaved correctly, but a single
+  successful run is weaker long-run assurance than a mechanically-enforced invariant would be. No
+  action needed for this delivery (the trade-off was already named and accepted at plan-gate time),
+  but if this pattern extends to a second curator agent or a higher-volume distillation cadence,
+  consider a tool-side "last write timestamp" queryable independently of the dispatched agent's own
+  narration, rather than relying on end-state consistency plus self-report. Owner: `architect`
+  (next time this tool's write path is revisited).
 
 ## Follow-ups (post-M2)
 
