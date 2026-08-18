@@ -1,6 +1,6 @@
 # Generic Cypher MCP — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M5 proposed, `docs/BACKLOG.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** C-501…C-507 (M5, `docs/BACKLOG.md`)
 
 ## Goal & definition of done
 
@@ -78,5 +78,10 @@ archived` flips routed to each doc's owner per root `AGENTS.md`'s by-kind table,
 | C3 | `graph-dba` | `acec67709b24433b5` | delivered | `docs/plans/generic-cypher-mcp-graph.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`), nothing else touched. | — (mechanical, no gate) |
 | C4 | `analyst` | `a7345d743610a128c` | delivered | `docs/reviews/generic-cypher-mcp.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`), nothing else touched. | — (mechanical, no gate) |
 | C5 | `qa-engineer` | `a25a00ee86d9239fa` | delivered | `docs/test-plans/generic-cypher-mcp.md` + `docs/test-reports/generic-cypher-mcp-report.md` — teco-verified via `git diff`: single-token `Status:` flip (`active`→`archived`) on both, nothing else touched. | — (mechanical, no gate) |
-| C6 | `cobb` | `ad237c56b9bd79517` | in-flight | `docs/BACKLOG.md` (C-506 `🔵`→`✅`, M5 milestone-map row `🟡`→`✅`, gate-status prose updated to record the full U1…U7 sequence, mirroring `a1ebd9f`'s pattern) + `docs/HISTORY.md` (dated M5 close entry). | — |
-| C7 | `teco` | (self) | queued | `docs/plans/generic-cypher-mcp-coordination.md` — this file, flip `Status:` to `archived` once C1…C6 land. | — |
+| C6 | `cobb` | `ad237c56b9bd79517` | accepted | `docs/BACKLOG.md` (C-506 `🔵`→`✅`, M5 milestone-map row `🟡`→`✅`, gate-status prose recording the full U3/U4/U6/U7 sequence, new `## Follow-ups (post-M5)` with **C-507** sourced from the test report's Feedback #1) + `docs/HISTORY.md` (dated 2026-08-18 M5 close entry, per-unit summary). teco independently verified via `git diff` against both source documents: every figure cited (83/84 passed+7 deselected, `labels_added=6, nodes_created=6, properties_set=48`, graph count 6→5, 8/8 ACs, C-507's Feedback #1 citation) matches the coordination ledger and test report verbatim — none invented. Only `docs/BACKLOG.md`/`docs/HISTORY.md` touched, no `Status:` fields modified. | spot-check (teco) → **accepted** |
+| C7 | `teco` | (self) | delivered | `docs/plans/generic-cypher-mcp-coordination.md` — this file, `Status:` flipped to `archived`, `Tracks:` updated to `C-501…C-507 (M5, docs/BACKLOG.md)`. | — |
+
+**Milestone closed.** All of C1…C7 delivered/accepted. `generic-cypher-mcp` (M5) is fully designed,
+implemented, migrated, doc-synced, acceptance-tested, and archived — 8 commits this close phase
+(`461ea12`, `becccdd`, `a207450`, `d58169e`, `0c2ffc5`, plus this file's own commit) on top of the
+5 delivery commits (`650c910`…`b360daa`).
