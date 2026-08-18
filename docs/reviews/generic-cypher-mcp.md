@@ -1,6 +1,6 @@
 # Generic Cypher MCP — plan-gate review (U1 + U2)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M5 proposed)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M5 proposed)
 
 ## Scope & verdict
 

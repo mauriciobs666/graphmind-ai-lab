@@ -1,6 +1,6 @@
 # Generic Cypher MCP — graph data model for `graph-dba`'s kaizen working memory
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M5 proposed)
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** — (M5 proposed)
 
 Design for the data-shape slice of
 [`../requirements/generic-cypher-mcp.md`](../requirements/generic-cypher-mcp.md) (FR-2, FR-3,

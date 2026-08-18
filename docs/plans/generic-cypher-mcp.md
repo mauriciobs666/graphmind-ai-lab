@@ -1,6 +1,6 @@
 # Generic Cypher MCP — tool mechanism, enforcement, and rollout plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M5 proposed) · **Version:** 1.2 —
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M5 proposed) · **Version:** 1.2 —
 > revised after `analyst`'s U3 plan-gate (Pass 1 and Pass 2: needs changes); see §10 for the dated
 > revision notes.
 
