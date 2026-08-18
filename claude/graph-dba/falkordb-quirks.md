@@ -37,6 +37,13 @@ to the general fact here.
 - **Index before constraint, always** — `GRAPH.CONSTRAINT CREATE` requires a
   pre-existing exact-match index on the same property, or it fails with
   `"missing supporting exact-match index"`.
+- **`GRAPH.CONSTRAINT CREATE`'s entity-type keyword is `NODE`/`RELATIONSHIP`, not `LABEL`**
+  (verified 2026-08-18, module 41811). `GRAPH.CONSTRAINT CREATE <key> UNIQUE LABEL <Label>
+  PROPERTIES <n> <prop>...` fails outright with `"Invalid constraint entity type"` — the
+  correct syntax is `GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE <Label> PROPERTIES <n>
+  <prop>...`. Creation is also **async**: the command returns `PENDING` immediately, not a
+  confirmation; poll `CALL db.constraints()` (or `db.indexes()` for the paired index) and
+  check `status` for `OPERATIONAL` before relying on the constraint being enforced.
 - **Composite constraints** (`PROPERTIES 2 key version`) are supported and operational.
 - **Fulltext** (`db.idx.fulltext.createNodeIndex` / `queryNodes`) confirmed working.
 - **Vector dimension is enforced at query time and index-membership time, but NOT at write

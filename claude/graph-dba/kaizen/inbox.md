@@ -1,5 +1,13 @@
 # Kaizen — Learnings Inbox: graph-dba
 
+> **FROZEN — 2026-08-18.** This file is a historical snapshot only. Its contents (as of this date)
+> were imported once into the `kaizen_graph_dba` FalkorDB graph
+> (`docs/plans/generic-cypher-mcp.md`); `graph-dba` no longer appends here. New raw learnings are
+> written directly into the graph and are immediately queryable by any agent:
+> `mcp__cpg__query(graph='kaizen_graph_dba', cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact,
+> e.evidence, e.context, e.suggestedHome, e.author ORDER BY e.date')`. Content below is preserved
+> for historical reference and will not change.
+
 > Append-only capture of durable, non-obvious environment facts the `graph-dba` agent
 > discovers during runs — raw observations, not conclusions. The maintainer (cobb)
 > periodically distills this inbox (agent-maintenance skill §5): verifies each entry,
