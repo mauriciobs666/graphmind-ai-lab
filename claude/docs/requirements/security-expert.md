@@ -75,3 +75,17 @@ and plans/requirements docs for security implications before they're acted on.
 authoring); the security expert supplies a dedicated security opinion that feeds into `cobb`'s
 call, replacing ad hoc routing (as happened 2026-07-31) with a named, standing source of that
 opinion. Not a veto.
+2026-08-17 — Invocation mode for both sides → **On demand only, neither side is a standing gate.**
+Nothing changes automatically before shipping/promotion; the security expert is invoked
+explicitly (by the stakeholder, `teco`, `cobb`, or another agent) when a security opinion is
+wanted.
+2026-08-17 — Scope expansion beyond the original two areas → stakeholder wants **all** of:
+vulnerability/dependency review (core of code/app security), secrets/infra hardening, and
+compliance/audit checklists, in addition to code/app security review and agent/prompt-safety
+review.
+2026-08-17 — Boundary for secrets/infra hardening → same advisory shape as `analyst`/`cobb`:
+**security expert advises, `devops` decides** and keeps ownership of actually changing
+infra/secrets config.
+2026-08-17 — What does "compliance/audit checklists" mean? → **No specific framework named** —
+a general structured-checklist-audit capability, not tied to OWASP or any other named external
+standard right now.
