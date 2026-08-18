@@ -2,7 +2,8 @@
 
 > Forward-looking backlog for the `graph-dba` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-28 (joern-agent merge; last full pass 2026-07-11, team-coherence certification)
+> Last reviewed: 2026-08-18 (K-007 opened from a kept-open kaizen-graph distillation entry;
+> last full pass 2026-07-11, team-coherence certification; joern-agent merge 2026-07-28)
 
 ## Active
 
@@ -10,6 +11,7 @@
 |-------|------------|----------|--------|---------|
 | K-005 | 2026-07-28 | med | 🔵 | Streaming loader for large-repo CPGs — `joern-cpg`'s transformer dedupes in memory, fine for moderate repos but a risk at repo scale (inherited from the retired `joern` agent's K-003) |
 | K-006 | 2026-07-28 | low | 🔵 | CPGQL script library (`skills/joern-cpg/scripts/queries/*.sc`) for common security/taint/call-graph queries (inherited from `joern` K-004) |
+| K-007 | 2026-08-18 | low | 🔵 | Unreconciled relationship-count discrepancy on a scoped `DETACH DELETE` of a workflow-snapshot subgraph (34 deleted vs. ~15 expected) — investigate if it recurs |
 
 > K-005/K-006 inherited 2026-07-28 from the retired `joern` agent when its CPG-generation
 > capability folded into this agent (see history.md). K-001/K-002 deferred (below), K-003
@@ -56,6 +58,30 @@
   flow, call-chain to a function) get rewritten each time CPG generation is invoked.
 - **Proposed change:** add `skills/joern-cpg/scripts/queries/*.sc` runnable via
   `joern --script`, referenced from the skill's CPGQL cheat-sheet.
+
+### K-007 — Unreconciled `DETACH DELETE` relationship-count discrepancy
+- **Status:** 🔵 proposed (opened from a kept-open kaizen-graph entry, cobb distillation
+  pass 2026-08-18)
+- **Priority:** low
+- **Rationale:** a 2026-08-16 scoped `DETACH DELETE` of `ws:acme`'s `triage@v1` snapshot
+  (1 `WorkflowDefSnapshot` + 3 `Step` nodes, 6 structural edges + 7 `OF_DEF` + ≤2 `AT_STEP`
+  ≈ 15 relationships expected) reported **34** relationships deleted. Follow-up scoped
+  queries confirmed the deletion was otherwise correctly scoped (0 remaining
+  `triage:v1:*` `Step`s, the sibling `access-request@v1` snapshot and its 14 `OF_DEF`-linked
+  runs untouched) — this is a discrepancy in the *count*, not evidence of an incorrect blast
+  radius — but the extra ~19 relationships were never reconciled (the data was already gone
+  by the time the count was noticed).
+- **Proposed change:** next time a similar scoped `DETACH DELETE` is run on this schema,
+  count relationships on the target subgraph *before* deleting (`OPTIONAL MATCH (n) WHERE n
+  IN [...] -[e]-() RETURN count(DISTINCT e)`) rather than trusting structural-edge
+  arithmetic, and/or check whether `advance_run`'s `AT_STEP`/`LAST_STEP_RUN` FOREACH-guarded
+  writes (`repository.py`) can leave stale edges on nominally-terminal runs under some race.
+- **Notes:** kept open (not promoted, not discarded) during the 2026-08-18 kaizen-graph
+  distillation pass — `graph-dba` itself flagged the source entry `unsure`, and `cobb`
+  could not independently verify it (the pre-delete state is gone and the anomaly isn't
+  reproducible without a live repro). The raw `:KaizenEntry` also stays live in
+  `kaizen_graph_dba` (entryId `6e5d6451-72fa-400c-b002-52757727f805`) alongside this backlog
+  item, in case a future occurrence supplies the missing pre-delete count.
 
 ## Parking lot / ideas
 - **The agent owns one recurring `Status: archived` flip it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `graph-dba` the performer for `plans/<slug>-graph.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. Zero `-graph.md` files exist so far, so there is nothing to fix yet — revisit once the first one ships.

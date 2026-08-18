@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-18 — Own-inbox promotion: strengthened `agent-maintenance` §5 step 2 ("verify") after a real graph-dba distillation pass surfaced a citation that was real but wrong
+- **What:** While running the real `kaizen_graph_dba` distillation pass (see `claude/graph-dba/
+  kaizen/history.md`'s matching 2026-08-18 entry), re-verifying entry `f8c28d75…` against
+  `falkor-chat/server/falkorchat/repository.py` found the entry's own quoted "Evidence" had
+  omitted a real `CREATE (sr)-[:RAN]->(cur)` edge present in the exact function it cited —
+  and, via `git log -S`, present since five weeks before the entry was even written. Logged this
+  as a learning in `cobb/kaizen/inbox.md`, then promoted it same-run: `skills/agent-maintenance/
+  SKILL.md` §5 step 2 now reads "**Re-derive the fact yourself; don't just confirm the entry's
+  cited evidence still exists at that path/line** — a citation can be real and still misdescribe
+  what's there," with this origin note attached.
+- **Why:** Durable process fact about the distillation procedure itself, not about any one
+  agent's domain — belongs in the skill (every future distillation pass pays for reading it,
+  and every future pass benefits from not repeating the miss). High enough value to promote
+  same-run rather than let it sit; cobb is the one agent whose maintainer role puts full §1/§2
+  bookkeeping for its own inbox in-bounds mid-run.
+- **Verified:** re-read the edited skill section after the change — reads correctly, doesn't
+  contradict the surrounding step-2/step-3 text, and the origin note's facts (edge name, commit
+  `3921f87`, 2026-07-12 date) match what was independently confirmed during the graph-dba pass.
+- **Docs touched:** `skills/agent-maintenance/SKILL.md` §5 (knowledge-base edit), `claude/cobb/
+  kaizen/inbox.md` (entry cleared after this write), this `history.md` entry.
+- **Plan items:** none — not on an active K-item; a direct procedural fix.
+
 ## 2026-08-18 — generic-cypher-mcp U6 (steps 4a+4b): repo-wide catalog + both agents' operative prompts + `agent-maintenance` §5 retargeted from `inbox.md` to `graph-dba`'s working-memory graph
 
 - **What:** `teco`-coordinated delivery of `docs/plans/generic-cypher-mcp.md` §7 steps 4a+4b (unit

@@ -395,6 +395,17 @@ One model, both worlds. Runtime evaluation & the run/step-run schema: §6.2; ver
   prompt/response, tool call/result, guard judgment, and retrieval (dozens per run); a non-debug run
   writes **zero**. New node type → new DDL: `TraceEvent.traceId` index **then** UNIQUE (§7.1).
 - **`stepRunId`** is the `StepRun`'s stable identity (indexed + UNIQUE, §7.1).
+- **Snapshot/`Step` deletion blast radius (graph-dba, verified 2026-08-18).** A
+  `WorkflowDefSnapshot`+`Step` subgraph can be `DETACH DELETE`d (e.g. to force a
+  re-materialize) without corrupting a live/completed `WorkflowRun`'s executed-step
+  history: `stepKey` is copied onto `StepRun` at write time (`record_step_and_advance`,
+  `repository.py`) rather than read live from `Step`, and `HAS_STEP_RUN`/`LAST_STEP_RUN`/
+  `NEXT`/`PRODUCED` never touch `Step`. The one edge that **is** severed by deleting the
+  `Step` nodes above is `RAN` (`StepRun`→`Step`, this section) — today that's a write-only
+  pointer (created at advance time, not read by any shipped query), so the practical blast
+  radius is "live position (`AT_STEP`) + `OF_DEF` back-reference + the `RAN` pointer,"
+  never the audit trail's own readable data. If a future query starts traversing `RAN`,
+  re-check this note before relying on it across a snapshot deletion.
 
 > `ctx`/`input`/`output`/`payload` are opaque; the executor (de)serializes app-side.
 

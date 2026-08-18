@@ -153,6 +153,15 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
   128KB per-argv limit on a batched CREATE (`Argument list too long`) and, at
   smaller batches, a connection-reset storm from thousands of short-lived TCP
   connections. Don't reintroduce a per-statement spawn.
+- **Piping `pipeline.sh`'s output through `tee <file>` can read as a failed run even when
+  it fully succeeded, if the tee target's parent directory doesn't exist yet at pipe-start.**
+  `tee` opens its target immediately, racing `pipeline.sh`'s own `mkdir -p "$WORKDIR"` a few
+  lines into the script — if it loses, you get `tee: <path>: No such file or directory` up
+  front, and with no `pipefail` the overall command's exit code becomes `tee`'s (nonzero)
+  rather than `pipeline.sh`'s real (successful) exit code, even though the run completed
+  correctly end-to-end (verify-prefix passed, counts matched, freshness marker stamped).
+  Either `mkdir -p` the tee target's directory *before* invoking `pipeline.sh`, or skip the
+  tee entirely — a backgrounded run's own captured stdout/stderr already has the full log.
 - **JVM startup is slow** (~30–60s per `joern-*` invocation). A full
   parse+export of a real repo takes minutes; expect it and run long jobs in the
   background.
@@ -203,9 +212,14 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
   but not free, and there's no built-in way to just replay a saved artifact.
 - **Scale:** deduped in memory by the transformer — fine for moderate repos; for
   very large codebases this is a streaming-loader concern (tracked in
-  `graph-dba`'s kaizen plan, K-005). Rule of thumb from a real run: ~2,700 nodes
-  / ~18,000 edges per Python source file with default overlays (41 files → 110k
-  nodes / 735k edges) — a repo 10× that size projects into multi-million-edge
-  territory, worth a `graph-dba` sizing conversation before a full load. Prefer
-  a narrower `--repr` (e.g. `ast` or `cpg14`) when you don't need every edge layer.
+  `graph-dba`'s kaizen plan, K-005). Rule of thumb: **~2,700–2,800 nodes / ~18,000–18,600
+  edges per Python source file** with default overlays — consistent across two independent
+  real runs (41 files → 110k nodes/735k edges; a later 60-file rebuild of the same target →
+  167k nodes/1.12M edges) despite the file count itself being a moving target as the source
+  tree grows (it was already 65 files a day after the 60-file measurement). **Measure your
+  own repo's file count before projecting** (`find "$SRC" -name "*.py" | wc -l`) rather than
+  anchoring on either worked example's total — the per-file rate is the durable number. A
+  repo 10× a measured baseline projects into multi-million-edge territory, worth a
+  `graph-dba` sizing conversation before a full load. Prefer a narrower `--repr` (e.g. `ast`
+  or `cpg14`) when you don't need every edge layer.
 - **Deeper schema & model notes:** see [`references/cpg-model.md`](./references/cpg-model.md).

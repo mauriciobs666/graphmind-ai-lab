@@ -299,6 +299,16 @@ to the general fact here.
   instead grabs digits from the stats line and reports a phantom huge count
   (one run misread a real 29,447 as 273,336).
   (Verified 2026-07-17 on v4.18.11; surfaced building the CPG loader, `joern-cpg` skill.)
+- **`GRAPH.EXPLAIN` (unlike `GRAPH.QUERY`/`GRAPH.RO_QUERY`) refuses to run against a graph key
+  that doesn't exist yet** — `GRAPH.EXPLAIN <key> "<any syntactically valid query>"` against a
+  never-created key errors `ERR Invalid graph operation on empty key` and materializes nothing
+  (re-verified live 2026-08-18, module `41811`). Consequence: `GRAPH.EXPLAIN` **cannot** be used
+  to syntax-check a **write** query when there's no existing graph to point it at. Workaround:
+  run the write query via `GRAPH.RO_QUERY` against any existing graph (not necessarily the
+  target one) — it parses the query first and only then rejects it for being a write ("graph.
+  RO_QUERY is to be executed only on read-only queries"), which proves the Cypher parses with
+  zero side effects. `GRAPH.PROFILE` isn't a substitute either — see the entry below (it
+  silently *executes* writes rather than explaining them).
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely**; a write runs to
   completion regardless of clause or default. Reads enforce it batch-granularly

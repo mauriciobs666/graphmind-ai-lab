@@ -2,6 +2,121 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-18 — Kept-open node `6e5d6451…` cleared after `analyst` re-gate resolved the graph's open question (`agent-maintenance` §5 rule added)
+- **What:** `analyst`'s diff-scoped re-gate of the pass below (`docs/reviews/graph-dba-kaizen-
+  distillation.md`) approved both judgment calls but flagged one gap: the kept-open node
+  `6e5d6451…` had no forward pointer to K-007 and no sanctioned way to get one (the MCP write
+  model allows only create-your-own and curator-`DETACH DELETE`, no in-place `SET`) — risking a
+  future pass re-opening a duplicate K-008 with no signal K-007 already exists. The review left
+  the deeper question — should a "kept open" node stay live or get cleared once logged? — for
+  `cobb`/the skill to decide, not resolving it unilaterally.
+- **Decision:** **clear once logged**, for every disposition including "kept open," file-based
+  agents included. Wrote this as an explicit rule into `skills/agent-maintenance/SKILL.md` §5
+  (step 3's new "Kept open (unresolved)" bullet + step 4's clearing rule): the kaizen graph
+  (and `inbox.md` for file-based agents) is working memory for capture **not yet reviewed**;
+  once an entry is reviewed and its disposition — including "still unresolved, here's why" — is
+  written into `history.md` (and `plan.md` when actionable), that *is* the durable record, and a
+  live raw node with no update mechanism can only drift from what those files say. Also added a
+  dedup-check rule (step 3): before opening a new `K-`item for a kept-open entry, grep the
+  agent's `plan.md` for the entry's `entryId`/fact — don't duplicate an item a prior pass
+  already opened.
+- **Action taken:** `6e5d6451…`'s full record already lived in this file's prior entry (below)
+  and in `plan.md` K-007, so nothing new needed capturing. Cleared it:
+  `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
+  {entryId:'6e5d6451-72fa-400c-b002-52757727f805'}) DETACH DELETE e", agent='cobb')` →
+  `nodes_deleted=1.0`. Confirmed via a follow-up `MATCH (e:KaizenEntry) RETURN count(e)` → **0**
+  — `kaizen_graph_dba` now holds no `:KaizenEntry` nodes at all.
+- **Why:** Matches the file-based-agent convention (a processed entry, of any disposition,
+  leaves the raw inbox) rather than carving out a graph-only exception, and removes the
+  duplicate-tracking risk the review flagged outright rather than just mitigating it with the
+  dedup check alone.
+- **Verified:** re-read the edited skill section after the change (no contradiction with the
+  surrounding step 2/3 text); graph count re-checked live (0, above) rather than assumed from
+  the write-ok response alone.
+- **Docs touched:** `skills/agent-maintenance/SKILL.md` §5 (two edits: kept-open + dedup rule
+  in step 3, clearing rule in step 4), this `history.md` entry. `plan.md` K-007 unchanged — it
+  already carries the full durable record and needs no forward/back pointer now that the graph
+  node is gone.
+- **Plan items:** none opened or closed; K-007 (below) stands as-is.
+
+## 2026-08-18 — Graph distillation pass 2 (real, not acceptance): 4 of 5 remaining entries promoted, 1 kept open — `kaizen_graph_dba` now empty of promotable entries
+
+- **What:** `cobb` processed the 5 `:KaizenEntry` nodes left in `kaizen_graph_dba` after the
+  2026-08-18 acceptance-test promotion above (confirmed via a fresh read: entries dated
+  2026-08-16 ×3, 2026-08-17 ×2 — the `META_DATA` entry from the original 6 was already gone).
+  `claude/graph-dba/kaizen/inbox.md` re-checked: still carries only the "FROZEN — 2026-08-18"
+  historical snapshot, nothing appended below it — no action needed there, confirmed rather
+  than assumed.
+  1. **`58ad5ace…` (`GRAPH.EXPLAIN` refuses on a nonexistent graph key) — PROMOTED, verified
+     live.** Re-ran `redis-cli GRAPH.EXPLAIN <fresh-key> "MERGE (b:CpgBuildInfo) SET b.x=1"`
+     against a never-created key → `ERR Invalid graph operation on empty key`, exact match to
+     the original finding. Added to `claude/graph-dba/falkordb-quirks.md` (Ops, config &
+     tooling), right above the existing `GRAPH.PROFILE`-isn't-read-only entry it directly
+     complements — both are "which GRAPH.* command actually does what you think" traps.
+  2. **`f8c28d75…` (`StepRun` audit trail decoupled from `Step` nodes) — PROMOTED WITH A
+     CORRECTION, not verbatim.** Re-read `record_step_and_advance`
+     (`falkor-chat/server/falkorchat/repository.py:1370-1391`, current line numbers): the core
+     claim holds (`stepKey` is copied onto `StepRun` at write time; `HAS_STEP_RUN`/
+     `LAST_STEP_RUN`/`NEXT`/`PRODUCED` never touch `Step`) — **but the original entry's
+     evidence block was factually wrong on one point**: it asserted "no edge is ever created
+     from `StepRun` to `Step`," when the code (and `falkor-chat/docs/DESIGN.md` §6.2 / `docs/
+     QUERIES.md` §12) has carried a real `(:StepRun)-[:RAN]->(:Step)` edge since 2026-07-12
+     (`git log -S`, commit `3921f87`, M3 K-022 Landing 1) — five weeks before the entry was
+     recorded, so this isn't drift, the original observation simply missed it. Confirmed via
+     `grep` that `RAN` is currently write-only (created at advance time, never traversed by any
+     shipped query in `repository.py`/`QUERIES.md`/`DESIGN.md`), so the *practical* blast-radius
+     conclusion the entry reached is still correct today, just for a narrower reason than
+     claimed. Added a corrected note to `falkor-chat/docs/DESIGN.md` §6.2 (after the `stepRunId`
+     bullet, before the `ctx`/`input`/`output` opacity note) stating the real blast radius —
+     live position + `OF_DEF` back-reference + the (currently unread) `RAN` pointer — and
+     flagging that a future query starting to traverse `RAN` should re-check the note.
+  3. **`7f0e3cf1…` (`pipeline.sh` \| `tee` exit-code trap) — PROMOTED, verified plausible/
+     current.** The mechanism (`tee` opens its target before `pipeline.sh`'s own `mkdir -p
+     "$WORKDIR"` runs, and no `pipefail` means the pipe's exit status is `tee`'s, not
+     `pipeline.sh`'s) is a shell-semantics fact independent of any specific run, not something
+     that can go stale — confirmed by reading `pipeline.sh`'s current structure (workdir
+     creation still happens a few lines in, no early `mkdir` added since). Added to
+     `skills/joern-cpg/SKILL.md` Gotchas, right after the "Loading at scale needs one
+     persistent connection" bullet.
+  4. **`80ef4889…` (scaling worked-example stale) — PROMOTED, reframed rather than
+     re-numbered.** Live-counted `falkor-chat/server/{falkorchat,tests}` today: **65** `.py`
+     files (`find ... -name "*.py" | wc -l`) — already past the entry's own 2026-08-17
+     measurement of 60, one day later. This confirms the entry's own suggested-home framing
+     ("reframe so it doesn't read as a live number to sanity-check against" is the more robust
+     of its two proposed options) rather than the alternative ("refresh to ~60/166k") — a
+     hardcoded file count is a moving target on this repo on roughly a one-day cadence. Edited
+     `skills/joern-cpg/SKILL.md`'s Gotchas "Scale" bullet: kept the per-file rate (~2,700–2,800
+     nodes / ~18,000–18,600 edges, consistent across both the 41-file and 60-file real runs),
+     dropped the single worked-example total, and added an explicit "measure your own repo
+     first" instruction with the `find`/`wc -l` command.
+  5. **`6e5d6451…` (unreconciled `DETACH DELETE` relationship count) — KEPT OPEN, neither
+     promoted nor discarded.** The entry is self-flagged `unsure` by `graph-dba`, and the
+     doubt is genuinely unverifiable in this pass: the pre-delete graph state that would let
+     anyone reconcile the extra ~19 relationships is gone (the deletion already happened,
+     2026-08-16), and there's no live repro to re-run. Per the `agent-maintenance` skill §5
+     step-2 guidance ("unverifiable ≠ discard"), date-stamping the doubt and keeping it is the
+     right call here rather than forcing a disposition. Concretely: opened **K-007** in
+     `plan.md` (this agent's own backlog, so a future occurrence has somewhere to land) *and*
+     left the raw `:KaizenEntry` (`entryId 6e5d6451-72fa-400c-b002-52757727f805`) live in
+     `kaizen_graph_dba` rather than clearing it — it carries detail (the exact structural-edge
+     arithmetic) that a terse `plan.md` bullet shouldn't have to duplicate.
+- **Why:** Real distillation pass per `agent-maintenance` skill §5 (the prior 2026-08-18 entry
+  above was QA's AC-5 acceptance exercise, one entry only). Dispatched by `cobb`'s own
+  maintainer role, not by `graph-dba` or another producing agent.
+- **Verified:** `redis-cli GRAPH.EXPLAIN` re-run live (item 1, exact repro). `repository.py`
+  read at current line numbers + `git log -S` for the `RAN` edge's introduction date (item 2).
+  `skills/joern-cpg/SKILL.md`'s current Gotchas text read before editing, to avoid duplicating
+  or contradicting an existing bullet (items 3–4). `find` re-run live for the current `.py`
+  file count (item 4). Order of operations honored throughout: each promotion's `history.md`
+  text (this entry) was written and confirmed **before** its `entryId` was cleared from
+  `kaizen_graph_dba` via `mcp__cpg__query(..., agent='cobb')` — see the graph read/write
+  results in `cobb`'s own run output for the before (5 entries) / after (1 entry, `6e5d6451…`)
+  counts.
+- **Docs touched:** `claude/graph-dba/falkordb-quirks.md` (item 1), `falkor-chat/docs/
+  DESIGN.md` §6.2 (item 2), `skills/joern-cpg/SKILL.md` Gotchas ×2 edits (items 3, 4),
+  `claude/graph-dba/kaizen/plan.md` (K-007 opened, item 5), this `history.md` entry.
+- **Plan items:** opens K-007 (item 5, above); does not touch K-005/K-006.
+
 ## 2026-08-18 — Graph distillation: 1 entry promoted to `skills/joern-cpg/references/cpg-model.md` (`agent-maintenance` §5, cobb, U7 acceptance pass)
 
 - **What:** `cobb` read all 6 raw `:KaizenEntry` nodes in `kaizen_graph_dba` and promoted entry

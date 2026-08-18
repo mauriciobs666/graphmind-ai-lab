@@ -15,4 +15,5 @@
 > - **Suggested home:** prompt | knowledge base | project docs | unsure
 > ```
 
-*(empty — no unprocessed learnings)*
+*(empty — no unprocessed learnings; the previous entry was promoted same-run to
+`skills/agent-maintenance/SKILL.md` §5 — see `claude/cobb/kaizen/history.md`, 2026-08-18)*

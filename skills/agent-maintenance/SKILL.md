@@ -344,8 +344,15 @@ distills — on request, and folded into every certification pass (§4):
    e.context, e.suggestedHome, e.author ORDER BY e.date")` — a plain read, no
    `agent` needed (reads are unrestricted).
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
-   system or docs; environment facts rot on upgrades. Unverifiable ≠ discard —
-   date-stamp the doubt and keep or drop by value.
+   system or docs; environment facts rot on upgrades. **Re-derive the fact
+   yourself; don't just confirm the entry's cited evidence still exists at that
+   path/line** — a citation can be real and still misdescribe what's there
+   (origin: 2026-08-18, a `graph-dba` entry's quoted evidence omitted a
+   `CREATE`d edge that was present in the very function it quoted, and had been
+   since five weeks before the entry was written — the entry's bottom-line
+   conclusion still held, for a narrower reason than claimed, but a verbatim
+   promotion would have shipped the wrong absolute claim into project docs).
+   Unverifiable ≠ discard — date-stamp the doubt and keep or drop by value.
 3. **Route each surviving entry to exactly one destination:**
    - **The agent's always-loaded prompt** — only if it changes behavior or
      routing in most sessions. Highest bar: every session pays tokens for it.
@@ -357,28 +364,63 @@ distills — on request, and folded into every certification pass (§4):
      project* belong where every agent sees them, never hoarded in one agent's
      private files where they drift out of sync.
    - **Discard** — stale, task-specific, or already documented.
-4. **Log & clear.** Every promotion gets a dated entry in the agent's
-   `history.md` (what, why, where it went) — the history entry is the durable
-   record either way. For a **file-based** agent, the processed entry is then
-   removed directly from `inbox.md`. For **`graph-dba`**, the ordering is
-   **non-negotiable**: the `history.md` append must be confirmed durable
-   *before* the graph node is cleared — the two writes are independent tool
-   calls, not one transaction, so append-then-delete is the only sequence that
-   fails safe (a crash between the two leaves the entry harmlessly duplicated
-   in both places; delete-first risks losing it from both if the append never
-   lands). Concretely, for each `graph-dba` entry being promoted:
+   - **Kept open (unresolved)** — step 2's "unverifiable ≠ discard" case. Log
+     the dated doubt in `history.md` regardless; if the entry is actionable
+     (not just a shrug), also open a backlog item in the agent's `plan.md`
+     under the next `K-`number. **Dedup check before opening one:** grep the
+     agent's `plan.md` for the entry's `entryId` (graph-based) or its one-line
+     fact (file-based) — if a prior distillation pass already opened an item
+     for it, reference/update that item instead of creating a duplicate
+     (origin: 2026-08-18, `graph-dba` entry `6e5d6451…`/K-007 review — the
+     entry's `entryId` has no in-place way to carry a forward pointer to the
+     `K-`item it spawned, so a *later* pass reading it fresh would have no
+     signal a backlog item already exists without this check). The raw entry
+     itself does not survive being kept open past this pass — see step 4.
+4. **Log & clear.** Every disposition — promoted, discarded, or kept open —
+   gets a dated entry in the agent's `history.md` (what, why, where it went,
+   or why it's still open) — **the history entry (and, for a kept-open item,
+   the `plan.md` backlog entry) is the durable record, not the raw capture
+   itself.** For a **file-based** agent, the processed entry is then removed
+   directly from `inbox.md` **in every case, including "kept open"** — an
+   unresolved question lives on in `history.md`'s dated note (and `plan.md`
+   if actionable), not by leaving the raw line sitting in `inbox.md` next to
+   entries nobody has looked at yet. The same rule applies to **`graph-dba`**:
+   a "kept open" entry's node is cleared from `kaizen_graph_dba` too, once its
+   disposition is logged — the graph is working memory for capture **not yet
+   reviewed**, not a permanent store for reviewed-but-still-unresolved
+   questions, and a live node with no update mechanism (no sanctioned `SET`,
+   only create-your-own and curator-clear) can only drift from whatever
+   `history.md`/`plan.md` say about it. (Decided 2026-08-18, `analyst`-gated
+   review of `docs/reviews/graph-dba-kaizen-distillation.md`; the alternative
+   — leaving kept-open nodes live as a standing "still unresolved" marker —
+   was considered and rejected: nothing reads the graph for that signal that
+   `plan.md`'s K-item table doesn't already serve just as well, and a live
+   node still offers no way to handle the "kept open but not even actionable
+   enough for a K-item" case, where `history.md`'s dated note is already the
+   *only* durable record either reading would produce.)
+   For **`graph-dba`**, the append-before-clear ordering is **non-negotiable**
+   regardless of disposition: the `history.md` append must be confirmed
+   durable *before* the graph node is cleared — the two writes are independent
+   tool calls, not one transaction, so append-then-delete is the only sequence
+   that fails safe (a crash between the two leaves the entry harmlessly
+   duplicated in both places; delete-first risks losing it from both if the
+   append never lands). Concretely, for each `graph-dba` entry being disposed
+   of (promoted, discarded, or kept open):
    1. Read the raw entry (already done in step 1, or re-read by id):
       `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
       {entryId: '<id>'}) RETURN e.date, e.fact, e.evidence, e.context,
       e.suggestedHome, e.author")` — a plain read, `agent` omitted.
    2. Verify it (step 2, above).
-   3. `Edit` `claude/graph-dba/kaizen/history.md`, appending the promotion in
-      the existing format. **Confirm the edit succeeded** before the next
-      step — do not proceed on an error.
+   3. `Edit` `claude/graph-dba/kaizen/history.md`, appending the disposition
+      (promoted/discarded/kept-open, with reasoning) in the existing format,
+      and `plan.md` too if a backlog item is opened for a kept-open entry.
+      **Confirm the edit(s) succeeded** before the next step — do not proceed
+      on an error.
    4. Only then: `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH
       (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')` —
       the one recognized curator-clear shape; `cobb` is a recognized curator
-      agent (`CPG_MCP_CURATOR_AGENTS`), so this is authorized.
+      agent (`CPG_MCP_CURATOR_AGENTS`), so this is authorized. This runs for
+      **every** disposition, kept-open included — see the rule above.
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.
 
