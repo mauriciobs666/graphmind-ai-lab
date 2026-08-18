@@ -1,6 +1,6 @@
 # Generic Cypher MCP — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-506 (M5)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** C-506 (M5)
 
 ## 1. Scope & objective
 

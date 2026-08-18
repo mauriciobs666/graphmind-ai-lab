@@ -1,6 +1,6 @@
 # Generic Cypher MCP — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-506 (M5)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** C-506 (M5)
 
 ## Summary
 
