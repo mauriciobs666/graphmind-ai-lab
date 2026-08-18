@@ -56,3 +56,10 @@ agent/prompt-safety review. For the code-security side, the stakeholder wants th
 use the project's existing Code Property Graph (the `cpg` MCP tool / `cpg-analysis` skill pattern
 other agents already follow) when one exists for the component under review — noted here as a
 stated preference for reusing an existing project capability, not a new design decision.
+2026-08-17 — What triggered this now? → No specific incident; proactive risk reduction ("ensure
+we won't have any problems") rather than a reaction to a known close call. This is about standing
+coverage, not patching one discovered hole.
+2026-08-17 — Does the security expert replace or layer on top of `analyst`'s existing
+security/perf checklist step? → **Layer on top.** `analyst` keeps its lightweight security/perf
+check on every review as the first line of defense; the security expert is a separate, deeper
+pass invoked when security is the actual concern.
