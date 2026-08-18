@@ -69,3 +69,9 @@ untrusted-input surfaces only).
 2026-08-17 — What does the agent/prompt-safety side review? → **All three**: kaizen inbox
 entries before promotion (the 2026-07-31 scenario), agent/skill prompt definitions themselves,
 and plans/requirements docs for security implications before they're acted on.
+2026-08-17 — Who has final say when the security expert flags agent/prompt material as unsafe?
+→ **`cobb` decides; the security expert advises.** Same shape as the `analyst` boundary —
+`cobb` keeps ownership of what actually gets promoted/shipped (kaizen distillation, agent/skill
+authoring); the security expert supplies a dedicated security opinion that feeds into `cobb`'s
+call, replacing ad hoc routing (as happened 2026-07-31) with a named, standing source of that
+opinion. Not a veto.
