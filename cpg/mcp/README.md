@@ -1,12 +1,17 @@
 # `cpg` MCP server
 
-A small stdio MCP server exposing **one** tool, `mcp__cpg__query`, that runs read-only OpenCypher
-against a named FalkorDB graph — typically a loaded Joern Code Property Graph. It replaces
-hand-assembled `redis-cli GRAPH.QUERY` command lines on the CPG **read** path for the
-`cpg-analysis` skill's consumers (`analyst`, `architect`, `qa-engineer`).
+A small stdio MCP server exposing **one** tool, `mcp__cpg__query`, that runs OpenCypher against
+any named FalkorDB graph — not limited to CPG graphs. It replaces hand-assembled `redis-cli
+GRAPH.QUERY` command lines on the CPG **read** path for the `cpg-analysis` skill's consumers
+(`analyst`, `architect`, `qa-engineer`), and additionally offers a narrow, attributed **write**
+path (see [Writing through this tool](#writing-through-this-tool)) piloted on `graph-dba`'s
+kaizen working memory (`kaizen_graph_dba`).
 
-Design and rationale: [`../../docs/plans/cpg-query-access.md`](../../docs/plans/cpg-query-access.md).
-CPG schema: [`../../skills/joern-cpg/references/cpg-model.md`](../../skills/joern-cpg/references/cpg-model.md).
+Design and rationale: [`../../docs/plans/cpg-query-access.md`](../../docs/plans/cpg-query-access.md)
+(the original read-only contract) and
+[`../../docs/plans/generic-cypher-mcp.md`](../../docs/plans/generic-cypher-mcp.md) (the write path,
+the `agent` parameter, and the graph-agnostic widening). CPG schema:
+[`../../skills/joern-cpg/references/cpg-model.md`](../../skills/joern-cpg/references/cpg-model.md).
 
 ---
 
@@ -94,17 +99,19 @@ context — so the in-container gate's expected counts are unchanged by it.
 ## The tool
 
 Server name `cpg` · tool name `query` · callable name **`mcp__cpg__query`**. Exactly one tool,
-exactly two parameters — that is the requirement (FR-2) the component exists to satisfy, which is
-why every other knob is an environment variable rather than a third parameter.
+two required parameters plus one optional — that is the requirement (FR-2's original two-required
+shape, widened by `generic-cypher-mcp.md` FR-1's one new optional parameter) the component exists
+to satisfy, which is why every other knob is an environment variable, not a fourth parameter.
 
 | Parameter | Type | Meaning |
 |---|---|---|
-| `graph` | `str` | The FalkorDB graph key. **Always caller-supplied** — never defaulted, never inferred from context. CPGs are conventionally `cpg_<component>`. |
+| `graph` | `str` | The FalkorDB graph key. **Always caller-supplied** — never defaulted, never inferred from context. Not limited to `cpg_*`: any graph key on this instance is reachable, e.g. `kaizen_graph_dba`. |
 | `cypher` | `str` | The query text, sent **verbatim**. Multi-line is fine; there is no shell layer, so no quoting or escaping. |
+| `agent` | `str \| None` | **Optional, default `None`.** The caller's own agent slug. Unused on a read — reads stay unrestricted, exactly as before. Required (and checked) only when the tool detects a write attempt; see [Writing through this tool](#writing-through-this-tool). |
 
-Both are required. There is deliberately no `params` argument: Cypher parameters would be a third
-parameter, so recipes substitute literals into the query text (the same rule the `redis-cli` path
-always had).
+`graph` and `cypher` are required, exactly as before. There is deliberately no `params` argument:
+Cypher parameters would be a fourth parameter, so recipes substitute literals into the query text
+(the same rule the `redis-cli` path always had).
 
 ### Read-only — and why that is a design guarantee, not a convention
 
@@ -118,6 +125,57 @@ The plain path is **`GRAPH.RO_QUERY`**, which buys two distinct things:
 
 This is a property of this tool only. FalkorDB itself remains open on `:6379` with no auth,
 `redis-cli` is unrestricted, and the `joern` load/write path is untouched.
+
+### Writing through this tool
+
+Design and rationale in full:
+[`../../docs/plans/generic-cypher-mcp.md`](../../docs/plans/generic-cypher-mcp.md) §3.2. The short
+version: a write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement it could parse,
+or — pre-migration only — a lightweight keyword scan on an "empty key" response), then gated by
+`authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **two**
+write shapes are ever authorized, both scoped to the `:KaizenEntry` label piloted on `graph-dba`'s
+kaizen working memory (`kaizen_graph_dba`); every other write is rejected regardless of `agent`:
+
+1. **Author** — an agent creates its own entry. The `cypher` text's `CREATE (<var>:KaizenEntry
+   {...})` map literal must carry a literal `author: '<value>'` matching the declared `agent`
+   exactly (a `SET`-based reassignment of an existing entry's `author` is never recognized as this
+   shape, regardless of the value — only entry *creation* is authorized):
+
+   ```
+   mcp__cpg__query(
+     graph='kaizen_graph_dba',
+     cypher="CREATE (k:KaizenEntry {entryId:'...', date:'...', fact:'...', evidence:'...', "
+            "context:'...', suggestedHome:'...', author:'graph-dba', createdAt:'...'})",
+     agent='graph-dba',
+   )
+   ```
+
+2. **Curator-clear** — a recognized curator agent (`CPG_MCP_CURATOR_AGENTS` env var,
+   comma-separated, default `cobb`) clears an entry it did not author, by `entryId`. Exactly one
+   skeleton is recognized — no other write shape gets curator treatment:
+
+   ```
+   mcp__cpg__query(
+     graph='kaizen_graph_dba',
+     cypher="MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e",
+     agent='cobb',
+   )
+   ```
+
+A write with no `agent` supplied, an author mismatch, a non-curator attempting the clear shape, or
+any Cypher that isn't one of the two shapes above, is rejected with a curated message **before**
+`GRAPH.QUERY` is ever called — nothing is written on a rejected call. This is enforced at the
+trust level `docs/requirements/generic-cypher-mcp.md` FR-8 states explicitly: "well-behaved callers
+can't do this by accident," not hardened against a malicious one — a caller that aliases the
+literal (e.g. `WITH 'graph-dba' AS a CREATE (k:KaizenEntry {author: a})`) evades detection, a known,
+accepted limitation.
+
+On a successful write, the response line reports which mutation counters moved (e.g. `graph=... ·
+write ok (nodes_created=1, properties_set=8) · 4.2ms`) — **confirmed** against the pinned
+`falkordb` 1.6.2 client's own source (`falkordb/query_result.py`): `QueryResult` exposes
+`nodes_created`, `nodes_deleted`, `properties_set`, `properties_removed`, `relationships_created`,
+`relationships_deleted`, `labels_added`, `labels_removed`, `indices_created`, `indices_deleted` as
+plain `int` properties, each 0 when nothing of that kind happened; only non-zero counters are shown.
 
 ### `EXPLAIN` yes, `PROFILE` no
 
@@ -207,6 +265,7 @@ and the default is used, rather than taking the server down.
 | `CPG_MCP_MAX_CELL` | `300` | Chars per cell; a cut appends `…(+N chars)`. |
 | `CPG_MCP_MAX_CHARS` | `30000` | Total payload chars; whole rows are dropped from the tail (never a partial row) until it fits. |
 | `CPG_MCP_TIMEOUT_MS` | `30000` | Server-side query timeout, passed to `ro_query`. Deliberately below the 60 s `.mcp.json` wall so the *server*, not the harness, produces the error message. **Does not apply to the `EXPLAIN` path** — `explain()` takes no timeout argument; planning does not execute the traversal, and the 60 s wall remains the backstop. |
+| `CPG_MCP_CURATOR_AGENTS` | `cobb` | Comma-separated agent slugs allowed to run the curator-clear write shape (see [Writing through this tool](#writing-through-this-tool)). Whitespace around each entry is stripped; empty entries are dropped. |
 
 **On raising `CPG_MCP_MAX_CHARS`.** The server declares
 `_meta["anthropic/maxResultSizeChars"] = min(2 × CPG_MCP_MAX_CHARS, 500000)`, so Claude Code's
@@ -427,9 +486,9 @@ host counts minus that module, not a different suite.
 
 ```bash
 cpg/mcp/build.sh                                    # precondition: both targets, immediately first
-docker run --rm cpg-mcp:test python -m pytest tests -q                    # 53 passed, 7 deselected
+docker run --rm cpg-mcp:test python -m pytest tests -q                    # 74 passed, 7 deselected
 docker run --rm --add-host=host.docker.internal:host-gateway \
-  cpg-mcp:test python -m pytest tests -q -m live                          # 7 passed, 53 deselected
+  cpg-mcp:test python -m pytest tests -q -m live                          # 7 passed, 74 deselected
 redis-cli -p 6379 GRAPH.LIST                        # done-condition: no _cpg_mcp_selftest_* residue
 ```
 

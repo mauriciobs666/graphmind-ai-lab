@@ -30,13 +30,37 @@ class FakeResult:
         self.result_set = rows
 
 
+class FakeWriteResult:
+    """Stands in for `falkordb.query_result.QueryResult`'s write path: every
+    mutation-counter attribute the real (1.6.2, pinned) client exposes,
+    defaulting to 0 unless overridden — mirrors `server._WRITE_STAT_ATTRS`
+    exactly, so a test can assert on the same names `format_write_result()`
+    reads."""
+
+    def __init__(self, **stats):
+        for attr in server._WRITE_STAT_ATTRS:
+            setattr(self, attr, stats.get(attr, 0))
+
+
 class FakeGraph:
-    def __init__(self, calls, *, header=None, rows=None, error=None, plan="PLAN"):
+    def __init__(
+        self,
+        calls,
+        *,
+        header=None,
+        rows=None,
+        error=None,
+        plan="PLAN",
+        query_error=None,
+        write_stats=None,
+    ):
         self._calls = calls
         self._header = header if header is not None else [[2, "n"]]
         self._rows = rows if rows is not None else [["x"]]
         self._error = error
         self._plan = plan
+        self._query_error = query_error
+        self._write_stats = write_stats or {}
 
     def ro_query(self, cypher, timeout=None):
         self._calls.append(("ro_query", cypher, timeout))
@@ -49,6 +73,15 @@ class FakeGraph:
         if self._error is not None:
             raise self._error
         return self._plan
+
+    def query(self, cypher, timeout=None):
+        """Records the call so "was a real write attempted" is directly
+        assertable, then returns a `FakeWriteResult` with the configured
+        mutation counters (all 0 unless `write_stats` was supplied)."""
+        self._calls.append(("query", cypher, timeout))
+        if self._query_error is not None:
+            raise self._query_error
+        return FakeWriteResult(**self._write_stats)
 
 
 class FakeClient:
@@ -92,12 +125,19 @@ def test_exactly_one_tool_named_query():
     assert [t.name for t in tools] == ["query"]
 
 
-def test_input_schema_has_exactly_two_required_string_parameters():
-    """FR-2 is a hard stakeholder requirement — a third parameter is a defect."""
+def test_input_schema_has_two_required_params_and_one_optional_agent():
+    """FR-2's original two-required-param shape holds; FR-1 (generic-cypher-mcp)
+    widens it with exactly one new, optional third parameter — never a second
+    required one, which would break every existing read-only caller."""
     schema = _tools()[0].inputSchema
-    assert set(schema["properties"]) == {"graph", "cypher"}
+    assert set(schema["properties"]) == {"graph", "cypher", "agent"}
     assert sorted(schema["required"]) == ["cypher", "graph"]
-    assert {p["type"] for p in schema["properties"].values()} == {"string"}
+    assert schema["properties"]["graph"]["type"] == "string"
+    assert schema["properties"]["cypher"]["type"] == "string"
+    # `agent: str | None = None` — optional, accepts a string or null.
+    agent_types = {branch["type"] for branch in schema["properties"]["agent"]["anyOf"]}
+    assert agent_types == {"string", "null"}
+    assert schema["properties"]["agent"]["default"] is None
 
 
 def test_output_schema_is_absent():
@@ -519,6 +559,262 @@ def test_explain_path_sends_the_stripped_query_and_renders_the_plan(fake_client)
 
 
 # --------------------------------------------------------------------------
+# 8 — write authorization (FR-8, docs/plans/generic-cypher-mcp.md §3.1/§3.2)
+# --------------------------------------------------------------------------
+
+_READ_ONLY_ERROR = "graph.RO_QUERY is to be executed only on read-only queries"
+_EMPTY_KEY_ERROR = "Invalid graph operation on empty key"
+
+# The real §3.4 migration shape: one shared `author: 'graph-dba'` literal in
+# the CREATE clause itself, not per-row inside the UNWIND list (the per-row
+# maps never carry an `author` key at all).
+_MIGRATION_CYPHER = (
+    "UNWIND [{entryId:'1', date:'2026-08-16', fact:'a', evidence:'e1', context:'c1', "
+    "suggestedHome:'unsure', createdAt:'t'}, "
+    "{entryId:'2', date:'2026-08-16', fact:'b', evidence:'e2', context:'c2', "
+    "suggestedHome:'unsure', createdAt:'t'}] AS e "
+    "CREATE (k:KaizenEntry {entryId: e.entryId, date: e.date, fact: e.fact, "
+    "evidence: e.evidence, context: e.context, suggestedHome: e.suggestedHome, "
+    "author: 'graph-dba', createdAt: e.createdAt})"
+)
+
+
+def _writes_never_ran(client) -> bool:
+    return not any(call[0] == "query" for call in client.calls)
+
+
+def test_read_path_unchanged_without_agent(fake_client):
+    """1 — a plain MATCH...RETURN, no `agent` → unchanged behavior, regression pin."""
+    client = fake_client(graphs=["g"], header=HEADER, rows=[["a", "b"]])
+    out = server.run_query("g", "MATCH (n) RETURN n.caller, n.file")
+    assert out.splitlines()[1] == "caller | file"
+    assert _writes_never_ran(client)
+
+
+def test_write_without_agent_is_rejected(fake_client):
+    """2 — write Cypher, `agent` omitted, graph exists → curated "no agent
+    supplied" message; the real write is never attempted."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "CREATE (k:KaizenEntry {entryId:'x', author:'graph-dba'})"
+    out = server.run_query("g", cypher)
+    assert "no `agent` parameter supplied" in out
+    assert _writes_never_ran(client)
+
+
+def test_author_write_with_matching_agent_succeeds(fake_client):
+    """3 — a real CREATE with a matching `author:` literal is authorized and
+    the write summary is rendered."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1, "properties_set": 8},
+    )
+    cypher = (
+        "CREATE (k:KaizenEntry {entryId:'e1', date:'2026-08-17', fact:'x', "
+        "evidence:'y', context:'z', suggestedHome:'unsure', author:'graph-dba', "
+        "createdAt:'2026-08-17T00:00:00Z'})"
+    )
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+    assert "nodes_created=1" in out
+    assert "properties_set=8" in out
+
+
+def test_author_write_with_mismatched_agent_is_rejected(fake_client):
+    """4 — `author: 'cobb'` literal, `agent='graph-dba'` → rejected; no
+    partial write (AC-6)."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "CREATE (k:KaizenEntry {entryId:'e1', author:'cobb'})"
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert "author 'cobb'" in out
+    assert "agent='graph-dba'" in out
+    assert _writes_never_ran(client)
+
+
+def test_curator_clear_shape_with_cobb_succeeds(fake_client):
+    """5 — the exact curator-clear skeleton, `agent='cobb'` → allowed."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_deleted": 1},
+    )
+    cypher = "MATCH (e:KaizenEntry {entryId: 'e1'}) DETACH DELETE e"
+    out = server.run_query("kaizen_graph_dba", cypher, "cobb")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "nodes_deleted=1" in out
+
+
+def test_curator_clear_shape_with_non_curator_is_rejected(fake_client):
+    """6 — same skeleton, `agent='graph-dba'` → rejected (curator-only)."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "MATCH (e:KaizenEntry {entryId: 'e1'}) DETACH DELETE e"
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert "not a recognized curator" in out
+    assert _writes_never_ran(client)
+
+
+def test_unrecognized_write_shape_is_rejected(fake_client):
+    """7 — neither shape (no `author:` literal, not the curator skeleton) →
+    rejected regardless of `agent`."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "MATCH (n) DETACH DELETE n"
+    out = server.run_query("g", cypher, "graph-dba")
+    assert "neither an author-write" in out
+    assert _writes_never_ran(client)
+
+
+def test_migration_shaped_batch_with_single_shared_author_literal_succeeds(fake_client):
+    """8 — the real §3.4 shape: one claim found, matches → allowed."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 2, "properties_set": 16},
+    )
+    out = server.run_query("kaizen_graph_dba", _MIGRATION_CYPHER, "graph-dba")
+    assert ("query", _MIGRATION_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_write_to_nonexistent_graph_without_agent_is_graph_not_found(fake_client):
+    """9 — "empty key", no `agent` → today's exact graph-not-found message,
+    unchanged (regression)."""
+    client = fake_client(graphs=["one", "two"], error=_response_error(_EMPTY_KEY_ERROR))
+    cypher = "CREATE (k:KaizenEntry {entryId:'e1', author:'graph-dba'})"
+    out = server.run_query("kaizen_graph_dba", cypher)
+    assert "Graph 'kaizen_graph_dba' does not exist." in out
+    assert _writes_never_ran(client)
+
+
+def test_write_to_nonexistent_graph_with_agent_and_matching_author_creates_it(fake_client):
+    """10 — "empty key", `agent='graph-dba'`, the §3.4-shaped CREATE with a
+    matching `author:` literal → the write runs (the migration path)."""
+    client = fake_client(
+        error=_response_error(_EMPTY_KEY_ERROR),
+        write_stats={"nodes_created": 6, "properties_set": 48},
+    )
+    out = server.run_query("kaizen_graph_dba", _MIGRATION_CYPHER, "graph-dba")
+    assert ("query", _MIGRATION_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_write_to_nonexistent_graph_with_agent_but_non_write_text_is_graph_not_found(
+    fake_client,
+):
+    """11 — Pass-1 review M3. "empty key", `agent='graph-dba'` (supplied out of
+    habit), plain read text (no write keyword) → routed straight to
+    graph-not-found; `authorize_write()` never runs, `query()` never called."""
+    client = fake_client(graphs=["one"], error=_response_error(_EMPTY_KEY_ERROR))
+    out = server.run_query(
+        "kaizen_graph_dba", "MATCH (e:KaizenEntry) RETURN e.fact", "graph-dba"
+    )
+    assert "Graph 'kaizen_graph_dba' does not exist." in out
+    assert _writes_never_ran(client)
+
+
+def test_profile_still_refused_regardless_of_agent(fake_client):
+    """12 — PROFILE, any `agent` → unchanged refusal, no ro_query/query call at
+    all (PROFILE can't be used to dodge §3.2)."""
+    client = fake_client()
+    out = server.run_query("g", "PROFILE MATCH (n) RETURN n", "graph-dba")
+    assert out == server.PROFILE_REFUSAL
+    assert client.calls == []
+
+
+def test_explain_still_works_on_write_cypher(fake_client):
+    """13 — EXPLAIN + a write statement → plan returned via the unchanged
+    explain() path, regardless of `agent`; nothing executed."""
+    client = fake_client(graphs=["g"], plan="Create")
+    cypher = "CREATE (k:KaizenEntry {entryId:'e1', author:'graph-dba'})"
+    out = server.run_query("g", f"EXPLAIN {cypher}", "graph-dba")
+    assert ("explain", cypher) in client.calls
+    assert _writes_never_ran(client)
+    assert "Create" in out
+
+
+def test_author_write_succeeds_despite_decoy_author_substring_in_evidence(fake_client):
+    """14 — Pass-1 review M1. A decoy `author:`-shaped substring sitting inside
+    `evidence`'s own string-literal span is excluded; only the real top-level
+    `author: 'graph-dba'` is found → allowed."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1},
+    )
+    cypher = (
+        "CREATE (k:KaizenEntry {fact: 'x', evidence: \"the pattern author: "
+        "'someone-else' shows up in the log line\", context: 'c', "
+        "suggestedHome: 'unsure', author: 'graph-dba', createdAt: 't'})"
+    )
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_set_based_author_reassignment_is_always_rejected(fake_client):
+    """15 — Pass-1 review M2. `SET e.author = 'graph-dba'` against a node the
+    caller doesn't own, even with a matching `agent` → still rejected, because
+    `_kaizen_entry_create_map_spans()` finds no CREATE clause at all. Proves
+    the SET path is categorically unreachable, not just unmatched by
+    coincidence."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "MATCH (e:KaizenEntry {entryId:'not-mine'}) SET e.author = 'graph-dba'"
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert "neither an author-write" in out
+    assert _writes_never_ran(client)
+
+
+def test_set_map_merge_author_reassignment_is_always_rejected(fake_client):
+    """15b — analyst's diff-scoped code re-gate (2026-08-18, Major M-A). Test
+    15's dot-assignment spelling (`.author = '<value>'`) never matches
+    `_AUTHOR_LITERAL_RE` (map-KEY colon form only), with or without
+    CREATE-scoping — so it doesn't actually pin the M2 fix (CREATE-only
+    scoping excluding SET). This uses the colon-form property-merge SET
+    (`SET e += {author: '<value>'}`) instead, against a MATCHed (not
+    newly-created) node: a form `_AUTHOR_LITERAL_RE` *would* match if
+    CREATE-scoping were ever removed (the literal itself is spelled exactly
+    like a CREATE map's `author:` key), so this genuinely dies under that
+    mutation, while the real, shipped `_kaizen_entry_create_map_spans()`
+    finds no CREATE clause here at all and correctly rejects it."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "MATCH (e:KaizenEntry {entryId:'not-mine'}) SET e += {author: 'graph-dba'}"
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert "neither an author-write" in out
+    assert _writes_never_ran(client)
+
+
+def test_nested_create_decoy_in_free_text_is_excluded(fake_client):
+    """16 — Pass-2 review, M1-residual. Two sub-cases, both copied verbatim
+    from the review's own verified reproductions."""
+    # Over-rejection: a free-text field quotes a COMPLETE decoy CREATE clause,
+    # but the real top-level `author: 'graph-dba'` is correct — must still be
+    # allowed (before the fix, the decoy's own `author: 'evil'` also
+    # registered as a claim and wrongly rejected this).
+    over_rejection_cypher = (
+        "CREATE (real:KaizenEntry {fact: 'x', "
+        "evidence: \"example: CREATE (k:KaizenEntry {author: 'evil'})\", "
+        "context: 'c', suggestedHome: 'unsure', author: 'graph-dba', createdAt: 't'})"
+    )
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1},
+    )
+    out = server.run_query("kaizen_graph_dba", over_rejection_cypher, "graph-dba")
+    assert ("query", over_rejection_cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+    # Under-enforcement: the real top-level map has NO `author:` property at
+    # all; only a free-text-embedded decoy CREATE carries one. The decoy must
+    # NOT satisfy authorization (before the fix, it wrongly did — allowing an
+    # un-attributed node to be created).
+    under_enforcement_cypher = (
+        "CREATE (real:KaizenEntry {fact: 'x', "
+        "evidence: \"example: CREATE (k:KaizenEntry {author: 'graph-dba'})\", "
+        "context: 'c', suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    client2 = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out2 = server.run_query("kaizen_graph_dba", under_enforcement_cypher, "graph-dba")
+    assert "neither an author-write" in out2
+    assert _writes_never_ran(client2)
+
+
+# --------------------------------------------------------------------------
 # live — against a REAL FalkorDB, on a scratch graph this module owns
 # --------------------------------------------------------------------------
 
@@ -611,10 +907,17 @@ def test_live_syntax_error_keeps_falkordbs_line_and_column(live_graph):
 
 
 @pytest.mark.live
-def test_live_write_is_rejected_server_side(live_graph):
+def test_live_write_without_agent_is_rejected_server_side(live_graph):
+    """A write against a REAL, existing graph is still refused with no `agent`
+    supplied — updated for the generic-cypher-mcp write path (`docs/plans/
+    generic-cypher-mcp.md` §3.1): `GRAPH.RO_QUERY` really does reject it
+    server-side first (proving the "ro_query" classification branch fires
+    against live FalkorDB, not just the fake), and `authorize_write()` then
+    curates the more specific "no `agent` supplied" message rather than the
+    old generic read-only refusal. Either way, nothing is written."""
     client = server.get_client()
     out = server.run_query(live_graph, "CREATE (:CpgMcpWriteProbe)")
-    assert out.startswith("This tool is read-only (GRAPH.RO_QUERY).")
+    assert "no `agent` parameter supplied" in out
     check = client.select_graph(live_graph).ro_query(
         "MATCH (n:CpgMcpWriteProbe) RETURN count(n)"
     )

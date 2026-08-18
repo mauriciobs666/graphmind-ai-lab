@@ -2,6 +2,11 @@
 > **Status:** archived · **Owner:** `tico` · **Tracks:** C-301…C-307 (M3) ·
 > **Delivered ✅** — AC-1…AC-4 met and accepted (M3, 2026-07-25); follow-ups tracked in
 > [`../BACKLOG.md`](../BACKLOG.md) · **Last updated:** 2026-07-25
+>
+> **Note:** the "Non-CPG graphs / general agent access to FalkorDB" and "Authentication, per-user
+> grants, and read-only enforcement" lines below are widened by
+> [`generic-cypher-mcp.md`](./generic-cypher-mcp.md) FR-1 — read that document for the current
+> scope; this archived document's body is left exactly as originally written.
 
 ## Intent
 Agents that read a loaded Joern CPG in FalkorDB should be able to ask the graph a

@@ -2,14 +2,27 @@
 """The `cpg` MCP server — one tool, `query`, over a named FalkorDB graph.
 
 Design and rationale: ``docs/plans/cpg-query-access.md`` §4.4 (the frozen tool
-contract). The short version:
+contract) and ``docs/plans/generic-cypher-mcp.md`` (the write path below). The
+short version:
 
-* **One tool, exactly two parameters** (``graph``, ``cypher``) — FR-2/FR-4. No
-  ``limit``, no ``params``, no ``mode``; every knob is an environment variable.
-* **Read-only via ``GRAPH.RO_QUERY``.** That is what bounds the blast radius on
-  an instance that also holds non-CPG graphs: writes are rejected server-side,
-  *and* a typo'd graph name cannot materialise an empty key (plain
-  ``GRAPH.QUERY`` would create one). Safe by construction, not by validation.
+* **One tool, two required parameters** (``graph``, ``cypher``) **plus one
+  optional** (``agent``) — FR-2/FR-4 of the original contract, widened by
+  ``generic-cypher-mcp.md`` FR-1. No ``limit``, no ``params``, no ``mode``;
+  every other knob is an environment variable.
+* **Read-only via ``GRAPH.RO_QUERY`` — still the whole read path, unchanged.**
+  That is what bounds the blast radius on an instance that also holds non-CPG
+  graphs: writes are rejected server-side, *and* a typo'd graph name cannot
+  materialise an empty key (plain ``GRAPH.QUERY`` would create one). Safe by
+  construction, not by validation.
+* **A write is a distinct, narrower path, gated by ``authorize_write()``.**
+  ``GRAPH.RO_QUERY`` rejecting a statement (or FalkorDB reporting "empty key"
+  for a plausibly-first write, e.g. the one-time kaizen-graph migration) is
+  what routes a call into enforcement — never the mere presence of the
+  ``agent`` argument. Only two write shapes are ever authorized: an agent
+  creating its own ``:KaizenEntry`` (a literal ``author:`` match), or a
+  recognised curator agent clearing one by ``entryId``. See
+  ``docs/plans/generic-cypher-mcp.md`` §3.1/§3.2 for the full design and
+  rationale, including the false-positive/false-negative fixes verified there.
 * **``EXPLAIN`` is honoured, ``PROFILE`` is actively refused.** Raw FalkorDB
   *ignores* both prefixes and executes the query, so a passive drop would return
   results to a caller that asked for a profile — a wrong answer rather than an
@@ -80,6 +93,14 @@ MAX_CELL = _env_int("CPG_MCP_MAX_CELL", 300)
 MAX_CHARS = _env_int("CPG_MCP_MAX_CHARS", 30000)
 TIMEOUT_MS = _env_int("CPG_MCP_TIMEOUT_MS", 30000)
 
+#: Agents allowed to run the curator-clear write shape (FR-8's "curator"
+#: capability — clearing an entry it did not author, e.g. `cobb`'s
+#: distillation workflow). Comma-separated; defaults to `cobb`, the only
+#: curator this pilot names (`docs/plans/generic-cypher-mcp.md` §3.2).
+CURATOR_AGENTS = frozenset(
+    a.strip() for a in os.environ.get("CPG_MCP_CURATOR_AGENTS", "cobb").split(",") if a.strip()
+)
+
 #: Declared to the harness as ``_meta["anthropic/maxResultSizeChars"]``. Claude
 #: Code otherwise estimates a *token* budget and, above it, persists the result
 #: to disk and replaces it with a file reference — which would swallow the
@@ -93,20 +114,33 @@ MAX_RESULT_SIZE_CHARS = min(2 * MAX_CHARS, 500_000)
 # --------------------------------------------------------------------------
 
 TOOL_DESCRIPTION = (
-    "Run a read-only OpenCypher query against a named FalkorDB graph, typically a loaded "
-    "Joern CPG. `graph` is the graph key (caller-supplied, e.g. cpg_<component>); `cypher` "
-    "is the query text, sent verbatim — multi-line welcome, no shell quoting. Prefix "
+    "Run OpenCypher against a named FalkorDB graph — not limited to cpg_* graphs; any graph "
+    "key on this instance is reachable (e.g. cpg_<component>, or kaizen_graph_dba). `graph` "
+    "is the graph key (caller-supplied); `cypher` is the query text, sent verbatim — "
+    "multi-line welcome, no shell quoting. Reads run unrestricted via GRAPH.RO_QUERY. A "
+    "write additionally requires the optional `agent` parameter (your agent slug) and is "
+    "authorized only in two shapes: creating a `:KaizenEntry` whose CREATE map literal "
+    "carries a matching `author:` value, or a recognized curator agent clearing one by "
+    "`entryId` (`MATCH (...) DETACH DELETE`) — every other write is rejected. Prefix "
     "EXPLAIN for a query plan; PROFILE is not supported (it executes the query). FalkorDB "
     "is OpenCypher: no APOC, no GDS. CPG schema: "
     "skills/joern-cpg/references/cpg-model.md."
 )
 
 SERVER_INSTRUCTIONS = (
-    "The `cpg` server exposes a single tool, `query`: read-only OpenCypher against a named "
-    "FalkorDB graph — typically a Joern Code Property Graph loaded as `cpg_<component>`. "
-    "Use it to answer call-graph, data-flow, impact-analysis and test-gap questions about a "
-    "codebase without reading files. Graph names are always supplied by the caller; a query "
-    "against an unknown graph answers with the list of loaded graphs."
+    "The `cpg` server exposes a single tool, `query`: OpenCypher against a named FalkorDB "
+    "graph — not limited to cpg_* graphs; typically a Joern Code Property Graph loaded as "
+    "`cpg_<component>`, but any graph key on this instance is reachable, e.g. "
+    "`kaizen_graph_dba` (graph-dba's kaizen working memory). Use it to answer call-graph, "
+    "data-flow, impact-analysis and test-gap questions about a codebase without reading "
+    "files, or to read/write graph-dba's kaizen entries. Graph names are always supplied by "
+    "the caller; a query against an unknown graph answers with the list of loaded graphs. "
+    "Reads need no `agent` and are unrestricted. A write additionally requires `agent` (the "
+    "caller's agent slug) and is authorized only in two shapes: an agent creating its own "
+    "`:KaizenEntry` (a CREATE map literal with a matching `author:` value), or a recognized "
+    "curator agent (`CPG_MCP_CURATOR_AGENTS`, default `cobb`) clearing an entry by `entryId` "
+    "(`MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e`) — every other write shape, "
+    "and any author mismatch, is rejected."
 )
 
 PROFILE_REFUSAL = (
@@ -185,6 +219,166 @@ def split_directive(cypher: str) -> tuple[str, str]:
     if match.group(1).upper() == "PROFILE":
         return "profile", ""
     return "explain", cypher[match.end():].lstrip()
+
+
+# --------------------------------------------------------------------------
+# Write authorization (FR-8) — `docs/plans/generic-cypher-mcp.md` §3.2
+#
+# A static, pre-execution, string-literal-aware text scan — deliberately not a
+# real Cypher parser (FR-8's own stated trust bar: "well-behaved callers can't
+# do this by accident," not hardened against a malicious one). Two, and only
+# two, recognized write shapes: an agent creating its own `:KaizenEntry` via a
+# literal `author:` claim inside a `CREATE (...:KaizenEntry {...})` map body,
+# and a recognized curator agent clearing one by `entryId`
+# (`MATCH (...) DETACH DELETE`).
+# --------------------------------------------------------------------------
+
+#: Lightweight pre-classification only, used solely on the "empty key" branch
+#: of `run_query()` to decide whether `agent` being supplied plausibly signals
+#: write intent — never itself an authorization decision.
+_WRITE_KEYWORD_RE = re.compile(r"\b(CREATE|MERGE|SET|DELETE|REMOVE)\b", re.IGNORECASE)
+
+
+def _looks_like_write(cypher: str) -> bool:
+    """Lightweight pre-classification only — never an authorization decision. A
+    read whose free-text predicate happens to quote a write keyword (e.g. `WHERE
+    e.context CONTAINS 'DETACH DELETE'`) can false-positive here; the only
+    consequence is routing into `authorize_write()`, which is itself
+    string-literal- and CREATE-span-aware and would reject it as
+    "not a recognized write shape" rather than the more accurate "graph not
+    found" — a less-precise message, never a wrong authorization. This branch
+    only ever fires pre-migration or on a graph-name typo, since a populated
+    `kaizen_graph_dba` never returns "empty key" again after the one-time import.
+    """
+    return bool(_WRITE_KEYWORD_RE.search(cypher))
+
+
+# The map-KEY form only — never `.author = ...` (SET). Restricting extraction to a
+# CREATE's own map literal (below) already excludes SET syntactically, since SET
+# never appears inside a CREATE's `{...}` body — this pattern doesn't even need to
+# recognize the SET spelling to make that true.
+_AUTHOR_LITERAL_RE = re.compile(r"""\bauthor\s*:\s*['"]([^'"]*)['"]""", re.IGNORECASE)
+
+# The ONE recognized curator-clear skeleton (`graph-dba`'s plan §3), whitespace-
+# collapsed before matching. Deliberately narrow to :KaizenEntry — see the risks
+# section of `docs/plans/generic-cypher-mcp.md` §9 for the revisit trigger.
+_CURATOR_CLEAR_RE = re.compile(
+    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\) "
+    r"DETACH DELETE [a-zA-Z_]\w*;?$",
+    re.IGNORECASE,
+)
+
+
+def _string_literal_spans(text: str) -> list[tuple[int, int]]:
+    """[start, end) index ranges of every quoted string literal in `text` (single
+    or double quoted, backslash-escape aware)."""
+    spans, i, n, in_string, start = [], 0, len(text), None, None
+    while i < n:
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_string:
+                spans.append((start, i + 1))
+                in_string = None
+        elif ch in ("'", '"'):
+            in_string, start = ch, i
+        i += 1
+    return spans
+
+
+def _kaizen_entry_create_map_spans(cypher: str) -> list[str]:
+    """Body text of every map literal `{...}` immediately following a
+    `CREATE (<var>:KaizenEntry ...)` clause. Brace-matched using the same
+    string-literal scan as above, so a free-text field containing a literal `{`/`}`
+    can't desync the match. A `SET`, `MATCH`, or `MERGE` clause simply produces no
+    spans here — there is no separate "exclude SET" rule to get wrong.
+
+    The `CREATE`-keyword *location* step is itself string-literal-aware (Pass-2
+    review, M1-residual): a whole-text `_string_literal_spans` pass is computed
+    first, and any `CREATE` match whose start falls inside one of those spans is
+    skipped — otherwise a free-text field that happens to quote a *complete*
+    `CREATE (...:KaizenEntry {...})`-shaped example (not just a bare `author:`
+    fragment) would be misread as a second, independent top-level clause."""
+    outer_spans = _string_literal_spans(cypher)
+    spans = []
+    for cm in re.finditer(r"\bCREATE\b", cypher, re.IGNORECASE):
+        if any(s <= cm.start() < e for s, e in outer_spans):
+            continue
+        tail = cypher[cm.end():]
+        m = re.match(r"\s*\(\s*[a-zA-Z_]\w*\s*:\s*KaizenEntry\s*\{", tail)
+        if not m:
+            continue
+        body_start = cm.end() + m.end()
+        depth, i, in_string = 1, body_start, None
+        while i < len(cypher) and depth > 0:
+            ch = cypher[i]
+            if in_string:
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == in_string:
+                    in_string = None
+            elif ch in ("'", '"'):
+                in_string = ch
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            i += 1
+        spans.append(cypher[body_start:i - 1])
+    return spans
+
+
+def _author_claims(cypher: str) -> list[str]:
+    """Every literal `author: '<value>'` found strictly inside a CREATE's own
+    KaizenEntry map body, and NOT nested inside a sibling property's own string
+    value (a decoy `author:`-shaped substring inside `evidence`/`context` sits
+    inside THAT property's string-literal span and is excluded)."""
+    claims = []
+    for span in _kaizen_entry_create_map_spans(cypher):
+        literal_ranges = _string_literal_spans(span)
+        for m in _AUTHOR_LITERAL_RE.finditer(span):
+            if not any(s <= m.start() < e for s, e in literal_ranges):
+                claims.append(m.group(1))
+    return claims
+
+
+def authorize_write(cypher: str, agent: str | None) -> str | None:
+    """Return a curated rejection message, or None if the write is authorized."""
+    if not agent:
+        return (
+            "Write detected but no `agent` parameter supplied. Declare the caller's "
+            "identity: mcp__cpg__query(graph, cypher, agent='<your-agent-slug>')."
+        )
+    claims = _author_claims(cypher)
+    if claims:
+        mismatched = [c for c in claims if c != agent]
+        if mismatched:
+            return (
+                f"Rejected: this write attributes an entry to author '{mismatched[0]}', "
+                f"but the call declared agent='{agent}'. One agent's write cannot be "
+                "accepted as another's (FR-8)."
+            )
+        return None   # every author: literal found inside a CREATE:KaizenEntry body
+                       # matches the declared agent — allowed
+    normalized = " ".join(cypher.split())
+    if _CURATOR_CLEAR_RE.match(normalized):
+        if agent in CURATOR_AGENTS:
+            return None   # the one recognized curator-clear shape, by a curator agent
+        return (
+            f"Rejected: this is the curator-clear shape (MATCH ... DETACH DELETE by "
+            f"entryId), but agent='{agent}' is not a recognized curator "
+            f"({sorted(CURATOR_AGENTS)}). Only a curator may clear an entry it did not "
+            "author."
+        )
+    return (
+        "Rejected: this write is neither an author-write (no literal `author: "
+        f"'{agent}'` found inside a CREATE (...:KaizenEntry {{...}}) clause) nor the "
+        "recognized curator-clear shape. This tool only authorizes those two write "
+        "shapes (FR-8)."
+    )
 
 
 # --------------------------------------------------------------------------
@@ -359,6 +553,45 @@ def format_plan(graph: str, plan: object) -> str:
     return f"graph={graph} · EXPLAIN (plan only — nothing was executed)\n{plan}"
 
 
+#: ``QueryResult`` mutation-counter properties, verified against the pinned
+#: client's own source (``falkordb`` 1.6.2, ``falkordb/query_result.py``) —
+#: each one an ``int`` parsed from FalkorDB's stats line, 0 when nothing of
+#: that kind happened. Confirmed real, not guessed: every name below is a
+#: ``@property`` on ``falkordb.query_result.QueryResult`` in the installed
+#: package.
+_WRITE_STAT_ATTRS = (
+    "labels_added",
+    "labels_removed",
+    "nodes_created",
+    "nodes_deleted",
+    "properties_set",
+    "properties_removed",
+    "relationships_created",
+    "relationships_deleted",
+    "indices_created",
+    "indices_deleted",
+)
+
+
+def format_write_result(graph: str, result: object, elapsed_ms: float) -> str:
+    """Render a write's outcome: which mutation counters moved, and how long it took.
+
+    Only non-zero counters are shown, comma-separated, so a curator-clear
+    (``nodes_deleted=1``) doesn't print nine zeros next to it. If the result
+    object doesn't expose any of the expected counters (an unexpected client
+    shape), falls back to a minimal "write ok" line with no stats rather than
+    guessing — this repo's standing "don't assert unverified behavior"
+    convention.
+    """
+    parts = [
+        f"{attr}={value}"
+        for attr in _WRITE_STAT_ATTRS
+        if (value := getattr(result, attr, 0))
+    ]
+    stats = ", ".join(parts) if parts else "no counters reported"
+    return f"graph={graph} · write ok ({stats}) · {elapsed_ms:.1f}ms"
+
+
 # --------------------------------------------------------------------------
 # Errors — every failure is a curated, actionable message, never a traceback
 # --------------------------------------------------------------------------
@@ -457,12 +690,18 @@ mcp = FastMCP(name="cpg", instructions=SERVER_INSTRUCTIONS)
     structured_output=False,
     meta={"anthropic/maxResultSizeChars": MAX_RESULT_SIZE_CHARS},
 )
-def query(graph: str, cypher: str) -> str:
-    """Run read-only Cypher against `graph` and return a plain-text table."""
-    return run_query(graph, cypher)
+def query(graph: str, cypher: str, agent: str | None = None) -> str:
+    """Run Cypher against `graph` and return a plain-text table (or write summary).
+
+    Reads run unrestricted, exactly as before, and need no `agent`. A write is
+    only ever authorized when `agent` names the entry's own author, or a
+    recognized curator clearing an entry by `entryId` — see
+    `docs/plans/generic-cypher-mcp.md` §3.2.
+    """
+    return run_query(graph, cypher, agent)
 
 
-def run_query(graph: str, cypher: str) -> str:
+def run_query(graph: str, cypher: str, agent: str | None = None) -> str:
     """The tool body, importable and callable without the MCP plumbing.
 
     Never raises: every failure path returns a curated message instead, because
@@ -473,6 +712,7 @@ def run_query(graph: str, cypher: str) -> str:
 
         # Refused before any server call: FalkorDB would silently ignore the
         # prefix and return results, which is a wrong answer, not an error.
+        # PROFILE can never be used to dodge write authorization below.
         if kind == "profile":
             return PROFILE_REFUSAL
 
@@ -484,15 +724,60 @@ def run_query(graph: str, cypher: str) -> str:
             # materialise an empty key. Check first; the list doubles as the
             # not-found message's content. A failing GRAPH.LIST propagates to the
             # curated handler rather than letting an unverified explain() through.
+            # Plan preview only, regardless of write intent — nothing executes.
             graphs = list(client.list_graphs())
             if graph not in graphs:
                 return graph_not_found_message(graph, graphs)
             return format_plan(graph, target.explain(to_send))
 
-        started = time.perf_counter()
-        result = target.ro_query(to_send, timeout=TIMEOUT_MS)
-        elapsed_ms = (time.perf_counter() - started) * 1000.0
-        return format_result(graph, result.header, result.result_set, elapsed_ms)
+        # kind == "query"
+        try:
+            started = time.perf_counter()
+            result = target.ro_query(to_send, timeout=TIMEOUT_MS)
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            return format_result(graph, result.header, result.result_set, elapsed_ms)
+        except ResponseError as exc:
+            lowered = str(exc).lower()
+            if "ro_query" in lowered:
+                # A write, against a graph that EXISTS — RO_QUERY itself proved
+                # it (parsed the statement, rejected it only for being a
+                # write). No further classification needed; go straight to
+                # enforcement.
+                rejection = authorize_write(to_send, agent)
+                if rejection is not None:
+                    return rejection
+                started = time.perf_counter()
+                result = target.query(to_send, timeout=TIMEOUT_MS)
+                elapsed_ms = (time.perf_counter() - started) * 1000.0
+                return format_write_result(graph, result, elapsed_ms)
+            if "empty key" in lowered:
+                # The graph doesn't exist (yet). "empty key" fires for ANY
+                # query — read or write — against a missing/mistyped name, so
+                # `agent` being set is NOT on its own proof of write intent (a
+                # caller — plausibly graph-dba itself, which "owns" this
+                # graph — may pass `agent` out of habit on a read). Classify
+                # from the TEXT, not from whether `agent` happened to be
+                # supplied:
+                if agent is not None and _looks_like_write(to_send):
+                    # The only caller this branch exists for in practice — the
+                    # one-time import, materializing kaizen_graph_dba for the
+                    # first time. A false positive here still only routes into
+                    # enforcement, never to an unconditional execute.
+                    rejection = authorize_write(to_send, agent)
+                    if rejection is not None:
+                        return rejection
+                    started = time.perf_counter()
+                    result = target.query(to_send, timeout=TIMEOUT_MS)  # materializes the graph
+                    elapsed_ms = (time.perf_counter() - started) * 1000.0
+                    return format_write_result(graph, result, elapsed_ms)
+                # Not recognizably a write (or no agent): today's exact
+                # behavior, unchanged — a plain read against a missing/
+                # mistyped graph gets the real answer either way.
+                graphs = list(client.list_graphs())
+                return graph_not_found_message(graph, graphs)
+            # everything else (syntax errors, timeouts, ...): re-raise so the
+            # outer handler's curated classification runs exactly as before.
+            raise
     except Exception as exc:  # noqa: BLE001 — the curated path is the only exit
         graphs = _list_graphs(get_client()) if _is_missing_graph(exc) else None
         return explain_error(exc, graph, FALKORDB_HOST, FALKORDB_PORT, graphs)
