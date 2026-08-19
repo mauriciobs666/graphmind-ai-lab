@@ -1,5 +1,5 @@
 # CPG MCP server/tool rename — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-19
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-19
 
 ## Intent
 The MCP server and its single tool are still named after CPG (`cpg/mcp/`, `.mcp.json` server key
@@ -116,3 +116,5 @@ build inputs, per root `AGENTS.md`) needs any adjustment as a result of the move
 - 2026-08-19 — Atomic rename vs. a transition/compatibility period? → **Atomic** — one
   coordinated change, no dual-name alias period; the old tool name stops resolving once this
   ships.
+- 2026-08-19 — Readback delivered and confirmed. Stakeholder: "yes please." **Status → Ready for
+  design.** No material assumption left unconfirmed; Open questions is empty.
