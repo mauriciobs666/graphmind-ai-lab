@@ -40,6 +40,9 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   eleven.
 - As the **stakeholder**, unchanged from M5: I still watch graph state via FalkorDB's existing
   web console; my own direct read/write access to the knowledge plane remains a later phase.
+- As **`cobb`**, I want each new working-memory entry to point back at the Claude Code session it
+  came from, so that when the four narrative fields aren't enough context to route or verify an
+  entry, I can go read the actual conversation instead of working from the summary alone.
 
 ## Functional requirements
 - **FR-1** — Each of the eleven agents not yet migrated — `analyst`, `architect`, `cobb`,
@@ -66,9 +69,21 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   memory in one query** — an agent (or the stakeholder) does not have to know about, and loop
   over, each agent's graph individually to ask "what has the team learned about X." This is new
   relative to M5, whose pilot had only one agent's working memory to query.
-- **FR-8** — A working-memory entry captures the same fields as today's markdown entry (the
-  dated fact, its evidence, the context it surfaced in, a suggested home), queryable via graph
-  traversal, for every migrated agent — same shape as M5's FR-7.
+- **FR-8** — A working-memory entry's structure is **standardized and locked as the single
+  canonical contract across all twelve agents** — the dated fact, its evidence, the context it
+  surfaced in, a suggested home — the same five fields today's markdown template already uses
+  everywhere, queryable via graph traversal. This is not a change to what's captured (the
+  markdown template is already identical across every agent's `inbox.md`); it makes that shape an
+  explicit, enforced-by-convention standard rather than a coincidence of every agent copying the
+  same template, and forecloses per-agent drift going forward.
+- **FR-8a** — Every new entry created after an agent's migration additionally carries a
+  **session-identification field** — the Claude Code session ID of the conversation the learning
+  was captured in — so `cobb` can later locate and read that conversation's transcript when the
+  four narrative fields (fact/evidence/context/suggested home) aren't enough context on their
+  own. Expected by convention, at the same self-reported trust level as `author` attribution
+  (FR-9) — an entry missing it is not rejected, just incomplete. Entries imported from an agent's
+  pre-migration `inbox.md` (FR-3) carry **no** session ID — the information doesn't exist for
+  them, and the field is simply absent, distinguishing an imported entry from a new one.
 - **FR-9** — Write/modify access keeps M5's two shapes, applied per agent: **author** (an agent
   creates entries attributed only to itself — including `cobb` authoring its own) and
   **curator** (`cobb` clears/marks-as-promoted an entry it doesn't own, across all migrated
@@ -101,7 +116,10 @@ technically achieved — one shared graph with an agent-partition property, per-
 a federated query helper, something else — is a design decision, not specified here. So is
 whether each agent's graph follows `graph-dba`'s `kaizen_<agent>` naming pattern. Sequencing/
 batching of which agents migrate in what order is also left to implementation planning, given
-FR-13 accepts incremental delivery.
+FR-13 accepts incremental delivery. So is how an agent actually obtains its own Claude Code
+session ID to populate FR-8a's field at write time (an environment variable, a tool, something
+else) — the requirement is that the field exists and is populated by convention, not how an
+agent's runtime gets the value.
 
 ## Out of scope
 - **falkor-chat data integration** — unchanged from M5: linking knowledge-plane entries to chat
@@ -158,11 +176,19 @@ FR-13 accepts incremental delivery.
 - **AC-11** — `graph-dba`'s `kaizen/inbox.md`, frozen in the repo since M5, no longer exists in
   the repo's working tree after M6, with its content recoverable via git history the same way as
   the other eleven (FR-14).
+- **AC-12** — Given any two migrated agents' graphs, their `:KaizenEntry` (or equivalent) nodes
+  expose the identical field set — no agent's entries carry a field another agent's lack, or vice
+  versa, aside from the session-ID field's presence/absence distinguishing new entries from
+  imported ones (AC-13) (FR-8).
+- **AC-13** — Given a new entry created by a migrated agent that had a session ID available when
+  writing it, the entry carries that session-identification field; given an entry imported from
+  an agent's pre-migration `inbox.md`, it carries none — the two are distinguishable on this
+  basis (FR-8a).
 
-*How thoroughly each individual acceptance criterion is exercised per agent — an independent
-pass for all eleven vs. a sampled/consolidated pass with programmatic checks for the rest — is
-left to `qa-engineer`'s test strategy when this reaches that stage; the stakeholder had no
-preference (see Decision log).*
+*How thoroughly each individual acceptance criterion (AC-1…AC-13) is exercised per agent — an
+independent pass for all eleven vs. a sampled/consolidated pass with programmatic checks for the
+rest — is left to `qa-engineer`'s test strategy when this reaches that stage; the stakeholder had
+no preference (see Decision log).*
 
 ## Open questions
 *(none)*
@@ -219,3 +245,17 @@ preference (see Decision log).*
   `graph-dba`'s inbox.md that M5 already froze? → **All twelve, including `graph-dba`** — M6
   also deletes `graph-dba`'s already-frozen file as a cleanup (FR-14/AC-11), so every agent ends
   up in the same state.
+- 2026-08-19 — Standardize entry structure, decided on what's useful to `cobb`: keep today's
+  fields as-is (they're already identical across every agent's `inbox.md`, and already what M5
+  mirrored into `graph-dba`'s schema), or actually change the field set? → **Lock in the
+  existing shape** (date/fact, evidence, context, suggested home) as the explicit, canonical
+  contract across all twelve agents — no field changes beyond the new session-ID field (FR-8).
+- 2026-08-19 — What does "session identification" mean? → **The Claude Code session ID** of the
+  conversation the entry was captured in — so `cobb` can locate and read that transcript later
+  (FR-8a).
+- 2026-08-19 — Do imported/historical entries (which predate this feature) get a session ID? →
+  **No** — only new entries created after an agent's migration are expected to carry one; the
+  field is simply absent on imported entries, since the information doesn't exist for them.
+- 2026-08-19 — Is the session ID mandatory (rejected if missing) or expected by convention? →
+  **Expected by convention, not enforced** — same self-reported trust level as `author`
+  attribution; a missing session ID doesn't make an entry invalid.
