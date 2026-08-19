@@ -25,25 +25,72 @@ but `claude/AGENTS.md`, multiple agents' operative prompts and kaizen history, `
 example. This is a wide, cross-component rename, not a cosmetic single-file tweak.
 
 ## User stories
-*(to be filled in as the interview proceeds)*
+- As **any agent**, I want the MCP tool's name to reflect what it actually does (generic Cypher
+  over any graph, not CPG-only), so I don't misjudge its scope just from the name.
+- As **a reader of `claude/AGENTS.md` or an agent's own routing description**, I want the tool's
+  name to match its real, current capability, so I don't need to already know the M5/M6 history to
+  understand what it does.
+- As **the team**, we want the rename to land as one coordinated change, not a partial state where
+  some references say "cpg" and others say "cypher."
+- As **`graph-dba`** (owner of the actual Joern CPG pipeline), I want the genuinely CPG-specific
+  naming — the `cpg-analysis` skill, `cpg_<component>` graph names, the top-level `cpg/` directory
+  — left untouched, so this rename doesn't blur what's actually CPG-scoped versus generic.
 
 ## Functional requirements
-*(to be filled in as the interview proceeds)*
+- **FR-1** — The MCP tool agents invoke is renamed from `mcp__cpg__query` to
+  `mcp__cypher__query`.
+- **FR-2** — The `.mcp.json` server key (which produces the tool's `mcp__<key>__query` prefix) is
+  renamed from `"cpg"` to `"cypher"`, consistent with FR-1.
+- **FR-3** — The `cpg/mcp/` subdirectory itself is renamed/relocated to match the new identity —
+  the top-level `cpg/` directory, and its role as the CPG component's home (including
+  `.cpg-artifacts/`), is **unaffected**; only the generic-tool subdirectory moves.
+- **FR-4** — Every currently **active** (non-archived) document, agent prompt, and skill that
+  describes the tool by its old name (`mcp__cpg__query`, the `cpg` server key, or `cpg/mcp/` as a
+  path) is updated to the new name. **Archived documents are not edited** — they remain an
+  accurate historical record of the tool's name at the time they were written, per this repo's
+  own archived-document convention (a frozen document is not amended for a later rename).
+- **FR-5** — Code that implements or exercises the tool (`cpg/mcp/server.py`, its test suite,
+  `docker-run.sh`/`build.sh` and any embedded references) is updated to the new name/location.
+- **FR-6** — The rename lands as a **single atomic change** — no dual-name or compatibility-alias
+  period. Once shipped, the old tool name (`mcp__cpg__query`) no longer resolves.
+- **FR-7** — Genuinely CPG-specific naming is explicitly **not** part of this rename: the
+  `cpg-analysis` skill, the `joern-cpg` skill, `graph-dba`'s Joern build pipeline, and
+  `cpg_<component>` graph names all keep "cpg" — this delivery renames only the MCP tool/server
+  that used to be scoped to CPG and now is generic.
+
+*Context for the architect (not a requirement):* where `cpg/mcp/`'s new physical home actually is
+(renamed in place under `cpg/`, promoted to its own top-level component, something else) is a
+design decision, not specified here. So is whether the Docker image-tag scheme (a content hash of
+build inputs, per root `AGENTS.md`) needs any adjustment as a result of the move.
 
 ## Out of scope
-*(to be filled in as the interview proceeds)*
+- **Editing archived documents.** They stay exactly as written, describing the tool by whatever
+  name was current when they were authored (FR-4).
+- **Any change to the tool's actual behavior or capability.** This is a naming-only change — the
+  read/write mechanics, author/curator write enforcement, and (per M6) the team-wide query
+  surface are unaffected.
+- **CPG-specific naming** (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, the top-level
+  `cpg/` directory identity) — untouched, see FR-7.
+- **A compatibility/alias period for the old name.** Explicitly rejected — see FR-6.
+- **Any change to `graph-dba`'s Joern CPG pipeline or the `cpg-analysis` skill's own mechanics.**
+  Naming only; not touched by this delivery.
 
 ## Acceptance criteria
-*(to be filled in as the interview proceeds)*
+- **AC-1** — A repo-wide search for `mcp__cpg__query` finds zero hits outside archived documents.
+- **AC-2** — `.mcp.json`'s server key is `"cypher"`, not `"cpg"`.
+- **AC-3** — `cpg/mcp/` no longer exists as a directory; the relocated/renamed server starts,
+  connects to FalkorDB, and answers a live `mcp__cypher__query` call identically to how
+  `mcp__cpg__query` did before the rename.
+- **AC-4** — Every active (non-archived) document, agent prompt, and skill that referenced the
+  tool by its old name now references it by the new one — spot-checked against
+  `claude/AGENTS.md`, `skills/cpg-analysis/SKILL.md`, and each agent prompt that cites the tool.
+- **AC-5** — A diff confirms no unintended changes to the `cpg-analysis` skill, the `joern-cpg`
+  skill, `graph-dba`'s Joern pipeline docs, or any `cpg_<component>` graph name (FR-7).
+- **AC-6** — After the rename ships, a call using the old tool name (`mcp__cpg__query`) fails or
+  is otherwise unavailable — not silently supported alongside the new one (FR-6).
 
 ## Open questions
-- Does "rename" mean the tool-facing name only (`mcp__cpg__query` → `mcp__cypher__query`), or
-  also the directory (`cpg/` → something), the `.mcp.json` server key, and the component's own
-  identity throughout `AGENTS.md`/`README.md`?
-- Does the CPG-*specific* capability (Joern-built Code Property Graphs, the `cpg-analysis` skill,
-  `graph-dba`'s CPG pipeline) keep the word "cpg" anywhere, or does that also get relabeled?
-- Sequencing/risk: is this a single atomic rename, or does it need a transition
-  period/compatibility shim so in-flight sessions or cached references don't break?
+*(none)*
 
 ## Decision log
 - 2026-08-19 — Session opened. Raised mid-interview during the M6 (`generic-cypher-mcp2`)
@@ -57,3 +104,15 @@ example. This is a wide, cross-component rename, not a cosmetic single-file twea
   identity, not the kaizen-inbox rollout).
 - 2026-08-19 — New name? → **`cypher`** — `mcp__cypher__query`, matching the "generic Cypher MCP"
   language already used for the underlying feature.
+- 2026-08-19 — Rename depth: tool name only, or the component's full identity (directory,
+  `.mcp.json` key, docs)? → **Full identity, everywhere.**
+- 2026-08-19 — Does genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`,
+  `cpg_<component>` graphs) also change? → **No, untouched** — those stay "cpg" because it's
+  still accurate for them; only the now-generic MCP tool/server is renamed.
+- 2026-08-19 — Does the top-level `cpg/` directory itself rename, given it's documented
+  repo-wide as "the CPG component home" and also holds `.cpg-artifacts/` (real CPG build
+  output), separate from `cpg/mcp/`? → **Only `cpg/mcp/` moves/renames** — the top-level `cpg/`
+  directory keeps its name and CPG-component identity.
+- 2026-08-19 — Atomic rename vs. a transition/compatibility period? → **Atomic** — one
+  coordinated change, no dual-name alias period; the old tool name stops resolving once this
+  ships.
