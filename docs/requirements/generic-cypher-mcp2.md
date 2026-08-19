@@ -141,6 +141,11 @@ agent's runtime gets the value.
 - **Redesigning the write mechanism itself.** FR-1 reuses M5's author/curator mechanism as-is;
   this delivery is a rollout of an existing mechanism to more agents, not a mechanism redesign
   (FR-7's query surface is additive, not a change to the write path).
+- **Renaming the MCP server/tool itself** (`cpg` → something that reflects it's no longer
+  CPG-scoped; the tool is currently `mcp__cpg__query`). Raised in this session as a real,
+  acknowledged need — `cpg`/`mcp__cpg__query` is referenced across 60+ files repo-wide, well
+  beyond kaizen-inbox territory — but the stakeholder chose to track it as its **own, separate
+  follow-on**, not fold it into M6. See Decision log.
 
 ## Acceptance criteria
 - **AC-1** — Given a migrated agent's working-memory graph, when another agent queries it, it
@@ -259,3 +264,10 @@ no preference (see Decision log).*
 - 2026-08-19 — Is the session ID mandatory (rejected if missing) or expected by convention? →
   **Expected by convention, not enforced** — same self-reported trust level as `author`
   attribution; a missing session ID doesn't make an entry invalid.
+- 2026-08-19 — Stakeholder: "cpg doesn't reflect that it's now generic" — should the MCP
+  server/tool be renamed, and what to? `tico` gave an informal naming opinion (`cypher` over
+  `graph` or `falkordb`-flavored names, the latter risking confusion with the *official*
+  `@falkordb/mcpserver` M5's requirements doc already discusses and rejects), flagged as a
+  suggestion, not a decision — actual name and safe rename sequencing across 60+ referencing
+  files is the architect's call. → **Track as a separate follow-on**, not part of M6 — this
+  delivery stays scoped to the kaizen inbox rollout.
