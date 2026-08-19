@@ -34,12 +34,13 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
 *(to be filled in as the interview proceeds)*
 
 ## Open questions
-- Single cross-team query surface vs. per-agent graphs (mirroring today's one-file-per-agent
-  shape) — does "collective memory" need to mean one query reaches every agent's raw entries?
-- Does `cobb`'s distillation role/cadence need to change to handle 11x the raw-capture volume?
-- Sequencing/batching of the rollout across the eleven agents.
-- Anything agent-specific that breaks the graph-dba template (e.g. `cobb`'s own dual role as
-  both an author of its own inbox *and* the curator of everyone else's).
+- Atomic cutover (nothing is "done" until all eleven are live) vs. incremental (each agent's
+  migration is independently valuable/verifiable as it lands)?
+- Does the FalkorDB memory-footprint concern that shaped M5's working-memory-vs-permanent-record
+  split need re-examining now that the pattern scales to twelve agents' working memory at once?
+- Verification depth: an independent acceptance pass per agent (mirroring M5's AC-1…AC-8), or one
+  consolidated pass that spot-checks a few agents plus programmatically confirms the rest, since
+  the underlying mechanism is already proven?
 
 ## Decision log
 - 2026-08-18 — Session opened. Stakeholder: "extend the [graph-backed kaizen] inbox to all
@@ -54,3 +55,13 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   subset, not deferred as a separate later batch.
 - 2026-08-18 — Why now? → **M5 proved out end-to-end** (8/8 acceptance criteria, no defects) —
   no reason to wait for more evidence the pattern works.
+- 2026-08-19 — Team-wide query surface? → **Needs a team-wide view** — an agent (or the
+  stakeholder) should be able to reach raw learnings across the whole team in one query, not loop
+  over eleven (now twelve, counting `graph-dba`) separate graphs one at a time. This is a new
+  capability M5 didn't need (its pilot had only one agent's working memory to query).
+- 2026-08-19 — `cobb`'s distillation cadence at 11x the raw-capture volume? → **No change** — same
+  cadence, same workflow, just a different backend, exactly like M5 did for `graph-dba` alone.
+- 2026-08-19 — Is `cobb`'s own kaizen inbox (author of its own learnings *and* curator of
+  everyone else's) a special case? → **No** — `cobb` migrates too, on the same template: it
+  authors its own entries into the graph and later curator-clears them itself, same as it already
+  does for the rest of the team.
