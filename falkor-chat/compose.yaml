@@ -49,7 +49,7 @@ services:
     extra_hosts:
       # The container's `localhost` is itself, not the host running LM Studio — an
       # ENABLE_AGENT=1 run needs this (or a LAN address in the mounted opencode.json)
-      # to reach a host-bound LM Studio (same pattern `cpg/mcp/docker-run.sh` uses).
+      # to reach a host-bound LM Studio (same pattern `cypher-mcp/docker-run.sh` uses).
       - "host.docker.internal:host-gateway"
     depends_on:
       falkordb:

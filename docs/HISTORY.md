@@ -7,7 +7,7 @@
 
 ## 2026-08-18 — M5: Generic Cypher MCP — delivery & gate closure (U1…U7) ✅
 
-`mcp__cpg__query` gains write capability — an optional `agent` parameter and two enforced write
+`mcp__cypher__query` gains write capability — an optional `agent` parameter and two enforced write
 shapes (author-write, curator-clear) — piloted end to end on `graph-dba`'s kaizen working memory:
 the graph (`kaizen_graph_dba`) replaces `inbox.md` as the raw-capture layer, `history.md` stays
 unchanged, `inbox.md` is frozen after a one-time import, and `cobb`'s distillation workflow now
@@ -19,7 +19,7 @@ runs against the graph. Full unit-by-unit detail lives in
   markdown fields + `entryId`/`author`/`createdAt`), curator-clear as a hard `DETACH DELETE` by
   `entryId` with append-before-delete ordering flagged non-negotiable, migration mapping for all 6
   existing inbox entries.
-- **U2** (`architect`) — `docs/plans/generic-cypher-mcp.md`: extends `cpg/mcp/server.py` in place
+- **U2** (`architect`) — `docs/plans/generic-cypher-mcp.md`: extends `cypher-mcp/server.py` in place
   (optional `agent` param), FR-8 enforcement via static regex on `author:` literals plus a
   curator-clear skeleton, FR-4 frozen note, BACKLOG.md M5/C-501…505 proposal, 5-step
   implementation table.
@@ -29,7 +29,7 @@ runs against the graph. Full unit-by-unit detail lives in
   **needs changes** again (a new major, M1-residual, on the CREATE-clause-location step not being
   string-literal-aware); **U2-fix2** closed it. Pass 3 (**U3-regate2**) — **approve**. Plan gate
   closed.
-- **U4** (`coder`, steps 1+2 — `cpg/mcp/server.py` write path + `cpg/mcp/tests/test_server.py`, 83
+- **U4** (`coder`, steps 1+2 — `cypher-mcp/server.py` write path + `cypher-mcp/tests/test_server.py`, 83
   passed/7 deselected offline) — code re-gate (`analyst`) → **approve with suggestions**; fixed at
   **U4-fix** (added the real M2 regression pin, independently confirmed by `teco`, suite green
   **84 passed/7 deselected**).
@@ -173,7 +173,7 @@ applied.
 - **C-319** — approval-scoping behavior documented in `skills/agent-standards/claude-code.md` §MCP;
   causal-link error caught and fixed in self-review before finalization.
 - **C-321** — both halves done: scratch-graph-name UUID uniqueness fix (replaces `os.getpid()`),
-  plus autobuild pull-free gate (`CPG_MCP_NO_PULL=1`), hash-walk robustness (`image-tag.sh`), and
+  plus autobuild pull-free gate (`CYPHER_MCP_NO_PULL=1`), hash-walk robustness (`image-tag.sh`), and
   build-step reordering (`test` then `runtime`).
 - **C-316** also closed this round via a separate process; see its BACKLOG entry.
 
@@ -182,11 +182,11 @@ applied.
 re-fix); `cobb` skill/doc review (`docs/reviews/cpg-followups-skills-impl.md`, **approve**, one
 Major self-caught finding on C-319 wording, fixed in place).
 
-**Test suite (host venv):** `cpg/mcp/.venv/bin/python -m pytest -q` → **67 passed, 7 deselected**
+**Test suite (host venv):** `cypher-mcp/.venv/bin/python -m pytest -q` → **67 passed, 7 deselected**
 (offline default run); with `-m live` selected, the 7 live-marked tests pass (67 deselected). No new
 failures introduced.
 
-**Documentation fix:** `cpg/mcp/README.md` lines 434–439 updated from present-tense warning about
+**Documentation fix:** `cypher-mcp/README.md` lines 434–439 updated from present-tense warning about
 PID-1 collision to past-tense reflection that the issue is fixed by C-321.
 
 ## 2026-08-08 — C-311 follow-up: tightened the pipeline.sh --reset match after review; fixed a stale C-312 owner
@@ -274,7 +274,7 @@ Also updated `claude/AGENTS.md`'s "Hook machinery" section to mention the new wr
 ## 2026-07-30 — CPG getting-started manual, reviewed and behavior-verified (doc-only)
 
 New `docs/manuals/cpg-getting-started.md` — the component's first end-user-facing manual,
-walking a reader through readiness checks, the read-only `mcp__cpg__query` tool, and routing
+walking a reader through readiness checks, the read-only `mcp__cypher__query` tool, and routing
 CPG-build requests to `graph-dba` — authored by `tico` (commit `814c954`). Independently
 reviewed by `analyst` for factual/architectural accuracy (`docs/reviews/cpg-getting-started.md`,
 **approve with suggestions**, no blocker; commit `15d3ad5`) and behavior-verified by `qa-engineer`
@@ -426,8 +426,8 @@ This is that fix plus the doc corrections; no design decision moved.
   is skipped, because its sources come from another build stage and were being misreported as missing
   build-context files — a wrong diagnostic on the natural next edit to a multi-stage Dockerfile.
 - **The regression is checked in, because a silent false pass is undetectable without one.**
-  `cpg/mcp/tests/test_build_inputs.py` (9 cases) runs `--verify-inputs` against a throwaway copy of
-  `cpg/mcp/` in pytest's `tmp_path`: the unmodified tree passes and writes nothing to stdout; the two
+  `cypher-mcp/tests/test_build_inputs.py` (9 cases) runs `--verify-inputs` against a throwaway copy of
+  `cypher-mcp/` in pytest's `tmp_path`: the unmodified tree passes and writes nothing to stdout; the two
   continued-`COPY` forms and the single-line control all fail with the offending operand named; a
   *covered* continued `COPY` still passes; `COPY --from=` is accepted; and the directory rule (M-4)
   keeps its cover. Proven to catch the bug: run against the pre-fix `build.sh`, exactly the two M-7
@@ -444,37 +444,37 @@ This is that fix plus the doc corrections; no design decision moved.
   `.dockerignore`'s exclusions when it applies two of the three (`.pytest_cache` is not excluded —
   safe direction, filed on C-321).
 - **Deferred by stakeholder decision, recorded on C-321 (M-8).** The autobuild calls
-  `build.sh --runtime-only` without `CPG_MCP_NO_PULL`, so a hash miss puts an unbounded Docker Hub
+  `build.sh --runtime-only` without `CYPHER_MCP_NO_PULL`, so a hash miss puts an unbounded Docker Hub
   pull inside the 30 s MCP startup budget — and because the hash covers `tests/`, `pytest.ini` and
   `requirements-dev.txt` while the *runtime* stage COPYs none of them, a test-only edit forces a
   rebuild of a byte-identical runtime image. C-321 already edits `tests/test_server.py`, so it will
   trigger exactly this; the finding, the reason it belongs there and the cheapest fix
-  (`CPG_MCP_NO_PULL=1` on the autobuild call) are now on that entry, together with the review's other
+  (`CYPHER_MCP_NO_PULL=1` on the autobuild call) are now on that entry, together with the review's other
   one-line `image-tag.sh` minors. **Not implemented here.**
 - **Verified** — the images were rebuilt at the new hash (`ba910c48571d` → `3f825c8afe4f`; the tag
   moves only because of the two `tests/` changes — `build.sh` is not a hash input), so the wired path
   does not pay for a build at the next session start. Full protocol handshake through
-  `cpg/mcp/docker-run.sh`: ids 1–3 answered, `MATCH (m:METHOD) RETURN count(m)` on `cpg_falkorchat` →
-  **1968**, stdout pure JSON. `docker ps -a --filter label=cpg-mcp=1` shows one `Up` container (this
+  `cypher-mcp/docker-run.sh`: ids 1–3 answered, `MATCH (m:METHOD) RETURN count(m)` on `cpg_falkorchat` →
+  **1968**, stdout pure JSON. `docker ps -a --filter label=cypher-mcp=1` shows one `Up` container (this
   session's own server, on the pre-change tag) and **no `Exited`/`Created`** entry, i.e. no orphan.
-  `GRAPH.LIST` still the same five graphs, no `_cpg_mcp_selftest_*` residue; `falkordb-dev` and
+  `GRAPH.LIST` still the same five graphs, no `_cypher_mcp_selftest_*` residue; `falkordb-dev` and
   `falkordb-data` untouched. `claude/scripts/audit-team.sh`: **no new failures** — the same two
   pre-existing C-309a leaks, in none of the files this change touches (the new file is untracked, so
   it was grepped directly for all five personal identifiers: clean).
 
-## 2026-07-26 — The `cpg` MCP server is containerized (C-320) ✅
+## 2026-07-26 — The `cypher` MCP server is containerized (C-320) ✅
 
 A clone now needs **Docker**, not a correctly built local Python 3.12 venv, to answer CPG queries.
 The tool contract did not change — one tool, two parameters, read-only, same output format — and
 `server.py` was not touched. `.mcp.json` changed by exactly two lines.
 
-- **What shipped** — `cpg/mcp/Dockerfile` (multi-stage: `runtime` carries `server.py` and runtime
+- **What shipped** — `cypher-mcp/Dockerfile` (multi-stage: `runtime` carries `server.py` and runtime
   deps only, `test` adds pytest and the suite; non-root `appuser`; `python:3.12-slim` following
   `falkor-chat/Dockerfile`; **no `EXPOSE` and no `HEALTHCHECK`** because this is a one-shot stdio
   process, not a service, and for the same reason **no Compose service** — `falkor-chat/compose.yaml`
   already defines a `falkordb` service that would bind a *second* engine on `:6379` over the same
   volume). Plus `.dockerignore`, `image-tag.sh` (sourced), `build.sh`, `docker-run.sh`.
-- **The launch gate is a content hash, and that is the load-bearing decision.** `cpg-mcp:<hash12>` is
+- **The launch gate is a content hash, and that is the load-bearing decision.** `cypher-mcp:<hash12>` is
   a SHA-256 over every build input; `docker-run.sh` does one `docker image inspect` (~0.05 s, purely
   local) and builds **only on a miss**. The first design had the wrapper run a cached `docker build`
   on every launch; measurement killed it — **a warm, fully-cached BuildKit build still makes a Docker
@@ -494,18 +494,18 @@ The tool contract did not change — one tool, two parameters, read-only, same o
   manual, non-persistent `docker network connect`.
 - **Lifecycle, measured** — `--init` is *required*, not defensive: PID-1 `python` **ignores
   `SIGTERM`** (still running a minute later), so without tini the harness's shutdown sequence cannot
-  stop it. `--label cpg-mcp=1` makes any leak findable, `--rm` reaps, and **no `--name`** because a
+  stop it. `--label cypher-mcp=1` makes any leak findable, `--rm` reaps, and **no `--name`** because a
   fixed name would collide across the concurrent sessions this repo encourages. `--read-only
   --tmpfs /tmp` was adopted only after probing every tool-body path under it.
 - **Two implementation-time finds, both fixed here.** Docker's bare `-e VAR` form does **not** fall
   through to the image's `ENV` when the variable is unset in the caller's environment — it **deletes**
   it in the container, which silently left `server.py` on its `127.0.0.1` default, i.e. the container
-  talking to itself. Env vars are now forwarded only when actually set. And `CPG_MCP_IMAGE`, which is
+  talking to itself. Env vars are now forwarded only when actually set. And `CYPHER_MCP_IMAGE`, which is
   documented to *bypass* the hash gate, still fell into the autobuild branch on a miss and then failed
   with docker's bare `No such image`; it now short-circuits with a curated message.
 - **The host venv path is retained** (`setup.sh`, `run.sh`, `.venv`) and re-documented as (a) the fast
   regression loop and (b) the fallback. Both regression commands are unchanged and still green:
-  `cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q` → **53 passed, 7 deselected**; `-q -m live` → **7
+  `cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q` → **53 passed, 7 deselected**; `-q -m live` → **7
   passed, 53 deselected**. The same suite **inside the image** gives byte-identical counts, which is
   the control against the two paths drifting. Rollback is those two `.mcp.json` lines plus a restart.
 - **Measured** — connect through the wrapper, spawn → `initialize` + `tools/list`: **median 1.47 s**
@@ -517,17 +517,17 @@ The tool contract did not change — one tool, two parameters, read-only, same o
 - **Design & review** — `docs/plans/cpg-mcp-containerization.md` (v3) and
   `docs/reviews/cpg-mcp-containerization.md` (two `analyst` passes: *needs changes* on v1, then
   *approve with suggestions* on v2). Backlog: **C-320** ✅, new **C-321** (the live suite's
-  `os.getpid()`-derived scratch-graph name collapses to the constant `_cpg_mcp_selftest_1` inside a
+  `os.getpid()`-derived scratch-graph name collapses to the constant `_cypher_mcp_selftest_1` inside a
   container — test code, so out of scope here and worked around by documentation plus a residue
   check). **C-310 is not absorbed**; no OpenCode/Kiro config was written.
 
 ## 2026-07-25 — M3: CPG query access — the MCP read path ✅
 
 Asking the code graph a question is now **one tool call**, not a hand-assembled shell command.
-`mcp__cpg__query(graph, cypher)` replaces `redis-cli GRAPH.QUERY` on the CPG **read** path:
+`mcp__cypher__query(graph, cypher)` replaces `redis-cli GRAPH.QUERY` on the CPG **read** path:
 the graph key and the Cypher text are parameters, so nothing has to survive a shell layer.
 
-- **`cpg` MCP server** (`cpg/mcp/`) — a Python **FastMCP** stdio server exposing **exactly one**
+- **`cypher` MCP server** (`cypher-mcp/`) — a Python **FastMCP** stdio server exposing **exactly one**
   read-only tool over `GRAPH.RO_QUERY`, with `setup.sh`, `run.sh`, a README and a pytest suite
   (**53 offline / 7 live** — the component's only regression signal). Semantics: read-only;
   **`EXPLAIN`-only, `PROFILE` removed** (decision D4 — `GRAPH.PROFILE` *executes* the query
@@ -537,18 +537,18 @@ the graph key and the Cypher text are parameters, so nothing has to survive a sh
   returns a curated not-found listing the loaded graphs and **does not materialise an empty key**
   (closing the known FalkorDB quirk); truncation is **display-only** (200 rows / 300-char cells /
   30,000 chars) with the notice repeated as the first *and* last line.
-- **Wiring** — repo-root `.mcp.json` (`bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'`, no
+- **Wiring** — repo-root `.mcp.json` (`bash -c 'exec "$CLAUDE_PROJECT_DIR/cypher-mcp/run.sh"'`, no
   absolute paths) plus `enabledMcpjsonServers` in `.claude/settings.json`. This is the repo's
   **first MCP wiring, and it is Claude-Code-only** — OpenCode and Kiro configure MCP through their
   own files and neither is wired (backlog **C-310**), so `redis-cli GRAPH.QUERY` remains their only
   path and stays documented as the fallback everywhere.
-- **Consumers** — `mcp__cpg__query` added to the `analyst` and `architect` `tools:` allowlists
+- **Consumers** — `mcp__cypher__query` added to the `analyst` and `architect` `tools:` allowlists
   (without which the tool is invisible to them; `qa-engineer` declares none and inherits) and to
   `skills/cpg-analysis/SKILL.md` `allowed-tools`, with §1 rewritten around the tool.
   `skills/agent-standards/claude-code.md` §MCP was rewritten and an **OpenCode MCP** section added,
   recording the divergences and the cross-tool rule that **MCP wiring does not port**.
 - **`joern-cpg-pipeline.md` FR-9 reversed** — it had chosen `redis-cli` *"over MCP tool"*; it now
-  routes through `mcp__cpg__query` and points at `docs/requirements/cpg-query-access.md`, with
+  routes through `mcp__cypher__query` and points at `docs/requirements/cpg-query-access.md`, with
   `redis-cli` as the documented fallback (**AC-4**).
 - **Build, not buy** — the official `@falkordb/mcpserver` v1.3.0 exposes 7 tools including
   `delete_graph` with no tool filtering (a flat FR-2 violation) and needs Node ≥18, absent on the

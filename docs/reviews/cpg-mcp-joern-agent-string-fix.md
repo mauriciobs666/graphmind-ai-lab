@@ -1,11 +1,11 @@
-# cpg/mcp joern-agent stale-string fix — Review
+# cypher-mcp joern-agent stale-string fix — Review
 
 > **Status:** active · **Owner:** `analyst` · **Tracks:** —
 
 ## Scope & verdict
 
-Static review of an already-applied, uncommitted fix to `cpg/mcp/server.py` (two user-facing
-error-message strings) and `cpg/mcp/tests/test_server.py` (two matching assertions), closing the
+Static review of an already-applied, uncommitted fix to `cypher-mcp/server.py` (two user-facing
+error-message strings) and `cypher-mcp/tests/test_server.py` (two matching assertions), closing the
 stale-agent-name finding originally logged in `claude/analyst/kaizen/inbox.md:133` and echoed in
 `docs/reviews/cpg-getting-started.md` (M1). Reviewed via `git diff`, direct reads of both files,
 a run of the non-live suite, and a grep sweep for remaining live occurrences of the stale string.
@@ -57,7 +57,7 @@ cover only the `graph_not_found_message` one.
   `joern` agent exists in `claude/README.md`'s roster. Both edited strings now name the right
   agent.
 - **Completeness.** `grep -rn "joern agent" --include="*.py" .` returns only the two intentional
-  occurrences left in `cpg/mcp/tests/test_server.py` line 366 (the test *function name*, not a
+  occurrences left in `cypher-mcp/tests/test_server.py` line 366 (the test *function name*, not a
   string literal under test — see m2) — zero remaining stale string literals in live `.py`
   source. Two other files still contain the exact phrase and are correctly out of scope, as the
   task anticipated:

@@ -47,13 +47,13 @@ human-facing quickstart and `docs/plans/mcp-monitor.md` for the full design.
 - `fake_mcp_server/` — FR-12's purpose-built stdio server (one tool, `get_status`, reads a JSON
   state file) + `set_state.py` (flips it). Deliberately stdio where falkor-chat is HTTP, so the
   automated test suite proves the client layer is transport-agnostic, not merely tool-agnostic.
-  Modeled on `cpg/mcp/server.py`'s mechanics (a `FastMCP` stdio server), not its content.
+  Modeled on `cypher-mcp/server.py`'s mechanics (a `FastMCP` stdio server), not its content.
 
 ## Conventions
 
-- **Host venv, no Docker.** `setup.sh`/`run.sh` mirror `cpg/mcp/`'s host-venv half exactly (create
+- **Host venv, no Docker.** `setup.sh`/`run.sh` mirror `cypher-mcp/`'s host-venv half exactly (create
   venv, install with dev extra, smoke-import). No container packaging — `docs/plans/mcp-monitor.md`
-  §1 explains why (no Joern/JVM-toolchain concern to isolate, unlike `cpg/mcp`); it's a
+  §1 explains why (no Joern/JVM-toolchain concern to isolate, unlike `cypher-mcp`); it's a
   `docs/BACKLOG.md` item if a real deployment need shows up later.
 - **TOML config, `tomllib`, no new dependency.** Literal strings (`pattern = '...'`) avoid
   backslash-doubling a regex the way a JSON string would need.

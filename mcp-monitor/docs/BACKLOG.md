@@ -17,7 +17,7 @@ append-only-ish (items get struck through or annotated when resolved, not delete
   class of trade-off as the item above, called out separately per the plan review's Minor finding
   (a) since §13 of the plan named the restart-loss risk but not this one.
 - **Optional Docker packaging.** `docs/plans/mcp-monitor.md` §1: no containerization in v1 (no
-  Joern/JVM-toolchain concern to isolate the way `cpg/mcp` has); `cpg/mcp/Dockerfile` +
+  Joern/JVM-toolchain concern to isolate the way `cypher-mcp` has); `cypher-mcp/Dockerfile` +
   `docker-run.sh` are the template to follow if a real deployment need for mcp-monitor shows up.
 - **Config hot-reload.** Out of scope per `docs/requirements/mcp-monitor.md` — restarting the
   process to apply a config change is accepted. Not attempted here.

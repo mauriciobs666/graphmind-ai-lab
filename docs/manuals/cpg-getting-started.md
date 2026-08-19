@@ -28,7 +28,7 @@ Two things had to exist before any of this was useful, and they were built in th
    FalkorDB, someone still has to know its schema (property names, edge types, the
    gotchas) to query it usefully. The `cpg-analysis` skill packages that knowledge as
    ready-to-adapt recipes, and the questions themselves travel through a small, dedicated
-   MCP tool (`mcp__cpg__query`) instead of a hand-typed `redis-cli` command line.
+   MCP tool (`mcp__cypher__query`) instead of a hand-typed `redis-cli` command line.
 
 **Two agents, two very different rhythms.** Building a CPG is **rare and deliberate** —
 you ask for it when you need one, it can take minutes for a real repo, and reloading is
@@ -45,7 +45,7 @@ flowchart LR
         D -->|loaded into| E[(FalkorDB<br/>graph: cpg_&lt;name&gt;)]
     end
     subgraph Query["Querying a loaded CPG — cheap, frequent"]
-        E -->|mcp__cpg__query| F[analyst / architect / qa-engineer]
+        E -->|mcp__cypher__query| F[analyst / architect / qa-engineer]
     end
 ```
 
@@ -62,9 +62,9 @@ prerequisites — but it helps to know what "ready" looks like:
 - **FalkorDB is running.** Everything downstream needs it reachable at `localhost:6379`.
   Start it with `./falkor-chat/scripts/start_falkordb.sh -d` if it's ever down — it's the
   same shared container `falkor-chat` and `salesperson` use, so it's usually already up.
-- **The `cpg` MCP tool is connected**, if you're working inside Claude Code. Run
-  `/mcp` in a session, or `claude mcp list` from a shell, and look for `cpg` — `✔
-  Connected`. First run in a fresh clone may need `cpg/mcp/build.sh` once (it builds a
+- **The `cypher` MCP tool is connected**, if you're working inside Claude Code. Run
+  `/mcp` in a session, or `claude mcp list` from a shell, and look for `cypher` — `✔
+  Connected`. First run in a fresh clone may need `cypher-mcp/build.sh` once (it builds a
   small container); the tool self-heals on a miss, so this is a safety net, not a
   strict requirement.
 - **A CPG actually exists for the repo you care about.** Nothing here works on thin
@@ -125,7 +125,7 @@ have to ask for it explicitly, though you can ("use the CPG to find callers of
 ```mermaid
 sequenceDiagram
     participant Agent as analyst / architect / qa-engineer
-    participant Tool as mcp__cpg__query
+    participant Tool as mcp__cypher__query
     participant FalkorDB
 
     Agent->>Tool: query(graph="cpg_falkorchat", cypher="MATCH ...")
@@ -165,7 +165,7 @@ answer:
 - **Outside Claude Code, the same graph is still reachable.** The MCP tool is
   Claude-Code-specific; querying directly with `redis-cli GRAPH.QUERY`/`GRAPH.RO_QUERY`
   is the documented fallback (and the only path in other tools today) — ask an agent, or
-  see `cpg/mcp/README.md` for the exact command.
+  see `cypher-mcp/README.md` for the exact command.
 
 ## FAQ / troubleshooting
 

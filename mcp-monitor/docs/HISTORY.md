@@ -54,7 +54,7 @@ delivery except the three upstream docs.
   env-var subprocess launch, exit-code logging), `logging_setup.py` (per-watch `LoggerAdapter`),
   `__main__.py` (CLI: `--config PATH [--log-level LEVEL]`, signal-driven shutdown).
 - **`fake_mcp_server/`** — FR-12's purpose-built stdio server (`server.py`, one tool
-  `get_status`) + `set_state.py` (state-flip CLI), modeled on `cpg/mcp/server.py`'s mechanics.
+  `get_status`) + `set_state.py` (state-flip CLI), modeled on `cypher-mcp/server.py`'s mechanics.
 - **`tests/`** — three automated tiers, all green in the default `pytest` run (34 passed): unit
   (`test_config.py`, `test_matcher.py`, `test_launcher.py`), in-memory component
   (`test_watch_loop.py`, `mcp.shared.memory.create_connected_server_and_client_session`, same
@@ -65,7 +65,7 @@ delivery except the three upstream docs.
   in the default test environment). Needs a human/QA run against a live `falkor-chat` +
   `FalkorDB`; not executed as part of this delivery.
 - **`pyproject.toml`/`setup.sh`/`run.sh`/`config.example.toml`** — host-venv packaging mirroring
-  `cpg/mcp/`'s host-venv half; no Docker (plan §1).
+  `cypher-mcp/`'s host-venv half; no Docker (plan §1).
 - **Entry docs** — `README.md` (human) + `AGENTS.md` (agent), and this component registered in
   root `AGENTS.md`'s Structure section and Component docs table.
 - **`docs/BACKLOG.md`** (new) — seeded with persistent-dedupe-state-across-restart, unbounded

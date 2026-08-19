@@ -75,7 +75,7 @@ built in `falkor-chat`.
 
 ### M2 — CPG consumer skill (`cpg-analysis`)
 - **FR-9** — Agents access the loaded CPG through a **`cpg-analysis` skill** (a lean core plus
-  per-task recipes), querying FalkorDB with Cypher through the **`mcp__cpg__query` MCP tool**;
+  per-task recipes), querying FalkorDB with Cypher through the **`mcp__cypher__query` MCP tool**;
   `redis-cli GRAPH.QUERY` is retained as a documented fallback and remains the only path outside
   Claude Code. *(Resolves former OQ1. The original wording chose `redis-cli GRAPH.QUERY` "over MCP
   tool / raw Cypher"; that choice was **deliberately reversed on 2026-07-25** and is superseded by
@@ -152,7 +152,7 @@ previously flagged as scope extensions under OQ4, are now approved** — `qa-eng
 consumer, runtime coverage explicitly excluded. Tracked as **M2 / C-201…C-208** in
 [`../BACKLOG.md`](../BACKLOG.md); the blocking requirements pass (C-200) is thereby resolved.
 2026-07-25 — **Access mechanism reversed (FR-9)** → agents query the loaded CPG through the
-**`mcp__cpg__query` MCP tool** instead of hand-assembling a `redis-cli GRAPH.QUERY` command line;
+**`mcp__cypher__query` MCP tool** instead of hand-assembling a `redis-cli GRAPH.QUERY` command line;
 `redis-cli` stays as the documented fallback and as the only path outside Claude Code. This
 supersedes the 2026-07-18 clause "chosen over MCP tool / raw Cypher" — the skill is still the
 access route, only the transport changed. Ruled by the stakeholder in

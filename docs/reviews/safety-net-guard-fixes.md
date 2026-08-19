@@ -75,7 +75,7 @@ this diff's own C-309(a) writeup surfaces the fact that would fix it. Not a find
   `claude/` containing `$HOME`; the gate FAILed on both the "home path" and "username" labels
   with `exit 1` and the offending `file:line:content` printed; removed the file; the gate
   returned to a clean `RESULT: PASS` with `exit 0`. Also confirmed a leak placed inside a
-  gitignored path (`cpg/mcp/.venv/...`, matched by the root `.gitignore`) is correctly *not*
+  gitignored path (`cypher-mcp/.venv/...`, matched by the root `.gitignore`) is correctly *not*
   caught — the union of `--cached` + `--others --exclude-standard` behaves as intended, not as an
   unbounded "every file on disk" scan. Verified `xargs -0 -r grep` degrades safely on an empty
   file list (exit 0, no output) and `git ls-files -z --cached --others --exclude-standard`

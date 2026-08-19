@@ -138,7 +138,7 @@ fake_mcp_server/         FR-12's minimal stdio test/demo server + its state-flip
 tests/                   the three automated tiers above
 scripts/demo_falkor_chat.sh   the AC-3 manual runbook
 config.example.toml       the config schema, documented — copy-and-edit starting point
-setup.sh / run.sh         host-venv create/refresh, and the launcher (mirrors cpg/mcp/)
+setup.sh / run.sh         host-venv create/refresh, and the launcher (mirrors cypher-mcp/)
 ```
 
 See `AGENTS.md` for architecture pointers aimed at an agent working in this code, and

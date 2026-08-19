@@ -1,5 +1,5 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M6) · **Last updated:** 2026-08-19
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M7) · **Last updated:** 2026-08-19
 
 ## Intent
 M5 (`docs/requirements/generic-cypher-mcp.md`) proved the graph-backed working-memory pattern on
@@ -12,7 +12,7 @@ inboxes, the way it was done for `graph-dba`.
 Every agent except `graph-dba` still captures raw kaizen learnings by appending to its own
 `claude/<agent>/kaizen/inbox.md` (append-only markdown), distilled periodically by `cobb`
 (verify → route → append to `history.md` → clear). `graph-dba` alone has moved its raw-capture
-layer to a FalkorDB graph (`kaizen_graph_dba`) via `mcp__cpg__query`'s write path, while its
+layer to a FalkorDB graph (`kaizen_graph_dba`) via `mcp__cypher__query`'s write path, while its
 `history.md` stays markdown and unchanged. The other eleven agents' raw learnings are siloed in
 per-agent markdown files that only `cobb` reads across agents, and are invisible to any other
 agent until a distillation pass promotes them.
@@ -235,7 +235,7 @@ no preference (see Decision log).*
   deferred to whenever the next agent happens to be created.
 - 2026-08-19 — Stakeholder question (Mode 2, not a requirements decision): how is the graph
   organized — one shared graph, or one per agent? `tico` explained the tool mechanics
-  (`mcp__cpg__query` runs against one named graph per call, no built-in fan-out) and the
+  (`mcp__cypher__query` runs against one named graph per call, no built-in fan-out) and the
   resulting trade-off, framed as an informal opinion, not a decision — left to the architect per
   the doc's existing "Context for the architect" note (§ Functional requirements). Not resolved
   here by design.

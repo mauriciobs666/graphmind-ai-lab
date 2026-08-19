@@ -44,9 +44,10 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 |---|---|---|
 | **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified | `joern` agent + `joern-cpg` skill — delivered 2026-07-17, commit `b2b9a6e` (see [`HISTORY.md`](./HISTORY.md)) |
 | **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
-| **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cpg__query(graph, cypher)` (`cpg/mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
+| **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cypher__query(graph, cypher)` (`cypher-mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
 | **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
-| **M5 — Generic Cypher MCP** ✅ | `mcp__cpg__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
+| **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
+| **M6 — MCP tool rename** | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. | **C-601 → C-605** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -106,7 +107,7 @@ Critical path: C-201 → C-202 → C-203/C-204 → C-207 → C-208 (recipes C-20
 ## M3 — CPG query access (MCP read path)
 
 Replaces the hand-assembled `redis-cli GRAPH.QUERY` command line on the CPG **read** path with one
-MCP tool, `mcp__cpg__query(graph, cypher)`. Requirements:
+MCP tool, `mcp__cypher__query(graph, cypher)`. Requirements:
 [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md) (FR-1…FR-6 / AC-1…AC-4, as
 amended 2026-07-25) · plan: [`plans/cpg-query-access.md`](./plans/cpg-query-access.md) v2.2
 (steps S1–S10) · reviews: [`reviews/cpg-query-access.md`](./reviews/cpg-query-access.md) ·
@@ -138,29 +139,29 @@ filtered down to one read-only tool.
 
 ### Items
 
-- **C-301 — MCP server (`cpg/mcp/`).** ✅ 2026-07-25 (commit `f2d55f7`) — `requirements*.txt`,
+- **C-301 — MCP server (`cypher-mcp/`).** ✅ 2026-07-25 (commit `f2d55f7`) — `requirements*.txt`,
   idempotent `setup.sh`, `run.sh`, and `server.py`: a Python **FastMCP** stdio server exposing
-  **exactly one** read-only tool `mcp__cpg__query(graph, cypher)` over `GRAPH.RO_QUERY`, with the
+  **exactly one** read-only tool `mcp__cypher__query(graph, cypher)` over `GRAPH.RO_QUERY`, with the
   `PROFILE` refusal (comment-blind), the `GRAPH.LIST` pre-check that keeps a typo'd graph name from
   materialising an empty key, display-only truncation (row/cell/char caps, notice at both ends of
   the payload) and a server-level `instructions=` string. Pytest suite: **53 offline / 7 live**.
   Steps S1–S2. Owner: devops (deps) / coder (server).
 - **C-302 — Harness wiring.** ✅ 2026-07-25 — repo-root `.mcp.json` (the
-  `bash -c 'exec "$CLAUDE_PROJECT_DIR/cpg/mcp/run.sh"'` form, no absolute paths) plus
-  `enabledMcpjsonServers: ["cpg"]` in `.claude/settings.json`; `claude mcp list` → `✔ Connected`,
+  `bash -c 'exec "$CLAUDE_PROJECT_DIR/cypher-mcp/run.sh"'` form, no absolute paths) plus
+  `enabledMcpjsonServers: ["cypher"]` in `.claude/settings.json`; `claude mcp list` → `✔ Connected`,
   and the contract was proven at protocol level (1 tool, 2 required params, `readOnlyHint`).
   The repo's **first MCP wiring, and Claude-Code-only** (see C-310). Step S3. Owner: devops.
 - **C-303 — Skill surface.** ✅ 2026-07-25 — `skills/cpg-analysis/SKILL.md` frontmatter
-  (`allowed-tools: mcp__cpg__query, Bash, Read`) + §1 rewritten around the tool (discovery,
+  (`allowed-tools: mcp__cypher__query, Bash, Read`) + §1 rewritten around the tool (discovery,
   `EXPLAIN`-only, truncation, `redis-cli` fallback block), the `impact-analysis` recipe preamble,
   and the `skills/README.md` catalog row. Step S4. Owner: cobb.
-- **C-304 — Agent wiring & catalogs.** ✅ 2026-07-25 — `mcp__cpg__query` added to the
+- **C-304 — Agent wiring & catalogs.** ✅ 2026-07-25 — `mcp__cypher__query` added to the
   `claude/analyst/analyst.md` and `claude/architect/architect.md` `tools:` allowlists (without
   which the tool is **invisible** to them; `qa-engineer` declares none and inherits),
   `claude/README.md` rows 9/16/17, root `AGENTS.md`, the three kaizen histories and the `tico`
   inbox close-out. Step S5. Owner: cobb.
 - **C-305 — Requirements reconciliation.** ✅ 2026-07-25 — `joern-cpg-pipeline.md` **FR-9
-  reversed** (redis-cli → `mcp__cpg__query`, `redis-cli` documented as the fallback, marked
+  reversed** (redis-cli → `mcp__cypher__query`, `redis-cli` documented as the fallback, marked
   deliberately reversed and pointing at `cpg-query-access.md`); `cpg-query-access.md` AC-1 → direct
   callers (D3) and AC-3 → tool ≡ `redis-cli` equivalence on the fresh baseline (D1/D2). Satisfies
   **AC-4**. Step S6. Owner: coder.
@@ -198,7 +199,7 @@ latency).
 (D5): AC-3 reconciled to values + counts + ordering, no code change** — the only finding that
 touched an AC's wording, and **AC-3 passes** under it. DEF-2/DEF-3/DEF-5 are low-severity cleanups
 (C-314/C-315/C-316) and DEF-4 is closed by S10 itself (C-317). Two residuals recorded by the
-acceptance run and *not* carried as backlog items: no `mcp__cpg__query` call has been made *from
+acceptance run and *not* carried as backlog items: no `mcp__cypher__query` call has been made *from
 inside* an `analyst`/`architect` subagent (their allowlists are proven to resolve, which was the
 actual risk), and the FalkorDB stop/restart connection-pool recovery path is untested because the
 container is shared.
@@ -237,14 +238,14 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   untracked file containing `$HOME` under `claude/`, confirming the gate FAILed on it, then
   removing it and confirming `RESULT: PASS` returned.
   Owner: `cobb` / `devops`.
-- **C-310 — OpenCode + Kiro MCP wiring for the `cpg` server.** 🔵 `.mcp.json` and
+- **C-310 — OpenCode + Kiro MCP wiring for the `cypher` server.** 🔵 `.mcp.json` and
   `enabledMcpjsonServers` are **Claude Code only**; OpenCode and Kiro configure MCP through their
   own files and neither is wired. `skills/cpg-analysis` is a *shared* skill, so today it reaches
   the MCP path in exactly one harness and `redis-cli GRAPH.QUERY` remains the **only** path under
   OpenCode/Kiro. Includes the `allowed-tools` portability result from S4 (an unknown entry is
   ignored, not rejected — spot-checked, not exercised by a real OpenCode invocation).
-  **Updated 2026-07-26 (C-320):** the launch command is now `cpg/mcp/docker-run.sh` rather than
-  `cpg/mcp/run.sh`. The property this item depends on is preserved exactly — the launch surface is
+  **Updated 2026-07-26 (C-320):** the launch command is now `cypher-mcp/docker-run.sh` rather than
+  `cypher-mcp/run.sh`. The property this item depends on is preserved exactly — the launch surface is
   still *a single command*, and a script ports where a JSON `args` array does not; it also replaces
   the per-host question "is there a working Python 3.12 venv there" with "is there a Docker daemon".
   Two new obligations for this item: Docker becomes a prerequisite on any harness host (`run.sh` is
@@ -320,7 +321,7 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   authority; **AC-3 now passes**. **Option B — re-rendering lists `redis-cli`-style — was
   rejected; no source change**, the server is correct as built. A specification reconciliation, not
   a defect concession. Ruled by the stakeholder; recorded in the requirements decision log.
-- **C-314 — map-valued cells leaking client type.** ✅ Fixed in `cpg/mcp/server.py`: a new
+- **C-314 — map-valued cells leaking client type.** ✅ Fixed in `cypher-mcp/server.py`: a new
   `_normalize_for_repr()` helper recursively walks dict/list/tuple values (not just top-level) before
   `repr()`, rebuilding any `Mapping` (e.g. `falkordb`'s `OrderedDict`) as a plain `dict` at every
   nesting depth. Pinned by two tests: the original flat-case test plus
@@ -343,7 +344,7 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   literally leaves the char-cap path untested. The genuine binder is
   `MATCH (n:LITERAL) WHERE size(n.CODE) > 400 RETURN size(n.CODE) AS len, n.CODE AS code`
   (29,890 chars, 92 of 111 rows on the graph this defect was originally filed against). **Live
-  re-verification 2026-08-09, `mcp__cpg__query` against `cpg_falkorchat`** (`falkordb-dev` was
+  re-verification 2026-08-09, `mcp__cypher__query` against `cpg_falkorchat`** (`falkordb-dev` was
   briefly down mid-session; `teco` restarted it and confirmed `cpg_falkorchat` survived in the
   persisted volume): the probe returns `rows=120` in 9.6ms, and the tool truncates its own reply
   with `"showing 92 of 120 rows (char cap 30000)"` — the **char cap**, not the 200-row cap, is what
@@ -358,7 +359,7 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   `requirements/cpg-query-access.md` and `requirements/joern-cpg-pipeline.md` deferred the
   transitive upward-closure query to *"backlog item C-308"* before this backlog carried one.
   Closed by creating **C-308** above under M3's follow-ups; the citations now resolve. Owner: S10.
-- **C-318 — pin the server `instructions=` string.** ✅ `cpg/mcp/tests/test_server.py` gained
+- **C-318 — pin the server `instructions=` string.** ✅ `cypher-mcp/tests/test_server.py` gained
   `test_server_instructions_are_present_and_bounded`, asserting `mcp.instructions` is non-empty and
   ≤2000 chars (currently 408 chars). Verified as a real pin (not a tautology) by transiently
   blanking the string and observing the assertion fail before restoring. Reviewed by `analyst`:
@@ -373,10 +374,10 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   Reviewed by `cobb` (self-review, applying real scrutiny per the round's brief): caught and fixed a
   Major finding — the first draft asserted an unsupported causal link between the two facts;
   corrected to state them as parallel, verified against the official MCP docs. Owner: `cobb`.
-- **C-320 — Containerize the `cpg` MCP server.** ✅ **Delivered 2026-07-26.** The server runs as a
+- **C-320 — Containerize the `cypher` MCP server.** ✅ **Delivered 2026-07-26.** The server runs as a
   container instead of a host venv, so a clone needs **Docker** rather than a correctly built local
   Python 3.12 venv to answer CPG queries. The tool contract is unchanged (one tool, two parameters,
-  read-only, same output). Shipped: `cpg/mcp/{Dockerfile,.dockerignore,image-tag.sh,build.sh,
+  read-only, same output). Shipped: `cypher-mcp/{Dockerfile,.dockerignore,image-tag.sh,build.sh,
   docker-run.sh}` plus a two-line `.mcp.json` edit. The launch tag is a **content hash of the build
   inputs** gated by `docker image inspect`, so **on a hit** the launch path makes **no registry
   contact** and a stale image is unrepresentable. A **miss builds**, and a build does need the
@@ -385,14 +386,14 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   `docs/plans/cpg-mcp-containerization.md` (v3); review:
   `docs/reviews/cpg-mcp-containerization.md`. Owner: `devops`.
 - **C-321 — both halves now done, close the whole item.** ✅ **Core** (the item's main body):
-  `cpg/mcp/tests/test_server.py`'s live-suite scratch-graph key now derives from `uuid4().hex[:8]`
+  `cypher-mcp/tests/test_server.py`'s live-suite scratch-graph key now derives from `uuid4().hex[:8]`
   instead of `os.getpid()` (extracted into a `_scratch_graph_name()` helper), fixing the PID-1
   collision risk when the server runs containerized. TDD red/green: pinned the bug with
   `test_scratch_graph_name_is_unique_across_calls` (red under the old `os.getpid()` behavior, green
   after), then sanity-checked live (7/7 passed, no residue). **"Also do this here" sub-item**
-  (deferred from the C-320 review, M-8): `docker-run.sh`'s autobuild path now sets `CPG_MCP_NO_PULL=1`
+  (deferred from the C-320 review, M-8): `docker-run.sh`'s autobuild path now sets `CYPHER_MCP_NO_PULL=1`
   on its `build.sh --runtime-only` call (plus a one-line addition to the build-failure message
-  pointing at a manual `cpg/mcp/build.sh` run) — smoke-tested end to end, confirmed no `docker pull`
+  pointing at a manual `cypher-mcp/build.sh` run) — smoke-tested end to end, confirmed no `docker pull`
   step, ~5s cold build, well under the 30s MCP startup budget. `image-tag.sh`'s hash-walk now
   excludes `.pytest_cache` (matching `.dockerignore`) and hard-fails (rather than silently
   skipping/succeeding) on a missing walked directory, a symlink under a walked directory, or a failed
@@ -406,7 +407,7 @@ accepted by D5 (C-313 closed); the residual cleanups are C-314/C-315.
   reordering when `--no-cache` isn't requested at all. Reviewed by `analyst`: approve (Pass 2
   confirmed U4/U5 diffs untouched by the C-314/315 re-fix cycle). One non-blocking Informational
   note from the review: the `.pytest_cache` exclusion is currently a no-op given the real directory
-  layout (pytest's cache lands at `cpg/mcp/.pytest_cache`, never under a walked `tests/` subtree) —
+  layout (pytest's cache lands at `cypher-mcp/.pytest_cache`, never under a walked `tests/` subtree) —
   correct and defensive, not a defect, no action needed. Owner: `coder` / `devops`.
 
 - **C-322 — Documentation reference & naming convention.** ✅ **Delivered 2026-07-27.** The repo had
@@ -553,7 +554,7 @@ full U1…U9 ledger.
 
 ## M5 — Generic Cypher MCP
 
-`mcp__cpg__query` gains write capability — an optional `agent` parameter and two enforced write
+`mcp__cypher__query` gains write capability — an optional `agent` parameter and two enforced write
 shapes (author-write, curator-clear) — and is piloted end to end on `graph-dba`'s kaizen working
 memory: the graph (`kaizen_graph_dba`) replaces `inbox.md` as the raw-capture layer, `history.md`
 stays unchanged, and `cobb`'s distillation workflow runs against the graph. Requirements:
@@ -565,9 +566,9 @@ mechanism, `architect`) · coordination:
 
 ### Items
 
-- **C-501 — MCP server write path.** ✅ `cpg/mcp/server.py` gains the optional `agent` parameter
+- **C-501 — MCP server write path.** ✅ `cypher-mcp/server.py` gains the optional `agent` parameter
   and the write-detection/authorization branch (author-write vs. curator-clear);
-  `cpg/mcp/README.md` updated. Step 1. Owner: `coder`.
+  `cypher-mcp/README.md` updated. Step 1. Owner: `coder`.
 - **C-502 — Requirements pointer.** ✅ `docs/requirements/cpg-query-access.md`'s header gains a
   `**Note:**` pointing at this feature's AC-8 supersession of its "Non-CPG graphs / general agent
   access to FalkorDB" out-of-scope line. Step 2. Owner: `coder`.
@@ -607,7 +608,7 @@ full U1…U7 ledger.
 
 - **C-507 — AC-5's append-before-delete ordering is enforced procedurally, not mechanically.** 🔵
   `cobb`'s 4-step distillation sequence (append to `history.md`/knowledge base, confirm, only then
-  curator-clear) is a documented discipline, not a tool-enforced invariant — `mcp__cpg__query` has
+  curator-clear) is a documented discipline, not a tool-enforced invariant — `mcp__cypher__query` has
   no way to require or check the ordering of two independent write calls
   (`docs/plans/generic-cypher-mcp.md` §9 names this explicitly as procedural, not mechanical,
   enforcement). U7's acceptance pass could confirm only end-state consistency, not the raw sequence
@@ -619,6 +620,29 @@ full U1…U7 ledger.
   consider a tool-side "last write timestamp" queryable independently of the dispatched agent's own
   narration, rather than relying on end-state consistency plus self-report. Owner: `architect`
   (next time this tool's write path is revisited).
+
+## M6 — MCP tool rename
+
+- **C-601 — Relocate + rebuild `cypher-mcp/`.** 🔵 `git mv cpg/mcp cypher-mcp`; every identity
+  string inside the moved files renamed (server name, tool name, Docker image/label, env-var
+  prefix, internal shell-function names, log-line prefix); relative links shortened; offline
+  suite and in-container gates green from the new path. Step 1. Owner: `coder`.
+- **C-602 — Harness + agent-tool-surface wiring.** 🔵 `.mcp.json`, `.claude/settings.json`, both
+  `analyst`/`architect` `tools:` lines, and `skills/cpg-analysis/SKILL.md`'s `allowed-tools:` +
+  body mentions updated to `mcp__cypher__query`; `claude mcp list` shows `cypher` connected, no
+  `cpg` entry. Step 2. Owner: `coder`.
+- **C-603 — `claude/` + `skills/` sweep.** 🔵 Every active agent prompt, kaizen log, and skill
+  body under `claude/`/`skills/` with a live hit renamed; CPG-domain vocabulary (`cpg-analysis`,
+  `joern-cpg`, `cpg_<component>` graphs) left untouched. Step 3a. Owner: `cobb`.
+- **C-604 — `docs/` + `mcp-monitor/` + `falkor-chat/` sweep.** 🔵 Every active
+  `docs/{plans,requirements,reviews,test-plans,test-reports}/*.md` with a live hit,
+  `docs/manuals/cpg-getting-started.md`, `docs/BACKLOG.md`/`docs/HISTORY.md` (surgical),
+  `mcp-monitor/{AGENTS,README}.md` + `mcp-monitor/docs/{BACKLOG,HISTORY}.md` (surgical), and
+  `falkor-chat/compose.yaml` renamed; includes the `docs/requirements/generic-cypher-mcp2.md`
+  `(M6)`→`(M7)` header bump. Step 3b. Owner: `cobb`.
+- **C-605 — Acceptance pass.** 🔵 AC-1…AC-6 exercised live; zero unexplained `cpg`-identity hits
+  survive the widened sweep outside archived/family/domain-vocabulary categories. Step 4. Owner:
+  `qa-engineer`.
 
 ## Follow-ups (post-M2)
 

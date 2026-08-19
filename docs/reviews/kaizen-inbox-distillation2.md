@@ -108,7 +108,7 @@ failure mode didn't.
 
 ---
 
-### Major — M-4. The corrected `rows=` claim now contradicts `cpg/mcp/server.py`'s own module docstring, and no follow-up was filed
+### Major — M-4. The corrected `rows=` claim now contradicts `cypher-mcp/server.py`'s own module docstring, and no follow-up was filed
 
 **Evidence.** The correction itself is **well-founded** — I cross-checked it and it is not a bare
 assertion: `docs/test-reports/cpg-getting-started-report.md:33` (TP-008/DEF-001, 2026-07-30, live:
@@ -117,7 +117,7 @@ assertion: `docs/test-reports/cpg-getting-started-report.md:33` (TP-008/DEF-001,
 `docs/HISTORY.md:138`, and `docs/manuals/cpg-getting-started.md:150-158` (DEF-001 already folded in
 on the same date). Four independent sites, consistent numbers.
 
-But `cpg/mcp/server.py:20-22` — the module docstring of the very server the README documents —
+But `cypher-mcp/server.py:20-22` — the module docstring of the very server the README documents —
 still reads:
 
 ```
@@ -133,7 +133,7 @@ files the follow-up, so it exists nowhere.
 
 **Suggested fix.** Route a one-line docstring fix to `coder`/`devops` ("…exact below FalkorDB's
 `RESULTSET_SIZE` (default 10000), at or above which it is itself a cap") and record the handoff in
-`claude/graph-dba/kaizen/history.md`'s entry, which currently lists `cpg/mcp/README.md` as fully
+`claude/graph-dba/kaizen/history.md`'s entry, which currently lists `cypher-mcp/README.md` as fully
 handled.
 
 ---
@@ -283,7 +283,7 @@ reconcile (M-1).
   "standing user directive, not a ceremony trade-off" clause correctly pre-empts the "match ceremony
   to the task" line at `:50`.
 - **The `RESULTSET_SIZE` correction is genuinely corroborated**, not asserted — four independent
-  sites with consistent live numbers (see M-4). Both edits (`cpg/mcp/README.md`,
+  sites with consistent live numbers (see M-4). Both edits (`cypher-mcp/README.md`,
   `skills/cpg-analysis/SKILL.md` ×2) are internally consistent with each other and with the
   end-user manual's already-corrected wording, and the "below 10k exact / at-or-above a floor"
   framing is the right precision.
@@ -429,9 +429,9 @@ follow its shape.
 
 ### M-4 — closed, verified (both halves)
 
-`cpg/mcp/server.py:20-22`'s docstring now reads "the reported row count is exact below FalkorDB's
+`cypher-mcp/server.py:20-22`'s docstring now reads "the reported row count is exact below FalkorDB's
 `RESULTSET_SIZE` (default 10000), at or above which it is itself a cap" — consistent with the
-already-corrected `cpg/mcp/README.md` and `skills/cpg-analysis/SKILL.md` wording. `claude/graph-dba/
+already-corrected `cypher-mcp/README.md` and `skills/cpg-analysis/SKILL.md` wording. `claude/graph-dba/
 kaizen/history.md`'s entry now has an explicit "M-4 follow-up, verified closed" paragraph
 confirming the `server.py` fix and listing all three now-consistent sites; the "Docs touched" line
 lists `server.py` alongside `README.md`, correcting the previous omission.

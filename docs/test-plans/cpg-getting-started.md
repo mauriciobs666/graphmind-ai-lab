@@ -17,7 +17,7 @@ Out of scope, and why:
   destructive (wipes an existing graph). Two CPGs are already loaded (`cpg_falkorchat`,
   `cpg_salesperson`), sufficient to verify the query walkthrough without triggering a rebuild.
   The "building a CPG" walkthrough's factual claims are spot-checked statically against
-  `skills/joern-cpg/SKILL.md` and `cpg/mcp/README.md` instead.
+  `skills/joern-cpg/SKILL.md` and `cypher-mcp/README.md` instead.
 - **The manual's factual/architectural claims** (e.g. "Joern reads source and builds nodes for
   methods/call sites/parameters/literals") — that's `analyst`'s half of a `tico`-authored-manual
   review, routed separately by `teco`. This plan covers only claims that are checkable by
@@ -29,7 +29,7 @@ Out of scope, and why:
 ## References
 
 - `docs/manuals/cpg-getting-started.md` (document under test)
-- `cpg/mcp/README.md` (tool contract: read-only, truncation, EXPLAIN/PROFILE, error behavior)
+- `cypher-mcp/README.md` (tool contract: read-only, truncation, EXPLAIN/PROFILE, error behavior)
 - `skills/cpg-analysis/SKILL.md` §1–2 (query surface, the five gotchas)
 - `skills/joern-cpg/SKILL.md` (build pipeline, reload-is-destructive claim)
 
@@ -49,29 +49,29 @@ Out of scope, and why:
 | ID | Title | Preconditions | Steps | Expected result | Priority | Type |
 |---|---|---|---|---|---|---|
 | TP-001 | FalkorDB reachable | none | `redis-cli -p 6379 PING` | `PONG` | High | functional |
-| TP-002 | `cpg` MCP tool connected | Claude Code session | `claude mcp list` | `cpg` listed, `✔ Connected` | High | functional |
+| TP-002 | `cypher` MCP tool connected | Claude Code session | `claude mcp list` | `cypher` listed, `✔ Connected` | High | functional |
 | TP-003 | A CPG is already loaded (avoid a needless rebuild) | FalkorDB up | `redis-cli -p 6379 GRAPH.LIST` | At least one `cpg_<name>` graph present | High | functional |
-| TP-004 | Basic query against a loaded CPG | TP-003 passes | `mcp__cpg__query(graph="cpg_falkorchat", cypher="MATCH (m:METHOD) RETURN count(m) AS n")` | Plain-text result with a stats line (`graph=… rows=1 …`) and a count | High | functional |
+| TP-004 | Basic query against a loaded CPG | TP-003 passes | `mcp__cypher__query(graph="cpg_falkorchat", cypher="MATCH (m:METHOD) RETURN count(m) AS n")` | Plain-text result with a stats line (`graph=… rows=1 …`) and a count | High | functional |
 | TP-005 | Impact-analysis query shape ("who calls X") | TP-004 passes | Run the `cpg-analysis` "callers of a method" recipe against a real method found in `cpg_falkorchat` | Rows listing caller `FULL_NAME`/`FILENAME`/`LINE_NUMBER`, or a clean empty result | High | functional |
-| TP-006 | Read-only enforcement | TP-004 passes | `mcp__cpg__query(graph="cpg_falkorchat", cypher="CREATE (n:QaProbe {x:1}) RETURN n")` | Rejected server-side (error), no node created | High | functional |
+| TP-006 | Read-only enforcement | TP-004 passes | `mcp__cypher__query(graph="cpg_falkorchat", cypher="CREATE (n:QaProbe {x:1}) RETURN n")` | Rejected server-side (error), no node created | High | functional |
 | TP-007 | Unmatched query returns clean empty result | TP-004 passes | Query with a condition matching nothing | Stats line + column names + `(no rows)`, not an error | Medium | functional |
 | TP-008 | Large/unfiltered query triggers truncation notice | TP-004 passes | `MATCH (n) RETURN n` (or similar) on a CPG with more rows than the cap | Notice naming the cap, shown-vs-true row counts, and the true `rows=` figure in the stats line | High | functional |
-| TP-009 | Unknown graph name lists what is loaded | TP-002 passes | `mcp__cpg__query(graph="cpg_does_not_exist", cypher="MATCH (n) RETURN n LIMIT 1")` | Error message enumerating the graphs that *are* loaded (per manual FAQ: "no CPG loaded for that name lists what is loaded") | Medium | functional |
+| TP-009 | Unknown graph name lists what is loaded | TP-002 passes | `mcp__cypher__query(graph="cpg_does_not_exist", cypher="MATCH (n) RETURN n LIMIT 1")` | Error message enumerating the graphs that *are* loaded (per manual FAQ: "no CPG loaded for that name lists what is loaded") | Medium | functional |
 | TP-010 | Graph naming convention | TP-003 | Inspect `GRAPH.LIST` output | Loaded CPGs follow `cpg_<component>` | Low | functional |
-| TP-011 | Build-walkthrough claims (static) | none — not executed live | Read `skills/joern-cpg/SKILL.md` §"Reloading is deliberate (destructive)" and `cpg/mcp/README.md` | Confirms: loader refuses non-empty graph; reset is an explicit guard-gated `GRAPH.DELETE`; destructive FalkorDB ops are approval-gated | Medium | static fact-check |
-| TP-012 | `EXPLAIN` yes / `PROFILE` no (static, optionally spot-live) | TP-004 passes | Fact-check against `cpg/mcp/README.md`; optionally try `EXPLAIN` through the tool | Manual's claim ("read-only, enforced server-side... not just convention") is consistent with README's documented `PROFILE` refusal and `GRAPH.RO_QUERY` behavior | Low | static + optional functional |
+| TP-011 | Build-walkthrough claims (static) | none — not executed live | Read `skills/joern-cpg/SKILL.md` §"Reloading is deliberate (destructive)" and `cypher-mcp/README.md` | Confirms: loader refuses non-empty graph; reset is an explicit guard-gated `GRAPH.DELETE`; destructive FalkorDB ops are approval-gated | Medium | static fact-check |
+| TP-012 | `EXPLAIN` yes / `PROFILE` no (static, optionally spot-live) | TP-004 passes | Fact-check against `cypher-mcp/README.md`; optionally try `EXPLAIN` through the tool | Manual's claim ("read-only, enforced server-side... not just convention") is consistent with README's documented `PROFILE` refusal and `GRAPH.RO_QUERY` behavior | Low | static + optional functional |
 
 ## Environment & data setup
 
 No setup required beyond what's already running: shared `falkordb-dev` container (started by
 `falkor-chat/scripts/start_falkordb.sh`), already-loaded `cpg_falkorchat` / `cpg_salesperson`
-graphs, and the `cpg` MCP server wired via the repo-root `.mcp.json`. No test data is created;
+graphs, and the `cypher` MCP server wired via the repo-root `.mcp.json`. No test data is created;
 TP-006's write attempt is designed to fail closed and leave no residue (verified by re-querying
 afterward).
 
 ## Entry / exit criteria
 
-- **Entry:** FalkorDB up, `cpg` MCP tool connected, at least one CPG loaded (TP-001…TP-003 must
+- **Entry:** FalkorDB up, `cypher` MCP tool connected, at least one CPG loaded (TP-001…TP-003 must
   pass before continuing — if any is blocked, the rest of the live items are blocked too, and the
   blocker is reported plainly rather than worked around).
 - **Exit:** All items executed or explicitly marked blocked/skipped with a reason; every defect

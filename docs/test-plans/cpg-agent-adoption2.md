@@ -64,7 +64,7 @@ against `cpg_falkorchat` →
 | `2026-08-17T00:40:42Z` | `/tmp/cpg-src/falkor-chat-server` | `null` | `null` |
 
 Confirmed at query time (`2026-08-17T00:46:33Z`, ~6 minutes after `BUILT_AT`) via
-`mcp__cpg__query`. `GRAPH.LIST` confirms both `cpg_falkorchat` and `cpg_salesperson` still
+`mcp__cypher__query`. `GRAPH.LIST` confirms both `cpg_falkorchat` and `cpg_salesperson` still
 loaded. `SOURCE_COMMIT`/`SOURCE_DIRTY` are absent, as predicted by
 `cpg-agent-adoption-graph.md` §6 for this graph's `.git`-less scratch-copy build pattern — the
 dispatched agent has no way to run the stronger git-log staleness check and must fall back to

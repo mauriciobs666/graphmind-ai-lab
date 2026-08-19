@@ -17,7 +17,7 @@ Diff-scoped review of `cobb`'s first genuine (non-acceptance-test) maintenance p
 - `skills/agent-maintenance/SKILL.md` §5 step 2 (cobb's own-run process learning)
 - `claude/cobb/kaizen/history.md` / `claude/cobb/kaizen/inbox.md` (cobb's own bookkeeping)
 
-Baseline re-derived directly, not taken on cobb's report: `mcp__cpg__query(kaizen_graph_dba,
+Baseline re-derived directly, not taken on cobb's report: `mcp__cypher__query(kaizen_graph_dba,
 "MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.author, e.context, e.suggestedHome")` now
 returns exactly **1** row, `entryId 6e5d6451-72fa-400c-b002-52757727f805`, `date 2026-08-16` —
 matches the expected post-run state exactly.
