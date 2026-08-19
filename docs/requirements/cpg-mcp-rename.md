@@ -37,10 +37,9 @@ example. This is a wide, cross-component rename, not a cosmetic single-file twea
 *(to be filled in as the interview proceeds)*
 
 ## Open questions
-- What should the new name actually be?
-- Does "rename" mean the tool-facing name only (`mcp__cpg__query` → `mcp__<x>__query`), or also
-  the directory (`cpg/` → `<x>/`), the `.mcp.json` server key, and the component's own identity
-  throughout `AGENTS.md`/`README.md`?
+- Does "rename" mean the tool-facing name only (`mcp__cpg__query` → `mcp__cypher__query`), or
+  also the directory (`cpg/` → something), the `.mcp.json` server key, and the component's own
+  identity throughout `AGENTS.md`/`README.md`?
 - Does the CPG-*specific* capability (Joern-built Code Property Graphs, the `cpg-analysis` skill,
   `graph-dba`'s CPG pipeline) keep the word "cpg" anywhere, or does that also get relabeled?
 - Sequencing/risk: is this a single atomic rename, or does it need a transition
@@ -56,3 +55,5 @@ example. This is a wide, cross-component rename, not a cosmetic single-file twea
   it into M6, given the 60+-file blast radius — new document opened here, own topic slug (not a
   family member of `generic-cypher-mcp`/`generic-cypher-mcp2`, since this is about the tool's own
   identity, not the kaizen-inbox rollout).
+- 2026-08-19 — New name? → **`cypher`** — `mcp__cypher__query`, matching the "generic Cypher MCP"
+  language already used for the underlying feature.
