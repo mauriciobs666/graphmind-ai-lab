@@ -5,7 +5,7 @@
 ## 2026-08-16 — Inbox distillation (on-demand, cobb): 2 of 3 entries promoted to `cpg-analysis` skill, 1 already fixed
 - **What:** `cobb` processed the three same-day inbox entries at the stakeholder's explicit
   request (not a periodic sweep). **Verified each against live state first:**
-  1. `mcp__cpg__query(graph="cpg_falkorchat", "MATCH (n) RETURN count(n)")` → 166,789 nodes (graph
+  1. `mcp__cypher__query(graph="cpg_falkorchat", "MATCH (n) RETURN count(n)")` → 166,789 nodes (graph
      exists); `graph="cpg_falkor-chat"` → not found, confirming the entry's evidence. **But**
      `skills/cpg-analysis/SKILL.md` §1 already reads "the component-directory name with hyphens
      stripped (`falkor-chat` → `cpg_falkorchat`, …)" — that exact fix landed *earlier the same day*
@@ -185,7 +185,7 @@ is back to the standard empty placeholder.
   `falkor-chat/docs/HISTORY.md:903-919` (K-031 V-1). The `EXPLAIN`/`PROFILE` behavior is documented
   verbatim in `skills/cpg-analysis/SKILL.md:65-75`. The `tools:` allowlist gotcha is documented in
   `skills/agent-standards/claude-code.md:373-375`, and the concrete instance was closed the day
-  after capture (this file, 2026-07-25 entry: `mcp__cpg__query` added to `architect`'s and
+  after capture (this file, 2026-07-25 entry: `mcp__cypher__query` added to `architect`'s and
   `analyst`'s `tools:`). The check-7/`.mcp.json` portable-form fact is documented in
   `skills/agent-standards/claude-code.md:259-276` and is what the repo's actual `.mcp.json` uses
   today. The `pipeline.sh --reset` bypass is fixed (C-311, `claude/scripts/guard-destructive-ops.sh`,
@@ -238,9 +238,9 @@ is back to the standard empty placeholder.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.6 makes a three-field header (`Status:` · `Owner:` · `Tracks:`) the lifecycle signal that replaces the milestone filename prefix and the move-to-`archive/` rule; a plan is the most-cited document kind in the repo, and `architect` is the agent that creates it, so the field is only ever present if this prompt asks for it. The line is a **pointer, not an inlined template** (v1.4 M20): root `AGENTS.md` reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import, so the second hop costs nothing, while eight copies of a still-settling block would drift — §9.6 stays the one place the block is stated. The sentence is byte-identical across all six producing prompts on purpose; the convention's coverage check greps for it literally. `claude/README.md` row 9 re-checked — it cites the plan write path and the hook, not the document's internal structure; no edit needed.
 - **Plan items:** none. Note for whoever picks up the parking-lot "self-review checklist before delivering a plan" idea: the header block is now the first thing that checklist should assert.
 
-## 2026-07-25 — `tools:` allowlist gains `mcp__cpg__query` (M3 / C-304)
-- **What:** Frontmatter `tools:` now ends `…, Agent, mcp__cpg__query`. `claude/README.md` row 9 updated to say the `cpg-analysis` skill reaches the graph through that MCP tool and why the allowlist entry is required. No body or `description` change — the impact-analysis CPG clause added on 2026-07-19 stays accurate.
-- **Why:** M3 replaces the CPG read path with a single MCP tool, `mcp__cpg__query(graph, cypher)` (`docs/plans/cpg-query-access.md` S5). **`tools:` is an allowlist, not a hint** — an agent that declares one does not see MCP tools absent from it, so without this line the tool would have been invisible to `architect` (and `analyst`) while `qa-engineer`, which declares no allowlist, inherited it. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
+## 2026-07-25 — `tools:` allowlist gains `mcp__cypher__query` (M3 / C-304)
+- **What:** Frontmatter `tools:` now ends `…, Agent, mcp__cypher__query`. `claude/README.md` row 9 updated to say the `cpg-analysis` skill reaches the graph through that MCP tool and why the allowlist entry is required. No body or `description` change — the impact-analysis CPG clause added on 2026-07-19 stays accurate.
+- **Why:** M3 replaces the CPG read path with a single MCP tool, `mcp__cypher__query(graph, cypher)` (`docs/plans/cpg-query-access.md` S5). **`tools:` is an allowlist, not a hint** — an agent that declares one does not see MCP tools absent from it, so without this line the tool would have been invisible to `architect` (and `analyst`) while `qa-engineer`, which declares no allowlist, inherited it. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
 - **Verification note:** this is the *edit*; the live proof (a cold `architect` actually calling the tool) needs the server wired in S3 and is verified in S9, per the plan's m-4 split.
 - **Plan items:** none.
 

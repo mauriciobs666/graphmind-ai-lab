@@ -349,8 +349,8 @@ claude.ai connectors). When the same server name exists in two scopes the
   described below — two parallel cwd-independent facts, not one shared cause.
   Observed graphmind-ai-lab,
   2026-07-25 (`claude/devops/kaizen/inbox.md`, C-319): with `.mcp.json` +
-  `"enabledMcpjsonServers": ["cpg"]` at the repo root, `claude mcp list` from
-  the repo root reported `cpg: … ✔ Connected`; the identical command run from
+  `"enabledMcpjsonServers": ["cypher"]` at the repo root, `claude mcp list` from
+  the repo root reported `cypher: … ✔ Connected`; the identical command run from
   the `falkor-chat/` subdirectory reported `⏸ Pending approval (run \`claude\`
   to approve)` — the server was still *discovered* there (walk-up to the git
   root worked), confirming this is approval scoping and not a discovery
@@ -410,7 +410,7 @@ directory, and sends `notifications/roots/list_changed` when that set changes
 
 ### Tool naming
 
-`mcp__<server>__<tool>` — e.g. `mcp__cpg__query`. Plugin-bundled servers take the
+`mcp__<server>__<tool>` — e.g. `mcp__cypher__query`. Plugin-bundled servers take the
 longer form `mcp__plugin_<plugin>_<server>__<tool>` (any character outside
 `A-Za-z0-9_-` becomes `_`), and a hook matcher written against the bare server key
 **never fires** for one.
@@ -496,7 +496,7 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   from the parent session's state, so this gates every delegate's access too.
   Verified 2026-07-25 (graphmind-ai-lab, cpg-query-access delivery: the
   delivering session wrote `.mcp.json` and had `claude mcp list` show
-  Connected, but no `mcp__cpg__query` tool existed in that session; the
+  Connected, but no `mcp__cypher__query` tool existed in that session; the
   following session started with the server's `instructions` in the system
   prompt and the tool present, no user action needed).
 - **Stdio servers are local processes and are NOT auto-reconnected** if they die
@@ -517,7 +517,7 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   restart). Write such a check as **liveness-aware**: expect exactly one `Up`
   container per currently-open session and zero `Exited` ones, and only assert
   "empty" with all sessions using that server closed. (Observed
-  graphmind-ai-lab, 2026-07-26, reviewing a `cpg` MCP server containerization
+  graphmind-ai-lab, 2026-07-26, reviewing a `cypher` MCP server containerization
   design whose own author had measured the check with no session open.)
 
 ### How MCP meets subagents and skills

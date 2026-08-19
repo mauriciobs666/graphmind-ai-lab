@@ -22,7 +22,7 @@
   already opened.
 - **Action taken:** `6e5d6451…`'s full record already lived in this file's prior entry (below)
   and in `plan.md` K-007, so nothing new needed capturing. Cleared it:
-  `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
+  `mcp__cypher__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
   {entryId:'6e5d6451-72fa-400c-b002-52757727f805'}) DETACH DELETE e", agent='cobb')` →
   `nodes_deleted=1.0`. Confirmed via a follow-up `MATCH (e:KaizenEntry) RETURN count(e)` → **0**
   — `kaizen_graph_dba` now holds no `:KaizenEntry` nodes at all.
@@ -109,7 +109,7 @@
   or contradicting an existing bullet (items 3–4). `find` re-run live for the current `.py`
   file count (item 4). Order of operations honored throughout: each promotion's `history.md`
   text (this entry) was written and confirmed **before** its `entryId` was cleared from
-  `kaizen_graph_dba` via `mcp__cpg__query(..., agent='cobb')` — see the graph read/write
+  `kaizen_graph_dba` via `mcp__cypher__query(..., agent='cobb')` — see the graph read/write
   results in `cobb`'s own run output for the before (5 entries) / after (1 entry, `6e5d6451…`)
   counts.
 - **Docs touched:** `claude/graph-dba/falkordb-quirks.md` (item 1), `falkor-chat/docs/
@@ -153,7 +153,7 @@
 - **What:** The "Learning capture" section (`graph-dba.md`) no longer instructs appending to
   `kaizen/inbox.md` for non-FalkorDB-quirk learnings. It now instructs writing a new `:KaizenEntry`
   node directly into the `kaizen_graph_dba` working-memory graph, attributed to `graph-dba`, via
-  `mcp__cpg__query(graph='kaizen_graph_dba', cypher=<CREATE ...>, agent='graph-dba')` — the same
+  `mcp__cypher__query(graph='kaizen_graph_dba', cypher=<CREATE ...>, agent='graph-dba')` — the same
   `CREATE (...:KaizenEntry {..., author: 'graph-dba', ...})` shape `graph-dba` itself already used
   live in U5 to run the one-time inbox migration (`write ok (labels_added=6, nodes_created=6,
   properties_set=48)`). The `falkordb-quirks.md` direct-home carve-out (live-verified engine
@@ -213,23 +213,23 @@
   into `skills/cpg-analysis/SKILL.md`'s query-usage guidance ("probe reachability, don't assume").
 - **Also folded in from other agents' inboxes (not counted in this entry's "7 entries," logged in
   those agents' own history entries):** the FalkorDB `RESULTSET_SIZE` silent-cap finding
-  (`qa-engineer`'s inbox) → `falkordb-quirks.md`, `cpg/mcp/README.md` (corrected an overclaim —
+  (`qa-engineer`'s inbox) → `falkordb-quirks.md`, `cypher-mcp/README.md` (corrected an overclaim —
   "the `rows=` figure is always the true total" was false above 10k rows), and
   `skills/cpg-analysis/SKILL.md`'s gotcha list (new #6). The **no-string-repetition-operator**
   finding is `coder`'s own inbox entry and its promotion is logged solely in `coder`'s history
   entry — this entry previously double-claimed it too (nit n-1); removed here.
-- **M-4 follow-up, verified closed:** `cpg/mcp/server.py`'s module docstring ("Display-only
+- **M-4 follow-up, verified closed:** `cypher-mcp/server.py`'s module docstring ("Display-only
   truncation" bullet, `:20-22`) carried the same now-corrected `rows=`-is-always-exact overclaim as
-  `cpg/mcp/README.md`, in the most authoritative of the three sites (flagged by `analyst`'s review,
+  `cypher-mcp/README.md`, in the most authoritative of the three sites (flagged by `analyst`'s review,
   M-4). `teco` fixed it directly — confirmed present and reads correctly: "the reported row count
   is exact below FalkorDB's `RESULTSET_SIZE` (default 10000), at or above which it is itself a
-  cap." All three sites (`falkordb-quirks.md`, `cpg/mcp/README.md`, `cpg/mcp/server.py`) are now
+  cap." All three sites (`falkordb-quirks.md`, `cypher-mcp/README.md`, `cypher-mcp/server.py`) are now
   consistent; `skills/cpg-analysis/SKILL.md` was always correct on this point.
 - **Verified:** `bash claude/scripts/audit-team.sh` clean. `db.indexes()` correction and
   `RESULTSET_SIZE` figures cross-checked against the entries' own cited commands/outputs, not
   re-run live (no FalkorDB access from this session).
 - **Docs touched:** `claude/graph-dba/{kaizen/{history,inbox,plan},falkordb-quirks.md}` ·
-  `falkor-chat/docs/QUERIES.md` · `cpg/mcp/README.md` · `skills/cpg-analysis/SKILL.md`.
+  `falkor-chat/docs/QUERIES.md` · `cypher-mcp/README.md` · `skills/cpg-analysis/SKILL.md`.
 
 ## 2026-07-28 — `joern` agent retired; CPG generation folded in as an on-demand capability
 - **What:** The standalone `joern` subagent (CPG specialist) was retired at the user's

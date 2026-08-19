@@ -84,6 +84,6 @@ CREATE (k:KaizenEntry {
 })
 ```
 
-called as `mcp__cpg__query(graph='kaizen_graph_dba', cypher=<that text>, agent='graph-dba')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+called as `mcp__cypher__query(graph='kaizen_graph_dba', cypher=<that text>, agent='graph-dba')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
 
 Respond in the user's language (English by default; mirror Portuguese if they write in it).

@@ -38,3 +38,22 @@
 - **Context:** K-026 GraphRAG eval harness, Unit 3 code review (`falkor-chat/docs/reviews/graphrag-eval.md`, "Unit 3 code review (judge layer)" section, finding N-2) — confirming a caveat-language conformance requirement the coordinating session explicitly asked to be checked.
 - **Suggested home:** knowledge base (`claude/analyst/review-techniques.md`) — a short technique note: when a finding/spec asks you to confirm text was reproduced "verbatim," extract both strings into variables and diff them with whitespace normalized (`re.sub(r'\s+', ' ', s).strip()`) rather than reading them side by side — a line-wrap point in the *source* of the "expected" text is exactly where a hand-transcription is most likely to silently drop a character, and it's the one place a visual read is least likely to notice it (both versions look right individually).
 
+## 2026-08-19 — When verifying a plan's cited "regression floor" pytest baseline, `pytest -k "not live"` and the project's actual `pytest.ini` `addopts = -m "not live"` silently give different pass/deselect splits for the same suite
+
+- **Evidence:** `docs/plans/cpg-mcp-rename.md` cited `cypher-mcp`'s offline baseline as "84 passed, 7
+  deselected." Running `.venv/bin/python -m pytest tests/ -k "not live" -q` from `cypher-mcp/`
+  produced `83 passed, 8 deselected` — a one-test discrepancy that looked like a stale/wrong plan
+  claim. Re-running with no `-k` override (letting `pytest.ini`'s own `addopts = -m "not live"`
+  apply) produced `84 passed, 7 deselected`, matching the plan exactly. Root cause: `-k` is a
+  substring/keyword filter over test *names*, not the marker-based `-m` deselection `pytest.ini`
+  actually documents (`cypher-mcp/pytest.ini`: "`-m \"not live\"` DESELECTS the FalkorDB-dependent
+  tests by default... a reachability-skip would not"); one test apparently has "live" somewhere in
+  its collected name/id without carrying the `live` marker, so `-k` and `-m` disagree on it by one.
+- **Context:** `docs/reviews/cpg-mcp-rename.md`, verifying the plan's §2/§5 offline-suite baseline
+  claim before trusting it as a regression floor.
+- **Suggested home:** knowledge base (`claude/analyst/review-techniques.md`) — when verifying a
+  plan's cited test-count baseline, run the project's own default/documented invocation (check its
+  `pytest.ini`/`pyproject.toml` `addopts` first) rather than a hand-written `-k` filter that looks
+  equivalent — the two are different filtering mechanisms and can silently disagree on the split
+  even when the total is identical.
+

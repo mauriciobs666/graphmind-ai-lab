@@ -9,7 +9,7 @@ to it could transitively break. **Change one parameter** — the target's short
 `NAME` (and `FILENAME` to disambiguate) or its `FULL_NAME`.
 
 Pass the graph key (caller-supplied; never hardcode) and the Cypher below as the
-two parameters of `mcp__cpg__query` — `graph` and `cypher`. Outside Claude Code,
+two parameters of `mcp__cypher__query` — `graph` and `cypher`. Outside Claude Code,
 or if the tool is unavailable, use the `redis-cli` fallback in
 [`../SKILL.md`](../SKILL.md) §1.
 

@@ -274,7 +274,7 @@ to the general fact here.
   wrapper, an MCP tool, a manual script) needs to either raise `RESULTSET_SIZE` for the session or
   document that its reported row count can itself be a silent cap, not the true total — a claim
   like "the reported total is always exact" is false against this default. (Verified 2026-07-30,
-  v4.18.11, via the `cpg` MCP tool vs. raw `GRAPH.RO_QUERY`.)
+  v4.18.11, via the `cypher` MCP tool vs. raw `GRAPH.RO_QUERY`.)
 - **A destructive op run through a wrapper script used to be invisible to `guard-destructive-ops.sh`
   — fixed 2026-08-08 (C-311), don't assume it's still open.** `pipeline.sh --reset` runs
   `redis-cli ... GRAPH.DELETE` *inside* the script, so the literal string never appeared in the

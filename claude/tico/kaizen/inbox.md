@@ -23,7 +23,7 @@
 ## 2026-08-17 — FalkorDB's bundled web console is already live on `:3000` wherever `falkordb-dev` runs — no new work needed for "can I just look at the graph"
 - **Evidence:** `falkor-chat/scripts/start_falkordb.sh` publishes `-p "${FALKORDB_WEB_PORT}:3000"` (default `3000`) alongside the `:6379` Redis/Cypher port, and prints `Web console: http://localhost:${FALKORDB_WEB_PORT}` on every start.
 - **Context:** `generic-cypher-mcp` requirements interview — stakeholder asked "can I use the web tool to monitor created nodes/relationships," which resolved a whole access-tier open question (deferring their own read/write access to a later phase) once confirmed this already exists today with zero new work.
-- **Suggested home:** unsure (candidate: a line in `tico`'s own explanation reflexes, or `cpg/mcp/README.md`'s troubleshooting/observability section, since agents debugging graph state might not know this console exists either).
+- **Suggested home:** unsure (candidate: a line in `tico`'s own explanation reflexes, or `cypher-mcp/README.md`'s troubleshooting/observability section, since agents debugging graph state might not know this console exists either).
 
 ## 2026-08-17 — Introducing a new *agent* is a tico requirements interview too, filed under claude/docs/requirements/
 - **Fact:** A stakeholder request to add a new team member (a new Claude Code subagent, e.g.
@@ -45,3 +45,19 @@
   *new*-agent proposal gets a `claude/docs/requirements/<slug>.md` via `tico` before `cobb`
   designs it, so this doesn't need re-deriving next time. Also worth `cobb` knowing this doc
   exists as the WHAT/WHY input the next time it's asked to design the security-expert agent.
+
+## 2026-08-19 — Stakeholder flagged commit cadence as too fine-grained: one commit per single Edit/decision-log append reads as noisy, even though each was individually a "meaningful update"
+- **Evidence:** one session covering two requirements docs (`generic-cypher-mcp2.md`,
+  `cpg-mcp-rename.md`) produced **11 separate commits**, several of them a single decision-log
+  entry or one FR tweak (e.g. `generic-cypher-mcp2 — scope (all 11 agents) and trigger settled`
+  immediately followed by `— team-wide query surface, cobb cadence/self-migration settled`, two
+  commits apart by one `AskUserQuestion` round each). The stakeholder's own words: "you seen to be
+  committing too often." My prompt's guidance ("after a meaningful update lands... stage and
+  commit exactly the file(s) you just wrote") was followed literally per-edit rather than batched
+  per settled *thread* or natural pause point in the conversation.
+- **Context:** live M6 (`generic-cypher-mcp2`) + follow-on (`cpg-mcp-rename`) requirements
+  interviews, same session, back-to-back `AskUserQuestion` rounds each followed by its own commit.
+- **Suggested home:** prompt — tighten `tico.md`'s "Commit as you go" guidance to commit at
+  natural batch points (a full readback, a settled cluster of decisions, or before switching
+  topics/modes) rather than after every individual `Edit` call, while still never batching two
+  *different* documents' changes into one commit.

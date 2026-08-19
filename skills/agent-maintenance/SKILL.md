@@ -324,7 +324,7 @@ graphmind-ai-lab, enforced by `audit-team.sh` check 1) — **except `graph-dba`*
 writes directly into a working-memory FalkorDB graph, `kaizen_graph_dba`, as
 `:KaizenEntry` nodes (`entryId`, `date`, `fact`, `evidence`, `context`,
 `suggestedHome`, `author`, `createdAt`), each attributed to itself via
-`mcp__cpg__query(graph='kaizen_graph_dba', cypher=<CREATE ...>,
+`mcp__cypher__query(graph='kaizen_graph_dba', cypher=<CREATE ...>,
 agent='graph-dba')`. Its `kaizen/inbox.md` is a **frozen historical
 snapshot** — the pre-migration content, kept for reference, no longer written
 to. During runs, every other agent appends dated, evidence-backed observations
@@ -339,7 +339,7 @@ delete one, which requires the curator role below. The maintainer (cobb)
 distills — on request, and folded into every certification pass (§4):
 
 1. **Read every inbox** (`claude/*/kaizen/inbox.md`), plus, for `graph-dba`,
-   a live read of its graph: `mcp__cpg__query(graph='kaizen_graph_dba',
+   a live read of its graph: `mcp__cypher__query(graph='kaizen_graph_dba',
    cypher="MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.fact, e.evidence,
    e.context, e.suggestedHome, e.author ORDER BY e.date")` — a plain read, no
    `agent` needed (reads are unrestricted).
@@ -407,7 +407,7 @@ distills — on request, and folded into every certification pass (§4):
    append never lands). Concretely, for each `graph-dba` entry being disposed
    of (promoted, discarded, or kept open):
    1. Read the raw entry (already done in step 1, or re-read by id):
-      `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
+      `mcp__cypher__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
       {entryId: '<id>'}) RETURN e.date, e.fact, e.evidence, e.context,
       e.suggestedHome, e.author")` — a plain read, `agent` omitted.
    2. Verify it (step 2, above).
@@ -416,10 +416,10 @@ distills — on request, and folded into every certification pass (§4):
       and `plan.md` too if a backlog item is opened for a kept-open entry.
       **Confirm the edit(s) succeeded** before the next step — do not proceed
       on an error.
-   4. Only then: `mcp__cpg__query(graph='kaizen_graph_dba', cypher="MATCH
+   4. Only then: `mcp__cypher__query(graph='kaizen_graph_dba', cypher="MATCH
       (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')` —
       the one recognized curator-clear shape; `cobb` is a recognized curator
-      agent (`CPG_MCP_CURATOR_AGENTS`), so this is authorized. This runs for
+      agent (`CYPHER_MCP_CURATOR_AGENTS`), so this is authorized. This runs for
       **every** disposition, kept-open included — see the rule above.
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.

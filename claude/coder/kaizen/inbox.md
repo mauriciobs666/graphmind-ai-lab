@@ -15,4 +15,7 @@
 > - **Suggested home:** prompt | knowledge base | project docs | unsure
 > ```
 
-*(empty — no unprocessed learnings)*
+## 2026-08-19 — `git mv <dir1> <dir2>` moves a tracked directory's *untracked* contents too (it's a filesystem rename, not an index-only op), but a Python venv's internal absolute-path artifacts (script shebangs, `pyvenv.cfg`) still point at the old path and must be regenerated
+- **Evidence:** `git mv cpg/mcp cypher-mcp` (relocating the `cypher-mcp` MCP server per `docs/plans/cpg-mcp-rename.md` step 1) carried the gitignored `.venv/`, `__pycache__/`, `.pytest_cache/` along with the tracked files — `ls cypher-mcp/` showed `.venv` present immediately after the `git mv`, no separate copy needed. But `./cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q` failed with `cannot execute: required file not found` — the venv's `bin/pytest` shebang still hardcoded `#!/home/.../cpg/mcp/.venv/bin/python`, a path that no longer existed. Fixed by `./cypher-mcp/setup.sh --recreate`.
+- **Context:** cpg-mcp-rename U3 (relocating `cpg/mcp/` → top-level `cypher-mcp/`, renaming every internal identity string) — the offline test suite needed to run clean from the new path before the container gate.
+- **Suggested home:** knowledge base (a directory-relocation checklist item: after `git mv`-ing a directory containing a Python venv, always `--recreate` it rather than assuming the moved venv still works).

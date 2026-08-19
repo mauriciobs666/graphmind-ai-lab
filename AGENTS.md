@@ -20,17 +20,20 @@ and OpenCode artifacts).
     `skill-builder`, `user-preferences`, `write-tutorial`); OpenCode's global config symlinks here,
     not to the repo's shared `skills/`. See `opencode/skills/README.md`.
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
-- `cpg/` — Code-Property-Graph component code home. `cpg/mcp/` is the **`cpg` MCP server** (stdio,
-  Python) exposing the single read-only tool `mcp__cpg__query(graph, cypher)` over FalkorDB; build
-  artifacts (`.cpg-artifacts/`) and its `.venv/` are gitignored. It **runs containerized** — the
-  launch surface is `cpg/mcp/docker-run.sh`, whose image tag is a **content hash of the build
-  inputs**, so a stale image is unrepresentable rather than merely unlikely; `cpg/mcp/build.sh` is
-  the supported build step. The container reaches FalkorDB over the host's published port via
-  `--add-host=host.docker.internal:host-gateway`, so it does **not** touch the shared `falkordb-dev`
-  container. The **host venv is retained** (`setup.sh`/`run.sh`) as the fast test loop and the
-  fallback. See `cpg/mcp/README.md`. The repo-root `.mcp.json` that wires it is the repo's **first MCP
-  wiring, and it is Claude-Code-only** — OpenCode and Kiro configure MCP through their own files and
-  neither is wired (backlog C-310).
+- `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
+  (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
+  FalkorDB. The MCP server that used to live under `cpg/mcp/` is now the top-level `cypher-mcp/`
+  component (below) — it is a generic Cypher-query tool, not CPG-specific, so it moved out.
+- `cypher-mcp/` — the **`cypher` MCP server** (stdio, Python) exposing the single read-only tool
+  `mcp__cypher__query(graph, cypher)` over FalkorDB — generic (not limited to `cpg_*` graphs). It
+  **runs containerized** — the launch surface is `cypher-mcp/docker-run.sh`, whose image tag is a
+  **content hash of the build inputs**, so a stale image is unrepresentable rather than merely
+  unlikely; `cypher-mcp/build.sh` is the supported build step. The container reaches FalkorDB over
+  the host's published port via `--add-host=host.docker.internal:host-gateway`, so it does **not**
+  touch the shared `falkordb-dev` container. The **host venv is retained** (`setup.sh`/`run.sh`)
+  as the fast test loop and the fallback. See `cypher-mcp/README.md`. The repo-root `.mcp.json`
+  that wires it is the repo's **first MCP wiring, and it is Claude-Code-only** — OpenCode and Kiro
+  configure MCP through their own files and neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history + learnings inbox the agent appends to during runs — except `graph-dba`, whose raw
   capture writes directly into the `kaizen_graph_dba` FalkorDB graph instead; `cobb` distills the
@@ -63,7 +66,8 @@ and OpenCode artifacts).
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
-| `cpg/` | `cpg/mcp/README.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
+| `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
+| `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |

@@ -195,7 +195,7 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
     prefix you expect isn't there (or the count is 0), rebuild from a parse root
     that includes it.
   - **Live-verified** (2026-08-09, `falkordb-dev`, graph `cpg_falkorchat`, via
-    `mcp__cpg__query`): happy path `MATCH (m:METHOD) WHERE m.FILENAME STARTS
+    `mcp__cypher__query`): happy path `MATCH (m:METHOD) WHERE m.FILENAME STARTS
     WITH "tests/" RETURN count(m)` → **1067**; failure path with the same query
     against `"nonexistent/"` → **0**, i.e. exactly the condition
     `pipeline.sh --verify-prefix` treats as a hard failure and exits 1 on.

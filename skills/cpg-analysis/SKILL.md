@@ -87,7 +87,7 @@ mcp__cypher__query(
 
 **Truncation is display-only — with one FalkorDB-level exception.** Long results are capped for
 rendering — a maximum number of rows, a per-cell character cap, and a total-size cap (the current
-defaults and their env overrides live in the repo's `cpg/mcp/README.md`, next to the server). The
+defaults and their env overrides live in the repo's `cypher-mcp/README.md`, next to the server). The
 query itself always runs in full, and below 10,000 true rows the reported row count is exact; when
 one of this tool's own caps binds, the output says which one and how many rows of how many are
 shown. **But** FalkorDB's own server-side `RESULTSET_SIZE` (default 10000) silently caps the result
@@ -159,7 +159,7 @@ Full detail in `cpg-model.md`; the minimum you trip on:
 5. **`REACHING_DEF` (data flow) is intraprocedural** — it stops at call-site
    arguments and does not cross into a callee. Crossing calls is a deliberate,
    sparser step (see the interprocedural note below and the rca/code-review recipes).
-6. **`rows=` in the `cpg` MCP tool's own accounting is exact below 10,000 true rows, but
+6. **`rows=` in the `cypher` MCP tool's own accounting is exact below 10,000 true rows, but
    FalkorDB's server-side `RESULTSET_SIZE` (default 10000) silently caps it above that** —
    even against an explicit larger `LIMIT`, with no marker distinguishing "the true count" from
    "the cap." At/above 10k, re-query with a narrowing predicate rather than trusting the figure.

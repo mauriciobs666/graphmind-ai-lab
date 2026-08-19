@@ -4,7 +4,7 @@
 > were imported once into the `kaizen_graph_dba` FalkorDB graph
 > (`docs/plans/generic-cypher-mcp.md`); `graph-dba` no longer appends here. New raw learnings are
 > written directly into the graph and are immediately queryable by any agent:
-> `mcp__cpg__query(graph='kaizen_graph_dba', cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact,
+> `mcp__cypher__query(graph='kaizen_graph_dba', cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact,
 > e.evidence, e.context, e.suggestedHome, e.author ORDER BY e.date')`. Content below is preserved
 > for historical reference and will not change.
 
@@ -24,7 +24,7 @@
 > ```
 
 ## 2026-08-16 — `META_DATA` (and `FILE`/`TYPE`/`NAMESPACE`) are absent from both live pysrc2cpg-built graphs, despite being listed in cpg-model.md's node-label vocabulary
-- **Evidence:** `MATCH (n:META_DATA) RETURN n` → 0 rows on both `cpg_falkorchat` and `cpg_salesperson`, via `mcp__cpg__query`. `CALL db.labels()` on `cpg_falkorchat` returned exactly 20 labels (`CpgNode`, `METHOD`, `CALL`, `LOCAL`, `MODIFIER`, `LITERAL`, `IDENTIFIER`, `FIELD_IDENTIFIER`, `BLOCK`, `METHOD_RETURN`, `METHOD_PARAMETER_OUT`, `CONTROL_STRUCTURE`, `METHOD_PARAMETER_IN`, `UNKNOWN`, `METHOD_REF`, `TYPE_DECL`, `RETURN`, `IMPORT`, `TYPE_REF`, `MEMBER`) — none of `META_DATA`, `FILE`, `TYPE`, `NAMESPACE`/`NAMESPACE_BLOCK` appear, though `skills/joern-cpg/references/cpg-model.md`'s "Node labels you'll see most" list includes all of them.
+- **Evidence:** `MATCH (n:META_DATA) RETURN n` → 0 rows on both `cpg_falkorchat` and `cpg_salesperson`, via `mcp__cypher__query`. `CALL db.labels()` on `cpg_falkorchat` returned exactly 20 labels (`CpgNode`, `METHOD`, `CALL`, `LOCAL`, `MODIFIER`, `LITERAL`, `IDENTIFIER`, `FIELD_IDENTIFIER`, `BLOCK`, `METHOD_RETURN`, `METHOD_PARAMETER_OUT`, `CONTROL_STRUCTURE`, `METHOD_PARAMETER_IN`, `UNKNOWN`, `METHOD_REF`, `TYPE_DECL`, `RETURN`, `IMPORT`, `TYPE_REF`, `MEMBER`) — none of `META_DATA`, `FILE`, `TYPE`, `NAMESPACE`/`NAMESPACE_BLOCK` appear, though `skills/joern-cpg/references/cpg-model.md`'s "Node labels you'll see most" list includes all of them.
 - **Context:** designing the cpg-agent-adoption freshness-marker feature (`docs/plans/cpg-agent-adoption-graph.md`) — was evaluating whether to hook a build-timestamp property onto the existing `META_DATA` node vs. a dedicated node; had to rule out `META_DATA` empirically before designing around it.
 - **Suggested home:** knowledge base (`skills/joern-cpg/references/cpg-model.md`) — the "Node labels you'll see most" list reads as "always present" but is apparently frontend/export-configuration-dependent (likely `pysrc2cpg` + default `--repr cpg` specific); worth a one-line caveat there ("confirmed absent on `pysrc2cpg`/`cpg_falkorchat`/`cpg_salesperson`, 2026-08-16") so a future producer doesn't assume `META_DATA` is a safe anchor without checking first, the way this task almost did.
 

@@ -34,7 +34,7 @@
   unchanged for every other agent, which still append to their own file-based `kaizen/inbox.md`:
   1. **`claude/AGENTS.md`** (line 3) — the directory-level convention sentence gained the
      `graph-dba` carve-out (writes `:KaizenEntry` nodes into `kaizen_graph_dba` via
-     `mcp__cpg__query`, `inbox.md` now frozen) alongside the unchanged generic statement for
+     `mcp__cypher__query`, `inbox.md` now frozen) alongside the unchanged generic statement for
      everyone else.
   2. **`claude/README.md`** (Kaizen section) — same carve-out, phrased for the human catalog;
      distillation clause now states clear-by-inbox-edit vs. clear-by-curator-`DETACH DELETE`
@@ -53,13 +53,13 @@
      mirroring M4's exact phrasing shape.
   4. **`claude/graph-dba/graph-dba.md`** — "Learning capture" section's inbox-append instruction
      replaced with the graph-write instruction (concrete `CREATE (...:KaizenEntry {...})` Cypher +
-     `mcp__cpg__query(..., agent='graph-dba')` call, matching the live-verified schema/pattern from
+     `mcp__cypher__query(..., agent='graph-dba')` call, matching the live-verified schema/pattern from
      `docs/plans/generic-cypher-mcp-graph.md` §1 and U5's actual migration call). The
      `falkordb-quirks.md` direct-home carve-out is untouched. Own `kaizen/history.md` entry added
      (2026-08-18, this date).
   5. **`claude/cobb/cobb.md`** — the "Learnings distillation" bullet's blanket "every agent (you
      included) appends... to its `kaizen/inbox.md`" claim corrected: `graph-dba`'s raw capture is
-     now graph-based (cited: `:KaizenEntry` via `mcp__cpg__query`, attributed to itself), every
+     now graph-based (cited: `:KaizenEntry` via `mcp__cypher__query`, attributed to itself), every
      other agent's is still file-based, exactly as before. The clear-step clause now names both
      dispositions (curator `DETACH DELETE` with `agent='cobb'` for `graph-dba`, an inbox edit for
      everyone else) instead of only "clear the inbox."
@@ -68,7 +68,7 @@
      the live graph-read query; step 4 ("Log & clear") now branches — a file-based agent's entry is
      removed from `inbox.md` directly, while `graph-dba`'s entries follow a **non-negotiable**
      four-step sequence (read the raw entry → verify → `Edit history.md` and confirm the write
-     succeeded → **only then** curator-clear via `mcp__cpg__query(..., cypher="MATCH (e:KaizenEntry
+     succeeded → **only then** curator-clear via `mcp__cypher__query(..., cypher="MATCH (e:KaizenEntry
      {entryId:'<id>'}) DETACH DELETE e", agent='cobb')`) — this is the **one and only place** the
      append-before-delete ordering constraint is documented, per `docs/plans/generic-cypher-mcp.md`
      §3.5's explicit resolution of the plan-gate's open question (deliberately **not** duplicated
@@ -117,7 +117,7 @@
   plan-gate's B1 finding, and asked for the fix folded into this unit), plus the two edited agents'
   own `kaizen/history.md` (this repo's standing "prompt edit → dated history entry" rule, confirmed
   by precedent in both agents' existing history files before writing these entries). `inbox.md`/
-  `history.md` content from U5 (already done), `cpg/mcp/` (U4), and the requirements/plan/review/
+  `history.md` content from U5 (already done), `cypher-mcp/` (U4), and the requirements/plan/review/
   coordination docs for this feature were not touched.
 - **Independent review:** `analyst`'s diff-scoped code re-gate (`docs/reviews/
   generic-cypher-mcp.md`, "Code re-gate (U6, diff-scoped) — 2026-08-18") — **approve with
@@ -226,7 +226,7 @@
 - **M-3 (3 new agent KBs not annotated in `claude/AGENTS.md`):** added the parenthetical KB
   annotation (pattern already used for `graph-dba`) to `devops`, `qa-engineer`,
   `data-scientist`, and `analyst`'s pre-existing `review-techniques.md` (never annotated before).
-- **M-4 (verify-only):** confirmed `teco`'s direct fix to `cpg/mcp/server.py`'s module docstring
+- **M-4 (verify-only):** confirmed `teco`'s direct fix to `cypher-mcp/server.py`'s module docstring
   is present and reads correctly (`RESULTSET_SIZE` framing, matching the other 3 corrected sites).
   Did not re-edit `server.py`. Updated `graph-dba/kaizen/history.md`'s entry to record the
   `server.py` fix alongside the `README.md` one it previously listed alone.
@@ -303,7 +303,7 @@
   bases (`skills/python-web-quirks/SKILL.md`, `claude/graph-dba/falkordb-quirks.md`,
   `skills/cpg-analysis/SKILL.md`, `claude/cobb/TESTING.md`), several project-doc corrections
   (including fixing two now-incorrect "the reported total is always exact" claims in
-  `cpg/mcp/README.md` and `skills/cpg-analysis/SKILL.md`, and an incorrect invariant claim in
+  `cypher-mcp/README.md` and `skills/cpg-analysis/SKILL.md`, and an incorrect invariant claim in
   `falkor-chat/docs/QUERIES.md` §11.2), and small prompt additions to `analyst.md`, `tico.md`, and
   `data-scientist.md`. My own 3 inbox entries (subagent tool-set narrower than frontmatter,
   agent-definition edits needing a fresh session to verify, AutoMem index-only-to-subagents) went
@@ -457,7 +457,7 @@
   map carried one entry (the root) and none for the subdirectory. Re-checked the `projects` map
   live today — still exactly one entry, same shape — before promoting; did not re-derive the
   `claude mcp list` contrast itself (a quick attempt in this environment hit unrelated infra
-  failures — no reachable `docker`/FalkorDB backing the `cpg` server — so it couldn't cleanly
+  failures — no reachable `docker`/FalkorDB backing the `cypher` server — so it couldn't cleanly
   reproduce either outcome; the inbox's original, cleaner evidence is what's cited). Promoted the
   underlying inbox entry out of `claude/devops/kaizen/inbox.md` into
   `claude/devops/kaizen/history.md` (agent-maintenance skill §5 distillation).
@@ -535,7 +535,7 @@
   honesty — independently re-deriving technical claims rather than trusting citations: live-ran
   `GRAPH.PROFILE`/`EXPLAIN`-prefix/`sum(CASE...)` behavior against the running `falkordb-dev`
   container, installed and exercised `mcp` 1.28.1's `FastMCP` `outputSchema`/`structured_output`
-  behavior in `cpg/mcp/.venv`, reproduced the pydantic nested-`exclude_unset` drop in
+  behavior in `cypher-mcp/.venv`, reproduced the pydantic nested-`exclude_unset` drop in
   `falkor-chat/server/.venv`, re-ran `claude/scripts/audit-team.sh` (full PASS), and reproduced the
   `DESIGN.md` SHA-lock re-extraction command byte-for-byte. Verdict: **approve with suggestions** —
   zero blockers/majors, every reproducible claim reproduced, `analyst.md`'s scope matched exactly
@@ -1007,13 +1007,13 @@
 ## 2026-07-25 — M3 / CPG query access: skill surface, agent wiring, and MCP knowledge capture (C-303/C-304/C-307)
 - **What:** Implemented steps S4, S5 and S7 of `docs/plans/cpg-query-access.md` (re-gated
   "approve with suggestions", 0 blockers).
-  - **S4 (C-303):** `skills/cpg-analysis/SKILL.md` re-pointed at the `mcp__cpg__query` MCP tool —
-    `description`, `allowed-tools: mcp__cpg__query, Bash, Read`, §1 rewritten (two parameters, no
+  - **S4 (C-303):** `skills/cpg-analysis/SKILL.md` re-pointed at the `mcp__cypher__query` MCP tool —
+    `description`, `allowed-tools: mcp__cypher__query, Bash, Read`, §1 rewritten (two parameters, no
     shell; read-only `GRAPH.RO_QUERY`; graph discovery without a `list_graphs` tool; `EXPLAIN`-only
     with the `PROFILE` refusal and its reason; display-only truncation; a labelled `redis-cli`
     fallback block), §3's parameter note generalised to "neither path binds Cypher parameters".
     Preamble of `references/impact-analysis.md` moved to the tool; `skills/README.md` row updated.
-  - **S5 (C-304):** `mcp__cpg__query` added to the `tools:` allowlists of `analyst` and `architect`
+  - **S5 (C-304):** `mcp__cypher__query` added to the `tools:` allowlists of `analyst` and `architect`
     (`qa-engineer` inherits), `claude/README.md` rows 9/16/17, root `AGENTS.md` (`cpg/` structure
     entry, component-docs row, `cpg-analysis` bullet, smoke command), the three agents' kaizen
     histories, and a status annotation closing out `claude/tico/kaizen/inbox.md:19`.
@@ -1037,7 +1037,7 @@
   (`disabledMcpServers`/`enabledMcpServers`), per-*tool* subsetting does not.
 - **Portability spot-check (review finding m-3), resolved:** `opencode debug skill` — a cheap,
   offline way to test `SKILL.md` portability — shows OpenCode parsing `cpg-analysis` with the
-  Claude-only `mcp__cpg__query` in `allowed-tools`, description intact, no warning; its docs
+  Claude-only `mcp__cypher__query` in `allowed-tools`, description intact, no warning; its docs
   confirm unknown frontmatter is ignored. **New quirk found and promoted, not inboxed:** repeated
   runs return *different subsets* of the same 9 skills with no error — recorded in
   `agent-standards/opencode.md` and `skills/README.md`, and the root `AGENTS.md` "all 9 skills
@@ -1045,7 +1045,7 @@
 - **Also fixed:** root `AGENTS.md` ended with a committed `</content>\n</invoke>` XML trailer from
   an earlier tool-assisted edit — removed. It sat in an always-loaded context file (imported by the
   root `CLAUDE.md`), i.e. in every session's prompt.
-- **Not done, deliberately:** the server (`cpg/mcp/`, S2 · coder), `.mcp.json` + settings (S3 ·
+- **Not done, deliberately:** the server (`cypher-mcp/`, S2 · coder), `.mcp.json` + settings (S3 ·
   devops) and `docs/requirements/` (S6 · coder) — other owners; and the `instructions=` /
   `alwaysLoad` *implementation* those two steps now have the facts for.
 - **Plan items:** advances K-001 (Claude Code MCP moves off the 2026-05-31 baseline; Skills/Memory/

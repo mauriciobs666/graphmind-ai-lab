@@ -121,7 +121,7 @@ None — every open question from the interview was resolved and logged below.
 2026-08-17 — What's the intent? → Introduce a security-expert agent covering both (1) deeper
 code/app security review than `analyst`'s current security/perf checklist step, and (2)
 agent/prompt-safety review. For the code-security side, the stakeholder wants the agent able to
-use the project's existing Code Property Graph (the `cpg` MCP tool / `cpg-analysis` skill pattern
+use the project's existing Code Property Graph (the `cypher` MCP tool / `cpg-analysis` skill pattern
 other agents already follow) when one exists for the component under review — noted here as a
 stated preference for reusing an existing project capability, not a new design decision.
 2026-08-17 — What triggered this now? → No specific incident; proactive risk reduction ("ensure

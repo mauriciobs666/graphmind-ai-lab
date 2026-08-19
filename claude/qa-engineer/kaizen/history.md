@@ -87,7 +87,7 @@
   - The `RESULTSET_SIZE` silent-cap finding (this entry corroborated `graph-dba`'s independent
     capture of the same mechanism) and the `METHOD.CODE`-is-narrow / `redis-cli --no-raw` flat-
     stream-parsing / boolean-quoting-not-casing entries (3 more) → folded into `skills/cpg-analysis/
-    SKILL.md` and `cpg/mcp/README.md` as part of the same edit that processed `graph-dba`'s
+    SKILL.md` and `cypher-mcp/README.md` as part of the same edit that processed `graph-dba`'s
     matching entries (see that agent's 2026-08-11 history entry for the full list).
 - **Discarded — already covered elsewhere (1):** the Bash-tool backgrounding entry
   ("`cmd &` backgrounded manually inside a Bash call can stall the tool for its full timeout, and
@@ -118,8 +118,8 @@
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §12 step 1 (decisions D1/D4/D6, two analyst review rounds plus a spot-check). Both `AGENTS.md` files flip in the same change: leaving the prompt's *"never into `archive/`"* against a rule with no `archive/` destination is the contradiction the step exists to prevent. `claude/README.md` row 16 re-checked — it cites write paths, not the archive rule, so no catalog edit was needed.
 - **Plan items:** none opened or closed; K-002's 2026-07-11 closure note is annotated in `plan.md` because the convention it recorded has been superseded.
 
-## 2026-07-25 — CPG read path moves to `mcp__cpg__query`; catalog row updated (M3 / C-304)
-- **What:** `claude/README.md` row 16 now records that the `cpg-analysis` test-gap work queries the graph through the **`mcp__cpg__query`** MCP tool, and that this agent inherits the tool automatically because it declares no `tools:` allowlist. **No frontmatter change** — deliberately: adding an allowlist here to "declare" the MCP tool would newly restrict every other tool the agent inherits.
+## 2026-07-25 — CPG read path moves to `mcp__cypher__query`; catalog row updated (M3 / C-304)
+- **What:** `claude/README.md` row 16 now records that the `cpg-analysis` test-gap work queries the graph through the **`mcp__cypher__query`** MCP tool, and that this agent inherits the tool automatically because it declares no `tools:` allowlist. **No frontmatter change** — deliberately: adding an allowlist here to "declare" the MCP tool would newly restrict every other tool the agent inherits.
 - **Why:** M3 replaces the CPG read path with a single MCP tool (`docs/plans/cpg-query-access.md` S5). Recording the *reason* this agent needed no edit, while `analyst` and `architect` did, is the point of the entry — the asymmetry is a property of their allowlists, not of their capabilities. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
 - **Plan items:** none.
 

@@ -160,7 +160,7 @@ Note the divergences from Claude Code, each a real porting trap:
 
 Consequence for shared skills: a `SKILL.md` deployed to all three harnesses that
 routes work through an MCP tool must keep a non-MCP fallback documented, because
-the wiring reaches only the harness it was written for. In this repo the `cpg`
+the wiring reaches only the harness it was written for. In this repo the `cypher`
 server is wired for Claude Code only (repo-root `.mcp.json`); `cpg-analysis` keeps
 `redis-cli GRAPH.QUERY` for exactly that reason, and OpenCode/Kiro wiring is
 tracked as backlog **C-310**.

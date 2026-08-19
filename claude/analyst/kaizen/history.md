@@ -124,7 +124,7 @@ branch (dated 2026-08-08) matching exactly what the entry asked for; entry 16 (C
 25k-token output cap) and entry 18 (`CLAUDE_PROJECT_DIR` expansion) are both already in
 `skills/agent-standards/claude-code.md`; entry 20 (MCP startup-timeout doc disagreement) is
 already resolved there too (`MCP_TIMEOUT` vs `MCP_TOOL_TIMEOUT` disambiguated); entry 25 (stale
-"the joern agent's job" error text in `cpg/mcp/server.py`) — the live string now reads "the
+"the joern agent's job" error text in `cypher-mcp/server.py`) — the live string now reads "the
 graph-dba agent's job", no trace of "joern agent" left in the file.
 
 **(B) Promoted to project docs — `falkor-chat/AGENTS.md` + `docs/DESIGN.md` (entries 4, 5, 6, 7,
@@ -243,9 +243,9 @@ were found to conflict with each other.
 - **Why:** `docs/plans/doc-reference-convention.md` v1.4 §9.4 found `-impl` **used 4× and documented nowhere** — the only member of the closed role set (`(none)` · `-coordination` · `-ml` · `-graph` · `-rca` · `-impl` · `-report`) missing from the prompt that produces it, and the absence had already broken a document family. The header line is the canonical M9 sentence, byte-identical across the prompts that get it, and is a pointer rather than an inlined template because root `AGENTS.md` reaches every agent through the root `CLAUDE.md` `@AGENTS.md` import. `claude/README.md` row 17 re-checked — it cites the review write paths, not the naming rule, so no catalog edit was needed.
 - **Plan items:** none. (K-001's remaining RCA half is untouched; `-rca` was already documented.)
 
-## 2026-07-25 — `tools:` allowlist gains `mcp__cpg__query` (M3 / C-304)
-- **What:** Frontmatter `tools:` now ends `…, Agent, mcp__cpg__query`. `claude/README.md` row 17 updated to say the `cpg-analysis` skill reaches the graph through that MCP tool and why the allowlist entry is required. No body or `description` change — the CPG routing clause added on 2026-07-19 stays accurate, and the skill is progressively disclosed.
-- **Why:** M3 replaces the CPG read path with a single MCP tool, `mcp__cpg__query(graph, cypher)` (`docs/plans/cpg-query-access.md` S5). **`tools:` is an allowlist, not a hint** — an agent that declares one does not see MCP tools absent from it, so without this line the feature would have been silently inert for `analyst` (and `architect`); `qa-engineer` and `graph-dba` declare no allowlist and inherit it. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
+## 2026-07-25 — `tools:` allowlist gains `mcp__cypher__query` (M3 / C-304)
+- **What:** Frontmatter `tools:` now ends `…, Agent, mcp__cypher__query`. `claude/README.md` row 17 updated to say the `cpg-analysis` skill reaches the graph through that MCP tool and why the allowlist entry is required. No body or `description` change — the CPG routing clause added on 2026-07-19 stays accurate, and the skill is progressively disclosed.
+- **Why:** M3 replaces the CPG read path with a single MCP tool, `mcp__cypher__query(graph, cypher)` (`docs/plans/cpg-query-access.md` S5). **`tools:` is an allowlist, not a hint** — an agent that declares one does not see MCP tools absent from it, so without this line the feature would have been silently inert for `analyst` (and `architect`); `qa-engineer` and `graph-dba` declare no allowlist and inherit it. `redis-cli GRAPH.QUERY` remains the documented fallback and is the only path under OpenCode/Kiro.
 - **Verification note:** this is the *edit*; the live proof (a cold `analyst` actually calling the tool) needs the server wired in S3 and is verified in S9, per the plan's m-4 split.
 - **Plan items:** none.
 
