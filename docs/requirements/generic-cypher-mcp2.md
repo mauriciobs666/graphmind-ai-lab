@@ -1,5 +1,5 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M6) · **Last updated:** 2026-08-19
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M6) · **Last updated:** 2026-08-19
 
 ## Intent
 M5 (`docs/requirements/generic-cypher-mcp.md`) proved the graph-backed working-memory pattern on
@@ -271,3 +271,5 @@ no preference (see Decision log).*
   suggestion, not a decision — actual name and safe rename sequencing across 60+ referencing
   files is the architect's call. → **Track as a separate follow-on**, not part of M6 — this
   delivery stays scoped to the kaizen inbox rollout.
+- 2026-08-19 — Readback delivered and confirmed. Stakeholder: "yes." **Status → Ready for
+  design.** No material assumption left unconfirmed; Open questions is empty.
