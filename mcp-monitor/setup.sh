@@ -6,7 +6,7 @@ set -euo pipefail
 # Idempotent: re-running is safe and cheap (pip reports "Requirement already
 # satisfied" and exits 0). Ends by importing the runtime dependency and the
 # package itself, so a successful run is also the component's dependency
-# smoke test. Mirrors cpg/mcp/setup.sh.
+# smoke test. Mirrors cypher-mcp/setup.sh.
 #
 # Usage:
 #   mcp-monitor/setup.sh              # create/update mcp-monitor/.venv, install `.[dev]`
@@ -14,7 +14,7 @@ set -euo pipefail
 #   mcp-monitor/setup.sh --help
 #
 # The venv lives at mcp-monitor/.venv, dedicated to this component (not shared
-# with falkor-chat/server/.venv or cpg/mcp/.venv) — untracked, the repo-root
+# with falkor-chat/server/.venv or cypher-mcp/.venv) — untracked, the repo-root
 # .gitignore already ignores `.venv`.
 #
 # Env overrides:

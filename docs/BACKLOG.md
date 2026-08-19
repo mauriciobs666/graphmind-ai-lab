@@ -47,7 +47,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cypher__query(graph, cypher)` (`cypher-mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
 | **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
 | **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
-| **M6 — MCP tool rename** | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. | **C-601 → C-605** |
+| **M6 — MCP tool rename** ✅ | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. Plan gate (`analyst`, `docs/reviews/cpg-mcp-rename.md`) — 2 passes: needs changes → approve with suggestions. Implementation: commits `e00b9f6` (step 1), `59a03c4` (step 2, includes U4-fix), `acecb34` (step 3a), `cd4142f` (step 3b). Acceptance (`qa-engineer`, `docs/test-reports/cpg-mcp-rename-report.md`) — **PASS**, AC-1…AC-6 all hold, regression floor 84 passed/7 deselected unchanged; one low-severity defect D-1 found and fixed in this same unit (mcp-monitor source-comment path citations). | **C-601 → C-605** |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -623,24 +623,24 @@ full U1…U7 ledger.
 
 ## M6 — MCP tool rename
 
-- **C-601 — Relocate + rebuild `cypher-mcp/`.** 🔵 `git mv cpg/mcp cypher-mcp`; every identity
+- **C-601 — Relocate + rebuild `cypher-mcp/`.** ✅ `git mv cpg/mcp cypher-mcp`; every identity
   string inside the moved files renamed (server name, tool name, Docker image/label, env-var
   prefix, internal shell-function names, log-line prefix); relative links shortened; offline
   suite and in-container gates green from the new path. Step 1. Owner: `coder`.
-- **C-602 — Harness + agent-tool-surface wiring.** 🔵 `.mcp.json`, `.claude/settings.json`, both
+- **C-602 — Harness + agent-tool-surface wiring.** ✅ `.mcp.json`, `.claude/settings.json`, both
   `analyst`/`architect` `tools:` lines, and `skills/cpg-analysis/SKILL.md`'s `allowed-tools:` +
   body mentions updated to `mcp__cypher__query`; `claude mcp list` shows `cypher` connected, no
   `cpg` entry. Step 2. Owner: `coder`.
-- **C-603 — `claude/` + `skills/` sweep.** 🔵 Every active agent prompt, kaizen log, and skill
+- **C-603 — `claude/` + `skills/` sweep.** ✅ Every active agent prompt, kaizen log, and skill
   body under `claude/`/`skills/` with a live hit renamed; CPG-domain vocabulary (`cpg-analysis`,
   `joern-cpg`, `cpg_<component>` graphs) left untouched. Step 3a. Owner: `cobb`.
-- **C-604 — `docs/` + `mcp-monitor/` + `falkor-chat/` sweep.** 🔵 Every active
+- **C-604 — `docs/` + `mcp-monitor/` + `falkor-chat/` sweep.** ✅ Every active
   `docs/{plans,requirements,reviews,test-plans,test-reports}/*.md` with a live hit,
   `docs/manuals/cpg-getting-started.md`, `docs/BACKLOG.md`/`docs/HISTORY.md` (surgical),
   `mcp-monitor/{AGENTS,README}.md` + `mcp-monitor/docs/{BACKLOG,HISTORY}.md` (surgical), and
   `falkor-chat/compose.yaml` renamed; includes the `docs/requirements/generic-cypher-mcp2.md`
   `(M6)`→`(M7)` header bump. Step 3b. Owner: `cobb`.
-- **C-605 — Acceptance pass.** 🔵 AC-1…AC-6 exercised live; zero unexplained `cpg`-identity hits
+- **C-605 — Acceptance pass.** ✅ AC-1…AC-6 exercised live; zero unexplained `cpg`-identity hits
   survive the widened sweep outside archived/family/domain-vocabulary categories. Step 4. Owner:
   `qa-engineer`.
 

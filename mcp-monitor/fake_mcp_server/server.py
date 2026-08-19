@@ -14,7 +14,7 @@ unreadable) on every call — so a test or the demo can externally,
 deterministically flip what the *next* poll sees via `set_state.py`, without
 any FalkorDB, network, or external process beyond this one.
 
-Modeled on `cpg/mcp/server.py`'s mechanics (a `FastMCP` stdio server built the
+Modeled on `cypher-mcp/server.py`'s mechanics (a `FastMCP` stdio server built the
 same way falkor-chat's own MCP tools are), not its content — this server's
 only job is to read one file and hand back its contents.
 
@@ -47,7 +47,7 @@ def read_state() -> dict:
     """Read the state file, tolerating "not written yet" and "corrupt" alike.
 
     Never raises: a tool body that raises kills a stdio session that is not
-    reconnected mid-session (same posture as `cpg/mcp/server.py`).
+    reconnected mid-session (same posture as `cypher-mcp/server.py`).
     """
     path = state_file_path()
     try:

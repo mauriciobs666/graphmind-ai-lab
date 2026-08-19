@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Generic MCP tool-result watcher: poll a tool, match a regex, launch a command."
 requires-python = ">=3.12"
 # mcp is pinned to one minor, matching the in-repo precedent (falkor-chat/server's
-# pyproject.toml, cpg/mcp/requirements.txt): both existing MCP integrations in
+# pyproject.toml, cypher-mcp/requirements.txt): both existing MCP integrations in
 # this repo are verified against mcp 1.28.x, and mcp-monitor is the first
 # component to open a real stdio *and* real Streamable-HTTP client connection
 # here — a minor SDK bump changing client-side shapes (e.g.

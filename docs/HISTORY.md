@@ -5,6 +5,44 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-19 — M6: MCP tool rename — delivery & gate closure (U1…U8) ✅
+
+The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated
+`cpg/mcp/` → `cypher-mcp/`, as a single atomic rename (no dual-name period) across 60+ repo-wide
+references, leaving genuinely CPG-specific naming (`cpg-analysis`/`joern-cpg` skills,
+`cpg_<component>` graph names, the top-level `cpg/` directory) untouched. Full detail lives in
+`docs/plans/cpg-mcp-rename-coordination.md` (U1…U8 ledger) and
+`docs/test-reports/cpg-mcp-rename-report.md`.
+
+- **U1/U2** (`architect` + `analyst` plan gate) — `docs/plans/cpg-mcp-rename.md`: designed a
+  status-driven `git grep` discovery/sweep mechanism (not a fixed file list, direct fix for a
+  prior M5-precedent gap) with an ordered per-hit classification. Plan gate (`analyst`,
+  `docs/reviews/cpg-mcp-rename.md`): 2 passes — Pass 1 **needs changes** (blocker B1: the sweep
+  pattern missed bare unquoted `cpg` tool-identity references, would have false-clean-passed its
+  own AC-1 proof gate; major M1: the self-referential document exemption list omitted the review
+  document itself) — both fixed; Pass 2 **approve with suggestions**.
+- **U3** (`coder`, step 1, commit `e00b9f6`) — relocated `cpg/mcp/` → `cypher-mcp/` (`git mv`, 15
+  files), full identity mapping applied (tool/server name, Docker image/label, env-var prefix,
+  shell-function names, log prefix). Offline suite 84 passed/7 deselected (baseline match).
+- **U4** (`coder`, step 2, commit `59a03c4`, includes U4-fix) — `.mcp.json`/`.claude/settings.json`
+  rewired, `analyst`/`architect` `tools:` lines and `skills/cpg-analysis/SKILL.md` renamed.
+- **U5** (`cobb`, step 3a, commit `acecb34`) — 26 files across `claude/`+`skills/`+root
+  `AGENTS.md` swept.
+- **U6** (`cobb`, step 3b, commit `cd4142f`) — 19 files across `docs/`+`mcp-monitor/`+
+  `falkor-chat/` swept, plus the `docs/BACKLOG.md` M6 section and the `generic-cypher-mcp2.md`
+  `(M6)`→`(M7)` header bump (resolving a milestone-number collision).
+- **U7** (`qa-engineer`, step 4, acceptance, commits `b384354`/`690a2b1`) — **PASS**: all 9 test
+  items (TP-001…TP-009) executed live/static, AC-1…AC-6 all hold, regression floor exact (84/7
+  unchanged). One low-severity defect found: D-1, 3 `mcp-monitor/` source-comment files with
+  stale `cpg/mcp/` path citations (comment-only, no functional impact).
+- **U8** (this unit, `cobb`) — fixed D-1, flipped `docs/BACKLOG.md` C-601…C-605 to ✅, wrote this
+  close-out entry.
+
+**Milestone closed.** `docs/BACKLOG.md`'s M6 milestone-map row flips in this same entry.
+Per-document `Status: archived` flips on the requirements/plan/review/test-plan/test-report/
+coordination files are separate closing units, routed to each document's own owner (`tico`,
+`architect`, `analyst`, `qa-engineer`, `teco`) — handled in parallel, not performed here.
+
 ## 2026-08-18 — M5: Generic Cypher MCP — delivery & gate closure (U1…U7) ✅
 
 `mcp__cypher__query` gains write capability — an optional `agent` parameter and two enforced write
