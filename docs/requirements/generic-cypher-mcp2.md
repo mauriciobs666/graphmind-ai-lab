@@ -34,10 +34,12 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
 *(to be filled in as the interview proceeds)*
 
 ## Open questions
-- Which agents are actually in scope for M6 — literally all eleven remaining, or a subset/staged
-  rollout?
-- One-shot migration for all in-scope agents, or phased (M5 deliberately picked one low-risk
-  pilot first)?
+- Single cross-team query surface vs. per-agent graphs (mirroring today's one-file-per-agent
+  shape) — does "collective memory" need to mean one query reaches every agent's raw entries?
+- Does `cobb`'s distillation role/cadence need to change to handle 11x the raw-capture volume?
+- Sequencing/batching of the rollout across the eleven agents.
+- Anything agent-specific that breaks the graph-dba template (e.g. `cobb`'s own dual role as
+  both an author of its own inbox *and* the curator of everyone else's).
 
 ## Decision log
 - 2026-08-18 — Session opened. Stakeholder: "extend the [graph-backed kaizen] inbox to all
@@ -47,3 +49,8 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   `docs/BACKLOG.md` M5 section, and `claude/AGENTS.md`. Opened as a successor document on the
   same slug family (`generic-cypher-mcp2.md`), since M5's doc is `archived` (approved/gated/
   executed against) — not a fresh, unrelated topic.
+- 2026-08-18 — Scope? → **All eleven remaining agents** (analyst, architect, cobb, coder,
+  data-scientist, devops, frontend-engineer, qa-engineer, tdd-engineer, teco, tico) — not a
+  subset, not deferred as a separate later batch.
+- 2026-08-18 — Why now? → **M5 proved out end-to-end** (8/8 acceptance criteria, no defects) —
+  no reason to wait for more evidence the pattern works.
