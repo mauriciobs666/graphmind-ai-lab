@@ -1,4 +1,4 @@
-# Context is cpg/mcp/. Patterns are relative to it, and are `filepath.Match`-based:
+# Context is cypher-mcp/. Patterns are relative to it, and are `filepath.Match`-based:
 # a bare `__pycache__` matches ONLY at the context root, so the `**/` prefix is load-
 # bearing for anything nested. Measured: bare patterns shipped tests/__pycache__ into
 # the image; these do not. (§3.8, m-3.)

@@ -1,9 +1,9 @@
 # image-tag.sh — sourced by build.sh and docker-run.sh. Defines the content-hash image
 # tag. NOT executable, prints nothing on stdout, reads nothing from stdin.
 #
-# cpg_mcp_input_dirs   -> directory operands the enumeration WALKS (NUL-separated)
-# cpg_mcp_input_files  -> the exact set of build inputs, NUL-separated, relative paths
-# cpg_mcp_image_tag    -> sets CPG_MCP_TAG=<hash12>  (assigns a variable; no output)
+# cypher_mcp_input_dirs   -> directory operands the enumeration WALKS (NUL-separated)
+# cypher_mcp_input_files  -> the exact set of build inputs, NUL-separated, relative paths
+# cypher_mcp_image_tag    -> sets CYPHER_MCP_TAG=<hash12>  (assigns a variable; no output)
 #
 # The hash covers file CONTENTS and RELATIVE paths only — never an absolute path, so
 # the value is identical on every machine and no home path can reach a tracked file
@@ -11,15 +11,15 @@
 # bytes without the filename, and the relative path is contributed explicitly.
 #
 # INVARIANT: this must cover every path the Dockerfile COPYs, plus the Dockerfile and
-# .dockerignore themselves. A FILE operand is covered by cpg_mcp_input_files; a
-# DIRECTORY operand is covered by cpg_mcp_input_dirs, which is walked with the same
+# .dockerignore themselves. A FILE operand is covered by cypher_mcp_input_files; a
+# DIRECTORY operand is covered by cypher_mcp_input_dirs, which is walked with the same
 # exclusions .dockerignore applies. `build.sh --verify-inputs` checks both rules.
 #
 # What the hash does NOT cover, deliberately: the base image (python:3.12-slim is a
 # moving tag) and pip's dependency resolution (requirements.txt pins ranges). So the
 # tag is immutable with respect to the TRACKED build inputs, not a full image identity,
 # and nothing here ever refreshes an existing image's base — that is the documented
-# manual step `docker pull python:3.12-slim && cpg/mcp/build.sh --no-cache`.
+# manual step `docker pull python:3.12-slim && cypher-mcp/build.sh --no-cache`.
 # See docs/plans/cpg-mcp-containerization.md §3.6, §4.3.
 
 # Both current callers (build.sh, docker-run.sh) already `set -o pipefail` before
@@ -31,11 +31,11 @@
 # unobserved" gap (m-22) this file exists to close. A no-op for both current callers.
 set -o pipefail
 
-CPG_MCP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CYPHER_MCP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Directory operands. Walked, not globbed: that is what makes a NEW FILE OF ANY
 # EXTENSION under tests/ change the hash automatically, instead of only *.py doing so.
-cpg_mcp_input_dirs() {
+cypher_mcp_input_dirs() {
   printf '%s\0' tests
 }
 
@@ -55,7 +55,7 @@ cpg_mcp_input_dirs() {
 #     subtree (previously unobserved: `find`'s error went to stderr but the truncated
 #     listing still hashed as a valid, smaller tree — m-22).
 #
-# Every caller of this function (this file's own cpg_mcp_image_tag, and build.sh's
+# Every caller of this function (this file's own cypher_mcp_image_tag, and build.sh's
 # verify_inputs via _in_nul_set) may consume its NUL-separated output PARTIALLY — that
 # is the whole point of _in_nul_set's early-return-on-match, called out in build.sh's
 # own comment above it. Under `pipefail` that early close reliably SIGPIPEs whichever
@@ -68,7 +68,7 @@ cpg_mcp_input_dirs() {
 # caller's `set -e` — a bare `var="$(pipeline)"` assignment does not get that
 # exemption and would silently kill the whole script (confirmed: `x="$(seq 1 100000 |
 # head -n1)"` under `set -euo pipefail` exits 141 before the next line runs).
-cpg_mcp_input_files() {
+cypher_mcp_input_files() {
   local f d link errfile
 
   for f in Dockerfile .dockerignore requirements.txt requirements-dev.txt server.py pytest.ini; do
@@ -76,21 +76,21 @@ cpg_mcp_input_files() {
   done
 
   while IFS= read -r -d '' d; do
-    if [ ! -d "$CPG_MCP_DIR/$d" ]; then
-      echo "cpg/mcp/image-tag.sh: build input directory missing: cpg/mcp/$d" >&2
+    if [ ! -d "$CYPHER_MCP_DIR/$d" ]; then
+      echo "cypher-mcp/image-tag.sh: build input directory missing: cypher-mcp/$d" >&2
       echo "  Cannot compute a content hash. Restore the directory, or drop it from" >&2
-      echo "  cpg_mcp_input_dirs AND from the Dockerfile's COPY list (build.sh" >&2
+      echo "  cypher_mcp_input_dirs AND from the Dockerfile's COPY list (build.sh" >&2
       echo "  --verify-inputs checks they agree)." >&2
       return 3
     fi
 
-    errfile="$(mktemp "${TMPDIR:-/tmp}/cpg-mcp-find-err.XXXXXX")" || {
-      echo "cpg/mcp/image-tag.sh: mktemp failed; cannot walk cpg/mcp/$d." >&2
+    errfile="$(mktemp "${TMPDIR:-/tmp}/cypher-mcp-find-err.XXXXXX")" || {
+      echo "cypher-mcp/image-tag.sh: mktemp failed; cannot walk cypher-mcp/$d." >&2
       return 3
     }
 
     link=""
-    if ! link="$(cd "$CPG_MCP_DIR" \
+    if ! link="$(cd "$CYPHER_MCP_DIR" \
         && find "$d" -type l ! -path '*/__pycache__/*' ! -path '*/.pytest_cache/*' \
              2>"$errfile" | head -n1)"; then
       : # see the file-header note: a non-zero status here can be a harmless SIGPIPE
@@ -98,19 +98,19 @@ cpg_mcp_input_files() {
     if [ -s "$errfile" ]; then
       cat "$errfile" >&2
       rm -f "$errfile"
-      echo "cpg/mcp/image-tag.sh: 'find' errored scanning cpg/mcp/$d for symlinks" >&2
+      echo "cypher-mcp/image-tag.sh: 'find' errored scanning cypher-mcp/$d for symlinks" >&2
       echo "  (above) — refusing to hash a tree it could not fully see." >&2
       return 3
     fi
     if [ -n "$link" ]; then
       rm -f "$errfile"
-      echo "cpg/mcp/image-tag.sh: symlink under a walked directory: cpg/mcp/$link" >&2
+      echo "cypher-mcp/image-tag.sh: symlink under a walked directory: cypher-mcp/$link" >&2
       echo "  The walk only matches '-type f', so it never covers a symlink's target —" >&2
       echo "  yet Docker's build tar ships it. Remove it, or replace it with a real file." >&2
       return 3
     fi
 
-    if ! ( cd "$CPG_MCP_DIR" \
+    if ! ( cd "$CYPHER_MCP_DIR" \
         && find "$d" -type f \
              ! -path '*/__pycache__/*' ! -name '*.pyc' ! -path '*/.pytest_cache/*' \
              -print0 2>"$errfile" \
@@ -120,41 +120,41 @@ cpg_mcp_input_files() {
     if [ -s "$errfile" ]; then
       cat "$errfile" >&2
       rm -f "$errfile"
-      echo "cpg/mcp/image-tag.sh: 'find' errored while walking cpg/mcp/$d (above) — a" >&2
+      echo "cypher-mcp/image-tag.sh: 'find' errored while walking cypher-mcp/$d (above) — a" >&2
       echo "  partially-enumerated tree must not silently hash as a smaller one." >&2
       return 3
     fi
     rm -f "$errfile"
-  done < <(cpg_mcp_input_dirs)
+  done < <(cypher_mcp_input_dirs)
 }
 
-# Sets CPG_MCP_TAG. Returns non-zero (and explains on stderr) rather than hashing an
+# Sets CYPHER_MCP_TAG. Returns non-zero (and explains on stderr) rather than hashing an
 # absent input: silently skipping one would let two different trees collide on a tag.
 #
-# Reads cpg_mcp_input_files' NUL-separated output from a real temp FILE, not a process
+# Reads cypher_mcp_input_files' NUL-separated output from a real temp FILE, not a process
 # substitution: bash cannot hold a NUL byte in a variable (`x="$(printf 'a\0b\0')"`
 # silently drops it — confirmed on this box), and a process substitution's exit status
 # is never observed by the `while read` that consumes it. Both of those are exactly
 # what let a `find` failure inside the walk go unnoticed (m-22) — this is the one place
-# that actually matters, since CPG_MCP_TAG is the value the launch-time staleness gate
+# that actually matters, since CYPHER_MCP_TAG is the value the launch-time staleness gate
 # trusts.
-cpg_mcp_image_tag() {
+cypher_mcp_image_tag() {
   local f h files_file
 
-  files_file="$(mktemp "${TMPDIR:-/tmp}/cpg-mcp-input-files.XXXXXX")" || {
-    echo "cpg/mcp/image-tag.sh: mktemp failed; cannot compute a content hash." >&2
+  files_file="$(mktemp "${TMPDIR:-/tmp}/cypher-mcp-input-files.XXXXXX")" || {
+    echo "cypher-mcp/image-tag.sh: mktemp failed; cannot compute a content hash." >&2
     return 3
   }
   trap 'rm -f "$files_file"' RETURN
 
-  if ! cpg_mcp_input_files > "$files_file"; then
-    echo "cpg/mcp/image-tag.sh: failed to enumerate build inputs (see above)." >&2
+  if ! cypher_mcp_input_files > "$files_file"; then
+    echo "cypher-mcp/image-tag.sh: failed to enumerate build inputs (see above)." >&2
     return 3
   fi
 
   while IFS= read -r -d '' f; do
-    if [ ! -f "$CPG_MCP_DIR/$f" ]; then
-      echo "cpg/mcp/image-tag.sh: build input missing: cpg/mcp/$f" >&2
+    if [ ! -f "$CYPHER_MCP_DIR/$f" ]; then
+      echo "cypher-mcp/image-tag.sh: build input missing: cypher-mcp/$f" >&2
       echo "  Cannot compute a content hash. Restore the file, or drop it from image-tag.sh" >&2
       echo "  AND from the Dockerfile's COPY list (build.sh --verify-inputs checks they agree)." >&2
       return 3
@@ -170,14 +170,14 @@ cpg_mcp_image_tag() {
       # inert for the current image. Hashing it would cost a stat() per file for a
       # property nothing reads. Revisit if a CMD/ENTRYPOINT ever execs one of these
       # files directly (`./server.py`) — at that point the bit stops being inert.
-      sha256sum < "$CPG_MCP_DIR/$f"
+      sha256sum < "$CYPHER_MCP_DIR/$f"
     done < "$files_file" | sha256sum | cut -c1-12
   )"
 
   if [ "${#h}" -ne 12 ]; then
-    echo "cpg/mcp/image-tag.sh: content hash came back malformed ('$h')." >&2
+    echo "cypher-mcp/image-tag.sh: content hash came back malformed ('$h')." >&2
     return 4
   fi
 
-  CPG_MCP_TAG="$h"
+  CYPHER_MCP_TAG="$h"
 }

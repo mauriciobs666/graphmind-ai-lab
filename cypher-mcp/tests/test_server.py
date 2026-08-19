@@ -1,4 +1,4 @@
-"""Unit tests for the `cpg` MCP server (plan §5 S2, §7.1).
+"""Unit tests for the `cypher` MCP server (plan §5 S2, §7.1).
 
 Everything here except the `live`-marked tests runs offline: the pure functions
 (`split_directive`, `render_cell`, `format_result`, `explain_error`) need no
@@ -827,7 +827,7 @@ def _scratch_graph_name() -> str:
     (or an interrupted one leaving residue) would collide on the same key
     against the shared FalkorDB. `uuid4` is unique regardless of PID namespace.
     """
-    return f"_cpg_mcp_selftest_{uuid4().hex[:8]}"
+    return f"_cypher_mcp_selftest_{uuid4().hex[:8]}"
 
 
 def test_scratch_graph_name_is_unique_across_calls():
@@ -851,8 +851,8 @@ def live_graph():
     name = _scratch_graph_name()
     graph = client.select_graph(name)
     graph.query(
-        "CREATE (:CpgMcpSelfTest {name:'alpha', note:'line1\nline2'}), "
-        "(:CpgMcpSelfTest {name:'beta', note:'plain'})"
+        "CREATE (:CypherMcpSelfTest {name:'alpha', note:'line1\nline2'}), "
+        "(:CypherMcpSelfTest {name:'beta', note:'plain'})"
     )
     try:
         yield name
@@ -864,7 +864,7 @@ def live_graph():
 def test_live_two_column_query(live_graph):
     out = server.run_query(
         live_graph,
-        "MATCH (n:CpgMcpSelfTest) RETURN n.name AS name, n.note AS note ORDER BY name",
+        "MATCH (n:CypherMcpSelfTest) RETURN n.name AS name, n.note AS note ORDER BY name",
     )
     lines = out.splitlines()
     assert lines[0].startswith(f"graph={live_graph} · rows=2 · ")
@@ -875,11 +875,11 @@ def test_live_two_column_query(live_graph):
 @pytest.mark.live
 def test_live_multiline_query_is_accepted_verbatim(live_graph):
     single = server.run_query(
-        live_graph, "MATCH (n:CpgMcpSelfTest) RETURN n.name AS name ORDER BY name"
+        live_graph, "MATCH (n:CypherMcpSelfTest) RETURN n.name AS name ORDER BY name"
     )
     multi = server.run_query(
         live_graph,
-        "MATCH (n:CpgMcpSelfTest)\n"
+        "MATCH (n:CypherMcpSelfTest)\n"
         "    // no shell quoting, no escaping\n"
         "RETURN n.name AS name\n"
         "ORDER BY name",
@@ -901,7 +901,7 @@ def test_live_missing_graph_does_not_materialise_a_key(live_graph):
 
 @pytest.mark.live
 def test_live_syntax_error_keeps_falkordbs_line_and_column(live_graph):
-    out = server.run_query(live_graph, "MATCH (n:CpgMcpSelfTest RETURN n")
+    out = server.run_query(live_graph, "MATCH (n:CypherMcpSelfTest RETURN n")
     assert "line: 1" in out and "column:" in out
     assert out.splitlines()[-1] == server.SCHEMA_POINTER
 
@@ -916,17 +916,17 @@ def test_live_write_without_agent_is_rejected_server_side(live_graph):
     curates the more specific "no `agent` supplied" message rather than the
     old generic read-only refusal. Either way, nothing is written."""
     client = server.get_client()
-    out = server.run_query(live_graph, "CREATE (:CpgMcpWriteProbe)")
+    out = server.run_query(live_graph, "CREATE (:CypherMcpWriteProbe)")
     assert "no `agent` parameter supplied" in out
     check = client.select_graph(live_graph).ro_query(
-        "MATCH (n:CpgMcpWriteProbe) RETURN count(n)"
+        "MATCH (n:CypherMcpWriteProbe) RETURN count(n)"
     )
     assert check.result_set[0][0] == 0
 
 
 @pytest.mark.live
 def test_live_explain_returns_a_plan_not_results(live_graph):
-    out = server.run_query(live_graph, "EXPLAIN MATCH (n:CpgMcpSelfTest) RETURN n.name")
+    out = server.run_query(live_graph, "EXPLAIN MATCH (n:CypherMcpSelfTest) RETURN n.name")
     assert out.splitlines()[0] == f"graph={live_graph} · EXPLAIN (plan only — nothing was executed)"
     assert "Scan" in out
     assert "alpha" not in out
@@ -941,13 +941,13 @@ def test_live_profile_is_refused_even_though_falkordb_would_return_rows(live_gra
     """
     client = server.get_client()
     raw = client.select_graph(live_graph).ro_query(
-        "/* c */ PROFILE MATCH (n:CpgMcpSelfTest) RETURN count(n)"
+        "/* c */ PROFILE MATCH (n:CypherMcpSelfTest) RETURN count(n)"
     )
     assert raw.result_set[0][0] == 2  # FalkorDB ignored the directive
 
     for cypher in (
-        "PROFILE MATCH (n:CpgMcpSelfTest) RETURN count(n)",
-        "/* c */ PROFILE MATCH (n:CpgMcpSelfTest) RETURN count(n)",
-        "// c\nPROFILE MATCH (n:CpgMcpSelfTest) RETURN count(n)",
+        "PROFILE MATCH (n:CypherMcpSelfTest) RETURN count(n)",
+        "/* c */ PROFILE MATCH (n:CypherMcpSelfTest) RETURN count(n)",
+        "// c\nPROFILE MATCH (n:CypherMcpSelfTest) RETURN count(n)",
     ):
         assert server.run_query(live_graph, cypher) == server.PROFILE_REFUSAL

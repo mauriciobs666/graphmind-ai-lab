@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The `cpg` MCP server — one tool, `query`, over a named FalkorDB graph.
+"""The `cypher` MCP server — one tool, `query`, over a named FalkorDB graph.
 
 Design and rationale: ``docs/plans/cpg-query-access.md`` §4.4 (the frozen tool
 contract) and ``docs/plans/generic-cypher-mcp.md`` (the write path below). The
@@ -82,23 +82,23 @@ def _env_int(name: str, default: int) -> int:
 
 def _log(message: str) -> None:
     """Diagnostics go to stderr only — stdout carries the MCP protocol."""
-    print(f"[cpg-mcp] {message}", file=sys.stderr, flush=True)
+    print(f"[cypher-mcp] {message}", file=sys.stderr, flush=True)
 
 
 FALKORDB_HOST = os.environ.get("FALKORDB_HOST", "127.0.0.1")
 FALKORDB_PORT = _env_int("FALKORDB_PORT", 6379)
 
-MAX_ROWS = _env_int("CPG_MCP_MAX_ROWS", 200)
-MAX_CELL = _env_int("CPG_MCP_MAX_CELL", 300)
-MAX_CHARS = _env_int("CPG_MCP_MAX_CHARS", 30000)
-TIMEOUT_MS = _env_int("CPG_MCP_TIMEOUT_MS", 30000)
+MAX_ROWS = _env_int("CYPHER_MCP_MAX_ROWS", 200)
+MAX_CELL = _env_int("CYPHER_MCP_MAX_CELL", 300)
+MAX_CHARS = _env_int("CYPHER_MCP_MAX_CHARS", 30000)
+TIMEOUT_MS = _env_int("CYPHER_MCP_TIMEOUT_MS", 30000)
 
 #: Agents allowed to run the curator-clear write shape (FR-8's "curator"
 #: capability — clearing an entry it did not author, e.g. `cobb`'s
 #: distillation workflow). Comma-separated; defaults to `cobb`, the only
 #: curator this pilot names (`docs/plans/generic-cypher-mcp.md` §3.2).
 CURATOR_AGENTS = frozenset(
-    a.strip() for a in os.environ.get("CPG_MCP_CURATOR_AGENTS", "cobb").split(",") if a.strip()
+    a.strip() for a in os.environ.get("CYPHER_MCP_CURATOR_AGENTS", "cobb").split(",") if a.strip()
 )
 
 #: Declared to the harness as ``_meta["anthropic/maxResultSizeChars"]``. Claude
@@ -128,7 +128,7 @@ TOOL_DESCRIPTION = (
 )
 
 SERVER_INSTRUCTIONS = (
-    "The `cpg` server exposes a single tool, `query`: OpenCypher against a named FalkorDB "
+    "The `cypher` server exposes a single tool, `query`: OpenCypher against a named FalkorDB "
     "graph — not limited to cpg_* graphs; typically a Joern Code Property Graph loaded as "
     "`cpg_<component>`, but any graph key on this instance is reachable, e.g. "
     "`kaizen_graph_dba` (graph-dba's kaizen working memory). Use it to answer call-graph, "
@@ -138,7 +138,7 @@ SERVER_INSTRUCTIONS = (
     "Reads need no `agent` and are unrestricted. A write additionally requires `agent` (the "
     "caller's agent slug) and is authorized only in two shapes: an agent creating its own "
     "`:KaizenEntry` (a CREATE map literal with a matching `author:` value), or a recognized "
-    "curator agent (`CPG_MCP_CURATOR_AGENTS`, default `cobb`) clearing an entry by `entryId` "
+    "curator agent (`CYPHER_MCP_CURATOR_AGENTS`, default `cobb`) clearing an entry by `entryId` "
     "(`MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e`) — every other write shape, "
     "and any author mismatch, is rejected."
 )
@@ -350,7 +350,7 @@ def authorize_write(cypher: str, agent: str | None) -> str | None:
     if not agent:
         return (
             "Write detected but no `agent` parameter supplied. Declare the caller's "
-            "identity: mcp__cpg__query(graph, cypher, agent='<your-agent-slug>')."
+            "identity: mcp__cypher__query(graph, cypher, agent='<your-agent-slug>')."
         )
     claims = _author_claims(cypher)
     if claims:
@@ -677,7 +677,7 @@ def _list_graphs(client: FalkorDB) -> list[str] | None:
 # The tool
 # --------------------------------------------------------------------------
 
-mcp = FastMCP(name="cpg", instructions=SERVER_INSTRUCTIONS)
+mcp = FastMCP(name="cypher", instructions=SERVER_INSTRUCTIONS)
 
 
 @mcp.tool(

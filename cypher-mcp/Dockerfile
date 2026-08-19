@@ -1,20 +1,20 @@
-# The `cpg` MCP server as a container: ONE stdio process per session, launched by
-# cpg/mcp/docker-run.sh (see the repo-root .mcp.json) — NOT a long-lived service.
+# The `cypher` MCP server as a container: ONE stdio process per session, launched by
+# cypher-mcp/docker-run.sh (see the repo-root .mcp.json) — NOT a long-lived service.
 # No EXPOSE and no HEALTHCHECK on purpose: it listens on nothing and no orchestrator
 # polls it. See docs/plans/cpg-mcp-containerization.md §3.7.
 #
-# Build context is cpg/mcp/ (narrow, deliberately — keeps cpg/.cpg-artifacts/ out of
-# the build tar). Build with cpg/mcp/build.sh, never by hand: the image TAG is a
+# Build context is cypher-mcp/ (narrow, deliberately — keeps cpg/.cpg-artifacts/ out of
+# the build tar). Build with cypher-mcp/build.sh, never by hand: the image TAG is a
 # content hash of the build inputs and build.sh is what computes it (§3.3, §3.6).
 #
 # IMPORTANT: every path COPYed below must be covered by image-tag.sh — a FILE operand
-# by cpg_mcp_input_files, a DIRECTORY operand by cpg_mcp_input_dirs (which is walked) —
+# by cypher_mcp_input_files, a DIRECTORY operand by cypher_mcp_input_dirs (which is walked) —
 # or the hash gate will not notice a change to it. `build.sh --verify-inputs` enforces
 # both rules.
 
 FROM python:3.12-slim AS base
 
-LABEL cpg-mcp=1
+LABEL cypher-mcp=1
 
 # FALKORDB_HOST default: 127.0.0.1 would mean *this container*. The host-gateway
 # alias is supplied by docker-run.sh's --add-host. See §3.1.

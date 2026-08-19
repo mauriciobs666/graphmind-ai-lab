@@ -11,7 +11,7 @@ Such a false pass is undetectable by eye, so it is checked here rather than reme
 the review that found it (`docs/reviews/cpg-mcp-containerization.md` M-7) broke the check
 with an ordinary line-continued `COPY`, and got "OK".
 
-Every case runs against a **copy** of `cpg/mcp/` in pytest's tmp_path. The tracked tree is
+Every case runs against a **copy** of `cypher-mcp/` in pytest's tmp_path. The tracked tree is
 never modified, no image is built, and Docker is not required — `--verify-inputs` returns
 before `build.sh`'s daemon preflight.
 
@@ -37,7 +37,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture()
 def sandbox(tmp_path: Path) -> Path:
-    """A throwaway copy of `cpg/mcp/`, safe to mutate."""
+    """A throwaway copy of `cypher-mcp/`, safe to mutate."""
     dest = tmp_path / "mcp"
     shutil.copytree(MODULE_DIR, dest, ignore=_IGNORED, symlinks=True)
     return dest

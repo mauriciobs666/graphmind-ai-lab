@@ -3,7 +3,7 @@
 #
 # There is no "extras" concept in a requirements file; this second file is the
 # equivalent of falkor-chat/server/pyproject.toml's `[project.optional-dependencies] dev`.
-# cpg/mcp is a script run by path, not an installable package, so it stays on
+# cypher-mcp is a script run by path, not an installable package, so it stays on
 # plain requirements files rather than a pyproject.
 -r requirements.txt
 pytest>=9.1,<10

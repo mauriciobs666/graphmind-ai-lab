@@ -1,4 +1,4 @@
-# Runtime dependencies for the `cpg` MCP server (cpg/mcp/server.py).
+# Runtime dependencies for the `cypher` MCP server (cypher-mcp/server.py).
 #
 # Bounds mirror the live-verified pins in falkor-chat/server/pyproject.toml —
 # the in-repo precedent for this exact stack:

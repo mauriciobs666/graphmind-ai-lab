@@ -2,17 +2,17 @@
 set -euo pipefail
 exec </dev/null                 # This script reads NOTHING from stdin, ever — when
                                 # docker-run.sh calls it, stdin is the MCP pipe.
-# build.sh — build the `cpg` MCP server images at the current content-hash tag.
+# build.sh — build the `cypher` MCP server images at the current content-hash tag.
 #
 # Idempotent, and specifically: if the target tags ALREADY EXIST it does nothing at
 # all — no docker build, and no docker pull either. --no-cache is the way to rebuild
 # an existing tag.
 #
-#   cpg/mcp/build.sh                  # runtime + test at <hash>, plus :dev/:test aliases
-#   cpg/mcp/build.sh --runtime-only   # just cpg-mcp:<hash>  — what docker-run.sh calls
-#   cpg/mcp/build.sh --no-cache       # force a clean rebuild of an existing tag
-#   cpg/mcp/build.sh --verify-inputs  # check image-tag.sh covers every Dockerfile COPY
-#   cpg/mcp/build.sh --help
+#   cypher-mcp/build.sh                  # runtime + test at <hash>, plus :dev/:test aliases
+#   cypher-mcp/build.sh --runtime-only   # just cypher-mcp:<hash>  — what docker-run.sh calls
+#   cypher-mcp/build.sh --no-cache       # force a clean rebuild of an existing tag
+#   cypher-mcp/build.sh --verify-inputs  # check image-tag.sh covers every Dockerfile COPY
+#   cypher-mcp/build.sh --help
 #
 # ALL output goes to stderr — unconditionally, including --help — and stdin is closed
 # above: docker-run.sh calls this on the MCP stdio path, where a stray byte on stdout
@@ -20,7 +20,7 @@ exec </dev/null                 # This script reads NOTHING from stdin, ever —
 # The rule is absolute rather than conditional on purpose: an absolute one is auditable
 # by reading the file, a conditional one is not.
 #
-# Env overrides: CPG_MCP_IMAGE_REPO (default cpg-mcp), CPG_MCP_NO_PULL=1
+# Env overrides: CYPHER_MCP_IMAGE_REPO (default cypher-mcp), CYPHER_MCP_NO_PULL=1
 #
 # Design: docs/plans/cpg-mcp-containerization.md §3.3, §3.6, §4.4.
 
@@ -30,19 +30,19 @@ usage() {
   cat >&2 <<'EOF'
 Usage: build.sh [--runtime-only] [--no-cache] [--verify-inputs] [-h|--help]
 
-  (no args)        build cpg-mcp:<hash> and cpg-mcp:test-<hash>, plus the moving
+  (no args)        build cypher-mcp:<hash> and cypher-mcp:test-<hash>, plus the moving
                    :dev / :test aliases. Exits early, doing nothing, if both hash
                    tags already exist.
-  --runtime-only   build only cpg-mcp:<hash> (+ :dev). What docker-run.sh calls on a
+  --runtime-only   build only cypher-mcp:<hash> (+ :dev). What docker-run.sh calls on a
                    hash miss.
   --no-cache       rebuild even if the tag exists, with a cold Docker layer cache.
                    Also the way to pick up a refreshed base image:
-                     docker pull python:3.12-slim && cpg/mcp/build.sh --no-cache
+                     docker pull python:3.12-slim && cypher-mcp/build.sh --no-cache
   --verify-inputs  check image-tag.sh covers every Dockerfile COPY operand, then exit.
                    Run implicitly before every build.
   -h, --help       show this help
 
-All output goes to stderr. Env: CPG_MCP_IMAGE_REPO (default cpg-mcp), CPG_MCP_NO_PULL=1
+All output goes to stderr. Env: CYPHER_MCP_IMAGE_REPO (default cypher-mcp), CYPHER_MCP_NO_PULL=1
 EOF
 }
 
@@ -66,17 +66,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=image-tag.sh
 source "$HERE/image-tag.sh"
 
-REPO="${CPG_MCP_IMAGE_REPO:-cpg-mcp}"
+REPO="${CYPHER_MCP_IMAGE_REPO:-cypher-mcp}"
 
-if ! cpg_mcp_image_tag; then
+if ! cypher_mcp_image_tag; then
   echo "build.sh: cannot determine the content-hash tag (see above). Nothing built." >&2
   exit 1
 fi
-TAG="$CPG_MCP_TAG"
+TAG="$CYPHER_MCP_TAG"
 
 # --- is the operand covered by image-tag.sh? -------------------------------------
-# A FILE operand must appear in cpg_mcp_input_files. A DIRECTORY operand must appear
-# in cpg_mcp_input_dirs — i.e. the enumeration WALKS it, with .dockerignore's
+# A FILE operand must appear in cypher_mcp_input_files. A DIRECTORY operand must appear
+# in cypher_mcp_input_dirs — i.e. the enumeration WALKS it, with .dockerignore's
 # exclusions — which is what makes "add a fixture under tests/" change the hash
 # without anyone editing a list.
 #
@@ -99,7 +99,7 @@ verify_inputs() {
   # so the invariant covers them explicitly.
   local meta
   for meta in Dockerfile .dockerignore; do
-    if ! _in_nul_set "$meta" < <(cpg_mcp_input_files); then
+    if ! _in_nul_set "$meta" < <(cypher_mcp_input_files); then
       echo "build.sh --verify-inputs: '$meta' is not in image-tag.sh's file list, but it changes what gets built." >&2
       gaps=$((gaps + 1))
     fi
@@ -108,16 +108,16 @@ verify_inputs() {
   while IFS= read -r src; do
     [ -n "$src" ] || continue
     if [ -d "$HERE/$src" ]; then
-      if ! _in_nul_set "$src" < <(cpg_mcp_input_dirs); then
+      if ! _in_nul_set "$src" < <(cypher_mcp_input_dirs); then
         echo "build.sh --verify-inputs: Dockerfile COPYs the DIRECTORY '$src', which image-tag.sh does not walk." >&2
-        echo "  Fix: add '$src' to cpg_mcp_input_dirs in cpg/mcp/image-tag.sh (do NOT list its files individually —" >&2
+        echo "  Fix: add '$src' to cypher_mcp_input_dirs in cypher-mcp/image-tag.sh (do NOT list its files individually —" >&2
         echo "  a walk is what makes a new file of any extension under it change the hash)." >&2
         gaps=$((gaps + 1))
       fi
     elif [ -f "$HERE/$src" ]; then
-      if ! _in_nul_set "$src" < <(cpg_mcp_input_files); then
+      if ! _in_nul_set "$src" < <(cypher_mcp_input_files); then
         echo "build.sh --verify-inputs: Dockerfile COPYs the FILE '$src', which is not in image-tag.sh's input list." >&2
-        echo "  Fix: add '$src' to the fixed file list in cpg_mcp_input_files (cpg/mcp/image-tag.sh)." >&2
+        echo "  Fix: add '$src' to the fixed file list in cypher_mcp_input_files (cypher-mcp/image-tag.sh)." >&2
         gaps=$((gaps + 1))
       fi
     else
@@ -164,12 +164,12 @@ fi
 
 # --- preflight -------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
-  echo "build.sh: docker not on PATH. The host-venv path still works: cpg/mcp/setup.sh then cpg/mcp/run.sh." >&2
+  echo "build.sh: docker not on PATH. The host-venv path still works: cypher-mcp/setup.sh then cypher-mcp/run.sh." >&2
   exit 1
 fi
 if ! docker info >/dev/null 2>&1; then
   echo "build.sh: Docker daemon not reachable (check 'docker context ls')." >&2
-  echo "  The host-venv path still works: cpg/mcp/setup.sh then cpg/mcp/run.sh." >&2
+  echo "  The host-venv path still works: cypher-mcp/setup.sh then cypher-mcp/run.sh." >&2
   exit 1
 fi
 
@@ -186,14 +186,14 @@ if [ "$NO_CACHE" -eq 0 ]; then
     echo "build.sh: $RUNTIME_TAG already built$( [ "$RUNTIME_ONLY" -eq 1 ] || printf ' (and %s)' "$TEST_TAG" ) — nothing to build." >&2
     # Still re-point the moving aliases. Skipping the build must not leave :dev/:test
     # pointing at an OLDER hash — which is exactly what happens after moving between
-    # two input states, and would make an ad-hoc `docker run cpg-mcp:dev` silently run
+    # two input states, and would make an ad-hoc `docker run cypher-mcp:dev` silently run
     # stale code. `docker tag` is an instant local metadata op: no network, no build,
     # so it does not reintroduce what the early exit exists to avoid. The launch path
     # never names an alias (§3.6), so this is about humans, not about the gate.
     docker tag "$RUNTIME_TAG" "$REPO:dev" >&2
     [ "$RUNTIME_ONLY" -eq 1 ] || docker tag "$TEST_TAG" "$REPO:test" >&2
     echo "  Aliases re-pointed: $REPO:dev -> $TAG$( [ "$RUNTIME_ONLY" -eq 1 ] || printf ', %s:test -> test-%s' "$REPO" "$TAG" )" >&2
-    echo "  Force a rebuild with: cpg/mcp/build.sh --no-cache" >&2
+    echo "  Force a rebuild with: cypher-mcp/build.sh --no-cache" >&2
     exit 0
   fi
 fi
@@ -205,7 +205,7 @@ verify_inputs
 # build cache, NOT the image store, and resolves `FROM` metadata over the network
 # unless the base is in the store — measured at 0.5 s per build, essentially the whole
 # cost of a warm build. Pulling it here is what makes a later rebuild offline-safe.
-if [ "${CPG_MCP_NO_PULL:-0}" != "1" ]; then
+if [ "${CYPHER_MCP_NO_PULL:-0}" != "1" ]; then
   if ! docker pull -q "$BASE_IMAGE" >&2; then
     echo "build.sh: WARNING — could not pull $BASE_IMAGE (offline?). Continuing:" >&2
     echo "  the build may still succeed from the local image store or build cache." >&2
@@ -248,7 +248,7 @@ fi
   if [ "$RUNTIME_ONLY" -eq 0 ]; then
     echo "  $TEST_TAG  (alias $REPO:test)     — the in-container test gate"
   else
-    echo "  (test image not built — --runtime-only. Run cpg/mcp/build.sh for the test gate.)"
+    echo "  (test image not built — --runtime-only. Run cypher-mcp/build.sh for the test gate.)"
   fi
   echo
   echo "Next:"
@@ -257,5 +257,5 @@ fi
     echo "  docker run --rm --add-host=host.docker.internal:host-gateway $TEST_TAG \\"
     echo "    python -m pytest tests -q -m live                                          # live gate (needs FalkorDB up)"
   fi
-  echo "  docker image ls --filter label=cpg-mcp=1                                     # what has accumulated"
+  echo "  docker image ls --filter label=cypher-mcp=1                                     # what has accumulated"
 } >&2

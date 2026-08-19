@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# setup.sh — create/refresh the virtualenv for the `cpg` MCP server.
+# setup.sh — create/refresh the virtualenv for the `cypher` MCP server.
 #
 # Idempotent: re-running is safe and cheap (pip reports "Requirement already
 # satisfied" and exits 0). Ends by importing the two runtime dependencies, so a
 # successful run is also the component's dependency smoke test.
 #
 # Usage:
-#   cpg/mcp/setup.sh              # create/update cpg/mcp/.venv, then smoke-test imports
-#   cpg/mcp/setup.sh --recreate   # delete and rebuild .venv from scratch
-#   cpg/mcp/setup.sh --help
+#   cypher-mcp/setup.sh              # create/update cypher-mcp/.venv, then smoke-test imports
+#   cypher-mcp/setup.sh --recreate   # delete and rebuild .venv from scratch
+#   cypher-mcp/setup.sh --help
 #
-# The venv lives at cpg/mcp/.venv, deliberately NOT shared with
+# The venv lives at cypher-mcp/.venv, deliberately NOT shared with
 # falkor-chat/server/.venv: that one pins a chat application's dependency set,
 # and coupling them means a falkor-chat bump can break CPG query access.
 # It is untracked — the repo-root .gitignore already ignores `.venv`.
@@ -24,7 +24,7 @@ usage() {
   cat <<'EOF'
 Usage: setup.sh [--recreate] [-h|--help]
 
-  (no args)     create cpg/mcp/.venv if missing, install requirements-dev.txt,
+  (no args)     create cypher-mcp/.venv if missing, install requirements-dev.txt,
                 verify the runtime imports
   --recreate    remove an existing .venv first (use after a Python upgrade or a
                 half-installed venv)
@@ -94,6 +94,6 @@ PY
 cat <<'EOF'
 
 Setup OK. Next:
-  cpg/mcp/.venv/bin/python -c "import mcp.server.fastmcp, falkordb"   # dependency smoke test
-  cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q                           # available once S2 lands the server
+  cypher-mcp/.venv/bin/python -c "import mcp.server.fastmcp, falkordb"   # dependency smoke test
+  cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q                           # available once S2 lands the server
 EOF

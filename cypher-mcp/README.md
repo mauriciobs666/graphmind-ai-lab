@@ -1,33 +1,33 @@
-# `cpg` MCP server
+# `cypher` MCP server
 
-A small stdio MCP server exposing **one** tool, `mcp__cpg__query`, that runs OpenCypher against
+A small stdio MCP server exposing **one** tool, `mcp__cypher__query`, that runs OpenCypher against
 any named FalkorDB graph — not limited to CPG graphs. It replaces hand-assembled `redis-cli
 GRAPH.QUERY` command lines on the CPG **read** path for the `cpg-analysis` skill's consumers
 (`analyst`, `architect`, `qa-engineer`), and additionally offers a narrow, attributed **write**
 path (see [Writing through this tool](#writing-through-this-tool)) piloted on `graph-dba`'s
 kaizen working memory (`kaizen_graph_dba`).
 
-Design and rationale: [`../../docs/plans/cpg-query-access.md`](../../docs/plans/cpg-query-access.md)
+Design and rationale: [`../docs/plans/cpg-query-access.md`](../docs/plans/cpg-query-access.md)
 (the original read-only contract) and
-[`../../docs/plans/generic-cypher-mcp.md`](../../docs/plans/generic-cypher-mcp.md) (the write path,
+[`../docs/plans/generic-cypher-mcp.md`](../docs/plans/generic-cypher-mcp.md) (the write path,
 the `agent` parameter, and the graph-agnostic widening). CPG schema:
-[`../../skills/joern-cpg/references/cpg-model.md`](../../skills/joern-cpg/references/cpg-model.md).
+[`../skills/joern-cpg/references/cpg-model.md`](../skills/joern-cpg/references/cpg-model.md).
 
 ---
 
 ## Quick start
 
 ```bash
-cpg/mcp/build.sh                             # once per clone (or after any code change):
+cypher-mcp/build.sh                             # once per clone (or after any code change):
                                              #   build the container images — THE supported path
 ./falkor-chat/scripts/start_falkordb.sh -d   # FalkorDB must be up to answer queries
-cpg/mcp/setup.sh                             # the host venv: the test loop and the fallback
-cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q    # smoke check
+cypher-mcp/setup.sh                             # the host venv: the test loop and the fallback
+cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q    # smoke check
 ```
 
 **The server runs in a container.** In Claude Code it is wired by the repo-root
-[`.mcp.json`](../../.mcp.json), which launches `cpg/mcp/docker-run.sh`, and needs no manual start —
-see [Running in a container](#running-in-a-container). `cpg/mcp/build.sh` is the **supported**
+[`.mcp.json`](../.mcp.json), which launches `cypher-mcp/docker-run.sh`, and needs no manual start —
+see [Running in a container](#running-in-a-container). `cypher-mcp/build.sh` is the **supported**
 fresh-clone step, not an optional nicety: the launch wrapper *will* build on a miss, but that
 self-heal is a safety net whose success on a slow link is not guaranteed.
 
@@ -42,8 +42,8 @@ There are two setups, because there are two launch paths (see
 
 | Path | Setup | Needs |
 |---|---|---|
-| **Container** (what `.mcp.json` uses) | `cpg/mcp/build.sh` | Docker |
-| **Host venv** (test loop + fallback) | `cpg/mcp/setup.sh` | Python ≥ 3.12 |
+| **Container** (what `.mcp.json` uses) | `cypher-mcp/build.sh` | Docker |
+| **Host venv** (test loop + fallback) | `cypher-mcp/setup.sh` | Python ≥ 3.12 |
 
 ### Host venv
 
@@ -51,9 +51,9 @@ Requires **Python ≥ 3.12** (3.12.3 on this box) and network access for `pip`. 
 no `pipx` here — this is a plain `venv`, the same choice `falkor-chat/server` makes.
 
 ```bash
-cpg/mcp/setup.sh              # create cpg/mcp/.venv + install requirements-dev.txt
-cpg/mcp/setup.sh --recreate   # rebuild the venv from scratch
-cpg/mcp/setup.sh --help
+cypher-mcp/setup.sh              # create cypher-mcp/.venv + install requirements-dev.txt
+cypher-mcp/setup.sh --recreate   # rebuild the venv from scratch
+cypher-mcp/setup.sh --help
 ```
 
 `setup.sh` is idempotent — re-running is safe and fast. It ends by importing the runtime
@@ -70,8 +70,8 @@ application's dependency set. It is untracked (the repo-root `.gitignore` alread
 | `requirements.txt` | `mcp>=1.28,<1.29` · `falkordb>=1.6,<1.7` | Mirrors the live-verified pins in `falkor-chat/server/pyproject.toml`, the in-repo precedent for this stack. |
 | `requirements-dev.txt` | `-r requirements.txt` · `pytest>=9.1,<10` | Requirements files have no "extras"; this is the equivalent of that pyproject's `dev` optional-dependency group. |
 
-`cpg/mcp` is a script run by path, not an installable package — hence two plain requirements files
-rather than a `pyproject.toml`. If `cpg/` ever grows into a package, the migration is mechanical.
+`cypher-mcp` is a script run by path, not an installable package — hence two plain requirements files
+rather than a `pyproject.toml`. If `cypher-mcp/` ever grows into a package, the migration is mechanical.
 
 ## Smoke check
 
@@ -79,9 +79,9 @@ Nothing else in this repo will tell you when this component breaks — there is 
 runner — so run the smoke check after a dependency change, a Python upgrade, or a fresh clone:
 
 ```bash
-cpg/mcp/.venv/bin/python -c "import mcp.server.fastmcp, falkordb"   # dependencies import (exit 0)
-cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q                           # offline: contract + formatting + errors
-cpg/mcp/.venv/bin/pytest cpg/mcp/tests -q -m live                   # requires FalkorDB up on :6379
+cypher-mcp/.venv/bin/python -c "import mcp.server.fastmcp, falkordb"   # dependencies import (exit 0)
+cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q                           # offline: contract + formatting + errors
+cypher-mcp/.venv/bin/pytest cypher-mcp/tests -q -m live                   # requires FalkorDB up on :6379
 ```
 
 The `-m live` run needs FalkorDB up; the default run is offline and stays green regardless
@@ -89,7 +89,7 @@ The `-m live` run needs FalkorDB up; the default run is offline and stays green 
 database cannot silently change what the default command covers).
 
 `tests/test_build_inputs.py` is the one **host-only** module: it exercises
-`build.sh --verify-inputs` against a throwaway copy of `cpg/mcp/` in `tmp_path` (no Docker, no image
+`build.sh --verify-inputs` against a throwaway copy of `cypher-mcp/` in `tmp_path` (no Docker, no image
 built, the tracked tree never touched), because that check is the only thing enforcing
 "[the hash covers every `COPY`](#the-image-tag-is-a-content-hash)" and a false
 *pass* there is silent. It is **not collected inside the image** — `conftest.py` drops it when
@@ -98,7 +98,7 @@ context — so the in-container gate's expected counts are unchanged by it.
 
 ## The tool
 
-Server name `cpg` · tool name `query` · callable name **`mcp__cpg__query`**. Exactly one tool,
+Server name `cypher` · tool name `query` · callable name **`mcp__cypher__query`**. Exactly one tool,
 two required parameters plus one optional — that is the requirement (FR-2's original two-required
 shape, widened by `generic-cypher-mcp.md` FR-1's one new optional parameter) the component exists
 to satisfy, which is why every other knob is an environment variable, not a fourth parameter.
@@ -129,7 +129,7 @@ This is a property of this tool only. FalkorDB itself remains open on `:6379` wi
 ### Writing through this tool
 
 Design and rationale in full:
-[`../../docs/plans/generic-cypher-mcp.md`](../../docs/plans/generic-cypher-mcp.md) §3.2. The short
+[`../docs/plans/generic-cypher-mcp.md`](../docs/plans/generic-cypher-mcp.md) §3.2. The short
 version: a write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement it could parse,
 or — pre-migration only — a lightweight keyword scan on an "empty key" response), then gated by
 `authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **two**
@@ -142,7 +142,7 @@ kaizen working memory (`kaizen_graph_dba`); every other write is rejected regard
    shape, regardless of the value — only entry *creation* is authorized):
 
    ```
-   mcp__cpg__query(
+   mcp__cypher__query(
      graph='kaizen_graph_dba',
      cypher="CREATE (k:KaizenEntry {entryId:'...', date:'...', fact:'...', evidence:'...', "
             "context:'...', suggestedHome:'...', author:'graph-dba', createdAt:'...'})",
@@ -150,12 +150,12 @@ kaizen working memory (`kaizen_graph_dba`); every other write is rejected regard
    )
    ```
 
-2. **Curator-clear** — a recognized curator agent (`CPG_MCP_CURATOR_AGENTS` env var,
+2. **Curator-clear** — a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS` env var,
    comma-separated, default `cobb`) clears an entry it did not author, by `entryId`. Exactly one
    skeleton is recognized — no other write shape gets curator treatment:
 
    ```
-   mcp__cpg__query(
+   mcp__cypher__query(
      graph='kaizen_graph_dba',
      cypher="MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e",
      agent='cobb',
@@ -261,14 +261,14 @@ and the default is used, rather than taking the server down.
 |---|---|---|
 | `FALKORDB_HOST` | `127.0.0.1` (`server.py`) / **`host.docker.internal`** (image `ENV` + `.mcp.json`) | Where FalkorDB listens. See the note above — the container cannot use `127.0.0.1`. |
 | `FALKORDB_PORT` | `6379` | Port. On the container path this is the **host's published** port. |
-| `CPG_MCP_MAX_ROWS` | `200` | Rows rendered before the row cap binds. |
-| `CPG_MCP_MAX_CELL` | `300` | Chars per cell; a cut appends `…(+N chars)`. |
-| `CPG_MCP_MAX_CHARS` | `30000` | Total payload chars; whole rows are dropped from the tail (never a partial row) until it fits. |
-| `CPG_MCP_TIMEOUT_MS` | `30000` | Server-side query timeout, passed to `ro_query`. Deliberately below the 60 s `.mcp.json` wall so the *server*, not the harness, produces the error message. **Does not apply to the `EXPLAIN` path** — `explain()` takes no timeout argument; planning does not execute the traversal, and the 60 s wall remains the backstop. |
-| `CPG_MCP_CURATOR_AGENTS` | `cobb` | Comma-separated agent slugs allowed to run the curator-clear write shape (see [Writing through this tool](#writing-through-this-tool)). Whitespace around each entry is stripped; empty entries are dropped. |
+| `CYPHER_MCP_MAX_ROWS` | `200` | Rows rendered before the row cap binds. |
+| `CYPHER_MCP_MAX_CELL` | `300` | Chars per cell; a cut appends `…(+N chars)`. |
+| `CYPHER_MCP_MAX_CHARS` | `30000` | Total payload chars; whole rows are dropped from the tail (never a partial row) until it fits. |
+| `CYPHER_MCP_TIMEOUT_MS` | `30000` | Server-side query timeout, passed to `ro_query`. Deliberately below the 60 s `.mcp.json` wall so the *server*, not the harness, produces the error message. **Does not apply to the `EXPLAIN` path** — `explain()` takes no timeout argument; planning does not execute the traversal, and the 60 s wall remains the backstop. |
+| `CYPHER_MCP_CURATOR_AGENTS` | `cobb` | Comma-separated agent slugs allowed to run the curator-clear write shape (see [Writing through this tool](#writing-through-this-tool)). Whitespace around each entry is stripped; empty entries are dropped. |
 
-**On raising `CPG_MCP_MAX_CHARS`.** The server declares
-`_meta["anthropic/maxResultSizeChars"] = min(2 × CPG_MCP_MAX_CHARS, 500000)`, so Claude Code's
+**On raising `CYPHER_MCP_MAX_CHARS`.** The server declares
+`_meta["anthropic/maxResultSizeChars"] = min(2 × CYPHER_MCP_MAX_CHARS, 500000)`, so Claude Code's
 persist-to-disk threshold scales with the cap and the two can never disagree (without it, Claude
 Code estimates a *token* budget and, above it, replaces the result with a file reference — which
 would swallow the truncation notice). Raising the cap therefore stays free of disk substitution
@@ -280,8 +280,8 @@ specific investigation, not by default.
 
 | Path | Command | Job | Needs |
 |---|---|---|---|
-| **Container** — the default; what `.mcp.json` names | `cpg/mcp/docker-run.sh` | The real launch surface. | Docker |
-| **Host venv** — retained | `cpg/mcp/run.sh` | The fast test loop, the fallback when the image or daemon is broken, and what ports to a Docker-less host. | Python ≥ 3.12 |
+| **Container** — the default; what `.mcp.json` names | `cypher-mcp/docker-run.sh` | The real launch surface. | Docker |
+| **Host venv** — retained | `cypher-mcp/run.sh` | The fast test loop, the fallback when the image or daemon is broken, and what ports to a Docker-less host. | Python ≥ 3.12 |
 
 Both install from the same `requirements*.txt`, and the
 [in-container test gate](#the-in-container-test-gate) is the control that keeps them from drifting.
@@ -299,9 +299,9 @@ In Claude Code the server is configured at **project scope** by the repo-root `.
 ```json
 {
   "mcpServers": {
-    "cpg": {
+    "cypher": {
       "command": "bash",
-      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cpg/mcp/docker-run.sh\""],
+      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cypher-mcp/docker-run.sh\""],
       "env": { "FALKORDB_HOST": "host.docker.internal", "FALKORDB_PORT": "6379" },
       "timeout": 60000
     }
@@ -328,25 +328,25 @@ Two non-obvious details in that shape:
   and its prose pages disagree about which variable owns which default:
 
   ```
-  claude mcp list                        # cpg — ✔ Connected
-  MCP_TIMEOUT=1 claude mcp list          # cpg — ✘ Failed: connection timed out after 1ms
-  MCP_CONNECT_TIMEOUT_MS=1 claude mcp list   # cpg — ✔ Connected  (does NOT bind here)
+  claude mcp list                        # cypher — ✔ Connected
+  MCP_TIMEOUT=1 claude mcp list          # cypher — ✘ Failed: connection timed out after 1ms
+  MCP_CONNECT_TIMEOUT_MS=1 claude mcp list   # cypher — ✔ Connected  (does NOT bind here)
   ```
 
   So `MCP_TIMEOUT` is the knob to raise. `MCP_CONNECT_TIMEOUT_MS` (5 s) applies only under
-  `MCP_CONNECTION_NONBLOCKING=0` or a server with `alwaysLoad: true`; `cpg` uses neither. Since
+  `MCP_CONNECTION_NONBLOCKING=0` or a server with `alwaysLoad: true`; `cypher` uses neither. Since
   v2.1.142 MCP startup is **non-blocking** by default, so a slow connect delays tool availability
   rather than stalling the session, and a failed connect is reported to the model.
 
-`.claude/settings.json` carries `"enabledMcpjsonServers": ["cpg"]`, approving this server **by
+`.claude/settings.json` carries `"enabledMcpjsonServers": ["cypher"]`, approving this server **by
 name** rather than blanket-enabling every project server. A one-time interactive trust prompt on
 first run is still expected; `claude mcp reset-project-choices` resets that answer. Note the
 consequence for automation: a headless (`claude -p`) run in a workspace that has not been approved
-silently has **no** `cpg` server at all.
+silently has **no** `cypher` server at all.
 
 > **Starting a session in a subdirectory needs its own approval** (verified 2026-07-25).
 > `.mcp.json` discovery walks up to the repo root, so `claude mcp list` run from `falkor-chat/`
-> *does* find the `cpg` server — but the project-approval state is keyed on the session's working
+> *does* find the `cypher` server — but the project-approval state is keyed on the session's working
 > directory, and `falkor-chat/` carries its own `.claude/` settings dir, so the repo-root
 > `enabledMcpjsonServers` does not reach it. The result there is `⏸ Pending approval` until it is
 > approved once interactively from that directory. This is an approval-scoping behaviour, not a
@@ -355,14 +355,14 @@ silently has **no** `cpg` server at all.
 ## Running in a container
 
 Design and the measurements behind every choice below:
-[`../../docs/plans/cpg-mcp-containerization.md`](../../docs/plans/cpg-mcp-containerization.md).
+[`../docs/plans/cpg-mcp-containerization.md`](../docs/plans/cpg-mcp-containerization.md).
 
 ```bash
-cpg/mcp/build.sh                  # runtime + test images, plus the :dev/:test aliases
-cpg/mcp/build.sh --runtime-only   # just the launch image — what docker-run.sh calls on a miss
-cpg/mcp/build.sh --no-cache       # force a rebuild of an existing tag
-cpg/mcp/build.sh --verify-inputs  # check image-tag.sh covers every Dockerfile COPY
-cpg/mcp/build.sh --help
+cypher-mcp/build.sh                  # runtime + test images, plus the :dev/:test aliases
+cypher-mcp/build.sh --runtime-only   # just the launch image — what docker-run.sh calls on a miss
+cypher-mcp/build.sh --no-cache       # force a rebuild of an existing tag
+cypher-mcp/build.sh --verify-inputs  # check image-tag.sh covers every Dockerfile COPY
+cypher-mcp/build.sh --help
 ```
 
 `build.sh` writes **everything to stderr** and reads nothing from stdin — `docker-run.sh` may call it
@@ -375,9 +375,9 @@ There is no mutable `:latest`-style launch tag. The tag **is** the content of th
 
 | Tag | Meaning |
 |---|---|
-| `cpg-mcp:<hash12>` | The launch image. The only tag `docker-run.sh` ever names. |
-| `cpg-mcp:test-<hash12>` | The test-gate image, at the **same** hash. |
-| `cpg-mcp:dev`, `cpg-mcp:test` | Moving aliases for humans and ad-hoc `docker run`. Re-pointed by every `build.sh`, never used by the launch path. |
+| `cypher-mcp:<hash12>` | The launch image. The only tag `docker-run.sh` ever names. |
+| `cypher-mcp:test-<hash12>` | The test-gate image, at the **same** hash. |
+| `cypher-mcp:dev`, `cypher-mcp:test` | Moving aliases for humans and ad-hoc `docker run`. Re-pointed by every `build.sh`, never used by the launch path. |
 
 `<hash12>` is a SHA-256 over the Dockerfile, `.dockerignore`, both `requirements*.txt`, `server.py`,
 `pytest.ini` and **every file under `tests/`** — contents and *relative* paths only, so the value is
@@ -407,7 +407,7 @@ is skipped: those sources come from another build stage, not from the build cont
 
 FalkorDB runs in its **own** container (`falkordb-dev`, started by
 `falkor-chat/scripts/start_falkordb.sh`, shared with `falkor-chat` and `salesperson`) and publishes
-`6379` on the host. From inside the `cpg` container `127.0.0.1` would mean *that container*, so
+`6379` on the host. From inside the `cypher` container `127.0.0.1` would mean *that container*, so
 `docker-run.sh` passes `--add-host=host.docker.internal:host-gateway` and the image defaults
 `FALKORDB_HOST=host.docker.internal`. This rides the **already-published host port** that
 `redis-cli`, `falkor-chat` and `salesperson` all use, so it adds no new coupling — it inherits an
@@ -418,13 +418,13 @@ non-persistent `docker network connect`.
 
 ### Launch flags, and why each one is there
 
-`docker run -i --rm --init --label cpg-mcp=1 --pull=never --read-only --tmpfs /tmp
+`docker run -i --rm --init --label cypher-mcp=1 --pull=never --read-only --tmpfs /tmp
 --add-host=host.docker.internal:host-gateway`
 
 | Flag | Why |
 |---|---|
 | `--init` | **Required, not decorative.** PID-1 `python` **ignores `SIGTERM`** (measured: still running a minute later). tini forwards it, so the container exits `143` instead of surviving the harness's shutdown sequence. |
-| `--label cpg-mcp=1` | The only handle for finding a leaked container: `docker ps -a --filter label=cpg-mcp=1`. |
+| `--label cypher-mcp=1` | The only handle for finding a leaked container: `docker ps -a --filter label=cypher-mcp=1`. |
 | `--rm` | Reaps on normal exit and on death of the `docker run` CLI (both measured). |
 | `--pull=never` | The image is local-only, so a missing tag must say `No such image` rather than docker's misleading `pull access denied … may require 'docker login'`. |
 | `--read-only --tmpfs /tmp` | Least privilege. Adopted only after probing every tool-body path under it (query, `EXPLAIN`, unknown graph, `PROFILE` refusal, invalid Cypher) with no filesystem error. **First thing to drop** if the server ever fails at session start with a read-only/permission error. |
@@ -439,10 +439,10 @@ default, it **deletes** the variable in the container (measured on Docker 29.6.1
 
 | Variable | Effect |
 |---|---|
-| `CPG_MCP_NO_AUTOBUILD=1` | Never build in the launch path; fail with a curated "run `cpg/mcp/build.sh`" instead. |
-| `CPG_MCP_IMAGE=<ref>` | Run this exact image, **bypassing the hash gate entirely** — "the caller knows what they are running". Nothing is built for it; if it is absent you get a curated message saying so. |
-| `CPG_MCP_IMAGE_REPO` | Repository name instead of `cpg-mcp`. |
-| `CPG_MCP_NO_PULL=1` | `build.sh` skips the base-image `docker pull`. |
+| `CYPHER_MCP_NO_AUTOBUILD=1` | Never build in the launch path; fail with a curated "run `cypher-mcp/build.sh`" instead. |
+| `CYPHER_MCP_IMAGE=<ref>` | Run this exact image, **bypassing the hash gate entirely** — "the caller knows what they are running". Nothing is built for it; if it is absent you get a curated message saying so. |
+| `CYPHER_MCP_IMAGE_REPO` | Repository name instead of `cypher-mcp`. |
+| `CYPHER_MCP_NO_PULL=1` | `build.sh` skips the base-image `docker pull`. |
 | `MCP_TIMEOUT=60000` | Raise Claude Code's 30 s **startup** budget for a slow first build. |
 
 ### Measured on this box (2026-07-26, Docker 29.6.1, Claude Code 2.1.220)
@@ -460,8 +460,8 @@ default, it **deletes** the variable in the container (measured on Docker 29.6.1
 ### Housekeeping
 
 ```bash
-docker image ls --filter label=cpg-mcp=1                     # what has accumulated
-docker pull python:3.12-slim && cpg/mcp/build.sh --no-cache   # rebuild on a refreshed base image
+docker image ls --filter label=cypher-mcp=1                     # what has accumulated
+docker pull python:3.12-slim && cypher-mcp/build.sh --no-cache   # rebuild on a refreshed base image
 ```
 
 Every distinct input state leaves an image (~150 MB, almost entirely shared base layers, so the
@@ -469,7 +469,7 @@ marginal cost of each is small). Old hash tags accumulate and pruning is left to
 listing in front of them: nothing in the launch path ever removes an image, because a wrapper on the
 MCP startup path must not be able to destroy state.
 
-`docker ps -a --filter label=cpg-mcp=1` finds containers. The container is **session-lifetime**, so
+`docker ps -a --filter label=cypher-mcp=1` finds containers. The container is **session-lifetime**, so
 with N sessions open expect N in `Up` — those are live servers, not orphans. An orphan is an entry in
 `Exited`/`Created`, or an `Up` count exceeding the number of open sessions. **Never `docker stop` a
 labelled container while any session is open**: there is no way to tell from outside which session
@@ -485,20 +485,20 @@ deliberately does not contain and is therefore not collected there — so the co
 host counts minus that module, not a different suite.
 
 ```bash
-cpg/mcp/build.sh                                    # precondition: both targets, immediately first
-docker run --rm cpg-mcp:test python -m pytest tests -q                    # 74 passed, 7 deselected
+cypher-mcp/build.sh                                    # precondition: both targets, immediately first
+docker run --rm cypher-mcp:test python -m pytest tests -q                    # 74 passed, 7 deselected
 docker run --rm --add-host=host.docker.internal:host-gateway \
-  cpg-mcp:test python -m pytest tests -q -m live                          # 7 passed, 74 deselected
-redis-cli -p 6379 GRAPH.LIST                        # done-condition: no _cpg_mcp_selftest_* residue
+  cypher-mcp:test python -m pytest tests -q -m live                          # 7 passed, 74 deselected
+redis-cli -p 6379 GRAPH.LIST                        # done-condition: no _cypher_mcp_selftest_* residue
 ```
 
 Run it after a Dockerfile, `requirements*.txt` or base-image change. Because the test tag shares the
 runtime tag's content hash, a stale gate image cannot be reached by accident — if
-`cpg-mcp:test-<hash>` does not exist for the current hash, the command simply does not resolve.
+`cypher-mcp:test-<hash>` does not exist for the current hash, the command simply does not resolve.
 
 > **The live gate's scratch-graph name is unique per run** (fixed by C-321). Earlier, inside a
 > container `os.getpid()` was **1**, so the scratch-graph name collapsed to the constant
-> `_cpg_mcp_selftest_1` on the **shared** FalkorDB, and concurrent runs would corrupt each other.
+> `_cypher_mcp_selftest_1` on the **shared** FalkorDB, and concurrent runs would corrupt each other.
 > That collision is **fixed**: the name now derives from `uuid4().hex[:8]` instead of `getpid()`.
 
 ### Container debug recipe
@@ -507,7 +507,7 @@ The container twin of the venv recipe below — it overrides the image `CMD`, so
 involved:
 
 ```bash
-docker run --rm --add-host=host.docker.internal:host-gateway cpg-mcp:dev \
+docker run --rm --add-host=host.docker.internal:host-gateway cypher-mcp:dev \
   python -c "import server; print(server.run_query('cpg_falkorchat','MATCH (m:METHOD) RETURN count(m) AS n'))"
 ```
 
@@ -524,9 +524,9 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query","arguments":{"graph":"cpg_falkorchat","cypher":"MATCH (m:METHOD) RETURN count(m) AS n"}}}' \
  '{"jsonrpc":"2.0","id":4,"method":"ping"}' \
- | cpg/mcp/docker-run.sh 2>/tmp/cpg-mcp.err
+ | cypher-mcp/docker-run.sh 2>/tmp/cypher-mcp.err
 # expect replies for ids 1, 2, 3 — every line valid JSON, nothing but JSON on stdout,
-# all diagnostics in /tmp/cpg-mcp.err. Id 4's reply is expected to be absent.
+# all diagnostics in /tmp/cypher-mcp.err. Id 4's reply is expected to be absent.
 ```
 
 ### Container troubleshooting
@@ -537,15 +537,15 @@ printf '%s\n' \
 | `FalkorDB unreachable at host.docker.internal:6379` | FalkorDB is down (`./falkor-chat/scripts/start_falkordb.sh -d`), **or** the session is on a different Docker context (`docker context ls`) where `falkordb-dev` does not exist. |
 | A query **hangs** until the 60 s tool timeout instead of failing fast | A host firewall that **DROP**s traffic from `docker0` (rather than rejecting it) turns a fast `ECONNREFUSED` into a hang, so the curated "unreachable" message never appears. |
 | It worked, then stopped after FalkorDB was "hardened" | The container path depends on FalkorDB publishing on **`0.0.0.0`**, not just "to the host". `start_falkordb.sh` uses `-p "${FALKORDB_PORT}:6379"` (all interfaces). If that ever becomes `-p 127.0.0.1:6379:6379`, the container path needs `--network host` or a user-defined network instead. |
-| `No such image: cpg-mcp:<tag>` | `--pull=never` doing its job on a local-only name. Run `cpg/mcp/build.sh`. |
-| Build fails at `[internal] load metadata` | Offline with `python:3.12-slim` absent from the local image store. `docker pull python:3.12-slim` while connected, or fall back to `cpg/mcp/run.sh`. |
+| `No such image: cypher-mcp:<tag>` | `--pull=never` doing its job on a local-only name. Run `cypher-mcp/build.sh`. |
+| Build fails at `[internal] load metadata` | Offline with `python:3.12-slim` absent from the local image store. `docker pull python:3.12-slim` while connected, or fall back to `cypher-mcp/run.sh`. |
 | Server fails at session start with a read-only/permission error | Drop `--read-only --tmpfs /tmp` from `docker-run.sh` and re-run the protocol probe above. |
-| `docker not on PATH` / `Docker daemon not reachable` | Curated messages, both pointing at `cpg/mcp/run.sh`. |
+| `docker not on PATH` / `Docker daemon not reachable` | Curated messages, both pointing at `cypher-mcp/run.sh`. |
 
 ### Checking and restarting
 
 ```bash
-claude mcp list          # cpg — connected / ⏸ Pending approval / failed
+claude mcp list          # cypher — connected / ⏸ Pending approval / failed
 ```
 
 In-session, `/mcp` lists the server and its tool count (**1**). **Stdio servers are not
@@ -559,8 +559,8 @@ the tool body directly, which needs no protocol plumbing. **Host-venv version** 
 is in [Container debug recipe](#container-debug-recipe)):
 
 ```bash
-cpg/mcp/.venv/bin/python -c "
-import sys; sys.path.insert(0, 'cpg/mcp')
+cypher-mcp/.venv/bin/python -c "
+import sys; sys.path.insert(0, 'cypher-mcp')
 import server; print(server.run_query('cpg_falkorchat', 'MATCH (m:METHOD) RETURN count(m)'))"
 ```
 
@@ -571,7 +571,7 @@ context costs two lines in `.mcp.json`, not the capability — which is exactly 
 were kept:
 
 ```bash
-cpg/mcp/setup.sh    # if the venv is not there yet
+cypher-mcp/setup.sh    # if the venv is not there yet
 # then in .mcp.json:  docker-run.sh -> run.sh  and  host.docker.internal -> 127.0.0.1
 #                     …and restart the session
 ```
@@ -596,7 +596,7 @@ instead. This writes to `~/.claude.json`, which is untracked, so a concrete abso
 there and is *never* committed:
 
 ```bash
-claude mcp add --scope local cpg -- <repo-root>/cpg/mcp/docker-run.sh
+claude mcp add --scope local cypher -- <repo-root>/cypher-mcp/docker-run.sh
 ```
 
 Substitute your own checkout path for `<repo-root>`. Do **not** write that path back into
@@ -612,7 +612,7 @@ file for a home path and fails the audit on a hit.
 **OpenCode and Kiro.** Neither reads `.mcp.json` — OpenCode configures servers under its own
 `opencode.json` `mcp` key, Kiro under `~/.kiro/settings/mcp.json`, and neither is wired in this
 repo today (backlog **C-310**). The *command* ports unchanged — it is the same stdio process,
-now `cpg/mcp/docker-run.sh`, with the same two env vars — but the config file, the tool-naming scheme
+now `cypher-mcp/docker-run.sh`, with the same two env vars — but the config file, the tool-naming scheme
 and the approval model do not. Containerizing is mildly **helpful** to that wiring: the launch surface
 is still a single command (a script ports; a JSON `args` array does not), and "is there a working
 Python 3.12 venv at that path" becomes the easier-to-check "is there a Docker daemon". It also adds
