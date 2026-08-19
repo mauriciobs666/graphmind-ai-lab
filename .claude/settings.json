@@ -1,5 +1,5 @@
 {
-  "enabledMcpjsonServers": ["cpg"],
+  "enabledMcpjsonServers": ["cypher"],
   "permissions": {
     "allow": [
       "Bash(./claude/scripts/audit-team.sh)",

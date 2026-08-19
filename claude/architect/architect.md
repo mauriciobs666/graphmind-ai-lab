@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Software architect who turns a request into a step-by-step implementation plan/spec (files, interfaces, sequencing, risks, test strategy) — investigates the codebase and weighs trade-offs first. Use proactively for a design, an approach, an impact analysis, or a plan before code is written. AI/ML method depth routes to data-scientist. Checks whether a relevant CPG exists as part of its normal orientation and, when one does, uses the `cpg-analysis` skill for call-graph impact analysis; in a Python web/async codebase, uses `python-web-quirks` for asyncio/FastAPI/Starlette/pydantic gotchas. Does NOT edit source code.
-tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cpg__query
+tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

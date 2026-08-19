@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "cpg": {
+    "cypher": {
       "command": "bash",
-      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cpg/mcp/docker-run.sh\""],
+      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/cypher-mcp/docker-run.sh\""],
       "env": {
         "FALKORDB_HOST": "host.docker.internal",
         "FALKORDB_PORT": "6379"

@@ -2,7 +2,7 @@
 name: cpg-analysis
 description: >-
   Query an already-loaded Joern Code Property Graph (CPG) in FalkorDB with read-only
-  Cypher — through the mcp__cpg__query MCP tool in Claude Code, or redis-cli
+  Cypher — through the mcp__cypher__query MCP tool in Claude Code, or redis-cli
   GRAPH.QUERY as the documented fallback — to answer structured code questions
   without reading files: impact analysis (callers/callees + transitive reach),
   root-cause analysis (data-flow slices + cross-file symbol def/ref), code review
@@ -14,7 +14,7 @@ description: >-
   in skills/joern-cpg/references/cpg-model.md; this skill does not restate it.
   Requires a CPG already built and loaded by the joern-cpg pipeline; building or
   loading one routes to graph-dba (an on-demand capability, not routine).
-allowed-tools: mcp__cpg__query, Bash, Read
+allowed-tools: mcp__cypher__query, Bash, Read
 ---
 
 # cpg-analysis — query a loaded CPG in FalkorDB
@@ -32,7 +32,7 @@ skill carries only the query idioms that stand on that schema.
 
 ## 1. Run a query
 
-Send Cypher through the **`mcp__cpg__query`** MCP tool. It takes exactly two
+Send Cypher through the **`mcp__cypher__query`** MCP tool. It takes exactly two
 parameters and no shell is involved:
 
 | Parameter | What you pass |
@@ -41,7 +41,7 @@ parameters and no shell is involved:
 | `cypher` | the Cypher text itself, verbatim; multi-line and indentation are fine, and nothing needs quoting or escaping |
 
 ```
-mcp__cpg__query(
+mcp__cypher__query(
   graph  = "cpg_yourrepo",        # <-- the caller's graph key; do NOT assume a value
   cypher = "MATCH (m:METHOD) WHERE m.NAME = 'post_message'
             RETURN m.FULL_NAME, m.FILENAME"
@@ -182,7 +182,7 @@ All use a parameterized target. Substitute `$fn` (a short `NAME`) or `$full`
 > Cypher parameters.** Replace the token with the actual quoted value before you
 > send the query (e.g. edit `$full` to `'falkorchat/services.py:<module>.Services.post_message'`).
 > **Neither path binds Cypher parameters** — `redis-cli GRAPH.QUERY` has no
-> `--param`-style binding, and `mcp__cpg__query` takes only `graph` and `cypher`
+> `--param`-style binding, and `mcp__cypher__query` takes only `graph` and `cypher`
 > (a `params` argument would be a third parameter the tool deliberately does not
 > have). So do **not** try to pass them as parameters — an un-substituted `$full`
 > left in the string will error or match nothing. Always quote the substituted
