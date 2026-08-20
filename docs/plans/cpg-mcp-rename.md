@@ -1,6 +1,6 @@
 # CPG MCP server/tool rename — Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (proposed **M6**, `docs/BACKLOG.md`) ·
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (proposed **M6**, `docs/BACKLOG.md`) ·
 > **Version:** 1.1 — revised after `analyst`'s plan-gate (`docs/reviews/cpg-mcp-rename.md`,
 > verdict: needs changes); see §7 for the dated revision note.
 
