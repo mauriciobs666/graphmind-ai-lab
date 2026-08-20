@@ -54,6 +54,12 @@ two — see `claude/teco/kaizen/history.md` and `claude/cobb/kaizen/history.md` 
 
 ## Maintenance rules
 
+- **A stakeholder proposal for a new team member is a `tico` requirements interview, not a
+  straight-to-`cobb` request.** It's an ordinary Mode 1 interview with `claude/` treated as the
+  component — WHAT/WHY only (the new agent's remit, its boundaries with existing agents, any
+  destructive-shaped capability), landing at `claude/docs/requirements/<slug>.md`. Only once that
+  doc reaches **Ready for design** does `cobb` design the actual agent (name, prompt, tools,
+  hooks) from it. Precedent: `claude/docs/requirements/security-expert.md`.
 - Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md` (and seed `kaizen/inbox.md` on creation), the full catalog entry in [`README.md`](./README.md), and the name rosters here and in the repo-root `AGENTS.md`, in the same change.
 - Skills live in the repo-root [`skills/`](../skills/) home, not here. Their catalog is [`skills/README.md`](../skills/README.md); cobb's kaizen logs changes to `agent-maintenance`/`agent-standards`.
 - Don't paste full system prompts or duplicate the README catalog here — point to the source.

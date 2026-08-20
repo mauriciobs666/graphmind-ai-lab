@@ -2,7 +2,49 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
-## 2026-08-11 — Inbox distillation: 4 entries — 1 prompt addition, 1 discarded as superseded, 1 discarded as already tracked, 1 moved to plan.md pending a stakeholder decision
+## 2026-08-19 — Inbox distillation: remaining 3 entries — 1 prompt addition, 2 project-docs additions, 1 follow-up K-item opened on `cobb`
+Closes out the inbox (now empty) alongside the same-day commit-cadence distillation below.
+
+- **`AskUserQuestion` hard-rejects <2 options` (2026-08-17):** Verified directly against the
+  tool's own JSON schema (`"minItems": 2` on `options`) — still holds, no live test needed.
+  **Promoted to the prompt:** the "Offer options when they unblock" bullet (Mode 1 craft
+  guidance) now states the ≥2-option constraint explicitly and says to fall back to plain
+  conversation for a single-option free-text follow-up rather than inventing a filler option.
+- **FalkorDB web console live on `:3000`** (2026-08-17): Verified against
+  `falkor-chat/scripts/start_falkordb.sh` (still publishes `-p "${FALKORDB_WEB_PORT}:3000"`,
+  default 3000, prints the URL on start) — holds. Already documented in `falkor-chat/README.md`
+  (the "Web console" row), so the gap wasn't the fact itself but that agents debugging graph
+  state via `cypher-mcp` had no pointer to it from there. **Promoted to project docs:** added a
+  "Visual inspection" note to `cypher-mcp/README.md` (ahead of its "Checking and restarting"
+  section) pointing at the console and cross-referencing `falkor-chat/README.md` as the source.
+  Not a prompt change — this is infra any agent might need, not tico-specific.
+- **New-agent proposal is a tico interview, filed under `claude/docs/requirements/`**
+  (2026-08-17): Verified — `claude/docs/requirements/security-expert.md` exists, `Status: Ready
+  for design`, `Owner: tico`, confirming the precedent. **Promoted to project docs:** added a
+  bullet to `claude/AGENTS.md`'s Maintenance rules documenting the convention (tico interview →
+  `claude/docs/requirements/<slug>.md` → cobb design), citing the security-expert doc as
+  precedent. **Also surfaced a follow-up finding, not itself part of the distillation:** that
+  doc has sat at Ready for design since 2026-08-17 with no `cobb` design pass against it yet —
+  opened as K-016 in `cobb`'s own `kaizen/plan.md` rather than acted on silently here, since
+  designing a new agent is a scope call, not a bookkeeping step.
+
+## 2026-08-19 — Inbox distillation: 1 entry — "Commit as you go" retuned to batch at pause points, not per-edit
+- **What:** Verified the 2026-08-19 inbox entry against `git log` for the same-session commit
+  run it described (`generic-cypher-mcp2` + `cpg-mcp-rename` interviews): confirmed 12
+  `docs(requirements): ...` commits from tico across the two documents, several a single
+  decision-log line or one FR tweak apart (e.g. `generic-cypher-mcp2 — scope ... settled`
+  immediately followed by `— team-wide query surface, cobb cadence/self-migration settled`).
+  Matches the entry's account and the stakeholder's own "you seen to be committing too often."
+  Promoted to the prompt: Mode 1's "Commit as you go" bullet now reads "batch at natural pause
+  points, not after every edit" — commit when a *thread* settles (a readback, a settled cluster
+  of decisions, a topic/mode switch, or session close), staging whatever changed since the last
+  commit, rather than after each individual `Edit` call. The "never bundle unrelated files" /
+  "never batch two different documents into one commit" invariants are unchanged. Mode 3's
+  manual-commit bullet ("after a manual section lands") already batches at section granularity,
+  which satisfies the new rule as written — left unchanged.
+- **Why:** direct, dated stakeholder feedback captured in the inbox; re-derived (not just
+  cited) from `git log` before promoting, per the distillation SOP's verification step.
+- **Plan items:** none (fully promoted, not kept open — no K-item needed).
 
 - **What:** `cobb` processed all 4 entries in `tico/kaizen/inbox.md` (§5). (A prior version of this
   entry's header said "3 entries" and omitted the `version`/`defVersion` entry below entirely —

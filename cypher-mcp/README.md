@@ -542,6 +542,15 @@ printf '%s\n' \
 | Server fails at session start with a read-only/permission error | Drop `--read-only --tmpfs /tmp` from `docker-run.sh` and re-run the protocol probe above. |
 | `docker not on PATH` / `Docker daemon not reachable` | Curated messages, both pointing at `cypher-mcp/run.sh`. |
 
+### Visual inspection
+
+For eyeballing what a query returned — nodes, relationships, whether a load actually landed —
+FalkorDB's bundled web console is already live wherever `falkordb-dev` runs, no separate tool
+needed: **`http://localhost:3000`** by default (`FALKORDB_WEB_PORT` if overridden). It's started
+by `falkor-chat/scripts/start_falkordb.sh` alongside the `:6379` Cypher port (see
+`falkor-chat/README.md`'s "Web console" row) — the same container this server's `docker-run.sh`
+reaches over `host.docker.internal`, so any graph this tool can query, the console can browse.
+
 ### Checking and restarting
 
 ```bash
