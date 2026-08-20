@@ -1,5 +1,5 @@
 # Kaizen agent/learning-note ontology — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M8) · **Last updated:** 2026-08-20
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M8) · **Last updated:** 2026-08-20
 
 ## Intent
 Make `cobb`'s distillation work better by making the kaizen graphs' agent/note structure explicit
@@ -193,3 +193,6 @@ removal are **locked** by FR-2/FR-3 (2026-08-20 stakeholder decision) — matche
   entries created in the M7-only window (before M8 ships)? → **No** — same no-retrofit pattern as
   FR-2/FR-3: only entries created after M8 ships carry `sessionId` on the edge; the interim
   entries keep it on the note node, unmigrated.
+- 2026-08-20 — Final readback delivered and confirmed. Stakeholder: "flip please." **Status →
+  Ready for design.** No material assumption left unconfirmed; the one remaining open question
+  (agent-node properties beyond identity) is non-blocking and left for the architect.
