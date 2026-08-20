@@ -1,5 +1,5 @@
 # CPG MCP server/tool rename — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-19
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-19
 
 ## Intent
 The MCP server and its single tool are still named after CPG (`cpg/mcp/`, `.mcp.json` server key
