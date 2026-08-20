@@ -1,5 +1,5 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M7) · **Last updated:** 2026-08-19
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M7) · **Last updated:** 2026-08-20
 
 ## Intent
 M5 (`docs/requirements/generic-cypher-mcp.md`) proved the graph-backed working-memory pattern on
@@ -55,11 +55,12 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   `kaizen/inbox.md`, exactly as FR-2 did for `graph-dba` in M5.
 - **FR-3** — Each agent's current `kaizen/inbox.md` content, as of that agent's migration, is
   imported into its graph **once**, so nothing already captured is lost in the cutover.
-- **FR-4** — After that import (and once AC-2 confirms nothing was lost), each agent's
-  `kaizen/inbox.md` is **deleted** from the repo's working tree — git history, which already
-  tracks the file's full prior content, is the archive; no frozen-in-repo copy is kept. This
-  **reverses M5's FR-4** (which kept `graph-dba`'s file frozen in place) for the eleven agents
-  newly migrated by M6.
+- **FR-4** — **Superseded 2026-08-20** (see Decision log) — no `kaizen/inbox.md` file is ever
+  deleted, for any agent, permanently. Original text, kept for the record: ~~After that import
+  (and once AC-2 confirms nothing was lost), each agent's `kaizen/inbox.md` is **deleted** from
+  the repo's working tree — git history, which already tracks the file's full prior content, is
+  the archive; no frozen-in-repo copy is kept. This **reverses M5's FR-4** (which kept
+  `graph-dba`'s file frozen in place) for the eleven agents newly migrated by M6.~~
 - **FR-5** — Each agent's `kaizen/history.md` is **unchanged**: `cobb`'s promotions are still
   appended there, in the same format, at the same cadence, as today.
 - **FR-6** — Any agent can read any other migrated agent's working-memory graph directly —
@@ -104,12 +105,14 @@ Current per-agent `kaizen/inbox.md` sizes (context, not yet a requirement):
   a valid in-progress state of this delivery, not a failure of it) — this delivery is considered
   fully done once all eleven have landed, but is not blocked from making real progress before
   that point.
-- **FR-14** — M6 also reverses M5's FR-4 for `graph-dba` itself: its `kaizen/inbox.md`, kept
+- **FR-14** — **Superseded 2026-08-20** (see Decision log) — no `kaizen/inbox.md` file is ever
+  deleted, for any agent, including `graph-dba`'s own already-frozen one. Original text, kept for
+  the record: ~~M6 also reverses M5's FR-4 for `graph-dba` itself: its `kaizen/inbox.md`, kept
   frozen in the repo since M5, is **deleted** as part of this delivery — after confirming its
   content is already present in `kaizen_graph_dba` (it is, per M5's AC-2). This brings all twelve
   agents to the same end state: no frozen inbox files anywhere, git history the only archive. This
   is a supersession of M5's FR-4, recorded here (rather than by editing M5's document, which is
-  `archived`) per the repo's documentation convention for a superseded decision.
+  `archived`) per the repo's documentation convention for a superseded decision.~~
 
 *Context for the architect (not a requirement):* how FR-7's team-wide query surface is
 technically achieved — one shared graph with an agent-partition property, per-agent graphs plus
@@ -134,10 +137,12 @@ agent's runtime gets the value.
   newly required by the team-wide query surface (FR-7) either.
 - **Hardened/cryptographic access control** — unchanged from M5: same trusted
   self-identification level the rest of the repo runs at.
-- **Rewriting or purging git history.** Deleting an agent's `kaizen/inbox.md` (FR-4/FR-14) is a
-  normal file-deletion commit — nothing about the repo's git history is altered, which is exactly
-  why an in-repo frozen copy is no longer needed: the content stays fully recoverable via `git
-  log`/`git show`.
+- **Rewriting or purging git history.** *(Corrected 2026-08-20 — see Decision log: FR-4/FR-14
+  are superseded, so this bullet's original premise no longer holds.)* This delivery does not
+  touch git history in any way — that was never in scope. Original text, kept for the record and
+  now void: ~~Deleting an agent's `kaizen/inbox.md` (FR-4/FR-14) is a normal file-deletion commit —
+  nothing about the repo's git history is altered, which is exactly why an in-repo frozen copy is
+  no longer needed: the content stays fully recoverable via `git log`/`git show`.~~
 - **Redesigning the write mechanism itself.** FR-1 reuses M5's author/curator mechanism as-is;
   this delivery is a rollout of an existing mechanism to more agents, not a mechanism redesign
   (FR-7's query surface is additive, not a change to the write path).
@@ -153,9 +158,11 @@ agent's runtime gets the value.
   context, suggested home) — including entries `cobb` has not yet distilled.
 - **AC-2** — Given an agent's `kaizen/inbox.md` entries as of its migration, when the one-time
   import for that agent runs, every one of them is present in its graph afterward.
-- **AC-3** — After an agent's import is confirmed complete (AC-2), its `kaizen/inbox.md` no
-  longer exists in the repo's working tree — its full prior content remains recoverable via git
-  history (`git log`/`git show`).
+- **AC-3** — **Superseded 2026-08-20** (see Decision log) — no acceptance criterion requires an
+  agent's `kaizen/inbox.md` to be absent; it stays in the repo permanently. Original text, kept
+  for the record: ~~After an agent's import is confirmed complete (AC-2), its `kaizen/inbox.md`
+  no longer exists in the repo's working tree — its full prior content remains recoverable via
+  git history (`git log`/`git show`).~~
 - **AC-4** — Given a migrated agent discovers a new learning, when it records it, the entry
   appears in that agent's graph (not `inbox.md`), attributed to it, immediately queryable by
   another agent.
@@ -178,9 +185,11 @@ agent's runtime gets the value.
 - **AC-10** — At any point before all eleven have migrated, the set of already-migrated agents
   independently satisfies AC-1…AC-6 for themselves — partial progress is verifiably real
   progress, not merely claimed (FR-13).
-- **AC-11** — `graph-dba`'s `kaizen/inbox.md`, frozen in the repo since M5, no longer exists in
-  the repo's working tree after M6, with its content recoverable via git history the same way as
-  the other eleven (FR-14).
+- **AC-11** — **Superseded 2026-08-20** (see Decision log) — no acceptance criterion requires
+  `graph-dba`'s `kaizen/inbox.md` to be absent; it stays frozen in the repo permanently, the same
+  as the other eleven. Original text, kept for the record: ~~`graph-dba`'s `kaizen/inbox.md`,
+  frozen in the repo since M5, no longer exists in the repo's working tree after M6, with its
+  content recoverable via git history the same way as the other eleven (FR-14).~~
 - **AC-12** — Given any two migrated agents' graphs, their `:KaizenEntry` (or equivalent) nodes
   expose the identical field set — no agent's entries carry a field another agent's lack, or vice
   versa, aside from the session-ID field's presence/absence distinguishing new entries from
@@ -273,3 +282,35 @@ no preference (see Decision log).*
   delivery stays scoped to the kaizen inbox rollout.
 - 2026-08-19 — Readback delivered and confirmed. Stakeholder: "yes." **Status → Ready for
   design.** No material assumption left unconfirmed; Open questions is empty.
+- 2026-08-20 — **Reconsidered**: the 2026-08-19 "delete after import" decision (FR-4/AC-3,
+  extended to `graph-dba` via FR-14/AC-11) is itself reversed. Stakeholder's binding decision,
+  recorded in full in `docs/plans/generic-cypher-mcp2-coordination.md`'s "Stakeholder decision
+  (2026-08-20)" section: **no `kaizen/inbox.md` file is ever deleted, for any agent, permanently**
+  — every agent's inbox stays in the repo forever as a frozen historical snapshot, git history
+  recoverability was never the only reason to keep it. This **reverses this document's own
+  FR-4/FR-14** a second time (M5 → M6-as-drafted-2026-08-19 → M6-as-corrected-2026-08-20) and
+  drops AC-3/AC-11 entirely — recorded as an explicit supersession (FR-4, FR-14, AC-3, AC-11 each
+  marked **Superseded 2026-08-20** in place, original text struck through and kept for the
+  record) rather than silently rewritten, following the same in-place "Reconsidered" pattern this
+  document already used for its own 2026-08-19 entries above. The Out-of-scope bullet whose
+  rationale depended on the reversed decision ("...which is exactly why an in-repo frozen copy is
+  no longer needed") is corrected in place for the same reason. **FR-12/AC-9 are unaffected** —
+  the new-agent-creation convention still lands as originally written; nothing about them is
+  reversed by this decision.
+  **Mechanics: in-place revision, not a successor document.** Per root `AGENTS.md`'s document
+  collision rule 5, the choice turns on whether this document has been "approved, gated, or
+  executed against." It reached its approval gate (Status → Ready for design) on 2026-08-19, but
+  nothing has since been *executed* against the now-reversed FR-4/FR-14 — no unit ever ran the
+  deletion `G1`/`AC-11` would have gated (that gate's own first step required a fresh stakeholder
+  confirmation that never happened before this reversal), and the downstream plan/coordination
+  docs citing FR-4/AC-3/FR-14/AC-11 by number are being corrected in this same coordinated wave
+  (`docs/plans/generic-cypher-mcp2.md` unit `T1`), not after the fact. Splitting into a successor
+  document (e.g. `generic-cypher-mcp3.md`) would force every artifact that already cites this
+  document's FR/AC numbers by name — the plan, its coordination doc, the eventual test-plan/
+  report — to fork or dual-reference for what is, on the record, a narrow four-item correction,
+  not a new topic or a new round of stakeholder interviewing. The document's own precedent (the
+  2026-08-19 "Reconsidered" entries above, made the same way) and the architect's independent
+  read of that same precedent (`docs/plans/generic-cypher-mcp2.md`, the paragraph directly
+  preceding its `T1` row) both point the same way. Revised in place; `Version:` field not
+  introduced (this document has never carried one) — `Last updated` bumped to 2026-08-20 instead,
+  per this document's own header convention.
