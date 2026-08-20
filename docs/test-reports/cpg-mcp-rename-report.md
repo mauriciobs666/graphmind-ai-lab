@@ -1,6 +1,6 @@
 # CPG MCP server/tool rename — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-605 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** C-605 (M6)
 
 ## Summary
 
