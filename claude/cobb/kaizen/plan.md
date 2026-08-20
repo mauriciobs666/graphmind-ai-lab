@@ -84,6 +84,7 @@
 
 | K-015 | 2026-07-31 | medium | 🔵 | `analyst/kaizen/inbox.md` has a substantial backlog of already-verified, "suggested home: prompt" entries never distilled (stub-package HEAD-vs-working-tree import, review-safe pytest subset, isolatable snapshot side, byte-identity AST hash, line-number-invariance re-gate, exclude_unset nested-model gotcha, scratch-copy-reverse-patch). Run a full §5 pass: verify each still holds, promote the prompt-worthy ones into `analyst.md` (or a knowledge base for the FastAPI/FalkorDB/MCP-version-sensitive ones), log in `analyst/kaizen/history.md`, clear the inbox. |
 | K-016 | 2026-08-19 | medium | 🔵 | `claude/docs/requirements/security-expert.md` has sat at **Status: Ready for design** since 2026-08-17 with no `cobb` design pass against it yet — surfaced while distilling a `tico` inbox entry that documented "new-agent proposal → tico interview → cobb design" as the standing convention. Read the doc and either design the security-expert agent (name, prompt, tools, hooks, kaizen seed) or, if scope/priority needs a stakeholder call first, surface that explicitly rather than silently sitting on an approved doc. |
+| K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19, items 1-3 already done — see below): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
 
 ## Parking lot / ideas
 - **Broader team-verbosity reduction (surfaced 2026-08-19, three of four slices executed —
@@ -103,8 +104,9 @@
   caveats into tables/sub-lists where the underlying info is enumerable — `analyst`'s "Evidence
   over vibes" run-on sentence (flagged 2026-08-09) — **✅ done 2026-08-19**; (4) prune
   hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three
-  defensive clauses — **not yet done, the only remaining item**. Revisit on request, or fold into
-  the next full team certification pass (§4) as a verbosity sub-check.
+  defensive clauses — **promoted to K-017** (Active table above) 2026-08-20, the only remaining
+  item. Revisit on request, or fold into the next full team certification pass (§4) as a
+  verbosity sub-check.
 - **Learnings capture redesigned team-wide: file-based inbox → per-agent FalkorDB graph
   (2026-08-20).** After item 1 above shipped (pointing every agent's Learning-capture paragraph
   at its own `inbox.md` header), the user reversed course: "I will migrate all agents to write
