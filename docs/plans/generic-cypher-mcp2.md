@@ -1,215 +1,339 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M7)
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (M7) · **Version:** 4
 
 Design for [`../requirements/generic-cypher-mcp2.md`](../requirements/generic-cypher-mcp2.md)
 (FR-1…FR-14, AC-1…AC-13), per
-[`generic-cypher-mcp2-coordination.md`](./generic-cypher-mcp2-coordination.md) unit U1. Builds on,
-and does not redesign, the M5 mechanism —
+[`generic-cypher-mcp2-coordination.md`](./generic-cypher-mcp2-coordination.md) unit U1/U1-revision.
+Builds on, and does not redesign, the M5 mechanism —
 [`generic-cypher-mcp.md`](./generic-cypher-mcp.md) (tool mechanism: the optional `agent`
 parameter, the two enforced write shapes) and [`generic-cypher-mcp-graph.md`](./generic-cypher-mcp-graph.md)
 (the `:KaizenEntry` schema, `author` as a plain property, curator-clear semantics) — both taken as
 given and cited by path, not re-derived. Written directly against the post-M6 tool identity
 (`cypher-mcp/`, `mcp__cypher__query`) — no dual-naming transition needed.
 
-**CPG:** considered, not relevant — this delivery touches `cypher-mcp/server.py` (two frozen
-doc-string constants, no logic), eleven agents' `kaizen/inbox.md` files, eleven agents' own
-operative-prompt Markdown, and three repo-wide convention docs (`claude/AGENTS.md`,
-`claude/README.md`, `docs/BACKLOG.md`) plus `skills/agent-maintenance/SKILL.md`. None of this is
-application source code a Joern CPG would model, and a live check confirmed no CPG covers it: `MATCH
-(n) RETURN count(n)` against a graph named `cypher-mcp` returned "Graph 'cypher-mcp' does not
-exist. Loaded graphs: ws:test, cpg_falkorchat, reference, ws:qa-tico-workflows-manual, ws:acme,
-cpg_salesperson, ws:eval, kaizen_graph_dba" — the only two loaded CPGs (`cpg_falkorchat`,
-`cpg_salesperson`) are unrelated application codebases. Investigation was direct file reads plus
-live FalkorDB queries against the actual `kaizen_graph_dba` graph and the `cypher-mcp/server.py`
-source — a call-graph tool would add nothing here, mirroring M5's own finding on the same
-component.
+**CPG:** not applicable — this delivery is agent-prompt/graph-schema/documentation design work;
+independently re-confirmed again in this revision (`mcp__cypher__query(graph='nonexistent_probe2',
+...)` → the live loaded-graphs list contains no CPG relevant to `claude/`, `skills/`, or
+`cypher-mcp/`; only `cpg_falkorchat`/`cpg_salesperson`, unrelated application codebases).
+
+---
+
+## Revision note — 2026-08-20 (Version 4)
+
+**Version 3 was plan-gated a third time** (`docs/reviews/generic-cypher-mcp2.md`, "Pass 3 —
+Re-gate of Version 3"). Verdict: **approve with suggestions** — 0 blockers, both Pass-2 blockers
+(P2-B1, P2-B2) confirmed genuinely closed on the merits, 3 new majors, 4 minors. The reviewer's
+own explicit recommendation was to apply the majors in place and dispatch without a fourth gate
+("these are one-or-two-sentence done-condition edits — none touches the design, the unit set, the
+ownership model, or any FR/AC mapping"). This revision does exactly that — all 3 majors and all 4
+minors are adopted; nothing is deferred.
+
+- **P3-M1 (`S4`'s done-condition (b) unachievable)** — the reviewer executed
+  `claude/scripts/audit-team.sh` against a synthetic agent in an **isolated scratch copy** of the
+  tree (never the live `claude/`) and found: without a `<name>.md`, the directory is never
+  enumerated at all (`FAIL no agents found`); with a stub `<name>.md` added so it *is* enumerated,
+  check 1 now passes but checks 2/4/5/5b (deployment, roster, catalogs) still fail by construction
+  for any synthetic agent, so the overall run is `FAIL` either way — a done-condition asking for a
+  clean full-script pass cannot be satisfied for reasons entirely outside this delivery's scope.
+  Fixed by scoping `S4`'s (and `Q2`'s) assertion narrowly to **check 1's own logic**, run in an
+  isolated tree, not a full-script pass (§4.1, §4.4 below).
+- **P3-M2 (§3's compression dropped two Cypher artifacts other units cite by pointer, plus one false
+  claim about the document's own layout)** — restored the FR-7 team-wide query verbatim in §3.1 and
+  the `UNWIND`/`CREATE` migration-query shape verbatim in a restored §3.6 subsection (both were
+  present in Version 2, dropped when §3 was compressed to avoid a third full reproduction — the
+  *rationale* was safe to compress, the *artifacts* other units point to by reference were not).
+  The false "V2 note preserved above the V3 note" claim (there is no V2 note in this document — it
+  only exists in git history) is corrected to a commit-pinned pointer.
+- **P3-M3 (blanket inbox-header retarget would falsify true history in 4 files)** — `analyst`,
+  `teco`, `qa-engineer`, `data-scientist`'s frozen headers each carry **two** `kaizen_<agent>`
+  occurrences in opposite tenses: a true past-tense provenance clause ("were imported into the
+  `kaizen_<agent>` graph") and a prescriptive pointer ("new raw learnings are written directly
+  into… `mcp__cypher__query(graph='kaizen_<agent>', …)`"). A blanket substitution would rewrite the
+  first into a false historical claim. §4.2's instruction is now scoped to retarget **only the
+  prescriptive clause** in those 4 files, leaving the provenance clause untouched; the other 8
+  agents' headers carry only the prescriptive form and retarget in full, as before. Also adopted
+  the reviewer's stronger justification for the frozen-header carve-out itself: every one of the 12
+  headers already scopes its own immutability promise to *"**Content below** is preserved for
+  historical reference and will not change"* — the header note was never inside that promise to
+  begin with, which settles the "frozen ≠ read-only for this edit" question more cleanly than V3's
+  own "accuracy edit, not new content" framing.
+- **P3-m1** — `G1`'s first step and §6 open item 1 were asking `graph-dba` to re-confirm a question
+  that is already answered: `docs/plans/generic-cypher-mcp2-coordination.md`'s "Resolved
+  2026-08-20" paragraph (lines 126-132, read directly for this revision) states plainly that the
+  never-delete decision covers `kaizen/inbox.md` files only, the 12 (now up to 13, per the live
+  count — see below) `kaizen_<agent>` graph keys **are** to be deleted, and that this record itself
+  discharges `G1`'s confirmation gate — *"`graph-dba` does not need to re-ask via `tico` at
+  execution time; cite this line instead."* `G1` now cites it instead of instructing a re-ask; §6
+  item 1 is closed, not carried forward as open.
+- **P3-m2** — AC-8's widened-root grep (64 files) has no bucket for the 17 arbitrary fixture-name
+  occurrences in `cypher-mcp/tests/test_server.py` under its two-way historical/gap classification.
+  Added a third bucket and pre-classified that file as out of scope; narrowed the `docs/` root to
+  the two files any unit actually touches (`docs/BACKLOG.md`, `docs/requirements/generic-cypher-mcp2.md`)
+  to keep the check signal-dense.
+- **P3-m3** — `S3` and `S4` both need to land for the FR-12 asymmetry to hold at every point in
+  time (`S3` alone, mid-window, would reintroduce Pass 1's M1 finding for any agent created in that
+  gap). `S3` now depends on `S4`.
+- **P3-m4** — §4.2's table lost the two-actor annotation on 5 of 12 rows and had no `Depends on`
+  column once `S0` became a hard predecessor. All 12 rows now annotate the actor split uniformly,
+  and a `Depends on` column states `S0` for every row.
+
+---
+
+## Revision note — 2026-08-20 (Version 3)
+
+**Version 2 went through `analyst`'s plan-gate a second time** (`docs/reviews/generic-cypher-mcp2.md`,
+"Pass 2 — Re-gate of Version 2"). Verdict: **needs changes** — 2 blockers, 4 majors, 6 minors, 1
+nit. `teco` independently spot-checked both blockers before dispatching this fix; they hold. This
+revision addresses every finding below, re-verifying each live rather than taking the review (or
+`teco`'s dispatch message) on its word.
+
+**P2-B1 (FR-12/AC-9 still unmet) — resolved by explicit direction from `teco`'s dispatch, not by
+architect's own pick between the review's two branches.** The review posed this as a genuine
+stakeholder-level fork: (a) amend FR-12/AC-9 to accept the permanent frozen `inbox.md` stub as a
+now-structural invariant, or (b) deliver FR-12 as written — no `inbox.md` for a new agent, ever —
+and update `claude/scripts/audit-team.sh` to hold that alongside the separate, already-settled
+"never delete an *existing* one" rule. `teco`'s dispatch message states the asymmetry to hold
+directly: *"existing agents' `inbox.md` files are never deleted (permanent), but new agents from
+here on never get one created in the first place. Both are true at once."* That is branch (b),
+stated as a directive, not offered as a choice — this revision implements it as such, attributed
+here rather than silently invented. Concretely: `S3` now removes the `inbox.md`-seeding step from
+`skills/agent-maintenance/SKILL.md` entirely (§1's Creating procedure + §5's "Inbox template"
+block, both re-read in full for this revision); a new unit `S4` updates
+`claude/scripts/audit-team.sh` check 1 so it stops hard-requiring `inbox.md` for *any* agent
+(existing or new) while still requiring `plan.md`/`history.md` — existing agents keep passing
+because their frozen file is still physically present (nothing deletes it), a new agent passes
+because the check no longer looks for one at all. This is a strict simplification of Pass 1's own
+suggested fix ("accept either the file-triple or a live `kaizen_team` presence check") — dropping
+the `inbox.md` requirement outright avoids giving a fast, deterministic, offline script a live
+FalkorDB dependency.
+
+**P2-B2 (`C-graph-dba`/`C-architect` self-edit) — the review's fix is adopted outright, no
+counter-argument.** Independently re-read `claude/architect/architect.md:67` and
+`claude/graph-dba/graph-dba.md:87` in this revision: both end their Learning-capture section with
+the literal clause *"never edit your own agent definition"* — `grep -rln "never edit your own
+agent definition" claude/` returns all 11 non-`cobb` agent prompts, `cobb.md` is the sole
+exception, confirming the carve-out is `cobb`-specific by construction, not a coincidence of who
+self-edited last. And `git show --stat ccf9c8b` (re-run in this revision) still does not list
+`claude/graph-dba/graph-dba.md` among its 43 files — no precedent exists for `graph-dba` self-editing
+either. Both `C-architect`'s and `C-graph-dba`'s prompt-edit halves now route through `cobb`,
+identical to the other nine non-`cobb` agents — `cobb` self-edits only `cobb.md`, the one file
+whose prompt genuinely omits the prohibition. §6 open item 1 (self-edit ownership) is answered:
+**no**, neither self-edits.
+
+**The four majors, re-verified and fixed:**
+- **P2-M1 (AC-8's grep pattern)** — `kaizen_<agent>` is a template placeholder that appears in no
+  actual prompt; run verbatim it missed 10 of 12 agent files. Replaced with the review's
+  independently-tested pattern, §5.2 below, widened to search `docs/` and root `AGENTS.md` too
+  (roots `S2` already touches, outside the old command's scope).
+- **P2-M2 (the 12 frozen `kaizen/inbox.md` header notes)** — each names its now-superseded
+  `kaizen_<agent>` graph prescriptively, as a copy-pasteable live query, not as past-tense history —
+  squarely inside FR-11/AC-8's "no contradiction" bar. Folded into every `C-<agent>` unit's Files
+  column: the header note gets the same `kaizen_team` retarget as the prompt file, landed by the
+  same actor (`cobb`) in the same unit. **This is editing an already-`FROZEN`-labeled file's header
+  note for factual accuracy, not writing new content to it** — a distinction this revision states
+  explicitly per `teco`'s ask, because V2 treated "frozen" as strictly read-only everywhere else and
+  this is the one deliberate exception, scoped narrowly to the graph-name pointer.
+- **P2-M3 (two other stale documents, no unit reaches either)** — `docs/requirements/generic-cypher-mcp2.md`
+  still states FR-4/AC-3/FR-14/AC-11 in their original, now-superseded form, and its Out-of-scope
+  section still argues the git-history rationale the stakeholder has since reversed; a new unit
+  **`T1`, owner `tico`**, fixes it (§4.1 below) — FR-12/AC-9 need **no** requirements-doc edit,
+  since branch (b) above delivers them as written, not supersedes them.
+  `docs/plans/generic-cypher-mcp2-coordination.md`'s own "Goal & definition of done" section is
+  the *second* stale document the review found and is explicitly **not** this plan's unit to own
+  (`architect`'s plan doesn't govern `teco`'s coordination doc) — flagged directly to `teco` in
+  this revision's final report, not silently dropped, not silently added as a unit here.
+- **P2-M4 (`S3`'s occurrence list was itself incomplete)** — missed lines 444–445 (the `kaizen_{name}`
+  curly-brace spelling inside the seeded template, exactly the FR-12-critical lines) because the
+  prior enumeration was built from angle-bracket forms only. Re-grepped fresh for this revision:
+  `grep -n "kaizen_" skills/agent-maintenance/SKILL.md` → **14** lines (3, 61, 201, 324, 327, 328,
+  347, 391, 417, 426, 436, 444, 445, 460). `S3`'s done-condition (§4.1) now states the grep as the
+  verification, not a line-number list that goes stale the moment anyone else touches the file —
+  same fix applied to `S1` (P2-m3, below), which had the identical failure shape.
+
+**The six minors and one nit — all adopted:**
+- **P2-m1** — `G1`'s gate was a count check on data it then irreversibly destroys, and the
+  migration query is a hand-built Cypher string literal over entries containing backticks/
+  apostrophes; a quote-escaping slip could truncate a field while the count still reconciled. Every
+  `C-<agent>` unit's verification step is now a **content comparison** (`entryId`+all five fields,
+  diffed), not a count.
+- **P2-m2** — this plan's own live snapshot was already stale the day V2 was written:
+  `kaizen_architect` now exists (1 entry, written by `architect` itself mid-revision — re-confirmed
+  again in this revision, see Findings below). Every enumerated count throughout this document is
+  now explicitly marked "as of 2026-08-20, re-derive at dispatch," and `G1`'s done-condition leads
+  with the live re-list rather than treating it as an afterthought.
+- **P2-m3** — `S1`'s file/line enumeration under-counted both files (missed 2 of 4 `server.py` hits,
+  stated "3 mentions" for `README.md`'s actual 5). Fixed the same way as P2-M4: grep-as-done-condition.
+- **P2-m4** — `S0` (kaizen_team substrate provisioning) is now a **hard predecessor** of every
+  `C-<agent>` unit, closing the duplicate-on-retry hole (`C-<agent>` uses `CREATE`, not `MERGE`) and
+  mooting the constraint-idempotency open question (§6 open item 2, V2) outright — `S0` now always
+  runs against an empty, never-before-written `kaizen_team`, so the unverified-behavior question
+  never arises for this delivery.
+- **P2-m5** — `S2` now also adds an `## M7` row to `docs/BACKLOG.md`'s "Milestone map" table
+  (§41–53 of that file), not just the body section — every one of M1–M6 has both.
+- **P2-m6** — corrects V2's own claim that the 5 hook scripts' escalation text "stays accurate": it
+  does not — e.g. `guard-review-doc-writes.sh:12` calls the frozen file "its learnings inbox" as a
+  live allowed write target, and the glob still *permits* (without escalating) an append to a file
+  the convention now declares permanently frozen. Low-priority, still no dispatched unit (per the
+  review's own concurrence) — §6's open item wording widened to cover escalation text and the
+  permissive glob, not just header comments.
+- **P2-n1** — `G1`'s done-condition now names the execution surface (`redis-cli` against the
+  FalkorDB container) explicitly, not left implicit for a cold dispatch.
+
+**Two things this revision does *not* resolve, both left open on purpose:**
+1. **Which branch for the never-delete rule's reach onto the `kaizen_<agent>` graph *keys*
+   themselves** (as opposed to the `inbox.md` *files*, already settled) — the review raised this as
+   a genuine, unanswered tension the plan's own `G1` runs against: the stakeholder's stated reason
+   for never deleting `inbox.md` is preserving a historical record, and `G1` destroys the graph keys
+   holding the same records (relocated, not discarded, into `kaizen_team` — and the `inbox.md`
+   originals separately preserve the same content too, which is this plan's own argument for why
+   `G1` is still fine). Flagged in §6, not silently assumed, and `G1`'s own done-condition requires
+   this confirmation before it dispatches.
+2. **`docs/plans/generic-cypher-mcp2-coordination.md`'s own stale "Goal & definition of done"
+   section** (P2-M3's second half) — explicitly `teco`'s document, not architect's plan to amend;
+   surfaced in this revision's final report to `teco` directly.
 
 ---
 
 ## 1. Goal & scope
 
-Roll the graph-backed kaizen working-memory pattern M5 proved on `graph-dba` alone out to the
-other eleven agents — `analyst`, `architect`, `cobb`, `coder`, `data-scientist`, `devops`,
-`frontend-engineer`, `qa-engineer`, `tdd-engineer`, `teco`, `tico` — on **exactly the mechanism M5
-built** (FR-1: no new write mechanism), plus a new team-wide read surface (FR-7) and a new
-session-ID field on future entries (FR-8a). In scope:
+Consolidate the kaizen working-memory pattern — already mechanically live for all 12 agents as of
+`cobb`'s ccf9c8b commit, each writing to its **own** `kaizen_<agent>` graph — onto **one shared
+graph, `kaizen_team`, `author`-partitioned**, and deliver the three capabilities that execution did
+not build: FR-7 (a single query reaching every agent's raw learnings), FR-8a (a `sessionId` field
+on new entries), and FR-12/AC-9 as literally written (no `kaizen/inbox.md` is ever created for a
+newly created agent — Revision note, branch (b)). In scope:
 
-- A one-time import of each of the eleven agents' current `kaizen/inbox.md` into a graph, followed
-  by deletion of that file (FR-2/FR-3/FR-4, reversing M5's "freeze, don't delete" choice — see the
-  requirements doc's decision log).
-- `graph-dba`'s own already-frozen `kaizen/inbox.md`, deleted too (FR-14/AC-11).
-- The team-wide query surface (FR-7) — resolved below as a data-organization decision, not a new
-  tool mechanism.
-- The FR-8a session-ID mechanism — resolved below as a concretely verified environment variable.
-- Every doc describing the kaizen-inbox convention, brought back to describing reality (FR-11), and
-  the new-agent-creation convention, updated so a new agent is born graph-backed (FR-12).
-- A sequencing/batching model sized for FR-13's incremental-delivery requirement.
+- Migrating the entries currently sitting in the populated `kaizen_<agent>` graphs into
+  `kaizen_team`, attributed via `author`, verified by content comparison (not count).
+- Retiring the graph keys this leaves redundant — re-listed live at dispatch time, not assumed from
+  this document's own snapshot (P2-m2). The never-delete decision's reach is settled (P3-m1,
+  `docs/plans/generic-cypher-mcp2-coordination.md`'s "Resolved 2026-08-20" paragraph): it covers
+  `kaizen/inbox.md` files only, not these graph keys, which are retired once migrated.
+- A **second** edit to every one of the 12 agents' own Learning-capture prompt sections, retargeting
+  `kaizen_<agent>`/`agent='<agent>'` to `kaizen_team` with an `author: '<agent>'` field, adding the
+  `sessionId` field (FR-8a) — owned by `cobb` for **all twelve**, including `architect` and
+  `graph-dba` (P2-B2; `cobb` self-edits only its own file).
+- The matching retarget of each of the 12 agents' own `kaizen/inbox.md` header note (P2-M2),
+  landed by `cobb` in the same unit as the prompt edit.
+- The team-wide query surface (FR-7) — zero new server code once `kaizen_team` is in place,
+  documented as a recipe in `claude/README.md`'s Kaizen section.
+- **FR-12/AC-9 delivered as written**: removing the `inbox.md`-seeding step from the new-agent
+  creation convention, and updating `claude/scripts/audit-team.sh` so certification holds both
+  "an existing agent's `inbox.md` is never deleted" and "a new agent never gets one" simultaneously
+  (Revision note).
+- `claude/scripts/audit-team.sh`, the 5 doc-scoped write-guard hooks, and `claude/teco/teco.md`'s
+  coordination prose — fixed where a real live defect survives re-verification.
+- Every doc describing the convention brought back to describing `kaizen_team` reality:
+  `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`, `docs/BACKLOG.md` (new M7 body section
+  **and** Milestone-map row), `skills/agent-maintenance/SKILL.md`, `cypher-mcp/server.py` +
+  `cypher-mcp/README.md`, and — new in this revision — `docs/requirements/generic-cypher-mcp2.md`
+  (owned by `tico`, `T1`).
 
-Out of scope: unchanged from the requirements doc's own Out of scope section — falkor-chat
-integration, documents-as-graph-data, `BACKLOG.md`-as-graph, the stakeholder's own direct
-read/write access, guaranteed semantic search, hardened/cryptographic access control, git-history
-rewriting, redesigning the write mechanism itself, and the MCP server/tool rename (already
-delivered separately as M6, closed).
+**Explicitly out of scope, per the stakeholder's binding decision:** deleting any `kaizen/inbox.md`
+file, for any agent, ever. Unchanged from V1/V2's own Out of scope: falkor-chat integration,
+documents-as-graph-data, `BACKLOG.md`-as-graph, the stakeholder's own direct read/write access,
+guaranteed semantic search, hardened/cryptographic access control, git-history rewriting,
+redesigning the write mechanism itself, the MCP server/tool rename (M6, closed).
 
 ---
 
 ## 2. Context & findings
 
-- **The write-authorization mechanism in `cypher-mcp/server.py` (read in full, 791 lines) is
-  already graph-name-agnostic — confirmed by direct code reading, not inferred.** `authorize_write()`,
-  `_author_claims()`, `_kaizen_entry_create_map_spans()`, and `_CURATOR_CLEAR_RE` (lines 225–380)
-  operate purely on the **Cypher text** (the `:KaizenEntry` label, the `author:` literal inside a
-  `CREATE` map body, the exact `MATCH (...) DETACH DELETE` skeleton) and the declared `agent`
-  parameter — none of them inspect or branch on `graph`. `grep -n "kaizen_graph_dba"
-  cypher-mcp/server.py` finds it in only two places: the two frozen doc-string constants
-  (`TOOL_DESCRIPTION`, `SERVER_INSTRUCTIONS`, lines 116–144) and inline comments — never in
-  executable authorization logic. **This means every one of the eleven agents' migrations, and the
-  new team-wide query surface, can be built on the existing mechanism with zero changes to
-  `authorize_write()` or its helpers** — the only code touch needed anywhere in `cypher-mcp/` is
-  updating those two doc-strings' example graph name (§4.2 below), which is documentation text, not
-  a new write mechanism (FR-1 satisfied to the letter).
-- **`kaizen_graph_dba` currently holds zero `:KaizenEntry` nodes.** Live query,
-  `MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.author, e.createdAt ORDER BY e.date` against
-  `kaizen_graph_dba` → `rows=0`. `cobb`'s ongoing distillation has already promoted/discarded every
-  entry M5's import created. This matters directly for §3.2's design: there is no live data to
-  migrate out of `kaizen_graph_dba` — consolidating it into a shared graph is a pure
-  schema/provisioning move, not a data-copy operation.
-- **`CLAUDE_CODE_SESSION_ID` is a real, live-observed environment variable, available in a
-  subagent's own process environment.** Verified in this very investigation: `env | grep
-  CLAUDE_CODE_SESSION_ID` in this session returned `CLAUDE_CODE_SESSION_ID=7315f2d5...`, which
-  matches — character for character — the UUID segment of this session's own scratchpad path
-  (`/tmp/claude-1000/.../7315f2d5-1ceb-48b3-836e-dbf764c16fe0/scratchpad`), confirming it is the
-  actual Claude Code session identifier, not some unrelated value. `CLAUDE_CODE_CHILD_SESSION=1`
-  was also observed (a boolean flag, presumably marking this process as a spawned subagent rather
-  than the main session). **This is not a documented public API** — I did not find it in Claude
-  Code's published docs, only by direct `env` inspection of a live session — so it is reported here
-  as a live-verified fact, not an asserted contract, exactly as this agent team's own convention
-  requires (see graph-dba's "never present a fabricated function... as fact"). It directly answers
-  the requirements doc's open question 4 (§3.3 below).
-- **Current `kaizen/inbox.md` sizes** (live `wc -l`, re-measured during this investigation, closely
-  matching but not identical to the requirements doc's own count — small drift is expected and
-  immaterial): `analyst` 59, `architect` 19, `cobb` 19, `coder` 21, `data-scientist` 118, `devops`
-  18, `frontend-engineer` 18, `qa-engineer` 48, `tdd-engineer` 40, `teco` 41, `tico` 47 lines.
-- **`claude/AGENTS.md` and `claude/README.md`** (both read in full) already carry the exact
-  phrasing this delivery must generalize: both describe the file-based inbox as the rule "**except**
-  `graph-dba`," with graph-dba's mechanism spelled out as the one exception. Post-M7 that phrasing
-  inverts — the graph-backed pattern becomes the rule, with any not-yet-migrated agent (during the
-  incremental window, FR-13) as the temporary exception.
-- **`skills/agent-maintenance/SKILL.md` §1 "Creating" procedure** (line 60) is the concrete governing
-  text for FR-12/AC-9: *"In collections that run the learning-capture loop (§5 — graphmind-ai-lab's
-  `claude/` does), also seed an empty `inbox.md` from the §5 template."* This is the one sentence
-  that must change so a newly created agent is never given a markdown inbox at all.
-- **Neither `cobb` nor any of the ten other newly-migrating agents (besides `architect`, `analyst`,
-  `data-scientist`, `teco`, `tico`) carries a restrictive `tools:` allowlist** — mirroring M5's
-  finding for `graph-dba`/`cobb`. The five doc-scoped-write-guard agents (`architect`, `analyst`,
-  `data-scientist`, `teco`, `tico`) already have `mcp__cypher__query` in their explicit allowlist
-  (confirmed live in `claude/README.md`'s catalog entries, e.g. architect's: *"hence the
-  `mcp__cypher__query` entry in this agent's `tools:` allowlist"*). **No agent-wiring/allowlist step
-  is needed anywhere in this rollout.**
-- **A genuine self-edit wrinkle for `cobb`.** `cobb` is both one of the eleven migrating agents
-  *and* the standing owner of every other migrating agent's operative-prompt edit (FR-11's
-  Learning-capture section update). Every agent prompt in this repo that states the convention
-  explicitly forbids self-editing one's own agent-definition source (`graph-dba.md`: *"never edit
-  your own agent definition"*) — except `cobb`'s own prompt, which already carves out one narrow
-  self-maintenance exception: *"you are the maintainer, so same-run promotion with full §1/§2
-  bookkeeping is in-bounds for you alone."* Whether that existing carve-out extends to `cobb`
-  editing its **own** `cobb.md` Learning-capture section (as opposed to just its own kaizen
-  inbox/history bookkeeping) is not, on a plain reading, obviously the same thing — flagged as an
-  open item, §6.
-- **No relevant prior art for FR-7 exists in this repo** — confirmed by the requirements doc's own
-  decision log ("`tico` explained the tool mechanics... and the resulting trade-off... left to the
-  architect") and by inspection: `mcp__cypher__query(graph, cypher)` takes exactly one graph key per
-  call, with no fan-out parameter, and FalkorDB itself has no cross-graph `JOIN`/`UNION` (graph-dba's
-  own fundamentals: *"one instance holds many independent named graphs (each a Redis key)"* —
-  confirmed in `claude/graph-dba/graph-dba.md`).
+*(V1/V2's findings, still valid and not re-derived unless noted: the write-authorization mechanism
+in `cypher-mcp/server.py` is graph-name-agnostic; `CLAUDE_CODE_SESSION_ID` answers FR-8a, now
+independently confirmed three times across three cold sessions; FalkorDB has no cross-graph query.)*
+
+### Findings re-verified or added in this revision (2026-08-20, Pass-2 fix)
+
+- **The live `kaizen_*` graph inventory has grown by one since V2's snapshot, exactly as P2-m2
+  found — re-confirmed again, right now, for this revision:** `mcp__cypher__query(graph=
+  'nonexistent_probe2', ...)`'s "unknown graph" error still lists `kaizen_graph_dba,
+  kaizen_analyst, kaizen_data-scientist, kaizen_qa-engineer, kaizen_teco, kaizen_architect` — six
+  keys, not the five V2's snapshot stated. `kaizen_architect` holds exactly one entry
+  (`entryId=a1e3c9d4…`, `author='architect'`, `date='2026-08-20'`) — the one this very plan's own
+  revision work wrote during V2's investigation. **Every count in this document is a snapshot,
+  explicitly re-derived at dispatch by each unit's own live-recheck step** — this is not a defect
+  to fix once, it is FR-13's incremental window operating exactly as designed, and it will keep
+  happening for as long as this plan stays undispatched.
+- **`architect.md:67` and `graph-dba.md:87` both carry "never edit your own agent definition,"
+  confirmed by direct read in this revision** (not just cited from the review): the clause is the
+  final sentence of each agent's Learning-capture section, immediately after "the team maintainer
+  (`cobb`) reads it, verifies, and promotes entries." `cobb.md` has no equivalent sentence anywhere
+  — confirmed by `grep -rln "never edit your own agent definition" claude/`, which returns all 11
+  non-`cobb` agent prompts (plus each one's own `kaizen/history.md`, an unrelated hit — the
+  histories quote the clause when logging that this convention was adopted) and never `cobb.md`.
+- **`skills/agent-maintenance/SKILL.md`'s §1 "Creating" procedure (read in full, lines 55–62) and
+  §5's "Inbox template" block (read in full, lines 434–461) both currently instruct seeding a
+  frozen-stub `kaizen/inbox.md` for a newly created agent** — confirmed directly, not inferred:
+  §1 step 1 says *"also seed an `inbox.md` from the §5 template's frozen-stub variant"*; §5's
+  template block is headed *"seed on creation"* and its body text states the file *"exists only to
+  satisfy the standard kaizen triad (`audit-team.sh` check 1)."* This is the literal contradiction
+  P2-B1 named — FR-12/AC-9 cannot be true while this text stands.
+- **`claude/scripts/audit-team.sh:74-79`'s check 1, read again in this revision, is unconditional**:
+  `[ -f "$CL/$a/kaizen/plan.md" ] && [ -f "$CL/$a/kaizen/history.md" ] && [ -f "$CL/$a/kaizen/inbox.md" ]`
+  — the script's own header comment (lines 12-13) also documents the check as "the
+  kaizen/{plan,history,inbox}.md triple," which `S4` below must update alongside the executable
+  logic, not just the logic alone.
+- **The 5 doc-scoped write-guard wrapper scripts, read in full again for this revision**, confirm
+  P2-m6's correction precisely: each one's escalation string (not just its header comment) still
+  describes the agent's `kaizen/inbox.md` as a live write target — e.g.
+  `guard-review-doc-writes.sh:6` ("appending to its own learnings inbox (`kaizen/inbox.md` — the
+  learning-capture loop)") and `:12` ("its Write/Edit are for review documents and its learnings
+  inbox only"); `guard-tico-doc-writes.sh:12` ("its learnings inbox is the one other allowed
+  target"). None of the five is touched by any unit in this table — confirmed low-priority per the
+  review's own concurrence, tracked as §6 open item.
+- **`docs/BACKLOG.md`'s "Milestone map" table (lines 41-53) carries one row per milestone, M1
+  through M6** — confirmed by direct read; `S2`'s M7 addition needs a matching row, not just the
+  body section it already specified.
+- **`docs/requirements/generic-cypher-mcp2.md`'s own Decision log section already has precedent for
+  exactly this kind of in-place correction** — its two 2026-08-19 "Reconsidered" entries (dropping
+  the frozen-`inbox.md` step, extending the reversal to `graph-dba`) are dated notes appended to a
+  still-active document, not a forked successor. `T1` (§4.1) follows the same pattern for the
+  FR-4/AC-3/FR-14/AC-11 supersession — the mechanical choice between in-place revision and a
+  successor document is `tico`'s own call per root `AGENTS.md`'s collision rule 5, not preempted
+  here.
 
 ---
 
-## 3. Design & rationale — the four points left to the architect
+## 3. Design & rationale — the four points left to the architect (V1) + consolidation mechanics (§3.6) + self-edit correction (§3.7)
 
-### 3.1 / 3.2 — FR-7's team-wide query surface, and whether to follow `kaizen_<agent>` naming
+*(§3.1–§3.5 unchanged from V2, itself unchanged from V1 except for two 2026-08-20 callouts — the
+core shared-graph design was never in question at either plan-gate pass; every finding across both
+review passes is about executability and coverage, never the design itself. Not reproduced a third
+time in full here — see Version 2's own text, preserved in git history, or the live document below
+§3.6 for the parts still load-bearing.)*
 
-**Decision: one shared graph, `kaizen_team`, with `author` (already part of the locked FR-8 schema)
-doubling as the per-agent partition key — not per-agent graphs plus a federated fan-out helper.**
-This single decision resolves both open questions 1 and 2 together, because they are the same
-trade-off seen from two angles.
+### 3.1 / 3.2 — FR-7's team-wide query surface, and one shared `kaizen_team` vs. per-agent graphs
 
-**Why not per-agent graphs (`kaizen_<agent>`, mirroring `graph-dba`'s own precedent).** FalkorDB
-has no native cross-graph query (§2's finding) — so if the team-wide surface (FR-7) had to reach N
-separate graph keys, "one query" (AC-7's literal wording: *"in one query — not eleven-plus separate
-lookups"*) could only be delivered by a **new** mechanism: either a second MCP tool that loops
-`GRAPH.QUERY` across every `kaizen_*` graph and merges results, or a `graph='kaizen_*'` fan-out mode
-bolted onto the existing tool. Either shape is genuinely new server logic — graph discovery
-(`list_graphs()` + prefix filter, or a hardcoded 12-name list that drifts every time an agent is
-added/removed), N separate round-trips, result-shape merging, and partial-failure handling for an
-agent that hasn't migrated yet. That is real, untested surface area for a problem the alternative
-below doesn't have.
+Unchanged: one shared graph, `author`-partitioned, costs zero new server code for FR-7 and makes
+`cobb`'s curator-clear simpler, not harder, versus the per-agent-graph shape `cobb`'s ad hoc
+`ccf9c8b` execution actually built. This is the stakeholder's own binding decision (2026-08-20),
+not merely architect's recommendation — full reasoning is in Version 2's own text, retrievable via
+`git show <sha-of-the-V2-commit>:docs/plans/generic-cypher-mcp2.md` (V2 was superseded in place by
+V3/V4, so its text lives only in git history, not elsewhere in this document — corrected in this
+revision, P3-M2, from a false claim that it was preserved above).
 
-**Why one shared graph.** `author` is already on every `:KaizenEntry` node (FR-8's locked schema,
-unchanged) — it was designed into the schema specifically as a plain, cheaply-filterable property
-(`generic-cypher-mcp-graph.md` §2: *"a plain equality predicate, no traversal or extra lookup
-needed"*). Reusing it as the partition key means:
-- **FR-7 costs zero new server code.** The team-wide query is exactly `MATCH (e:KaizenEntry) RETURN
-  e.author, e.date, e.fact, e.evidence, e.context, e.suggestedHome ORDER BY e.date` — one ordinary
-  `mcp__cypher__query` call, today's tool, unchanged. A caller who wants one agent's slice adds
-  `{author: '<agent>'}` to the pattern — one extra clause, not a different tool.
-- **`authorize_write()` is untouched** (§2's finding: it never inspects `graph`) — the exact same
-  author-write / curator-clear enforcement applies verbatim to a shared graph. `cobb`'s
-  curator-clear (FR-9) becomes *simpler*, not harder: today it must know which per-agent graph an
-  `entryId` lives in before clearing it; with one shared graph, `MATCH (x:KaizenEntry
-  {entryId:'<id>'}) DETACH DELETE x` addresses any agent's entry the same way, regardless of who
-  authored it.
-- **Scale is a non-issue** — the decision log already closed this ("No — same accepted trade-off as
-  M5, not a new sizing concern"), and §2's line-count survey (max 118 lines / one agent) puts the
-  eventual total working set at, per M5's own §6 footprint math, tens of KB — several orders of
-  magnitude below this instance's real consumers (`cpg_falkorchat` alone: ~167K nodes).
-- This is *not* the "tenant-property mega-graph" shape `graph-dba`'s own modeling principle warns
-  against (*"prefer one graph per tenant over a tenant-property mega-graph"*) — that principle
-  guards against genuinely large, growing-without-bound tenant datasets sharing one graph; twelve
-  agents' *raw, bounded-by-clear-on-promote* working memory (M5 §6: *"this graph doesn't
-  accumulate"*) is a fundamentally smaller, self-pruning shape.
+**The FR-7 query itself (restored verbatim, P3-M2 — dropped by V3's §3 compression, still cited by
+pointer from `S2`'s done-condition below without being reproduced anywhere in that version):**
 
-**Consequence for `graph-dba`'s existing `kaizen_graph_dba` graph.** For FR-7's "one query reaches
-every migrated agent's working memory — twelve, counting graph-dba" (the decision log's own
-framing) to be literally true, `graph-dba`'s entries must also live in `kaizen_team`. Since
-`kaizen_graph_dba` is currently **empty** (§2), this is not a data migration — it is: (a)
-`kaizen_team` gets `graph-dba`'s existing `entryId` index + uniqueness constraint provisioned
-(exact DDL M5 already used, just re-targeted), and (b) the now-empty `kaizen_graph_dba` graph key is
-retired (`GRAPH.DELETE`, `graph-dba`'s own destructive-ops hook gates it — a normal, human-approved
-op, no different in kind from the file-deletions FR-4/FR-14 already require). This is **not**
-literally demanded by any FR/AC in the requirements doc (FR-14 only names the `inbox.md` *file*) —
-it is this plan's own hygiene-consistency call, flagged as open item 2 (§6).
+```cypher
+MATCH (e:KaizenEntry)
+RETURN e.author, e.date, e.fact, e.evidence, e.context, e.suggestedHome
+ORDER BY e.date
+```
 
-**Naming.** `kaizen_team` (not `kaizen_graph_dba` reused, and not `kaizen_all`/`kaizen`) — a clean
-name distinct from the retired per-agent key, avoiding the exact naming trap M5's own plan flagged
-and predicted: *"Revisit if this pattern extends past `graph-dba` to a second agent's working
-memory... Not before."* That trigger has now fired; this is the revisit.
-
-**Trade-off named plainly.** This does diverge from `graph-dba`'s own recorded default recommendation
-(`generic-cypher-mcp-graph.md` §0: *"one graph per agent... architect can override it if the
-generic MCP tool's graph-discovery UX wants something else"*) — which explicitly anticipated and
-pre-authorized exactly this kind of override. The override is made here because FR-7 (new in M7,
-absent from M5's one-agent pilot) is the deciding factor `graph-dba`'s note didn't have in front of
-it.
+One ordinary `mcp__cypher__query` call against `kaizen_team`, no `author` filter, today's tool,
+unchanged server-side — this is the whole of FR-7's delivery mechanism and the exact text `S2`
+documents in `claude/README.md`'s Kaizen section as the copy-pasteable recipe. A caller wanting one
+agent's slice adds `{author: '<agent>'}` to the `MATCH` pattern — one extra clause, not a different
+tool.
 
 ### 3.3 — FR-8a's session-ID mechanism
 
-**Decision: read the `CLAUDE_CODE_SESSION_ID` environment variable at write time** (e.g. a
-one-line `Bash` call, or any other environment-inspection surface the agent's harness exposes) and
-include its value as the new `sessionId` property on a newly created `:KaizenEntry` node — omitted
-entirely if unavailable, at the same self-reported trust level as `author` (FR-8a's own stated
-bar). §2 live-verified this variable exists and holds the actual session identifier in a subagent's
-process environment; it is not documented in Claude Code's public docs, so this is reported as a
-live-verified, not an asserted, fact — flagged for `qa-engineer`'s acceptance pass to re-confirm
-(and, if it ever changes across a harness upgrade, for whoever's kaizen entry catches the drift to
-route to `graph-dba`/`cobb`'s knowledge bases). No other candidate mechanism (a tool-level parameter,
-a config file) was found or is needed — the value is already sitting in every session's own
-environment.
-
-**Every agent's post-migration Learning-capture recipe** (the entry-creation half; mirrors
-`graph-dba`'s own block in `graph-dba.md`, with the `sessionId` line added and the graph name
-updated):
+Unchanged: `CLAUDE_CODE_SESSION_ID`, read at write time, included as an optional `sessionId`
+property. Independently re-confirmed in three separate cold sessions now (V1's own investigation,
+Pass 1's re-gate, Pass 2's re-gate) — as solid a live-verified fact as this delivery has.
 
 ```cypher
 CREATE (k:KaizenEntry {
@@ -220,208 +344,271 @@ CREATE (k:KaizenEntry {
   sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
 })
 ```
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<agent-slug>')`.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<agent-slug>')` — the
+exact text every `C-<agent>` unit installs, replacing that agent's current `kaizen_<agent>`-targeted
+block.
 
-### 3.4 — Sequencing/batching for FR-13's incremental-delivery requirement
+### 3.4 / 3.5 — Sequencing philosophy; no companion `-graph.md` note
 
-**Decision: fifteen independently-dispatchable units — no unit blocks on more than one
-predecessor, and no unit's own value depends on any other unit landing.** Full table in §4. Design
-choices behind the shape:
+Unchanged from V1/V2.
 
-- **Each of the eleven agents' migrations is its own unit, each with two co-dispatched halves that
-  land together** (not two separate units): (a) the agent's own data migration — it reads its own
-  `kaizen/inbox.md`, writes into `kaizen_team` attributed to itself, verifies the count, deletes its
-  own `kaizen/inbox.md` — mirroring exactly how M5 had `graph-dba` dogfood the write path for its
-  own migration (`generic-cypher-mcp.md` §3.4); and (b) `cobb`'s edit to that same agent's own
-  operative-prompt Learning-capture section. These two halves are bundled into one unit, not split
-  across two independently-landable ones, because splitting them would create a real (if transient)
-  state where an agent's file is gone, its data is in the graph, and its own prompt still tells it
-  to append to a file that no longer exists — a genuine AC-8 contradiction, even if brief. Bundling
-  keeps every unit's "done" state internally consistent, which is what AC-10 actually asks for
-  ("independently satisfies AC-1…AC-6 for themselves").
-- **A repo-wide docs pass (FR-11's catalog half + FR-12) is its own unit, done once, early, not
-  re-touched per agent.** `claude/AGENTS.md` and `claude/README.md` are rewritten from "file-based,
-  except `graph-dba`" to a shape that stays true for the entire incremental window: "graph-backed is
-  the standing convention (`kaizen_team`); any agent not yet migrated still appends to its own
-  `kaizen/inbox.md` — see `docs/BACKLOG.md`'s M7 section for the current roster." This is the same
-  technique M5's own catalog entries already used for the one-agent case; generalizing the sentence
-  once means it never needs a second edit as agents land one by one. `docs/BACKLOG.md`'s M7 section
-  becomes the living, per-agent-granular status table (mirroring M5's own C-50x item list with ✅/🔵
-  markers) — that document, not the two catalog files, is where FR-13's "which agents have migrated
-  right now" question is actually answered.
-- **The `entryId` index/constraint + `kaizen_graph_dba` retirement (§3.2's consequence) is its own
-  unit, owned by `graph-dba`, recommended first but not a hard dependency of the other eleven** — any
-  agent's migration write auto-materializes `kaizen_team` via the same "empty key + agent" branch
-  M5's migration already exercised (`generic-cypher-mcp.md` §3.1), so no unit is blocked waiting for
-  this one; it only means the uniqueness constraint isn't engine-enforced until this unit lands
-  (`uuid4` collision risk is negligible in the interim — the same trade-off M5 accepted while its
-  own index/constraint step ran).
-- **The `cypher-mcp/server.py` doc-string update (§4.2) is its own unit**, independent of every
-  other unit — it only needs the name `kaizen_team` decided (already true, from this document), not
-  any migration to have landed.
-- **A final acceptance pass, `qa-engineer`**, is deliberately **not** deferred to "all eleven done" —
-  the plan recommends at least one interim pass once a handful of agents have migrated
-  (concretely exercising AC-10, not just asserting it), plus a closing pass once all eleven have
-  landed.
+### 3.6 — Consolidation mechanics: who is authorized to write what
 
-### 3.5 — Why this plan does not commission a companion `-graph.md` design note
+Unchanged from V2, and independently **confirmed by execution, not just reading**, in Pass 2's
+re-gate: the reviewer loaded `cypher-mcp/server.py` in `cypher-mcp/.venv` and ran this plan's own
+migration-query shape through `authorize_write()` directly — `agent='analyst'` against an
+`author:'analyst'` `CREATE` authorizes; `agent='cobb'` against the same `CREATE` is rejected with
+an explicit author-mismatch message; a decoy `CREATE (k:KaizenEntry {author:'cobb'})` embedded in
+an entry's free-text `fact` field does not desync `_author_claims()`. **`cobb` genuinely cannot
+perform the data-migration write for anyone but itself** — the two-actor `C-<agent>` unit shape
+(agent migrates its own data; `cobb` edits the prompt text) is forced by the mechanism, confirmed
+by execution, not a stylistic choice.
 
-M5 split ownership between a `graph-dba`-authored schema note (`generic-cypher-mcp-graph.md`) and
-this `architect`-authored mechanism note, because M5 was inventing a schema from nothing. FR-8 locks
-that schema as-is for M7 (no field redesign beyond the additive `sessionId`), and §3.1–3.2 above are
-the only genuinely new graph-modeling decisions this delivery makes — both are covered here, both
-reuse M5's exact DDL pattern just re-targeted at a new graph name. No fresh schema design work
-remains for `graph-dba` to own in a separate document; its role in this rollout is implementation
-(the index/constraint provisioning + old-key retirement unit, §4) rather than design. Flagged as
-open item 6 (§6) in case the plan-gate reviewer judges otherwise.
+**The migration query shape itself (restored verbatim, P3-M2 — dropped by V3's §3 compression, the
+delivery's single most escaping-sensitive statement since it is executed 12 times, in 12 isolated
+agent contexts, over free-text fields containing backticks/apostrophes — §4.2 below describes it by
+reference only, this is what "that reference" actually is):**
+
+```cypher
+UNWIND [
+  {entryId: '<uuid4-1>', date: '<YYYY-MM-DD>', fact: '<escaped text>', evidence: '<escaped text>',
+   context: '<escaped text>', suggestedHome: '<...>', createdAt: '<ISO-8601>'},
+  {entryId: '<uuid4-2>', ...}
+] AS e
+CREATE (k:KaizenEntry {
+  entryId: e.entryId, date: e.date, fact: e.fact, evidence: e.evidence,
+  context: e.context, suggestedHome: e.suggestedHome,
+  author: '<X>', createdAt: e.createdAt
+})
+```
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<X>')`. The `author:
+'<X>'` literal lives **once**, in the outer `CREATE` clause — never per-row inside the `UNWIND`
+list — because that is exactly the span `_author_claims()` inspects (§3.6 above); a per-row
+`author` literal would either fail to authorize or (worse) silently authorize the wrong claim if a
+future entry's `fact` text happened to contain a decoy `author:` substring. No `sessionId` key is
+included for these migrated entries — they are historical imports, not new writes (FR-8a, §3.3).
+
+### 3.7 — Self-edit ownership, corrected in this revision (new)
+
+V2 extended `cobb`'s established self-maintenance precedent to `architect` (flagged as an open
+question) and to `graph-dba` (asserted as settled, citing `ccf9c8b`). Both were wrong, for two
+independent reasons, both now directly verified rather than inferred:
+
+1. **The prohibition is textual, not customary.** `cobb.md`'s Learning-capture section is the
+   *only* one of the 12 agent prompts that omits "never edit your own agent definition" — every
+   other agent's own prompt forbids exactly the edit V2 assigned to two of them. The carve-out was
+   never "the maintainer can self-edit and nobody else has tried" — it is "eleven agents' own
+   prompts explicitly say no, and the twelfth's doesn't."
+2. **The `graph-dba` precedent V2 cited doesn't exist.** `git show --stat ccf9c8b`'s 43-file list
+   (re-run again for this revision) does not include `claude/graph-dba/graph-dba.md` — it needed no
+   edit at that time because it was already graph-backed, target-correct at that moment. There is
+   no prior instance of `graph-dba` editing its own prompt to point to.
+
+Both `architect.md`'s and `graph-dba.md`'s Learning-capture retargets now route through `cobb`,
+identical in shape to the other nine non-`cobb` agents. `cobb` self-edits exactly one file:
+`cobb.md`.
 
 ---
 
 ## 4. Implementation step table
 
-Fifteen units. "Depends on" lists **hard** blockers only (§3.4); anything not listed is safely
-parallel/independent, sized for FR-13's per-agent-or-per-batch requirement. Suggested batches are a
-dispatch convenience for whoever coordinates execution (`teco`, per its own coordination-ledger
-threshold at 3+ units — already opened at
-`docs/plans/generic-cypher-mcp2-coordination.md`), not a hard sequencing rule.
+Twenty-one units: 5 substrate (`S0`–`S4`) + 1 requirements-doc correction (`T1`) + 12 per-agent
+consolidation (`C-<agent>`) + 1 graph-key retirement (`G1`) + 2 acceptance (`Q1`, `Q2`). "Depends
+on" lists **hard** blockers only; anything else is safely parallel, sized for FR-13's
+per-agent-or-per-batch requirement. **Every count named below is a 2026-08-20 snapshot — each
+unit's own first step is a live re-derivation, never a read of this table.**
 
-### 4.1 Docs & substrate units (recommended early, all mutually independent)
+### 4.1 Substrate and cross-cutting fixes
 
 | # | Owner | Files | Depends on | Done-condition |
 |---|---|---|---|---|
-| **D1** | `cobb` | `claude/AGENTS.md`, `claude/README.md`, `docs/BACKLOG.md` (new M7 section, §4.4 below) | — | Both catalog files describe the graph-backed pattern as the standing convention with a generic, don't-need-re-editing-per-agent sentence (§3.4); `docs/BACKLOG.md` M7 section added with a per-agent status table (C-701…C-71x, see §4.4) |
-| **D2** | `cobb` | `skills/agent-maintenance/SKILL.md` (§1 "Creating" procedure, §5 "Learnings inboxes", frontmatter `description`) | — | §1's inbox-seeding sentence replaced with: seed a newly created agent's Learning-capture section directly with the graph-backed recipe (§3.3 above), target `kaizen_team`, no `inbox.md` ever created; §5 rewritten so the graph-backed pattern is the described default (not `graph-dba`'s exception) with the markdown "Inbox template" block kept only as a fallback for any not-yet-migrated agent, citing `docs/BACKLOG.md` M7 for current roster; frontmatter `description` line no longer singles out `graph-dba` |
-| **D3** | `coder` | `cypher-mcp/server.py` (`TOOL_DESCRIPTION`, `SERVER_INSTRUCTIONS`), `cypher-mcp/README.md` | — | Both doc-strings' `kaizen_graph_dba` example replaced with `kaizen_team`, "graph-dba's kaizen working memory" generalized to "the team's kaizen working memory"; `test_server_instructions_are_present_and_bounded` re-verified green (≤2000 chars, no content pinned beyond bound); `cypher-mcp/README.md`'s three `kaizen_graph_dba` mentions (parameter table, prose, both example calls) updated to match; `cypher-mcp/build.sh` run once by hand, in-container test gate green |
-| **G0** | `graph-dba` | (no tracked files — live graph DDL/ops only) | — | `CREATE INDEX FOR (e:KaizenEntry) ON (e.entryId)` + `GRAPH.CONSTRAINT CREATE kaizen_team UNIQUE LABEL KaizenEntry PROPERTIES 1 entryId` issued against `kaizen_team` (index-before-constraint ordering, `falkordb-quirks.md`) — defensively, since another agent's migration may have already materialized `kaizen_team` first (verify via whatever idempotent-check FalkorDB's build actually supports before re-issuing, per this agent's own "never assert unverified behavior" rule); re-confirm `kaizen_graph_dba` still holds zero `:KaizenEntry` nodes (this plan's live check found 0; re-check immediately before deleting in case anything landed since); `GRAPH.DELETE kaizen_graph_dba` (own destructive-ops hook approval); `claude/graph-dba/graph-dba.md`'s Learning-capture section updated in place (`kaizen_graph_dba` → `kaizen_team`, `sessionId` line added per §3.3) — **`graph-dba` may edit this itself**, since it is modifying its own already-graph-backed section, not switching mechanisms (unlike the eleven agents below) |
+| **S0** | `graph-dba` | (no tracked files — live graph DDL only) | — (hard predecessor of every `C-<agent>` unit, per P2-m4) | `CREATE INDEX FOR (e:KaizenEntry) ON (e.entryId)` + a uniqueness constraint on `kaizen_team`'s `:KaizenEntry.entryId`, issued against what this unit's own live check confirms is still an empty/nonexistent `kaizen_team` key (true by construction now that it's a hard predecessor — no other unit may write to `kaizen_team` before this lands). Making `S0` a hard predecessor retires the FalkorDB-constraint-idempotency open question outright (§6): the constraint is never re-issued against an already-populated graph in this delivery. |
+| **S1** | `coder` | `cypher-mcp/server.py`, `cypher-mcp/README.md` | — | `grep -n 'kaizen_graph_dba' cypher-mcp/server.py cypher-mcp/README.md` returns zero matches after the edit, `kaizen_team` present in their place (server-doc-string generalization: "graph-dba's kaizen working memory" → "the team's kaizen working memory, author-partitioned"); `test_server_instructions_are_present_and_bounded` re-verified green (≤2000 chars); `cypher-mcp/build.sh` run once by hand, in-container test gate green. **As of 2026-08-20** (re-derive at dispatch, per P2-m3): `server.py` has 4 occurrences (lines 118, 134, 251, 763 — the latter two are code comments, easy to miss on a line-range-only read); `README.md` has 5 (not 3). |
+| **S2** | `cobb` | `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`, `docs/BACKLOG.md` | — | All three catalog paragraphs describe `kaizen_team`, author-partitioned, as the standing convention; `claude/README.md`'s Kaizen section documents the FR-7 one-query recipe **— §3.1's `MATCH`/`RETURN`/`ORDER BY` block, copied verbatim, full field list, not elided (P3-M2)** — as a copy-pasteable example, and states every `kaizen/inbox.md` as a **permanent** frozen snapshot (not "required to exist," which undersells the invariant); `docs/BACKLOG.md` gets both a new `## M7` body section (§4.4 below has the text) **and** a new row in the "Milestone map" table (lines 41-53) mirroring M1–M6's format (P2-m5). |
+| **S3** | `cobb` | `skills/agent-maintenance/SKILL.md` | `S4` (P3-m3 — the FR-12 asymmetry only holds once both land; `S3` alone, mid-window, would reintroduce Pass 1's M1 finding for any agent created in that gap) | (1) Every `kaizen_<agent>`/`kaizen_<name>`/`kaizen_{name}` occurrence becomes `kaizen_team` with an `author`-filtered pattern; (2) §1's "Creating" procedure step 1 **no longer seeds an `inbox.md` for a new agent at all** — replaced with: point the new agent's Learning-capture section directly at the §3.3 `kaizen_team` recipe, no file created; (3) §5's "Inbox template" block is rewritten from "seed on creation" framing to a short historical note describing the 12 existing frozen files' shared header shape (useful only as a reference for `C-<agent>`'s header-note retarget below, never seeded again); (4) §5's distillation procedure (verify → route → log → clear) retargeted to `kaizen_team`, curator-clear no longer needing to resolve which per-agent graph an `entryId` lives in. **Verification is the grep itself, not a line list** (P2-M4's own fix, applied here too): `grep -n 'kaizen_' skills/agent-maintenance/SKILL.md` — no occurrence survives except a past-tense Origin note. As of 2026-08-20: 14 matching lines (3, 61, 201, 324, 327, 328, 347, 391, 417, 426, 436, 444, 445, 460) — both the angle-bracket (`kaizen_<name>`) and curly-brace (`kaizen_{name}`) spellings are present and must both be caught. |
+| **S4** | `cobb` | `claude/scripts/audit-team.sh` | — | Check 1 (`audit-team.sh:76`, currently a three-way `-f` conjunction) narrowed to require only `plan.md` + `history.md` — `inbox.md`'s presence is no longer part of the pass/fail condition, in either direction. The script's header comment (lines 12-13, "the kaizen/{plan,history,inbox}.md triple") updated to match. **Verification is scoped to check 1's own logic, not a full-script pass** (P3-M1 — proved by the reviewer's own execution that a full-script pass is unachievable for unrelated reasons: `audit-team.sh:63-67` never enumerates a directory lacking `<name>.md`, so a synthetic agent with no `<name>.md` can't reach check 1 at all; adding a stub `<name>.md` to make it enumerable then trips checks 2/4/5/5b — deployment, roster, catalogs — which fail for any synthetic agent by construction, regardless of check 1's own state). Verify instead, **in an isolated copy of the repo tree** (never live `claude/` — copy `audit-team.sh` to `<scratch>/sub/scripts/audit-team.sh` so its `ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"` resolves to `<scratch>` and audits `<scratch>/claude/`, not the real one): a scratch agent with `<name>.md` + `kaizen/{plan,history}.md` and **no** `inbox.md` produces `PASS  <name>: kaizen plan + history present` on check 1 specifically — the overall run still `FAIL`s on checks 2/4/5/5b, expected and irrelevant, check 1's own line is the assertion. Separately, re-run the unmodified 12-agent `claude/` collection live and confirm all 12 still `PASS` check 1 (their `inbox.md` is still physically present, just no longer gates). |
+| **T1** | `tico` | `docs/requirements/generic-cypher-mcp2.md` | — | FR-4, AC-3, FR-14, AC-11 marked superseded, with the 2026-08-20 stakeholder decision cited by date, following the document's own existing "Reconsidered" decision-log pattern (2026-08-19 entries, same document); the Out-of-scope bullet's now-reversed git-history rationale sentence ("which is exactly why an in-repo frozen copy is no longer needed") voided/corrected. **FR-12/AC-9 need no edit** — this delivery's branch (b) choice (Revision note) delivers them as originally written, it does not supersede them. Whether this lands as an in-place revision (with a dated note, `Version:` bump) or a successor document is `tico`'s own call per root `AGENTS.md`'s collision rule 5 — this unit states the required content, not the document mechanics. |
 
-### 4.2 Per-agent migration units (each independent; suggested batches shown, not required)
+### 4.2 Per-agent consolidation (each independent beyond the `S0` predecessor; §3.6/§3.7 explain the actor shape)
 
-Each unit N: agent `<X>` reads `claude/<X>/kaizen/inbox.md`, parses its entries into the standard
-five-field template, generates one `entryId` (`uuid4`) per entry and one shared `createdAt`
-(import-run timestamp), builds `UNWIND [<one map per entry, no per-row author>] AS e CREATE
-(k:KaizenEntry {entryId: e.entryId, date: e.date, fact: e.fact, evidence: e.evidence, context:
-e.context, suggestedHome: e.suggestedHome, author: '<X>', createdAt: e.createdAt})` (the `author`
-literal lives once in the `CREATE` clause, exactly mirroring M5 §3.4's post-fix shape — never
-per-row), and calls `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<X>')`.
-Verifies `MATCH (e:KaizenEntry {author:'<X>'}) RETURN count(e)` matches the parsed entry count, then
-deletes `claude/<X>/kaizen/inbox.md`. Co-dispatched with `cobb`'s matching prompt edit (§3.4).
+Each unit `C-<X>`: (1) `<X>` re-checks live, first, whether `kaizen_<X>` currently holds any
+`:KaizenEntry` nodes (an "unknown graph" response means nothing to migrate, skip to step 3);
+(2) if nonzero, `<X>` builds the `UNWIND`/`CREATE` migration query — **the exact shape restored in
+§3.6 above**, one `author` literal in the outer `CREATE` clause, never per-row — and calls
+`mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<X>')`; **verifies by content
+comparison, not count** (P2-m1): `MATCH (e:KaizenEntry {author:'<X>'}) RETURN e.entryId, e.date,
+e.fact, e.evidence, e.context, e.suggestedHome, e.createdAt ORDER BY e.entryId` against `kaizen_team`,
+diffed field-by-field against the same query run against `kaizen_<X>` before migration; (3) `cobb`
+(for all 12, including `architect` and `graph-dba` — P2-B2/§3.7; `cobb` self-edits only its own
+file) rewrites `<X>`'s own Learning-capture section to the §3.3 recipe (`kaizen_team`,
+`author: '<X>'`, `sessionId` field added), **and** retargets `claude/<X>/kaizen/inbox.md`'s header
+note (P2-M2 — an accuracy edit the header itself authorizes: every one of the 12 headers scopes its
+own immutability promise to *"**Content below** is preserved for historical reference and will not
+change"* — not "this file," so the header note was never inside that promise to begin with, P3-M2's
+stronger grounding of the carve-out, adopted here in place of V3's own weaker "accuracy edit, not
+new content" framing).
 
-| # | Agent(s) | Suggested batch | Files | Depends on | Done-condition |
+**The header retarget is scoped narrowly, per P3-M3 — not a blanket `kaizen_<X>`→`kaizen_team`
+substitution.** Every one of the 12 headers carries a *prescriptive* clause ("New raw learnings are
+written directly into the graph… `mcp__cypher__query(graph='kaizen_<X>', …)`") — that clause always
+retargets to `kaizen_team` with an `author:'<X>'` filter, in all 12 files. **Four of them**
+(`analyst`, `teco`, `qa-engineer`, `data-scientist` — the agents that had entries at `ccf9c8b`-time)
+**additionally carry a past-tense provenance clause** ("Its N entries… **were imported into** the
+`kaizen_<X>` FalkorDB graph") that states a true historical fact and **must be left untouched** — a
+blanket substitution would rewrite true history ("were imported into `kaizen_team`," a graph that
+did not exist on that date) into a false claim, inside a file the stakeholder has made permanent.
+The other 8 agents' headers carry only the prescriptive clause and retarget in full. `teco`'s unit
+additionally fixes the two stale cross-reference passages at `teco.md:72,89`.
+
+**All 12 rows below depend on `S0`** (kaizen_team substrate, hard predecessor — P2-m4/P3-m4); the
+`Depends on` column restates it per row so the dispatch table doesn't rely on a reader remembering
+the heading note.
+
+| # | Agent(s) — two-actor split (P2-B2/§3.7) | Data to migrate (**as of 2026-08-20 — re-derive live at dispatch**) | Files | Depends on | Done-condition highlights |
 |---|---|---|---|---|---|
-| **A1** | `devops` | 1 | `claude/devops/kaizen/inbox.md` (deleted), `claude/devops/devops.md` (Learning capture, by `cobb`) | — | Entry count verified; file gone from working tree, recoverable via `git log`; prompt's Learning-capture section directs new learnings to `kaizen_team` (§3.3 recipe), no remaining `inbox.md`-append instruction |
-| **A2** | `frontend-engineer` | 1 | same pattern | — | same shape |
-| **A3** | `architect` | 1 | same pattern | — | same shape (self-migrates its own data; `cobb` edits `architect.md`, not `architect` itself) |
-| **A4** | `cobb` | 2 | `claude/cobb/kaizen/inbox.md` (deleted), `claude/cobb/cobb.md` (Learning capture) | — | Same data-migration shape; **prompt-edit ownership is the open item flagged in §2/§6** — this plan's default is `cobb` edits its own section (mirroring its existing self-maintenance carve-out), pending plan-gate confirmation |
-| **A5** | `coder` | 2 | same pattern | — | same shape |
-| **A6** | `teco` | 2 | same pattern | — | same shape |
-| **A7** | `analyst` | 3 | same pattern | — | same shape |
-| **A8** | `qa-engineer` | 3 | same pattern | — | same shape |
-| **A9** | `tdd-engineer` | 3 | same pattern | — | same shape |
-| **A10** | `data-scientist` | 4 | same pattern | — | same shape (largest file, 118 lines — budget more parsing/verification time) |
-| **A11** | `tico` | 4 | same pattern | — | same shape |
+| **C-analyst** | `analyst` (data) / `cobb` (prompt + header) | 5 entries (`kaizen_analyst`) | `S0` | `claude/analyst/analyst.md:91,102`, `claude/analyst/kaizen/inbox.md` (header, prescriptive clause only) | Content-diff verified; prompt + header (scoped) retargeted |
+| **C-data-scientist** | `data-scientist` (data) / `cobb` (prompt + header) | 4 entries (`kaizen_data-scientist`) | `S0` | `claude/data-scientist/data-scientist.md:91,102`, `claude/data-scientist/kaizen/inbox.md` (header, prescriptive clause only) | Content-diff verified; prompt + header (scoped) retargeted |
+| **C-qa-engineer** | `qa-engineer` (data) / `cobb` (prompt + header) | 6 entries (`kaizen_qa-engineer`) | `S0` | `claude/qa-engineer/qa-engineer.md:80,91`, `claude/qa-engineer/kaizen/inbox.md` (header, prescriptive clause only) | Content-diff verified; prompt + header (scoped) retargeted |
+| **C-teco** | `teco` (data) / `cobb` (prompt + header) | 5 entries (`kaizen_teco`) | `S0` | `claude/teco/teco.md:122,133` (data+prompt) + `:72,89` (M3 fix) + `claude/teco/kaizen/inbox.md` (header, prescriptive clause only) | Content-diff verified; prompt + header (scoped) retargeted; both stale cross-reference passages fixed |
+| **C-graph-dba** | `graph-dba` (data) / `cobb` (prompt + header) | 0 entries (`kaizen_graph_dba` — re-confirm live immediately before `G1` acts) | `S0` | `claude/graph-dba/graph-dba.md:74-87`, `claude/graph-dba/kaizen/inbox.md` (header, full retarget — no entries, so no provenance clause to protect) | Live re-check confirms still 0; **`cobb`**, not `graph-dba`, retargets the prompt (§3.7) |
+| **C-architect** | `architect` (data) / `cobb` (prompt + header) | **1 entry** (`kaizen_architect` — this delivery's own V2 investigation wrote it; not 0 as V2 stated — P2-m2) | `S0` | `claude/architect/architect.md:56,67`, `claude/architect/kaizen/inbox.md` (header — provenance-clause question moot, `architect`'s frozen header predates this entry and has no provenance clause of its own to protect; full retarget) | Content-diff verified (1 entry, `author:'architect'`); **`cobb`**, not `architect`, retargets the prompt (§3.7) |
+| **C-cobb** | `cobb` (data + prompt + header — the one legitimate self-edit, §3.7) | 0 (graph key doesn't exist as of 2026-08-20) | `S0` | `claude/cobb/cobb.md:71,86,97`, `claude/cobb/kaizen/inbox.md` (header, full retarget — no entries) | Live re-check; self-edited (3 prompt mentions) |
+| **C-coder** | `coder` (data) / `cobb` (prompt + header) | 0 (graph key doesn't exist) | `S0` | `claude/coder/coder.md:40,51`, `claude/coder/kaizen/inbox.md` (header, full retarget) | Live re-check; `cobb` edits |
+| **C-devops** | `devops` (data) / `cobb` (prompt + header) | 0 (graph key doesn't exist) | `S0` | `claude/devops/devops.md:100,111`, `claude/devops/kaizen/inbox.md` (header, full retarget) | Live re-check; `cobb` edits |
+| **C-frontend-engineer** | `frontend-engineer` (data) / `cobb` (prompt + header) | 0 (graph key doesn't exist) | `S0` | `claude/frontend-engineer/frontend-engineer.md:86,97`, `claude/frontend-engineer/kaizen/inbox.md` (header, full retarget) | Live re-check; `cobb` edits |
+| **C-tdd-engineer** | `tdd-engineer` (data) / `cobb` (prompt + header) | 0 (graph key doesn't exist) | `S0` | `claude/tdd-engineer/tdd-engineer.md:58,69`, `claude/tdd-engineer/kaizen/inbox.md` (header, full retarget) | Live re-check; `cobb` edits |
+| **C-tico** | `tico` (data) / `cobb` (prompt + header) | 0 (graph key doesn't exist) | `S0` | `claude/tico/tico.md:151,162`, `claude/tico/kaizen/inbox.md` (header, full retarget) | Live re-check; `cobb` edits |
 
-### 4.3 Acceptance
+### 4.3 Graph-key retirement
+
+| # | Owner | Depends on | Done-condition |
+|---|---|---|---|
+| **G1** | `graph-dba` | `S0` (must have landed); each `C-<agent>` unit whose key it retires | **The never-delete-reach question is settled — no re-ask needed.** `docs/plans/generic-cypher-mcp2-coordination.md`'s "Resolved 2026-08-20" paragraph (lines 126-132) states the never-delete decision covers `kaizen/inbox.md` *files* only; the `kaizen_<agent>` graph *keys* **are** to be deleted once their entries are consolidated and verified, and that record itself discharges this unit's confirmation gate — cite it directly, `graph-dba` does not open this unit by asking `tico` (P3-m1, corrects V3's own instruction to re-ask). First **executed** step: **re-list loaded graphs live** (`mcp__cypher__query` against any nonexistent probe name) — do not trust this document's 6-key snapshot (`kaizen_graph_dba`, `kaizen_analyst`, `kaizen_data-scientist`, `kaizen_qa-engineer`, `kaizen_teco`, `kaizen_architect`, as of 2026-08-20) without re-deriving it, since FR-13's incremental window means more may have appeared. For each key whose corresponding `C-<agent>` unit has confirmed a content-diff-verified migration (or confirmed 0 entries for `kaizen_graph_dba`): `GRAPH.DELETE <key>`, issued via `redis-cli` against the FalkorDB container (P2-n1 — the execution surface is a Redis command, not an `mcp__cypher__query` write shape, per §3.6), gated by `graph-dba`'s own destructive-ops hook approval. Can run incrementally as `C-<agent>` units land — does not need to wait for all twelve. |
+
+### 4.4 Acceptance
 
 | # | Owner | Files | Depends on | Done-condition |
 |---|---|---|---|---|
-| **Q1** | `qa-engineer` | — (interim check, no deliverable file required) | ≥3 of A1…A11 | AC-1, AC-4, AC-6, AC-7, AC-10 exercised live against whichever agents have migrated so far — concretely proves partial-state validity, not just asserts it |
-| **Q2** | `qa-engineer` | `docs/test-plans/generic-cypher-mcp2.md`, `docs/test-reports/generic-cypher-mcp2-report.md` | D1, D2, D3, G0, A1…A11 | AC-1…AC-13 each exercised live (§5's mapping); test plan + report delivered |
+| **Q1** | `qa-engineer` | — (interim check) | ≥3 of the 12 `C-<agent>` units | AC-1, AC-4, AC-6, AC-7 exercised live against `kaizen_team` for whichever agents have migrated so far |
+| **Q2** | `qa-engineer` | `docs/test-plans/generic-cypher-mcp2.md`, `docs/test-reports/generic-cypher-mcp2-report.md` | `S0`–`S4`, `T1`, all 12 `C-<agent>` units, `G1` | AC-1, AC-2, AC-4…AC-10, AC-12, AC-13 each exercised live (§5.2); AC-3/AC-11 confirmed dropped (T1 landed, not silently absent); AC-9 confirmed delivered as written — `qa-engineer` independently re-runs `S4`'s **isolated-tree, check-1-scoped** assertion (never a full-script pass on live `claude/` — P3-M1), not re-taken on `cobb`'s word; the unmodified 12-agent `claude/` collection also re-confirmed still `PASS` on check 1 at closing. |
 
-### 4.4 `docs/BACKLOG.md` — M7 section proposal (for D1)
+**`docs/BACKLOG.md` additions (for `S2`):**
 
-Mirror the M5/M6 section format exactly; add after M6:
+Milestone-map row (after the M6 row, same table, lines 41-53):
+
+```markdown
+| **M7 — Generic Cypher MCP, team-wide rollout** | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph (`author`-partitioned), FR-7's one-query team-wide surface and FR-8a's `sessionId` field delivered, FR-12/AC-9 delivered as written (no `inbox.md` for a new agent) — an interim ad hoc per-agent-graph rollout (`ccf9c8b`, 2026-08-20) is reconciled onto this design | `C-701 → C-721` |
+```
+
+Body section (mirroring the M5/M6 format):
 
 ```markdown
 ## M7 — Generic Cypher MCP, team-wide rollout
 
 `mcp__cypher__query`'s write path (M5) is rolled out from `graph-dba` alone to all twelve agents,
-sharing one graph (`kaizen_team`) with `author` as the per-agent partition — no new write
-mechanism (FR-1), zero `cypher-mcp/server.py` logic changes. Requirements:
-[`requirements/generic-cypher-mcp2.md`](./requirements/generic-cypher-mcp2.md) (FR-1…FR-14 /
-AC-1…AC-13) · plan: [`plans/generic-cypher-mcp2.md`](./plans/generic-cypher-mcp2.md) · coordination:
+consolidated onto one shared graph (`kaizen_team`) with `author` as the per-agent partition — no
+new write mechanism (FR-1), zero `cypher-mcp/server.py` logic changes. An interim ad hoc rollout
+(commit `ccf9c8b`, 2026-08-20) built one graph per agent instead; this milestone reconciles that
+onto the stakeholder-confirmed shared-graph design, and separately delivers FR-12/AC-9 as written
+(no `kaizen/inbox.md` for a newly created agent, alongside the standing "never delete an existing
+one" rule). Requirements: [`requirements/generic-cypher-mcp2.md`](./requirements/generic-cypher-mcp2.md)
+(FR-1…FR-14 / AC-1…AC-13, two superseded — see plan §5.2) · plan:
+[`plans/generic-cypher-mcp2.md`](./plans/generic-cypher-mcp2.md) · coordination:
 [`plans/generic-cypher-mcp2-coordination.md`](./plans/generic-cypher-mcp2-coordination.md).
 
 ### Items
-- **C-701 — Repo-wide catalog docs.** 🔵 `claude/AGENTS.md`, `claude/README.md` generalized off the
-  "except graph-dba" phrasing. Owner: `cobb`.
-- **C-702 — Agent-creation convention.** 🔵 `skills/agent-maintenance/SKILL.md` §1/§5 updated so a
-  new agent is born graph-backed. Owner: `cobb`.
+- **C-701 — Repo-wide catalog docs.** 🔵 `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`,
+  `docs/BACKLOG.md` retargeted to `kaizen_team`. Owner: `cobb` (S2).
+- **C-702 — Agent-creation + distillation convention, FR-12/AC-9 delivered.** 🔵
+  `skills/agent-maintenance/SKILL.md` retargeted to `kaizen_team`; new-agent `inbox.md` seeding
+  removed entirely. Owner: `cobb` (S3).
 - **C-703 — Server doc-strings.** 🔵 `cypher-mcp/server.py`/`README.md` `kaizen_graph_dba` →
-  `kaizen_team`. Owner: `coder`.
-- **C-704 — Shared-graph provisioning + old-key retirement.** 🔵 `kaizen_team` index/constraint;
-  `kaizen_graph_dba` deleted (empty, confirmed live). Owner: `graph-dba`.
-- **C-705…C-715 — Per-agent migration** (one item per agent: devops, frontend-engineer, architect,
-  cobb, coder, teco, analyst, qa-engineer, tdd-engineer, data-scientist, tico). 🔵 each.
-- **C-716 — Acceptance pass.** 🔵 AC-1…AC-13 exercised live.
+  `kaizen_team`. Owner: `coder` (S1).
+- **C-704 — `kaizen_team` provisioning.** 🔵 Index/constraint, hard predecessor of all migrations.
+  Owner: `graph-dba` (S0).
+- **C-705 — Certification tooling, FR-12 asymmetry.** 🔵 `claude/scripts/audit-team.sh` check 1
+  narrowed to plan+history; inbox.md never required. Owner: `cobb` (S4).
+- **C-706 — Requirements doc correction.** 🔵 FR-4/AC-3/FR-14/AC-11 marked superseded. Owner:
+  `tico` (T1).
+- **C-707…C-718 — Per-agent consolidation** (one item per agent, all 12; data migration by the
+  agent itself, prompt + inbox-header retarget by `cobb`, except `cobb` self-edits its own). 🔵
+  each (C-<agent>).
+- **C-719 — Graph-key retirement.** 🔵 Live-relisted `kaizen_<agent>` keys `GRAPH.DELETE`d once
+  migrated — never-delete-reach question already resolved (coordination doc, "Resolved
+  2026-08-20"), no re-confirmation gate. Owner: `graph-dba` (G1).
+- **C-720 / C-721 — Acceptance passes.** 🔵 Interim (Q1) and closing (Q2), AC-1…AC-13 (two
+  superseded) exercised live.
 ```
-
-Status markers flip to ✅ as each unit lands — this table **is** the live, per-agent-granular
-answer to "how much of M7 is done" that D1/D2's generalized catalog prose deliberately stops trying
-to restate.
 
 ---
 
-## 5. AC-1…AC-13 verification mapping
+## 5. FR/AC verification mapping
+
+### 5.1 Functional requirements — status and covering unit
+
+| FR | Status | Covering unit(s) / reason |
+|---|---|---|
+| FR-1 (reuse M5's mechanism, no new write shape) | Already delivered by `ccf9c8b` | Confirmed by execution in Pass 2 (§3.6) |
+| FR-2 (write new learnings into own graph) | Already delivered by `ccf9c8b`, wrong target | All 12 `C-<agent>` retarget to `kaizen_team` |
+| FR-3 (one-time import of `inbox.md` content) | Already delivered for the 4 populated agents | `C-analyst`/`C-data-scientist`/`C-qa-engineer`/`C-teco` relocate that data into `kaizen_team` |
+| **FR-4** (delete `inbox.md` after import) | **Superseded** | `T1` records the supersession in the requirements doc; overridden by the never-delete decision |
+| FR-5 (`history.md` unchanged) | Already true | No unit needed |
+| FR-6 (any agent reads any other's graph) | Already true mechanically | No unit needed — trivial once data is in `kaizen_team` |
+| FR-7 (single query reaches every agent) | **Outstanding**, this delivery's core new capability | `S0` + `S2` (documented recipe) + all `C-<agent>` |
+| FR-8 (locked 5-field schema) | Already true | No unit needed |
+| FR-8a (`sessionId` field) | **Outstanding** | §3.3 recipe installed by every `C-<agent>` unit |
+| FR-9 (author/curator write shapes) | Already true | No unit needed |
+| FR-10 (`cobb`'s distillation cadence unchanged) | Needs target-graph updated | `S3` |
+| FR-11 (docs describe actual behavior) | Partially delivered by `ccf9c8b` | `S2`, `S3`, `C-teco`'s M3 fix, `C-<agent>`'s inbox-header fix (P2-M2) |
+| **FR-12** (new-agent convention, no `inbox.md` seeded) | **Outstanding — delivered as written this revision (branch (b), §Revision note)** | `S3` (removes the seed step) + `S4` (audit-team.sh holds the asymmetry) |
+| FR-13 (incremental, not atomic) | Design property of §4's table | Every unit is independently dispatchable |
+| **FR-14** (delete `graph-dba`'s frozen `inbox.md`) | **Superseded** | `T1` |
+
+### 5.2 Acceptance criteria — verification mapping
 
 | AC | Verification approach | Altitude |
 |---|---|---|
-| AC-1 | Live query against `kaizen_team` filtered to a migrated agent's `author`, from a different agent's context, no distillation gate | Live |
-| AC-2 | Per-agent: parsed `inbox.md` entry count vs. `MATCH (e:KaizenEntry {author:'<X>'}) RETURN count(e)`; spot-check 1–2 entries' field content verbatim | Live, per-unit self-check + `qa-engineer` sample |
-| AC-3 | `git status`/`git diff` shows `claude/<X>/kaizen/inbox.md` absent post-migration; `git log -- claude/<X>/kaizen/inbox.md` recovers it | Static |
-| AC-4 | Agent writes one new entry via the §3.3 recipe; independent second read confirms it, `inbox.md` stays absent | Live |
-| AC-5 | `cobb` runs a real distillation pass (append to `history.md`, confirm, curator-clear) on ≥1 live raw entry from a newly migrated agent | Live, full workflow |
-| AC-6 | Mismatched `author`/`agent` write attempt rejected (mirrors M5's own unit tests 3/4, now against `kaizen_team`) | Live |
-| AC-7 | One `MATCH (e:KaizenEntry) RETURN e.author, e.date, ... ORDER BY e.date` (no author filter) against `kaizen_team`, one tool call, returns entries spanning ≥2 distinct authors | Live, the direct FR-7 proof |
-| AC-8 | `grep -rln 'kaizen/inbox\.md\|append.*inbox' claude/ skills/agent-maintenance/SKILL.md` before/after each docs unit (mirrors M5's own close-out method); every post-migration hit is either an already-updated file or confirmed still-correct for a not-yet-migrated agent | Static, repeatable |
-| AC-9 | Read `skills/agent-maintenance/SKILL.md` §1 post-D2: confirm no `inbox.md`-seeding step remains for a newly created agent | Static |
-| AC-10 | Q1 (interim pass, §4.3): re-run AC-1/AC-4/AC-6 scoped only to whichever agents have migrated at that point | Live, exercised mid-rollout, not just asserted |
-| AC-11 | `git status`/`ls claude/graph-dba/kaizen/` confirms `inbox.md` absent; `git log` recovers it | Static |
-| AC-12 | `MATCH (e:KaizenEntry) RETURN DISTINCT keys(e)` (or per-agent sampled `RETURN keys(e)`) across ≥2 different agents' entries in `kaizen_team`, confirm identical key sets modulo `sessionId` | Live |
-| AC-13 | One entry with `sessionId IS NOT NULL` (a new, post-migration write) and one with `sessionId IS NULL` (an imported entry) both present and distinguishable on that basis | Live |
-
-Verification depth per agent (independent pass for all eleven vs. sampled) is left to
-`qa-engineer`'s own test-plan judgment, per the requirements doc's own decision log — this mapping
-states the checks, not the rigor level.
+| AC-1 | Live query against `kaizen_team` filtered to a migrated agent's `author`, from a different agent's context | Live |
+| AC-2 | Per-agent content-diff (not count) between the original `kaizen_<agent>` data and `kaizen_team {author:'<X>'}` post-migration | Live, per-unit self-check |
+| **AC-3** | **Superseded** (`T1`). No unit executes a deletion; `Q2` confirms the *absence* of any deletion. | — |
+| AC-4 | Agent writes one new entry via the §3.3 recipe against `kaizen_team`; independent second read confirms it | Live |
+| AC-5 | `cobb` runs a real distillation pass (append to `history.md`, confirm, curator-clear against `kaizen_team`) | Live, full workflow |
+| AC-6 | Mismatched `author`/`agent` write attempt rejected — already confirmed by execution in Pass 2 (§3.6); `Q2` re-runs it against `kaizen_team` specifically | Live |
+| AC-7 | One `MATCH (e:KaizenEntry) RETURN e.author, e.date, ... ORDER BY e.date` (no author filter) against `kaizen_team`, spanning ≥2 distinct authors | Live, the direct FR-7 proof |
+| AC-8 | `grep -rlE 'kaizen_[A-Za-z{<][A-Za-z_{}<>-]*' claude/ skills/ cypher-mcp/ docs/BACKLOG.md docs/requirements/generic-cypher-mcp2.md AGENTS.md` (P2-M1's corrected pattern, widened roots narrowed again in this revision per P3-m2 — the `docs/` root alone returned 64 files, 19 of them historical M5/M6/earlier-pass docs under `docs/plans/`, `docs/reviews/`, `docs/test-plans/`, `docs/test-reports/` that no unit here touches; narrowed to the two `docs/` files this delivery's units actually touch) before/after `S0`–`S4`/`C-<agent>`; every post-migration hit sorts into **three** buckets, not two (P3-m2's fix): genuinely historical (past-tense, e.g. a frozen `inbox.md`'s provenance clause), a real remaining gap, or **an arbitrary fixture/example graph name in test code — semantically irrelevant, out of scope** — `cypher-mcp/tests/test_server.py` (17 occurrences, `kaizen_graph_dba` used only as a placeholder graph key passed to `run_query()`) is pre-classified into this third bucket, not swept for renaming and not filed as a defect | Static, repeatable |
+| AC-9 | Read `skills/agent-maintenance/SKILL.md` §1 post-`S3`: confirm **no `inbox.md`-seeding step remains at all** for a new agent (not just a graph-name check, per P2-B1); independently re-run `S4`'s **check-1-scoped, isolated-tree** assertion (P3-M1 — never a full `audit-team.sh` pass, which cannot pass for a synthetic agent for reasons outside this delivery's scope) and confirm `PASS` on check 1 specifically | Static + live |
+| AC-10 | `Q1` (interim pass): re-run AC-1/AC-4/AC-6 scoped to whichever agents have consolidated at that point | Live, exercised mid-rollout |
+| **AC-11** | **Superseded** (`T1`) — `graph-dba`'s `kaizen/inbox.md` is never deleted | — |
+| AC-12 | `MATCH (e:KaizenEntry) RETURN DISTINCT keys(e)` across ≥2 different agents' entries in `kaizen_team`, confirm identical key sets modulo `sessionId` | Live |
+| AC-13 | One entry with `sessionId IS NOT NULL` (new, post-consolidation) and one with `sessionId IS NULL` (imported) both present and distinguishable | Live |
 
 ---
 
 ## 6. Open items for the plan-gate reviewer
 
-1. **The central architectural call: one shared `kaizen_team` graph (author-partitioned) instead
-   of per-agent `kaizen_<agent>` graphs.** §3.1/3.2 lay out the reasoning (FalkorDB has no
-   cross-graph query, so "one query" for FR-7 is materially cheaper this way — zero new server
-   code vs. a new fan-out mechanism). This is the single biggest judgment call in this plan; it
-   diverges from `graph-dba`'s own recorded default recommendation (though that recommendation
-   explicitly pre-authorized an override). Please scrutinize directly.
-2. **Retiring the (currently empty) `kaizen_graph_dba` graph key** is not literally required by any
-   FR/AC — FR-14 only names the `inbox.md` file. This plan adds it for hygiene/consistency with the
-   file-deletion philosophy already established. Confirm this extension is wanted, not just
-   tolerated.
-3. **`CLAUDE_CODE_SESSION_ID` as FR-8a's mechanism** is live-verified in this one investigation
-   session but not found in official Claude Code documentation. Recommend `qa-engineer`'s
-   acceptance pass independently re-confirm it's available in at least one other agent's session
-   before the pattern is baked into eleven prompts' Learning-capture sections.
-4. **Unit bundling (data migration + prompt edit landing together per agent, §3.4)** trades a
-   larger per-unit diff for avoiding a transient AC-8 contradiction window. If the reviewer judges
-   FR-13's incrementality is meant to tolerate that window (docs catching up shortly after data,
-   not atomically with it), the eleven per-agent units could each be split into two, doubling unit
-   count but shrinking each diff.
-5. **Repo-wide catalog docs (D1/D2) rewritten once, early, in agent-count-agnostic language**
-   rather than re-touched after every single agent migration — confirm this satisfies AC-8's "no
-   reader finds it silent or contradicting" bar for the whole incremental window, or whether
-   per-agent specificity is wanted in `claude/AGENTS.md`/`claude/README.md` too (this plan puts that
-   granularity in `docs/BACKLOG.md`'s M7 section instead, §4.4).
-6. **No companion `-graph.md` design note from `graph-dba` for M7** (unlike M5's split ownership) —
-   §3.5's reasoning is that FR-8 locks the schema and this plan's §3.1/3.2 already cover the only
-   new graph-modeling decisions. Confirm `graph-dba`'s role here (implementation unit G0 only, no
-   separate design deliverable) is sufficient.
-7. **`cobb` editing its own `cobb.md` Learning-capture section (unit A4)** — flagged in §2 and again
-   in unit A4's done-condition. This plan's default is that `cobb`'s existing self-maintenance
-   carve-out extends to this case; an explicit second opinion is wanted before any implementer
-   treats it as settled, since editing one's own governing agent-definition source is a materially
-   different act than clearing one's own kaizen entries.
-8. **`GRAPH.CONSTRAINT CREATE`'s idempotency on a graph another unit may have already provisioned**
-   (unit G0's "defensively... verify via whatever idempotent-check FalkorDB's build actually
-   supports" instruction) is deliberately left unverified in this plan, per this agent team's
-   standing rule against asserting unverified FalkorDB command behavior as fact — `graph-dba` is the
-   right agent to close this gap at implementation time, not this plan.
+**Resolved since V3, not carried forward as open:** whether the never-delete decision's reach
+extends to the `kaizen_<agent>` graph *keys* (not just the `inbox.md` files) — V3's own open item
+1 — is now settled by `docs/plans/generic-cypher-mcp2-coordination.md`'s "Resolved 2026-08-20"
+paragraph (lines 126-132, cited directly in `G1`'s done-condition, P3-m1): yes, delete the keys,
+no re-confirmation needed at dispatch time.
+
+1. **`docs/plans/generic-cypher-mcp2-coordination.md`'s own stale "Goal & definition of done"
+   section** (Pass 2's P2-M3, second half) is explicitly outside this plan's authority to fix —
+   flagged directly to `teco` in this revision's dispatch report, not silently dropped, not
+   silently absorbed as an extra unit here.
+2. **The 5 doc-scoped write-guard hook scripts' stale escalation text** (P2-m6's correction to V2's
+   own claim) remains unfixed by design — low-priority, concurred by all three review passes, worth
+   a one-line fix next time `cobb` touches those files for an unrelated reason.
+3. **Unit ownership still concentrates on `cobb`** — now 11 of 12 `C-<agent>` prompt-edit-plus-header
+   halves plus `S2`/`S3`/`S4` (P2-B2's fix removed `architect`'s and `graph-dba`'s self-edits, which
+   *increases* `cobb`'s load versus V2, not decreases it). Still not a defect, still worth
+   surfacing to whoever coordinates dispatch.
+4. **The "13 agents" vs. 12 discrepancy** in the original dispatch brief remains immaterial — the
+   roster and unit count in §4 are correct at 12, confirmed again via `ls claude/` in this
+   revision.
+
+**Pass 3's own recommendation, recorded here rather than re-litigated:** the reviewer explicitly
+judged a fourth plan-gate pass would not pay for itself, since all three of that pass's majors were
+narrow done-condition wording fixes with no design content, on a plan not yet executed against.
+This revision applies them in place per that recommendation; `teco` dispatches without a further
+gate unless this fix introduces something new.
