@@ -115,7 +115,7 @@ MAX_RESULT_SIZE_CHARS = min(2 * MAX_CHARS, 500_000)
 
 TOOL_DESCRIPTION = (
     "Run OpenCypher against a named FalkorDB graph — not limited to cpg_* graphs; any graph "
-    "key on this instance is reachable (e.g. cpg_<component>, or kaizen_graph_dba). `graph` "
+    "key on this instance is reachable (e.g. cpg_<component>, or kaizen_team). `graph` "
     "is the graph key (caller-supplied); `cypher` is the query text, sent verbatim — "
     "multi-line welcome, no shell quoting. Reads run unrestricted via GRAPH.RO_QUERY. A "
     "write additionally requires the optional `agent` parameter (your agent slug) and is "
@@ -131,9 +131,9 @@ SERVER_INSTRUCTIONS = (
     "The `cypher` server exposes a single tool, `query`: OpenCypher against a named FalkorDB "
     "graph — not limited to cpg_* graphs; typically a Joern Code Property Graph loaded as "
     "`cpg_<component>`, but any graph key on this instance is reachable, e.g. "
-    "`kaizen_graph_dba` (graph-dba's kaizen working memory). Use it to answer call-graph, "
-    "data-flow, impact-analysis and test-gap questions about a codebase without reading "
-    "files, or to read/write graph-dba's kaizen entries. Graph names are always supplied by "
+    "`kaizen_team` (the team's kaizen working memory, author-partitioned). Use it to answer "
+    "call-graph, data-flow, impact-analysis and test-gap questions about a codebase without "
+    "reading files, or to read/write the team's kaizen entries. Graph names are always supplied by "
     "the caller; a query against an unknown graph answers with the list of loaded graphs. "
     "Reads need no `agent` and are unrestricted. A write additionally requires `agent` (the "
     "caller's agent slug) and is authorized only in two shapes: an agent creating its own "
@@ -248,7 +248,7 @@ def _looks_like_write(cypher: str) -> bool:
     "not a recognized write shape" rather than the more accurate "graph not
     found" — a less-precise message, never a wrong authorization. This branch
     only ever fires pre-migration or on a graph-name typo, since a populated
-    `kaizen_graph_dba` never returns "empty key" again after the one-time import.
+    `kaizen_team` never returns "empty key" again after the one-time import.
     """
     return bool(_WRITE_KEYWORD_RE.search(cypher))
 
@@ -760,7 +760,7 @@ def run_query(graph: str, cypher: str, agent: str | None = None) -> str:
                 # supplied:
                 if agent is not None and _looks_like_write(to_send):
                     # The only caller this branch exists for in practice — the
-                    # one-time import, materializing kaizen_graph_dba for the
+                    # one-time import, materializing kaizen_team for the
                     # first time. A false positive here still only routes into
                     # enforcement, never to an unconditional execute.
                     rejection = authorize_write(to_send, agent)

@@ -4,8 +4,8 @@ A small stdio MCP server exposing **one** tool, `mcp__cypher__query`, that runs 
 any named FalkorDB graph — not limited to CPG graphs. It replaces hand-assembled `redis-cli
 GRAPH.QUERY` command lines on the CPG **read** path for the `cpg-analysis` skill's consumers
 (`analyst`, `architect`, `qa-engineer`), and additionally offers a narrow, attributed **write**
-path (see [Writing through this tool](#writing-through-this-tool)) piloted on `graph-dba`'s
-kaizen working memory (`kaizen_graph_dba`).
+path (see [Writing through this tool](#writing-through-this-tool)) backing the team's
+kaizen working memory (`kaizen_team`, author-partitioned).
 
 Design and rationale: [`../docs/plans/cpg-query-access.md`](../docs/plans/cpg-query-access.md)
 (the original read-only contract) and
@@ -105,7 +105,7 @@ to satisfy, which is why every other knob is an environment variable, not a four
 
 | Parameter | Type | Meaning |
 |---|---|---|
-| `graph` | `str` | The FalkorDB graph key. **Always caller-supplied** — never defaulted, never inferred from context. Not limited to `cpg_*`: any graph key on this instance is reachable, e.g. `kaizen_graph_dba`. |
+| `graph` | `str` | The FalkorDB graph key. **Always caller-supplied** — never defaulted, never inferred from context. Not limited to `cpg_*`: any graph key on this instance is reachable, e.g. `kaizen_team`. |
 | `cypher` | `str` | The query text, sent **verbatim**. Multi-line is fine; there is no shell layer, so no quoting or escaping. |
 | `agent` | `str \| None` | **Optional, default `None`.** The caller's own agent slug. Unused on a read — reads stay unrestricted, exactly as before. Required (and checked) only when the tool detects a write attempt; see [Writing through this tool](#writing-through-this-tool). |
 
@@ -133,8 +133,8 @@ Design and rationale in full:
 version: a write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement it could parse,
 or — pre-migration only — a lightweight keyword scan on an "empty key" response), then gated by
 `authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **two**
-write shapes are ever authorized, both scoped to the `:KaizenEntry` label piloted on `graph-dba`'s
-kaizen working memory (`kaizen_graph_dba`); every other write is rejected regardless of `agent`:
+write shapes are ever authorized, both scoped to the `:KaizenEntry` label backing the team's
+kaizen working memory (`kaizen_team`, author-partitioned); every other write is rejected regardless of `agent`:
 
 1. **Author** — an agent creates its own entry. The `cypher` text's `CREATE (<var>:KaizenEntry
    {...})` map literal must carry a literal `author: '<value>'` matching the declared `agent`
@@ -143,7 +143,7 @@ kaizen working memory (`kaizen_graph_dba`); every other write is rejected regard
 
    ```
    mcp__cypher__query(
-     graph='kaizen_graph_dba',
+     graph='kaizen_team',
      cypher="CREATE (k:KaizenEntry {entryId:'...', date:'...', fact:'...', evidence:'...', "
             "context:'...', suggestedHome:'...', author:'graph-dba', createdAt:'...'})",
      agent='graph-dba',
@@ -156,7 +156,7 @@ kaizen working memory (`kaizen_graph_dba`); every other write is rejected regard
 
    ```
    mcp__cypher__query(
-     graph='kaizen_graph_dba',
+     graph='kaizen_team',
      cypher="MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e",
      agent='cobb',
    )
