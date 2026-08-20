@@ -25,6 +25,13 @@ wrong things:
 2. **`coder`** (no doc-scoped write guard; `permissionMode: acceptEdits`, otherwise Claude Code's
    default tool-permission behavior) is, per the stakeholder, asking for permission "much" more
    than wanted. Specific trigger(s) not yet pinned down — collecting live examples.
+3. **The plain default "confirm before Edit/Write" prompt** fires on any agent that lacks
+   `permissionMode: acceptEdits` — independent of, and in addition to, both mechanisms above.
+   `coder` is the only agent in the roster with that setting today; every other agent (including
+   ones with no custom write guard at all, like `cobb`, and the five with a doc-scoped guard) gets
+   a manual confirmation on every `Edit`/`Write`, even for an action squarely inside its normal,
+   documented remit. First live instance (below) confirms this fires even when the guard mechanism
+   doesn't apply at all.
 
 ## User stories
 - As a stakeholder, I don't want to be interrupted approving an agent writing to its own kaizen
@@ -34,8 +41,31 @@ wrong things:
   to ask for things that don't warrant an interruption — specifics pending live examples.
 
 ## Functional requirements
-_(Held open — being written against concrete instances as the stakeholder relays them from a live
-session, per its request. See Decision log / Open questions.)_
+_(Draft — validating against further live instances before finalizing wording.)_
+
+- **FR-1:** `cobb` editing another agent's own definition file (`<name>/<name>.md`) — its core,
+  stated job — must not require a manual per-edit confirmation. Well-evidenced: three-plus
+  instances (below), all confirmed legitimate, none an accidental drift.
+- **FR-2 (draft, broader form of FR-1):** More generally, an agent performing a `Write`/`Edit`
+  squarely within its own normal, documented remit should not require a manual per-action
+  confirmation — confirmation should be reserved for actions genuinely outside an agent's remit
+  or genuinely risky. Currently anchored only by the `cobb` evidence; still validating whether the
+  stakeholder wants this applied team-wide or agent-by-agent as friction is actually hit (see Open
+  questions).
+
+## Instances observed (live, from the concurrent `teco` session)
+1. **2026-08-20 — `cobb`, `Edit` on `claude/analyst/analyst.md`.** No custom write guard applies
+   to `cobb` (unrestricted tools). Stakeholder confirmed: this was `cobb` doing its normal
+   agent-maintenance job; approved. Mechanism: default Claude Code "confirm before Edit" prompt
+   (mechanism 3 above), not a custom guard hook. → supports FR-1.
+2. **2026-08-20 — `cobb`, `Edit` on `claude/data-scientist/data-scientist.md`.** Same shape as
+   instance 1 (no custom guard on `cobb`; default confirm-before-Edit prompt). Confirmed by the
+   stakeholder as legitimate.
+3. **2026-08-20 — several further `cobb` edits, all to other agents' own system-prompt files**
+   (`<name>/<name>.md`). Stakeholder: "there were several from cobb all while trying to edit
+   other agents' system prompts which is his purpose" — every one legitimate, none an accidental
+   drift. Pattern is now well-evidenced: `cobb` editing another agent's own `<name>.md` is its core
+   job, not an edge case.
 
 ## Out of scope
 _(TBD — likely candidates to confirm with the stakeholder: any change to the destructive-ops
