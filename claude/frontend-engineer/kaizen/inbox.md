@@ -1,5 +1,13 @@
 # Kaizen — Learnings Inbox: frontend-engineer
 
+> **FROZEN — 2026-08-20.** This file is a historical snapshot only (no entries had accumulated at
+> migration time). `claude/cobb/kaizen/history.md`'s 2026-08-20 entry records the team-wide
+> switch; `frontend-engineer` no longer appends here. New raw learnings are written directly into
+> the `kaizen_frontend-engineer` FalkorDB graph and are immediately queryable by any agent:
+> `mcp__cypher__query(graph='kaizen_frontend-engineer', cypher='MATCH (e:KaizenEntry) RETURN
+> e.date, e.fact, e.evidence, e.context, e.suggestedHome, e.author ORDER BY e.date')`. Content
+> below is preserved for historical reference and will not change.
+
 > Append-only capture of durable, non-obvious environment facts the `frontend-engineer` agent
 > discovers during runs — raw observations, not conclusions. The maintainer (cobb)
 > periodically distills this inbox (agent-maintenance skill §5): verifies each entry,

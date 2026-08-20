@@ -2,6 +2,27 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_tico`), mirroring `graph-dba`; `mcp__cypher__query` granted
+- **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
+  directly into `kaizen_tico` (FalkorDB, via `mcp__cypher__query`) instead of appending to
+  `kaizen/inbox.md`. `kaizen/inbox.md` is now a frozen historical snapshot — it had no
+  pre-existing entries to migrate; its own header explains the freeze and gives the live-read
+  query. Frontmatter `tools:` gained `mcp__cypher__query` — this agent previously had no MCP
+  tool access at all, needed now for this capture path. The "session" (not "run") wording and the
+  trailing "Your write guard allows exactly this inbox path" clause's removal both preserved
+  tico's existing conventions/constraints correctly — the write guard gates `Write`/`Edit`, not
+  the `mcp__cypher__query` MCP tool, so it no longer applies to this capture path.
+- **Why:** User-directed team-wide redesign ("I will migrate all agents to write their learnings
+  to the graph like graph-dba"), reversing yesterday's file-based Learning-capture dedup (entry
+  below) — the user determined the whole team should follow `graph-dba`'s existing graph-based
+  capture pattern instead of the file-based inbox convention.
+- **Plan items:** —
+
+## 2026-08-19 — Learning-capture paragraph de-duplicated against the inbox's own header
+- **What:** Trimmed the "Learning capture" paragraph: dropped "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture — the team maintainer verifies and promotes entries into prompts, knowledge bases, or project docs" — both already stated verbatim in `kaizen/inbox.md`'s own header template (agent-maintenance skill §5), which the agent necessarily opens to append. Kept: the discipline-specific fact-kind clause, the "session" (not "run") wording matching tico's interactive nature, the inbox path, "skip task-specific details," "never edit your own agent definition," and the write-guard clause. Behavior unchanged.
+- **Why:** User-directed prompt-verbosity reduction, item 1 of the parked diagnosis (`cobb/kaizen/plan.md`) — the mechanics were literally duplicated (prompt + inbox header say the same thing), not just similar boilerplate; pointing at the file's own header removes the duplication without losing information, since the agent reads that file to act anyway.
+- **Plan items:** —
+
 ## 2026-08-19 — Inbox distillation: remaining 3 entries — 1 prompt addition, 2 project-docs additions, 1 follow-up K-item opened on `cobb`
 Closes out the inbox (now empty) alongside the same-day commit-cadence distillation below.
 

@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_coder`), mirroring `graph-dba`
+- **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
+  directly into `kaizen_coder` (FalkorDB, via `mcp__cypher__query`) instead of appending to
+  `kaizen/inbox.md`. `kaizen/inbox.md` is now a frozen historical snapshot — it had no
+  pre-existing entries to migrate; its own header explains the freeze and gives the live-read
+  query.
+- **Why:** User-directed team-wide redesign ("I will migrate all agents to write their learnings
+  to the graph like graph-dba"), reversing yesterday's file-based Learning-capture dedup (entry
+  below) — the user determined the whole team should follow `graph-dba`'s existing graph-based
+  capture pattern instead of the file-based inbox convention.
+- **Plan items:** —
+
+## 2026-08-19 — Learning-capture paragraph de-duplicated against the inbox's own header
+- **What:** Trimmed the "Learning capture" paragraph: dropped "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture — the team maintainer verifies and promotes entries into prompts, knowledge bases, or project docs" — both already stated verbatim in `kaizen/inbox.md`'s own header template (agent-maintenance skill §5), which the agent necessarily opens to append. Kept: the discipline-specific fact-kind clause, the inbox path, "skip task-specific details," and "never edit your own agent definition" (no write-guard clause — coder has no doc-scoped write guard). Behavior unchanged.
+- **Why:** User-directed prompt-verbosity reduction, item 1 of the parked diagnosis (`cobb/kaizen/plan.md`) — the mechanics were literally duplicated (prompt + inbox header say the same thing), not just similar boilerplate; pointing at the file's own header removes the duplication without losing information, since the agent reads that file to act anyway.
+- **Plan items:** —
+
+## 2026-08-19 — Freshness-check clause removed (centralized on teco)
+- **What:** Dropped the CPG freshness-check paragraph from the CPG-orientation step — still checks whether a relevant CPG exists and uses it via `cpg-analysis`, but no longer queries the `:CpgBuildInfo` freshness marker itself. That responsibility is now `teco`'s alone (`docs/plans/cpg-agent-adoption2.md`, extending the archived `cpg-agent-adoption.md`); running standalone (no `teco`-issued brief), staleness is simply not checked.
+- **Why:** User-directed prompt-verbosity reduction: the freshness paragraph was ~130 words, byte-identical across six agent files. Stakeholder chose full centralization over a per-agent dedup, accepting the standalone-run capability loss.
+- **Plan items:** —
+
 ## 2026-08-16 — U7 fix round: freshness-check sequencing hardened, `CPG:` line anchored (DEF-1/DEF-2/DEF-3)
 - **What:** Two wording tightenings per `docs/plans/cpg-agent-adoption-coordination.md` unit U7,
   following U6's `qa-engineer` live-dispatch acceptance pass

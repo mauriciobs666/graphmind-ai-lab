@@ -2,6 +2,168 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture redesigned team-wide: file-based inbox → per-agent `kaizen_<agent>` FalkorDB graph, mirroring `graph-dba`
+- **What:** User redirected the previous day's file-pointer fix (below) with "I will migrate all
+  agents to write their learnings to the graph like graph-dba... we need to rethink the
+  solution." Executed the full migration in one pass:
+  - **Mechanism.** Every agent's "Learning capture" closing-protocol section (11 agent prompts +
+    `cobb.md` itself, 12 total) rewritten to write a `:KaizenEntry` node directly into its own
+    `kaizen_<agent>` FalkorDB graph via `mcp__cypher__query`, byte-for-byte mirroring
+    `graph-dba`'s pre-existing `kaizen_graph_dba` pattern (same node schema — `entryId`, `date`,
+    `fact`, `evidence`, `context`, `suggestedHome`, `author`, `createdAt` — same
+    author-write-authorization contract). `graph-dba` itself untouched (already correct).
+    `cypher-mcp`'s write authorization needed **no server-side change**: confirmed by reading
+    `cypher-mcp/server.py`'s `authorize_write()`/`_author_claims()` that the two authorized write
+    shapes (author-matched `CREATE :KaizenEntry`, curator `DETACH DELETE` by `entryId`) were
+    already agent-generic, never hardcoded to `graph-dba` — the MCP layer was ready for this
+    before today, only the 11 agents' own prompts and `inbox.md` files were on the old convention.
+  - **Migration of real content.** 4 of the 11 non-`graph-dba` inboxes had genuine unprocessed
+    entries: `analyst` (5), `data-scientist` (4), `qa-engineer` (6), `teco` (5) — 20 total. Wrote
+    a Python parser (`/tmp/migrate_inbox.py`, not committed) that splits each `inbox.md` on its
+    `## YYYY-MM-DD — <fact>` headers and extracts the Evidence/Context/Suggested-home fields
+    programmatically, rather than hand-transcribing — deliberately avoiding the exact
+    silent-drop-on-transcription failure mode `analyst`'s own 2026-08-11 kaizen entry warns
+    about (reconcile removed-entry counts against claimed counts). Generated a `uuid4` `entryId`
+    and a shared `createdAt` per entry, Cypher-escaped every field (backslash-escaped single
+    quotes, matching `cypher-mcp`'s own backslash-aware string-literal scanner), and live-wrote
+    each agent's batch as one multi-`CREATE` `mcp__cypher__query` call (`agent='<agent>'`) —
+    each `CREATE` clause needed its own bound variable name (`k0`, `k1`, ...) after the first
+    attempt hit "The bound variable 'k' can't be redeclared in a CREATE clause" reusing `k`
+    across clauses in one statement. Verified via `MATCH (e:KaizenEntry) RETURN count(e)` against
+    each of the 4 graphs post-write: 5/4/6/5, exact match. The other 7 agents' inboxes (`architect`,
+    `coder`, `devops`, `frontend-engineer`, `tdd-engineer`, `tico`, `cobb`) had nothing beyond the
+    seeded header template — no migration needed.
+  - **Frozen inboxes.** All 11 `kaizen/inbox.md` files (the 4 with migrated content plus the 7
+    empty ones) got a `**FROZEN — 2026-08-20.**` header block, mirroring `graph-dba`'s own frozen
+    `inbox.md` note exactly: states the file is a historical snapshot, names the entry count
+    migrated, gives the live-read `mcp__cypher__query` recipe, and says the agent no longer
+    appends here.
+  - **Tool grants.** `data-scientist` and `tico` had no MCP tool access at all before this —
+    added `mcp__cypher__query` to both frontmatters (checked all 12 agents' tool lists first;
+    `architect`/`analyst`/`teco` already had it explicitly, `coder`/`devops`/`frontend-engineer`/
+    `qa-engineer`/`tdd-engineer`/`cobb` already had it implicitly via `tools: All tools`).
+  - **Docs.** `cobb.md`'s own Learning-capture section and its "Learnings distillation"
+    maintenance-duties paragraph rewritten for the universal graph pattern.
+    `skills/agent-maintenance/SKILL.md` §5 rewritten end-to-end: header renamed "Learnings
+    inboxes" → "Learnings graphs", the `graph-dba`-is-the-exception framing replaced with
+    graph-is-the-default framing generalized to `<agent>`/`kaizen_<agent>` throughout (steps
+    1-4, the append-before-clear sub-procedure, the dedup-check wording), the seeded "Inbox
+    template" replaced with a frozen-stub variant for future agent creation, plus the skill's own
+    frontmatter `description` and three other stray "inbox" references (§1 bullet list, the
+    creation-procedure step, the order-of-operations step, the §7 fold-in cross-reference) swept
+    for consistency. `claude/AGENTS.md` and root `AGENTS.md`'s kaizen-convention paragraphs
+    rewritten to state graph-based capture as the norm (no more "except graph-dba" framing).
+  - **Bookkeeping.** Dated `kaizen/history.md` entries added to all 10 other touched agents
+    (this entry is `cobb`'s own, the 11th) plus `cobb/kaizen/plan.md`'s parking-lot item updated
+    to record the reversal of yesterday's item-1 fix and flag the open distillation follow-up.
+- **Why:** Direct user instruction, given only after item 1 of the verbosity diagnosis (below)
+  had already shipped — an explicit "this is not correct... we need to rethink the solution,"
+  not a request I inferred. `graph-dba`'s graph-based pattern was already live, already reviewed
+  (`docs/reviews/graph-dba-kaizen-distillation.md`), and the MCP server's authorization was
+  already generic across agents — so generalizing it team-wide closes a design inconsistency
+  (one agent on a fundamentally different capture mechanism than the other eleven) rather than
+  introducing a new one.
+- **Verified:** `bash claude/scripts/audit-team.sh` — same two pre-existing, unrelated FAILs only
+  (username/home-path leak in `falkor-chat/docs/test-reports/graphrag-eval-report.md`, predates
+  this session). All 4 populated graphs' entry counts confirmed live via `MATCH (e:KaizenEntry)
+  RETURN count(e)`. `grep -rn "kaizen/inbox\|graph-dba" skills/agent-maintenance/SKILL.md`
+  reviewed line-by-line — remaining hits are correctly-retained historical/precedent references
+  (origin notes, the pilot citation), not stale operative instructions.
+- **Docs touched:** all 11 non-`graph-dba` agent `.md` files (Learning-capture section) + their
+  `kaizen/inbox.md` (frozen) + their `kaizen/history.md` (this migration's entry); `cobb.md`
+  (Learning-capture + distillation paragraph); `data-scientist.md`/`tico.md` frontmatter
+  (`tools:`); `skills/agent-maintenance/SKILL.md`; `claude/AGENTS.md`; root `AGENTS.md`;
+  `cobb/kaizen/plan.md`.
+- **Plan items:** open follow-up noted in `plan.md` — a live §5 distillation pass against the 4
+  populated graphs (20 entries total) hasn't run yet; scoped as ordinary future distillation
+  work, not blocking.
+
+## 2026-08-19 — Verbosity-diagnosis item 1 executed: Learning-capture de-dup via existing inbox headers (11-agent sweep, own prompt included)
+- **What:** Investigated before executing the originally-proposed fix ("extract into a skill
+  pointer"). Found the extraction target already exists: every `kaizen/inbox.md`'s header already
+  carries the exact entry-format/promotion-model text (agent-maintenance skill §5's seeded
+  template) that each agent's "Learning capture" paragraph was separately restating — genuine
+  duplication, not just similar-looking boilerplate, and a stronger target than a new skill file
+  would have been (the `agent-maintenance` skill isn't loaded by the other 11 agents; the inbox
+  file is something every one of them already opens to append). Trimmed the redundant clause
+  — "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture —
+  the team maintainer verifies and promotes..." — out of `analyst`, `architect`, `coder`,
+  `data-scientist`, `devops`, `frontend-engineer`, `qa-engineer`, `tdd-engineer`, `teco`, `tico`,
+  and `cobb.md` itself (all but `graph-dba`, whose graph-based capture mechanism has no comparable
+  file header — never part of the "near-identical" set to begin with). Kept in every file: the
+  discipline-specific fact-kind clause (real, non-boilerplate customization), the inbox path,
+  "skip task-specific details," "never edit your own agent definition," and the write-guard
+  clause where the agent is doc-scope-guarded.
+- **Why:** Continuation of the 2026-08-19 verbosity diagnosis — item 1 was the largest of the four
+  parked items (13 files vs. 1) and the one flagged as needing the most design judgment (where
+  should the shared text live). Investigating first rather than defaulting to the original "new
+  skill" proposal avoided creating an indirection (a file most agents don't load) when a better
+  target (a file they already touch) was sitting there.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean (no new FAILs; same two pre-existing,
+  unrelated FAILs in `falkor-chat/docs/test-reports/graphrag-eval-report.md`). Spot-checked word
+  counts: ~22 words saved per file across the 10 non-`cobb` agents (analyst 2285→2263, architect
+  1427→1405, coder 1079→1057, tdd-engineer 1830→1808, qa-engineer 1845→1823,
+  frontend-engineer 1444→1422, teco 4074→4051), plus `data-scientist`/`devops`/`tico`/`cobb`
+  (not previously measured, edited identically).
+- **Docs touched:** the 11 agent `.md` files above, their `kaizen/history.md` files, and this
+  agent's own `kaizen/plan.md` (item 1 marked done, item 4 now the sole remaining item).
+- **Plan items:** parking-lot verbosity item updated — items 1, 2, and 3 done; item 4
+  (hedge-pruning) remains the only open slice.
+
+## 2026-08-19 — Verbosity-diagnosis items 2 & 3 executed: incident-narrative excision (teco), run-on-sentence-to-sub-list (analyst)
+- **What:** User picked two of the four parked verbosity-diagnosis items (own history entry
+  below) to execute now. (2) `teco.md`'s step-table sizing bullet kept its operative rule but
+  dropped the inline K-042 incident narrative (458k tokens/222 tool calls, dropped test files,
+  stakeholder quote) in favor of a dated pointer to `teco/kaizen/history.md`'s 2026-08-11 entry,
+  which already carries the full story verbatim — nothing lost, just de-duplicated between prompt
+  and change log. (3) `analyst.md`'s "Evidence over vibes" Guardrails bullet — a single run-on
+  sentence carrying 5 sub-rules after four separate clause extensions, flagged 2026-08-09 and
+  never fixed — restructured into a lead sentence plus a 5-item sub-list under the same bullet;
+  content unchanged, no new top-level Guardrails bullet.
+- **Why:** Continuation of the 2026-08-19 verbosity diagnosis below; these two were the
+  lowest-risk, single-file, no-content-loss slices (unlike item 1, which touches all 13 files, or
+  item 4, which needs a case-by-case judgment call on which hedges are actually backed
+  structurally).
+- **Verified:** `bash claude/scripts/audit-team.sh` clean (no new FAILs; the two pre-existing
+  unrelated FAILs in `falkor-chat/docs/test-reports/graphrag-eval-report.md` untouched). Word
+  counts: `teco.md` 4137 → 4074 (−63); `analyst.md` 2271 → 2285 (+14, sub-list markdown overhead
+  — the goal was scannability, not further shrinkage).
+- **Docs touched:** `claude/teco/teco.md`, `claude/analyst/analyst.md`,
+  `claude/teco/kaizen/history.md`, `claude/analyst/kaizen/history.md`, `claude/cobb/kaizen/plan.md`.
+- **Plan items:** parking-lot verbosity item updated — items 2 and 3 marked done, items 1 (Learning
+  capture dedup) and 4 (hedge-pruning) remain open.
+
+## 2026-08-19 — Team verbosity diagnosis + CPG-freshness centralization on teco (7-agent sweep)
+- **What:** Two-part session. (1) **Diagnosis** (no edits): user asked why the team's prompts are
+  verbose. Measured evidence: the "Learning capture" section (~90–190 words, near-identical) in
+  all 13 agent files (~1,500 words repo-wide); the CPG freshness-check paragraph duplicated
+  verbatim across 6 files (~780 words); `teco`'s step-table sizing rule carrying a ~100-word
+  incident narrative inline; a parking-lot precedent (`analyst`'s "Evidence over vibes" bullet,
+  flagged 2026-08-09) showing kaizen distillation as an additive-only ratchet. Recommended:
+  extract duplicated boilerplate into skill pointers, move incident narratives to `history.md`,
+  convert nested prose caveats into tables, prune hedges once a rule has structural backup. (2)
+  **Executed one concrete slice** the user chose to act on immediately: moved CPG
+  freshness-checking off `analyst`/`architect`/`coder`/`tdd-engineer`/`frontend-engineer`/
+  `qa-engineer` (each lost the ~130-word freshness paragraph) and centralized it on `teco`
+  (`mcp__cypher__query` added to its `tools:`; new §3 dispatch-time freshness bullet). Fully
+  centralized per explicit user choice — a specialist run standalone no longer checks freshness
+  at all, an accepted capability loss. Wrote `docs/plans/cpg-agent-adoption2.md` (Extends the
+  archived `cpg-agent-adoption.md` — AC-2's `CPG:` line and the six-agent CPG-orientation contract
+  are untouched); added the `Extended by:` header pointer on the archived original. Updated
+  `skills/cpg-analysis/SKILL.md` §4 and `references/freshness.md`'s consumer line. Logged a dated
+  `history.md` entry in each of the 7 touched agents; flagged the `mcp__cypher__query` grant as
+  **not yet live-verified** (teco has a known Grep/Glob declared-but-absent precedent, 2026-08-10)
+  in `teco.md`'s Guardrails and a `teco/kaizen/plan.md` parking-lot item.
+- **Why:** User-directed — a direct design conversation, not a `teco`-coordinated unit, so no
+  independent-review gate was invoked; the design fork (coordinated-only vs. fully-centralized;
+  teco-only vs. teco+tico) was resolved via `AskUserQuestion` rather than guessed. Recorded here
+  because it's a real behavior change to a shipped, AC-gated feature (M4) plus a same-run
+  demonstration of the diagnosis's own prescription (boilerplate removed, no incident narrative
+  added to the operative prompts — the origin lives in this entry and the plan doc instead).
+- **Plan items:** the broader diagnosis (Learning-capture dedup, teco's step-table narrative
+  excision, `analyst`'s run-on-sentence table conversion) is **not yet executed** — the user asked
+  only for the CPG-freshness slice this session. Parking below.
+
 ## 2026-08-18 — Own-inbox promotion: strengthened `agent-maintenance` §5 step 2 ("verify") after a real graph-dba distillation pass surfaced a citation that was real but wrong
 - **What:** While running the real `kaizen_graph_dba` distillation pass (see `claude/graph-dba/
   kaizen/history.md`'s matching 2026-08-18 entry), re-verifying entry `f8c28d75…` against

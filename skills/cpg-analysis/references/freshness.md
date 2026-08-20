@@ -2,7 +2,7 @@
 
 > Back to [`../SKILL.md`](../SKILL.md) · schema in
 > [`../../joern-cpg/references/cpg-model.md`](../../joern-cpg/references/cpg-model.md).
-> **Consumers:** any agent consulting a loaded CPG. **Covers:** FR-5, FR-6
+> **Consumer:** `teco`, at dispatch time, for a unit whose specialist will consult a CPG (2026-08-19: centralized — see `docs/plans/cpg-agent-adoption2.md`; a specialist invoked standalone no longer runs this check). **Covers:** FR-5, FR-6
 > (`cpg-agent-adoption`, M4).
 
 **Purpose.** Before trusting a loaded CPG's answers, find out how current it is

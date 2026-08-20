@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_data-scientist`), mirroring `graph-dba`; `mcp__cypher__query` granted
+- **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
+  directly into `kaizen_data-scientist` (FalkorDB, via `mcp__cypher__query`) instead of appending
+  to `kaizen/inbox.md`. `kaizen/inbox.md` is now a frozen historical snapshot — its 4
+  pre-existing entries were parsed out programmatically and imported into the graph verbatim
+  (entryId assigned, `author: 'data-scientist'`), preserving every field; its own header explains
+  the freeze and gives the live-read query. Frontmatter `tools:` gained `mcp__cypher__query` —
+  this agent previously had no MCP tool access at all, needed now for both this capture path and
+  any future graph reads. The trailing "Your write guard allows exactly this inbox path" clause
+  was dropped — the write guard gates `Write`/`Edit`, not the `mcp__cypher__query` MCP tool, so
+  it no longer applies to this capture path.
+- **Why:** User-directed team-wide redesign ("I will migrate all agents to write their learnings
+  to the graph like graph-dba"), reversing yesterday's file-based Learning-capture dedup (entry
+  below) — the user determined the whole team should follow `graph-dba`'s existing graph-based
+  capture pattern instead of the file-based inbox convention.
+- **Plan items:** —
+
+## 2026-08-19 — Learning-capture paragraph de-duplicated against the inbox's own header
+- **What:** Trimmed the "Learning capture" paragraph: dropped "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture — the team maintainer verifies and promotes entries into prompts, knowledge bases, or project docs" — both already stated verbatim in `kaizen/inbox.md`'s own header template (agent-maintenance skill §5), which the agent necessarily opens to append. Kept: the discipline-specific fact-kind clause, the inbox path, "skip task-specific details," "never edit your own agent definition," and the write-guard clause. Behavior unchanged.
+- **Why:** User-directed prompt-verbosity reduction, item 1 of the parked diagnosis (`cobb/kaizen/plan.md`) — the mechanics were literally duplicated (prompt + inbox header say the same thing), not just similar boilerplate; pointing at the file's own header removes the duplication without losing information, since the agent reads that file to act anyway.
+- **Plan items:** —
+
 ## 2026-08-11 — Inbox distillation: 4 entries — 1 prompt addition, 1 new knowledge base, 1 to `python-web-quirks`, 1 discarded as stale
 
 - **What:** `cobb` processed all 4 entries in `data-scientist/kaizen/inbox.md` (§5).

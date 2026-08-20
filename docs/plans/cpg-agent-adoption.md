@@ -1,6 +1,6 @@
 # CPG agent adoption — primary design
 
-> **Status:** archived · **Owner:** `cobb` · **Tracks:** cpg-agent-adoption (M4)
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** cpg-agent-adoption (M4) · **Extended by:** `docs/plans/cpg-agent-adoption2.md` (FR-5/FR-6 freshness-check ownership moved to `teco`; AC-2 unaffected)
 
 Design for the `cobb`-owned slice of
 [`../requirements/cpg-agent-adoption.md`](../requirements/cpg-agent-adoption.md) (Status: Ready

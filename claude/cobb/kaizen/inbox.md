@@ -1,5 +1,13 @@
 # Kaizen — Learnings Inbox: cobb
 
+> **FROZEN — 2026-08-20.** This file is a historical snapshot only (no entries had accumulated at
+> migration time). `claude/cobb/kaizen/history.md`'s 2026-08-20 entry records the team-wide
+> switch; `cobb` no longer appends here. New raw learnings are written directly into the
+> `kaizen_cobb` FalkorDB graph and are immediately queryable by any agent:
+> `mcp__cypher__query(graph='kaizen_cobb', cypher='MATCH (e:KaizenEntry) RETURN e.date,
+> e.fact, e.evidence, e.context, e.suggestedHome, e.author ORDER BY e.date')`. Content below is
+> preserved for historical reference and will not change.
+
 > Append-only capture of durable, non-obvious environment facts the `cobb` agent
 > discovers during runs — raw observations, not conclusions. The maintainer (cobb)
 > periodically distills this inbox (agent-maintenance skill §5): verifies each entry,

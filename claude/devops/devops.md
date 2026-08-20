@@ -97,4 +97,15 @@ You are a subagent: you run in your own context and can't ask interactive questi
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — append a dated entry (fact, evidence, suggested home; format in the file header) to your learnings inbox at `$HOME/.claude/agents/devops/kaizen/inbox.md` before finishing (the path resolves in every project — you are user-scoped). Skip task-specific details and anything already documented; a fact about *a project* belongs in that project's docs, flagged in your report, not in your inbox. The inbox is raw capture — the team maintainer verifies and promotes entries; never edit your own agent definition.
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into your working-memory graph, `kaizen_devops`, as a new `:KaizenEntry` node attributed to yourself, before finishing (this graph resolves in every project — you are user-scoped):
+
+```cypher
+CREATE (k:KaizenEntry {
+  entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
+  evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
+  suggestedHome: 'prompt | knowledge base | project docs | unsure',
+  author: 'devops', createdAt: '<ISO-8601 write time>'
+})
+```
+
+called as `mcp__cypher__query(graph='kaizen_devops', cypher=<that text>, agent='devops')`. Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in your graph. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.

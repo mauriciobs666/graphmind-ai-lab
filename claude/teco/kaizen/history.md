@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_teco`), mirroring `graph-dba`
+- **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
+  directly into `kaizen_teco` (FalkorDB, via `mcp__cypher__query`) instead of appending to
+  `kaizen/inbox.md`. `kaizen/inbox.md` is now a frozen historical snapshot — its 5 pre-existing
+  entries were parsed out programmatically and imported into the graph verbatim (entryId
+  assigned, `author: 'teco'`), preserving every field; its own header explains the freeze and
+  gives the live-read query. The trailing "Your write guard allows exactly this inbox path"
+  clause was dropped — the write guard gates `Write`/`Edit`, not the `mcp__cypher__query` MCP
+  tool, so it no longer applies to this capture path.
+- **Why:** User-directed team-wide redesign ("I will migrate all agents to write their learnings
+  to the graph like graph-dba"), reversing yesterday's file-based Learning-capture dedup (entry
+  below) — the user determined the whole team should follow `graph-dba`'s existing graph-based
+  capture pattern instead of the file-based inbox convention.
+- **Plan items:** —
+
+## 2026-08-19 — Learning-capture paragraph de-duplicated against the inbox's own header
+- **What:** Trimmed the "Learning capture" paragraph: dropped "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture — the team maintainer (`cobb`) verifies and promotes entries into prompts, knowledge bases, or project docs" — both already stated verbatim in `kaizen/inbox.md`'s own header template (agent-maintenance skill §5), which the agent necessarily opens to append. Kept: the discipline-specific fact-kind clause, the inbox path, "skip task-specific details," "never edit your own agent definition," and the write-guard clause. Behavior unchanged.
+- **Why:** User-directed prompt-verbosity reduction, item 1 of the parked diagnosis (`cobb/kaizen/plan.md`) — the mechanics were literally duplicated (prompt + inbox header say the same thing), not just similar boilerplate; pointing at the file's own header removes the duplication without losing information, since the agent reads that file to act anyway.
+- **Plan items:** —
+
+## 2026-08-19 — Step-table sizing rule: incident narrative moved out of operative prompt text
+- **What:** The dispatch-sizing bullet (§3, "Delegate with complete briefs") kept its operative rule verbatim (~3-step/5-file decomposition boundary, one unit per step/small cluster) but dropped the inline K-042 incident narrative (the 458k-token/222-tool-call whole-landing dispatch, the dropped-test-files detail, the stakeholder quote) in favor of a dated pointer to this file's own 2026-08-11 entry, which already carries the full story. −~85 words in the prompt body.
+- **Why:** User-directed prompt-verbosity reduction, item 2 of the parked diagnosis (`cobb/kaizen/plan.md`) — an origin story belongs in the change log it's already recorded in, not repeated inline in the instruction every session pays to load. The rule itself is unchanged; only the narrative moved.
+- **Plan items:** —
+
+## 2026-08-19 — CPG freshness centralized here; `mcp__cypher__query` added
+- **What:** Took over the CPG freshness check that `analyst`/`architect`/`coder`/`tdd-engineer`/`frontend-engineer`/`qa-engineer` used to run themselves (`docs/plans/cpg-agent-adoption2.md`, extending the archived `cpg-agent-adoption.md`). Added `mcp__cypher__query` to `tools:`; new §3 bullet — guess the graph key, run the freshness recipe (`skills/cpg-analysis/references/freshness.md`) before dispatching a unit likely to touch a CPG, state the result in the brief. Guardrails note flags the grant as **not yet live-verified** — teco's frontmatter already has a known live-tool-set-narrower-than-declared gap (`Grep`/`Glob`, verified 2026-08-10), so `mcp__cypher__query` needs the same live probe before this duty can be trusted.
+- **Why:** User-directed prompt-verbosity reduction surfaced the freshness check as ~130 words duplicated verbatim across six agents; user chose full centralization on teco (accepting the standalone-run capability loss) over a per-agent dedup via a shared skill pointer.
+- **Plan items:** new parking-lot item — live-verify the `mcp__cypher__query` grant on a real coordination before relying on the freshness duty.
+
 ## 2026-08-16 — K-013 ✅ and K-014 ✅ closed by real evidence from K-026's own coordination (review-only, no prompt change)
 
 - **What:** reviewing `teco/kaizen/plan.md`'s active table against the just-closed K-026

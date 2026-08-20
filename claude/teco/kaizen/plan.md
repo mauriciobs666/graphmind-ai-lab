@@ -120,6 +120,7 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
+- **Live-verify the `mcp__cypher__query` grant (added 2026-08-19 for the centralized CPG-freshness duty, `docs/plans/cpg-agent-adoption2.md`).** teco's frontmatter already has one precedent of a declared-but-not-actually-granted tool (`Grep`/`Glob`, verified 2026-08-10 by probing a live run) — `mcp__cypher__query` needs the same live probe before the freshness duty can be trusted rather than silently no-op'd. Do this on the next real teco-coordinated unit that touches a CPG-consuming specialist; if the tool doesn't resolve, that's itself the finding to log.
 - ~~Guardrails commit bullet is dense (2026-07-30); step-3 density (2026-07-29); model-routing
   evidence clause (2026-07-29).~~ *(✅ All three resolved 2026-08-10 — steps 3/4 split into
   sub-bullets, Guardrails' commit bullet split four ways, the dated evidence clause dropped from

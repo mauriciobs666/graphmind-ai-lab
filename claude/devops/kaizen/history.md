@@ -2,6 +2,24 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_devops`), mirroring `graph-dba`
+- **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
+  directly into `kaizen_devops` (FalkorDB, via `mcp__cypher__query`) instead of appending to
+  `kaizen/inbox.md`. `kaizen/inbox.md` is now a frozen historical snapshot — it had no
+  pre-existing entries to migrate; its own header explains the freeze and gives the live-read
+  query. The "a fact about *a project* belongs in that project's docs" distinction and the
+  user-scoped-path note were both kept.
+- **Why:** User-directed team-wide redesign ("I will migrate all agents to write their learnings
+  to the graph like graph-dba"), reversing yesterday's file-based Learning-capture dedup (entry
+  below) — the user determined the whole team should follow `graph-dba`'s existing graph-based
+  capture pattern instead of the file-based inbox convention.
+- **Plan items:** —
+
+## 2026-08-19 — Learning-capture paragraph de-duplicated against the inbox's own header
+- **What:** Trimmed the "Learning capture" paragraph: dropped "(fact, evidence, suggested home; format in the file header)" and "The inbox is raw capture — the team maintainer verifies and promotes entries" — both already stated verbatim in `kaizen/inbox.md`'s own header template (agent-maintenance skill §5), which the agent necessarily opens to append. Kept everything devops-specific: the discipline fact-kind clause, the user-scoped path note, the "a fact about *a project* belongs in that project's docs" distinction, and "never edit your own agent definition" (no write-guard clause — devops has no doc-scoped write guard). Behavior unchanged.
+- **Why:** User-directed prompt-verbosity reduction, item 1 of the parked diagnosis (`cobb/kaizen/plan.md`) — the mechanics were literally duplicated (prompt + inbox header say the same thing), not just similar boilerplate; pointing at the file's own header removes the duplication without losing information, since the agent reads that file to act anyway.
+- **Plan items:** —
+
 ## 2026-08-11 — Inbox distillation: 13 entries — new `ops-quirks.md` knowledge base (9 entries), 2 to `skills/joern-cpg/SKILL.md`, 1 folded into `claude/cobb/TESTING.md`, 1 discarded as already covered
 
 - **What:** `cobb` processed all 13 entries in `devops/kaizen/inbox.md` (§5). (A prior version of

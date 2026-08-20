@@ -35,9 +35,9 @@ and OpenCode artifacts).
   that wires it is the repo's **first MCP wiring, and it is Claude-Code-only** — OpenCode and Kiro
   configure MCP through their own files and neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history + learnings inbox the agent appends to during runs — except `graph-dba`, whose raw
-  capture writes directly into the `kaizen_graph_dba` FalkorDB graph instead; `cobb` distills the
-  inboxes, and `graph-dba`'s graph entries alongside them). See `claude/README.md` (human catalog)
+  history + a now-frozen learnings inbox — every agent's raw capture writes directly into its own
+  `kaizen_<name>` FalkorDB graph instead, a pattern piloted on `graph-dba` and migrated team-wide
+  2026-08-20; `cobb` distills each agent's graph). See `claude/README.md` (human catalog)
   and `claude/AGENTS.md` (agent context; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
   server as a client, restricted to `send_message`/`read_messages`, for a live demo of

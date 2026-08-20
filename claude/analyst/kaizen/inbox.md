@@ -1,5 +1,13 @@
 # Kaizen — Learnings Inbox: analyst
 
+> **FROZEN — 2026-08-20.** This file is a historical snapshot only. Its 5 entries (as of this
+> date) were imported into the `kaizen_analyst` FalkorDB graph (`claude/cobb/kaizen/history.md`,
+> 2026-08-20 entry); `analyst` no longer appends here. New raw learnings are written directly into
+> the graph and are immediately queryable by any agent: `mcp__cypher__query(graph='kaizen_analyst',
+> cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact, e.evidence, e.context, e.suggestedHome,
+> e.author ORDER BY e.date')`. Content below is preserved for historical reference and will not
+> change.
+
 > Append-only capture of durable, non-obvious environment facts the `analyst` agent
 > discovers during runs — raw observations, not conclusions. The maintainer (cobb)
 > periodically distills this inbox (agent-maintenance skill §5): verifies each entry,

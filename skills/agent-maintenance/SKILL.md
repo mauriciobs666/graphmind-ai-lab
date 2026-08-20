@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-inbox distillation procedure (verify → route → log → clear each agent's raw capture — kaizen/inbox.md, or graph-dba's working-memory graph), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings inboxes.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture — a `kaizen_<agent>` FalkorDB graph; `kaizen/inbox.md` is a frozen historical relic), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 The bookkeeping that keeps an agent collection healthy: every agent/skill you
 touch carries a living **kaizen** plan + history (agents additionally a
-learnings inbox, §5), and stays **documented for two audiences** (humans and
+learnings graph, §5), and stays **documented for two audiences** (humans and
 other agents). This skill holds the procedures and
 templates so the resident agent prompt stays lean — load it when you do any
 maintenance work, follow it, and mention at the end which kaizen/doc files you
@@ -22,7 +22,7 @@ touched.
 - **Reviewing** (no source change) → still record new improvement ideas in `plan.md`.
 - **Reconciling** an already-drifted context doc → run the audit pass (§3).
 - **Certifying team coherence** (rosters, handoff contracts, enforcement parity across the collection) → run the certification pass (§4).
-- **Distilling learnings inboxes** (on request, and folded into every certification pass) → run the distillation procedure (§5).
+- **Distilling learnings graphs** (on request, and folded into every certification pass) → run the distillation procedure (§5).
 - **Linting a single artifact's prompt quality** (on authoring/review, and folded into §4) → run the prompt-quality lint (§7).
 
 ---
@@ -57,7 +57,9 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
 1. **Creating:** create both files. Seed `history.md` with a dated "created"
    entry and `plan.md` with improvements you already foresee. In collections
    that run the learning-capture loop (§5 — graphmind-ai-lab's `claude/` does),
-   also seed an empty `inbox.md` from the §5 template.
+   also seed an `inbox.md` from the §5 template's frozen-stub variant — the
+   agent's own `kaizen_<name>` graph needs no pre-creation, FalkorDB
+   materializes the key lazily on its first write.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move completed ones out of
@@ -196,7 +198,8 @@ protects whoever runs it.
 ### Order of operations when you create or edit an artifact
 
 1. Write/edit the agent or skill source.
-2. Update its `kaizen/{plan,history}.md` (§1; agents also carry `inbox.md`, §5).
+2. Update its `kaizen/{plan,history}.md` (§1; agents also carry a `kaizen_<name>`
+   learnings graph and a frozen `inbox.md` stub, §5).
 3. **If you added, renamed, or removed an agent:** update every prompt that
    **enumerates the team** in the same change — an orchestrator's roster (e.g.
    teco's "The team you coordinate"). Other agents' prompts are consumers of
@@ -304,7 +307,7 @@ runtime (the personal-info rule, §2). Fix any FAIL before judging the rest.
 every artifact changed since the last certification — the semantic,
 intra-artifact defects (contradiction, ambiguity, persona, cognitive load,
 coverage, composition conflict) that the five inter-agent checks above can't
-see. Mirrors the §5 inbox-distillation fold-in; roll its findings into the
+see. Mirrors the §5 graph-distillation fold-in; roll its findings into the
 certificate.
 
 **Certificate:** log a dated entry in the maintainer's kaizen history (cobb's,
@@ -314,35 +317,40 @@ answerable from the log.
 
 ---
 
-## 5. Learnings inboxes — capture & distillation
+## 5. Learnings graphs — capture & distillation
 
 The self-improvement loop for a stateless agent team: **capture is cheap and
-unreviewed; promotion is curated.** Each agent carries an append-only
-**learnings inbox** at `<agent>/kaizen/inbox.md` (sibling of plan/history — in
-graphmind-ai-lab, enforced by `audit-team.sh` check 1) — **except `graph-dba`**
-(graphmind-ai-lab, since `docs/plans/generic-cypher-mcp.md`): its raw capture
-writes directly into a working-memory FalkorDB graph, `kaizen_graph_dba`, as
+unreviewed; promotion is curated.** Every agent's raw capture writes directly
+into its own working-memory FalkorDB graph, `kaizen_<agent>`, as
 `:KaizenEntry` nodes (`entryId`, `date`, `fact`, `evidence`, `context`,
 `suggestedHome`, `author`, `createdAt`), each attributed to itself via
-`mcp__cypher__query(graph='kaizen_graph_dba', cypher=<CREATE ...>,
-agent='graph-dba')`. Its `kaizen/inbox.md` is a **frozen historical
-snapshot** — the pre-migration content, kept for reference, no longer written
-to. During runs, every other agent appends dated, evidence-backed observations
-of **durable, non-obvious environment facts in its discipline** — tool
-quirks, undocumented behaviors, conventions that live only in the code.
-Agents never promote their own entries. For a file-based agent, the inbox is
-the only kaizen file it writes itself (the doc-scoped write guards allowlist
-exactly that path); `graph-dba`'s equivalent capture-only privilege is
-enforced by the MCP tool itself — its author-write authorization only lets
-`graph-dba` create `:KaizenEntry` nodes attributed to itself, never edit or
-delete one, which requires the curator role below. The maintainer (cobb)
-distills — on request, and folded into every certification pass (§4):
+`mcp__cypher__query(graph='kaizen_<agent>', cypher=<CREATE ...>,
+agent='<agent>')`. This pattern was piloted on `graph-dba` (`kaizen_graph_dba`,
+`docs/plans/generic-cypher-mcp.md`) and migrated team-wide 2026-08-20
+(graphmind-ai-lab, `claude/cobb/kaizen/history.md`). Every agent still carries
+`<agent>/kaizen/inbox.md` (sibling of plan/history — enforced by
+`audit-team.sh` check 1 as a structural triad), but it is now a **frozen
+historical snapshot** — pre-migration content (or nothing, for an agent with
+none at migration time), kept for reference, no longer written to; a new
+agent seeded after the migration gets the frozen-stub variant of the template
+below, never the old append-target variant. During runs, every agent writes
+dated, evidence-backed observations of **durable, non-obvious environment
+facts in its discipline** — tool quirks, undocumented behaviors, conventions
+that live only in the code — as new graph nodes. Agents never promote their
+own entries, and never edit or delete a `:KaizenEntry` once created — the
+MCP tool's author-write authorization only lets an agent *create* nodes
+attributed to itself; editing or clearing one requires the curator role
+below. The maintainer (cobb) distills — on request, and folded into every
+certification pass (§4):
 
-1. **Read every inbox** (`claude/*/kaizen/inbox.md`), plus, for `graph-dba`,
-   a live read of its graph: `mcp__cypher__query(graph='kaizen_graph_dba',
-   cypher="MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.fact, e.evidence,
-   e.context, e.suggestedHome, e.author ORDER BY e.date")` — a plain read, no
-   `agent` needed (reads are unrestricted).
+1. **Read every agent's graph**: for each agent, `mcp__cypher__query(
+   graph='kaizen_<agent>', cypher="MATCH (e:KaizenEntry) RETURN e.entryId,
+   e.date, e.fact, e.evidence, e.context, e.suggestedHome, e.author ORDER BY
+   e.date")` — a plain read, no `agent` needed (reads are unrestricted). A
+   graph with no entries yet simply doesn't exist as a key (FalkorDB
+   materializes a graph key lazily on first write) — a "graph not found"-style
+   empty result is the normal, expected state for an agent with nothing to
+   distill, not an error.
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
    system or docs; environment facts rot on upgrades. **Re-derive the fact
    yourself; don't just confirm the entry's cited evidence still exists at that
@@ -368,55 +376,54 @@ distills — on request, and folded into every certification pass (§4):
      the dated doubt in `history.md` regardless; if the entry is actionable
      (not just a shrug), also open a backlog item in the agent's `plan.md`
      under the next `K-`number. **Dedup check before opening one:** grep the
-     agent's `plan.md` for the entry's `entryId` (graph-based) or its one-line
-     fact (file-based) — if a prior distillation pass already opened an item
-     for it, reference/update that item instead of creating a duplicate
-     (origin: 2026-08-18, `graph-dba` entry `6e5d6451…`/K-007 review — the
-     entry's `entryId` has no in-place way to carry a forward pointer to the
-     `K-`item it spawned, so a *later* pass reading it fresh would have no
-     signal a backlog item already exists without this check). The raw entry
-     itself does not survive being kept open past this pass — see step 4.
+     agent's `plan.md` for the entry's `entryId` — if a prior distillation
+     pass already opened an item for it, reference/update that item instead
+     of creating a duplicate (origin: 2026-08-18, `graph-dba` entry
+     `6e5d6451…`/K-007 review — the entry's `entryId` has no in-place way to
+     carry a forward pointer to the `K-`item it spawned, so a *later* pass
+     reading it fresh would have no signal a backlog item already exists
+     without this check). The raw entry itself does not survive being kept
+     open past this pass — see step 4.
 4. **Log & clear.** Every disposition — promoted, discarded, or kept open —
    gets a dated entry in the agent's `history.md` (what, why, where it went,
    or why it's still open) — **the history entry (and, for a kept-open item,
    the `plan.md` backlog entry) is the durable record, not the raw capture
-   itself.** For a **file-based** agent, the processed entry is then removed
-   directly from `inbox.md` **in every case, including "kept open"** — an
-   unresolved question lives on in `history.md`'s dated note (and `plan.md`
-   if actionable), not by leaving the raw line sitting in `inbox.md` next to
-   entries nobody has looked at yet. The same rule applies to **`graph-dba`**:
-   a "kept open" entry's node is cleared from `kaizen_graph_dba` too, once its
-   disposition is logged — the graph is working memory for capture **not yet
-   reviewed**, not a permanent store for reviewed-but-still-unresolved
-   questions, and a live node with no update mechanism (no sanctioned `SET`,
-   only create-your-own and curator-clear) can only drift from whatever
-   `history.md`/`plan.md` say about it. (Decided 2026-08-18, `analyst`-gated
-   review of `docs/reviews/graph-dba-kaizen-distillation.md`; the alternative
-   — leaving kept-open nodes live as a standing "still unresolved" marker —
-   was considered and rejected: nothing reads the graph for that signal that
+   itself.** The processed node is then cleared from `kaizen_<agent>` **in
+   every case, including "kept open"** — an unresolved question lives on in
+   `history.md`'s dated note (and `plan.md` if actionable), not by leaving a
+   live node sitting in the graph next to entries nobody has reviewed yet.
+   The graph is working memory for capture **not yet reviewed**, not a
+   permanent store for reviewed-but-still-unresolved questions, and a live
+   node with no update mechanism (no sanctioned `SET`, only create-your-own
+   and curator-clear) can only drift from whatever `history.md`/`plan.md` say
+   about it. (Decided 2026-08-18, `analyst`-gated review of
+   `docs/reviews/graph-dba-kaizen-distillation.md`, piloted on `graph-dba`
+   before the 2026-08-20 team-wide migration; the alternative — leaving
+   kept-open nodes live as a standing "still unresolved" marker — was
+   considered and rejected: nothing reads the graph for that signal that
    `plan.md`'s K-item table doesn't already serve just as well, and a live
    node still offers no way to handle the "kept open but not even actionable
    enough for a K-item" case, where `history.md`'s dated note is already the
    *only* durable record either reading would produce.)
-   For **`graph-dba`**, the append-before-clear ordering is **non-negotiable**
-   regardless of disposition: the `history.md` append must be confirmed
-   durable *before* the graph node is cleared — the two writes are independent
-   tool calls, not one transaction, so append-then-delete is the only sequence
-   that fails safe (a crash between the two leaves the entry harmlessly
-   duplicated in both places; delete-first risks losing it from both if the
-   append never lands). Concretely, for each `graph-dba` entry being disposed
-   of (promoted, discarded, or kept open):
+   The append-before-clear ordering is **non-negotiable** regardless of
+   disposition: the `history.md` append must be confirmed durable *before*
+   the graph node is cleared — the two writes are independent tool calls, not
+   one transaction, so append-then-delete is the only sequence that fails
+   safe (a crash between the two leaves the entry harmlessly duplicated in
+   both places; delete-first risks losing it from both if the append never
+   lands). Concretely, for each entry being disposed of (promoted, discarded,
+   or kept open), for agent `<agent>`:
    1. Read the raw entry (already done in step 1, or re-read by id):
-      `mcp__cypher__query(graph='kaizen_graph_dba', cypher="MATCH (e:KaizenEntry
+      `mcp__cypher__query(graph='kaizen_<agent>', cypher="MATCH (e:KaizenEntry
       {entryId: '<id>'}) RETURN e.date, e.fact, e.evidence, e.context,
       e.suggestedHome, e.author")` — a plain read, `agent` omitted.
    2. Verify it (step 2, above).
-   3. `Edit` `claude/graph-dba/kaizen/history.md`, appending the disposition
+   3. `Edit` `claude/<agent>/kaizen/history.md`, appending the disposition
       (promoted/discarded/kept-open, with reasoning) in the existing format,
       and `plan.md` too if a backlog item is opened for a kept-open entry.
       **Confirm the edit(s) succeeded** before the next step — do not proceed
       on an error.
-   4. Only then: `mcp__cypher__query(graph='kaizen_graph_dba', cypher="MATCH
+   4. Only then: `mcp__cypher__query(graph='kaizen_<agent>', cypher="MATCH
       (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')` —
       the one recognized curator-clear shape; `cobb` is a recognized curator
       agent (`CYPHER_MCP_CURATOR_AGENTS`), so this is authorized. This runs for
@@ -424,34 +431,34 @@ distills — on request, and folded into every certification pass (§4):
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.
 
-**Inbox template** (seed on creation for a file-based agent; keep the header,
-entries append below — `graph-dba`'s entry schema instead lives in
-`docs/plans/generic-cypher-mcp-graph.md` §1):
+**Inbox template** (seed on creation, for the frozen `kaizen/inbox.md` triad
+member every agent still carries — no agent appends to it; the entry schema
+above is what actually gets written, into `kaizen_<name>`):
 
 ```markdown
 # Kaizen — Learnings Inbox: {name}
 
-> Append-only capture of durable, non-obvious environment facts the `{name}` agent
-> discovers during runs — raw observations, not conclusions. The maintainer (cobb)
-> periodically distills this inbox (agent-maintenance skill §5): verifies each entry,
-> routes it (prompt / knowledge base / project docs / discard), logs the promotion in
-> `history.md`, and clears it. The agent only appends here; it never promotes.
->
-> Entry format (append at the end):
->
-> ```markdown
-> ## YYYY-MM-DD — <the fact, one line>
-> - **Evidence:** what was run/read/observed (command, file:line, output)
-> - **Context:** the task where it surfaced, one line
-> - **Suggested home:** prompt | knowledge base | project docs | unsure
-> ```
+> This file exists only to satisfy the standard kaizen triad
+> (`audit-team.sh` check 1) and holds no content. `{name}`'s raw learnings
+> capture writes directly into its own working-memory FalkorDB graph,
+> `kaizen_{name}`, as `:KaizenEntry` nodes (agent-maintenance skill §5),
+> immediately queryable by any agent: `mcp__cypher__query(graph='kaizen_{name}',
+> cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact, e.evidence, e.context,
+> e.suggestedHome, e.author ORDER BY e.date')`. The agent only creates
+> `:KaizenEntry` nodes attributed to itself; it never promotes or clears them
+> — the maintainer (cobb) does, per the distillation procedure above.
 
-*(empty — no unprocessed learnings)*
+*(no entries — this file is never written to)*
 ```
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
-> quirks-file pattern into a team-wide capture→distill loop.
+> quirks-file pattern into a team-wide capture→distill loop, at first
+> file-based per agent. 2026-08-20: migrated the whole team onto the
+> graph-based capture piloted on `graph-dba` (`docs/plans/generic-cypher-mcp.md`,
+> `docs/plans/generic-cypher-mcp-graph.md`) — every agent's `kaizen/inbox.md`
+> is now a frozen historical snapshot, capture happens in `kaizen_<agent>`
+> instead (`claude/cobb/kaizen/history.md`).
 
 ---
 

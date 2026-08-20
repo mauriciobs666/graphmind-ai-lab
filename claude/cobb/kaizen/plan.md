@@ -86,6 +86,43 @@
 | K-016 | 2026-08-19 | medium | 🔵 | `claude/docs/requirements/security-expert.md` has sat at **Status: Ready for design** since 2026-08-17 with no `cobb` design pass against it yet — surfaced while distilling a `tico` inbox entry that documented "new-agent proposal → tico interview → cobb design" as the standing convention. Read the doc and either design the security-expert agent (name, prompt, tools, hooks, kaizen seed) or, if scope/priority needs a stakeholder call first, surface that explicitly rather than silently sitting on an approved doc. |
 
 ## Parking lot / ideas
+- **Broader team-verbosity reduction (surfaced 2026-08-19, three of four slices executed —
+  see history.md).** Diagnosis: (1) extract the near-identical "Learning capture" section
+  (~1,500 words across 13 agent files) — **✅ done 2026-08-19 by pointing each agent's paragraph
+  at its own `kaizen/inbox.md` header** (which already carried the format/promotion mechanics
+  verbatim), **then superseded 2026-08-20**: the user redirected the whole capture mechanism
+  itself to a graph-based design (item below), which replaced this fix's file-append target
+  entirely — the paragraph is now graph-shaped, not a pointer to `inbox.md`. Net verbosity is
+  *higher* than either prior state (the inline `CREATE`/`mcp__cypher__query` template mirrors
+  `graph-dba`'s own always-been-verbose pattern), a deliberate trade the user made for mechanism
+  consistency over prompt leanness — not a regression to flag, but worth remembering next time a
+  verbosity pass touches this section: the file-pointer fix is no longer available as a
+  lower-cost alternative, the graph template is the floor now. (2) strip inline incident
+  narratives out of operative prompt text into `kaizen/history.md` with a dated pointer — `teco`'s
+  step-table sizing rule (K-042 origin story) — **✅ done 2026-08-19**; (3) convert nested prose
+  caveats into tables/sub-lists where the underlying info is enumerable — `analyst`'s "Evidence
+  over vibes" run-on sentence (flagged 2026-08-09) — **✅ done 2026-08-19**; (4) prune
+  hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three
+  defensive clauses — **not yet done, the only remaining item**. Revisit on request, or fold into
+  the next full team certification pass (§4) as a verbosity sub-check.
+- **Learnings capture redesigned team-wide: file-based inbox → per-agent FalkorDB graph
+  (2026-08-20).** After item 1 above shipped (pointing every agent's Learning-capture paragraph
+  at its own `inbox.md` header), the user reversed course: "I will migrate all agents to write
+  their learnings to the graph like graph-dba... we need to rethink the solution." Executed the
+  same session: every agent's capture now targets its own `kaizen_<agent>` FalkorDB graph
+  (`:KaizenEntry` nodes via `mcp__cypher__query`, mirroring `graph-dba`'s pre-existing
+  `kaizen_graph_dba` pattern exactly — same node schema, same author-write authorization, no
+  `cypher-mcp` server changes needed since its write-authorization was already agent-generic).
+  20 pre-existing real entries (`analyst` 5, `data-scientist` 4, `qa-engineer` 6, `teco` 5) were
+  parsed out of their `inbox.md` files programmatically (not hand-transcribed, to avoid exactly
+  the silent-drop risk `analyst`'s own kaizen history warns about) and imported into their graphs
+  verbatim; the other 7 agents' inboxes had nothing to migrate. All 11 `inbox.md` files are now
+  frozen historical snapshots. `data-scientist` and `tico` gained `mcp__cypher__query` in their
+  frontmatter `tools:` (neither had any MCP tool access before). Full details, verification, and
+  file list: `history.md`, 2026-08-20 entry. **Open follow-up:** the `agent-maintenance` skill §5
+  distillation procedure now needs a live pass against the 4 non-empty graphs (20 entries) — not
+  done this session, scoped as future work like any other distillation cycle (on request, or
+  folded into the next certification pass).
 - From the 2026-08-12 corrective pass fixing `analyst`'s gate on the 2026-08-11 distillation
   (`docs/reviews/kaizen-distillation-2026-08.md`): a raw inbox entry can leak the maintainer's
   home path/username into a tracked file the moment an agent *appends* it — before any
