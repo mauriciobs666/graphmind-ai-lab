@@ -45,15 +45,19 @@ re-litigated by this document.
 - **FR-1** — Each team agent is represented as its own node in the graph (not merely a string
   value), so it can be a shared traversal target across every note that names it.
 - **FR-2** — Every new note (created after this feature ships) is connected to the agent that
-  produced it via a queryable graph relationship — the producer link. Preferred name:
-  `PRODUCED_BY` (naming preference, not binding — see Decision log). Historical notes created
-  before this feature are **not** retrofitted (they keep working via the existing `author`
-  property).
+  produced it via a queryable graph relationship — the producer link, `(:Agent)-[:PRODUCED]->(:KaizenEntry)`,
+  name and direction matching `falkor-chat`'s existing `(:StepRun)-[:PRODUCED]->(:Message)`
+  convention exactly (locked, not merely a preference — see Decision log). The `author` string
+  property is **dropped**: the producer link is its sole replacement, not a coexisting field.
+  Historical notes created before this feature are **not** retrofitted (Out of scope).
 - **FR-3** — A note may additionally be connected to zero or more other agents it is about, via a
-  separate queryable relationship — the reference link. Preferred name: `MENTIONS` (naming
-  preference, not binding). This is optional per note ("when applicable"), and is distinct from
-  the producer link (FR-2): a note's producer and the agent(s) it references are never the same
-  relationship type.
+  separate queryable relationship — the reference link, `(:KaizenEntry)-[:MENTIONS]->(:Agent)`,
+  name and direction matching `falkor-chat`'s existing `(:Message)-[:MENTIONS]->(:Entity)`
+  convention exactly (locked, not merely a preference). This is optional per note ("when
+  applicable"), and is distinct from the producer link (FR-2): the two relationship types run in
+  **opposite directions** — `PRODUCED` points agent→note (creator→artifact), `MENTIONS` points
+  note→agent (content→referent) — and a note's producer and the agent(s) it references are never
+  encoded as the same relationship type.
 - **FR-4** — The reference link (FR-3) is set by `cobb`, during its existing per-agent
   distillation pass — not by the note's producing agent at write time.
 - **FR-5** — A note connected to another agent via the reference link (FR-3) is included in that
@@ -70,13 +74,21 @@ re-litigated by this document.
 - **FR-7** — This feature is designed and delivered against the graph topology M7
   (`docs/requirements/generic-cypher-mcp2.md`) actually ships — **M8 does not start design until
   M7's plan gate closes and its consolidation lands.**
+- **FR-8** — For every new note created after M8 ships, the session-identification field (M7's
+  FR-8a — the Claude Code session ID the note was captured in) moves from a property on the
+  `:KaizenEntry` node to a property **on the `PRODUCED` relationship** (FR-2) instead — the
+  session belongs to the act of producing the note, not to the note itself. This **supersedes**
+  M7's FR-8a's placement for entries created after M8 ships; M7's own document is not edited (per
+  the repo's supersession-by-successor-document convention), since it will already be
+  approved/executed against by the time M8 starts. Entries created during the window after M7
+  ships but before M8 ships keep `sessionId` as a note property, per M7's rules — **not**
+  retrofitted onto the new edge, same no-retrofit pattern as FR-2/FR-3.
 
-*Context for the architect (not a requirement):* exact relationship-type names (`PRODUCED_BY` vs.
-`EMITTED_BY`, `MENTIONS` vs. `REFERS_TO`), whether the producer link fully replaces the `author`
-property or coexists with it, and the query mechanics behind FR-5/FR-6 (how `cobb`'s per-agent
-pass is scoped, how partial-edge deletion is expressed in Cypher) are design decisions, informed
-by `falkor-chat`'s locked naming precedent (`PRODUCED`, `MENTIONS`) but not dictated by it — a
-different graph/component, no literal namespace collision.
+*Context for the architect (not a requirement):* the query mechanics behind FR-5/FR-6 (how
+`cobb`'s per-agent pass is scoped, how partial-edge deletion is expressed in Cypher) are design
+decisions. Relationship names/directions (`PRODUCED`, `MENTIONS`) and the `author` property's
+removal are **locked** by FR-2/FR-3 (2026-08-20 stakeholder decision) — matched exactly to
+`falkor-chat`'s existing convention, not left open.
 
 ## Out of scope
 - **Retrofitting historical entries** with the new relationships (FR-2's note) — new entries only.
@@ -104,13 +116,13 @@ different graph/component, no literal namespace collision.
   agent, a query starting from that third agent's node reaches both notes.
 - **AC-6** — No design work for this feature starts before M7's coordination log records its plan
   gate closed and its consolidation delivered.
+- **AC-7** — Given a new note created after M8 ships, when any agent queries its `PRODUCED`
+  relationship, the session-identification field is present there (not on the note node); given a
+  note created after M7 shipped but before M8 shipped, its session-identification field remains on
+  the note node, unmigrated.
 
 ## Open questions
-1. Exact relationship-type names (`PRODUCED_BY`/`MENTIONS` vs. alternatives) — left to the
-   architect (see FR-7's "Context for the architect" note); not blocking readiness.
-2. Whether the `author` property is dropped once the producer relationship exists, or the two
-   coexist for a transition period — left to the architect.
-3. Any properties beyond identity on the new agent node (e.g. role/kind) — not raised by the
+1. Any properties beyond identity on the new agent node (e.g. role/kind) — not raised by the
    stakeholder; assume identity-only unless a concrete need surfaces at design time.
 
 ## Decision log
@@ -166,3 +178,18 @@ different graph/component, no literal namespace collision.
   pass always fully resolves/removes the `PRODUCED_BY` edge when it runs, regardless of how many
   `MENTIONS` edges remain. Only `MENTIONS` edges follow the count-and-defer-deletion rule; the node
   survives independently of `PRODUCED_BY` for as long as any `MENTIONS` edge remains.
+- 2026-08-20 — Readback delivered. Stakeholder corrected two things, both now **locked** (FR-2/
+  FR-3, superseding every earlier "preference, not binding" framing above): (1) the `author`
+  string property is **dropped outright**, not kept alongside the new producer link — closing
+  Open question 2. (2) Relationship names/directions must match `falkor-chat` **exactly**, not
+  merely take inspiration from it — which corrects the producer-link name from the earlier
+  `PRODUCED_BY` (note→agent) to **`PRODUCED`, agent→note** (`(:Agent)-[:PRODUCED]->(:KaizenEntry)`),
+  mirroring `falkor-chat`'s `(:StepRun)-[:PRODUCED]->(:Message)` in both name and direction — the
+  opposite direction from `MENTIONS` (note→agent), which was already correctly matched. Closes
+  Open question 1.
+- 2026-08-20 — Stakeholder: move M7's `sessionId` field off the note and onto the `PRODUCED`
+  relationship instead. → **Yes** (new FR-8/AC-7) — recorded in M8 as an explicit supersession of
+  M7's FR-8a placement, since M7's document isn't edited directly. Does the migration reach
+  entries created in the M7-only window (before M8 ships)? → **No** — same no-retrofit pattern as
+  FR-2/FR-3: only entries created after M8 ships carry `sessionId` on the edge; the interim
+  entries keep it on the note node, unmigrated.
