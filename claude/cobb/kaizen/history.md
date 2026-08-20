@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-20 — M7 substrate units S4/S3/S2: consolidate per-agent `kaizen_<agent>` graphs onto shared `kaizen_team`, deliver FR-12/AC-9 (no `inbox.md` for a new agent)
+- **What:** Dispatched by `teco` to execute 3 of the 21 units in
+  `docs/plans/generic-cypher-mcp2.md` (Version 4), in the plan's required order (`S4` before `S3`,
+  since `S3` depends on `S4` per P3-m3):
+  - **`S4`** — `claude/scripts/audit-team.sh` check 1 narrowed from a three-way `plan.md`+
+    `history.md`+`inbox.md` conjunction to a two-way `plan.md`+`history.md` pair; header comment
+    (lines 8-9) updated to match. Verified per the plan's own isolated-scratch-copy method (P3-M1):
+    a synthetic agent with `<name>.md`+`kaizen/{plan,history}.md` and **no** `inbox.md`, audited
+    from a copy of the script at `<scratch>/sub/scripts/audit-team.sh` (so `ROOT` resolves to
+    `<scratch>`), produced `PASS <name>: kaizen plan + history present` on check 1 specifically —
+    overall run still `FAIL`s on checks 2/4/5/5b, expected (deployment/roster/catalogs fail for any
+    synthetic agent by construction). Live re-run of the unmodified 12-agent `claude/` collection:
+    all 12 still `PASS` check 1 (their `inbox.md` is present but no longer required).
+  - **`S3`** — `skills/agent-maintenance/SKILL.md`: every `kaizen_<agent>`/`kaizen_<name>`/
+    `kaizen_{name}` occurrence retargeted to `kaizen_team` with an `author`-filtered pattern (§1
+    step 1, §2 step 2, §5's intro/distillation-procedure/read-and-clear calls); §1's "Creating"
+    procedure no longer seeds an `inbox.md` for a new agent — points the new agent's
+    Learning-capture section straight at the `kaizen_team` recipe instead; §5's "Inbox template"
+    block rewritten from "seed on creation" to a historical "Inbox header shape" reference note
+    (the target header shape `C-<agent>` units write into the 12 existing frozen files) plus a
+    note on the 4 agents whose provenance clause must stay untouched (P3-M3). Verified by
+    `grep -n 'kaizen_' skills/agent-maintenance/SKILL.md`: 13 of 15 hits are `kaizen_team`
+    (correct, retargeted); the 2 surviving old-pattern hits are both genuinely past-tense history
+    (the Inbox-header-shape note describing the real frozen files' provenance clause, and the
+    Origin block's account of the 2026-08-20 migration lineage) — no prescriptive pointer to the
+    old per-agent-graph convention survives.
+  - **`S2`** — `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`, `docs/BACKLOG.md` all
+    retargeted to describe `kaizen_team`, `author`-partitioned, as the standing convention (each
+    file's kaizen-adjacent paragraph, not just the one the plan named — also fixed `claude/AGENTS.md`
+    line ~63 and root `AGENTS.md`'s "Working in this repo" bullet, both of which still instructed
+    seeding `inbox.md` on agent creation). `claude/README.md`'s Kaizen section now carries §3.1's
+    `MATCH`/`RETURN`/`ORDER BY` FR-7 recipe verbatim, full field list, as a copy-pasteable example,
+    and states every `kaizen/inbox.md` as a **permanent** frozen snapshot (not "required to
+    exist"). `docs/BACKLOG.md` gets a new `## M7` body section (verbatim from the plan's §4.4) and
+    a matching Milestone-map row after M6, mirroring M1–M6's format.
+- **Why:** `docs/plans/generic-cypher-mcp2.md` (analyst-approved, "approve with suggestions"),
+  consolidating the ad hoc per-agent `kaizen_<agent>` graphs (below) onto one shared,
+  `author`-partitioned `kaizen_team` graph, and delivering FR-12/AC-9 as literally written.
+- **Verification commands run:** the isolated-scratch `audit-team.sh` check-1 test (above); live
+  `bash claude/scripts/audit-team.sh` (all 12 agents `PASS` check 1; the run's overall `FAIL` is a
+  **pre-existing, unrelated** personal-info leak in `falkor-chat/docs/test-reports/graphrag-eval-report.md`,
+  confirmed already committed at `1578af3`, outside this dispatch's scope); `grep -n 'kaizen_'
+  skills/agent-maintenance/SKILL.md` (above).
+- **Explicitly not touched in this dispatch** (separate `C-<agent>` units, per-agent, dispatched
+  separately): any `claude/<agent>/<agent>.md` prompt file or `claude/<agent>/kaizen/inbox.md`
+  header note — including `cobb.md`'s own.
+- **Plan items:** none opened — this is execution of an already-gated plan, not a new backlog idea.
+
 ## 2026-08-20 — Learnings capture redesigned team-wide: file-based inbox → per-agent `kaizen_<agent>` FalkorDB graph, mirroring `graph-dba`
 - **What:** User redirected the previous day's file-pointer fix (below) with "I will migrate all
   agents to write their learnings to the graph like graph-dba... we need to rethink the

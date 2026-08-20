@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture — a `kaizen_<agent>` FalkorDB graph; `kaizen/inbox.md` is a frozen historical relic), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph, `author`-partitioned; `kaizen/inbox.md` is a frozen historical relic), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -57,9 +57,12 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
 1. **Creating:** create both files. Seed `history.md` with a dated "created"
    entry and `plan.md` with improvements you already foresee. In collections
    that run the learning-capture loop (§5 — graphmind-ai-lab's `claude/` does),
-   also seed an `inbox.md` from the §5 template's frozen-stub variant — the
-   agent's own `kaizen_<name>` graph needs no pre-creation, FalkorDB
-   materializes the key lazily on its first write.
+   point the new agent's Learning-capture prompt section directly at the
+   `kaizen_team` write recipe (§5) — `author: '<name>'` on every entry it
+   creates. **No `inbox.md` is seeded for a new agent** (FR-12/AC-9,
+   `docs/plans/generic-cypher-mcp2.md`) — `kaizen_team` is a shared graph,
+   already provisioned; a new agent's entries just carry a new `author`
+   value, nothing to pre-create.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move completed ones out of
@@ -198,8 +201,9 @@ protects whoever runs it.
 ### Order of operations when you create or edit an artifact
 
 1. Write/edit the agent or skill source.
-2. Update its `kaizen/{plan,history}.md` (§1; agents also carry a `kaizen_<name>`
-   learnings graph and a frozen `inbox.md` stub, §5).
+2. Update its `kaizen/{plan,history}.md` (§1; agents also write into the
+   shared `kaizen_team` learnings graph, `author`-partitioned, §5 — no
+   `inbox.md` is created for a new agent).
 3. **If you added, renamed, or removed an agent:** update every prompt that
    **enumerates the team** in the same change — an orchestrator's roster (e.g.
    teco's "The team you coordinate"). Other agents' prompts are consumers of
@@ -321,19 +325,21 @@ answerable from the log.
 
 The self-improvement loop for a stateless agent team: **capture is cheap and
 unreviewed; promotion is curated.** Every agent's raw capture writes directly
-into its own working-memory FalkorDB graph, `kaizen_<agent>`, as
-`:KaizenEntry` nodes (`entryId`, `date`, `fact`, `evidence`, `context`,
-`suggestedHome`, `author`, `createdAt`), each attributed to itself via
-`mcp__cypher__query(graph='kaizen_<agent>', cypher=<CREATE ...>,
-agent='<agent>')`. This pattern was piloted on `graph-dba` (`kaizen_graph_dba`,
-`docs/plans/generic-cypher-mcp.md`) and migrated team-wide 2026-08-20
-(graphmind-ai-lab, `claude/cobb/kaizen/history.md`). Every agent still carries
-`<agent>/kaizen/inbox.md` (sibling of plan/history — enforced by
-`audit-team.sh` check 1 as a structural triad), but it is now a **frozen
-historical snapshot** — pre-migration content (or nothing, for an agent with
-none at migration time), kept for reference, no longer written to; a new
-agent seeded after the migration gets the frozen-stub variant of the template
-below, never the old append-target variant. During runs, every agent writes
+into one shared working-memory FalkorDB graph, `kaizen_team`,
+`author`-partitioned, as `:KaizenEntry` nodes (`entryId`, `date`, `fact`,
+`evidence`, `context`, `suggestedHome`, `author`, `createdAt`), each
+attributed to itself via `mcp__cypher__query(graph='kaizen_team', cypher=<CREATE
+...>, agent='<agent>')`. This pattern was piloted on `graph-dba`, then
+migrated team-wide 2026-08-20 (graphmind-ai-lab; see the Origin note below for
+the two-step migration lineage — one graph per agent, then consolidated onto
+this single shared graph the same day). Existing agents still carry
+`<agent>/kaizen/inbox.md` (sibling of plan/history, but no longer required by
+`audit-team.sh` check 1 — plan+history alone now suffice), and it is now a
+**permanent frozen historical snapshot** — pre-migration content (or nothing,
+for an agent with none at migration time), kept for reference, no longer
+written to. **A new agent created from here on gets no `inbox.md` at all**
+(FR-12/AC-9) — its Learning-capture section points straight at the
+`kaizen_team` recipe below. During runs, every agent writes
 dated, evidence-backed observations of **durable, non-obvious environment
 facts in its discipline** — tool quirks, undocumented behaviors, conventions
 that live only in the code — as new graph nodes. Agents never promote their
@@ -343,14 +349,16 @@ attributed to itself; editing or clearing one requires the curator role
 below. The maintainer (cobb) distills — on request, and folded into every
 certification pass (§4):
 
-1. **Read every agent's graph**: for each agent, `mcp__cypher__query(
-   graph='kaizen_<agent>', cypher="MATCH (e:KaizenEntry) RETURN e.entryId,
-   e.date, e.fact, e.evidence, e.context, e.suggestedHome, e.author ORDER BY
-   e.date")` — a plain read, no `agent` needed (reads are unrestricted). A
-   graph with no entries yet simply doesn't exist as a key (FalkorDB
-   materializes a graph key lazily on first write) — a "graph not found"-style
-   empty result is the normal, expected state for an agent with nothing to
-   distill, not an error.
+1. **Read the team-wide graph**: `mcp__cypher__query(graph='kaizen_team',
+   cypher="MATCH (e:KaizenEntry) RETURN e.entryId, e.date, e.fact, e.evidence,
+   e.context, e.suggestedHome, e.author ORDER BY e.date")` — a plain read, no
+   `agent` needed (reads are unrestricted); this is FR-7's one-query recipe
+   (documented as a copy-pasteable example in `claude/README.md`'s Kaizen
+   section) and it reaches every agent's raw capture in one call. To scope to
+   one agent's entries, add `{author: '<agent>'}` to the `MATCH` pattern.
+   `kaizen_team` is a shared graph provisioned once up front — there is no
+   per-agent "graph not found" case any more; an agent simply has zero
+   matching entries until it writes one.
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
    system or docs; environment facts rot on upgrades. **Re-derive the fact
    yourself; don't just confirm the entry's cited evidence still exists at that
@@ -388,7 +396,7 @@ certification pass (§4):
    gets a dated entry in the agent's `history.md` (what, why, where it went,
    or why it's still open) — **the history entry (and, for a kept-open item,
    the `plan.md` backlog entry) is the durable record, not the raw capture
-   itself.** The processed node is then cleared from `kaizen_<agent>` **in
+   itself.** The processed node is then cleared from `kaizen_team` **in
    every case, including "kept open"** — an unresolved question lives on in
    `history.md`'s dated note (and `plan.md` if actionable), not by leaving a
    live node sitting in the graph next to entries nobody has reviewed yet.
@@ -414,7 +422,7 @@ certification pass (§4):
    lands). Concretely, for each entry being disposed of (promoted, discarded,
    or kept open), for agent `<agent>`:
    1. Read the raw entry (already done in step 1, or re-read by id):
-      `mcp__cypher__query(graph='kaizen_<agent>', cypher="MATCH (e:KaizenEntry
+      `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry
       {entryId: '<id>'}) RETURN e.date, e.fact, e.evidence, e.context,
       e.suggestedHome, e.author")` — a plain read, `agent` omitted.
    2. Verify it (step 2, above).
@@ -423,7 +431,7 @@ certification pass (§4):
       and `plan.md` too if a backlog item is opened for a kept-open entry.
       **Confirm the edit(s) succeeded** before the next step — do not proceed
       on an error.
-   4. Only then: `mcp__cypher__query(graph='kaizen_<agent>', cypher="MATCH
+   4. Only then: `mcp__cypher__query(graph='kaizen_team', cypher="MATCH
       (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')` —
       the one recognized curator-clear shape; `cobb` is a recognized curator
       agent (`CYPHER_MCP_CURATOR_AGENTS`), so this is authorized. This runs for
@@ -431,25 +439,33 @@ certification pass (§4):
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.
 
-**Inbox template** (seed on creation, for the frozen `kaizen/inbox.md` triad
-member every agent still carries — no agent appends to it; the entry schema
-above is what actually gets written, into `kaizen_<name>`):
+**Inbox header shape** (historical note, not a template to seed — no agent's
+`kaizen/inbox.md` is ever created again, FR-12/AC-9). The 12 agents that
+existed at the 2026-08-20 migration each carry a frozen `kaizen/inbox.md`
+whose header note shares this shape (content below the header is preserved
+verbatim, untouched by any of this):
 
 ```markdown
 # Kaizen — Learnings Inbox: {name}
 
-> This file exists only to satisfy the standard kaizen triad
-> (`audit-team.sh` check 1) and holds no content. `{name}`'s raw learnings
-> capture writes directly into its own working-memory FalkorDB graph,
-> `kaizen_{name}`, as `:KaizenEntry` nodes (agent-maintenance skill §5),
-> immediately queryable by any agent: `mcp__cypher__query(graph='kaizen_{name}',
-> cypher='MATCH (e:KaizenEntry) RETURN e.date, e.fact, e.evidence, e.context,
-> e.suggestedHome, e.author ORDER BY e.date')`. The agent only creates
-> `:KaizenEntry` nodes attributed to itself; it never promotes or clears them
-> — the maintainer (cobb) does, per the distillation procedure above.
+> This file exists only to satisfy the historical kaizen record; it holds no
+> content. `{name}`'s raw learnings capture writes directly into the shared
+> `kaizen_team` FalkorDB graph, `author`-partitioned, as `:KaizenEntry` nodes
+> (agent-maintenance skill §5), immediately queryable by any agent:
+> `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry
+> {author:'{name}'}) RETURN e.date, e.fact, e.evidence, e.context,
+> e.suggestedHome ORDER BY e.date")`. The agent only creates `:KaizenEntry`
+> nodes attributed to itself; it never promotes or clears them — the
+> maintainer (cobb) does, per the distillation procedure above.
 
 *(no entries — this file is never written to)*
 ```
+
+Four of the twelve (`analyst`, `teco`, `qa-engineer`, `data-scientist` — the
+agents that had entries at migration time) additionally carry a true
+past-tense provenance sentence above this block ("its N entries were imported
+into the `kaizen_<name>` graph") that is never rewritten — only the
+prescriptive pointer (shown above) retargets when an agent's own unit lands.
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
@@ -458,7 +474,11 @@ above is what actually gets written, into `kaizen_<name>`):
 > graph-based capture piloted on `graph-dba` (`docs/plans/generic-cypher-mcp.md`,
 > `docs/plans/generic-cypher-mcp-graph.md`) — every agent's `kaizen/inbox.md`
 > is now a frozen historical snapshot, capture happens in `kaizen_<agent>`
-> instead (`claude/cobb/kaizen/history.md`).
+> instead (`claude/cobb/kaizen/history.md`). **Later the same day:** the
+> per-agent graphs were themselves consolidated onto one shared `kaizen_team`
+> graph, `author`-partitioned (`docs/plans/generic-cypher-mcp2.md`) — capture
+> now happens there instead, and no agent created from this point on gets an
+> `inbox.md` at all (FR-12/AC-9).
 
 ---
 

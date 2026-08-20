@@ -6,7 +6,10 @@
 # with the maintainer (cobb).
 #
 # Checks per agent:
-#   1. <name>/<name>.md has its kaizen/{plan,history,inbox}.md triple
+#   1. <name>/<name>.md has its kaizen/{plan,history}.md pair (inbox.md is no
+#      longer part of the pass/fail condition, in either direction — it's
+#      never deleted for an existing agent, but a newly created agent won't
+#      have one; see FR-12/AC-9, docs/plans/generic-cypher-mcp2.md)
 #   2. the agent is symlinked into ~/.claude/agents/ (deployed)
 #   3. every frontmatter hook command exists and is executable
 #   4. the agent is named in the orchestrator's (teco) prompt — roster drift
@@ -71,12 +74,13 @@ printf 'Auditing %d agents: %s\n\n' "${#agents[@]}" "${agents[*]}"
 for a in "${agents[@]}"; do
   src="$CL/$a/$a.md"
 
-  # 1. kaizen triple (plan/history curated by the maintainer; inbox is the
-  #    agent's own append-only learnings capture — agent-maintenance skill §5)
-  if [ -f "$CL/$a/kaizen/plan.md" ] && [ -f "$CL/$a/kaizen/history.md" ] && [ -f "$CL/$a/kaizen/inbox.md" ]; then
-    pass "$a: kaizen plan + history + inbox present"
+  # 1. kaizen pair (plan/history curated by the maintainer; inbox.md, where
+  #    present, is a frozen historical relic — no longer required, agent-
+  #    maintenance skill §5)
+  if [ -f "$CL/$a/kaizen/plan.md" ] && [ -f "$CL/$a/kaizen/history.md" ]; then
+    pass "$a: kaizen plan + history present"
   else
-    failmsg "$a: missing kaizen/plan.md, kaizen/history.md, or kaizen/inbox.md"
+    failmsg "$a: missing kaizen/plan.md or kaizen/history.md"
   fi
 
   # 2. deployment symlink

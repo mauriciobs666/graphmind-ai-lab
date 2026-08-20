@@ -35,9 +35,12 @@ and OpenCode artifacts).
   that wires it is the repo's **first MCP wiring, and it is Claude-Code-only** — OpenCode and Kiro
   configure MCP through their own files and neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history + a now-frozen learnings inbox — every agent's raw capture writes directly into its own
-  `kaizen_<name>` FalkorDB graph instead, a pattern piloted on `graph-dba` and migrated team-wide
-  2026-08-20; `cobb` distills each agent's graph). See `claude/README.md` (human catalog)
+  history; the 12 agents that existed at the 2026-08-20 migration also carry a now-permanently-frozen
+  learnings inbox, never created for an agent since) — every agent's raw capture writes directly
+  into one shared, `author`-partitioned `kaizen_team` FalkorDB graph, a pattern piloted on
+  `graph-dba` as its own graph, migrated team-wide onto one graph per agent 2026-08-20, then
+  consolidated the same day onto this single shared graph (`docs/plans/generic-cypher-mcp2.md`);
+  `cobb` distills the shared graph). See `claude/README.md` (human catalog)
   and `claude/AGENTS.md` (agent context; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
   server as a client, restricted to `send_message`/`read_messages`, for a live demo of
@@ -85,8 +88,9 @@ and OpenCode artifacts).
   OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
-  `kaizen/{plan,history,inbox}.md`, the relevant catalog (`claude/README.md` for agents, `skills/README.md`
-  for skills), and `claude/AGENTS.md` in the same change.
+  `kaizen/{plan,history}.md` (no `inbox.md` is created for a new agent — FR-12/AC-9), the relevant
+  catalog (`claude/README.md` for agents, `skills/README.md` for skills), and `claude/AGENTS.md` in
+  the same change.
 - **Module documentation convention** — all of a module's documentation lives under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
   change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
