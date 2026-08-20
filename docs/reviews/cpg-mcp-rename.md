@@ -1,6 +1,6 @@
 # CPG MCP server/tool rename — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (`docs/requirements/cpg-mcp-rename.md`)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (`docs/requirements/cpg-mcp-rename.md`)
 
 ## Scope & verdict
 
