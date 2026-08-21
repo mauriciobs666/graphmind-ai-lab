@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
+
+- **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes.
+- **Why:** user-directed — "no point keeping [it] since it's already git history." Verified lossless first: `kaizen_team` (the shared graph every agent's raw capture routes through since 2026-08-20) was confirmed completely empty before any deletion — every entry any agent ever wrote there (including this agent's own distillation, immediately below) has already been distilled and cleared — and this file's own pre-migration content was already imported into the graph system verbatim back on 2026-08-20 (see that date's entry). Full rationale and verification method: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** see `cobb`'s entry (cross-agent verification, not repeated per file).
+- **Plan items:** none opened — pure cleanup, no behavior change.
+
 ## 2026-08-21 — `kaizen_team` distillation: 8 entries — 3 to the prompt, 3 to `lm-studio-model-notes.md`, 1 discarded as an already-resolved one-off, 1 blocked from its original target by archival and redirected
 
 - **What:** `cobb` processed all 8 `author:'data-scientist'` entries in the shared `kaizen_team`

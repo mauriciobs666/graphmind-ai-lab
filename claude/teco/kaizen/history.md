@@ -2,6 +2,76 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — Optimization pass from a stakeholder-requested in-depth analysis: dispatch guard hook, status-flip carve-out, tool-grant reconciliation (K-012 ✅), Cost ledger column, gate-as-you-go, AskUserQuestion dual-mode
+
+- **What:** seven changes from a stakeholder-requested "analyze teco in depth / optimize its way
+  of work" session, three of them stakeholder-decided explicitly (status flips, AskUserQuestion,
+  consolidation timing).
+  1. **New `PreToolUse` hook `hooks/guard-agent-dispatch.sh` (matcher `Agent|Task`)** — escalates
+     any `Agent` dispatch missing `subagent_type` to the human. The 2026-08-21 silent-
+     `general-purpose` trap already had a prompt bullet, but prompt discipline alone had let two
+     such dispatches through; this makes the omission mechanically impossible to land silently.
+     Standalone agent-owned script (the `security-expert` exploitation-guard precedent), fail-open,
+     `ask`-only, jq→python3. Tested through the deployment symlink: present/missing/empty
+     `subagent_type` and garbage input all behave per contract.
+  2. **Status-flip carve-out in `guard-coordination-doc-writes.sh` (stakeholder-approved):**
+     before deferring to the shared core, the wrapper auto-allows an `Edit` on a `docs/**.md`
+     whose old/new strings differ only in the canonical `**Status:**` field flipping to
+     `archived` (python3 masks the field on both strings and requires byte-equality of the rest).
+     Rationale: the K-026 close spent **five separate agent spawns** on one-token archival flips.
+     Root `AGENTS.md`'s lifecycle section now names `teco` as the performer of the mechanical
+     flip (by-kind owner table retained for anything beyond it); teco.md's milestone-close bullet
+     and Guardrails updated to match. Tested: pure flip (relative + absolute path) → allow;
+     flip+other change, flip to a non-`archived` token, non-docs path, `Write` → escalate.
+  3. **Tool-grant reconciliation (K-012 ✅ closed).** Fresh-session probe (spawned teco run):
+     runtime tools are exactly `Read, Bash, Agent, SendMessage, Write, Edit, mcp__cypher__query`.
+     `ListAgents` absent (like the known `Grep`/`Glob` gap) — all three dropped from frontmatter
+     per K-012's own pre-agreed disposition. `mcp__cypher__query` **live-verified** (a
+     `kaizen_team` read returned; parking-lot item resolved) — the "not yet live-verified"
+     caveats on the CPG-freshness duty removed. Guardrails' runtime-tool-set bullet rewritten:
+     frontmatter now matches probed reality; the "a grant is not proof" lesson retained.
+  4. **Ledger gains a `Cost` column** (step 2): record the completion notification's reported
+     tokens/tool-uses per unit — the data K-015 (dispatch-sizing validation) needs to ever be
+     judged against numbers. Feasibility confirmed this session: the probe's own completion
+     notification carried `30982 tokens / 1 tool use`.
+  5. **Gate-as-you-go** (step 2): sequence each unit's review gate immediately after its
+     delivery, never batched at coordination close — K-026's pauses left four delivered units
+     ungated and uncommitted across sessions, exactly the crash-exposure this rule shrinks.
+  6. **AskUserQuestion dual-mode (stakeholder-approved):** frontmatter gains `AskUserQuestion`;
+     Pause-vs-proceed now distinguishes first-order runs (`claude --agent teco` — ask the
+     decision as a structured question and continue) from subagent runs (tool withheld by the
+     harness — return the decision summary as before). K-026 showed teco frequently runs
+     first-order, where every decision point previously cost a full stop-and-report.
+  7. **Stale-text fixes:** Guardrails' "and your own kaizen inbox" clause dropped (inbox deleted
+     2026-08-21); step 5's "don't assume an enumeration tool" hedge replaced with the probed
+     fact. (The hook wrapper's own stale inbox glob/comment turned out to be already fixed by a
+     concurrent edit outside this session — found mid-change when the file differed from its
+     first read.)
+- **Deferred by stakeholder decision:** the full consolidation/KB-split pass filed as **K-016**
+  (high) for a dedicated `cobb` pass rather than run in the same session that touched the prompt
+  in seven places. Two new parking-lot ideas: architect-side dispatch-boundary annotations
+  (feeds K-015), cross-session slug-echo convention.
+- **Why:** stakeholder asked for an in-depth analysis of teco and then "let's get to work" on its
+  findings. The through-line: promote prompt-level discipline to mechanical enforcement where it
+  has already failed (1), stop paying agent spawns for mechanically-verifiable edits (2), align
+  declared capability with probed reality (3), and attack the documented credit-burn pattern with
+  data capture + smaller exposure windows (4, 5).
+- **Verified:** `bash claude/scripts/audit-team.sh` — full PASS before and after (diff, not bare
+  gate). Both hook scripts `bash -n` clean and scenario-tested through `~/.claude/agents/teco/`.
+- **Docs touched:** `claude/teco/teco.md` · `claude/teco/hooks/guard-agent-dispatch.sh` (new) ·
+  `claude/teco/hooks/guard-coordination-doc-writes.sh` · root `AGENTS.md` (lifecycle/flip
+  authority) · `claude/AGENTS.md` (hook machinery) · `claude/README.md` (teco row + deployment
+  hooks note) · `claude/teco/kaizen/{plan,history}.md`.
+- **Plan items:** K-012 ✅ (moved here) · parking-lot `mcp__cypher__query` probe ✅ · K-015
+  updated (Cost column feeds it) · K-016 opened · two parking-lot ideas added.
+
+## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
+
+- **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes. In the same session, `kaizen_teco` (the per-agent graph this file's own 2026-08-20 entry below describes) was also retired — `graph-dba` `GRAPH.DELETE`d it after cross-checking all 5 of its entries against this file's 2026-08-21 distillation entry (below), all already promoted or kept-open-as-`K-018`-and-cleared.
+- **Why:** user-directed — "no point keeping [it] since it's already git history." Verified lossless first: `kaizen_team` (the shared graph every agent's raw capture routes through since 2026-08-20) was confirmed completely empty before any deletion — every entry any agent ever wrote there (including this agent's own 9-entry distillation, immediately below) has already been distilled and cleared. Full rationale and verification method: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** see `cobb`'s entry (cross-agent verification, not repeated per file).
+- **Plan items:** none opened — pure cleanup, no behavior change.
+
 ## 2026-08-21 — Coverage fix: dropped stale "kaizen-inbox entry" from the commit-authority grant (team certification, §7 fold-in)
 
 - **What:** The commit-authority grant ("The grant" bullet under Guardrails' `Bash` section)

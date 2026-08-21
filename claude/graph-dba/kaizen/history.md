@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere); also executed `G1`'s last 2 `kaizen_<agent>` retirements
+
+- **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes. In the same session, this agent was dispatched to finish `G1` (`docs/plans/generic-cypher-mcp2-coordination.md`): live-reconfirmed, then `GRAPH.DELETE`d, the last 2 of 12 `kaizen_<agent>` keys (`kaizen_analyst`: 8 entries, `kaizen_teco`: 5 entries), both content-diff-verified already fully distilled elsewhere before deletion. `GRAPH.LIST` re-run afterward confirmed both keys gone.
+- **Why:** user-directed team-wide cleanup — "no point keeping [inbox.md] since it's already git history." Verified lossless first: `kaizen_team` (the shared graph every agent's raw capture routes through since 2026-08-20) was confirmed completely empty before any deletion. Full rationale and verification method: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Anything unexpected:** `guard-destructive-ops.sh`'s `PreToolUse` hook did **not** intercept either live `GRAPH.DELETE` call in this dispatch's nested-subagent Bash context, despite the regex plainly matching — a live repeat of the already-tracked gap (`cobb/kaizen/plan.md` `K-018`). Logged a fresh corroborating `kaizen_team` entry (`c3e5f8a2-…`, `author: graph-dba`) rather than re-diagnosing; `cobb`'s territory to fold in on its next `K-018`/`K-019` pass.
+- **Verified:** live-relisted both target graphs' entry counts/ids before deleting (didn't trust the dispatch brief's snapshot alone); re-listed all graphs afterward to confirm both keys absent.
+- **Plan items:** none opened here — the hook-bypass finding is already tracked as `K-018`/`K-019` in `cobb`'s own plan.md, not duplicated in this agent's.
+
 ## 2026-08-21 — Live-dispatched for a hook-enforcement test (K-018/K-019); no `graph-dba`-side change
 
 - **What:** Ran, as a `graph-dba` subagent (`subagent_type` explicitly set by the dispatching

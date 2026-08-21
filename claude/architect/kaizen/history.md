@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
+
+- **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered). It had been frozen — never written to — since the 2026-08-20 graph migration (see that date's entry below, which already confirms this file's own pre-migration content was imported into the graph verbatim at the time).
+- **Why:** user-directed team-wide cleanup, "no point keeping a file already in git history." Before deleting any of the 12 agents' frozen inboxes, `cobb` live-confirmed `kaizen_team` — the single shared graph every agent's raw capture has routed through since the 2026-08-20 consolidation — holds **zero** entries for any agent: every raw capture any agent ever wrote there (including this agent's own distillation, immediately above) has since been fully distilled and cleared. Combined with the migration-time import guarantee above, nothing in this file was ever a live, undistilled input to anything — it was a pure redundant backup copy. Same session also completed `G1`'s last 2 of 12 `kaizen_<agent>` graph-key retirements (`kaizen_analyst`/`kaizen_teco`, executed by `graph-dba`), closing `docs/plans/generic-cypher-mcp2-coordination.md`'s one remaining open item.
+- **Verified:** live `mcp__cypher__query` count against `kaizen_team` (0 entries) before any deletion.
+- **Plan items:** none opened — pure cleanup, no behavior change.
+
 ## 2026-08-21 — `kaizen_team` distillation: 4 entries — 1 promoted to Guardrails, 3 discarded (2 already-documented elsewhere, 1 already-actioned)
 
 - **What:** `cobb` processed all 4 `author:'architect'` entries in the shared `kaizen_team` graph

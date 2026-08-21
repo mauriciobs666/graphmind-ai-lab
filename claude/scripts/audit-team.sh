@@ -7,9 +7,11 @@
 #
 # Checks per agent:
 #   1. <name>/<name>.md has its kaizen/{plan,history}.md pair (inbox.md is no
-#      longer part of the pass/fail condition, in either direction — it's
-#      never deleted for an existing agent, but a newly created agent won't
-#      have one; see FR-12/AC-9, docs/plans/generic-cypher-mcp2.md)
+#      longer part of the pass/fail condition, in either direction — no
+#      agent has one any more: the 12 that existed at the 2026-08-20
+#      migration each carried a frozen one, deleted outright 2026-08-21 once
+#      fully distilled, and an agent created since never got one; see
+#      FR-12/AC-9, docs/plans/generic-cypher-mcp2.md)
 #   2. the agent is symlinked into ~/.claude/agents/ (deployed)
 #   3. every frontmatter hook command exists and is executable
 #   4. the agent is named in the orchestrator's (teco) prompt — roster drift
@@ -74,9 +76,10 @@ printf 'Auditing %d agents: %s\n\n' "${#agents[@]}" "${agents[*]}"
 for a in "${agents[@]}"; do
   src="$CL/$a/$a.md"
 
-  # 1. kaizen pair (plan/history curated by the maintainer; inbox.md, where
-  #    present, is a frozen historical relic — no longer required, agent-
-  #    maintenance skill §5)
+  # 1. kaizen pair (plan/history curated by the maintainer; inbox.md no
+  #    longer exists for any agent — deleted 2026-08-21 once fully
+  #    distilled — and was never required by this check, agent-maintenance
+  #    skill §5)
   if [ -f "$CL/$a/kaizen/plan.md" ] && [ -f "$CL/$a/kaizen/history.md" ]; then
     pass "$a: kaizen plan + history present"
   else

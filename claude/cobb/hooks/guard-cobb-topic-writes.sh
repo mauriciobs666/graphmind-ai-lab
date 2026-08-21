@@ -44,6 +44,14 @@
 #                                     already-battle-tested glob form is kept
 #                                     rather than introducing a new pattern
 #                                     dialect for one low-risk edge case.
+#                                     (2026-08-21: all 12 frozen inbox.md
+#                                     files were deleted outright once fully
+#                                     distilled — the caveat above is now
+#                                     "matches a path that doesn't exist" in
+#                                     addition to "matches a path nobody
+#                                     writes to"; same conclusion, costs
+#                                     nothing either way, no glob change
+#                                     needed.)
 #   claude/*/kaizen/history.md, */claude/*/kaizen/history.md
 #   claude/*/kaizen/plan.md, */claude/*/kaizen/plan.md
 #                                     kaizen curation for any agent — cobb

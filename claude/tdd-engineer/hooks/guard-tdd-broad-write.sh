@@ -29,7 +29,10 @@
 #   claude/*/kaizen/*, */claude/*/kaizen/*   (same claude/*/*.md caveat as §4
 #                                             Finding 2 applies here too: also
 #                                             catches kaizen/inbox.md, accepted
-#                                             the same way — frozen, no-op)
+#                                             the same way — frozen, no-op,
+#                                             and since 2026-08-21 deleted
+#                                             outright, so the glob now
+#                                             matches a nonexistent path)
 #   claude/README.md, */claude/README.md     team catalog/context — cobb
 #   claude/AGENTS.md, */claude/AGENTS.md
 #   claude/CLAUDE.md, */claude/CLAUDE.md

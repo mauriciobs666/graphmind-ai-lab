@@ -1,6 +1,6 @@
 # Claude agents — context for AI agents working here
 
-This directory (`claude/`) holds custom Claude Code subagents. Each agent is a folder: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`. Every agent's raw learnings capture (durable environment facts discovered during runs) writes directly into one **shared** working-memory FalkorDB graph, `kaizen_team`, `author`-partitioned, as `:KaizenEntry` nodes attributed to itself via `mcp__cypher__query` — a pattern piloted on `graph-dba` as its own graph (`kaizen_graph_dba`), migrated team-wide onto one graph per agent 2026-08-20, then consolidated the same day onto this single shared `kaizen_team` graph (`claude/cobb/kaizen/history.md`; `docs/plans/generic-cypher-mcp2.md`) so one query reaches every agent's raw learnings. The 12 agents that existed at the migration each carry a `kaizen/inbox.md` — now a **permanent frozen historical snapshot**, never written to again but never deleted; an agent created since the consolidation gets **no `inbox.md` at all** (FR-12/AC-9) — `audit-team.sh` check 1 requires only `plan.md`+`history.md`, not a triad. `cobb` distills the shared graph periodically per the `agent-maintenance` skill §5 (verify → route to prompt/knowledge base/project docs → log in the entry's own agent's `history.md` → clear, a curator-scoped `DETACH DELETE` through `mcp__cypher__query` against `kaizen_team`). **Skills no longer live here** — they were unified into the repo-root [`skills/`](../skills/) home (see [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards` skills are there.
+This directory (`claude/`) holds custom Claude Code subagents. Each agent is a folder: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md`. Every agent's raw learnings capture (durable environment facts discovered during runs) writes directly into one **shared** working-memory FalkorDB graph, `kaizen_team`, `author`-partitioned, as `:KaizenEntry` nodes attributed to itself via `mcp__cypher__query` — a pattern piloted on `graph-dba` as its own graph (`kaizen_graph_dba`), migrated team-wide onto one graph per agent 2026-08-20, then consolidated the same day onto this single shared `kaizen_team` graph (`claude/cobb/kaizen/history.md`; `docs/plans/generic-cypher-mcp2.md`) so one query reaches every agent's raw learnings. The 12 agents that existed at the migration each carried a `kaizen/inbox.md` — frozen (never written to again) from the migration onward, and **removed outright on 2026-08-21** once every entry it ever held had been distilled into `kaizen_team` and cleared (git history retains each file); an agent created since the consolidation gets **no `inbox.md` at all** (FR-12/AC-9) — `audit-team.sh` check 1 requires only `plan.md`+`history.md`, not a triad. `cobb` distills the shared graph periodically per the `agent-maintenance` skill §5 (verify → route to prompt/knowledge base/project docs → log in the entry's own agent's `history.md` → clear, a curator-scoped `DETACH DELETE` through `mcp__cypher__query` against `kaizen_team`). **Skills no longer live here** — they were unified into the repo-root [`skills/`](../skills/) home (see [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards` skills are there.
 
 **The full agent catalog — what each does, when to use it, handoff contracts, hook enforcement — lives once, in [`README.md`](./README.md).** Each agent's frontmatter `description` is its routing contract and is auto-injected into sessions; each `<name>/<name>.md` is the source of truth for its behavior. This file keeps only the index plus directory-level conventions.
 
@@ -56,7 +56,12 @@ symlink):
   explicit `permissionDecision: "allow"` (added 2026-08-21 — previously a silent `exit 0`, which
   left an in-remit write's fate to whatever ambient permission mode governed the session; see
   `claude/docs/plans/agent-permission-friction.md` §1 for why that wasn't reliable). On a mismatch
-  (`on_mismatch="ask"`) it emits `permissionDecision: "ask"`, unchanged from before.
+  (`on_mismatch="ask"`) it emits `permissionDecision: "ask"`, unchanged from before. `teco`'s
+  wrapper is no longer purely thin (2026-08-21, stakeholder-approved): before deferring to the
+  core it auto-allows one mechanically-verified edit shape — an `Edit` on a `docs/**.md` file
+  whose old/new strings differ only in the canonical `Status:` field flipping to `archived` (the
+  milestone-close archival flip, previously one delegated spawn per one-token edit) — checked in
+  python3 by masking the Status field on both strings and requiring byte-equality of the rest.
 - **`scripts/guard-broad-write.sh`** (new, 2026-08-21) — the DENY-LIST inverse: for an
   implementer agent whose remit is genuinely "the whole codebase, this task" and has no single
   folder/kind to allowlist. Allow everything except a small set of paths KNOWN to belong to a
@@ -89,7 +94,13 @@ standalone, agent-owned script with the same mechanics/contract as the shared co
 `ask`-only, jq→python3 extraction) — extract it into a shared core only if a second
 exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003). `qa-engineer`
 is the second two-hook agent (since 2026-08-21): its pre-existing `Bash` destructive-ops guard is
-unchanged, alongside the new `Write|Edit` doc-write guard above.
+unchanged, alongside the new `Write|Edit` doc-write guard above. `teco` is the third (also
+2026-08-21): alongside its `Write|Edit` wrapper it carries an `Agent|Task` dispatch guard
+(`teco/hooks/guard-agent-dispatch.sh`, standalone agent-owned script, same
+fail-open/`ask`-only/jq→python3 contract as the shared cores) that escalates any `Agent` dispatch
+missing `subagent_type` — an omitted field silently spawns a `general-purpose` delegate with none
+of the named agent's prompt/tools/hooks (verified live 2026-08-21, `teco/kaizen/history.md`), and
+prompt-level discipline alone had already let two such dispatches through.
 
 **Git-commit authority is prompt-level, not hook-enforced.** Only `tico` and `teco` document
 `git add`/`git commit` authority — `tico` for its own doc kinds (requirements, manuals; mirrors

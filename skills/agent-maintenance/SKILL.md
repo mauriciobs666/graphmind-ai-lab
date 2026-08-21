@@ -332,12 +332,13 @@ attributed to itself via `mcp__cypher__query(graph='kaizen_team', cypher=<CREATE
 ...>, agent='<agent>')`. This pattern was piloted on `graph-dba`, then
 migrated team-wide 2026-08-20 (graphmind-ai-lab; see the Origin note below for
 the two-step migration lineage — one graph per agent, then consolidated onto
-this single shared graph the same day). Existing agents still carry
-`<agent>/kaizen/inbox.md` (sibling of plan/history, but no longer required by
-`audit-team.sh` check 1 — plan+history alone now suffice), and it is now a
-**permanent frozen historical snapshot** — pre-migration content (or nothing,
-for an agent with none at migration time), kept for reference, no longer
-written to. **A new agent created from here on gets no `inbox.md` at all**
+this single shared graph the same day). The 12 agents that existed at that
+migration each used to carry `<agent>/kaizen/inbox.md` (sibling of plan/
+history, but no longer required by `audit-team.sh` check 1 — plan+history
+alone suffice): frozen from the migration onward, then **removed outright on
+2026-08-21** once every entry it ever held had been distilled into
+`kaizen_team` and cleared (git history retains each file). **A new agent
+created from here on gets no `inbox.md` at all**
 (FR-12/AC-9) — its Learning-capture section points straight at the
 `kaizen_team` recipe below. During runs, every agent writes
 dated, evidence-backed observations of **durable, non-obvious environment
@@ -462,10 +463,11 @@ verbatim, untouched by any of this):
 ```
 
 Four of the twelve (`analyst`, `teco`, `qa-engineer`, `data-scientist` — the
-agents that had entries at migration time) additionally carry a true
+agents that had entries at migration time) additionally carried a true
 past-tense provenance sentence above this block ("its N entries were imported
-into the `kaizen_<name>` graph") that is never rewritten — only the
-prescriptive pointer (shown above) retargets when an agent's own unit lands.
+into the `kaizen_<name>` graph") that was never rewritten — the shape is
+preserved here purely as a historical reference; no `inbox.md` file exists
+any more for any agent (see the Origin note below).
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
@@ -473,12 +475,16 @@ prescriptive pointer (shown above) retargets when an agent's own unit lands.
 > file-based per agent. 2026-08-20: migrated the whole team onto the
 > graph-based capture piloted on `graph-dba` (`docs/plans/generic-cypher-mcp.md`,
 > `docs/plans/generic-cypher-mcp-graph.md`) — every agent's `kaizen/inbox.md`
-> is now a frozen historical snapshot, capture happens in `kaizen_<agent>`
+> became a frozen historical snapshot, capture happens in `kaizen_<agent>`
 > instead (`claude/cobb/kaizen/history.md`). **Later the same day:** the
 > per-agent graphs were themselves consolidated onto one shared `kaizen_team`
 > graph, `author`-partitioned (`docs/plans/generic-cypher-mcp2.md`) — capture
 > now happens there instead, and no agent created from this point on gets an
-> `inbox.md` at all (FR-12/AC-9).
+> `inbox.md` at all (FR-12/AC-9). **2026-08-21:** all 12 remaining
+> `kaizen/inbox.md` files were deleted outright — every entry any of them had
+> ever held was, by this date, long since distilled into `kaizen_team` and
+> cleared, so the frozen files were pure redundant copies of data already
+> captured downstream; git history retains each one verbatim.
 
 ---
 

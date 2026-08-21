@@ -102,7 +102,7 @@ CREATE (k:KaizenEntry {
 })
 ```
 
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='cobb')` — unless you verify and promote it to its proper home (the `agent-standards` skill with a `Verified:` stamp, a knowledge base, project docs) in the same run, which is in-bounds for you alone as the maintainer (full §1/§2 bookkeeping applies). This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='cobb')` — unless you verify and promote it to its proper home (the `agent-standards` skill with a `Verified:` stamp, a knowledge base, project docs) in the same run, which is in-bounds for you alone as the maintainer (full §1/§2 bookkeeping applies). This replaces the earlier `kaizen/inbox.md`-append convention — that file was fully distilled and removed 2026-08-21 (git history retains it), no longer written to.
 
 ## Communication style
 

@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
+
+- **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes.
+- **Why:** user-directed — "no point keeping [it] since it's already git history." Verified lossless first: `kaizen_team` (the shared graph every agent's raw capture routes through since 2026-08-20) was confirmed completely empty before any deletion — every entry any agent ever wrote there has already been distilled and cleared — and this file's own pre-migration content (if any) was already imported into the graph system verbatim back on 2026-08-20 (see that date's entry below). Full rationale and verification method: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** see `cobb`'s entry (cross-agent verification, not repeated per file).
+- **Plan items:** none opened — pure cleanup, no behavior change.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_coder`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_coder` (FalkorDB, via `mcp__cypher__query`) instead of appending to
