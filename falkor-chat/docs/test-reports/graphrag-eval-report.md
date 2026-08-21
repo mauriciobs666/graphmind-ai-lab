@@ -31,7 +31,7 @@ destructively during this run.
 | TP-003 | Retrieval eval reproduces committed baseline | **PASS** | `pytest tests/eval/test_retrieval_eval.py tests/eval/test_metrics.py -q -s` → printed `recall@10=0.9737 recall@5=0.8947 mrr=0.6259` (n=38); `retrieval_baseline.json` = `{"recall_at_10": 0.9736842105263158, "recall_at_5": 0.8947368421052632, "mrr": 0.6258771929824561, "n": 38}` — exact match |
 | TP-004 | `check_regression` branching correct | **PASS** | `pytest tests/eval/test_metrics.py -k regression -v` → `6 passed` (recall@10-regress fires, MRR-within-tolerance passes, MRR-beyond-tolerance fires, equal-to-baseline passes, both-regress reports 2 reasons — all present) |
 | TP-005 | Live judge suite runs against real LM Studio | **PASS** | `pytest -m live -s -v` → `2 passed, 1034 deselected in 175.92s (0:02:55)`; `judge_calibration.json` regenerated (`generatedAt: 2026-08-16T15:08:44Z`, `sameModelAsAgentUnderTest: true`); `ws:eval` message count `121` before **and** after (both the test's own assertion and my independent `redis-cli GRAPH.QUERY "ws:eval" "MATCH (m:Message) RETURN count(m)"` → `121`) |
-| TP-006 | Fresh report generation | **PASS** | `python tests/eval/generate_report.py` → exit 0, `wrote /home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/test-reports/graphrag-eval-2026-08-16.md` |
+| TP-006 | Fresh report generation | **PASS** | `python tests/eval/generate_report.py` → exit 0, wrote `falkor-chat/docs/test-reports/graphrag-eval-2026-08-16.md` |
 | TP-007 | Mandatory same-model caveat present verbatim in fresh report | **PASS** | `docs/test-reports/graphrag-eval-2026-08-16.md:38-42` — caveat block present, adjacent to the judge numbers (not a footnote), distinguishes calibration vs. generation sub-pass, includes "A passing calibration number does not license trusting these — they are two different validity claims" and the `data-scientist` sign-off placeholder, verbatim |
 | TP-008 | Self-retrieval guard mechanically enforced | **PASS** | Report line 51: `**PASS** — no golden query is a verbatim substring of...`; underlying test included and passing in TP-002's 117 |
 | TP-009 | Backlog done-condition cross-check | **PASS** | See breakdown below |
@@ -149,10 +149,10 @@ the fresh report's placeholder correctly still reads `[pending / not yet reviewe
 
 ## Deliverables
 
-- Test plan: `/home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/test-plans/graphrag-eval.md`
-- Test report (this document): `/home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/test-reports/graphrag-eval-report.md`
+- Test plan: `falkor-chat/docs/test-plans/graphrag-eval.md`
+- Test report (this document): `falkor-chat/docs/test-reports/graphrag-eval-report.md`
 - Fresh harness output artifact produced during this pass (not a QA deliverable, but evidence):
-  `/home/mauricio/prg/graphmind-ai-lab/falkor-chat/docs/test-reports/graphrag-eval-2026-08-16.md`
+  `falkor-chat/docs/test-reports/graphrag-eval-2026-08-16.md`
 - Side effect of TP-005's live run (expected, a harness artifact, not shared graph state):
-  `/home/mauricio/prg/graphmind-ai-lab/falkor-chat/server/tests/eval/judge_calibration.json`
+  `falkor-chat/server/tests/eval/judge_calibration.json`
   regenerated with a fresh timestamp and numbers; `ws:eval` itself was not mutated (verified).

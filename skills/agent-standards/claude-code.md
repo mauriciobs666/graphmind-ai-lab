@@ -16,6 +16,15 @@
 > main-session section below).
 > **Subagent tool-set/definition-load/AutoMem-index facts** — **observed 2026-08-10**, not
 > doc-sourced (see "What loads into a subagent" and "Bash tool environment").
+> **Hooks — `PreToolUse` "ask" enforcement gap observed 2026-08-21, filed upstream** (Claude Code
+> 2.1.238, Auto Mode, not doc-sourced — contradicts current docs; see the `## Hooks` section's
+> dated callout) — four isolated live tests found a `PreToolUse` hook (matcher `Bash` in three,
+> `Write`/`Edit` in one), confirmed correctly wired and confirmed to compute `ask` in isolation,
+> does not pause execution for the real matching command from **either** a Task-dispatched
+> subagent **or the main session itself**, regardless of whether the hook is defined in a
+> subagent's own frontmatter or in `settings.json`. Treat `PreToolUse` "ask" enforcement as
+> unverified under Auto Mode until re-confirmed — matcher-agnostic and context-agnostic, not a
+> narrow subagent-dispatch-only gap.
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -98,8 +107,35 @@ conversational agent**:
   subfolder in the scoped name).
 - **`initialPrompt` frontmatter** is auto-submitted as the first *user* turn in this
   mode (commands and skills are processed; it's prepended to any user-provided prompt).
-- **Frontmatter hooks fire in main-session mode too**, alongside `settings.json` hooks
-  (they also fire when the agent is spawned as a subagent or @-mentioned).
+- **Frontmatter hooks fire in main-session mode too**, alongside `settings.json` hooks —
+  per official docs, identically whether the agent is run as the main session, spawned as a
+  Task-dispatched subagent, or @-mentioned, with no documented exception.
+  > **Contradicted by four independent, isolated controlled live tests (graphmind-ai-lab,
+  > 2026-08-21, Claude Code 2.1.238, Auto Mode active) — matcher-agnostic, not "subagent-dispatch
+  > only" or "`Bash`-only."** (1) A subagent's own frontmatter `Bash` hook, confirmed correctly
+  > wired and confirmed to match+`ask` when fed the exact payload directly, did not fire when the
+  > subagent actually ran that command after being Task-dispatched with `subagent_type`
+  > explicitly correct (ruling out the "silently degraded to `general-purpose`" confound).
+  > (2) The identical guard mirrored as a **session-wide `.claude/settings.local.json` `Bash`
+  > hook** and run from the **main session itself** (no subagent) also did not fire. (3) Repeated
+  > after the user explicitly reloaded hook config via `/hooks`, which visibly listed the hook as
+  > registered (`[Local] Bash — 1 hook`) — still did not fire. (4) A `Write`/`Edit`-matched
+  > frontmatter hook, main session, targeting a path outside the hook's own allowlist — the write
+  > went through unescalated; re-fed the real payload to the script afterward and confirmed it
+  > correctly computes `ask` for that exact path. All four used a real, disposable payload
+  > (scratch graph or scratch file, immediately cleaned up). **This rules out `subagent_type`
+  > omission, stale/unloaded hook config, hook-not-registered, and a `Bash`-specific quirk as
+  > explanations** — the hook is loaded, matches, and correctly computes `ask` in isolation on
+  > both matchers tested, and still doesn't pause execution for the real call, in either
+  > main-session or subagent context. Working hypothesis (unconfirmed): Auto Mode's classifier
+  > layer silently resolves/overrides a correctly-emitted `ask` decision before it reaches the
+  > user — this contradicts both current official docs and third-party reporting that "ask forces
+  > a prompt in auto mode; the classifier can't approve it silently." **Filed upstream via
+  > `/feedback` 2026-08-21** (the 3-test `Bash` repro; test 4 landed after filing). **Practical
+  > consequence: don't treat a `PreToolUse` "ask" hook as a reliable backstop under Auto Mode,
+  > from any source (frontmatter or settings.json), on any matcher tested (`Bash`, `Write`/
+  > `Edit`), in either main-session or subagent execution**, until independently reconfirmed
+  > fixed. Full trail: `claude/cobb/kaizen/history.md`, 2026-08-21 entries (K-018/K-019).
 - The **withheld-tools list applies to subagents only** — as the main session the agent
   can use `AskUserQuestion` etc., so live multi-turn interaction works.
 - The main-thread agent can spawn subagents via `Agent`; the **`Agent(agent_type)`

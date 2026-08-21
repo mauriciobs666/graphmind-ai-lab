@@ -189,12 +189,17 @@ can't do this by accident," not hardened against a malicious one — a caller th
 literal (e.g. `WITH 'graph-dba' AS a CREATE (k:KaizenEntry {author: a})`) evades detection, a known,
 accepted limitation.
 
-On a successful write, the response line reports which mutation counters moved (e.g. `graph=... ·
-write ok (nodes_created=1, properties_set=8) · 4.2ms`) — **confirmed** against the pinned
-`falkordb` 1.6.2 client's own source (`falkordb/query_result.py`): `QueryResult` exposes
-`nodes_created`, `nodes_deleted`, `properties_set`, `properties_removed`, `relationships_created`,
-`relationships_deleted`, `labels_added`, `labels_removed`, `indices_created`, `indices_deleted` as
-plain `int` properties, each 0 when nothing of that kind happened; only non-zero counters are shown.
+On a successful write, the response line reports which mutation counters moved — e.g. `graph=... ·
+write ok (nodes_created=1.0, properties_set=8.0) · 4.2ms`; only non-zero counters are shown.
+
+> **Every counter renders with a trailing `.0`, not as a plain int** — live-verified 2026-08-21
+> with a real `CREATE`/`DETACH DELETE` round trip against `kaizen_team`
+> (`labels_added=1.0, nodes_created=1.0, properties_set=8.0` / `nodes_deleted=1.0`). This
+> corrects an earlier version of this section, which claimed the pinned `falkordb` 1.6.2 client's
+> `QueryResult` exposes these as plain `int`s — on this box they come back as Python floats
+> instead, and `format_write_result()` (`server.py`) does no int cast before formatting. Cosmetic
+> only (the counts are exact, just float-formatted), but a test asserting an exact-string
+> write-result message should expect `nodes_created=1.0`, not `nodes_created=1`.
 
 ### `EXPLAIN` yes, `PROFILE` no
 
@@ -261,6 +266,19 @@ that the shown rows are an arbitrary sample unless the query has `ORDER BY`. The
 deliberate: it survives any tail-side clipping by the harness, which is exactly the run where the
 notice matters most. Tools diffing this output against `redis-cli` should ignore lines beginning
 `… truncated:`.
+
+> **A single row with 2+ long-string columns can render corrupted/duplicated in a chat transcript,
+> even though `format_result()` itself is a plain, deterministic `" | ".join(...)` and the
+> underlying data is fine.** Confirmed reproducible during the `kaizen_qa-engineer` → `kaizen_team`
+> migration (2026-08-20): a multi-column chunking query (`RETURN substring(field, 0, 260) AS p0,
+> substring(field, 260, 260) AS p1, ...`) produced a row where `p1` visibly duplicated the tail of
+> `p0` with a spurious inserted `|`, even though `size()`/`substring()` checks on the raw stored
+> field proved no such duplication exists — the corruption traces to a layer above this server (the
+> caller's own tool-result rendering), not to this tool. Switching to **one `substring()` per
+> query, single `RETURN` column**, eliminated it for every entry re-read this way. When you need to
+> read a long text field exactly (a `KaizenEntry.fact`/`evidence`/`suggestedHome`, or any other long
+> stored string) rather than just spot-check it, page it one column at a time — never several long
+> chunks side by side in one row.
 
 ### Environment variables
 

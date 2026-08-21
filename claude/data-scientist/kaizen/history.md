@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` distillation: 8 entries — 3 to the prompt, 3 to `lm-studio-model-notes.md`, 1 discarded as an already-resolved one-off, 1 blocked from its original target by archival and redirected
+
+- **What:** `cobb` processed all 8 `author:'data-scientist'` entries in the shared `kaizen_team`
+  graph (agent-maintenance skill §5). Read via single-column `substring()` paging (avoids the
+  multi-column chat-rendering corruption documented in `cypher-mcp/README.md`).
+  - **Promoted (3) → `data-scientist.md` prompt, folded into existing bullets (not new top-level
+    bullets — kept cognitive load flat):**
+    - `8f6e20a1` — when the judge collapses onto the same model as the agent-under-test, a
+      blanket self-preference caveat conflates a fixed-content sub-pass (little risk) with a
+      live-output sub-pass (real risk); split it. Folded into the LLM-as-judge bullet.
+    - `11475cca` + `f3b90490` (same "Evaluation engineering" bullet, folded together) — before
+      blessing a zero-tolerance small-golden-set gate, compare the one-unit delta (`1/n`) to the
+      metric's CI width at that `n`; and when a probe set is gated with AND/OR logic, still
+      report each probe's individual outcome in prose, not just the bloc boolean — both are
+      reusable pre-sign-off habits, not falkor-chat-specific.
+    - `e6f3a1c4` — this lab's small-n pass/fail convention is the Wilson score interval, not
+      Clopper-Pearson/rule-of-three (independently re-derived in Python, matches the archived
+      `m3-guard-calibration.md` §6 figures to rounding). **Redirected from its own suggested
+      target**: the entry's context doc, `golden-set-expansion-ml.md`, is now `Status: archived`
+      (frozen except header-pointer metadata) — the fact is durable and reusable well beyond that
+      one document, so it went into the "Uncertainty" bullet instead of being lost.
+    - Folded `9642e9e0` in kind but routed to the knowledge base instead (next bullet) — its
+      LM-Studio-specific verification commands are better as a consultable recipe than prompt
+      prose the agent pays for every session.
+  - **Promoted (3) → new sections in `claude/data-scientist/lm-studio-model-notes.md`:**
+    - `e820b9e0` — Mistral/Ministral GGUF templates enforce strict role alternation (HTTP 400 on
+      two consecutive same-role messages); Qwen3 tolerates it silently. Live-verified against
+      `falkor-chat`'s real `triage@v1` intake prompt.
+    - `a1c2ef6d` — two differently-named LM Studio catalog ids can alias one loaded model slot
+      (confirmed via `/api/v0/models` state-flipping and byte-identical completions) — verify
+      before assuming two entries are two different weight files.
+    - `9642e9e0` — a live-run report's provenance can silently diverge from the repo's static
+      model config per box (the provider file is machine-local, outside the repo, and
+      `ProviderCatalog` validates only the provider id, not the model id); two reusable habits:
+      live-check `/api/v0/models` rather than trusting static config, and grep the repo for
+      `temperature` before assuming a pinned sampling parameter.
+  - **Discarded (1):** `b3f2a8e0` — a golden-set fixture id-numbering footnote (a draft plan
+    section had "used" `tn-08`/`tn-09` ahead of the real fixture file) whose only plausible
+    target, `golden-set-expansion-ml.md`, is now archived and the numbering it describes is
+    already resolved in the delivered `golden_guards.jsonl`; too narrow and already-moot to carry
+    forward into a different document.
+  - **Verified:** live-re-derived `e6f3a1c4`'s Wilson figures in Python (stdlib `math` only) before
+    promoting — reproduced `wilson_upper(0,10)=27.75%`, `wilson_upper(0,30)=11.35%`, matching the
+    entry's own citation.
+  - **Docs touched:** `claude/data-scientist/{data-scientist.md,lm-studio-model-notes.md,
+    kaizen/history.md}`.
+- **Why:** User-requested distillation pass ("who's next?" → data-scientist had the oldest pending
+  entries, 2026-08-15).
+- **Plan items:** none opened — every entry had a direct promotion target or a clear discard
+  rationale.
+
 ## 2026-08-21 — Persona fix: dropped stale "senior" framing (team certification, §7 fold-in)
 
 - **What:** Opening line "You are a senior **data scientist and AI/ML specialist**..." →

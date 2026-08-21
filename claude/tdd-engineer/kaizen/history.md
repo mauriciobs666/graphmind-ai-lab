@@ -2,6 +2,43 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` distillation: 1 entry promoted to Workflow step 1
+
+- **What:** `cobb` processed the sole `author:'tdd-engineer'` entry in `kaizen_team`
+  (`a3f1c9e2…`, 2026-08-20). Fact: a backlog-carried `analyst`-gate finding can already be
+  silently resolved by later, unrelated work that happened to touch the same function —
+  verified by grepping for the exact pattern the finding named (a function-local `import json as
+  _json` in `falkor-chat/app.py`) and finding zero matches, since removed as a side effect of an
+  unrelated parse-robustness fix. Added one clause to Workflow step 1, alongside the existing
+  architect-plan-path and analyst-RCA-path sentences: when the task is a carried finding from a
+  backlog/coordination doc, re-verify it against current code (grep the exact pattern) before
+  implementing the fix, rather than trusting the backlog text as still accurate.
+- **Why:** User-requested distillation pass, continuing the oldest-first queue
+  (data-scientist → architect → graph-dba/tdd-engineer, the last two done together as the queue's
+  final small entries).
+- **Docs touched:** `claude/tdd-engineer/{tdd-engineer.md,kaizen/history.md}`.
+- **Plan items:** none opened — the entry landed directly.
+
+## 2026-08-21 — Workflow step 1 restructured into a short lead + bulleted doc-path branches (team certification, §7 lint fold-in)
+
+- **What:** Step 1 ("Understand first") had grown, across four separate edits since 2026-07-09
+  (plan-path handling, RCA-path handling, the CPG check, and today's carried-finding clause
+  above), into a single run-on paragraph carrying seven distinct conditional
+  instructions. Restructured, no content change: a short lead sentence, then the three
+  "task arrives as X" branches (architect plan path / analyst RCA path / carried backlog
+  finding) as a bulleted sub-list, then the CPG-check and freshness-delegation sentences kept
+  as trailing prose (matching how other agents' equivalent steps handle their own CPG clause).
+- **Why:** Caught during a user-requested full team-coherence certification's §7 lint fold-in
+  (`claude/cobb/kaizen/history.md`, 2026-08-21 certificate entry) — cognitive-load dimension:
+  this step had become an outlier in conditional density against its own peer steps (2-5),
+  and this exact prompt region has a documented prior failure mode of a buried instruction
+  going unfollowed (DEF-3, the M4 U6 live-dispatch pass — a different clause, same class of
+  risk: dense, un-bulleted conditional prose in a step an agent must parse in one pass).
+- **Verified:** `bash claude/scripts/audit-team.sh` clean; re-read the restructured step against
+  the CPG-agent-adoption wiring it also carries — the `CPG:`-line requirement and freshness
+  delegation are unchanged in meaning, only in paragraph shape.
+- **Plan items:** none opened — direct fix from a live lint finding.
+
 ## 2026-08-21 — Enforcement-parity fix: Guardrails now describes the deny-list write guard (team certification, §4 judgment half)
 
 - **What:** The 2026-08-21 rollout below (`guard-tdd-broad-write.sh`, wired via frontmatter

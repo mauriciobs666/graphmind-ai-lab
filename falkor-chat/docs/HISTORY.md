@@ -5,6 +5,20 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-21 — Hygiene: home-path leak genericized in `docs/test-reports/graphrag-eval-report.md`
+
+**What:** Five occurrences of the maintainer's absolute `/home/<user>/prg/graphmind-ai-lab/…`
+prefix, left over from literal script output and self-referential deliverable citations, replaced
+with repo-root-relative paths (root `AGENTS.md`'s citation convention — a backticked path from the
+repo root, no leading slash). No content/verdict change, TP-006/TP-009's own findings untouched.
+
+**Why:** Flagged by `claude/scripts/audit-team.sh` check 7 (personal-identifier scan, run during an
+unrelated `cobb` session in `claude/`) as the repo's only FAIL; fixed on request. `git blame` on the
+lines showed the file untouched since its original authoring — a plain pre-existing leak, not
+introduced by anything recent.
+
+**Verified:** `bash claude/scripts/audit-team.sh` now reports `RESULT: PASS`.
+
 ## 2026-08-21 — K-027 item 4: golden-set expansion — delivered; epic closed
 
 **What:** Grew `server/tests/eval/golden_guards.jsonl` from 26 → **85 rows** per the finalized

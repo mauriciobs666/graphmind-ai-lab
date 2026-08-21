@@ -24,6 +24,13 @@
 - **Proposed change:** If model-selection questions recur, add `data-scientist/model-landscape.md` (dated entries, re-verify stamps) and point the prompt at it — kept out of the always-on prompt.
 
 ## Parking lot / ideas
+- **LLM-as-judge bullet is getting dense (noted 2026-08-21, team certification §7 lint fold-in).**
+  The "Evaluation engineering" section's LLM-as-judge bullet now carries three distinct rules in
+  one paragraph: general validity caveats, class-conditional-rate gating for a biased judge, and
+  the judge-collapses-onto-agent-under-test caveat-splitting rule (added this session). Minor —
+  still thematically coherent (all LLM-as-judge validity) and each sentence is self-contained, so
+  not fixed now. Revisit (split into two bullets: general validity + judge-collapse) if a fourth
+  rule lands in the same paragraph.
 - **The agent owns two recurring `Status: archived` flips it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `data-scientist` the performer for `plans/<slug>-ml.md` and `reviews/<slug>-ml.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. One prompt line if closes start leaving `-ml` documents `active`.
 - Revisit the advisory-only shape if the lab starts wanting evals *executed* rather than designed — either grant hands-on eval-execution powers (graph-dba-style) or define a standing data-scientist→qa-engineer handoff for eval execution (2026-07-09, creation decision: user chose advisory).
 - A worked example of a good method note (once one exists) linked from the prompt, if note quality proves inconsistent.

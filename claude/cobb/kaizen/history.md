@@ -2,6 +2,217 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-21 — K-019 escalated: `PreToolUse` "ask" hooks confirmed not enforcing under Auto Mode, from any source, in any execution context
+
+- **What:** User-directed test of K-019's first candidate mitigation ("test the settings.json
+  mitigation"). Mirrored `guard-destructive-ops.sh` as a session-wide `PreToolUse` hook in
+  `.claude/settings.local.json` (gitignored, no team-wide effect), pipe-tested it directly
+  (correctly returns `ask`), validated the JSON, then ran the exact `GRAPH.DELETE` command for
+  real from **my own main session** (not a subagent) against a disposable scratch graph. It
+  executed immediately, `OK`, no pause — same result as the subagent test.
+  - Considered the mundane explanation first (per the `update-config` skill's own troubleshooting
+    guidance): the settings watcher might not have reloaded the new hook config. Asked the user
+    to open `/hooks`. They did. Re-ran the identical test on a fresh scratch graph — **still no
+    pause.** Asked the user directly what `/hooks` displayed; they confirmed it listed
+    `[Local] Bash — 1 hook`, i.e. the hook **was** correctly registered and visible to the
+    harness. This rules out the reload explanation.
+  - **Conclusion:** three independent, isolated tests (frontmatter hook / Task-dispatched
+    subagent; settings.json hook / main session; settings.json hook / main session again,
+    post-`/hooks`-reload, registration confirmed) all show the same failure — a `PreToolUse`
+    "ask" hook on `Bash`, confirmed wired, confirmed registered, confirmed correct in isolation,
+    does not pause execution for the real matching command. This is broader than K-019's original
+    scope (Task-dispatch-specific): it now includes the main session's own tool calls and
+    settings.json-sourced hooks, not just subagent-frontmatter ones. Working hypothesis: Auto
+    Mode's classifier is silently resolving the `ask` decision before a human ever sees it —
+    contradicting both official docs and `claude-code-guide`'s own prior research on this point.
+  - **Reverted** the test hook from `settings.local.json` (proven ineffective; leaving it in
+    place would misrepresent the config as a working mitigation).
+  - **K-019 rewritten** (this file's `plan.md`) with the full three-test trail and the corrected,
+    broader scope. **`skills/agent-standards/claude-code.md`** corrected twice more (the Hooks
+    section's dated callout and the top-of-file stamp block) to state the confirmed scope rather
+    than the earlier, narrower Task-dispatch-only wording.
+  - **Not yet done:** drafting the `/feedback` report text for the user (K-019's next step) —
+    doing that next as a follow-up to this entry, since I can't submit `/feedback` myself (no
+    tool access to it; it's a user-facing slash command).
+- **Why:** User-requested: "test the settings.json mitigation," following through K-019's
+  candidate next steps in order, plus the natural troubleshooting the ambiguous first result
+  demanded (ruling out the reload explanation before accepting the more severe conclusion).
+- **Docs touched:** this file, `claude/cobb/kaizen/plan.md` (K-019 rewritten),
+  `skills/agent-standards/claude-code.md` (two corrections), `.claude/settings.local.json`
+  (test hook added, then reverted).
+
+## 2026-08-21 — K-019: `/feedback` filed; 4th test confirms the gap is matcher-agnostic (Write/Edit, not just Bash)
+
+- **What:** Two follow-ups to the entry above, both user-directed.
+  - **Filed the drafted `/feedback` report.** User ran `/feedback` with the drafted text
+    (3-test `Bash` repro, Claude Code 2.1.238). Confirmed submitted (`local-command-stdout:
+    "Feedback / bug report submitted"`).
+  - **Tested whether `Write`/`Edit`-matched hooks share the gap** (user: "yes please test those
+    as well"). Used my own frontmatter hook (`guard-cobb-topic-writes.sh`) directly — no subagent
+    dispatch needed, since `cobb` already carries a live `Write|Edit` `PreToolUse` hook. Wrote a
+    disposable scratch file, `docs/_hook_test_k019_scratch.md`, to a path plainly outside my own
+    allowlist (not `claude/*`, not the named skills/MCP-doc exceptions). **The write completed
+    immediately, no pause.** Re-fed the exact real `{"tool_input":{"file_path":"..."}}` payload
+    to the guard script directly afterward: it correctly returned `ask` for that path — same
+    pattern as every prior test, the hook logic is right and the enforcement still doesn't
+    happen. Deleted the scratch file immediately (`git status` confirms clean, never staged).
+  - **Conclusion:** the gap is confirmed **matcher-agnostic** (`Bash` and `Write`/`Edit` both
+    affected), on top of the already-confirmed context-agnostic result (main session and
+    Task-dispatched subagent both affected). Four independent tests, one clean pattern.
+  - **Updated:** `claude/cobb/kaizen/plan.md` K-019 (status line now "filed upstream," full
+    4-test trail, explicit statement of which matcher×context cells are covered vs. the one
+    remaining untested combination — Write/Edit on a Task-dispatched subagent).
+    `skills/agent-standards/claude-code.md` corrected twice more (Hooks section callout + the
+    top-of-file stamp block) to state "matcher-agnostic" rather than the earlier "`Bash`-only"
+    wording.
+- **Why:** User-directed, continuing K-019's investigation to full closure of the currently
+  reasonable test matrix.
+- **Docs touched:** this file, `claude/cobb/kaizen/plan.md`, `skills/agent-standards/claude-code.md`.
+  `docs/_hook_test_k019_scratch.md` created and deleted within this entry's own test — never
+  part of the tracked tree.
+
+## 2026-08-21 — K-018 CONFIRMED via controlled live re-test: subagent-frontmatter `PreToolUse` hooks do not reliably fire for a Task-dispatched subagent's own Bash calls; K-019 opened (systemic, mitigation decision pending)
+
+- **What:** User-directed live test, executing K-018's own prescribed next step. Dispatched
+  `graph-dba` via the `Agent` tool with **`subagent_type: "graph-dba"` explicitly set** (the
+  variable the G1 incident couldn't rule out) and a self-contained brief: create a throwaway
+  scratch graph, then run the exact `docker exec falkordb-dev redis-cli GRAPH.DELETE <key>`
+  command shape from the original episode, and report plainly whether anything paused for
+  approval before it executed.
+  - **Result: it did not pause.** The delete ran immediately, identically to the surrounding
+    non-destructive steps — no permission prompt, no `ask`, no interruption. The dispatched agent
+    independently re-verified the guard script itself is sound (fed the exact JSON payload
+    directly to `guard-destructive-ops.sh`, got a correct `permissionDecision: "ask"` back) and
+    confirmed its own frontmatter is correctly wired (`hooks.PreToolUse` → the right script, thin
+    wrapper → shared core intact). **This disproves the `subagent_type`-omission hypothesis**
+    K-018 was tracking: the dispatch was unambiguously `graph-dba`, with correct hooks, correct
+    script logic — and the destructive command still ran unescalated. No other graph on the
+    instance was touched; the test graph's deletion was itself the (harmless, disposable)
+    payload of the test.
+  - **Consulted `claude-code-guide`** for an authoritative read: official docs state hooks fire
+    identically for a subagent whether main-session or Task-dispatched — no documented exception,
+    confirming this contradicts the docs rather than being explained by them. It surfaced a
+    closely-matching **fixed** changelog bug (`v2.1.212`: "auto mode was overriding PreToolUse
+    `ask` decisions for unsandboxed Bash") and recommended checking the installed version.
+    `claude --version` → **2.1.238** — well past 2.1.212, so this is **not** that already-fixed
+    bug recurring; it's a distinct, still-open gap specific to the Task/Agent-dispatch path (the
+    2.1.212 fix likely covered the main-session's own Bash calls only, not a dispatched
+    subagent's). It also confirmed session-wide `.claude/settings.json`-defined `PreToolUse`
+    hooks are architecturally distinct from subagent-frontmatter hooks and, per docs, should
+    reliably cover subagent Bash calls where frontmatter hooks don't — **untested against this
+    repo's actual gap**, flagged as the natural next diagnostic rather than executed
+    unilaterally (a settings.json hook change affects every session team-wide).
+  - **Disposition:** K-018 closed as CONFIRMED (not hypothesized) — moved here; **K-019** opened,
+    high priority, as the systemic follow-up: this is the enforcement mechanism nearly every
+    guarded agent's "harness-enforced" Guardrails claim rests on, for the primary way these
+    agents actually run (Task-dispatched). Candidate next steps (settings.json-hook test,
+    `/feedback` upstream report, treating delegated-execution guardrails as currently unverified)
+    recorded in K-019 — **not executed**, since choosing among them (and any resulting
+    settings.json change) is a call for the user, not something to decide unilaterally given the
+    safety stakes.
+  - **Raw capture routed:** the dispatched `graph-dba` subagent logged this finding itself as
+    `:KaizenEntry` `a4f3d2e1-9b7c-4a1e-8f6d-2c1b3e5a9d70` (`author: graph-dba`) in `kaizen_team`.
+    Read and verified against the transcript above (matches exactly, `suggestedHome: 'unsure'`
+    honestly reflecting that the entry itself couldn't determine routing) — fully captured in
+    this entry and in K-018/K-019, so cleared from `kaizen_team` after this write was confirmed
+    (`entryId a4f3d2e1…`, curator-clear, `agent='cobb'`). `claude/graph-dba/kaizen/history.md`
+    carries a short cross-reference pointer (the detailed narrative lives here since K-018/K-019
+    are cobb-owned, team-wide items, not `graph-dba`-specific).
+- **Why:** User-requested: "confirm subagent_type on the next graph-dba dispatch" — K-018's own
+  prescribed test, executed exactly as specified plus the natural follow-up research once the
+  result came back positive-for-a-gap.
+- **Docs touched:** this file, `claude/cobb/kaizen/plan.md` (K-018 closed, K-019 opened),
+  `claude/graph-dba/kaizen/history.md` (pointer), `skills/agent-standards/claude-code.md`
+  (dated caveat correcting the "frontmatter hooks fire... when spawned as a subagent" claim).
+
+## 2026-08-21 — Team-coherence certification (script clean, §7 lint: 2 minor findings fixed)
+
+- **What:** User-requested certification, closing out a full `kaizen_team` distillation sweep run
+  earlier this session (oldest-pending-first: `qa-engineer` 10 entries, `data-scientist` 8,
+  `architect` 4, `graph-dba` 1, `tdd-engineer` 1 — `analyst`/`teco` already at zero from a prior
+  session, see the entry above). `kaizen_team` now holds **zero** entries across every author.
+  - **Deterministic script:** `bash claude/scripts/audit-team.sh` — **114 PASS / 0 FAIL**, clean.
+  - **Judgment checklist:** none of this session's edits touched a roster, boundary, hook wiring,
+    or subagent-awareness phrasing — every change was either a knowledge-base addition, a prompt
+    clause deepening an existing capability, or a doc-content fix, so roster accuracy/handoff
+    symmetry/enforcement parity/boundary reciprocity all reconfirmed unchanged rather than newly
+    verified from scratch. Spot-checked `claude/README.md`'s rows for the five touched agents
+    against their current files — all still accurate, no catalog edit needed.
+  - **§7 prompt-quality lint**, run over every artifact changed since the last certification
+    (`data-scientist.md`, `architect.md`, `tdd-engineer.md` — the three agent prompts actually
+    edited this session; KB/doc files given a lighter contradiction/coverage-only pass):
+    - **Clean:** `architect.md` (new Guardrails bullet — no contradiction, persona, or coverage
+      issue; mild productive overlap with the existing "plan must stand alone" principle, not a
+      defect). `qa-testing-techniques.md`, `lm-studio-model-notes.md`, `freshness.md` — no
+      contradictions with existing content. `cypher-mcp/README.md` — verified the corrected
+      write-result text doesn't leave a stray contradicting claim elsewhere in the file.
+    - **Minor, fixed:** `tdd-engineer.md` Workflow step 1 had grown, across four edits since
+      2026-07-09, into a single run-on paragraph carrying seven distinct conditional
+      instructions — a cognitive-load outlier against its own peer steps, in a prompt region with
+      a documented prior failure mode (DEF-3, a buried instruction going unfollowed on live
+      dispatch). Restructured into a short lead + a bulleted sub-list of the three doc-path
+      branches, no content change. Logged in `tdd-engineer/kaizen/history.md`.
+    - **Minor, parked:** `data-scientist.md`'s LLM-as-judge bullet now carries three distinct
+      validity rules in one paragraph (general caveats, class-conditional-rate gating, and
+      today's judge-collapse caveat-splitting rule). Still thematically coherent and each
+      sentence self-contained — not fixed now; parked in `data-scientist/kaizen/plan.md` with a
+      revisit trigger (split into two bullets if a fourth rule lands).
+  - **A genuine safety-relevant finding surfaced during distillation, not this certification's own
+    lint, but closed out here:** `graph-dba`'s raw `kaizen_team` capture of the G1 dispatch
+    (`guard-destructive-ops.sh` not escalating 4 live `GRAPH.DELETE` calls) turned out to be the
+    same episode already tracked as **K-018** (this file's `plan.md`, opened in an earlier
+    session distilling `teco`'s parallel capture of the same event). Re-verified the guard script
+    directly (correctly emits `"ask"` on the exact cited command in isolation — not a regex bug)
+    and added two corroborating-but-unconfirmed upstream GitHub issues to K-018 as search terms
+    for its still-open next step, rather than re-opening a duplicate item. Full trail:
+    `claude/graph-dba/kaizen/history.md`, `claude/cobb/kaizen/plan.md` K-018.
+- **Verified:** `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry) RETURN
+  count(e)")` → 0, before and after this certification's own edits (the certification made no
+  further graph writes).
+- **Why:** User-requested, following the session's distillation sweep.
+- **Docs touched (cross-artifact bookkeeping; each agent's own history has the full per-entry
+  disposition table for its distillation):** this file, `claude/tdd-engineer/kaizen/history.md`
+  (lint fix), `claude/data-scientist/kaizen/plan.md` (parked lint finding).
+
+## 2026-08-21 — Distilled all 12 pending `analyst`-authored entries from `kaizen_team`
+
+- **What:** Ran the agent-maintenance skill §5 procedure against every `kaizen_team` node with
+  `author:'analyst'` (12 entries). Full dispositions, verification notes, and the exact promoted
+  text live in `claude/analyst/kaizen/history.md`'s matching 2026-08-21 entry — this entry covers
+  only the cross-artifact bookkeeping that isn't analyst's to log.
+  - **Promoted to `claude/analyst/review-techniques.md`** (7 entries, one new section each plus
+    one new case appended to an existing section): kaizen-graph distillation reconciliation,
+    live-prompt-via-symlink review urgency, whitespace-normalized verbatim-text diffing,
+    `pytest -k` vs `-m` baseline verification, self-edit ground truth, live-service reachability
+    before trusting a live-test report, and a third (untracked-file) case for the existing
+    zero-touch mutation-test section.
+  - **Promoted to `claude/analyst/analyst.md`** (1 entry): new "Evidence over vibes" bullet on
+    running a plan's prescribed acceptance-check command verbatim rather than trusting it matches
+    the repo.
+  - **Promoted to `claude/cobb/TESTING.md`** (1 entry, cross-agent routing): a new Gotcha on
+    `audit-team.sh`'s scratch-testability and its silent kaizen-only-directory skip — landed here
+    rather than analyst's own knowledge base since the fact is about safely testing a script this
+    agent (`cobb`) owns.
+  - **Discard, already resolved elsewhere** (3 entries): a `SendMessage`-grant open question
+    superseded same-day by `claude/docs/requirements/mid-run-escalation.md`; a falkor-chat
+    `r1_probe` field-semantics finding already documented and fixed in
+    `falkor-chat/docs/plans/golden-set-expansion-ml.md`; and an `nc`/`ncat`/`netcat` guard gap in
+    `security-expert/hooks/guard-exploitation-approval.sh` already fixed, cited by name in that
+    script's own current header comment.
+- **Verification method:** pulled every entry's full, untruncated text via `redis-cli GRAPH.QUERY
+  kaizen_team ... --no-raw` directly against FalkorDB rather than paging the MCP tool's ~300-char
+  per-cell display through repeated `substring()` calls — far fewer round trips for 12 entries ×
+  4 fields. Every surviving claim was re-derived from the live repo (pytest.ini, the guard
+  script's current source, `audit-team.sh`'s actual enumeration logic, a live `grep` for the
+  self-edit clause) before promotion or discard, not accepted from the entry's own framing.
+- **Why:** user asked to "work on analyst's inbox" — analyst's `kaizen/inbox.md` is a frozen
+  2026-08-20 historical snapshot (already imported and cleared), so the live equivalent is its
+  pending raw capture in the shared `kaizen_team` graph; this was the first full distillation pass
+  against it since the migration.
+- **Docs touched this pass (cross-artifact bookkeeping only — see `analyst/kaizen/history.md` for
+  the full per-entry disposition table):** `claude/cobb/kaizen/history.md` (this entry),
+  `claude/cobb/TESTING.md`.
+
 ## 2026-08-21 — Team-coherence certification (full 13-agent pass) — 7 real defects found and fixed
 
 - **Scope:** user-requested ("certify the team"). Last full certification was 2026-07-29 —

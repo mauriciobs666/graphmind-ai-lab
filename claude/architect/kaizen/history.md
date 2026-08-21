@@ -2,6 +2,37 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` distillation: 4 entries — 1 promoted to Guardrails, 3 discarded (2 already-documented elsewhere, 1 already-actioned)
+
+- **What:** `cobb` processed all 4 `author:'architect'` entries in the shared `kaizen_team` graph
+  (agent-maintenance skill §5), all from the same 2026-08-20 episode (authoring/revising
+  `docs/plans/generic-cypher-mcp2.md` through several plan-gate rounds).
+  - **Promoted (1) → new Guardrails bullet:** `c4a8d2f1` — two plan-revision-rigor lessons from
+    that episode's Pass-3 plan-gate majors: compressing a plan section to "see prior version,
+    unchanged" breaks any other section that cites the compressed content literally (an
+    isolated-context implementer needs the actual Cypher block/command, not a git-history
+    pointer); and a blanket find-and-replace across N near-identical files/sections needs the N
+    verified textually identical first (a tense mismatch among them means one substitution is
+    wrong for some).
+  - **Discarded (3):**
+    - `a1e3c9d4` — already fully documented in `cypher-mcp/README.md` (the "Read-only" and "Graph
+      discovery" sections: a graph materializes only on write, and querying an unknown graph name
+      returns the full list of loaded graphs in the error text).
+    - `b7f2e1a8` — same episode, same underlying fact (a self-edit "precedent" the plan claimed
+      for `architect`/`graph-dba` didn't actually exist, verified against `git show --stat`) as
+      `analyst`'s own kaizen capture of this same 2026-08-20 review round — already promoted, with
+      the identical origin note, into `claude/analyst/review-techniques.md` ("Ground truth for
+      'may an agent edit its own definition?'"). Promoting it again here would duplicate, not add.
+    - `f3a7c2e1` — the action it describes (add a dated Version-5 revision note to
+      `docs/plans/generic-cypher-mcp2.md` recording the header-retarget instruction's real-world
+      enforcement override) is **already done**: the document's header already reads `Version: 5`
+      and carries a "Revision note — 2026-08-20 (Version 5)" section. Nothing left to act on.
+  - **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`.
+- **Why:** User-requested distillation pass, continuing the oldest-first queue (data-scientist,
+  then architect).
+- **Plan items:** none opened — the one promotable entry landed directly; the other three needed
+  no forward-looking action.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_architect`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_architect` (FalkorDB, via `mcp__cypher__query`) instead of appending to

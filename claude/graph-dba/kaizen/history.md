@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-21 — Live-dispatched for a hook-enforcement test (K-018/K-019); no `graph-dba`-side change
+
+- **What:** Ran, as a `graph-dba` subagent (`subagent_type` explicitly set by the dispatching
+  `cobb` session), a deliberate live test of the destructive-ops `PreToolUse` guard: created a
+  throwaway scratch graph, ran the exact `GRAPH.DELETE` command shape from the earlier G1
+  incident, and reported whether anything paused for approval. It didn't — confirming a genuine
+  harness-level hook-enforcement gap for Task-dispatched subagents, not a defect in this agent's
+  own `guard-destructive-ops.sh` (independently re-verified sound in isolation during the same
+  test). Logged the finding as `:KaizenEntry` `a4f3d2e1…` for `cobb` to route.
+- **Why:** User-requested confirmation of K-018's open hypothesis.
+- **Disposition:** the full investigation trail, the finding's team-wide implications, and the
+  now-open follow-up (**K-019**) live in `claude/cobb/kaizen/{plan,history}.md` — this is a
+  cobb-owned, team-wide item (the enforcement gap affects every guarded agent, not just
+  `graph-dba`), not a `graph-dba`-specific prompt/hook change. No file in this agent's own folder
+  changed as a result.
+- **Plan items:** none opened here — tracked as K-018 (closed, confirmed)/K-019 (open) in cobb's
+  plan.md.
+
+## 2026-08-21 — `kaizen_team` distillation: the deferred `d4f8b1c3…` entry — kept open, merged into cobb's already-tracked K-018 (no new graph-dba-side action)
+
+- **What:** `cobb` processed the one remaining `author:'graph-dba'` entry in `kaizen_team`
+  (`d4f8b1c3-2a67-4e05-9c81-3f6b9d2e7a45`, 2026-08-20) — explicitly out of scope for the
+  2026-08-20 distillation pass above, deferred to a proper full pass. It reports the same G1
+  episode (M7 rollout, `docs/plans/generic-cypher-mcp2-coordination.md`) already investigated
+  from `teco`'s side: `guard-destructive-ops.sh` did not escalate 4 live `docker exec
+  falkordb-dev redis-cli GRAPH.DELETE <key>` calls despite the shared regex plainly matching.
+  **This is not new information** — `cobb`'s own `kaizen/plan.md` already carries the fuller
+  analysis as **K-018** (opened 2026-08-21 distilling `teco`'s parallel entry `b1e3a1f0…`), with
+  the leading hypothesis being `subagent_type` omission on the `Agent` dispatch (silently runs the
+  delegate as `general-purpose`, carrying none of `graph-dba`'s frontmatter `hooks:`) rather than a
+  defect in the guard script itself — a fix for the omission (`always pass subagent_type
+  explicitly`) is already shipped in `teco.md`'s Guardrails.
+- **Verified, added to K-018:** re-ran `guard-destructive-ops.sh` directly with the exact command
+  text this entry cites (`docker exec falkordb-dev redis-cli GRAPH.DELETE
+  kaizen_data-scientist`) — the script correctly emits `"ask"` in isolation, confirming the
+  regex/script logic is not the bug (rules out one candidate explanation; the enforcement gap, if
+  it persists once `subagent_type` is confirmed correct, lives elsewhere in the dispatch/hook
+  pipeline). Also found two related-but-not-identical closed upstream Claude Code issues
+  (#18392, #34692 — corroborating that subagent-dispatch hook reliability is a documented gap
+  class, not a one-off) and folded them into K-018 as search terms for the still-pending live
+  re-check, not as a confirmed root cause.
+- **Disposition:** kept open — no `graph-dba`-side prompt/hook change from this entry specifically;
+  the durable record and the pending next step (a live `graph-dba` dispatch with `subagent_type`
+  confirmed, watching whether the hook fires) live in `claude/cobb/kaizen/plan.md` K-018. This
+  agent's own hook script is verified correct as written; nothing here implicates
+  `guard-destructive-ops.sh`'s pattern-matching logic.
+- **Cleared:** `d4f8b1c3-2a67-4e05-9c81-3f6b9d2e7a45` removed from `kaizen_team` after this entry
+  was confirmed written (curator-clear, `agent='cobb'`). `kaizen_team` now has zero
+  `author:'graph-dba'` entries.
+- **Why:** User-requested distillation pass, continuing the oldest-first queue.
+- **Docs touched:** this file; `claude/cobb/kaizen/plan.md` (K-018 addendum).
+
 ## 2026-08-20 — Graph distillation: 1 entry promoted to `cypher-mcp/README.md` (`agent-maintenance` §5, cobb, Q2 acceptance pass — AC-5 re-proof on the consolidated `kaizen_team` graph)
 
 - **What:** `cobb` processed one raw `:KaizenEntry` node in the now-consolidated, `author`-partitioned

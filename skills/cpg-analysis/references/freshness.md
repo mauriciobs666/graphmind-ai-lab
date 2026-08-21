@@ -71,7 +71,19 @@ signal, not the threshold.
   copied along — the pattern `cpg-query-access.md` §S8 used for `cpg_falkorchat`
   itself, to keep `.venv` out of the parse) has no commit reference even though
   the *real* source is tracked. `sourcePath` and raw `builtAt` age are then the
-  only signal.
+  only signal — **but not necessarily the only signal you can act on.** If you
+  can independently confirm, from task context (not from any field on the
+  marker itself), the real repo-relative directory a scratch copy was staged
+  from, the stronger `git log --since=<builtAt> -- <realSourcePath>` check is
+  still valid: one live dispatch correctly inferred `falkor-chat/server` as the
+  real counterpart of a `.git`-less `/tmp/cpg-src/falkor-chat-server` scratch
+  build and ran the stronger check on it, independently confirmed correct
+  (`docs/test-reports/cpg-agent-adoption2-report.md` TP-002). That's valid
+  signal, not an over-reach past this limitation — but only once the real path
+  is verified, never on the marker's literal `sourcePath` for this build
+  pattern: running that literal straight through `git log` doesn't error, it
+  silently returns zero commits, which reads as false "unchanged" confidence
+  rather than "no signal available."
 - **Opt-in per build.** Any CPG built before this feature shipped, or by a
   pipeline run whose own load verification failed, has no marker — that's the
   "zero rows" case above, not an error.

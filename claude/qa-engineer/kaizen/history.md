@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` distillation: 10 entries — 7 promoted, 2 discarded as already-covered/self-flagged, 1 discovered a stale doc claim and fixed it
+- **What:** `cobb` processed all 10 `author:'qa-engineer'` entries in the shared `kaizen_team`
+  graph (agent-maintenance skill §5). Verified each against the live system before disposing;
+  fields were read via single-column `substring()` paging per entry `a1b2c3d4`'s own finding
+  (below) rather than a multi-column table read, to avoid the corruption it describes.
+  - **Promoted (5) → new sections in `claude/qa-engineer/qa-testing-techniques.md`:**
+    - `1cb831d4` — a twice-verified prompt-compliance gate (plan + diff, both `analyst`, zero
+      findings) still failed 3 different ways across 3 live dispatches (`cpg-agent-adoption` M4
+      U6, DEF-1/2/3); static gates on prompt wording are necessary, never sufficient, when
+      acceptance criteria are prompt-compliance claims — budget live-dispatch sampling as its own
+      test layer. Folded `fe00857c` into the same section (a "confirm N defects closed" re-pass
+      surfaced a 4th, previously-masked defect — read full output, not just the targeted clause).
+    - `3f55c37b` — a `pytest -m live` suite with ~50 sequential local-LLM calls ran 175.92s, past
+      Bash's 120s foreground default; expect it and use `run_in_background`/`Monitor` proactively.
+    - `1fd61032` — `claude mcp list`/`claude mcp get <name>` via `Bash` is a fresh CLI process,
+      independent of the session's own (possibly stale) MCP-client binding — verifies a rename/
+      reconfig without a session restart.
+    - `c92f6a18` — a first-attempt `mcp__cypher__query` write blocked by Auto-Mode's classifier,
+      with an identical retry succeeding immediately, is a harness false start, not a defect
+      signal by itself — retry once before concluding the write path is broken.
+    - `a1b2c3d4` — cross-referenced (full writeup landed in `cypher-mcp/README.md`, next bullet).
+  - **Promoted (2) → project docs (facts about the shared MCP tool, not qa-engineer-private):**
+    - `a1b2c3d4` → `cypher-mcp/README.md` "Result format and truncation": a multi-column chunking
+      query with 2+ long-string columns can render corrupted/duplicated text in the chat
+      transcript even though `format_result()` is a plain deterministic join and the underlying
+      data is fine (verified via `size()`/`substring()` on the raw field) — page long fields one
+      `substring()` per query, single `RETURN` column, never several long chunks in one row.
+    - `75167f4d` → `skills/cpg-analysis/references/freshness.md` Limits section: a `.git`-less
+      scratch-copy build isn't necessarily stuck on raw-age-only — a dispatch that independently
+      confirms the real repo-relative source path from task context can still validly run the
+      stronger `git log` check; flagged the adjacent trap (the marker's literal `sourcePath` run
+      through `git log` silently returns a spurious "zero commits" instead of erroring).
+  - **Verified live and found *more* than it originally claimed — `13d8e8eb`:** re-tested with a
+    real `CREATE`/`DETACH DELETE` round trip against `kaizen_team` (2026-08-21). The entry's claim
+    (write-result counters render as floats, e.g. `nodes_created=1.0`) still holds — **and** it
+    directly contradicted `cypher-mcp/README.md`'s own text, which claimed (with a specific,
+    plausible-sounding citation to the pinned client's source) these render as plain `int`s. Fixed
+    the README to state the live-verified behavior and note the contradiction, rather than
+    promoting the entry into a knowledge base that would have sat beside an already-wrong doc.
+  - **Discarded (2):**
+    - `cda51378` — self-flagged in its own `fact` field as a Q1 acceptance-check test entry, "not
+      a durable team learning, safe to skip in distillation."
+    - `b7a1e4d2` — the curator-clear space-requirement fact it reports is already documented in
+      `cypher-mcp/README.md`'s "Writing through this tool" section (per the entry's own evidence,
+      the README was fixed in the same pass that produced this entry) — promoting again would
+      duplicate, not add.
+  - **Docs touched:** `claude/qa-engineer/qa-testing-techniques.md` (5 new sections) ·
+    `cypher-mcp/README.md` (write-result float correction + multi-column rendering caution) ·
+    `skills/cpg-analysis/references/freshness.md` (Limits section addition).
+- **Why:** User-requested distillation pass ("let's work on qa-engineer's inbox").
+- **Plan items:** none opened — every actionable entry had a direct, concrete promotion target;
+  nothing here needed to wait as a `plan.md` backlog item.
+
 ## 2026-08-21 — Enforcement-parity fix: Guardrails now describes the new doc-write guard (team certification, §4 judgment half)
 
 - **What:** The `guard-qa-doc-writes.sh` hook below (same 2026-08-21 rollout) shipped without a
