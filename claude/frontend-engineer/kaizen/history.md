@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-08-21 — Persona fix: dropped stale "senior" framing (team certification, §7 fold-in)
+
+- **What:** Opening line "You are a **senior front-end engineer** — a specialist implementer..."
+  → "You are a **front-end engineer** — a specialist implementer...". Dropped the one word.
+- **Why:** Caught during a user-requested full team-coherence certification's §7 lint fold-in.
+  The team dropped "senior" framing collection-wide on 2026-06-20 (overconfidence concern;
+  persona-prompting evidence shows role labels are weak-to-neutral for correctness —
+  `claude/cobb/kaizen/history.md`, 2026-06-20 entry, "Collection harmonization"). This file
+  (created after that sweep) had never been checked against it — genuine drift, along with the
+  same finding on `data-scientist.md` (`claude/data-scientist/kaizen/history.md`, same date).
+- **Verified:** `bash claude/scripts/audit-team.sh` — same 113 PASS / 2 pre-existing FAILs before
+  and after (diff, not bare gate).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_frontend-engineer`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_frontend-engineer` (FalkorDB, via `mcp__cypher__query`) instead of

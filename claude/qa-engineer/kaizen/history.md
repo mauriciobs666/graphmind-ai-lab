@@ -2,6 +2,22 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-21 — Enforcement-parity fix: Guardrails now describes the new doc-write guard (team certification, §4 judgment half)
+
+- **What:** The `guard-qa-doc-writes.sh` hook below (same 2026-08-21 rollout) shipped without a
+  matching Guardrails line — the destructive-ops hook was already documented, but the *second*
+  hook (added the same day) was silent machinery from this file's own perspective. Added one new
+  Guardrails bullet describing it accurately: `docs/test-plans/*`/`docs/test-reports/*` writes are
+  auto-approved (no prompt), everything else falls through unmediated to the ambient permission
+  flow — this hook only ever skips a redundant prompt, it never escalates.
+- **Why:** Caught during a user-requested full team-coherence certification
+  (`claude/cobb/kaizen/history.md`, 2026-08-21 certificate entry) — enforcement parity is one of
+  §4's five judgment-checklist items. Same root cause, same day, as the matching fixes on
+  `tdd-engineer.md` and `cobb.md` (both hooks landed without their prompts being updated).
+- **Verified:** `bash claude/scripts/audit-team.sh` clean (113 PASS / 2 pre-existing, unrelated
+  FAILs, unchanged by this fix).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-21 — Added a `Write|Edit` doc-write guard for test-plans/test-reports (agent-permission-friction FR-3)
 
 - **What:** `qa-engineer` previously had no `Write`/`Edit` guard at all — only its pre-existing

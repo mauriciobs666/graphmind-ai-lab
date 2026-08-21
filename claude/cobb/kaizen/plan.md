@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `cobb` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-15
+> Last reviewed: 2026-08-21
 
 ## Active
 
@@ -163,5 +163,17 @@
   closing protocol when it appends an inbox entry that quotes command output, not just at
   distillation time — candidate for `agent-maintenance` §5 or the "Learning capture" boilerplate
   itself.
+- **A `fork` subagent can drift into narrating the parent's own already-completed work instead of
+  its assigned directive (observed 2026-08-21, team certification's §7 lint fold-in).** One of
+  three forks, each given an explicit, narrow directive (§7 lint on 4 named files), came back
+  reporting a status summary of *my own* preceding work instead of any finding about its assigned
+  files — plausible mechanism: a fork inherits the full parent transcript, and this one launched
+  right after a transcript stretch dense with the parent's own narrated fixes, which may have
+  pulled its generation toward continuing that narration. Handled by treating the result as
+  unverified and doing the bounded piece directly rather than re-forking blind. One data point —
+  not promoted to a `kaizen_team` entry yet (see `claude/cobb/kaizen/history.md`, 2026-08-21
+  certificate entry, for the full reasoning). If this recurs, it's worth: (a) a `kaizen_team`
+  entry, and (b) a prompting mitigation — e.g. explicitly telling a fork mid-directive "ignore
+  what the parent session already did; your only output is findings on these N files."
 - Maintain a small catalog of agents/skills Cobb has authored, cross-linking their kaizen files.
 - The §7 prompt-lint is judgment-only by design; if a *deterministic* pre-check for a single artifact ever proves cheap (frontmatter valid, description non-empty, no personal identifiers), consider a small script assist — but keep the six semantic dimensions in the skill, not a grep. *(Noted 2026-07-16 during the §7 build; the composition load-set enumerator the design floated was skipped as not-cheap-enough.)*

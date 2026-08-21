@@ -2,6 +2,24 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-21 — Coverage fix: dropped stale "your kaizen inbox" from the commit-authority bullet (team certification, §7 fold-in)
+
+- **What:** The Bash bullet's commit-authority grant listed "your kaizen inbox" among the files
+  tico may `git add`/`git commit` (alongside its Write/Edit guard's actual two doc kinds). Removed
+  the phrase.
+- **Why:** Caught during a user-requested full team-coherence certification's §7 lint fold-in —
+  two independent problems, not one: (1) `kaizen/inbox.md` has been a frozen historical snapshot
+  since the 2026-08-20 graph migration (this file's own Learning-capture section, further down,
+  already correctly says so) — nothing will ever make it dirty again, so the grant is dead prose;
+  (2) it was never even true as written — this file's own Write/Edit-guard bullet only names
+  `docs/requirements/` and `docs/manuals/`, never `kaizen/inbox.md`, so "files your Write/Edit
+  guard already allows you to touch" didn't actually cover the thing being granted. The same stale
+  phrase pattern was found and fixed the same pass in `teco.md`'s commit-authority grant
+  (`claude/teco/kaizen/history.md`, same date).
+- **Verified:** `bash claude/scripts/audit-team.sh` — same 113 PASS / 2 pre-existing FAILs before
+  and after (diff, not bare gate).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_tico`), mirroring `graph-dba`; `mcp__cypher__query` granted
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_tico` (FalkorDB, via `mcp__cypher__query`) instead of appending to

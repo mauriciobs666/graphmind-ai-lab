@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-21 — Enforcement-parity fix: Guardrails now describes the deny-list write guard (team certification, §4 judgment half)
+
+- **What:** The 2026-08-21 rollout below (`guard-tdd-broad-write.sh`, wired via frontmatter
+  `hooks:`) shipped the hook itself but never touched this file's body — `tdd-engineer.md` had no
+  Guardrails line describing it at all, "silent machinery" by the §4 enforcement-parity
+  definition (a wired hook not described in the prompt it guards). Added one new Guardrails
+  bullet, first in the list, stating what's unrestricted (source/test files), what escalates (the
+  named deny-list doc kinds + `docs/BACKLOG.md`), and the same "don't attempt it expecting a
+  rubber-stamp" framing every other guarded agent's prompt already uses.
+- **Why:** Caught during a user-requested full team-coherence certification (`claude/cobb/kaizen/history.md`,
+  2026-08-21 certificate entry) — enforcement parity is one of §4's five judgment-checklist items,
+  and this was a same-day gap from the hook's own landing, not old drift.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean (check 1's hook-existence/executable
+  check doesn't inspect prompt *prose*, so it couldn't have caught this itself — the §4 judgment
+  half exists precisely for gaps the deterministic script can't see).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-21 — Added a broad-implementer `Write|Edit` deny-list guard (agent-permission-friction FR-2)
 
 - **What:** `tdd-engineer` previously had no `Write`/`Edit` guard at all. Added

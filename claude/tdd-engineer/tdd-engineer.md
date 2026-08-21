@@ -55,6 +55,7 @@ Keep the whole suite green between cycles. If a change reddens unrelated tests, 
 
 ## Guardrails
 
+- **Your `Write`/`Edit` is harness-enforced against writing another specialist's deliverable.** Source and test files are unrestricted — your remit is genuinely "the whole codebase, this task." A `PreToolUse` hook escalates to the human for one-time approval only when the target looks like a different specialist's documented doc kind (a plan, review, requirements/manual doc, test plan/report, an agent/kaizen file, a team catalog, a skill package, an MCP-standards doc) or `docs/BACKLOG.md` (deliberately left escalating either way — genuinely unresolved, not a bug). If you're only attempting the write because you expect the approval to be rubber-stamped, it isn't actually yours to make; hand it to the owning specialist instead.
 - **No production code without a failing test that requires it** — except trivial scaffolding (imports, stubs, type signatures) that exists only to let a test compile and fail meaningfully.
 - **Don't delete or weaken tests to get green.** A failing test is information. If a test is genuinely wrong, fix it deliberately and explain why; never gut assertions to force a pass.
 - **Don't disable, skip, or `expect`-wrap failures to hide them.** Surface them.

@@ -2,6 +2,125 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-21 — Team-coherence certification (full 13-agent pass) — 7 real defects found and fixed
+
+- **Scope:** user-requested ("certify the team"). Last full certification was 2026-07-29 —
+  essentially the entire roster changed since (`security-expert` created, `agent-permission-friction`
+  hook rollout, the `kaizen_team` graph consolidation, teco's CPG-freshness centralization), so
+  this ran as a full pass, not a scoped one.
+- **§4 deterministic half:** `claude/scripts/audit-team.sh` — **113 PASS / 2 FAIL**, both
+  pre-existing and unrelated (username/home-path leak in
+  `falkor-chat/docs/test-reports/graphrag-eval-report.md`, committed 2026-08-16, outside every
+  agent's write remit — consistent with every prior certification's handling of this same known
+  leak; not fixed here, per the diff-not-gate convention). Same 113/2 before and after every fix
+  below (verified via diff, not a bare re-run).
+- **§4 judgment half — 5-point checklist:**
+  1. **Roster accuracy** — found and fixed a real drift: `claude/AGENTS.md`'s Hook-machinery
+     section said "Seven `Write|Edit` wrappers" on `guard-doc-writes.sh`; actual count (verified
+     by listing every agent's frontmatter `hooks:` block) is **eight**
+     (architect/analyst/data-scientist/teco/tico/security-expert/cobb/qa-engineer) — the
+     2026-08-21 rollout added two wrappers (`cobb`, `qa-engineer`) in one edit but the prose was
+     only bumped by one. Fixed both occurrences ("Seven"→"Eight", "six of the seven"→"seven of
+     the eight").
+  2. **Handoff symmetry** — clean. Verified the highest-risk pair directly: all six
+     CPG-freshness-consuming agents (`analyst`/`architect`/`coder`/`tdd-engineer`/
+     `frontend-engineer`/`qa-engineer`) correctly state "CPG freshness-checking is teco's
+     responsibility, not yours (2026-08-19)," matching teco.md's own centralization claim
+     word-for-word. The manuals review split (`qa-engineer` behavioral / `analyst`
+     architectural) is stated symmetrically on both sides.
+  3. **Subagent-awareness** — clean. Every delegate-able agent (10 checked directly) carries
+     can't-ask-mid-run language.
+  4. **Enforcement parity** — found and fixed **3 real gaps**, all the same shape and all from
+     the same 2026-08-21 `agent-permission-friction` rollout: a hook was wired in frontmatter but
+     never described in the prompt body it guards ("silent machinery," the exact failure mode §4
+     exists to catch).
+     - `tdd-engineer.md` — zero prose about its new `guard-tdd-broad-write.sh`. Fixed (new
+       Guardrails bullet). Logged: `claude/tdd-engineer/kaizen/history.md`.
+     - `cobb.md` (**my own prompt**) — zero prose about its own `guard-cobb-topic-writes.sh`, in
+       either a Guardrails section (which doesn't exist) or Principles. Fixed (new Principles
+       bullet — added there rather than a new H2, matching this file's existing density).
+     - `qa-engineer.md` — documented its pre-existing destructive-ops hook but not the *second*,
+       same-day `guard-qa-doc-writes.sh`. Fixed (new Guardrails bullet). Logged:
+       `claude/qa-engineer/kaizen/history.md`.
+     Everything else checked (`analyst`, `architect`, `data-scientist`, `devops`, `graph-dba`,
+     `security-expert`, `coder`'s deliberate no-hook exemption) was already accurate — this was a
+     rollout-specific blind spot (ship the hook, forget the prose), not a systemic pattern.
+  5. **Boundary reciprocity** — script's 11 `BOUNDARY_PAIRS` all symmetric at the name level (22
+     PASS); spot-checked semantic complementarity on the newest three pairs
+     (`security-expert:analyst/cobb/devops`) — each states "advisory... X weighs it but keeps
+     final authority," genuinely reciprocal, not just name-matched.
+- **§7 lint fold-in** — every artifact changed since 2026-07-29 (19 files: 15 agent prompts + 4
+  skills). Forked the work three ways to keep it out of my own context (findings only came back,
+  not full file reads) — two forks (`analyst`/`architect`/`coder`/`data-scientist`/`devops`, and
+  `frontend-engineer`/`graph-dba`/`security-expert`/`tico`) returned real, on-target findings; the
+  third (assigned the 4 changed skill files) came back off-target — it echoed my own
+  already-completed judgment-checklist work instead of linting its assigned files, a context-bleed
+  failure mode worth a kaizen note of its own (see below). Did that piece directly instead of
+  re-forking it. **Findings, across all 19 files:**
+  - **2 persona findings (minor, but confirmed against a real, dated team decision — not a fresh
+    opinion):** `data-scientist.md` and `frontend-engineer.md` both still opened "You are a
+    senior ___" — the team dropped "senior" framing collection-wide 2026-06-20 (this file,
+    2026-06-20 entry, "overconfidence concern; persona-prompting evidence shows role labels are
+    weak-to-neutral," applied explicitly to `cobb` itself and stated as harmonizing the whole
+    collection). Both files postdate that sweep and were never checked against it. Fixed both
+    (dropped the one word each). Re-swept the whole `claude/*/*.md` tree afterward — zero
+    remaining hits (the one surviving "senior" match, `cobb/TESTING.md`, names an unrelated
+    OpenCode agent, `coding-senior`, as a candidate example — not this team's persona).
+  - **2 coverage findings (minor, real intra-file staleness, harmless in practice):**
+    `tico.md`'s and `teco.md`'s commit-authority grants each still named a "kaizen inbox
+    entry"/"your kaizen inbox" as a committable deliverable — dead since the 2026-08-20 graph
+    migration (no agent produces a fresh `kaizen/inbox.md` entry any more; `tico`'s case was
+    doubly wrong — its own Write/Edit-guard bullet never named `kaizen/inbox.md` as covered in
+    the first place). Fixed both. Logged: `claude/tico/kaizen/history.md`,
+    `claude/teco/kaizen/history.md`.
+  - **1 finding checked and dismissed (false lead):** a fork flagged `security-expert.md`'s
+    "or the session scratchpad" clause as possibly unverified against `claude/AGENTS.md`'s
+    shorter hook summary. Read the actual `guard-review-doc-writes.sh` script directly — its own
+    escalation message says "outside a `docs/reviews/` directory **or the `/tmp` scratchpad**,"
+    confirming the prompt's claim and not `AGENTS.md`'s summary, which simply omitted the detail
+    (a summary, not a denial). No fix needed.
+  - **1 non-finding worth recording:** `coder.md` has no `tools:` frontmatter field, unlike every
+    other file in its lint batch — confirmed intentional, not a gap: `claude/README.md` already
+    documents `coder`/`tdd-engineer`/`frontend-engineer`/`qa-engineer` as the four agents that
+    declare no `tools:` allowlist specifically so they inherit `mcp__cypher__query` automatically.
+  - **1 non-finding worth recording:** `guard-ds-doc-writes.sh` and `guard-plan-doc-writes.sh`
+    are both directory-scoped (`docs/plans/*`), not filename-suffix-scoped — `data-scientist` can
+    technically write unprompted anywhere under `docs/plans/`, including `architect`'s own plans,
+    and vice versa. Symmetric, pre-existing (predates 2026-08-21), and both files' prose already
+    describes the breadth accurately (no overclaim) — not filed as a defect, just noted here in
+    case it's news to a future reader.
+  - The 4 skill files (`agent-maintenance`, `cpg-analysis`, `joern-cpg`, `python-web-quirks`),
+    checked directly after the assigned fork came back off-target: no stale `kaizen/inbox.md`
+    operative references (the one hit, `python-web-quirks/SKILL.md`'s origin note, is correctly
+    past-tense — describes where the content was distilled *from* in 2026-08-09, not a live
+    instruction), no leftover pre-rename `mcp__cpg__*` tool naming (clean sweep from the
+    cypher-mcp rename), `agent-maintenance/SKILL.md`'s own three `kaizen/inbox.md` mentions are
+    its own correct, current documentation of the frozen-inbox convention.
+- **Kaizen-worthy harness observation (not filed as a graph entry — resolved in this same run,
+  see the Learning-capture exemption):** a `fork` subagent given a narrow, explicit directive (§7
+  lint on 4 named files) can still drift into narrating the *parent* session's own
+  already-completed work instead of doing its assigned task — plausible mechanism: a fork
+  inherits the full parent transcript, and a long transcript with a lot of the parent's own
+  recent narrated actions (this session had just fixed 4 real defects immediately before the
+  fork launched) can apparently pull a fork's own generation toward continuing that narration
+  rather than executing its distinct directive. Mitigation used here: treat an off-target fork
+  result as **unverified**, don't retry with the same shape blind — either re-scope the prompt to
+  more forcefully exclude parent-session narration, or (what I did) just do the bounded piece of
+  work directly instead of re-forking. Not (yet) promoted to a `kaizen_team` entry — this is a
+  single data point, not independently confirmed, and doesn't change any agent's operative
+  behavior on its own; worth a second data point before promoting.
+- **Verified:** `bash claude/scripts/audit-team.sh` — 113 PASS / 2 pre-existing FAILs, identical
+  before and after every fix in this pass (7 fixes total: 1 roster-count, 3 enforcement-parity,
+  2 persona, 2 coverage — the "7" undercounts by the 2 kaizen-related ones already logged as
+  their own dated entries above this one, for a session total of 9 real defects found and fixed).
+  No personal identifiers introduced by any edit this pass (checked `git diff` on every touched
+  file).
+- **Docs touched this pass:** `claude/AGENTS.md`, `claude/cobb/cobb.md`,
+  `claude/data-scientist/data-scientist.md`, `claude/frontend-engineer/frontend-engineer.md`,
+  `claude/qa-engineer/qa-engineer.md`, `claude/tdd-engineer/tdd-engineer.md`,
+  `claude/teco/teco.md`, `claude/tico/tico.md`, plus each edited agent's own
+  `kaizen/history.md` (self-logged, cross-referenced above) and this file.
+
 ## 2026-08-21 — Distilled all 9 pending `teco`-authored entries from `kaizen_team`
 
 - **What:** Ran the agent-maintenance skill §5 procedure against every `kaizen_team` node with

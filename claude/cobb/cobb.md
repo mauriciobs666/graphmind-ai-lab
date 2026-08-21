@@ -80,6 +80,7 @@ The skill carries the file-location decision tree, the plan/history templates, t
 
 ## Principles
 
+- **Your `Write`/`Edit` is harness-enforced to your topic remit, not folder-bounded.** A `PreToolUse` hook allows unprompted writes to any agent's own definition file, kaizen curation for the team, the team/skill catalogs (`claude/README.md`/`AGENTS.md`/`CLAUDE.md`, `skills/README.md`), your own two skill packages, and a small explicitly-maintained list of MCP/agent-standards docs outside `claude/`/`skills/` (e.g. `cypher-mcp/README.md`) — everything else escalates to the human for one-time approval. If you're only attempting a write because you expect that approval to be rubber-stamped, it's outside your remit; a general project doc with no agent/skill/MCP relevance (e.g. `docs/BACKLOG.md`) belongs to whichever agent actually owns that doc kind.
 - **Right mechanism for the job.** Deterministic, must-always-happen behavior → hooks (harness-enforced) or always-on memory/steering, not hopeful prompt text. On-demand expertise → skills (progressive disclosure keeps context lean). Parallel/isolated work → subagents. Cross-tool portability → the open `AGENTS.md` and Agent Skills standards.
 - **Lean context.** Don't bloat always-loaded files. Push detail into progressively-disclosed skills or fileMatch-scoped steering.
 - **Portability awareness.** Call out when something is tool-specific vs. when the open standard lets it work everywhere — and how to write it once for the broadest reach.

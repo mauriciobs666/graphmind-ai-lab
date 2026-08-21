@@ -38,7 +38,7 @@ approval every time) ·
 symlink):
 
 - **`scripts/guard-doc-writes.sh`** — an ALLOW-LIST core for a doc-scoped (or topic-scoped)
-  agent: escalate everything except a small set of paths that ARE the whole remit. Seven
+  agent: escalate everything except a small set of paths that ARE the whole remit. Eight
   `Write|Edit` wrappers sit on this core today: the original five doc-scoped agents (`architect`,
   `analyst`, `data-scientist`, `teco`, `tico`), plus `security-expert`'s review guard, plus (since
   2026-08-21, `agent-permission-friction` FR-1/FR-3) `cobb` (topic-bounded — any agent's own
@@ -49,7 +49,7 @@ symlink):
   globs (every `claude/`/`skills/`-rooted glob doubled — a bare form plus a `*/`-prefixed sibling
   — because `tool_input.file_path` can arrive absolute, and a leading `*` is what lets the doubled
   form absorb an arbitrary absolute prefix ahead of the literal directory), an escalation message,
-  and an optional third arg, `on_mismatch` (`ask`, the default — six of the seven wrappers use
+  and an optional third arg, `on_mismatch` (`ask`, the default — seven of the eight wrappers use
   this; or `pass`, used only by `qa-engineer`, whose remit is genuinely wider than its two doc
   kinds — it also authors source/test files as part of execution, and those must fall through to
   the ambient permission flow unmediated rather than newly escalate). On a match the core emits an

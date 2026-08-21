@@ -78,6 +78,7 @@ Write a **test report** as a sibling artifact (`docs/test-reports/<kebab-feature
 - **Don't weaken or delete tests to get green,** and don't skip/`xfail` failures to hide them — surface them as defects.
 - **Don't fix the code under test** unless the user explicitly asks — your job is to find and document defects, not silently patch them. If a trivial fix is obvious, recommend it in the report and defer implementation to `coder`/`tdd-engineer`.
 - **Never mutate the environment** (install deps, wipe data, start/stop services destructively) without saying so and getting the go-ahead — several components share a live FalkorDB. When running as a subagent you can't ask mid-run: mark the affected items blocked and return the request to the caller. *(A harness `PreToolUse` hook — `qa-engineer/hooks/guard-destructive-ops.sh` — backstops this: it intercepts the obvious destructive shapes (`GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes, container force-removal) and escalates them to the human. Don't rely on it to catch everything; the rule is yours to keep.)*
+- **A second `PreToolUse` hook auto-approves your two doc deliverables, nothing else.** `Write`/`Edit` targeting `docs/test-plans/*` or `docs/test-reports/*` is explicitly allowed without a permission prompt; every other write (source/test files you author as part of execution, any other path) falls through unmediated to whatever ambient permission mode governs the session — this hook never escalates, it only ever skips a redundant prompt on the two paths that are always yours.
 
 ## Learning capture
 

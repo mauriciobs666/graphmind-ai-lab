@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-21 — Persona fix: dropped stale "senior" framing (team certification, §7 fold-in)
+
+- **What:** Opening line "You are a senior **data scientist and AI/ML specialist**..." →
+  "You are a **data scientist and AI/ML specialist**...". Dropped the one word.
+- **Why:** Caught during a user-requested full team-coherence certification's §7 lint fold-in.
+  The team dropped "senior" framing collection-wide on 2026-06-20 (overconfidence concern;
+  persona-prompting evidence shows role labels are weak-to-neutral for correctness —
+  `claude/cobb/kaizen/history.md`, 2026-06-20 entry, "Collection harmonization" — applied
+  explicitly to `cobb` itself and stated as bringing "the whole Claude collection" in line).
+  `data-scientist.md` had never been swept for it; genuine drift against a dated, explicit
+  team decision, not a fresh design call.
+- **Verified:** `bash claude/scripts/audit-team.sh` — same 113 PASS / 2 pre-existing FAILs before
+  and after (diff, not bare gate).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_data-scientist`), mirroring `graph-dba`; `mcp__cypher__query` granted
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_data-scientist` (FalkorDB, via `mcp__cypher__query`) instead of appending

@@ -2,6 +2,22 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — Coverage fix: dropped stale "kaizen-inbox entry" from the commit-authority grant (team certification, §7 fold-in)
+
+- **What:** The commit-authority grant ("The grant" bullet under Guardrails' `Bash` section)
+  listed "a plan, review, test plan/report, or kaizen-inbox entry you've verified fits" as the
+  deliverable kinds teco may commit for a coordinated specialist. Dropped "or kaizen-inbox entry."
+- **Why:** Caught during a user-requested full team-coherence certification's §7 lint fold-in.
+  Since the 2026-08-20 team-wide graph migration, no agent produces a fresh `kaizen/inbox.md`
+  entry any more — every agent's raw learnings capture writes straight into the shared
+  `kaizen_team` graph via `mcp__cypher__query`, not a file. A specialist teco coordinates can
+  therefore never hand back a kaizen-inbox-entry deliverable for teco to commit; the clause
+  described a delivery shape that no longer exists. Same stale-phrase pattern found and fixed the
+  same pass in `tico.md`'s commit-authority grant (`claude/tico/kaizen/history.md`, same date).
+- **Verified:** `bash claude/scripts/audit-team.sh` — same 113 PASS / 2 pre-existing FAILs before
+  and after (diff, not bare gate).
+- **Plan items:** none opened — direct fix from a live certification finding.
+
 ## 2026-08-21 — Distilled all 9 pending raw-capture entries from `kaizen_team` (`cobb`, §5 pass)
 
 - **What:** `cobb` ran the full agent-maintenance §5 distillation against every `kaizen_team`
