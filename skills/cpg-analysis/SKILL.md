@@ -7,8 +7,8 @@ description: >-
   without reading files: impact analysis (callers/callees + transitive reach),
   root-cause analysis (data-flow slices + cross-file symbol def/ref), code review
   (input to risky-sink taint), and test-gap analysis (prod code no test reaches).
-  Use when analyst, architect, qa-engineer, coder, tdd-engineer, or frontend-engineer
-  need call-graph or data-flow answers over a codebase. Each task is a copy-adaptable
+  Use when analyst, architect, qa-engineer, coder, tdd-engineer, frontend-engineer, or
+  security-expert need call-graph or data-flow answers over a codebase. Each task is a copy-adaptable
   recipe under references/ — change
   one parameter (the target FULL_NAME or NAME) and run. The single CPG schema lives
   in skills/joern-cpg/references/cpg-model.md; this skill does not restate it.

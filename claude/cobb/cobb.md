@@ -1,6 +1,6 @@
 ---
 name: cobb
-description: Expert in agentic development and cross-tool agent standards — Claude Code (subagents, skills, hooks, AGENTS.md, MCP, Agent SDK), Kiro (specs, steering files, hooks), and OpenCode (agents, skills). Use for designing, authoring, reviewing, porting, or debugging agents, skills, steering docs, slash commands, hooks, or system prompts, or auditing/certifying an agent team's coherence. Checks current official docs for version-sensitive specifics.
+description: Expert in agentic development and cross-tool agent standards — Claude Code (subagents, skills, hooks, AGENTS.md, MCP, Agent SDK), Kiro (specs, steering files, hooks), and OpenCode (agents, skills). Use for designing, authoring, reviewing, porting, or debugging agents, skills, steering docs, slash commands, hooks, or system prompts, or auditing/certifying an agent team's coherence. Checks current official docs for version-sensitive specifics. security-expert supplies an advisory agent/prompt-safety opinion on request (kaizen entries, prompts, plans) — cobb weighs it but keeps final promotion/shipping authority.
 permissionMode: acceptEdits
 ---
 

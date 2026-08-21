@@ -2,6 +2,53 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-20 — Designed and created the `security-expert` agent (K-016)
+
+- **What:** Closed `kaizen/plan.md` **K-016** — designed the new `security-expert` agent from
+  `claude/docs/requirements/security-expert.md` (`Status: Ready for design`, `tico` interview
+  confirmed 2026-08-17). Full design, files, and rationale: `claude/security-expert/kaizen/
+  history.md`'s own "2026-08-20 — Created" entry (the source of truth for the agent's own design
+  decisions — not duplicated here). Summary for this agent's own log:
+  - New folder `claude/security-expert/` — `security-expert.md`, two hook scripts
+    (`hooks/guard-review-doc-writes.sh`, a normal thin wrapper over the shared
+    `scripts/guard-doc-writes.sh` core scoped to `docs/reviews/*`; `hooks/
+    guard-exploitation-approval.sh`, a **new standalone script**, deliberately not layered on the
+    shared `scripts/guard-destructive-ops.sh` core — different hazard class, see its own header
+    and the security-expert kaizen entry for the full reasoning), `kaizen/{plan,history}.md` (no
+    `inbox.md` — created after the 2026-08-20 shared-graph consolidation, FR-12/AC-9).
+  - Deployed: `~/.claude/agents/security-expert` symlinked to `claude/security-expert`.
+  - Boundary pairs declared in `claude/scripts/audit-team.sh` (`security-expert:analyst`,
+    `security-expert:cobb`, `security-expert:devops`) with reciprocal description clauses added to
+    `analyst.md`, `cobb.md` (this agent — a self-edit, see the standing open item below), and
+    `devops.md`. `teco.md` gained a routing-table row + handoff-contract line. `claude/README.md`
+    gained a catalog row + kaizen-links entry; `claude/AGENTS.md` gained a roster mention and a
+    "Hook machinery" paragraph describing the new agent-owned exploitation-approval hook as a
+    departure from the two existing shared cores. Root `AGENTS.md` checked — no change needed
+    (doesn't enumerate agent names; confirmed via check 5b's own logic).
+  - **Verified:** `bash claude/scripts/audit-team.sh` — all checks pass for `security-expert`
+    itself and every edited file (kaizen pair, deployment symlink, both hooks exist+executable,
+    teco roster mention, both catalogs, all three boundary pairs symmetric, no commit-authority
+    claim). The run's one FAIL (`falkor-chat/docs/test-reports/graphrag-eval-report.md` leaking
+    the maintainer's home path/username) is **pre-existing and unrelated** — confirmed via `git
+    log`/`git status` that the file is untouched by this session and was last committed
+    2026-08-16; flagged in the task's final report for separate follow-up, not fixed here (out of
+    this task's scope, and not this agent's file to silently rewrite mid-unrelated-task). Also ran
+    `bash -n` on both new hook scripts plus 8 manual test cases through the exploitation guard
+    (benign commands and local-marked network commands pass silently; named offensive tools, a
+    listener setup, and an external-host network command all correctly escalate).
+  - **Open item carried forward, not resolved here:** this change includes a self-edit to
+    `cobb.md`'s own `description` (the reciprocal boundary clause) — exactly the shape flagged in
+    this file's own parking lot ("Extend the independent-review-gate practice to `cobb.md`
+    self-edits specifically") as going out unreviewed. Noted in the task's final report as
+    something `analyst`'s independent review of this whole change should specifically double-check
+    when it runs.
+- **Why:** Executing a named, dated backlog item (K-016) per this agent's own maintenance
+  duties — the requirements doc had sat at `Ready for design` for three days with the design pass
+  not yet run.
+- **Plan items:** K-016 closed (moved to the Closed line). No new cobb-side plan items — the
+  design's own judgment calls and follow-ups live in `security-expert/kaizen/plan.md`, where they
+  belong (agent-specific, not team-maintenance-specific).
+
 ## 2026-08-20 — D-1 fix: `cobb.md`'s "Maintenance duties" section still described the pre-M7 convention (inbox-seeding, per-agent `kaizen_<agent>` graph); `docs/BACKLOG.md`'s M7 section flipped 🔵→✅
 
 - **What:** Dispatched directly (two small closeout fixes for M7, not `teco`-coordinated) off

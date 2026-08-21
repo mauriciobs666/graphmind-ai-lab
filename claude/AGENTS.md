@@ -24,6 +24,10 @@ Joern via the `joern-cpg` skill, on demand, to build a repo's CPG and export/loa
 FalkorDB as Cypher — a rare capability, not a proactive default) ·
 `devops` (user-scoped — runs in every project; carries an on-demand knowledge base:
 `ops-quirks.md` — live-verified Docker/BuildKit/Bash-scripting traps) ·
+`security-expert` (on-demand deep security reviewer: code/app security, agent/prompt-safety,
+secrets/infra-hardening, compliance checklists — advisory to `analyst`/`cobb`/`devops`; the only
+agent on this team gated to attempt active exploitation, local/dev targets only, fresh explicit
+approval every time) ·
 `cobb` (team maintainer: `agent-maintenance`/`agent-standards` skills,
 `scripts/audit-team.sh`, testing standards in `cobb/TESTING.md`).
 
@@ -41,6 +45,21 @@ graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destruc
 Frontmatter wires every
 hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
 symlink.
+
+`security-expert` carries **two** `PreToolUse` hooks under one frontmatter `hooks:` block — a
+departure from the one-hook-per-agent pattern above. Its `Write|Edit` guard
+(`security-expert/hooks/guard-review-doc-writes.sh`) is a normal thin wrapper over the shared
+`guard-doc-writes.sh` core, scoped to `docs/reviews/*` only. Its `Bash` guard
+(`security-expert/hooks/guard-exploitation-approval.sh`), enforcing FR-10's "active exploitation
+needs a fresh, explicit approval every time, local/dev targets only"
+(`docs/requirements/security-expert.md`), is deliberately **not** layered on the shared
+`guard-destructive-ops.sh` core — that core's catalog is shared-state-destruction literals
+(`GRAPH.DELETE`, `FLUSHALL`, volume wipes), a different hazard class from the offensive-tool/
+network-exploitation patterns this guard matches (named tools like `sqlmap`/`nmap`/`msfconsole`,
+listener setups, or a network-reaching command with no visible local/dev marker). It's a
+standalone, agent-owned script with the same mechanics/contract as the shared cores (fail-open,
+`ask`-only, jq→python3 extraction) — extract it into a shared core only if a second
+exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003).
 
 **Git-commit authority is prompt-level, not hook-enforced.** Only `tico` and `teco` document
 `git add`/`git commit` authority — `tico` for its own doc kinds (requirements, manuals; mirrors
