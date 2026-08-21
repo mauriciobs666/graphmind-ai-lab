@@ -134,7 +134,13 @@ version: a write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement
 or — pre-migration only — a lightweight keyword scan on an "empty key" response), then gated by
 `authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **two**
 write shapes are ever authorized, both scoped to the `:KaizenEntry` label backing the team's
-kaizen working memory (`kaizen_team`, author-partitioned); every other write is rejected regardless of `agent`:
+kaizen working memory (`kaizen_team`, author-partitioned); every other write is rejected
+regardless of `agent` — **schema DDL included**: `CREATE INDEX FOR (e:KaizenEntry) ON
+(e.entryId)` and `GRAPH.CONSTRAINT CREATE` are rejected the same as any other non-`KaizenEntry`
+write, with no carve-out for schema statements over data statements, even from a valid,
+recognized agent slug (live-verified during `docs/plans/generic-cypher-mcp2.md` S0's `kaizen_team`
+index/constraint provisioning, which had to fall back to `redis-cli GRAPH.QUERY` for exactly this
+reason):
 
 1. **Author** — an agent creates its own entry. The `cypher` text's `CREATE (<var>:KaizenEntry
    {...})` map literal must carry a literal `author: '<value>'` matching the declared `agent`
@@ -152,12 +158,17 @@ kaizen working memory (`kaizen_team`, author-partitioned); every other write is 
 
 2. **Curator-clear** — a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS` env var,
    comma-separated, default `cobb`) clears an entry it did not author, by `entryId`. Exactly one
-   skeleton is recognized — no other write shape gets curator treatment:
+   skeleton is recognized — no other write shape gets curator treatment. **The space after the
+   colon is load-bearing:** `_CURATOR_CLEAR_RE` (`server.py`) matches the literal substring
+   `entryId: ` (colon **then a space**) before the quote, and the pre-match whitespace
+   normalization only *collapses* existing runs of whitespace — it never *inserts* one, so
+   `{entryId:'...'}` (no space) fails the regex and is rejected as an unrecognized shape, while
+   `{entryId: '...'}` (space present, as below) is accepted — live-verified 2026-08-20:
 
    ```
    mcp__cypher__query(
      graph='kaizen_team',
-     cypher="MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e",
+     cypher="MATCH (e:KaizenEntry {entryId: '...'}) DETACH DELETE e",
      agent='cobb',
    )
    ```
