@@ -567,6 +567,25 @@ def test_judge_prompt_is_capped_by_dropping_the_oldest_turns_first():
     assert "S00:" not in user  # the oldest was evicted first
 
 
+def test_judge_prompt_cap_holds_at_scale_well_beyond_the_shipped_window():
+    # n-2 (K-027 carried finding): the cap loop was rewritten from O(turns^2)
+    # (re-joining the whole candidate message on every eviction) to O(turns) —
+    # this pins the arithmetic at a scale (300 turns) the shipped RECENT_TURNS_N=6
+    # window never reaches, so a reintroduced off-by-one in the new eviction
+    # arithmetic would show here even though it's invisible at N=6.
+    from falkorchat.app import JUDGE_USER_MAX_CHARS, _render_judge_user
+
+    turns = [
+        {"speaker": f"S{i:04d}", "text": "y" * 100}
+        for i in range(300)
+    ]
+    user = _render_judge_user("enough info?", {}, turns)
+
+    assert len(user) <= JUDGE_USER_MAX_CHARS
+    assert "S0299:" in user       # the newest turn survives the cap
+    assert "S0000:" not in user  # the oldest was evicted first
+
+
 def test_judge_prompt_survives_a_condition_with_no_evidence_at_all():
     # The degenerate case must still be a well-formed prompt, not a crash: the judge
     # then correctly biases to suspend (that behavior is Defect A's *symptom*, and is

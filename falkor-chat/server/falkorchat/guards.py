@@ -58,7 +58,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable
 
 # DS §Q1: "RECENT TURNS (context only) … N = 6, newest last" — the fallback evidence tier.
@@ -88,11 +88,19 @@ _NEGATION_CUES: tuple[str, ...] = (
 
 # A cue immediately preceded by one of these is negated → it affirms rather than contradicts.
 _NEGATORS: tuple[str, ...] = ("no ", "not ", "nothing ", "never ", "n't ")
-# Only the text *immediately* before the cue counts. Wide enough for a copula ("nothing IS
-# unclear"), deliberately too narrow to span a clause boundary: in "did not provide the
-# version; more info is needed" the "not " belongs to another clause and must NOT negate the
-# cue. Erring narrow keeps the failure on the safe (over-suspend) side — DS Q1.
+# Only the text *immediately* before the cue counts, and never across a clause boundary:
+# in "did not provide the version; more info is needed" the "not " belongs to another clause
+# and must NOT negate the cue. A plain N-char window is not enough to guarantee that on its
+# own — e.g. "The user did not say; more info is needed." puts "not " within 12 chars of the
+# cue even though a `;` separates the two clauses (m-1, K-027 carried finding). `_is_negated`
+# additionally truncates the window at the last clause-boundary punctuation before the cue, so
+# a negator from an earlier clause can never leak in. Erring toward "not negated" (→ treated as
+# a contradiction → suspend) is the safe (over-suspend) direction — DS Q1; a missed contradiction
+# is the dangerous **false-advance** direction, which is what an unbounded window risks.
 _NEGATOR_WINDOW = 12
+# Punctuation that ends a clause; a negator on the far side of one of these must not reach
+# across it to negate a cue in the following clause.
+_CLAUSE_BOUNDARY: frozenset[str] = frozenset(";.,")
 
 
 # ── the deterministic `cmp` comparator (K-024 U1, plan §3.2) ─────────────────
@@ -166,10 +174,20 @@ class WorkflowConfigError(Exception):
 
 @dataclass(frozen=True)
 class GuardVerdict:
-    """A guard judgment: a boolean `decision` plus a traced `rationale` (FR-4)."""
+    """A guard judgment: a boolean `decision` plus a traced `rationale` (FR-4).
+
+    `tier` (m-3, K-027 carried finding) records which evidence tier an `llm`-kind
+    guard's judge actually saw — `"understanding"` (primary) or `"recent_turns"`
+    (degraded fallback) — so calibration work can stratify by tier and the trace can
+    show it. `None` for every non-`llm` guard (unconditional, `cmp` family): those
+    never consult a judge, so there is no tier to report. Defaults to `None` so every
+    existing call site/test constructing a `GuardVerdict` positionally or by
+    `decision`/`rationale` alone stays byte-compatible.
+    """
 
     decision: bool
     rationale: str = ""
+    tier: str | None = None
 
 
 # The injected fuzzy-guard judge: scores a CONDITION against the compact CURRENT STATE and
@@ -222,6 +240,7 @@ def evaluate_guard(
         # so the turns are still the only evidence available. The precedence lives here,
         # not in the judge — it is a method decision every judge should inherit rather
         # than re-derive, and it stays unit-testable offline against a stub judge.
+        tier = "understanding" if understanding else "recent_turns"
         recent_turns = [] if understanding else _recent_turns(thread)
 
         # K-042 §4.10/§2.8: forward `model=` only when the guard names its own
@@ -241,7 +260,10 @@ def evaluate_guard(
         if getattr(judge, "accepts_run", False):
             judge_kwargs["run"] = run
         raw = judge(parsed.get("text", ""), **judge_kwargs)
-        return _coerce_verdict(raw)
+        # `_coerce_verdict` stays tier-agnostic (its own signature/tests untouched);
+        # the tier is a property of *which evidence was gathered here*, not of the
+        # judge's raw output, so it is set on the resulting verdict afterward.
+        return replace(_coerce_verdict(raw), tier=tier)
 
     if kind in CMP_KINDS:
         return _evaluate_cmp(parsed, ctx=ctx, step_output=step_output)
@@ -503,8 +525,13 @@ def _rationale_contradicts(rationale: str) -> bool:
 
 
 def _is_negated(low: str, cue_start: int) -> bool:
-    """Is the cue at `cue_start` immediately preceded by a negator (→ it affirms)?"""
+    """Is the cue at `cue_start` immediately preceded by a negator, in the SAME clause
+    (→ it affirms)? A negator across a clause boundary (`;`/`.`/`,`) does not count."""
     window = low[max(0, cue_start - _NEGATOR_WINDOW):cue_start]
+    for i in range(len(window) - 1, -1, -1):
+        if window[i] in _CLAUSE_BOUNDARY:
+            window = window[i + 1:]
+            break
     return any(neg in window for neg in _NEGATORS)
 
 
@@ -513,14 +540,20 @@ def _recent_turns(thread: Any, n: int = RECENT_TURNS_N) -> list[dict[str, str]]:
     newest last, normalized to a compact `{speaker, role, text}`.
 
     Input rows are `repository.read_thread` shape and already **chronological**
-    (`ORDER BY m.createdAt`), so `thread[-n:]` *is* "newest last". Tolerant by design —
-    `None` / non-list / malformed rows → `[]`; a guard must never crash a drive (the
-    offline stub path and non-agent steps legitimately carry no thread).
+    (`ORDER BY m.createdAt`), so the last `n` valid rows *are* "newest last". Tolerant
+    by design — `None` / non-list / malformed rows → `[]`; a guard must never crash a
+    drive (the offline stub path and non-agent steps legitimately carry no thread).
+
+    **Filters before slicing (m-2, K-027 carried finding).** Malformed/empty rows are
+    dropped first and only THEN is the tail taken — slicing first would let malformed
+    rows in the tail shrink the usable evidence window exactly when the judge is on
+    this degraded fallback tier (recall this function only runs when no `understanding`
+    was emitted).
     """
     if not isinstance(thread, list):
         return []
     turns: list[dict[str, str]] = []
-    for row in thread[-n:]:
+    for row in thread:
         if not isinstance(row, Mapping):
             continue
         text = row.get("text")
@@ -531,7 +564,7 @@ def _recent_turns(thread: Any, n: int = RECENT_TURNS_N) -> list[dict[str, str]]:
         turns.append({
             "speaker": str(speaker), "role": str(role), "text": text[:TURN_TEXT_MAX],
         })
-    return turns
+    return turns[-n:]
 
 
 def _extract_understanding(step_output: str, ctx: dict[str, Any]) -> dict[str, Any]:

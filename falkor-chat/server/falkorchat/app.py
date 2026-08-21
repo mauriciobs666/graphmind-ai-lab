@@ -348,19 +348,28 @@ def _render_judge_user(
     if understanding:
         state = json.dumps(understanding, indent=2, sort_keys=True, default=str)
         blocks.append(f"CURRENT STATE:\n{state}")
+    base = "\n\n".join(blocks)
 
+    # n-2 (K-027 carried finding): compute how many *newest* turns fit via O(1)
+    # length arithmetic per eviction instead of re-joining the whole candidate
+    # message on every drop — the old loop was O(turns^2) in turn count (a real
+    # cost only once a caller hands this many turns; irrelevant at the shipped
+    # RECENT_TURNS_N=6 window). `lines[-kept:]` is always the same suffix the old
+    # `turns.pop(0)` loop converged on, since both only ever drop from the front.
     turns = list(recent_turns) if isinstance(recent_turns, list) else []
-    while turns:
-        rendered = "\n".join(
-            f"{t.get('speaker', 'member')}: {t.get('text', '')}" for t in turns
-        )
-        candidate = blocks + [f"RECENT TURNS (context only):\n{rendered}"]
-        text = "\n\n".join(candidate)
-        if len(text) <= JUDGE_USER_MAX_CHARS:
-            return text
-        turns.pop(0)  # drop the oldest turn and retry
+    lines = [f"{t.get('speaker', 'member')}: {t.get('text', '')}" for t in turns]
+    n = len(lines)
+    header = "RECENT TURNS (context only):\n"
+    kept = n
+    total = len(base) + 2 + len(header) + sum(map(len, lines)) + max(0, n - 1)
+    while kept > 0 and total > JUDGE_USER_MAX_CHARS:
+        total -= len(lines[n - kept]) + (1 if kept > 1 else 0)
+        kept -= 1
 
-    return "\n\n".join(blocks)[:JUDGE_USER_MAX_CHARS]
+    if kept:
+        rendered = "\n".join(lines[-kept:])
+        return "\n\n".join(blocks + [f"{header}{rendered}"])
+    return base[:JUDGE_USER_MAX_CHARS]
 
 
 class _LlmGuardJudge:

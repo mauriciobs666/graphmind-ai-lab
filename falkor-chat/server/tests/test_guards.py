@@ -219,6 +219,70 @@ def test_last_six_turns_are_handed_to_the_judge_when_no_understanding_was_emitte
     assert turns[-1]["text"] == "turn 9"
 
 
+def test_verdict_tier_is_understanding_when_an_understanding_was_emitted():
+    # m-3 (K-027 carried finding): the judge's evidence tier must be visible on the
+    # returned verdict so it can be folded into the trace and stratify calibration.
+    judge = StubJudge({"decision": True, "rationale": "x"})
+
+    verdict = evaluate_guard(
+        LLM_GUARD, ctx={}, run={},
+        step_output=json.dumps({"understanding": {"request": "r", "known": [], "missing": []}}),
+        thread=None, judge=judge,
+    )
+
+    assert verdict.tier == "understanding"
+
+
+def test_verdict_tier_is_recent_turns_when_no_understanding_was_emitted():
+    # m-3: the degraded fallback tier must be distinguishable from the primary one.
+    judge = StubJudge({"decision": True, "rationale": "x"})
+
+    verdict = evaluate_guard(
+        LLM_GUARD, ctx={}, run={}, step_output="prose", thread=_rows(3), judge=judge,
+    )
+
+    assert verdict.tier == "recent_turns"
+
+
+def test_cmp_guard_verdict_has_no_tier():
+    # m-3: `tier` is an LLM-guard-only concept — a `cmp` guard never touches the judge.
+    guard = {"kind": "cmp", "path": "ctx.decision", "op": "eq", "value": "approve"}
+    verdict = evaluate_guard(
+        json.dumps(guard), ctx={"decision": "approve"}, run={}, step_output="",
+        thread=None, judge=_boom_judge,
+    )
+    assert verdict.tier is None
+
+
+def test_unconditional_guard_verdict_has_no_tier():
+    # m-3: the empty-guard default judges nothing, so it carries no tier either.
+    verdict = evaluate_guard("", ctx={}, run={}, step_output="", thread=None, judge=_boom_judge)
+    assert verdict.tier is None
+
+
+def test_malformed_rows_in_the_tail_do_not_shrink_the_evidence_window():
+    # m-2 (K-027 carried finding): `_recent_turns` must filter malformed/empty rows
+    # BEFORE slicing to the last N, not after — otherwise malformed rows in the tail
+    # shrink the usable window exactly when the judge is on its degraded fallback
+    # tier. 6 valid turns followed by 3 malformed (empty-text) rows: the naive
+    # slice-then-filter order would yield only 3 turns even though 6 valid ones exist.
+    judge = StubJudge({"decision": False, "rationale": "x"})
+    thread = _rows(6) + [
+        {"msgId": "bad1", "text": "", "role": "user"},
+        {"msgId": "bad2", "role": "user"},  # no `text` key at all
+        "not-a-mapping",
+    ]
+
+    evaluate_guard(
+        LLM_GUARD, ctx={}, run={}, step_output="prose", thread=thread, judge=judge,
+    )
+
+    turns = judge.calls[0]["recent_turns"]
+    assert len(turns) == 6, f"malformed tail rows shrank the window: {turns!r}"
+    assert turns[0]["text"] == "turn 0"
+    assert turns[-1]["text"] == "turn 5"
+
+
 def test_recent_turns_are_normalized_to_speaker_role_text():
     # T3 — a compact, prompt-ready shape; `displayName` → `authorId` → "member".
     judge = StubJudge({"decision": False, "rationale": "x"})
@@ -372,6 +436,14 @@ SUSPENDING_RATIONALES = [
     "More info is needed about the deployment.",
     "The root cause is still missing.",
     "There is insufficient detail to research this.",
+    # m-1 (K-027 carried finding): cross-clause negation must NOT negate a cue in a
+    # LATER clause — a "not"/"no"/etc. before a `;`/`.`/`,` belongs to a different
+    # clause and must not shield a genuine deficiency cue after it. Pinned from the
+    # analyst gate's probe (`docs/archive/reviews/m3-guard-thread-context-impl.md`
+    # minor m-1); previously all three went the false-advance direction (missed).
+    "The user did not say; more info is needed.",
+    "Alice gave no version; still need the logs.",
+    "She said 'I do not know'; more info is needed.",
 ]
 
 

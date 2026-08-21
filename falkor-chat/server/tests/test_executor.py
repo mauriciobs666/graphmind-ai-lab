@@ -259,6 +259,28 @@ def test_debug_run_records_trace_events(wf_repo):
     assert "node_rationale" in kinds
 
 
+def test_guard_judgment_trace_payload_names_the_evidence_tier(wf_repo):
+    # m-3 (K-027 carried finding): the judge's evidence tier (`understanding` vs
+    # `recent_turns`) must be visible on the traced `guard_judgment` line, not just
+    # on the in-memory `GuardVerdict`. The Phase-1 stub `agent` step emits no
+    # `understanding`, so the intake->research LLM guard runs on the fallback tier.
+    _start_run(wf_repo, trace=True)
+    tracer = GraphTracer(
+        wf_repo, id_gen=(lambda c=itertools.count(1): f"te{next(c)}"),
+        clock=(lambda c=itertools.count(9000): next(c)),
+    )
+    judge = StubJudge([True])
+    ex = _make_executor(wf_repo, guard_judge=judge, tracer=tracer)
+
+    ex.run(CTX, run_id="r1")
+
+    judgments = [e["payload"] for e in wf_repo.read_trace("test", run_id="r1")
+                 if e["kind"] == "guard_judgment"]
+    assert judgments, "the intake->research llm guard must contribute a guard_judgment"
+    assert "[recent_turns]" in judgments[0], judgments[0]
+    assert judgments[0].startswith("enough info? -> True [recent_turns]:")
+
+
 def test_non_debug_run_records_zero_trace_events(wf_repo):
     # same flow, trace=False → NullTracer by construction → zero TraceEvents (AC-5)
     _start_run(wf_repo, trace=False)

@@ -1050,9 +1050,14 @@ class WorkflowExecutor:
         guard (LLM **and** `cmp`-family, M-6). `seq` orders events within the StepRun
         (§12.10). A `NullTracer` no-ops (AC-5).
 
-        The judgment payload is `"{label} -> {decision}: {rationale}"`. `_select_transition`
-        guarantees a non-empty label for every judged guard; the empty-label branch here is
-        the belt that keeps a trace line from ever opening with a bare `" -> "`."""
+        The judgment payload is `"{label} -> {decision}[ [{tier}]]: {rationale}"` — the
+        `[{tier}]` segment (m-3, K-027 carried finding) appears only when the guard
+        actually consulted a judge and so carries a `GuardVerdict.tier`
+        (`"understanding"` or `"recent_turns"`); a `cmp`-family or unconditional guard
+        has no tier and keeps the pre-existing `"{label} -> {decision}: {rationale}"`
+        shape byte-for-byte. `_select_transition` guarantees a non-empty label for
+        every judged guard; the empty-label branch here is the belt that keeps a trace
+        line from ever opening with a bare `" -> "`."""
         seq = 0
         tracer.record(
             ctx.ws, step_run_id=step_run_id, seq=seq, kind="node_rationale",
@@ -1066,9 +1071,10 @@ class WorkflowExecutor:
         for _tr, label, verdict in decision.judgments:
             seq += 1
             prefix = f"{label} -> " if label else ""
+            tier_note = f" [{verdict.tier}]" if verdict.tier else ""
             tracer.record(
                 ctx.ws, step_run_id=step_run_id, seq=seq, kind="guard_judgment",
-                payload=f"{prefix}{verdict.decision}: {verdict.rationale}",
+                payload=f"{prefix}{verdict.decision}{tier_note}: {verdict.rationale}",
             )
 
     def _link_emissions(
