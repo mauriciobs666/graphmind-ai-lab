@@ -220,17 +220,17 @@ def test_guard_judge_calibration_live(
     quantization = _fetch_quantization(resolved.base_url, resolved.model) or "(unknown)"
 
     rows = load_golden_guards()
-    assert len(rows) == 26, f"golden_guards.jsonl has {len(rows)} rows, expected 26"
+    assert len(rows) == 85, f"golden_guards.jsonl has {len(rows)} rows, expected 85"
 
     cases = [run_case(row, judge, k=K_REPLICATES) for row in rows]
     cases_by_id = {c.id: c for c in cases}
-    assert len(cases) == 26
-    assert sum(len(c.replicates) for c in cases) == 26 * K_REPLICATES
+    assert len(cases) == 85
+    assert sum(len(c.replicates) for c in cases) == 85 * K_REPLICATES
 
     clear_cases = [c for c in cases if c.tier in ("clear_advance", "clear_suspend")]
     boundary_cases = [c for c in cases if c.tier == "boundary"]
-    assert len(clear_cases) == 21
-    assert len(boundary_cases) == 5
+    assert len(clear_cases) == 70
+    assert len(boundary_cases) == 15
 
     g1 = false_advance_rate(cases)
     g1_all = false_advance_rate_all(cases)

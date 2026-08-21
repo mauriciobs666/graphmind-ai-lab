@@ -5,6 +5,70 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-21 — K-027 item 4: golden-set expansion — delivered; epic closed
+
+**What:** Grew `server/tests/eval/golden_guards.jsonl` from 26 → **85 rows** per the finalized
+`data-scientist` method note (`docs/plans/golden-set-expansion-ml.md` v3), gate-approved
+unconditionally by `analyst` (`docs/reviews/golden-set-expansion.md` Pass 2, 2026-08-21). This was
+the last open scope item in K-027 — landing it closes the epic.
+
+**Composition** (§3.4's target, re-derived from the real file, not just restated): `clear_advance`
+30 (18 `understanding` / 12 `turns`), `clear_suspend` 40 (24/16), `boundary` 15 (9/6) — a
+Wilson-interval-derived zero-tolerance screen (n=40 `clear_suspend` bounds true false-advance rate
+≤8.8% at 95% confidence on zero observed failures), not the backlog's original "~30"/"~50-60"
+heuristic. Appended the 59 new rows drafted in plan §6 verbatim (extracted programmatically from
+the plan's own fenced JSON blocks, not retyped, to rule out transcription drift) — the existing 26
+rows are untouched (`git diff --stat`: 59 insertions, 0 deletions). All 85 ids unique, schema
+identical across old and new rows.
+
+**Descope, recorded plainly (2026-08-20, by the user, carried from the plan's own §5/§10):** no
+second labeler was available, so the `boundary` tier's independent-second-labeler requirement —
+the backlog item's original ask — was dropped. All three tiers are now sourced identically:
+LLM-drafted candidate rows, single human spot-check before merge. A `boundary` row's label
+therefore carries **no more validation than a `clear_advance`/`clear_suspend` row's does** —
+downstream readers of the calibration report should treat every `boundary` label as a spot-checked
+draft, never as independently validated ground truth. This is a real, accepted loss of validation
+strength for the one tier whose labels are policy calls rather than extracted facts, not a footnote
+to omit.
+
+**Harness edits** (`server/tests/eval/test_guard_calibration_live.py`, F3 — the only file with
+fixture-size-specific literals): five asserts updated `26→85` (rows), `26→85` (cases),
+`26*K_REPLICATES→85*K_REPLICATES` (replicate count), `21→70` (clear-tier cases, 30+40), `5→15`
+(boundary-tier cases). No other harness file needed a size-specific edit — `guard_calibration.py`'s
+metric functions already group dynamically by `tier`/`path`.
+
+**New offline integrity test:** `server/tests/eval/test_guard_set_integrity.py` (closes F4),
+mirroring `test_golden_set_integrity.py`'s pattern for the retrieval set — unique ids, required
+schema fields, `tier`/`path` enum validity, `expected` is bool, every `boundary` row is
+`expected: false`, and per-stratum/path counts as **minimum** inequalities (not exact literals) so
+the check survives the next expansion unedited. Written test-first: run against the pre-expansion
+26-row fixture first (RED — failed on the stratum-floor check, 111 other assertions already green),
+then against the expanded 85-row fixture (GREEN — 358 passed). Mutation-tested twice: (1) dropped a
+required field from one drafted row and flipped one `boundary` row's `expected` to `true` — both
+defects caught, then reverted; (2) reverted the fixture-row-count literal edit in
+`test_guard_calibration_live.py` back to `26` — the live test failed immediately with the real
+85-row fixture, confirming the assert actually exercises the file — then restored.
+
+**Live-verified end-to-end, not just collection-checked** — LM Studio (serving
+`qwen/qwen3-4b-2507`) and FalkorDB were both reachable this session, so `pytest -m live` ran the
+real 85-case × k=3 = 255-call calibration to completion: **G1 false-advance = 10.0% (n=40 cases /
+120 calls — lands right at the ≤10% gate) · G2 advance-recall = 86.7% (n=30 cases) · VERDICT:
+wire.** Full report: `docs/test-reports/guard-judge-calibration-2026-08-21.md`. This is a
+substantially stronger, but still not certifying, result than the n=10/11 screen it replaces — see
+the plan's own §8 item 2 for why a single unlucky replicate among 120 would still fail the gate
+outright even against a well-behaved judge.
+
+**Offline suite:** `test_guard_calibration.py` + `test_golden_set_integrity.py` +
+`test_guard_set_integrity.py` — 499 passed (baseline was 141 before this unit's own new test file).
+Full repo default suite (`pytest -q`, offline): 1456 passed, 3 deselected, no failures. Running the
+full offline suite wiped the shared `reference` graph as documented (`AGENTS.md`); re-seeded via
+`./scripts/seed_workflows.sh acme`, then confirmed back in sync with `./scripts/verify_workflows.sh`.
+
+**Docs:** `docs/plans/golden-set-expansion-ml.md` (v3, `data-scientist`, unconditional per §7);
+`docs/reviews/golden-set-expansion.md` (`analyst`, Pass 2, approve). `docs/BACKLOG.md` K-027 item 4
+marked ✅ delivered; **the K-027 header itself flips to ✅ delivered — this was the epic's last open
+scope item.**
+
 ## 2026-08-20 — K-027 item 5: Ministral re-probe — delivered (block on both axes); K-048 filed
 
 **What:** Re-probed Ministral-3B against current code (post item 1's parse fix, post item 2's

@@ -315,7 +315,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 
-### K-027 — Live triage reliability + carried gate findings (🟡 in-progress — the D12-B descope from K-022 Landing 2; **only item 4 remains open**, and it is itself blocked on a user decision — who labels the golden-set boundary tier — see `docs/plans/golden-set-expansion-ml.md` §10, not yet resolved. Items 1–3, item 5, and all six carried findings are ✅ delivered.)
+### K-027 — Live triage reliability + carried gate findings (✅ delivered 2026-08-21 — the D12-B descope from K-022 Landing 2, now fully closed: item 4 (golden-set expansion) was the last open scope item and landed clean 2026-08-21 — see [`HISTORY.md`](./HISTORY.md). Items 1–3, item 5, and all six carried findings were already ✅.)
 
 > **Numbering note:** the coordination log calls these "**K-023 follow-ups**", but K-023 is already
 > taken (workflow ↔ chat linkage, now ✅). They are collected here as **K-027**, the next free number.
@@ -426,11 +426,25 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
      with fixed `understanding`/`turns` values), and used the wrong G1 denominator (15
      cases — `clear_suspend` + `boundary` combined — not the gate's 10 `clear_suspend`
      cases); full derivation in `docs/plans/guard-judge-calibration-ml.md` §3.
-  4. **Golden-set expansion (D11)** — `server/tests/eval/golden_guards.jsonl` exists (**26 rows**,
-     well-formed and labeled) but **nothing reads it yet** (gate nit **n-3**) — the file will rot
-     unless this item consumes it. A real FAR ≤ 10% bound needs ~30 suspend cases at zero failures
-     (≈50–60 total), and **all current labels are one labeler's** — expansion should add a second
-     labeler for the boundary tier or it buys precision without independence.
+  4. ✅ **Golden-set expansion (D11)** (**delivered 2026-08-21** — see
+     [`HISTORY.md`](./HISTORY.md)) — `server/tests/eval/golden_guards.jsonl` grown from **26 → 85
+     rows** per the finalized method note (`docs/plans/golden-set-expansion-ml.md` v3,
+     gate-approved unconditionally: `docs/reviews/golden-set-expansion.md` Pass 2), composition
+     `clear_advance` 30 (18 `understanding`/12 `turns`), `clear_suspend` 40 (24/16), `boundary` 15
+     (9/6) — a Wilson-interval-derived zero-tolerance screen (n=40 `clear_suspend` bounds true FAR
+     ≤8.8% at 95% confidence), not the backlog's original "~30"/"≈50–60" estimate. **Descope,
+     recorded explicitly (2026-08-20, by the user):** no second labeler was available, so the
+     `boundary` tier's independent-labeling requirement was dropped — all three tiers are now
+     sourced identically (LLM-drafted, single human spot-check before merge); a `boundary` label
+     carries no more validation than a `clear_advance`/`clear_suspend` label does.
+     `server/tests/eval/test_guard_calibration_live.py`'s five fixture-size literal asserts (F3)
+     updated 26/26/78/21/5 → 85/85/255/70/15. New offline, mutation-tested structural-integrity
+     test, `server/tests/eval/test_guard_set_integrity.py` (closes gate finding **F4**), mirrors
+     `test_golden_set_integrity.py`'s pattern — unique ids, required fields, tier/path/expected
+     validity, boundary-always-`false`, per-stratum/path floors as inequalities. Live-verified
+     end-to-end this session (LM Studio + FalkorDB both reachable): the real 85×k=3=255-call
+     calibration ran and passed — **G1 false-advance = 10.0% (n=40/120 calls) · G2 advance-recall
+     = 86.7% (n=30) · VERDICT: wire**; report: `docs/test-reports/guard-judge-calibration-2026-08-21.md`.
   5. ✅ **Ministral re-probe (D13 finding 2)** (**delivered 2026-08-20** — see
      [`HISTORY.md`](./HISTORY.md)) — re-probed against current code, post item 1's parse fix and
      post item 2's engine contract, using the same reviewed harness/protocol as item 3 rather than a
