@@ -123,6 +123,14 @@ deliberately, as validation for AC-4, not as friction to remove).
    pattern as instance 7, now on a source file rather than a test file.)
 9. **2026-08-20 — `cobb`, `Edit` on `claude/cobb/cobb.md` (its own file).** Confirms FR-1's
    agentic-development topic-remit extends to `cobb` editing itself, not just other agents.
+10. **2026-08-20 — `analyst`, `Create` on `../docs/reviews/ministral-reprobe.md`.** `analyst` is
+    one of the five agents with a *custom* doc-scoped write guard (`guard-review-doc-writes.sh`,
+    allowlisting `docs/reviews/*`/`*/docs/reviews/*`) — this path matches that allowlist, so the
+    custom guard already passes it silently. The confirmation prompt the stakeholder hit was
+    therefore the plain default one (mechanism 3), not the custom hook. → first confirmed instance
+    from one of the five doc-scoped-guarded agents, showing the base confirmation fires *even when
+    the custom guard has nothing to say* — settles that FR-2 must address all five of those agents
+    too, not just agents like `cobb`/`qa-engineer`/`tdd-engineer` that have no custom guard.
 
 ### Counter-examples — confirmation/guard was correct (support AC-4, not FR-1/FR-2/FR-3)
 C1. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py`.**
