@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-09
+> Last reviewed: 2026-08-21
 
 ## Active
 
@@ -12,7 +12,7 @@
 | K-002 | 2026-07-09 | — | ⚪ | ~~SendMessage continuation for interview rounds~~ — moot once tico converses natively as the main-session agent |
 | K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
-| K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind (architect-owned doc) |
+| K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
 | K-008 | 2026-08-11 | — | 🔵 | **Needs a stakeholder decision, not a cobb guess** — relax tico's write/`Agent` scope? See below. |
 
@@ -69,12 +69,12 @@
 - **Proposed change:** run `claude --agent tico` once asking it to explain a real project aspect (verify: grounded in actual docs/code, plain-language, light-suggestion framing, inline Mermaid when it fits) and once asking it to write a first real manual end-to-end (verify: `docs/manuals/<slug>.md` created with the header block, Mermaid used only where it earns its keep, guard hook passes the write silently, commit-as-you-go holds, **the offered verification-pass bullet actually fires and correctly spawns `qa-engineer`/`analyst` via `Agent` on acceptance**). Also worth one delegated (subagent) invocation of the Mode 3 fallback to see it complete in one pass from a self-contained brief.
 - **Notes:** added when Modes 2/3 were introduced (2026-07-29); do the interview e2e (K-001) and this one independently — different mode, different failure surface.
 
-### K-005 — Formal doc-reference-convention update for `manuals/`
+### K-005 — Formal doc-reference-convention update for `manuals/`, and a collision-rule-5 gloss
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** root `AGENTS.md` was extended directly with the new `manuals/` kind (needed immediately for tico's new capability), but the formal, heavily-reviewed spec at `docs/plans/doc-reference-convention.md` (Owner: `architect`, Status: active, Tracks: C-322) still doesn't mention it. That document is architect's, not cobb's, to extend with a proper versioned changelog entry.
-- **Proposed change:** an `architect` pass adding a `manuals/` mention to the convention plan (changelog entry, any affected checks/tables) — purely additive, doesn't reopen any existing ruling (D1/D4/D6 etc.).
-- **Notes:** not blocking — root `AGENTS.md` is what's actually enforced/read every session; this is closing the paper trail, not fixing a behavior gap.
+- **Proposed change:** an `architect` pass adding (a) a `manuals/` mention to the convention plan (changelog entry, any affected checks/tables) — purely additive, doesn't reopen any existing ruling (D1/D4/D6 etc.); and (b) a gloss on collision rule 5's "approved, gated, or executed against" test, from a 2026-08-20 kaizen distillation finding (`tico/kaizen/history.md`, 2026-08-21 entry): a document reaching its approval **gate** alone (e.g. `Status: Ready for design`) does not by itself force a successor document if nothing downstream has actually *executed* against the specific content being revised — `docs/requirements/generic-cypher-mcp2.md`'s own 2026-08-20 Decision-log entry and `docs/plans/generic-cypher-mcp2.md`'s `T1` precedent paragraph both establish this reading in practice, but the rule's literal disjunctive text doesn't yet say so, so a future agent reading it cold could misapply it.
+- **Notes:** not blocking — root `AGENTS.md` is what's actually enforced/read every session; this is closing the paper trail, not fixing a behavior gap. Both sub-items are the same underlying job (an architect pass adding clarifying content to the same owned document) — batch them rather than splitting into two K-items.
 
 ### K-006 — Live e2e spin of the demo-environment delegation
 - **Status:** 🔵 proposed

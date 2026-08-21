@@ -2,6 +2,75 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` distillation: all 12 pending `analyst`-authored entries processed
+
+- **What:** `cobb` ran the agent-maintenance skill §5 procedure against every `kaizen_team` node
+  with `author:'analyst'` (12 entries, dated 2026-08-11 through 2026-08-21 — analyst's raw
+  capture since the 2026-08-20 team-wide graph migration; none of these overlap the 3 entries the
+  2026-08-11 inbox.md distillation already processed, which was a distinct, file-based pass from
+  before the migration). Full per-entry disposition:
+  - **Promoted to `review-techniques.md`** (7 entries):
+    - Reconciling a kaizen-graph distillation's claimed dispositions against ground truth
+      (`481f29ed…`) — adapted from its original file-diff framing (`grep -c '^-## '` on an
+      inbox diff) to the graph-based mechanism, since the inbox-diffing technique itself is now
+      moot (inboxes are frozen); the underlying discipline — verify an aggregate "N processed"
+      claim against the itemized ground truth — carries over unchanged, and is exactly what this
+      pass's own bookkeeping had to do.
+    - An uncommitted agent-prompt edit under review is already live, via the deployment symlink
+      (`854e701d…`).
+    - Verifying a "copied verbatim" text-block claim needs a programmatic whitespace-normalized
+      diff, not a read-through (`fe2007f5…`).
+    - `pytest -k` is not a substitute for the project's own `-m` marker filter when verifying a
+      cited baseline (`eea48dac…`) — re-verified live: `cypher-mcp/pytest.ini`'s
+      `addopts = -m "not live"` still matches the fact as described.
+    - Ground truth for "may an agent edit its own definition?" — the literal "never edit your own
+      agent definition" clause (`b9ed574b…`) — re-verified live: `grep -rln` today returns all 12
+      non-cobb prompts (grew from 11 at entry-creation time — `security-expert` now also carries
+      it), `cobb.md` still the sole exception.
+    - Check live-service reachability before trusting a live-test report (`b3a1f2e4…`).
+    - A brand-new untracked file has no `HEAD` baseline for the existing zero-touch mutation-test
+      methods — added as case (c) alongside existing (a)/(b) (`e7f3a1b2…`).
+  - **Promoted to `claude/analyst/analyst.md`** (1 entry): a new "Evidence over vibes" bullet —
+    run a plan's prescribed acceptance-check command verbatim before approving; the doc-template
+    placeholder token (`kaizen_<agent>`) silently matches nothing against the repo's expanded key
+    (`8b881e50…`).
+  - **Promoted to `claude/cobb/TESTING.md`** (1 entry): a new Gotcha — `audit-team.sh`'s `ROOT`
+    resolution makes it scratch-testable, and a kaizen-files-only directory is silently skipped
+    from agent enumeration rather than failing check 1 (`0b11bf16…`) — routed to cobb's testing
+    doc rather than this agent's own knowledge base since the fact is about safely testing a
+    script `cobb` owns, not a review technique this agent performs.
+  - **Discarded, already resolved elsewhere** (3 entries):
+    - The "no `SendMessage` means a nested review-gate result misroutes" open question
+      (`4a4a031a…`) — fully resolved the same day this pass ran:
+      `claude/docs/requirements/mid-run-escalation.md` (Status: Ready for design, 2026-08-21)
+      settles it directly — `teco` performs the `SendMessage` resume, not the delegate, so
+      review-gate reporters never need the grant. A stronger, more current answer than anything
+      this entry could be promoted into.
+    - The `r1_probe` field-semantics finding on falkor-chat's `golden_guards.jsonl`
+      (`a1e6f3d2…`) — already fully documented and the underlying mismarking already fixed:
+      `falkor-chat/docs/plans/golden-set-expansion-ml.md` §"r1_probe semantics (2026-08-20
+      addition, analyst review)" states the exact rule, and `cs-10`/`cs-13` are confirmed flipped
+      to `r1_probe: false` in that file's finalized golden set.
+    - The `nc`/`ncat`/`netcat` local-marker exemption gap in `security-expert`'s
+      `guard-exploitation-approval.sh` (`eadd7a90…`) — already fixed: the live script's branch
+      (c) and its header comment cite this exact finding ("analyst review 2026-08-20") as the fix
+      that gave `nc`/`ncat`/`netcat`-with-a-shell-flag its own unconditional always-ask branch,
+      re-verified by reading the current script.
+- **Verification method:** fetched every field's exact, untruncated text via `redis-cli
+  GRAPH.QUERY kaizen_team ... --no-raw` (the `mcp__cypher__query` tool's own per-cell display
+  truncates around 300 chars, `…(+N chars)`, and paging every field via `substring()` for 12
+  entries × 4 fields would have been far more round trips than one raw redis dump). Re-derived
+  each surviving claim against the live repo rather than trusting the entry's own framing —
+  `pytest.ini`, `audit-team.sh`'s actual `ROOT`/enumeration logic, the `grep` for the self-edit
+  clause, and the two "already fixed/documented" discards were all re-read from source, not
+  assumed from the entry text.
+- **Why:** user asked to "work on analyst's inbox" — `analyst/kaizen/inbox.md` is a frozen
+  2026-08-20 historical snapshot (already imported and cleared, 3 entries), so the live
+  equivalent is analyst's pending raw capture in the shared `kaizen_team` graph; this is the
+  first full distillation pass against it since the migration.
+- **Plan items:** none opened — every surviving entry either promoted cleanly or was already
+  resolved elsewhere; nothing was kept open pending further verification.
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_analyst`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_analyst` (FalkorDB, via `mcp__cypher__query`) instead of appending to

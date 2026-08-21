@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-21 — `kaizen_team` graph distillation: 1 entry — collision-rule-5 gloss flagged for `architect`, folded into K-005
+- **What:** Processed tico's one pending `kaizen_team` entry (`entryId`
+  `b2f1c8b0-6d1a-4e2a-9c3d-7a1f0e5d9c21`, dated 2026-08-20): "root `AGENTS.md` collision rule 5
+  does not turn on a requirements doc's own Status flip alone — the real test is whether anything
+  downstream has actually executed against the specific content being changed," captured during
+  the `generic-cypher-mcp2` plan's `T1` unit (superseding FR-4/AC-3/FR-14/AC-11 in place rather
+  than forking a successor document).
+- **Verified (re-derived, not just cited):** read `docs/requirements/generic-cypher-mcp2.md`'s own
+  2026-08-20 Decision-log entry in full and `docs/plans/generic-cypher-mcp2.md`'s `T1` row plus the
+  precedent paragraph directly above it. Both independently confirm the instance and the reasoning
+  verbatim — the document had reached its "Ready for design" **gate** on 2026-08-19, but nothing
+  had since **executed** against the reversed FR-4/FR-14 content (no unit ever ran the deletion the
+  gate would have authorized), so revision in place — not a successor document — was the correct
+  call under root `AGENTS.md`'s collision rule 5. The fact is already fully recorded as an
+  instance, with complete reasoning, in both cited project docs — no new edit needed to preserve
+  *this instance*.
+- **Not promoted as a standalone project-docs edit — folded into K-005 instead:** the entry's real
+  ask is that root `AGENTS.md`'s collision rule 5 (and its source spec,
+  `docs/plans/doc-reference-convention.md`) states only the literal disjunctive test ("approved,
+  **gated**, or executed against" → any true means fork a successor) without this narrower gloss —
+  a reached gate alone doesn't force a successor if nothing has executed against the specific
+  content changing. A future agent reading the rule cold, without knowing to dig up this precedent,
+  could misapply it. That's a convention-text edit to a document `architect` owns
+  (`docs/plans/doc-reference-convention.md`, Tracks: C-322) — per this file's own K-005 precedent
+  (2026-07-29: formal updates to that document are `architect`'s pass to make, not a side effect of
+  a kaizen distillation or an agent-prompt edit), it isn't `cobb`'s to make unilaterally. K-005
+  already tracks "an architect pass adding formative content to `doc-reference-convention.md`"
+  (there: the `manuals/` doc-kind mention) — extended (see `plan.md`) to also carry this
+  collision-rule-5 gloss, so both land in the same architect pass rather than opening a
+  near-duplicate second K-item for the same underlying job.
+- **Plan items:** K-005 extended, not opened fresh.
+- **Graph:** entry `b2f1c8b0-6d1a-4e2a-9c3d-7a1f0e5d9c21` cleared from `kaizen_team` after this
+  append landed (curator `DETACH DELETE` via `cobb`, append-before-clear order per the
+  agent-maintenance skill §5).
+
 ## 2026-08-21 — Coverage fix: dropped stale "your kaizen inbox" from the commit-authority bullet (team certification, §7 fold-in)
 
 - **What:** The Bash bullet's commit-authority grant listed "your kaizen inbox" among the files

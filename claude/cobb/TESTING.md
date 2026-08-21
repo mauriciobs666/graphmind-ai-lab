@@ -38,6 +38,24 @@ the script's own logic.
 the two disagree, the gotcha is live; re-check after any harness update, since it depends on how
 this environment wraps `grep`, not on anything in this repo.
 
+### Gotcha — `audit-team.sh` can be exercised against synthetic agents without touching the live `claude/` tree
+
+**Fact:** `ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"` — copying the script to
+`<scratch>/sub/scripts/audit-team.sh` makes it audit `<scratch>/claude/` instead of the real
+tree, with no other change needed. Also: a directory under `claude/` is only enumerated as an
+agent if `<name>/<name>.md` exists (`for d in "$CL"/*/; ... [ -f "$d$name.md" ] &&
+agents+=(...)`) — a kaizen-files-only directory (e.g. `plan.md`+`history.md` but no prompt file
+yet) is silently **skipped from enumeration entirely**, not flagged as a check-1 failure.
+
+**Consequence:** to verify a plan's claim about the script's behavior (e.g. "a synthetic
+plan+history-only agent would PASS `audit-team.sh`"), build the synthetic tree in scratch and run
+the real script against it — don't reason about the script's logic from reading it alone. Verified
+2026-08-20 (plan-gate Pass 3, `docs/plans/generic-cypher-mcp2.md`): with kaizen files only, the
+script printed `no agents found under <scratch>/claude` for an otherwise-empty scratch tree;
+adding a stub `newagent.md` made it enumerate the agent and FAIL checks 1, 2, 4, 5 (deployment
+symlink, teco roster, both catalogs) — a synthetic stub agent can never make the *overall* run
+PASS, only exercise an individual check's logic in isolation.
+
 ### Gotcha — a stdio MCP server smoke-tested by closing stdin immediately loses replies in flight, and it's a race, not "always the last one"
 
 **Fact:** driving a FastMCP/`mcp` 1.28.x stdio server with `subprocess.run(input=<newline-delimited
