@@ -1,6 +1,6 @@
 # Agent permission-escalation friction — Design
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** — (—)
 
 **Component:** `claude/` · **Owner altitude:** cobb (design + implementation) · **Reviewer:** `analyst` (gate before implementation)
 **Upstream:** `claude/docs/requirements/agent-permission-friction.md` (Status: Ready for design) · `claude/docs/plans/agent-permission-friction-coordination.md` (ledger)

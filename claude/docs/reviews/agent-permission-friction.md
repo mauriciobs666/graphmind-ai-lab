@@ -1,6 +1,6 @@
 # Agent permission-escalation friction — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (—)
 
 ## Scope & verdict
 
