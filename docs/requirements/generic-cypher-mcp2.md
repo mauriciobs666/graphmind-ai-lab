@@ -1,5 +1,5 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M7) · **Last updated:** 2026-08-20
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M7) · **Last updated:** 2026-08-20
 
 ## Intent
 M5 (`docs/requirements/generic-cypher-mcp.md`) proved the graph-backed working-memory pattern on
