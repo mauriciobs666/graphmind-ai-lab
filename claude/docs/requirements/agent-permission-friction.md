@@ -34,31 +34,34 @@ wrong things:
    doesn't apply at all.
 
 ## User stories
-- As a stakeholder, I don't want to be interrupted approving an agent writing to its own kaizen
-  files when that's a normal, expected part of its job, now that the inbox.md capture path has
-  moved to the graph.
+- As a stakeholder, I don't want to be interrupted approving an agent's `Write`/`Edit` when it's
+  squarely that agent's own normal, documented work — regardless of which agent it is.
+- As a stakeholder, I want `cobb` in particular to be able to edit anything across the agent team
+  (definitions, kaizen files, related docs) without being stopped, since touching everyone else's
+  files is its entire job, not an edge case.
+- As a stakeholder, I still want to be asked when an agent does something genuinely outside its
+  remit, or something destructive/irreversible — the interruption should mean something when it
+  happens.
 - As a stakeholder, I want `coder` to run with looser permission requirements so it isn't stopping
   to ask for things that don't warrant an interruption — specifics pending live examples.
 
 ## Functional requirements
-_(Draft — validating against further live instances before finalizing wording.)_
+Settled: applies **team-wide** (stakeholder, 2026-08-20: "applies to all legitimate cases"), not
+agent-by-agent. FR-2 is the governing requirement; FR-1 and FR-3 are its two evidenced instances,
+kept as their own line items because each has concrete, confirmed evidence behind it.
 
-- **FR-1:** `cobb` performing a `Write`/`Edit` within its documented remit — agent/skill
-  definition files, MCP/agent-standards documentation (wherever it lives, e.g. a component
-  README), and kaizen curation for the team (`kaizen/history.md`, `kaizen/plan.md` across every
-  agent) — must not require a manual per-edit confirmation. Well-evidenced: five-plus instances
-  (below), all confirmed legitimate, none an accidental drift, spanning agent-prompt files, a
-  component README, and kaizen curation.
-- **FR-3 (draft):** `qa-engineer` writing to its own stated deliverable paths (`docs/test-plans/`,
-  `docs/test-reports/`) must not require a manual per-write confirmation. Evidence: instance 5
-  below. Same mechanism-3 friction as FR-1, different agent — suggests the underlying need may
-  generalize past `cobb` specifically (see FR-2, still draft, and Open questions).
-- **FR-2 (draft, broader form of FR-1):** More generally, an agent performing a `Write`/`Edit`
-  squarely within its own normal, documented remit should not require a manual per-action
-  confirmation — confirmation should be reserved for actions genuinely outside an agent's remit
-  or genuinely risky. Currently anchored only by the `cobb` evidence; still validating whether the
-  stakeholder wants this applied team-wide or agent-by-agent as friction is actually hit (see Open
-  questions).
+- **FR-2 (governing):** An agent performing a `Write`/`Edit` that stays within its own
+  already-documented remit/deliverable-path convention must not require a manual per-action
+  confirmation. An agent performing a `Write`/`Edit` genuinely outside that remit must still be
+  escalated for approval — this requirement narrows *when* confirmation fires, it does not remove
+  the safety net for a genuine accidental drift.
+- **FR-1 (instance of FR-2):** `cobb` specifically gets no path restriction at all — "cobb can edit
+  anything on the agents" (stakeholder, 2026-08-20). Unlike every other agent, cobb's whole job is
+  touching other agents'/the team's files, so there's no meaningful "in vs. out of remit" line to
+  draw for it. Evidenced by instances 1–3, 5, 6 below.
+- **FR-3 (instance of FR-2):** `qa-engineer` writing to its own stated deliverable paths
+  (`docs/test-plans/`, `docs/test-reports/`) must not require a manual per-write confirmation.
+  Evidenced by instance 4 below.
 
 ## Instances observed (live, from the concurrent `teco` session)
 1. **2026-08-20 — `cobb`, `Edit` on `claude/analyst/analyst.md`.** No custom write guard applies
@@ -73,45 +76,64 @@ _(Draft — validating against further live instances before finalizing wording.
    other agents' system prompts which is his purpose" — every one legitimate, none an accidental
    drift. Pattern is now well-evidenced: `cobb` editing another agent's own `<name>.md` is its core
    job, not an edge case.
-5. **2026-08-20 — `qa-engineer`, `Create` (Write) on `docs/test-plans/generic-cypher-mcp2.md`.**
+4. **2026-08-20 — `qa-engineer`, `Create` (Write) on `docs/test-plans/generic-cypher-mcp2.md`.**
    Exactly `qa-engineer`'s stated deliverable path (its versioned test plan). No custom write guard
    restricts `qa-engineer`'s `Write`/`Edit` paths (its guard is destructive-ops-only, Bash-scoped).
    Confirmed legitimate. → same mechanism-3 friction as the `cobb` instances, on a different agent:
    the "confirm before Edit/Write" default isn't cobb-specific, it's team-wide except `coder`.
-6. **2026-08-20 — `cobb`, `Edit` on `claude/graph-dba/kaizen/history.md`.** Directly resolves the
+5. **2026-08-20 — `cobb`, `Edit` on `claude/graph-dba/kaizen/history.md`.** Directly resolves the
    original kaizen-file thread (Open questions 1–2, below): `cobb` — not the individual doc-scoped
    agent — is the one editing `kaizen/history.md`/`plan.md`, per the documented "curated by cobb"
    convention. Confirmed legitimate. → folded into FR-1: `cobb`'s remit explicitly includes kaizen
    curation across the team, not just agent-prompt/README edits.
-7. **2026-08-20 — `cobb`, `Edit` on `cypher-mcp/README.md`.** Not an agent system prompt this
+6. **2026-08-20 — `cobb`, `Edit` on `cypher-mcp/README.md`.** Not an agent system prompt this
    time — a component README. Cobb's documented remit explicitly covers MCP wiring/cross-tool
    standards, so this is still inside its job, not a drift. Stakeholder confirmed: legitimate,
    approved. → broadens FR-1: the friction isn't confined to `<name>/<name>.md` edits, it's any
    routine `cobb` edit across its documented remit (agent/skill files, MCP/agent-standards
    documentation wherever it lives, kaizen curation for the team).
+7. **2026-08-20 — `tdd-engineer`, `Edit` on `server/tests/test_guards.py`.** Squarely its own
+   core job (writing/editing tests); no custom guard applies to `tdd-engineer` at all. Confirmed
+   legitimate (per the "only sharing approved cases" rule). → third distinct agent hitting the
+   identical mechanism-3 friction on its own core work — `cobb` (team maintenance), `qa-engineer`
+   (test plans), `tdd-engineer` (test code) — reinforces FR-2 as a genuine team-wide pattern.
 
 ## Out of scope
-_(TBD — likely candidates to confirm with the stakeholder: any change to the destructive-ops
-guards on `devops`/`graph-dba`/`qa-engineer`; any change to git-commit authority scoping.)_
+- **The destructive-ops guards** (`devops`, `graph-dba`, `qa-engineer`'s Bash-pattern guard over
+  `claude/scripts/guard-destructive-ops.sh` — `GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes,
+  `docker rm -f`, `pipeline.sh ... --reset`) are unaffected. Those exist to catch genuinely
+  irreversible actions, not routine doc/code writes — no evidence or stakeholder ask has touched
+  this mechanism, and it stays exactly as strict as it is today.
+- **Git-commit authority scoping** (only `tico`/`teco` may `git add`/`git commit`, per the
+  2026-07-30 stakeholder decision) is unaffected — this feature is about `Write`/`Edit`
+  confirmation, not who may version-control what.
+- **The doc-scoped guards' "ask" behavior for genuinely out-of-remit paths stays** — e.g. if
+  `architect` tries to edit something outside `docs/plans/`, that should still escalate. This
+  feature removes the *redundant* confirmation on work that's already in-scope, not the guard's
+  actual catch for a genuine drift.
 
 ## Acceptance criteria
-_(TBD — will be derived per-FR once the FRs are settled.)_
+- **AC-1 (FR-1):** Given `cobb` performs any `Write`/`Edit`, when the tool call runs, then no
+  manual confirmation prompt appears.
+- **AC-2 (FR-3):** Given `qa-engineer` writes/edits a file under `docs/test-plans/` or
+  `docs/test-reports/`, when the tool call runs, then no manual confirmation prompt appears.
+- **AC-3 (FR-2, general):** Given any other agent performs a `Write`/`Edit` within its own
+  already-documented deliverable-path convention (e.g. `tdd-engineer` editing a test file,
+  `architect` editing `docs/plans/*`), when the tool call runs, then no manual confirmation prompt
+  appears.
+- **AC-4 (FR-2, safety net preserved):** Given any agent performs a `Write`/`Edit` genuinely
+  outside its documented remit, when the tool call runs, then a manual "ask" confirmation still
+  appears.
+- **AC-5 (out of scope, regression check):** Given a destructive operation via `devops`/
+  `graph-dba`/`qa-engineer` (e.g. `GRAPH.DELETE`, `FLUSHALL`, a volume wipe), when the command
+  runs, then a manual confirmation still appears, unchanged from today.
 
 ## Open questions
-1. ~~For the kaizen-file thread: which files?~~ **Answered** (instance 6): it's `cobb` editing
-   `kaizen/history.md`/`plan.md` as curator, per the existing convention — not the five doc-scoped
-   agents self-editing. Folded into FR-1.
-2. ~~Responsibility change, or guard-widening?~~ **Answered**: no responsibility change — `cobb`
-   remains the curator; the fix is removing the default-confirmation friction on `cobb`'s own
-   routine edits (FR-1), not widening the five agents' write-guard allowlists.
-3. For `coder`: which specific actions are triggering unwanted prompts? (awaiting live examples —
-   still the one thread from the opening message with no evidence yet)
-4. FR-3 (`qa-engineer`) raises the question FR-2 already drafted: should "no confirmation for
-   in-remit routine writes" become a team-wide default (every agent gets what `coder` already has
-   via `permissionMode: acceptEdits`), rather than a per-agent fix (`cobb`, then `qa-engineer`,
-   then whichever agent hits it next)? Leaning toward yes given the pattern, but want the
-   stakeholder's explicit call before writing it as a requirement — this is a real scope decision,
-   not a detail.
+1. For `coder`: which specific actions are triggering unwanted prompts? Still no live example —
+   `coder` already has `permissionMode: acceptEdits`, so its friction (if real) is likely a
+   *different* mechanism (e.g. Bash/terminal-command confirmations) than the one this document has
+   otherwise nailed down (`Write`/`Edit` confirmation). Not folding it into FR-2 until there's a
+   concrete instance to confirm that.
 
 ## Decision log
 - 2026-08-20 — Stakeholder: "my agents ask too much permission when editing plans reviews and
@@ -123,3 +145,21 @@ _(TBD — will be derived per-FR once the FRs are settled.)_
 - 2026-08-20 — Stakeholder is running a concurrent `teco` session and will relay each
   permission-escalation instance here as it happens, rather than answering hypothetically →
   interview proceeds evidence-first; this doc updates per instance.
+- 2026-08-20 — Instances 1–2 (`cobb` editing `analyst.md`/`data-scientist.md`) confirmed
+  legitimate and approved individually.
+- 2026-08-20 — Stakeholder: "there were several from cobb all while trying to edit other agents'
+  system prompts which is his purpose" (instance 3) → pattern established for FR-1.
+- 2026-08-20 — Asked whether to save an FR-1 improvement item directly into `cobb/kaizen/plan.md`
+  → declined: outside tico's Write/Edit scope (requirements docs + manuals only) and outside its
+  sanctioned `Agent`-delegation uses; pointed the stakeholder to relay FR-1 to their concurrent
+  `teco`/`cobb` session directly, with this doc as the evidence trail either way.
+- 2026-08-20 — Instance 4 (`qa-engineer` → `docs/test-plans/generic-cypher-mcp2.md`) and instance
+  5 (`cobb` → `claude/graph-dba/kaizen/history.md`) confirmed legitimate.
+- 2026-08-20 — Stakeholder: "im only sharing approved cases" → every instance from here on is
+  treated as already-confirmed-legitimate without re-asking per instance.
+- 2026-08-20 — Instance 6 (`cobb` → `cypher-mcp/README.md`) relayed under the above rule.
+- 2026-08-20 — Asked whether the fix should be team-wide or agent-by-agent → Stakeholder: "cobb
+  can edit anything on the agents" (settles FR-1: no path restriction for `cobb`) → then "applies
+  to all legitimate cases" (settles FR-2: team-wide default, not agent-by-agent).
+- 2026-08-20 — Instance 7 (`tdd-engineer` → `server/tests/test_guards.py`) relayed under the
+  approved-cases rule; third distinct agent confirming the team-wide pattern.
