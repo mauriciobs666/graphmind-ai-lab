@@ -137,6 +137,14 @@ deliberately, as validation for AC-4, not as friction to remove).
     10 — confirms the base-confirmation friction on a second of the five custom-guarded agents,
     not just `analyst`.
 
+### Unresolved — not yet classified as evidence or counter-example
+U1. **2026-08-20 — `tdd-engineer`, `Edit` on `docs/BACKLOG.md` (repo root).** Same file that turned
+    out to be out-of-remit for `cobb` (counter-example C2). Stakeholder unsure whether this was
+    `tdd-engineer` marking off a backlog item as part of its own just-delivered work (plausibly
+    in-remit, per `teco`'s "doc updates are part of every unit's done-condition" convention) or a
+    general/unrelated backlog edit (would be out-of-remit, like C2). Not counted toward FR-2
+    evidence either way until this is resolved.
+
 ### Counter-examples — confirmation/guard was correct (support AC-4, not FR-1/FR-2/FR-3)
 C1. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py`.**
     `data-scientist` is advisory-only ("never implements"), and its write guard only allows
@@ -191,6 +199,10 @@ C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initiall
    *different* mechanism (e.g. Bash/terminal-command confirmations) than the one this document has
    otherwise nailed down (`Write`/`Edit` confirmation). Not folding it into FR-2 until there's a
    concrete instance to confirm that.
+2. Instance U1 (`tdd-engineer` → `docs/BACKLOG.md`): was this in-remit (marking off its own
+   delivered work) or out-of-remit (general backlog edit, like counter-example C2)? Stakeholder
+   didn't know in the moment — needs checking against what the actual edit contained, or asking
+   `tdd-engineer`/`teco` directly what the edit was for.
 
 ## Decision log
 - 2026-08-20 — Stakeholder: "my agents ask too much permission when editing plans reviews and
@@ -234,3 +246,9 @@ C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initiall
   C2**; FR-1 and AC-1 rewritten from "no path restriction" to "topic-bounded, not folder-bounded"
   (agentic-development practice — agent/skill files, kaizen curation, MCP/agent-standards docs —
   not literally every repo file `cobb` happens to touch).
+- 2026-08-20 — Instances 10–11 (`analyst` → `docs/reviews/ministral-reprobe.md`, `tico` →
+  `docs/requirements/generic-cypher-mcp2.md`) relayed; both close the "does this also affect the
+  five custom-guarded agents" evidence gap.
+- 2026-08-20 — `tdd-engineer` → `docs/BACKLOG.md` relayed; given the fresh C2 precedent, `tico`
+  flagged the ambiguity instead of assuming legitimacy. Stakeholder: "i dont kno to be honest" →
+  logged as unresolved (U1), not counted as evidence either way.
