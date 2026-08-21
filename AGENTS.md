@@ -161,17 +161,20 @@ and OpenCode artifacts).
     `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
     stakeholder confirmation) · `active` (the producing agent, at creation; amendable in place
     until the document has been approved, gated, or executed against) · `superseded` (whoever
-    writes the successor) · `archived` (**the document's own owner, at milestone close, on
-    `teco`'s coordination**). The owner who performs the `archived` flip, by kind:
+    writes the successor) · `archived` (**`teco`, at milestone close** — since 2026-08-21,
+    stakeholder decision, `teco` performs the mechanical flips itself: its write guard
+    auto-allows an `Edit` on a `docs/**.md` file whose old/new strings differ only in the
+    canonical `Status:` field flipping to `archived`, so a close no longer costs one delegated
+    agent spawn per one-token edit). For any `archived` flip that is **more than** that
+    mechanical one-token edit — bundled with other changes, disputed, or needing judgment about
+    what freezes — the flip still routes to the by-kind owner:
     `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
     `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
     `reviews/*` → `analyst` · `requirements/*` and `manuals/*` → `tico` · `test-plans/*` and
     `test-reports/*` → `qa-engineer`. **This table controls where it disagrees with a document's own
     `Owner:` field** — a `reviews/*` document authored by some other specialist still flips via
     `analyst`; only the `-ml` and `-graph` rows follow the owner, and they do so because they are
-    named rows here, not by inference. **`teco` coordinates the close; it does not perform the flips** — its write
-    guard reaches `docs/plans/*` only, so any other kind would raise a human approval prompt
-    per file.
+    named rows here, not by inference.
   - **The whole lifecycle, one line:** `grep -m1 -H 'Status:' docs/plans/*.md`.
   - **An existing `m<n>-` filename prefix is part of a name, not a lifecycle claim** — nobody
     should read meaning into it, and nobody should "fix" it.

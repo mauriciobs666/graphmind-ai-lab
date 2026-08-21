@@ -8,8 +8,28 @@
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-012 | 2026-08-10 | high | 🔵 | Verify `ListAgents` actually materializes in a teco run — still no evidence |
-| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — still no evidence (K-026's dispatches all stayed single-unit) |
+| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — still no evidence (K-026's dispatches all stayed single-unit); the new ledger `Cost` column (2026-08-21) is what will supply the per-unit numbers |
+| K-016 | 2026-08-21 | high | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
+
+### K-016 — consolidate teco.md + split rare-path rules into an on-demand knowledge base
+- **Status:** 🔵 proposed · **Priority:** high
+- **Rationale:** an in-depth analysis (2026-08-21, stakeholder-requested) found `teco.md` at
+  ~4.7k words — the team's heaviest prompt, regrowing after two slimming passes because each
+  kaizen distillation appends another incident-derived bullet. Steps 3–4 now carry several
+  same-family rules ("don't trust a claim — verify it": stale placeholder results, fabricated
+  haiku numbers, self-reported recoveries, stale message state, unverified docs) that could merge
+  into one principle with sub-cases. The 2026-07-11 rationale for giving teco no on-demand
+  knowledge base ("teco uses its whole body every run") no longer holds: incoming-message
+  misrouting/staleness handling, the milestone-close freeze, and CPG freshness are rare-path
+  rules paid for on every spawn.
+- **Proposed change:** a dedicated `cobb` pass — (1) merge the verify-family bullets; (2) create
+  `claude/teco/coordination-techniques.md` (the `analyst`/`qa-engineer`/`graph-dba` on-demand-KB
+  pattern) and move the rare-path rules there with prompt-side one-line pointers; (3) re-run the
+  §7 lint on the slimmed prompt. Stakeholder chose "dedicated pass" over doing it inside the
+  2026-08-21 session (which already touched the prompt in several places).
+- **Notes:** the same analysis's distillation-side counterweight — apply §5's "every session pays
+  for it" bar more aggressively when the suggested home is teco's always-loaded prompt — belongs
+  to `cobb`'s procedure, worth raising in the same pass.
 
 ### K-015 — validate the dispatch-sizing rule on a real oversized plan
 - **Status:** 🔵 proposed · **Priority:** high
@@ -35,23 +55,14 @@
   including its closing ones (qa-engineer acceptance pass, doc closeout), stayed single-unit and
   never crossed the ~3-step/5-file boundary that would exercise the sizing rule.
 
-### K-012 — verify `ListAgents` actually materializes
-- **Status:** 🔵 proposed · **Priority:** high
-- **Rationale:** the 2026-08-10 probe found teco's *runtime* tool list to be exactly
-  `Read, Bash, Agent, SendMessage, Write, Edit` — **`Grep` and `Glob` are declared in
-  frontmatter and simply absent at runtime**, silently, with no error. A frontmatter grant is
-  therefore not proof of availability on this harness build, and `ListAgents` was granted the
-  same day on the assumption that it is.
-- **Confound found the same day:** a verification probe run *from the session that made the
-  grant* reported `ListAgents` absent — but custom agent definitions load at **parent-session
-  start**, so that session was still holding the pre-edit `teco.md`. The negative result is
-  therefore inconclusive for `ListAgents` (it is conclusive for `Grep`/`Glob`, which predate the
-  session). Re-probe from a **fresh session**.
-- **Already de-risked:** step 5 no longer depends on the answer — it says to attempt the
-  `SendMessage` and treat an addressing error as non-resolution, and Guardrails records the
-  runtime tool set explicitly. If a fresh-session probe shows `ListAgents` still absent, drop the
-  frontmatter grant as decoration; if present, add the enumeration step back to step 5.
-
+> **K-012 — verify `ListAgents` actually materializes — ✅ done 2026-08-21** (moved to
+> history.md). Fresh-session probe (a spawned teco run, current `teco.md`): defined tools were
+> exactly `Read, Bash, Agent, SendMessage, Write, Edit, mcp__cypher__query` — `ListAgents`
+> absent alongside the known-absent `Grep`/`Glob`. Disposition per this item's own de-risking
+> note: all three dropped from the frontmatter as decoration; step 5's attempt-`SendMessage`-
+> first fallback already didn't depend on enumeration. The same probe live-verified
+> `mcp__cypher__query` (a `kaizen_team` read succeeded), closing the parking-lot item below.
+>
 > **K-013 — exercise the `SendMessage` continuation loop for real — ✅ done 2026-08-16** (moved
 > to history.md). K-026's own coordination ledger (Unit 2b needs-changes → fix → re-gate cycle)
 > resumed the same `analyst` agent by its `agentId` for the re-gate; it re-verified its own
@@ -120,7 +131,9 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
-- **Live-verify the `mcp__cypher__query` grant (added 2026-08-19 for the centralized CPG-freshness duty, `docs/plans/cpg-agent-adoption2.md`).** teco's frontmatter already has one precedent of a declared-but-not-actually-granted tool (`Grep`/`Glob`, verified 2026-08-10 by probing a live run) — `mcp__cypher__query` needs the same live probe before the freshness duty can be trusted rather than silently no-op'd. Do this on the next real teco-coordinated unit that touches a CPG-consuming specialist; if the tool doesn't resolve, that's itself the finding to log.
+- ~~Live-verify the `mcp__cypher__query` grant (added 2026-08-19 for the centralized CPG-freshness duty, `docs/plans/cpg-agent-adoption2.md`).~~ *(✅ Resolved 2026-08-21 — the K-012 fresh-session probe called it live: a `kaizen_team` read succeeded. Caveat removed from Guardrails; the freshness duty stands on a verified tool. See history.md.)*
+- **Architect plans annotate dispatch-unit boundaries (noted 2026-08-21).** The dispatch-sizing rule (K-015) asks teco to derive unit boundaries from a step table under pressure; if `architect`'s plan template instead marked suggested dispatch clusters in the step table itself, teco's job becomes verification, and K-015 gets exercised far more easily. Cross-agent change — belongs to `architect`'s prompt/handoff contract; raise when K-015 or K-016 is worked.
+- **Cross-session addressing hygiene (noted 2026-08-21).** The 2026-08-16 misrouting incident is mitigated by a pause-and-confirm rule; a cheaper preventive convention would be: the coordination doc records its session's identity, and any inter-session `SendMessage` must echo the coordination slug — a message without a matching slug is declined without analysis. Decide from the next incident, not now.
 - ~~Guardrails commit bullet is dense (2026-07-30); step-3 density (2026-07-29); model-routing
   evidence clause (2026-07-29).~~ *(✅ All three resolved 2026-08-10 — steps 3/4 split into
   sub-bullets, Guardrails' commit bullet split four ways, the dated evidence clause dropped from
