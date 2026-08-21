@@ -131,6 +131,11 @@ deliberately, as validation for AC-4, not as friction to remove).
     from one of the five doc-scoped-guarded agents, showing the base confirmation fires *even when
     the custom guard has nothing to say* — settles that FR-2 must address all five of those agents
     too, not just agents like `cobb`/`qa-engineer`/`tdd-engineer` that have no custom guard.
+11. **2026-08-20 — `tico`, `Edit` on `docs/requirements/generic-cypher-mcp2.md`.** `tico` is
+    another of the five custom-guarded agents; this is squarely its own remit
+    (`docs/requirements/*`), passed silently by `guard-tico-doc-writes.sh`. Same shape as instance
+    10 — confirms the base-confirmation friction on a second of the five custom-guarded agents,
+    not just `analyst`.
 
 ### Counter-examples — confirmation/guard was correct (support AC-4, not FR-1/FR-2/FR-3)
 C1. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py`.**
