@@ -55,16 +55,27 @@ kept as their own line items because each has concrete, confirmed evidence behin
   confirmation. An agent performing a `Write`/`Edit` genuinely outside that remit must still be
   escalated for approval — this requirement narrows *when* confirmation fires, it does not remove
   the safety net for a genuine accidental drift.
-- **FR-1 (instance of FR-2):** `cobb` specifically gets no path restriction at all — "cobb can edit
-  anything on the agents" (stakeholder, 2026-08-20), confirmed to include `cobb`'s own file
-  (instance 10) as well as every other agent's. Unlike every other agent, cobb's whole job is
-  touching other agents'/the team's files, so there's no meaningful "in vs. out of remit" line to
-  draw for it. Evidenced by instances 1–3, 5, 6, 10 below.
+- **FR-1 (instance of FR-2):** `cobb`'s remit is **topic-bounded, not folder-bounded** like most
+  other agents — agentic-development practice: any agent's own definition file (including
+  `cobb`'s own), kaizen curation for the team (`kaizen/history.md`/`plan.md` for any agent), and
+  MCP/agent-standards documentation wherever it lives (e.g. a component README). A `Write`/`Edit`
+  within that topic must not require confirmation, same as any other agent's in-remit work under
+  FR-2 — `cobb`'s remit is just wider and cuts across folders rather than living in one. It is
+  **not** a literal blanket exemption from all confirmation: a `Write`/`Edit` genuinely outside
+  that topic (e.g. a general project backlog item with no agent/skill relevance) still escalates,
+  same as any other agent. (An earlier reading of "cobb can edit anything on the agents" as
+  path-unrestricted was corrected by the stakeholder — see counter-example C2.) Evidenced by
+  instances 1–3, 5, 6, 9 below.
 - **FR-3 (instance of FR-2):** `qa-engineer` writing to its own stated deliverable paths
   (`docs/test-plans/`, `docs/test-reports/`) must not require a manual per-write confirmation.
   Evidenced by instance 4 below.
 
 ## Instances observed (live, from the concurrent `teco` session)
+Split into two groups: instances that support the FRs (redundant confirmation on genuinely
+in-remit work) and **counter-examples** (the confirmation/guard was actually correct — kept
+deliberately, as validation for AC-4, not as friction to remove).
+
+### Evidence for FR-1 / FR-2 / FR-3
 1. **2026-08-20 — `cobb`, `Edit` on `claude/analyst/analyst.md`.** No custom write guard applies
    to `cobb` (unrestricted tools). Stakeholder confirmed: this was `cobb` doing its normal
    agent-maintenance job; approved. Mechanism: default Claude Code "confirm before Edit" prompt
@@ -110,17 +121,23 @@ kept as their own line items because each has concrete, confirmed evidence behin
    implementer agent editing actual source code as part of its sanctioned task, not just to
    doc-authoring agents. (Edited again shortly after — same red→green→refactor compounding-cost
    pattern as instance 7, now on a source file rather than a test file.)
-9. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py` — NOT
-   friction, the guard working correctly.** `data-scientist` is advisory-only ("never implements"),
-   and its write guard only allows `docs/plans/*`/`docs/reviews/*` — a `tests/eval/` script is
-   genuinely outside that. Stakeholder, on reflection: "this one is not his role." Kept in this
-   document as a **counter-example**, not FR-2 evidence: it validates AC-4 (escalation must stay
-   for genuinely out-of-remit work) and shows the distinction this feature draws — in-remit
-   friction goes away, a real drift still gets caught — is a real, live distinction, not just a
-   theoretical carve-out.
-10. **2026-08-20 — `cobb`, `Edit` on `claude/cobb/cobb.md` (its own file).** Confirms FR-1's
-    "anything on the agents" extends to `cobb` editing itself, not just other agents — closes a
-    reading ambiguity in the earlier phrasing.
+9. **2026-08-20 — `cobb`, `Edit` on `claude/cobb/cobb.md` (its own file).** Confirms FR-1's
+   agentic-development topic-remit extends to `cobb` editing itself, not just other agents.
+
+### Counter-examples — confirmation/guard was correct (support AC-4, not FR-1/FR-2/FR-3)
+C1. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py`.**
+    `data-scientist` is advisory-only ("never implements"), and its write guard only allows
+    `docs/plans/*`/`docs/reviews/*` — a `tests/eval/` script is genuinely outside that. Stakeholder,
+    on reflection: "this one is not his role." Validates AC-4: escalation must stay for genuinely
+    out-of-remit work.
+C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initially logged as FR-1
+    evidence (an over-broad reading of "cobb can edit anything on the agents" as literally
+    path-unrestricted). Stakeholder corrected on reflection: "this is not cobb's job" — a general
+    project backlog item with no agent/skill/MCP relevance is outside `cobb`'s topic-remit, same as
+    any other agent's out-of-remit edit. **Caused FR-1's wording to be corrected** from "no path
+    restriction" to "topic-bounded, not folder-bounded" (see FR-1). Important because it shows the
+    same "in-remit vs. not" judgment call applies to `cobb` too — its remit is wide, not
+    unconditional.
 
 ## Out of scope
 - **The destructive-ops guards** (`devops`, `graph-dba`, `qa-engineer`'s Bash-pattern guard over
@@ -137,8 +154,11 @@ kept as their own line items because each has concrete, confirmed evidence behin
   actual catch for a genuine drift.
 
 ## Acceptance criteria
-- **AC-1 (FR-1):** Given `cobb` performs any `Write`/`Edit`, when the tool call runs, then no
-  manual confirmation prompt appears.
+- **AC-1 (FR-1):** Given `cobb` performs a `Write`/`Edit` within its agentic-development topic-remit
+  (an agent's own definition file, kaizen curation for any agent, MCP/agent-standards
+  documentation), when the tool call runs, then no manual confirmation prompt appears. Given
+  `cobb` performs a `Write`/`Edit` genuinely outside that remit (e.g. a general project backlog
+  item unrelated to agents/skills — counter-example C2), then a manual confirmation still appears.
 - **AC-2 (FR-3):** Given `qa-engineer` writes/edits a file under `docs/test-plans/` or
   `docs/test-reports/`, when the tool call runs, then no manual confirmation prompt appears.
 - **AC-3 (FR-2, general):** Given any other agent performs a `Write`/`Edit` within its own
@@ -188,8 +208,16 @@ kept as their own line items because each has concrete, confirmed evidence behin
 - 2026-08-20 — Instance 7 (`tdd-engineer` → `server/tests/test_guards.py`, recurring) and instance
   8 (`tdd-engineer` → `server/falkorchat/guards.py`, source code) relayed; broadened FR-2 to
   source-code edits and to per-edit (not per-task) friction cost.
-- 2026-08-20 — Instance 9 (`data-scientist` → `tests/eval/probe_ministral_judge.py`) flagged by
-  `tico` as a likely-genuine guard hit rather than friction, since it falls outside
+- 2026-08-20 — Counter-example C1 (`data-scientist` → `tests/eval/probe_ministral_judge.py`)
+  flagged by `tico` as a likely-genuine guard hit rather than friction, since it falls outside
   `data-scientist`'s "never implements" contract and its write-guard allowlist. Stakeholder agreed
   on reflection: "this one is not his role" → kept as a counter-example (AC-4), not folded into
   FR-2/FR-3 evidence.
+- 2026-08-20 — Instance 9 (`cobb` → `claude/cobb/cobb.md`, self-edit) relayed; confirms FR-1's
+  topic-remit covers `cobb` editing itself.
+- 2026-08-20 — `cobb` → `docs/BACKLOG.md` initially logged as further FR-1 evidence (an
+  over-broad "no path restriction at all" reading of "cobb can edit anything on the agents").
+  Stakeholder corrected on reflection: "this is not cobb's job" → **reclassified as counter-example
+  C2**; FR-1 and AC-1 rewritten from "no path restriction" to "topic-bounded, not folder-bounded"
+  (agentic-development practice — agent/skill files, kaizen curation, MCP/agent-standards docs —
+  not literally every repo file `cobb` happens to touch).
