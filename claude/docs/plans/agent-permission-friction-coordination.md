@@ -1,6 +1,16 @@
 # Agent permission-escalation friction — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—)
+
+## Close-out
+Feature delivered, reviewed twice (plan gate + diff-scoped implementation gate, both `analyst`,
+both approve), and committed: `93c3a39` (implementation), `4a35a48` (requirements doc archived by
+`tico`), `949c41b` (plan + review docs archived by `architect`/`analyst`). One process deviation
+occurred and was corrected mid-run (see "Process deviation" below) — assessed as low content-risk,
+both affected deliverables were independently re-verified by a properly-typed specialist before
+acceptance. `~/.claude/settings.json`'s undocumented blanket Edit/Write/NotebookEdit allow rule
+(flagged in `docs/plans/agent-permission-friction.md` §1.2) remains a stakeholder decision, not
+resolved by this coordination — relayed to the user directly, not tracked as an open unit here.
 
 ## Goal
 Implement the requirements at `claude/docs/requirements/agent-permission-friction.md`
@@ -32,8 +42,8 @@ regardless of nesting) does. Verify against current docs rather than assuming ei
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict |
 |---|---|---|---|---|---|
 | U1 | `cobb` | `a3671bdce543d0dc1` | accepted | `claude/docs/plans/agent-permission-friction.md` | `analyst` (`aed057e50a0a6a24c`) → approve (Pass 2) |
-| U2 | `cobb` | `a3671bdce543d0dc1` | gated | hook/frontmatter/catalog diff (`git status --short`, 9 modified + 6 new files) | `analyst` (`a725ec2c6b0040d1e`, fresh + typed) → in-flight |
-| U3 | `architect`/`analyst`/`tico` | — | queued | archive-status flips (plan, review, requirements) | — |
+| U2 | `cobb` | `a3671bdce543d0dc1` | accepted | hook/frontmatter/catalog diff — committed `93c3a39` | `analyst` (`a725ec2c6b0040d1e`, fresh + typed) → approve |
+| U3 | `architect`/`analyst`/`tico` | `abcbe65feffdc8eb9` / `ac176f94c85a532e6` / `a72f61c09de86d66f` | accepted | archive-status flips (plan, review, requirements) — committed `949c41b` (plan+review), `4a35a48` (requirements, tico self-committed) | — |
 
 U2 depends on U1's plan being accepted. U3 is closing bookkeeping, dispatched only once U2 is
 accepted.
