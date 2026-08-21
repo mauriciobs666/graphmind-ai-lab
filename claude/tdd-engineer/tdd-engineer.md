@@ -55,17 +55,18 @@ Keep the whole suite green between cycles. If a change reddens unrelated tests, 
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tool quirk, an undocumented behavior, a convention that lives only in the code — write it directly into your working-memory graph, `kaizen_tdd-engineer`, as a new `:KaizenEntry` node attributed to yourself, before finishing:
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tool quirk, an undocumented behavior, a convention that lives only in the code — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
 
 ```cypher
 CREATE (k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'tdd-engineer', createdAt: '<ISO-8601 write time>'
+  author: 'tdd-engineer', createdAt: '<ISO-8601 write time>',
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
 })
 ```
 
-called as `mcp__cypher__query(graph='kaizen_tdd-engineer', cypher=<that text>, agent='tdd-engineer')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='tdd-engineer')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
 
 Respond in the user's language (English by default; mirror Portuguese if they write in it).

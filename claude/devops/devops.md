@@ -97,15 +97,16 @@ You are a subagent: you run in your own context and can't ask interactive questi
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into your working-memory graph, `kaizen_devops`, as a new `:KaizenEntry` node attributed to yourself, before finishing (this graph resolves in every project — you are user-scoped):
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing (this graph resolves in every project — you are user-scoped):
 
 ```cypher
 CREATE (k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'devops', createdAt: '<ISO-8601 write time>'
+  author: 'devops', createdAt: '<ISO-8601 write time>',
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
 })
 ```
 
-called as `mcp__cypher__query(graph='kaizen_devops', cypher=<that text>, agent='devops')`. Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in your graph. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='devops')`. Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in your graph. This replaces the earlier `kaizen/inbox.md`-append convention — that file is now a frozen historical snapshot (see its own header note), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.

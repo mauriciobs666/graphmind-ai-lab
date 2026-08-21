@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-20 — Graph distillation: 1 entry promoted to `cypher-mcp/README.md` (`agent-maintenance` §5, cobb, Q2 acceptance pass — AC-5 re-proof on the consolidated `kaizen_team` graph)
+
+- **What:** `cobb` processed one raw `:KaizenEntry` node in the now-consolidated, `author`-partitioned
+  `kaizen_team` graph — `a3f4e1b2-6c9d-4e2a-8f1b-0d5c7a9e3f21` (2026-08-20, `graph-dba`): the `cypher`
+  MCP tool authorizes writes in exactly two shapes (an author-matched `KaizenEntry` CREATE, or a
+  curator `entryId`-clear) and rejects every other write — including schema DDL such as
+  `CREATE INDEX`/`GRAPH.CONSTRAINT CREATE` — even from a valid, recognized agent slug. Routed to
+  **`cypher-mcp/README.md`**'s "Writing through this tool" section (the entry's own `suggestedHome`
+  was "project docs," and this is exactly that — the tool's own component doc, not a `graph-dba`-only
+  fact): added a clause after "every other write is rejected regardless of `agent`" naming the DDL
+  case explicitly (schema statements get no carve-out over data statements) and citing the concrete
+  `CREATE INDEX FOR (e:KaizenEntry) ON (e.entryId)` example plus the S0 unit's live rejection.
+- **Why:** Genuinely durable, non-obvious fact about `authorize_write()`'s scope — the README already
+  documented the two-shapes rule in general ("every other write is rejected regardless of `agent`"),
+  but a reader could plausibly assume schema DDL sits outside the "write" gate entirely (it's
+  metadata, not data). The entry proves that assumption wrong and the concrete example makes the
+  boundary unambiguous for the next reader/writer of this tool.
+- **Verified:** re-read `cypher-mcp/README.md`'s full "Writing through this tool" section before
+  editing — the general two-shapes rule was already present, confirming the entry's core mechanism
+  claim rather than contradicting it; the DDL-specific instantiation was not yet spelled out, so this
+  is an additive clarification, not a duplicate. Attempted a live re-run of the entry's own cited
+  repro (`CREATE INDEX FOR (e:KaizenEntry) ON (e.date)` against `kaizen_team` with `agent='cobb'`)
+  to independently re-derive the fact rather than trust the citation alone; the harness's own
+  auto-mode classifier blocked the attempt as a write-shaped Bash-equivalent action before it reached
+  the MCP server, so the live re-run itself is inconclusive — but the entry's original evidence (a
+  real S0-unit rejection message, quoted verbatim in the node) plus the README's own written
+  contract (§"Writing through this tool": "any Cypher that isn't one of the two shapes above, is
+  rejected... before `GRAPH.QUERY` is ever called") independently corroborate the fact without
+  requiring the re-run.
+- **Order of operations honored:** this `history.md` entry was written and confirmed **before**
+  `entryId` `a3f4e1b2-6c9d-4e2a-8f1b-0d5c7a9e3f21` was cleared from `kaizen_team` via
+  `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry {entryId:'a3f4e1b2-6c9d-4e2a-8f1b-0d5c7a9e3f21'}) DETACH DELETE e", agent='cobb')`.
+  Before/after count for `kaizen_team` filtered to `author='graph-dba'`: **2 → 1** (the remaining
+  entry, `d4f8b1c3-2a67-4e05-9c81-3f6b9d2e7a45`, is explicitly out of scope for this pass and was not
+  touched).
+- **Scope note:** this is a narrow, single-entry acceptance exercise (qa-engineer's Q2 closing pass
+  for `docs/plans/generic-cypher-mcp2.md`, AC-5), re-proving the distillation workflow end-to-end now
+  that raw capture lives in the consolidated `kaizen_team` graph rather than the interim
+  `kaizen_graph_dba` graph AC-5 was first proven against (2026-08-18, below). No other `kaizen_team`
+  entries (any author), `kaizen_teco`, or `kaizen_analyst` were read, verified, or touched.
+- **Docs touched:** `cypher-mcp/README.md` (knowledge-base edit, above), this `history.md` entry.
+- **Plan items:** none — not on this agent's active K-list; a `cobb`-run distillation pass
+  (`agent-maintenance` skill §5), not a `graph-dba` self-edit.
+
 ## 2026-08-18 — Kept-open node `6e5d6451…` cleared after `analyst` re-gate resolved the graph's open question (`agent-maintenance` §5 rule added)
 - **What:** `analyst`'s diff-scoped re-gate of the pass below (`docs/reviews/graph-dba-kaizen-
   distillation.md`) approved both judgment calls but flagged one gap: the kept-open node

@@ -2,6 +2,156 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-20 — D-1 fix: `cobb.md`'s "Maintenance duties" section still described the pre-M7 convention (inbox-seeding, per-agent `kaizen_<agent>` graph); `docs/BACKLOG.md`'s M7 section flipped 🔵→✅
+
+- **What:** Dispatched directly (two small closeout fixes for M7, not `teco`-coordinated) off
+  `Q2`'s closing acceptance report (`docs/test-reports/generic-cypher-mcp2-report.md`, defect
+  **D-1**). Two edits, both in-scope for `cobb`'s own self-edit carve-out (§3.7 of
+  `docs/plans/generic-cypher-mcp2.md`):
+  1. **`claude/cobb/cobb.md` lines 65 and 71** (the "Kaizen" and "Learnings distillation" bullets
+     under "Maintenance duties"). Both still described the **pre-M7** state — line 65 said a new
+     agent gets an `inbox.md` "seed[ed] on creation" (contradicts FR-12/AC-9 and
+     `skills/agent-maintenance/SKILL.md:62`); line 71 said raw capture goes into "its own
+     working-memory FalkorDB graph, `kaizen_<agent>`" and described curator-clearing against "the
+     agent's own `kaizen_<agent>` graph" (describes the **interim** per-agent-graph shape,
+     `ccf9c8b`, already superseded — 10 of those 12 keys are retired by `G1`). Both directly
+     contradicted the same file's own, already-correct "## Learning capture" section
+     (lines 84–98). Rewrote both bullets to state the current convention: no `inbox.md` for a new
+     agent (the 12 pre-2026-08-20 agents keep theirs frozen); raw capture → shared `kaizen_team`
+     graph, `author`-partitioned, curator-clear scoped by `entryId`. Targeted edit only — did not
+     restructure the section, matching the brief's sizing instruction ("similarly to how 'Learning
+     capture' already reads").
+  2. **`docs/BACKLOG.md`'s M7 milestone-map row + `C-701`…`C-721` item bullets**, still 🔵
+     (proposed) though `Q2`'s verdict (**PASS with noted open items**) is now in. Flipped the
+     milestone row and all individual items to ✅, but **not** as a blanket flip — three genuine
+     open nuances kept as inline notes rather than silently absorbed: (a) the inbox-header-retarget
+     half of every `C-<agent>` unit was **dropped entirely by stakeholder decision** (not merely
+     deferred — see the coordination ledger's `cobb`-batch row); (b) `teco`'s (`e40a95fe-…`) and
+     `analyst`'s (`fe2007f5-…`) per-agent migrations each carry one already-known, already-tracked
+     data-fidelity defect on a single entry, pending a separate stakeholder approval for the
+     `cobb` curator-clear fix; (c) `G1` correspondingly leaves `kaizen_teco`/`kaizen_analyst` live,
+     deliberately, pending the same fix. Modeled the "✅ with a caveat clause" phrasing on M4's own
+     precedent (DEF-4 folded as a named residual, not a blocker) rather than inventing a new
+     convention. Did **not** invent new backlog `C-` numbers for the two pending defects — they're
+     already tracked in `docs/plans/generic-cypher-mcp2-coordination.md`'s unit ledger (the
+     `C-teco`/`C-analyst` rows), referenced by pointer instead of duplicated.
+- **Why:** `Q2`'s own recommended fix, direct dispatch. D-1 is the report's one new, genuinely
+  unaddressed finding (High severity, self-contradiction inside `cobb`'s own always-loaded
+  prompt); the BACKLOG flip is the report's own housekeeping note ("recommend `teco`/`cobb` flip
+  both to ✅ once this report's verdict is accepted") plus FR-13's explicit "incremental delivery
+  is valid progress" framing, which is why the two still-open per-agent defects got a note instead
+  of blocking the flip.
+- **Verified:** re-read both edited `cobb.md` bullets against `skills/agent-maintenance/SKILL.md:62`
+  and against `cobb.md`'s own "Learning capture" section — no remaining contradiction. Re-read the
+  M7 section of `docs/BACKLOG.md` against `docs/plans/generic-cypher-mcp2-coordination.md`'s unit
+  ledger row-by-row (S0–S4, T1, all 12 `C-<agent>` rows, `G1`, Q1/Q2) to confirm every ✅/note
+  matches the ledger's own recorded status, not an assumption.
+- **Not done in this pass (flagged, not silently skipped):** the report's Feedback #2 recommends an
+  independent `analyst`/`qa-engineer` diff review specifically for self-edited files (the gap that
+  let D-1 ship unnoticed in the first place) — this fix is itself another `cobb` self-edit with no
+  independent review yet. Parking-lot note added below; not resolved here (no reviewer available
+  in a direct, non-`teco`-coordinated dispatch) — flag for whoever next coordinates a `cobb.md`
+  touch, or route to `teco` on request.
+- **Docs touched:** `claude/cobb/cobb.md`, `docs/BACKLOG.md`, this `history.md` entry,
+  `kaizen/plan.md` (parking-lot note below).
+- **Plan items:** see `plan.md`'s new parking-lot note — extend the independent-review-gate
+  practice to `cobb.md` self-edits specifically (this fix included).
+
+## 2026-08-20 — `cypher-mcp/README.md`'s own curator-clear example was wrong (missing space); fixed in-line during the Q2 AC-5 acceptance distillation
+
+- **What:** While re-deriving (not just re-citing) `graph-dba` entry `a3f4e1b2…`'s claim during the
+  Q2/AC-5 acceptance distillation (below, `claude/graph-dba/kaizen/history.md`), the harness's
+  auto-mode classifier blocked a live re-run of the entry's own DDL repro, so I read
+  `cypher-mcp/server.py` directly instead. Found `_CURATOR_CLEAR_RE` (`:265-269`) requires the
+  literal substring `entryId: ` (colon **then a space**) before the quote, and the pre-match
+  normalization (`" ".join(cypher.split())`, `:366`) only *collapses* existing whitespace runs —
+  it never *inserts* a missing one. Consequence: `cypher-mcp/README.md`'s own documented
+  curator-clear example, `{entryId:'...'}` (no space), does **not** match the regex and is
+  rejected — confirmed live, twice, in this session: the no-space form on the real clear I was
+  about to run got "Rejected: this write is neither an author-write ... nor the recognized
+  curator-clear shape," and the identical query with a space after the colon succeeded
+  (`nodes_deleted=1.0`). Fixed the README's curator-clear code example to include the space and
+  added a explanatory note naming the exact mechanism, so the next reader who copy-pastes it
+  doesn't hit the same rejection.
+- **Why:** A documented example that fails when copy-pasted verbatim is worse than no example —
+  it actively teaches the wrong shape. This is squarely a `cypher-mcp` project-docs fix (not a
+  `graph-dba`-specific fact), found and fixed in the same pass per the standing Learning-capture
+  instruction ("verify and promote... in the same run, in-bounds for you alone as the
+  maintainer") rather than filed as a raw `kaizen_team` entry for a later pass.
+- **Verified:** read `server.py`'s `_CURATOR_CLEAR_RE` and the `normalized = " ".join(cypher.split())`
+  line directly (ground truth, not inference); reproduced the rejection/success pair live against
+  `kaizen_team` in this same session (two real tool calls, differing only in that one space).
+- **Scope note:** code (`server.py`) itself was **not** touched — only the README's documented
+  example and explanation. Whether the regex itself should tolerate the no-space form is a
+  `cypher-mcp` implementation question, out of scope for a docs-only maintenance pass; not filed
+  as a backlog item since the doc fix alone resolves the practical footgun.
+- **Docs touched:** `cypher-mcp/README.md` (curator-clear example + note), this `history.md` entry.
+- **Plan items:** none opened — see the scope note above.
+
+## 2026-08-20 — M7 `C-<agent>` units, cobb's half (all 12): prompt retarget to `kaizen_team` delivered; header-retarget half dropped by stakeholder decision
+- **What:** Dispatched by `teco`, batched per the coordination doc's own sizing note (same owner —
+  `cobb` — disjoint files across 12 units, an efficiency batch, not a mega-dispatch), to execute
+  the `cobb`-owned half of all 12 `C-<agent>` units in `docs/plans/generic-cypher-mcp2.md` §4.2
+  (Version 4): each agent's own data-migration half is that agent's separate, independently-run job
+  (not this unit).
+  - **Prompt retarget (delivered, all 12).** Every `claude/<agent>/<agent>.md`'s Learning-capture
+    section rewritten to the plan's §3.3 recipe verbatim: target graph `kaizen_team` (`author`-
+    partitioned) instead of the agent's own `kaizen_<agent>`, plus the new `sessionId` field
+    (`$CLAUDE_CODE_SESSION_ID`, FR-8a) — `analyst`, `data-scientist`, `qa-engineer`, `teco`,
+    `graph-dba`, `architect`, `coder`, `devops`, `frontend-engineer`, `tdd-engineer`, `tico`, and
+    `cobb.md` itself (the one legitimate self-edit, §3.7 — every other agent's own prompt still
+    reads "never edit your own agent definition," `cobb.md`'s alone omits it).
+  - **`teco.md`'s extra M3 fix (delivered).** Two stale cross-reference passages outside its
+    Learning-capture section, both still describing a file-based `kaizen/inbox.md` capture
+    mechanism that no longer matches reality: the "Fencing carve-out" bullet (formerly ~line 72)
+    rewritten — raw learnings capture is a graph write (`mcp__cypher__query` against `kaizen_team`),
+    not a file write, so a brief excluding a subtree (`claude/`) never blocks it, no carve-out
+    needed for that step specifically; the "Learnings ride the handoff" bullet (formerly ~line 89)
+    now checks for a dated `:KaizenEntry` in `kaizen_team` rather than an `inbox.md` entry.
+  - **C-cobb data-migration (delivered, no-op).** Live-checked `kaizen_cobb` via `mcp__cypher__query`
+    — the graph key does not exist ("Graph 'kaizen_cobb' does not exist," listed alongside the
+    other live keys), confirming 0 entries, matching the plan's 2026-08-20 snapshot. Nothing to
+    migrate; no graph write made.
+  - **Header retarget (attempted, then fully dropped — stakeholder decision, mid-run).** The plan's
+    §4.2/P3-M3 authorized retargeting each of the 12 `kaizen/inbox.md` headers' *prescriptive*
+    clause (the copy-pasteable `mcp__cypher__query(graph='kaizen_<agent>', ...)` pointer) to
+    `kaizen_team`, while leaving the 4 agents' (`analyst`/`data-scientist`/`qa-engineer`/`teco`)
+    true past-tense provenance clause untouched — reasoning: each header's own immutability promise
+    is scoped to *"Content below,"* so the header note itself was never inside that promise.
+    Attempted 3 of the 4 scoped files (`analyst`, `data-scientist`, `qa-engineer`) plus `teco`
+    (landed first); the permission system **denied all 3 scoped attempts live**, each with the
+    reason "this is frozen" / "it is frozen." `teco`'s edit had already landed before the pattern
+    was clear. Stopped, reported the conflict rather than continuing to the other 8 or guessing;
+    the stakeholder relayed, via `teco`: **Option 2 — stop entirely, revert what already landed.**
+    Reverted `claude/teco/kaizen/inbox.md` via `git checkout -- <path>` (not hand-reconstructed) to
+    its exact HEAD text; verified via `git diff --stat -- 'claude/*/kaizen/inbox.md'` (empty) and
+    `git status --porcelain -- 'claude/*/kaizen/inbox.md'` (empty) that **all 12** `inbox.md` files
+    are untouched, byte-identical to HEAD. **This supersedes the plan's own §4.2/P3-M3 header-retarget
+    authorization** — a correction for whoever closes the plan/coordination doc to record (not made
+    here; `docs/plans/*` isn't this agent's file to edit).
+  - **Ambiguity found and flagged, now moot but worth recording:** `claude/graph-dba/kaizen/inbox.md`'s
+    header (dated 2026-08-18, pre-dating the general 2026-08-20 migration) actually carries a real
+    past-tense provenance clause too ("Its contents… were imported once into the `kaizen_graph_dba`
+    FalkorDB graph") — the plan's C-graph-dba row calls it "no entries, so no provenance clause to
+    protect," which a direct read doesn't support. Moot now that header edits are off the table
+    entirely, but the plan/coordination doc's premise on that row was slightly wrong independent of
+    the stakeholder decision.
+- **Why:** `docs/plans/generic-cypher-mcp2.md` (analyst-approved, "approve with suggestions") — the
+  prompt half is FR-2/FR-7/FR-8a/FR-11's delivery mechanism for all 12 agents; the header half's
+  fate was decided live, mid-dispatch, by direct stakeholder call relayed through `teco`, overriding
+  the plan's own written authorization for that one narrow piece.
+- **Verification commands run:** `mcp__cypher__query(graph='kaizen_cobb', ...)` (graph absent, 0
+  entries); `git diff --stat -- 'claude/*/kaizen/inbox.md'` and `git status --porcelain -- 'claude/*/kaizen/inbox.md'`
+  (both empty, post-revert); `git status --porcelain -- claude/` (12 modified files, all
+  `<agent>/<agent>.md`, matching exactly the prompt-retarget scope, nothing else).
+- **Explicitly not touched:** any `claude/<agent>/kaizen/inbox.md` (all 12, including `teco`'s, now
+  reverted); any `claude/<agent>/kaizen/plan.md`/`history.md` other than `cobb`'s own; any
+  `docs/plans/*` file (the plan's own supersession note is `teco`'s to make, not `cobb`'s); any
+  `kaizen_<agent>` graph data for the other 11 agents (each agent's own separately-dispatched job).
+- **Plan items:** see `plan.md`'s new note below — inbox.md headers are enforced-frozen in
+  practice, not just by written convention; don't plan future work assuming the "Content below"
+  scoping argument is actionable without re-confirming live.
+
 ## 2026-08-20 — M7 substrate units S4/S3/S2: consolidate per-agent `kaizen_<agent>` graphs onto shared `kaizen_team`, deliver FR-12/AC-9 (no `inbox.md` for a new agent)
 - **What:** Dispatched by `teco` to execute 3 of the 21 units in
   `docs/plans/generic-cypher-mcp2.md` (Version 4), in the plan's required order (`S4` before `S3`,

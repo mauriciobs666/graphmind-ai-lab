@@ -17,6 +17,33 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
 ## Parking lot / ideas
+- **Extend the independent-review-gate practice to `cobb.md` self-edits specifically (surfaced
+  2026-08-20, `Q2`'s D-1 finding + its own fix).** `Q2`'s closing acceptance pass
+  (`docs/test-reports/generic-cypher-mcp2-report.md`) found `cobb.md` had shipped a self-edit
+  (the M7 `C-cobb` "Learning capture" retarget) that only touched one of two affected sections,
+  leaving lines 65/71 stale and self-contradictory — undetected because no independent reviewer
+  ever read that diff (the self-edit carve-out, §3.7 of `docs/plans/generic-cypher-mcp2.md`, makes
+  `cobb` both author and sole editor of that one file). The fix for D-1 (this same 2026-08-20,
+  `history.md` above) is **itself** another unreviewed `cobb.md` self-edit — the exact shape most
+  likely to repeat the miss. Cheap mitigation the report proposes: whenever a self-edit unit
+  closes, route a one-line "did every section I was supposed to touch actually change?" grep-diff
+  check to a second agent. Not actionable unilaterally (no reviewer in a direct, non-`teco`
+  dispatch) — raise with `teco` next time a `cobb.md` touch is coordinated, or self-apply the
+  grep-diff check as a matter of discipline even without a formal second reviewer.
+- **`kaizen/inbox.md` headers are enforced-frozen in practice, not just by written convention
+  (surfaced 2026-08-20, M7 `C-<agent>` header-retarget attempt).** `docs/plans/generic-cypher-mcp2.md`
+  §4.2/P3-M3 reasoned that a header note's *prescriptive* clause (the copy-pasteable
+  `mcp__cypher__query(graph='kaizen_<agent>', ...)` pointer) was safely editable because each
+  header's own immutability promise is scoped to "Content below," not the header itself — a
+  textually sound argument, gated through 3 plan-review passes. Live execution disagreed: the
+  permission system denied 3 of 4 attempted edits outright ("this is frozen"), and the stakeholder,
+  relayed through `teco`, then directed dropping the header-retarget half entirely and reverting the
+  one edit that had already landed (`teco`'s). **Don't plan future work that treats the "Content
+  below" scoping argument as actionable without re-confirming live first** — a textual carve-out in
+  a doc is not the same thing as a carve-out the actual permission gate (or the stakeholder) will
+  honor at execution time. If a future delivery genuinely needs a frozen `inbox.md` header touched,
+  raise it as its own small, explicitly-flagged ask rather than folding it into a larger unit's
+  done-condition.
 - **Redirected from `teco`'s 2026-08-12 inbox entry (distilled 2026-08-15):** a directly-invoked
   (non-`teco`-coordinated) large sweep I ran — the 39-file full-team kaizen-inbox distillation,
   gated "needs changes" by `analyst` — had no coordination ledger, and the session that ran it hit
