@@ -2,6 +2,26 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-21 — Added a `Write|Edit` doc-write guard for test-plans/test-reports (agent-permission-friction FR-3)
+
+- **What:** `qa-engineer` previously had no `Write`/`Edit` guard at all — only its pre-existing
+  `Bash`-scoped destructive-ops guard. Added `claude/qa-engineer/hooks/guard-qa-doc-writes.sh`, a
+  second `PreToolUse` hook (frontmatter now carries two matcher entries under one `hooks:` block,
+  same pattern `security-expert` already uses) over the shared `claude/scripts/guard-doc-writes.sh`
+  core, allowlisting `docs/test-plans/*`/`docs/test-reports/*` (component-relative variants too,
+  each doubled for an absolute `file_path`). Deliberately uses the core's new `on_mismatch="pass"`
+  mode, **not** the default `ask`: qa-engineer's remit is its two doc kinds *plus* whatever
+  source/test files phase-3 execution needs, so a non-matching write (e.g. an authored test file)
+  falls through to the ambient permission flow exactly as before instead of newly escalating —
+  verified this is load-bearing via mutation test (temporarily dropped the `pass` arg, confirmed a
+  test-file write started wrongly escalating, then restored and reconfirmed silent pass-through).
+- **Why:** Requirements doc `claude/docs/requirements/agent-permission-friction.md` (FR-3,
+  instance 4): a manual confirmation was firing on `qa-engineer` writing its own versioned test
+  plan/report, squarely in-remit. Same root cause as cobb's FR-1 entry above/below (see design doc
+  `claude/docs/plans/agent-permission-friction.md` §1, `analyst`-reviewed, verdict approve) — an
+  explicit hook `"allow"` is the mechanism that actually suppresses the prompt.
+- **Plan items:** —
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_qa-engineer`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_qa-engineer` (FalkorDB, via `mcp__cypher__query`) instead of appending to

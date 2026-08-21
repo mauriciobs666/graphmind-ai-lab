@@ -33,33 +33,63 @@ approval every time) ·
 
 ## Hook machinery
 
-The five doc-scoped write guards (architect, analyst, data-scientist, teco, tico) are thin
-wrappers over one shared core, **`scripts/guard-doc-writes.sh`** — each wrapper passes its
-allowed-path globs and escalation message; the core does jq→python3 path extraction, fail-open,
-and the `permissionDecision: "ask"` escalation. The three destructive-ops guards (devops,
-graph-dba, qa-engineer) are likewise thin wrappers over **`scripts/guard-destructive-ops.sh`**
-(each passes its agent name; the core matches Bash command patterns — `GRAPH.DELETE`,
-`FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`, and (since 2026-08-08, C-311)
-`pipeline.sh ... --reset` — a wrapper invocation matched ad hoc because the script runs
-`GRAPH.DELETE` internally, where the literal string never reaches the guard — not write paths).
-Frontmatter wires every
-hook via `$HOME/.claude/agents/<name>/hooks/<script>.sh`, which resolves through the deployment
-symlink.
+**Three shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
+`hooks:` → `$HOME/.claude/agents/<name>/hooks/<script>.sh` (resolves through the deployment
+symlink):
 
-`security-expert` carries **two** `PreToolUse` hooks under one frontmatter `hooks:` block — a
-departure from the one-hook-per-agent pattern above. Its `Write|Edit` guard
-(`security-expert/hooks/guard-review-doc-writes.sh`) is a normal thin wrapper over the shared
-`guard-doc-writes.sh` core, scoped to `docs/reviews/*` only. Its `Bash` guard
+- **`scripts/guard-doc-writes.sh`** — an ALLOW-LIST core for a doc-scoped (or topic-scoped)
+  agent: escalate everything except a small set of paths that ARE the whole remit. Seven
+  `Write|Edit` wrappers sit on this core today: the original five doc-scoped agents (`architect`,
+  `analyst`, `data-scientist`, `teco`, `tico`), plus `security-expert`'s review guard, plus (since
+  2026-08-21, `agent-permission-friction` FR-1/FR-3) `cobb` (topic-bounded — any agent's own
+  definition file, kaizen curation for the team, and a small explicitly-maintained list of
+  MCP/agent-standards docs outside `claude/`/`skills/`, e.g. `cypher-mcp/README.md` — cuts across
+  folders rather than living in one, so its allowlist is a wider glob union than the others') and
+  `qa-engineer` (`docs/test-plans/*`, `docs/test-reports/*`). Each wrapper passes its allowed-path
+  globs (every `claude/`/`skills/`-rooted glob doubled — a bare form plus a `*/`-prefixed sibling
+  — because `tool_input.file_path` can arrive absolute, and a leading `*` is what lets the doubled
+  form absorb an arbitrary absolute prefix ahead of the literal directory), an escalation message,
+  and an optional third arg, `on_mismatch` (`ask`, the default — six of the seven wrappers use
+  this; or `pass`, used only by `qa-engineer`, whose remit is genuinely wider than its two doc
+  kinds — it also authors source/test files as part of execution, and those must fall through to
+  the ambient permission flow unmediated rather than newly escalate). On a match the core emits an
+  explicit `permissionDecision: "allow"` (added 2026-08-21 — previously a silent `exit 0`, which
+  left an in-remit write's fate to whatever ambient permission mode governed the session; see
+  `claude/docs/plans/agent-permission-friction.md` §1 for why that wasn't reliable). On a mismatch
+  (`on_mismatch="ask"`) it emits `permissionDecision: "ask"`, unchanged from before.
+- **`scripts/guard-broad-write.sh`** (new, 2026-08-21) — the DENY-LIST inverse: for an
+  implementer agent whose remit is genuinely "the whole codebase, this task" and has no single
+  folder/kind to allowlist. Allow everything except a small set of paths KNOWN to belong to a
+  *different* specialist's documented deliverable-path convention (every other agent's doc kind,
+  `claude/`/`skills/`-rooted agent-standards paths, and `docs/BACKLOG.md` — the last one
+  deliberately kept escalating rather than resolved either way, per
+  `agent-permission-friction.md`'s unresolved instance U1). One wrapper today:
+  `tdd-engineer/hooks/guard-tdd-broad-write.sh`.
+- **`scripts/guard-destructive-ops.sh`** — thin-wrapped by the three destructive-ops guards
+  (`devops`, `graph-dba`, `qa-engineer`; each passes its agent name; the core matches Bash command
+  patterns — `GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`, and (since
+  2026-08-08, C-311) `pipeline.sh ... --reset` — a wrapper invocation matched ad hoc because the
+  script runs `GRAPH.DELETE` internally, where the literal string never reaches the guard — not
+  write paths). Untouched by the 2026-08-21 friction-reduction work (`agent-permission-friction.md`
+  AC-5) — still `ask`-only, no allow branch.
+
+`security-expert`, `qa-engineer`, and (since 2026-08-21) every agent above carry either one or two
+`PreToolUse` hooks under one frontmatter `hooks:` block — one-hook-per-agent is the common case,
+not a hard rule. `security-expert`'s `Write|Edit` guard
+(`security-expert/hooks/guard-review-doc-writes.sh`) is a normal thin wrapper over
+`guard-doc-writes.sh`, scoped to `docs/reviews/*` only; its `Bash` guard
 (`security-expert/hooks/guard-exploitation-approval.sh`), enforcing FR-10's "active exploitation
 needs a fresh, explicit approval every time, local/dev targets only"
-(`docs/requirements/security-expert.md`), is deliberately **not** layered on the shared
-`guard-destructive-ops.sh` core — that core's catalog is shared-state-destruction literals
+(`docs/requirements/security-expert.md`), is deliberately **not** layered on
+`guard-destructive-ops.sh` — that core's catalog is shared-state-destruction literals
 (`GRAPH.DELETE`, `FLUSHALL`, volume wipes), a different hazard class from the offensive-tool/
 network-exploitation patterns this guard matches (named tools like `sqlmap`/`nmap`/`msfconsole`,
 listener setups, or a network-reaching command with no visible local/dev marker). It's a
 standalone, agent-owned script with the same mechanics/contract as the shared cores (fail-open,
 `ask`-only, jq→python3 extraction) — extract it into a shared core only if a second
-exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003).
+exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003). `qa-engineer`
+is the second two-hook agent (since 2026-08-21): its pre-existing `Bash` destructive-ops guard is
+unchanged, alongside the new `Write|Edit` doc-write guard above.
 
 **Git-commit authority is prompt-level, not hook-enforced.** Only `tico` and `teco` document
 `git add`/`git commit` authority — `tico` for its own doc kinds (requirements, manuals; mirrors

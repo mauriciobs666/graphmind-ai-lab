@@ -2,6 +2,39 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-21 — Added a topic-bounded `Write|Edit` guard (agent-permission-friction FR-1)
+
+- **What:** `cobb` previously had no custom write guard at all (unrestricted `Write`/`Edit`,
+  frontmatter `permissionMode: acceptEdits` only). Added
+  `claude/cobb/hooks/guard-cobb-topic-writes.sh` — a new thin wrapper over the shared
+  `claude/scripts/guard-doc-writes.sh` core, wired via a new frontmatter `hooks:` block — plus a
+  core-script change (that core now emits an explicit `permissionDecision:"allow"` on a glob
+  match, instead of a silent `exit 0`, and gained an optional `on_mismatch` `ask|pass` 3rd arg;
+  the six pre-existing callers are unaffected, verified byte-identical `ask`-branch behavior).
+  Cobb's allowlist is **topic-bounded, not folder-bounded** — any agent's own definition file
+  (`claude/*/*.md`), kaizen curation for any agent (`claude/*/kaizen/{history,plan}.md`), the
+  team catalog/context files (`claude/README.md`/`AGENTS.md`/`CLAUDE.md`), cobb's own skill
+  packages (`skills/agent-{maintenance,standards}/*`, `skills/README.md`), and a small,
+  explicitly maintained list of MCP/agent-standards docs living outside `claude/`/`skills/`
+  (seeded with `cypher-mcp/README.md`) — every `claude/`/`skills/`-rooted entry doubled (a bare
+  form plus a `*/`-prefixed sibling) so it matches whether `tool_input.file_path` arrives
+  repo-relative or absolute. `docs/BACKLOG.md` and anything else genuinely outside that topic
+  still escalates.
+- **Why:** Requirements doc `claude/docs/requirements/agent-permission-friction.md` (FR-1,
+  instances 1-3,5,6,9, counter-example C2): the stakeholder was hitting a manual confirmation
+  prompt on cobb's own routine, in-remit work (editing other agents' definition files, kaizen
+  curation, MCP-standards docs) despite `acceptEdits` since 2026-07-24. Root cause (design doc
+  `claude/docs/plans/agent-permission-friction.md` §1, `analyst`-reviewed, verdict approve):
+  frontmatter `permissionMode` is a Task-tool-subagent-scoped setting, silently ignored/overridden
+  by the parent session's mode in documented cases (including auto mode, the Pro/Max/Team
+  default) — an explicit hook `"allow"` is the one mechanism confirmed to suppress the prompt
+  regardless of ambient mode. Mutation-tested (deliberately broke the match branch, confirmed the
+  guard correctly fell back to `"ask"` on a previously-allowed path, then restored and reconfirmed
+  `"allow"`) and regression-checked against the six pre-existing `guard-doc-writes.sh` callers
+  (`architect`, `analyst`, `data-scientist`, `teco`, `tico`, `security-expert`'s review guard —
+  all byte-identical `ask`-branch text, only their match branch changed to explicit `allow`).
+- **Plan items:** —
+
 ## 2026-08-20 — Designed and created the `security-expert` agent (K-016)
 
 - **What:** Closed `kaizen/plan.md` **K-016** — designed the new `security-expert` agent from

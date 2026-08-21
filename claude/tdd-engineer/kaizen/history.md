@@ -2,6 +2,33 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-21 — Added a broad-implementer `Write|Edit` deny-list guard (agent-permission-friction FR-2)
+
+- **What:** `tdd-engineer` previously had no `Write`/`Edit` guard at all. Added
+  `claude/tdd-engineer/hooks/guard-tdd-broad-write.sh`, wired via a new frontmatter `hooks:`
+  block, over a **new** shared core, `claude/scripts/guard-broad-write.sh` — the inverse shape
+  from `guard-doc-writes.sh`: a deny-list (allow by default, escalate only on a match) rather than
+  an allow-list, because tdd-engineer's remit is genuinely "the whole codebase, this task," not
+  one doc kind. The deny-list covers every other specialist's documented deliverable-path
+  convention (`docs/plans/*`, `docs/reviews/*`, `docs/requirements/*`, `docs/manuals/*`,
+  `docs/test-plans/*`, `docs/test-reports/*`, agent definitions/kaizen under `claude/*`, the team
+  catalog files, cobb's skill packages, `cypher-mcp/README.md`) plus `docs/BACKLOG.md` — kept in
+  the deny-list deliberately so a tdd-engineer → `BACKLOG.md` write keeps escalating exactly as
+  today, per the requirements doc's unresolved instance U1 (not decided either way by this
+  change). Every entry doubled (bare + `*/`-prefixed) for an absolute `file_path`.
+  Mutation-tested (temporarily dropped the `docs/BACKLOG.md` entries, confirmed the guard
+  wrongly fell back to `allow` on that path, then restored and reconfirmed `ask`).
+- **Why:** Requirements doc `claude/docs/requirements/agent-permission-friction.md` (FR-2 general,
+  instances 7-8, AC-3's named tdd-engineer example): a manual confirmation was firing on ordinary
+  in-remit test/source-file edits despite `acceptEdits` since 2026-07-24. Root cause (design doc
+  `claude/docs/plans/agent-permission-friction.md` §1, `analyst`-reviewed across two passes,
+  verdict approve): frontmatter `permissionMode` is silently ignored/overridden by the parent
+  session's mode in documented cases; an explicit hook `"allow"` is the mechanism that actually
+  suppresses the prompt regardless of ambient mode. `frontend-engineer`/`devops`/`graph-dba` are
+  designed-for the same treatment but deliberately not touched this round (zero live evidence);
+  `coder`'s friction and instance U1 stay explicitly out of scope, per the requirements doc.
+- **Plan items:** —
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_tdd-engineer`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_tdd-engineer` (FalkorDB, via `mcp__cypher__query`) instead of appending
