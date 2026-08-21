@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-16
+> Last reviewed: 2026-08-21
 
 ## Active
 

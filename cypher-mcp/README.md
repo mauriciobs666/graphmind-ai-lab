@@ -173,6 +173,14 @@ reason):
    )
    ```
 
+> **Transcribing an embedded newline into a `CREATE` literal needs the single-backslash `\n`
+> form, not a literal `\\n` two-character escape** — FalkorDB Cypher string literals distinguish
+> the two, and getting it wrong silently produces a byte-different string, not an error. This bit
+> three independent agents migrating free-text kaizen entries into `kaizen_team` in one rollout
+> (2026-08-20); all three were caught only because the migration briefs mandated a post-write
+> `size()`-based byte-exact verification step, not by inspection — verify any multi-line string
+> write against `size()`/a direct re-read, not a visual read of the truncated-for-display result.
+
 A write with no `agent` supplied, an author mismatch, a non-curator attempting the clear shape, or
 any Cypher that isn't one of the two shapes above, is rejected with a curated message **before**
 `GRAPH.QUERY` is ever called — nothing is written on a rejected call. This is enforced at the

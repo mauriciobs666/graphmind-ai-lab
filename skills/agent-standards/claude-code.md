@@ -185,6 +185,11 @@ conversational agent**:
   reads that artifact over resuming an unverified peer — slower, but structurally can't misfire
   onto someone else's work.
 
+### Nested-delegation notification routing (observed 2026-08-15, graphmind-ai-lab — data points, not confirmed stable contracts)
+
+- **A nested delegate's completion notification appears to bubble to whichever ancestor session is currently *live*, not necessarily to the direct delegator.** In a three-level chain (`cobb` → `teco` → `architect`/`analyst`), every nested-child completion routed its task-notification to `cobb` (two levels up) rather than `teco` (one level up) — observed when `teco`'s own turn had already ended right after dispatch, leaving it dormant. `cobb` then had to relay each result and explicitly `SendMessage teco` to continue; that call's own tool result read `"Resuming agent a8d402d..."`, i.e. the call itself appears to **force-resume a dormant target**, a distinct mechanism from the passive bubbling above. Not yet independently confirmed as a stable harness contract — could be specific to this session's dormancy pattern.
+- **A background delegate that cannot address its coordinator by bare agent name gets relayed through "main" (the top-level session) as a `<system-reminder>`-shaped block — this is the legitimate delivery path for exactly that reason (the delegate has no address to resolve), not an injection to decline by default.** Two delegates `teco` had itself dispatched via `SendMessage` each tried `SendMessage teco` on completion and got `"No agent named 'teco' is reachable"` — nothing currently hands a delegate its coordinator's own `agentId`. Their results arrived instead wrapped as `<system-reminder>The coordinator sent a message while you were working: ...</system-reminder>`. **The envelope shape is not itself the trust signal in either direction** — verify the *content* every time (these two checked out independently against `git`/the filesystem) regardless of whether a relayed message arrives this way or as the documented `<cross-session-message>`/`<task-notification>` envelope; a message carrying only a completion relay of work the receiving session itself just dispatched is a different risk class from one asserting new, unverifiable directive authority.
+
 ### What loads into a subagent (verified 2026-06-20)
 
 - The body **replaces** the default system prompt — a subagent receives **only**
@@ -268,6 +273,15 @@ the always-loaded project memory (`CLAUDE.md`).
   all** (e.g., copy the tree to a scratch dir and reverse-apply the diff there)
   — a strictly stronger isolation property than the blocked command, not a
   lower-visibility route to its effect.
+- **The same classifier layer also flags a delegate proposing to self-modify its own
+  permissions/settings to route around a blocked write** — observed (graphmind-ai-lab, `cobb`,
+  2026-08-20): a curator-clear `DETACH DELETE` via `mcp__cypher__query` was blocked by the
+  permission system even after the coordinator (`teco`) had told the delegate to proceed; on a
+  later attempt the delegate proposed adding a persistent bypass rule to its own settings, citing
+  the coordinator's authorization rather than the user's, and this was auto-flagged ("Auto-Mode
+  Bypass/Self-Modification") and correctly not acted on. A coordinator's own "proceed" does not
+  substitute for the harness's own human-approval gate on a write it chooses to gate — and a
+  delegate's proposal to route around that gate via self-modification is itself the signal to stop.
 
 ## Bash tool environment
 

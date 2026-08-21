@@ -2,6 +2,79 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — Distilled all 9 pending raw-capture entries from `kaizen_team` (`cobb`, §5 pass)
+
+- **What:** `cobb` ran the full agent-maintenance §5 distillation against every `kaizen_team`
+  node with `author:'teco'` — the raw capture written since the 2026-08-20 team-wide graph
+  migration (teco's `kaizen/inbox.md` itself stays a frozen, already-imported snapshot; this is
+  the *new* capture that accrued in the graph afterward). All 9 verified, dispositioned, and
+  cleared from the graph in this pass; none discarded outright.
+  1. **`7994edd7…` (2026-08-15, nested notification bubbles to the live ancestor; `SendMessage`
+     force-resumes a dormant target) → promoted** to
+     `skills/agent-standards/claude-code.md`, new "Nested-delegation notification routing"
+     subsection, explicitly dated/caveated as a live observation, not a confirmed stable
+     contract — matches the entry's own `suggestedHome: unsure`.
+  2. **`e40a95fe…` (2026-08-15, a delegate that can't address teco by name is relayed through
+     "main" as a `<system-reminder>` block — legitimate, not an injection) → promoted**, same
+     new subsection, paired with entry 1 (same K-026 incident).
+  3. **`a77a32a3…` (2026-08-16, parallel dispatches sharing a live shared-DB fixture
+     cross-contaminated despite disjoint files) → promoted** into `teco.md` §3 "Dispatch,"
+     sharpening the existing same-file/shared-key serialization rule to cover concurrent
+     live-suite exercise, not only destructive overlap.
+  4. **`f7070b80…` (2026-08-17, a `completed` notification's `<result>` can be a stale
+     mid-task placeholder from a delegate's own unfinished background step) → promoted**
+     into `teco.md` §4 "Track what's in flight," new bullet after "Never state or predict a
+     pending delegate's result."
+  5. **`9ec17ba5…` (2026-08-18, a clean QA PASS on a brand-new mechanism isn't full
+     state-space coverage) → promoted** into `teco.md` Guardrails, new bullet next to the
+     review-gate guardrail.
+  6. **`f1a2b3c4…` (2026-08-20, a coordinator's "proceed" ≠ real user approval on a
+     harness-gated write; never relay a delegate's self-modify-permissions proposal) →
+     promoted**, split across two homes: `teco.md` Guardrails (the operative rule for teco's
+     own coordination authority) and `skills/agent-standards/claude-code.md` Hooks section (the
+     underlying harness-classifier fact, a sibling to the existing auto-mode Bash-classifier
+     bullet).
+  7. **`a2b3c4d5…` (2026-08-20, `guard-destructive-ops.sh` didn't fire for a live
+     `GRAPH.DELETE` run inside a nested subagent's Bash context) → kept open, not promoted
+     to teco.md.** This is a hook-wiring question the entry itself flagged for `cobb` to
+     triage, not a teco-side behavior gap. `cobb` re-fetched `code.claude.com/docs/en/hooks`
+     (2026-08-21): hooks are documented to fire identically for a subagent whether run as the
+     main session agent or a nested delegate, no exception noted — so the observed gap isn't
+     explained by any documented behavior. Filed as `K-018` in `claude/cobb/kaizen/plan.md`
+     (high priority), with the leading hypothesis that it's actually explained by entry 9
+     below (a `subagent_type`-omitted dispatch silently running as `general-purpose`, with no
+     `graph-dba` hooks at all) — not confirmed from the coordination doc alone, needs a live
+     re-check on a future `graph-dba` dispatch. Node cleared from the graph regardless per §5's
+     "kept open" disposition — the durable record is this note plus `K-018`, not a lingering
+     graph node.
+  8. **`b3c4d5e6…` (2026-08-20, `mcp__cypher__query` table rendering truncates a cell at
+     ~300 chars; FalkorDB Cypher distinguishes `\n` from `\\n` in string literals) → partially
+     promoted.** The truncation half was **already fully documented** in
+     `cypher-mcp/README.md` ("Result format and truncation" — `CYPHER_MCP_MAX_CELL`/
+     `CYPHER_MCP_MAX_CHARS`), confirmed by `cobb` re-deriving the exact same 300-char cap
+     firsthand while reading these very entries out of the graph, independent of the entry's
+     own claim — discarded as a duplicate. The `\n`/`\\n` escaping half was genuinely
+     undocumented — promoted to the same README, "Writing through this tool" section.
+  9. **`b1e3a1f0…` (2026-08-21, `Agent` silently defaults to `subagent_type: general-purpose`
+     when omitted — no error, no hooks/persona/tools for the named agent) → promoted**, high
+     priority, into `teco.md` Guardrails as a new bullet next to the existing
+     narrower-than-frontmatter runtime-tool-set warning — same "don't trust the frontmatter/the
+     brief alone" family. Cross-referenced by entry 7's `K-018` as the likely (unconfirmed)
+     root cause of that separate incident.
+- **Why:** user asked to "work on teco's inbox" — the file `kaizen/inbox.md` is itself a frozen,
+  already-distilled 2026-08-20 snapshot, so the live equivalent is teco's pending raw capture in
+  the shared `kaizen_team` graph; first distillation pass against it since the migration.
+- **Verified:** every entry's full field text was read via `size()` + multi-column `substring()`
+  paging (the harness's own per-cell display truncates at ~300 chars) before any disposition
+  decision, not acted on from a truncated partial read; the one live-checkable external claim
+  (hook parity for nested subagents, entry 7) was re-checked against current official docs rather
+  than taken on the entry's own framing.
+- **Plan items:** none opened in `teco/kaizen/plan.md` itself (K-018 opened in `cobb`'s own
+  plan.md instead, per its "flagged for cobb" suggested home).
+- **Docs touched:** `claude/teco/teco.md`, `claude/teco/kaizen/history.md` (this entry),
+  `skills/agent-standards/claude-code.md`, `cypher-mcp/README.md`, `claude/cobb/kaizen/
+  {plan,history}.md` (cross-artifact bookkeeping, logged from `cobb`'s side).
+
 ## 2026-08-20 — Learnings capture migrated to a working-memory graph (`kaizen_teco`), mirroring `graph-dba`
 - **What:** The "Learning capture" closing-protocol section now writes a `:KaizenEntry` node
   directly into `kaizen_teco` (FalkorDB, via `mcp__cypher__query`) instead of appending to

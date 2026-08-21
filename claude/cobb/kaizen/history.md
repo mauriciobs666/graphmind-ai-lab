@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-21 — Distilled all 9 pending `teco`-authored entries from `kaizen_team`
+
+- **What:** Ran the agent-maintenance skill §5 procedure against every `kaizen_team` node with
+  `author:'teco'` (9 entries, dated 2026-08-15 through 2026-08-21 — teco's own raw capture since
+  the 2026-08-20 team-wide graph migration). Full dispositions, verification notes, and the exact
+  promoted text live in `claude/teco/kaizen/history.md`'s matching 2026-08-21 entry — this entry
+  covers only the cross-artifact bookkeeping that isn't teco's to log.
+  - **Promoted to `claude/teco/teco.md`** (5 entries): shared-DB-state dispatch serialization
+    (sharpened the existing line), `subagent_type` must always be explicit on `Agent` calls
+    (blocker-severity — silently degrades to `general-purpose`, no hooks/persona/tools), a
+    `completed` notification's `<result>` can be a stale mid-task placeholder, a clean QA pass on
+    a brand-new mechanism isn't full state-space coverage, and a coordinator's "proceed" never
+    substitutes for real user approval on a harness-gated write (paired with a hard "never relay
+    a delegate's self-modify-permissions proposal" line).
+  - **Promoted to `skills/agent-standards/claude-code.md`** (3 entries): a new "Nested-delegation
+    notification routing" subsection (dormant-ancestor bubbling + force-resume; the
+    `<system-reminder>`-relay delivery path for an unaddressable delegate — both explicitly
+    dated/caveated as live observations, not confirmed stable contracts) under Subagents, and one
+    new bullet under Hooks' existing auto-mode-classifier note (the classifier also flags a
+    delegate proposing to self-modify its own permissions).
+  - **Promoted to `cypher-mcp/README.md`** (partial, 1 entry): the `\n` vs `\\n` string-literal
+    escaping trap, added to "Writing through this tool." The same entry's other claim — per-cell
+    truncation at ~300 chars — turned out **already fully documented**
+    (`CYPHER_MCP_MAX_CELL`/`CYPHER_MCP_MAX_CHARS` in "Result format and truncation"), confirmed by
+    direct re-derivation: I hit the exact same 300-char truncation reading these very entries out
+    of the graph this session, before ever reading the README section that already named it.
+    Discarded that half as a duplicate; promoted only the escaping half, which the README did not
+    cover.
+  - **Kept open — filed `K-018`** (this file's `plan.md`, high priority): the
+    `guard-destructive-ops.sh`-didn't-fire-for-a-nested-subagent's-`GRAPH.DELETE` entry. Re-fetched
+    `code.claude.com/docs/en/hooks` (2026-08-21) — official docs state hooks fire identically for a
+    subagent whether run as the main session agent or a nested delegate, no documented exception —
+    so the observed gap contradicts the doc rather than being explained by it. Leading hypothesis
+    (not confirmed): the same dispatch likely omitted `subagent_type`, which — per the *other*
+    surviving entry from this same batch (`b1e3a1f0…`, now in `teco.md`) — silently runs the
+    delegate as `general-purpose`, which would carry no `graph-dba` frontmatter `hooks:` at all.
+    Couldn't confirm from the coordination doc alone (`ab3504712c7912872` is a real agentId either
+    way); needs a live re-check on the next `graph-dba` dispatch with `subagent_type` confirmed
+    correct before this can close.
+  - **Discard:** none outright — every surviving entry (all 9) either promoted somewhere or opened
+    K-018.
+- **Verification method:** the harness's own per-cell display truncates any single returned graph
+  field at ~300 chars (`…(+N chars)`) — re-derived exactly, not assumed, via `size()` queries plus
+  multi-column `substring()` paging per entry before reading any of them, so no entry was acted on
+  from a truncated partial read. Re-fetched the one live-checkable external claim (hook parity for
+  nested subagents) against current official docs rather than trusting the entry's own framing.
+- **Why:** user asked to "work on teco's inbox" — teco's `kaizen/inbox.md` is a frozen
+  2026-08-20 historical snapshot (already imported and cleared), so the live equivalent is its
+  pending raw capture in the shared `kaizen_team` graph; this was the first full distillation pass
+  against it since the migration.
+- **Docs touched this pass (cross-artifact bookkeeping only — see `teco/kaizen/history.md` for the
+  full per-entry disposition table):** `claude/cobb/kaizen/{plan,history}.md` (this file + K-018),
+  `skills/agent-standards/claude-code.md`, `cypher-mcp/README.md`.
+
 ## 2026-08-21 — Added a topic-bounded `Write|Edit` guard (agent-permission-friction FR-1)
 
 - **What:** `cobb` previously had no custom write guard at all (unrestricted `Write`/`Edit`,
