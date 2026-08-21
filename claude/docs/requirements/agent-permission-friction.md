@@ -92,11 +92,28 @@ kept as their own line items because each has concrete, confirmed evidence behin
    approved. → broadens FR-1: the friction isn't confined to `<name>/<name>.md` edits, it's any
    routine `cobb` edit across its documented remit (agent/skill files, MCP/agent-standards
    documentation wherever it lives, kaizen curation for the team).
-7. **2026-08-20 — `tdd-engineer`, `Edit` on `server/tests/test_guards.py`.** Squarely its own
-   core job (writing/editing tests); no custom guard applies to `tdd-engineer` at all. Confirmed
-   legitimate (per the "only sharing approved cases" rule). → third distinct agent hitting the
-   identical mechanism-3 friction on its own core work — `cobb` (team maintenance), `qa-engineer`
-   (test plans), `tdd-engineer` (test code) — reinforces FR-2 as a genuine team-wide pattern.
+7. **2026-08-20 — `tdd-engineer`, `Edit` on `server/tests/test_guards.py`, recurring.** Squarely
+   its own core job (writing/editing tests); no custom guard applies to `tdd-engineer` at all.
+   Confirmed legitimate (per the "only sharing approved cases" rule). The *same* file was edited
+   again moments later — consistent with a red→green→refactor TDD cycle hitting one test file
+   repeatedly. → third distinct agent hitting the identical mechanism-3 friction on its own core
+   work (`cobb`: team maintenance, `qa-engineer`: test plans, `tdd-engineer`: test code) — and
+   shows the cost compounds *per edit*, not per task: a single legitimate TDD cycle can trigger
+   several separate confirmations against the same file.
+8. **2026-08-20 — `tdd-engineer`, `Edit` on `server/falkorchat/guards.py`.** Source/implementation
+   code this time, not a test file — but still core TDD work (red→green: writing the simplest
+   code to make a failing test pass). Confirmed legitimate. → broadens the evidence past
+   docs/test-file edits: FR-2's "in-remit work shouldn't need confirmation" applies equally to an
+   implementer agent editing actual source code as part of its sanctioned task, not just to
+   doc-authoring agents.
+9. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py` — NOT
+   friction, the guard working correctly.** `data-scientist` is advisory-only ("never implements"),
+   and its write guard only allows `docs/plans/*`/`docs/reviews/*` — a `tests/eval/` script is
+   genuinely outside that. Stakeholder, on reflection: "this one is not his role." Kept in this
+   document as a **counter-example**, not FR-2 evidence: it validates AC-4 (escalation must stay
+   for genuinely out-of-remit work) and shows the distinction this feature draws — in-remit
+   friction goes away, a real drift still gets caught — is a real, live distinction, not just a
+   theoretical carve-out.
 
 ## Out of scope
 - **The destructive-ops guards** (`devops`, `graph-dba`, `qa-engineer`'s Bash-pattern guard over
@@ -161,5 +178,11 @@ kept as their own line items because each has concrete, confirmed evidence behin
 - 2026-08-20 — Asked whether the fix should be team-wide or agent-by-agent → Stakeholder: "cobb
   can edit anything on the agents" (settles FR-1: no path restriction for `cobb`) → then "applies
   to all legitimate cases" (settles FR-2: team-wide default, not agent-by-agent).
-- 2026-08-20 — Instance 7 (`tdd-engineer` → `server/tests/test_guards.py`) relayed under the
-  approved-cases rule; third distinct agent confirming the team-wide pattern.
+- 2026-08-20 — Instance 7 (`tdd-engineer` → `server/tests/test_guards.py`, recurring) and instance
+  8 (`tdd-engineer` → `server/falkorchat/guards.py`, source code) relayed; broadened FR-2 to
+  source-code edits and to per-edit (not per-task) friction cost.
+- 2026-08-20 — Instance 9 (`data-scientist` → `tests/eval/probe_ministral_judge.py`) flagged by
+  `tico` as a likely-genuine guard hit rather than friction, since it falls outside
+  `data-scientist`'s "never implements" contract and its write-guard allowlist. Stakeholder agreed
+  on reflection: "this one is not his role" → kept as a counter-example (AC-4), not folded into
+  FR-2/FR-3 evidence.
