@@ -1,5 +1,5 @@
 # Agent permission-escalation friction — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-21
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-21
 
 ## Intent
 Reduce permission-escalation prompts that fire on legitimate, safe agent actions, without
