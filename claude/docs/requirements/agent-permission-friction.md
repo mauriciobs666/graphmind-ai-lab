@@ -56,9 +56,10 @@ kept as their own line items because each has concrete, confirmed evidence behin
   escalated for approval — this requirement narrows *when* confirmation fires, it does not remove
   the safety net for a genuine accidental drift.
 - **FR-1 (instance of FR-2):** `cobb` specifically gets no path restriction at all — "cobb can edit
-  anything on the agents" (stakeholder, 2026-08-20). Unlike every other agent, cobb's whole job is
+  anything on the agents" (stakeholder, 2026-08-20), confirmed to include `cobb`'s own file
+  (instance 10) as well as every other agent's. Unlike every other agent, cobb's whole job is
   touching other agents'/the team's files, so there's no meaningful "in vs. out of remit" line to
-  draw for it. Evidenced by instances 1–3, 5, 6 below.
+  draw for it. Evidenced by instances 1–3, 5, 6, 10 below.
 - **FR-3 (instance of FR-2):** `qa-engineer` writing to its own stated deliverable paths
   (`docs/test-plans/`, `docs/test-reports/`) must not require a manual per-write confirmation.
   Evidenced by instance 4 below.
@@ -81,6 +82,8 @@ kept as their own line items because each has concrete, confirmed evidence behin
    restricts `qa-engineer`'s `Write`/`Edit` paths (its guard is destructive-ops-only, Bash-scoped).
    Confirmed legitimate. → same mechanism-3 friction as the `cobb` instances, on a different agent:
    the "confirm before Edit/Write" default isn't cobb-specific, it's team-wide except `coder`.
+   (Confirmed again shortly after on the other half of its deliverable pair — `Create` on
+   `docs/test-reports/generic-cypher-mcp2-report.md` — matching AC-2 exactly.)
 5. **2026-08-20 — `cobb`, `Edit` on `claude/graph-dba/kaizen/history.md`.** Directly resolves the
    original kaizen-file thread (Open questions 1–2, below): `cobb` — not the individual doc-scoped
    agent — is the one editing `kaizen/history.md`/`plan.md`, per the documented "curated by cobb"
@@ -105,7 +108,8 @@ kept as their own line items because each has concrete, confirmed evidence behin
    code to make a failing test pass). Confirmed legitimate. → broadens the evidence past
    docs/test-file edits: FR-2's "in-remit work shouldn't need confirmation" applies equally to an
    implementer agent editing actual source code as part of its sanctioned task, not just to
-   doc-authoring agents.
+   doc-authoring agents. (Edited again shortly after — same red→green→refactor compounding-cost
+   pattern as instance 7, now on a source file rather than a test file.)
 9. **2026-08-20 — `data-scientist`, `Create` on `tests/eval/probe_ministral_judge.py` — NOT
    friction, the guard working correctly.** `data-scientist` is advisory-only ("never implements"),
    and its write guard only allows `docs/plans/*`/`docs/reviews/*` — a `tests/eval/` script is
@@ -114,6 +118,9 @@ kept as their own line items because each has concrete, confirmed evidence behin
    for genuinely out-of-remit work) and shows the distinction this feature draws — in-remit
    friction goes away, a real drift still gets caught — is a real, live distinction, not just a
    theoretical carve-out.
+10. **2026-08-20 — `cobb`, `Edit` on `claude/cobb/cobb.md` (its own file).** Confirms FR-1's
+    "anything on the agents" extends to `cobb` editing itself, not just other agents — closes a
+    reading ambiguity in the earlier phrasing.
 
 ## Out of scope
 - **The destructive-ops guards** (`devops`, `graph-dba`, `qa-engineer`'s Bash-pattern guard over
