@@ -315,7 +315,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   `docs/test-reports/`); isolated `ws:qa` (create + delete), `reference`/`ws:acme` additive-only.
 - **Done-condition:** PASS (or PASS-with-parked-defects) on green baselines ⇒ **M3 ✅**.
 
-### K-027 — Live triage reliability + carried gate findings (🟡 in-progress — the D12-B descope from K-022 Landing 2)
+### K-027 — Live triage reliability + carried gate findings (🟡 in-progress — the D12-B descope from K-022 Landing 2; **only item 4 remains open**, and it is itself blocked on a user decision — who labels the golden-set boundary tier — see `docs/plans/golden-set-expansion-ml.md` §10, not yet resolved. Items 1–3, item 5, and all six carried findings are ✅ delivered.)
 
 > **Numbering note:** the coordination log calls these "**K-023 follow-ups**", but K-023 is already
 > taken (workflow ↔ chat linkage, now ✅). They are collected here as **K-027**, the next free number.
@@ -431,13 +431,36 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
      unless this item consumes it. A real FAR ≤ 10% bound needs ~30 suspend cases at zero failures
      (≈50–60 total), and **all current labels are one labeler's** — expansion should add a second
      labeler for the boundary tier or it buys precision without independence.
-  5. **Ministral re-probe (D13 finding 2)** — Ministral-3B is *better* at the terminal tool call
-     (native `post_message` 3/3 in replay where Qwen emitted prose 3/3) but far worse at judging
-     (fence-fixed advance-recall 0.364 vs Qwen 0.818). Worth re-probing **only if** the judge is made
-     model-robust (item 1) — **that precondition is now met (slice A, 2026-07-24), so this is
-     unblocked**; the re-probe should run against the widened parse layer, not the old one. Notes:
-     `docs/archive/plans/m3-capability-probe-ml.md`,
-     `docs/plans/local-model-ram-budget-ml.md` (the ~4–5GB fits-16GB chat-model budget).
+  5. ✅ **Ministral re-probe (D13 finding 2)** (**delivered 2026-08-20** — see
+     [`HISTORY.md`](./HISTORY.md)) — re-probed against current code, post item 1's parse fix and
+     post item 2's engine contract, using the same reviewed harness/protocol as item 3 rather than a
+     new one. **Judge calibration: block.** Real `guards.evaluate_guard` run (not a bypass) via the
+     workspace-override hard cap, same fixture/gates/k=3 design as item 3 —
+     `server/tests/eval/golden_guards.jsonl` (26 cases × k=3 = 78 real calls). **G1 false-advance =
+     0.0%** (pass, ≤10% gate) but **G2 advance-recall = 45.5%** (5/11 cases, fails the ≥80% gate);
+     κ=0.442, diagnostic only. An improvement over D13's fence-tolerant re-parse (0.364) — the item-1
+     parse fix genuinely helped — but nowhere near Qwen's 0.818; the underlying reasoning-quality gap
+     (over-suspending on clear-advance cases) is a parser fix cannot close, exactly as D13 predicted.
+     **Terminal tool call: Ministral remains the better native caller** — 5/5 draws called
+     `post_message` cleanly in an isolated schema replay (reconfirms D13's 3/3); a same-session Qwen
+     replay on the identical current prompt/schema scored 0/5. **But this is moot in practice**: the
+     already-shipped K-039 implicit-`post_message`-dispatch fallback (2026-07-31) already compensates
+     for Qwen's native weakness at the engine level for AC-4 purposes, so the axis D13 measured no
+     longer decides the practical outcome. **New finding, more consequential than either number:**
+     `executor._assemble_messages`'s unconditionally-appended trailing `user`-role `CONTEXT` block
+     produces two consecutive `user`-role messages on the very first `intake` call (and structurally
+     again for `research`/`answer`) — live-verified **structurally incompatible** with Ministral's
+     LM-Studio-served chat template (hard `HTTP 400`, "conversation roles must alternate..."), while
+     Qwen's template silently tolerates the identical shape. `executor._drive`'s fault net turns the
+     crash into an unhandled `fail_run` on the run's very first LLM call — Ministral cannot be
+     evaluated end-to-end under the current code at all, independent of any capability question.
+     Filed separately as **K-048** (model-agnostic message-assembly defect, not specific to this
+     decision). **Verdict: do not wire Ministral for either kind under the current codebase** — does
+     **not** change D13's practical relevance: Qwen remains the right call, though for a different
+     reason than D13 measured (K-039 neutralizes its tool-calling weakness; Ministral's template
+     introduces a new, more severe failure mode Qwen doesn't have). Method note:
+     `docs/plans/ministral-reprobe-ml.md`. Review (`analyst`, **approve**, 0 blocker/major):
+     `docs/reviews/ministral-reprobe.md`.
   6. **Exit** — these outcomes are what would let the **K-025 / U15 acceptance** move AC-2b/AC-3/AC-4
      from *model-gated, structurally demonstrated* to *verified*. K-025 can run before this item; it
      just cannot claim more than D12-B allows.
@@ -498,35 +521,70 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   against (D12-B); this note is now historical context, not current state.
 - **Carried findings from the analyst gate** (`docs/archive/reviews/m3-guard-thread-context-impl.md`, minors +
   nits — recorded here so they cannot rot):
-  - **m-1 · `guards.py` negator window leaks across clause boundaries.** The 12-char window misses
-    e.g. `"The user did not say; more info is needed."`, and a missed contradiction is a
-    **false advance** — the *dangerous* direction under DS Q1, and the **opposite** of what the code
-    comment claims ("erring narrow keeps the failure on the safe over-suspend side"). Stakes are
-    limited (the backstop only fires on an already-inconsistent verdict; the prompt rule is the primary
-    defense). **At minimum, fix the comment;** the real fix is a same-clause requirement plus pinning
-    the three missed rationales in `SUSPENDING_RATIONALES` (only the safe direction is pinned today).
-  - **m-2 · `guards._recent_turns` slices before filtering** (`thread[-n:]` then skips malformed/empty
-    rows), so malformed rows shrink the evidence window exactly when the judge is on its degraded tier.
-    Fix = filter first, slice second.
-  - **m-3 · the judge's evidence tier is invisible in the trace** — `_select_transition` traces
-    `(transition, guard_text, verdict)` only, so nothing records whether a judgment ran on
-    `understanding` (primary) or `recent_turns` (fallback). Calibration (item 3) needs results
-    **stratified by tier**. Fix = return the tier on `GuardVerdict` and fold it into the
-    `guard_judgment` payload — additive, no graph change.
-  - **n-1 ·** function-local `import json as _json` in `app._render_judge_user` / `_build_llm_judge`;
-    every other module imports it at the top. **n-2 ·** the judge-prompt cap loop re-joins the whole
-    message on each eviction — **O(n²)** in turn count (irrelevant at N=6, but a test drives it with 50).
-  - **Doc-drift · the `_drive_loop` byte-identity lock is quoted as SHA `71055f756280` + 2844 bytes.**
-    The **SHA is correct and reproducible; the byte count is wrong** (the extraction yielding that hash
-    is 2860 bytes; a third figure, 2839, appears in an earlier coordination entry). A future gate
-    verifying the lock by byte count would wrongly report it broken. Correct the figure wherever the
-    lock is quoted — or drop the byte count and verify by SHA only, with the line-number-independent
-    extraction now documented at the lock site (`DESIGN.md` §6.2): `awk` bounded by the `def _drive_loop`
-    / seam-comment markers, not a `sed` line range (which breaks on any unrelated line shift elsewhere
-    in the file).
+  - **m-1 · `guards.py` negator window leaks across clause boundaries — ✅ delivered 2026-08-20
+    (`tdd-engineer`).** The 12-char window missed e.g. `"The user did not say; more info is
+    needed."` — confirmed a **false advance** (the *dangerous* direction under DS Q1): the stray
+    `"not "` from the earlier clause fell inside the window and was read as negating the
+    `"more info"` cue in the later clause, so `_rationale_contradicts` returned `False` and the
+    verdict stayed `True` (wrongly advanced). Fix: `_is_negated` now truncates its window at the
+    last `;`/`.`/`,` before the cue, so a negator never reaches across a clause boundary; the code
+    comment (`_NEGATOR_WINDOW`) is corrected to state the true failure direction. The three missed
+    rationales from the gate's probe table are pinned into `SUSPENDING_RATIONALES`
+    (`tests/test_guards.py`). Test: `test_a_deficiency_asserting_rationale_still_contradicts_a_true_decision`
+    (parametrized, now includes the three). Mutation-tested: revert → 3/3 new cases red (false
+    advance reproduced) → reapply → green.
+  - **m-2 · `guards._recent_turns` slices before filtering — ✅ delivered 2026-08-20
+    (`tdd-engineer`).** `thread[-n:]` then skipped malformed/empty rows, so malformed rows in the
+    tail shrank the usable evidence window exactly when the judge is on its degraded fallback tier.
+    Fix: filter first (drop non-`Mapping` / empty-text rows), *then* take the last `n` of what
+    remains. Test: `test_malformed_rows_in_the_tail_do_not_shrink_the_evidence_window`
+    (`tests/test_guards.py`) — 6 valid turns + 3 malformed tail rows now still yields 6 turns, not
+    3. Mutation-tested: revert → red (3 turns instead of 6) → reapply → green.
+  - **m-3 · the judge's evidence tier is invisible in the trace — ✅ delivered 2026-08-20
+    (`tdd-engineer`).** `_select_transition` traced `(transition, guard_text, verdict)` only.
+    Fix: `GuardVerdict` gained an additive `tier: str | None = None` field (`"understanding"` /
+    `"recent_turns"`, `None` for `cmp`/unconditional guards — byte-compatible with every existing
+    construction site), set in `evaluate_guard`'s `llm` branch via `dataclasses.replace` (leaving
+    `_coerce_verdict`'s own signature/tests untouched), and folded into the `guard_judgment` trace
+    payload as an optional `[{tier}]` segment (`"{label} -> {decision} [{tier}]: {rationale}"`,
+    unchanged shape when tier is absent). Tests: 4 new cases in `tests/test_guards.py`
+    (`test_verdict_tier_is_understanding_when_an_understanding_was_emitted` and siblings) +
+    `test_guard_judgment_trace_payload_names_the_evidence_tier` in `tests/test_executor.py`.
+    Mutation-tested: revert both halves together → all 5 red → reapply → green. `_select_transition`/
+    `_trace_step` sit outside the `_drive_loop` SHA lock (confirmed before touching); the lock is
+    unchanged (`71055f756280` before and after).
+  - **n-1 · ✅ delivered — already fixed before this run, no code change needed.** The function-local
+    `import json as _json` in `app._render_judge_user` / `_build_llm_judge` this finding named was
+    removed by an earlier, unrelated commit (`1dd48a0`, K-027 slice A / item 1's parse-robustness
+    fix) that hoisted a top-level `import json` while touching the same functions. Current
+    `app.py` has only the top-level import; verified by grep (`import json as _json` — zero
+    matches in `falkorchat/`) before closing this item.
+  - **n-2 · the judge-prompt cap loop was O(n²) — ✅ delivered 2026-08-20 (`tdd-engineer`).**
+    `_render_judge_user`'s eviction loop re-joined the whole candidate message on every dropped
+    turn. Rewritten to accumulate turn/base lengths once and evict oldest-first via O(1) arithmetic
+    per step, building the final string exactly once — verified byte-identical output to the old
+    algorithm across 2000 randomized cases (multiple turn counts, understanding on/off, edge
+    lengths) before landing. A refactor under green (no behavior change, so no new RED/GREEN
+    cycle applies) rather than a mutation-tested bug fix; existing tests
+    (`tests/test_app.py::test_judge_prompt_is_capped_by_dropping_the_oldest_turns_first`, 50 turns)
+    plus a new `test_judge_prompt_cap_holds_at_scale_well_beyond_the_shipped_window` (300 turns)
+    pin the arithmetic at a scale N=6 never reaches.
+  - **Doc-drift · the `_drive_loop` byte-identity lock is quoted as SHA `71055f756280` + 2844 bytes
+    — ✅ delivered 2026-08-20 (`tdd-engineer`).** The **SHA is correct and reproducible; the byte
+    count is wrong.** Re-measured with the `DESIGN.md` §6.2 `awk` extraction: **2860 bytes**
+    (matching the figure already recorded here, not either wrong figure). Repo-wide grep for `2844`
+    and `2839` near `_drive_loop`/`71055f756280` found the wrong figures **only** in
+    `docs/archive/plans/m3-executor-coordination.md` and
+    `docs/archive/reviews/m3-guard-thread-context-impl.md` — both under `docs/archive/`, which
+    `AGENTS.md` designates **read-only history of the previous convention, never re-edited**; every
+    currently-active doc site that quotes the lock (`DESIGN.md`, `AGENTS.md`, `BACKLOG.md`,
+    `HISTORY.md`, and every `docs/plans/`/`docs/reviews/` site found via
+    `grep -rln 71055f756280`) already quotes the SHA alone, with no byte count attached, so none
+    needed correcting. Nothing left to fix outside the frozen archive.
   - **m-A / n-1 (carried from the earlier `m3-executor-landing2-impl.md` gate) ·** `node_note` is
     missing from the trace-kind enumeration in `docs/QUERIES.md` §12.10 and `docs/DESIGN.md` §5,
-    although the executor emits it.
+    although the executor emits it. **Not part of this run's scope** (a distinct, still-open carried
+    finding — left untouched).
 - **Risks/RAM (rule 6):** none new — no node type, index, or vector dimension changes. The terminal-node
   contract touches the executor loop, whose §2.1 A/B/C block is byte-identity-locked: any change there
   is a deliberate, reviewed act, not a refactor.
@@ -1554,6 +1612,61 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
 > trivial, test-only, no-production-surface unit (teco's own call, not analyst-gated); teco
 > independently reviewed both diffs and re-ran the full suite, confirming 1051/2 before commit. See
 > HISTORY.md 2026-08-16.
+
+### K-048 — `executor._assemble_messages`'s unconditional trailing `user`-role `CONTEXT` block breaks strict-alternation chat templates (🔵 proposed — found during the K-027 item 5 Ministral re-probe, `data-scientist`, 2026-08-20)
+
+> **Why it exists.** `WorkflowExecutor._assemble_messages` (`server/falkorchat/executor.py:910-931`)
+> builds an `agent`-typed node's opening message list as: the node's `systemPrompt` (`role: system`),
+> then the recent thread turns role-mapped `user`/`assistant`, then **one more `role: user` message
+> appended unconditionally** — a `"CONTEXT:\n{...}"` block carrying the run's serialized state. If
+> the thread's last turn before this block is itself `user`-authored, the request ends with two
+> consecutive `user`-role messages. This is **structural, not incidental**: the message that starts
+> a run is a `user`-role trigger turn, so `intake`'s very first call already has this shape by
+> construction; `research` (granted only `graphrag_retrieve`, never `post_message`) never posts an
+> assistant-visible turn before `answer` runs in the same drive, so the same shape recurs there too.
+> **Confirmed live**, not assumed: replaying `intake`'s exact system prompt + trigger message +
+> `CONTEXT` block against LM Studio's `mistralai/ministral-3-3b` (and its alias
+> `mistralai_ministral-3-3b-instruct-2512`) returns a hard `HTTP 400`, with the underlying Jinja
+> template error surfaced verbatim: *"After the optional system message, conversation roles must
+> alternate user and assistant roles except for tool calls and results."* A minimal 3-message repro
+> (`system`, `user`, `user`) reproduces the same failure on both catalog ids; the identical shape
+> against `qwen/qwen3-4b-2507` succeeds cleanly (`finish_reason: tool_calls`). Traced through the
+> code, not just observed at the boundary: `falkorchat/transport.py`'s `urllib.error.HTTPError` rung
+> wraps the 400 into a `ProviderCallError`; `executor._drive`'s `except Exception` (`executor.py:
+> 447-449`) catches it, calls `_fail_with_note` (`fail_run`), and **re-raises** — so a live run on an
+> affected model fails loudly on its very first LLM call, not gracefully. Full evidence trail:
+> `docs/plans/ministral-reprobe-ml.md` §4.2 (the live-verified crash, both catalog ids, the exact
+> error text, the traced fault-net path) and §4.4 (why K-039's implicit-`post_message`-dispatch
+> fallback, shipped 2026-07-31, makes this matter less for Qwen today — Qwen's template tolerates
+> the shape, so it never needs the fallback for *this* reason — but would matter for any future
+> multi-vendor model-portability goal). Independently confirmed at the `analyst` gate on that note
+> (`docs/reviews/ministral-reprobe.md`, verdict approve).
+- **Model-agnostic, independent of the Ministral decision.** The trigger was evaluating Ministral as
+  a candidate model (declined — see K-027 item 5), but the defect is in the message-assembly
+  convention itself: *any* strict-alternation chat template (confirmed here for LM Studio's
+  Mistral-family serving; plausibly other vendors/templates too, unverified) would hit the same
+  crash on `intake`'s first call, regardless of why that model was chosen.
+- **Not inside the SHA-locked `_drive_loop`** — verified directly, not assumed, since the K-033
+  precedent established the lock covers `_drive_loop` only and named `_execute_step`/
+  `_select_transition`/`_trace_step`/`resume` as outside it. `_assemble_messages` (executor.py:910)
+  and its caller `_run_agent_node` (executor.py:615) sit well outside the locked span
+  (`_drive_loop` is executor.py:451-514); re-ran the lock's own reproducible recipe
+  (`docs/DESIGN.md` §9's awk one-liner) on the current tree and confirmed the hash is still
+  `71055f756280`, unchanged. A fix here needs no re-lock ceremony.
+- **Owner:** **`architect`** to pick the remedy (a message-shape decision, not a one-line bug fix —
+  candidates include merging the `CONTEXT` block into the prior turn when it would otherwise be
+  same-role, or folding thread turns and `CONTEXT` into a single trailing `user` message
+  unconditionally), then **`tdd-engineer`**.
+- **Scope:** `server/falkorchat/executor.py`'s `_assemble_messages` only; no Cypher, no schema, no
+  index, no vector dimension (rule 6) — pure message-list construction.
+- **Risks/RAM:** none structural. Behavioural risk: changing how thread context is folded into the
+  opening message list could alter what a *tolerant* model (Qwen) sees too, so a fix needs a
+  regression pass against the existing live triage flow, not just a Ministral-shaped test case.
+- **Test strategy:** an offline unit test asserting `_assemble_messages` never emits two consecutive
+  same-role messages for a thread whose last turn is `user`-authored (the exact shape that crashes
+  today); a live/replay-level regression check (mirroring `docs/plans/ministral-reprobe-ml.md` §4.2's
+  own repro) that the fixed shape no longer 400s against a strict-alternation template, without
+  requiring a live Ministral instance to be part of the standing suite.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,

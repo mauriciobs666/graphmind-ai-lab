@@ -5,6 +5,117 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-20 — K-027 item 5: Ministral re-probe — delivered (block on both axes); K-048 filed
+
+**What:** Re-probed Ministral-3B against current code (post item 1's parse fix, post item 2's
+engine contract) per K-027 item 5 / D13 finding 2, reusing item 3's reviewed judge-calibration
+harness/protocol rather than a new one. Model identity confirmed live first — LM Studio's two
+catalog ids, `mistralai_ministral-3-3b-instruct-2512` and `mistralai/ministral-3-3b`, are the same
+underlying weights aliased onto one loaded slot (byte-identical temperature-0 completions,
+`/api/v0/models` state flips between the two depending on which was called last).
+
+**Judge calibration: block.** New throwaway driver `server/tests/eval/probe_ministral_judge.py`
+(not pytest-collected) drives the real, unmodified `guard_calibration.py` plumbing against
+`lmstudio/mistralai/ministral-3-3b` via the workspace-override hard cap
+(`run["modelOverrides"]["guardModel"]`) — never a `config/models.json` edit. Same fixture (26 cases
+× k=3 = 78 real calls, `golden_guards.jsonl`, sha256 unchanged from the 2026-08-17 Qwen run), same
+gates as item 3. **G1 false-advance = 0.0%** (0/30, pass) · **G2 advance-recall = 45.5%** (5/11,
+fails the ≥80% gate) · κ=0.442 diagnostic. Improves on D13's fence-tolerant 0.364 (the item-1 parse
+fix measurably helped) but stays far under Qwen's 0.818 — a reasoning-quality gap, not a parse
+artifact.
+
+**Terminal tool call: Ministral remains the better native caller, but it's moot.** An isolated
+`post_message`-schema replay (D13's own protocol, n=5, alternation-safe message shape) scored
+Ministral 5/5 native tool calls (reconfirms D13's 3/3); a same-session Qwen replay on the identical
+current prompt/schema scored 0/5. Moot in practice: the already-shipped K-039 implicit-dispatch
+fallback (2026-07-31) already compensates for Qwen's native weakness at the engine level.
+
+**New finding: a message-alternation crash, filed as K-048.** Before attempting the full live e2e,
+live-verified that `executor._assemble_messages`'s unconditionally-appended trailing `user`-role
+`CONTEXT` block produces two consecutive `user`-role messages on `intake`'s very first call —
+Ministral's LM-Studio-served chat template hard-rejects this (`HTTP 400`, Jinja alternation error),
+while Qwen's template tolerates it. `executor._drive`'s fault net turns the crash into an unhandled
+`fail_run`. This is model-agnostic message-assembly debt, not specific to the Ministral decision,
+so it is filed as its own backlog item (`docs/BACKLOG.md` **K-048**, 🔵 proposed, owner
+`architect`→`tdd-engineer`) rather than folded into the Ministral verdict; confirmed **not** inside
+the SHA-locked `_drive_loop` (re-ran the lock's own recipe — hash unchanged, `71055f756280`) before
+stating that as fact in the filing.
+
+**Verdict: do not wire Ministral for either kind under the current codebase.** Does not change
+D13's practical relevance — Qwen remains the right call, but for a different reason than D13
+measured: K-039 already neutralizes Qwen's tool-calling weakness, and Ministral's own chat template
+introduces a new, more severe failure mode (a hard crash) that Qwen doesn't have.
+
+**Docs:** `docs/plans/ministral-reprobe-ml.md` (method note, `data-scientist`); reviewed
+**approve**, 0 blocker/major, `docs/reviews/ministral-reprobe.md` (`analyst`). `docs/BACKLOG.md`
+K-027 item 5 marked ✅ delivered; the K-027 heading note updated to name item 4 as the only item
+still open, itself blocked on a user decision (`docs/plans/golden-set-expansion-ml.md` §10, not yet
+resolved); new **K-048** filed. No `server/` code touched by this entry — the probe driver
+(`server/tests/eval/probe_ministral_judge.py`) was added by the re-probe itself, tracked separately
+in that unit's own artifacts, not part of this doc-only follow-up.
+
+## 2026-08-20 — K-027: six carried gate findings (m-1/m-2/m-3/n-1/n-2/doc-drift) — delivered
+
+**What:** Closed out the six still-open "Carried findings from the analyst gate"
+(`docs/archive/reviews/m3-guard-thread-context-impl.md`) recorded under `docs/BACKLOG.md`'s
+`### K-027`, as unit U1 of the `guard-reliability-followups-coordination.md` run (`teco`-coordinated,
+alongside U2/U3 golden-set and Ministral advisory notes, out of scope here). Strictly test-first
+per finding; `guards.py`'s `_is_negated`/`_rationale_contradicts`/`_coerce_verdict` bias-to-suspend
+policy re-derived from the code before changing anything (per the brief's instruction not to trust
+the carried BACKLOG text's framing blindly).
+
+**m-1 (false-advance bug, the important one).** `guards._is_negated`'s 12-char negator window let a
+negator from an *earlier* clause (e.g. the "not" in `"The user did not say; more info is needed."`)
+negate a deficiency cue in a *later* clause across a `;`/`.`/`,` boundary — the false-advance
+direction the code's own comment claimed couldn't happen. Fix: the window is now truncated at the
+last clause-boundary punctuation before the cue; the comment is corrected to name the true failure
+direction. The three rationales from the gate's probe table are pinned into
+`SUSPENDING_RATIONALES` (`tests/test_guards.py`). Mutation-tested (revert/red/reapply/green).
+
+**m-2 (evidence-window bug).** `guards._recent_turns` sliced `thread[-n:]` *before* filtering
+malformed/empty rows, shrinking the usable evidence window exactly when the judge is on its
+degraded fallback tier. Fix: filter first, slice second. Mutation-tested.
+
+**m-3 (tier now traced).** `GuardVerdict` gained an additive `tier: str | None = None` field
+(`"understanding"` / `"recent_turns"`, `None` for non-`llm` guards) set in `evaluate_guard`'s `llm`
+branch; `executor._trace_step`'s `guard_judgment` payload folds it in as an optional `[{tier}]`
+segment when present, unchanged otherwise. `_select_transition`/`_trace_step` are outside the
+`_drive_loop` SHA lock — confirmed before touching, and the lock (`71055f756280`) is unchanged
+before and after this whole unit. Mutation-tested (both halves reverted together).
+
+**n-1 (already fixed, no code change).** The function-local `import json as _json` this finding
+named was already removed by an unrelated earlier commit (`1dd48a0`) that hoisted a top-level
+`import json` while touching the same `app.py` functions; verified by grep before closing.
+
+**n-2 (O(n²) cap loop → O(n)).** `app._render_judge_user`'s eviction loop re-joined the whole
+candidate message on every dropped turn. Rewritten to accumulate lengths once and evict oldest-first
+via O(1) arithmetic per step, verified byte-identical to the old algorithm's output across 2000
+randomized cases before landing (a behavior-preserving refactor under green, not a bug fix — no
+mutation-test applies). New scale test (`tests/test_app.py`, 300 turns) pins the arithmetic well
+beyond the shipped `RECENT_TURNS_N=6` window.
+
+**Doc-drift.** Re-measured the `_drive_loop` byte-identity extraction (`DESIGN.md` §6.2's `awk`
+command): **2860 bytes**, confirming `BACKLOG.md`'s existing figure and refuting both `2844` and
+`2839`. Repo-wide grep found the wrong figures only inside `docs/archive/` (read-only history,
+per `AGENTS.md` — never re-edited); every currently-active doc site already quotes the SHA alone
+with no byte count, so nothing needed correcting there.
+
+**Tests added:** `tests/test_guards.py` — 3 new `SUSPENDING_RATIONALES` cases (m-1), 1 malformed-tail
+case (m-2), 4 tier cases (m-3). `tests/test_executor.py` — 1 trace-payload tier case (m-3).
+`tests/test_app.py` — 1 scale case (n-2). Net +10 tests.
+
+**Suite:** offline `.venv/bin/python -m pytest -q` from `server/` — **1088 passed, 3 deselected**
+before this unit's changes; **1098 passed, 3 deselected** after (matches the entry baseline recorded
+in `guard-reliability-followups-coordination.md`). `_drive_loop` SHA-lock reconfirmed unchanged
+before and after: `71055f756280` both times, byte count **2860** both times (the earlier-quoted
+2844/2839 figures were never accurate — see Doc-drift above). `reference` graph re-seeded after the
+final run (`./scripts/seed_workflows.sh acme`), verified in sync (`./scripts/verify_workflows.sh
+acme` → exit 0, "2 defs in sync").
+
+**Files touched:** `server/falkorchat/guards.py`, `server/falkorchat/executor.py`,
+`server/falkorchat/app.py`, `server/tests/test_guards.py`, `server/tests/test_executor.py`,
+`server/tests/test_app.py`, `docs/BACKLOG.md` (this run's six K-027 items marked delivered).
+
 ## 2026-08-17 — K-027 item 3: judge calibration (D9/D10) — delivered
 
 **What:** Ran the guard-judge calibration protocol (`docs/archive/plans/m3-guard-calibration.md`
