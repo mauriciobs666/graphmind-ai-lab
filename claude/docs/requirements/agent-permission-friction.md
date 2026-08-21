@@ -43,9 +43,16 @@ wrong things:
 ## Functional requirements
 _(Draft — validating against further live instances before finalizing wording.)_
 
-- **FR-1:** `cobb` editing another agent's own definition file (`<name>/<name>.md`) — its core,
-  stated job — must not require a manual per-edit confirmation. Well-evidenced: three-plus
-  instances (below), all confirmed legitimate, none an accidental drift.
+- **FR-1:** `cobb` performing a `Write`/`Edit` within its documented remit — agent/skill
+  definition files, MCP/agent-standards documentation (wherever it lives, e.g. a component
+  README), and kaizen curation for the team (`kaizen/history.md`, `kaizen/plan.md` across every
+  agent) — must not require a manual per-edit confirmation. Well-evidenced: five-plus instances
+  (below), all confirmed legitimate, none an accidental drift, spanning agent-prompt files, a
+  component README, and kaizen curation.
+- **FR-3 (draft):** `qa-engineer` writing to its own stated deliverable paths (`docs/test-plans/`,
+  `docs/test-reports/`) must not require a manual per-write confirmation. Evidence: instance 5
+  below. Same mechanism-3 friction as FR-1, different agent — suggests the underlying need may
+  generalize past `cobb` specifically (see FR-2, still draft, and Open questions).
 - **FR-2 (draft, broader form of FR-1):** More generally, an agent performing a `Write`/`Edit`
   squarely within its own normal, documented remit should not require a manual per-action
   confirmation — confirmation should be reserved for actions genuinely outside an agent's remit
@@ -66,6 +73,22 @@ _(Draft — validating against further live instances before finalizing wording.
    other agents' system prompts which is his purpose" — every one legitimate, none an accidental
    drift. Pattern is now well-evidenced: `cobb` editing another agent's own `<name>.md` is its core
    job, not an edge case.
+5. **2026-08-20 — `qa-engineer`, `Create` (Write) on `docs/test-plans/generic-cypher-mcp2.md`.**
+   Exactly `qa-engineer`'s stated deliverable path (its versioned test plan). No custom write guard
+   restricts `qa-engineer`'s `Write`/`Edit` paths (its guard is destructive-ops-only, Bash-scoped).
+   Confirmed legitimate. → same mechanism-3 friction as the `cobb` instances, on a different agent:
+   the "confirm before Edit/Write" default isn't cobb-specific, it's team-wide except `coder`.
+6. **2026-08-20 — `cobb`, `Edit` on `claude/graph-dba/kaizen/history.md`.** Directly resolves the
+   original kaizen-file thread (Open questions 1–2, below): `cobb` — not the individual doc-scoped
+   agent — is the one editing `kaizen/history.md`/`plan.md`, per the documented "curated by cobb"
+   convention. Confirmed legitimate. → folded into FR-1: `cobb`'s remit explicitly includes kaizen
+   curation across the team, not just agent-prompt/README edits.
+7. **2026-08-20 — `cobb`, `Edit` on `cypher-mcp/README.md`.** Not an agent system prompt this
+   time — a component README. Cobb's documented remit explicitly covers MCP wiring/cross-tool
+   standards, so this is still inside its job, not a drift. Stakeholder confirmed: legitimate,
+   approved. → broadens FR-1: the friction isn't confined to `<name>/<name>.md` edits, it's any
+   routine `cobb` edit across its documented remit (agent/skill files, MCP/agent-standards
+   documentation wherever it lives, kaizen curation for the team).
 
 ## Out of scope
 _(TBD — likely candidates to confirm with the stakeholder: any change to the destructive-ops
@@ -75,14 +98,20 @@ guards on `devops`/`graph-dba`/`qa-engineer`; any change to git-commit authority
 _(TBD — will be derived per-FR once the FRs are settled.)_
 
 ## Open questions
-1. For the kaizen-file thread: does "history and other relevant files" mean `kaizen/history.md`
-   only, or `kaizen/plan.md` too — anything else? (asked, awaiting answer)
-2. Is this a responsibility change (agents self-log their own history/plan entries going forward,
-   instead of `cobb` curating) or purely a guard-widening (edits still land the same way, they
-   just stop triggering an "ask")? (asked, awaiting answer)
-3. For `coder`: which specific actions are triggering unwanted prompts? (awaiting live examples)
-4. Should any loosening apply uniformly to all five doc-scoped agents, or only to the ones the
-   stakeholder has actually hit friction with?
+1. ~~For the kaizen-file thread: which files?~~ **Answered** (instance 6): it's `cobb` editing
+   `kaizen/history.md`/`plan.md` as curator, per the existing convention — not the five doc-scoped
+   agents self-editing. Folded into FR-1.
+2. ~~Responsibility change, or guard-widening?~~ **Answered**: no responsibility change — `cobb`
+   remains the curator; the fix is removing the default-confirmation friction on `cobb`'s own
+   routine edits (FR-1), not widening the five agents' write-guard allowlists.
+3. For `coder`: which specific actions are triggering unwanted prompts? (awaiting live examples —
+   still the one thread from the opening message with no evidence yet)
+4. FR-3 (`qa-engineer`) raises the question FR-2 already drafted: should "no confirmation for
+   in-remit routine writes" become a team-wide default (every agent gets what `coder` already has
+   via `permissionMode: acceptEdits`), rather than a per-agent fix (`cobb`, then `qa-engineer`,
+   then whichever agent hits it next)? Leaning toward yes given the pattern, but want the
+   stakeholder's explicit call before writing it as a requirement — this is a real scope decision,
+   not a detail.
 
 ## Decision log
 - 2026-08-20 — Stakeholder: "my agents ask too much permission when editing plans reviews and
