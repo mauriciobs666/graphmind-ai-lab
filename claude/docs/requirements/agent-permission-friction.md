@@ -1,5 +1,5 @@
 # Agent permission-escalation friction — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-20
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-21
 
 ## Intent
 Reduce permission-escalation prompts that fire on legitimate, safe agent actions, without
@@ -43,7 +43,9 @@ wrong things:
   remit, or something destructive/irreversible — the interruption should mean something when it
   happens.
 - As a stakeholder, I want `coder` to run with looser permission requirements so it isn't stopping
-  to ask for things that don't warrant an interruption — specifics pending live examples.
+  to ask for things that don't warrant an interruption — specifics still pending live examples;
+  **deferred to a future phase 2** of this feature rather than blocking this round (see Out of
+  scope).
 
 ## Functional requirements
 Settled: applies **team-wide** (stakeholder, 2026-08-20: "applies to all legitimate cases"), not
@@ -131,6 +133,8 @@ deliberately, as validation for AC-4, not as friction to remove).
     from one of the five doc-scoped-guarded agents, showing the base confirmation fires *even when
     the custom guard has nothing to say* — settles that FR-2 must address all five of those agents
     too, not just agents like `cobb`/`qa-engineer`/`tdd-engineer` that have no custom guard.
+    (Repeated shortly after on `docs/reviews/guard-carried-findings.md` — same pattern, same
+    conclusion.)
 11. **2026-08-20 — `tico`, `Edit` on `docs/requirements/generic-cypher-mcp2.md`.** `tico` is
     another of the five custom-guarded agents; this is squarely its own remit
     (`docs/requirements/*`), passed silently by `guard-tico-doc-writes.sh`. Same shape as instance
@@ -173,6 +177,17 @@ C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initiall
   `architect` tries to edit something outside `docs/plans/`, that should still escalate. This
   feature removes the *redundant* confirmation on work that's already in-scope, not the guard's
   actual catch for a genuine drift.
+- **`coder`'s specific friction triggers** — the stakeholder's original second complaint. Zero live
+  instances were ever collected this round despite the evidence-first approach applying throughout;
+  `coder` already runs with `permissionMode: acceptEdits`, so whatever it's hitting is suspected to
+  be a *different* mechanism (e.g. Bash/terminal-command confirmations) than the `Write`/`Edit`
+  confirmation this document resolves. **Explicitly deferred to a phase 2** of this feature, to be
+  opened once the stakeholder has collected concrete live examples.
+- **Instance U1** (`tdd-engineer` → `docs/BACKLOG.md`) — never classified as evidence or
+  counter-example; the stakeholder was genuinely unsure whether it was in-remit. Excluded from this
+  round's FR-2 evidence and left unresolved rather than folded into either bucket; a candidate for
+  re-examination if similar `docs/BACKLOG.md`-from-an-implementer-agent instances turn up in a
+  future phase.
 
 ## Acceptance criteria
 - **AC-1 (FR-1):** Given `cobb` performs a `Write`/`Edit` within its agentic-development topic-remit
@@ -194,15 +209,10 @@ C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initiall
   runs, then a manual confirmation still appears, unchanged from today.
 
 ## Open questions
-1. For `coder`: which specific actions are triggering unwanted prompts? Still no live example —
-   `coder` already has `permissionMode: acceptEdits`, so its friction (if real) is likely a
-   *different* mechanism (e.g. Bash/terminal-command confirmations) than the one this document has
-   otherwise nailed down (`Write`/`Edit` confirmation). Not folding it into FR-2 until there's a
-   concrete instance to confirm that.
-2. Instance U1 (`tdd-engineer` → `docs/BACKLOG.md`): was this in-remit (marking off its own
-   delivered work) or out-of-remit (general backlog edit, like counter-example C2)? Stakeholder
-   didn't know in the moment — needs checking against what the actual edit contained, or asking
-   `tdd-engineer`/`teco` directly what the edit was for.
+None for this round. The two items that remained open — `coder`'s specific triggers, and instance
+U1's classification — are resolved not by answering them but by explicitly scoping them out (see
+Out of scope) into an anticipated **phase 2** of this feature, once the stakeholder has collected
+more live evidence. Nothing in FR-1/FR-2/FR-3/AC-1..5 depends on either being answered.
 
 ## Decision log
 - 2026-08-20 — Stakeholder: "my agents ask too much permission when editing plans reviews and
@@ -252,3 +262,14 @@ C2. **2026-08-20 — `cobb`, `Edit` on `docs/BACKLOG.md` (repo root).** Initiall
 - 2026-08-20 — `tdd-engineer` → `docs/BACKLOG.md` relayed; given the fresh C2 precedent, `tico`
   flagged the ambiguity instead of assuming legitimacy. Stakeholder: "i dont kno to be honest" →
   logged as unresolved (U1), not counted as evidence either way.
+- 2026-08-20 — Instance 10 repeated shortly after on `docs/reviews/guard-carried-findings.md`
+  (`analyst`, second custom-guarded-agent confirmation) — folded into instance 10, no new signal.
+- 2026-08-21 — Stakeholder: "lets close the scope for this round we already have a lot to
+  implement, ill start a new requirement once im able to collect more evidence (you can already
+  forecast a future phase 2)" → closes the interview on the evidence collected so far. `coder`'s
+  friction and instance U1 move from "open question" to explicitly out-of-scope-for-this-round,
+  deferred to a forecasted phase 2 (a fresh `tico` interview once more live evidence exists) rather
+  than left dangling. FR-1/FR-2/FR-3 and AC-1 through AC-5 stand as fully evidenced and require no
+  further confirmation. Status → **Ready for design**; next step is an `architect` pass over this
+  document (and, per the stakeholder's earlier "please have them act on it" request, this is the
+  point where their concurrent `teco`/`cobb` session can pick it up directly).
