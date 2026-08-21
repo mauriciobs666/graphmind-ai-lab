@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-21 — `CPG:` line gained a `not applicable` vs. `considered, not relevant` disambiguation (C-408)
+
+- **What:** `cobb` added one clause to this agent's `CPG:` evidence-trail sentence (§ "Context & findings"): `not applicable` is now explicitly scoped to a task with no code-level component at all, distinct from `considered, not relevant` (a code-level task in a component that simply has no loaded CPG). See `claude/cobb/kaizen/history.md`'s matching 2026-08-21 entry for the full reasoning and the defect this closes (`docs/BACKLOG.md` C-408, DEF-4).
+- **Why / Verified / Plan items:** see the master entry above.
+
 ## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
 
 - **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered). It had been frozen — never written to — since the 2026-08-20 graph migration (see that date's entry below, which already confirms this file's own pre-migration content was imported into the graph verbatim at the time).

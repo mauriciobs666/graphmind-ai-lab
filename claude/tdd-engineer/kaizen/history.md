@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-21 — `CPG:` line gained a `not applicable` vs. `considered, not relevant` disambiguation (C-408)
+
+- **What:** `cobb` added one clause to this agent's `CPG:` evidence-trail sentence (§ "Verify honestly"): `not applicable` is now explicitly scoped to a task with no code-level component at all, distinct from `considered, not relevant` (a code-level task in a component that simply has no loaded CPG). This is the agent whose live dispatch (D3′, U9) originally surfaced the ambiguity — it picked `not applicable` for a code-level task on a component with no loaded CPG, which the plan's own wording calls `considered, not relevant`. See `claude/cobb/kaizen/history.md`'s matching 2026-08-21 entry for the full reasoning and the defect this closes (`docs/BACKLOG.md` C-408, DEF-4).
+- **Why / Verified / Plan items:** see the master entry above.
+
 ## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
 
 - **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes.

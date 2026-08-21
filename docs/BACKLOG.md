@@ -7,7 +7,7 @@
 > Item IDs use the `C-` prefix (distinct from falkor-chat's `K-`); the hundreds digit tracks the
 > milestone (C-2xx = M2, C-3xx = M3).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done · ⚪ deferred
-> Last reviewed: 2026-07-25.
+> Last reviewed: 2026-08-21.
 
 ## Handoff — `teco` drives M2 (2026-07-18)
 
@@ -519,17 +519,25 @@ full U1…U9 ledger.
 
 ## Follow-ups (post-M4)
 
-- **C-408 — `CPG:` shape-selection ambiguity (DEF-4).** 🔵 The three-shape `CPG:` convention
-  (`docs/plans/cpg-agent-adoption.md` §3) gives one worked example each for `used` and
-  `considered, not relevant`, but none for `not applicable` — and U9's live re-pass found a real
-  dispatch (`tdd-engineer`, D3′) pick `not applicable` for a code-level task on a component with
-  no loaded CPG, where the plan's own definition and its `considered, not relevant` worked
-  example both point the other way (`docs/test-reports/cpg-agent-adoption-report.md` Pass 2,
-  DEF-4). Severity minor — AC-2's anti-silence guarantee is intact; only a shape-specific
-  spot-check (e.g. `grep "considered, not relevant"`) would miss it. Fix direction (per the
-  report's own feedback #2): either add a worked counter-example distinguishing `not applicable`
-  from `considered, not relevant`, or explicitly accept this as a low-severity, rare edge case not
-  worth further prompt surface. Owner: `cobb` (next time this doc's wiring is touched).
+- **C-408 — `CPG:` shape-selection ambiguity (DEF-4).** ✅ **Resolved 2026-08-21 by `cobb`.** The
+  three-shape `CPG:` convention's source design (`docs/plans/cpg-agent-adoption.md` §3, `Status:
+  archived` — a header-pointer-only document, so left unedited per the doc-lifecycle convention)
+  gives one worked example each for `used` and `considered, not relevant`, but none for `not
+  applicable` — and U9's live re-pass found a real dispatch (`tdd-engineer`, D3′) pick `not
+  applicable` for a code-level task on a component with no loaded CPG, where the plan's own
+  definition and its `considered, not relevant` worked example both point the other way
+  (`docs/test-reports/cpg-agent-adoption-report.md` Pass 2, DEF-4). Severity minor — AC-2's
+  anti-silence guarantee was intact; only a shape-specific spot-check (e.g. `grep "considered, not
+  relevant"`) would miss it. **Fix taken (of the report's two named options): the worked
+  counter-example**, added directly to the six *live* wiring points instead of the archived design
+  doc — the `CPG:` sentence in each of `claude/{analyst,architect,qa-engineer,coder,tdd-engineer,
+  frontend-engineer}/<name>.md` now reads: "`not applicable` is only for a task with no code-level
+  component at all — e.g. a pure requirements/process/documentation task — never for a code-level
+  task in a component that simply has no loaded CPG, which is `considered, not relevant`." This is
+  the actual operative text a dispatched agent reads (the archived plan is cited from it, not the
+  reverse), so the disambiguation lands where it can change behavior. No code change; no new
+  review/acceptance round dispatched for a single-clause prompt clarification on an already-minor,
+  already-accepted residual. Owner: `cobb`.
 - **C-409 — No live dispatch had observed a populated `:CpgBuildInfo` marker.** ⚪ **Narrowed,
   not fully closed** — `graph-dba` rebuilt `cpg_falkorchat` on request; `qa-engineer`'s targeted
   follow-up (`docs/test-plans/cpg-agent-adoption2.md`, `docs/test-reports/
@@ -696,12 +704,23 @@ one" rule). Requirements: [`requirements/generic-cypher-mcp2.md`](./requirements
 
 ## Follow-ups (post-M2)
 
-- **C-101 — Fix `joern-cpg` loader `MAX_ARG_STRLEN` failure + masked exit code.** 🔵 The M1
-  `cpg-to-falkordb.py --load` passes each 500-node `UNWIND` batch as a single `redis-cli` argv;
-  on large `CODE` properties this exceeds the Linux 128 KiB `MAX_ARG_STRLEN` limit →
-  `OSError: [Errno 7] Argument list too long`, yet `pipeline.sh` still reports **exit 0**
-  (the failure is masked). Discovered 2026-07-19 during the M2 CPG substrate build; worked
-  around by streaming batches via stdin (`redis-cli -x`). Fix both defects: (a) stream each
-  batch via stdin instead of argv, and (b) propagate the loader's real exit code so
-  `pipeline.sh` fails loudly. Owner: `joern` (producer skill). Ref: `docs/HISTORY.md` M1;
-  details in the M2 coordination doc.
+- **C-101 — Fix `joern-cpg` loader `MAX_ARG_STRLEN` failure + masked exit code.** ✅ **Found
+  already resolved, 2026-08-21 (`cobb`, doc-accuracy pass) — this backlog entry was simply
+  never flipped.** Fixed in commit `e773060` ("fix(joern-cpg): robust bulk load + generic
+  pipeline flags; verified end-to-end", 2026-07-17) — **before** this backlog file even
+  reached its current form, so the item was stale from the start rather than regressing
+  later. Both defects closed there: (a) `cpg-to-falkordb.py --load` now streams every
+  statement over **one persistent RESP socket** (`load_statements()`, direct
+  `socket.create_connection` + hand-rolled RESP encode/decode) instead of spawning a
+  `redis-cli` per statement — a stronger fix than the stdin-`-x` workaround originally
+  proposed here, since a socket write has no argv at all, sidestepping `MAX_ARG_STRLEN`
+  by construction rather than raising its practical ceiling; it also kills the
+  connection-reset storm the old per-statement spawn caused. (b) the loader now
+  `sys.exit(1 if failed else 0)`s on a real failure count, and `pipeline.sh` runs under
+  `set -euo pipefail` (line 39) so that non-zero code aborts the pipeline loudly instead
+  of the old masked exit 0. Verified end-to-end at the time on `falkor-chat/server/falkorchat`:
+  453/453 statements ok at batch 500 (the exact batch size the old `redis-cli` path died
+  on), graph landed at exactly 29,447 nodes / 185,517 edges — re-confirmed in this pass by
+  reading current `cpg-to-falkordb.py`/`pipeline.sh` source directly (no code change made;
+  none needed) and `git log -S` on both marker strings. Owner: `graph-dba` (`joern` folded
+  in per C-309). Ref: `docs/HISTORY.md` M1; details in the M2 coordination doc.

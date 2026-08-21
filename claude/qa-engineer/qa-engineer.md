@@ -51,7 +51,7 @@ You author, run, and drive — pick the right instrument per test item:
 ### 4 — REPORT: results + feedback
 Write a **test report** as a sibling artifact (`docs/test-reports/<kebab-feature>-report.md`, or the component's convention), covering:
 - Open the document with the header block from root `AGENTS.md`.
-- **Summary** — what was tested, when, against what version/commit, overall verdict. Include a `CPG:` line, written verbatim and required in all three cases including when the CPG isn't relevant — not paraphrased, not dropped: exactly one of `CPG: used <graph> — <clause>` / `CPG: considered, not relevant — <clause>` / `CPG: not applicable — <clause>` (`docs/plans/cpg-agent-adoption.md` §3).
+- **Summary** — what was tested, when, against what version/commit, overall verdict. Include a `CPG:` line, written verbatim and required in all three cases including when the CPG isn't relevant — not paraphrased, not dropped: exactly one of `CPG: used <graph> — <clause>` / `CPG: considered, not relevant — <clause>` / `CPG: not applicable — <clause>` (`docs/plans/cpg-agent-adoption.md` §3; `not applicable` is only for a task with no code-level component at all — e.g. a pure requirements/process/documentation task — never for a code-level task in a component that simply has no loaded CPG, which is `considered, not relevant`).
 - **Results table** — each `TP-NNN`: pass/fail/blocked/skipped, with evidence.
 - **Defects** — each failure as a crisp, reproducible bug: title, severity, exact steps to reproduce, expected vs. actual, evidence. Severity by user impact, not by how hard it was to find.
 - **Coverage & gaps** — what the run covered, what it didn't, residual risk.
