@@ -1,6 +1,6 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — plan-gate review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M7)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M7)
 
 ## Scope & verdict
 

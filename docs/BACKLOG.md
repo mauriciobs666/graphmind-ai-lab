@@ -48,7 +48,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
 | **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
 | **M6 — MCP tool rename** ✅ | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. Plan gate (`analyst`, `docs/reviews/cpg-mcp-rename.md`) — 2 passes: needs changes → approve with suggestions. Implementation: commits `e00b9f6` (step 1), `59a03c4` (step 2, includes U4-fix), `acecb34` (step 3a), `cd4142f` (step 3b). Acceptance (`qa-engineer`, `docs/test-reports/cpg-mcp-rename-report.md`) — **PASS**, AC-1…AC-6 all hold, regression floor 84 passed/7 deselected unchanged; one low-severity defect D-1 found and fixed in this same unit (mcp-monitor source-comment path citations). | **C-601 → C-605** |
-| **M7 — Generic Cypher MCP, team-wide rollout** | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph (`author`-partitioned), FR-7's one-query team-wide surface and FR-8a's `sessionId` field delivered, FR-12/AC-9 delivered as written (no `inbox.md` for a new agent) — an interim ad hoc per-agent-graph rollout (`ccf9c8b`, 2026-08-20) is reconciled onto this design | `C-701 → C-721` |
+| **M7 — Generic Cypher MCP, team-wide rollout** ✅ | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph (`author`-partitioned), FR-7's one-query team-wide surface and FR-8a's `sessionId` field delivered, FR-12/AC-9 delivered as written (no `inbox.md` for a new agent) — the interim ad hoc per-agent-graph rollout (`ccf9c8b`, 2026-08-20) reconciled onto this design; closing acceptance (`Q2`, `docs/test-reports/generic-cypher-mcp2-report.md`) — **PASS with noted open items**, delivered 2026-08-20. Per FR-13's incremental-delivery framing, three items are deliberately not fully closed: the inbox-header retarget half of every `C-<agent>` unit was **dropped entirely by stakeholder decision** (not deferred — every `inbox.md` stays frozen, header included); `teco`'s and `analyst`'s per-agent migrations each carry one known data-fidelity defect on a single entry, pending a separate stakeholder approval for the `cobb` curator-clear fix; `G1` correspondingly leaves `kaizen_teco`/`kaizen_analyst` live pending that same fix. `Q2`'s own new finding, D-1 (`claude/cobb/cobb.md` stale wording), fixed same-day | `C-701 → C-721` |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -659,27 +659,40 @@ one" rule). Requirements: [`requirements/generic-cypher-mcp2.md`](./requirements
 [`plans/generic-cypher-mcp2-coordination.md`](./plans/generic-cypher-mcp2-coordination.md).
 
 ### Items
-- **C-701 — Repo-wide catalog docs.** 🔵 `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`,
+- **C-701 — Repo-wide catalog docs.** ✅ `claude/AGENTS.md`, `claude/README.md`, root `AGENTS.md`,
   `docs/BACKLOG.md` retargeted to `kaizen_team`. Owner: `cobb` (S2).
-- **C-702 — Agent-creation + distillation convention, FR-12/AC-9 delivered.** 🔵
+- **C-702 — Agent-creation + distillation convention, FR-12/AC-9 delivered.** ✅
   `skills/agent-maintenance/SKILL.md` retargeted to `kaizen_team`; new-agent `inbox.md` seeding
   removed entirely. Owner: `cobb` (S3).
-- **C-703 — Server doc-strings.** 🔵 `cypher-mcp/server.py`/`README.md` `kaizen_graph_dba` →
+- **C-703 — Server doc-strings.** ✅ `cypher-mcp/server.py`/`README.md` `kaizen_graph_dba` →
   `kaizen_team`. Owner: `coder` (S1).
-- **C-704 — `kaizen_team` provisioning.** 🔵 Index/constraint, hard predecessor of all migrations.
+- **C-704 — `kaizen_team` provisioning.** ✅ Index/constraint, hard predecessor of all migrations.
   Owner: `graph-dba` (S0).
-- **C-705 — Certification tooling, FR-12 asymmetry.** 🔵 `claude/scripts/audit-team.sh` check 1
+- **C-705 — Certification tooling, FR-12 asymmetry.** ✅ `claude/scripts/audit-team.sh` check 1
   narrowed to plan+history; inbox.md never required. Owner: `cobb` (S4).
-- **C-706 — Requirements doc correction.** 🔵 FR-4/AC-3/FR-14/AC-11 marked superseded. Owner:
+- **C-706 — Requirements doc correction.** ✅ FR-4/AC-3/FR-14/AC-11 marked superseded. Owner:
   `tico` (T1).
 - **C-707…C-718 — Per-agent consolidation** (one item per agent, all 12; data migration by the
-  agent itself, prompt + inbox-header retarget by `cobb`, except `cobb` self-edits its own). 🔵
-  each (C-<agent>).
-- **C-719 — Graph-key retirement.** 🔵 Live-relisted `kaizen_<agent>` keys `GRAPH.DELETE`d once
+  agent itself, prompt retarget by `cobb`, except `cobb` self-edits its own). ✅ Data migration and
+  prompt retarget complete for all 12 (10 clean; `coder`/`devops`/`frontend-engineer`/
+  `tdd-engineer`/`cobb` correctly no-op, nothing to migrate). **Inbox-header retarget dropped
+  entirely by stakeholder decision** (every `kaizen/inbox.md` stays frozen permanently, header
+  included — not merely deferred; see coordination ledger's `cobb`-batch row). Two of the twelve —
+  `teco` (`e40a95fe-…`) and `analyst` (`fe2007f5-…`) — each carry one known, already-tracked
+  data-fidelity defect on a single migrated entry (a byte-level escaping slip, not data loss),
+  pending a separate stakeholder approval for the `cobb` curator-clear + re-`CREATE` fix; per FR-13
+  this is valid incremental progress, not an open failure. See
+  `docs/plans/generic-cypher-mcp2-coordination.md`'s unit ledger for the per-agent detail.
+- **C-719 — Graph-key retirement.** ✅ Live-relisted `kaizen_<agent>` keys `GRAPH.DELETE`d once
   migrated — never-delete-reach question already resolved (coordination doc, "Resolved
-  2026-08-20"), no re-confirmation gate. Owner: `graph-dba` (G1).
-- **C-720 / C-721 — Acceptance passes.** 🔵 Interim (Q1) and closing (Q2), AC-1…AC-13 (two
-  superseded) exercised live.
+  2026-08-20"), no re-confirmation gate. 10 of 12 in-scope keys retired (5 deleted + confirmed
+  gone, 5 already-nonexistent no-op); `kaizen_teco`/`kaizen_analyst` **deliberately** still live,
+  correctly excluded pending the same two data-fidelity fixes above. Owner: `graph-dba` (G1).
+- **C-720 / C-721 — Acceptance passes.** ✅ Interim (Q1, PASS) and closing (Q2, **PASS with noted
+  open items**), AC-1…AC-13 (two superseded) exercised live — `docs/test-plans/
+  generic-cypher-mcp2.md` / `docs/test-reports/generic-cypher-mcp2-report.md`. Q2's one new
+  defect, D-1 (`claude/cobb/cobb.md:65,71` stale pre-M7 wording), fixed same-day by `cobb`'s
+  self-edit carve-out.
 
 ## Follow-ups (post-M2)
 

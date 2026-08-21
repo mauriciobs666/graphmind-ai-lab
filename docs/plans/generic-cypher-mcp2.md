@@ -1,6 +1,6 @@
 # Generic Cypher MCP — team-wide kaizen inbox rollout — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M7) · **Version:** 4
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M7) · **Version:** 5
 
 Design for [`../requirements/generic-cypher-mcp2.md`](../requirements/generic-cypher-mcp2.md)
 (FR-1…FR-14, AC-1…AC-13), per
@@ -16,6 +16,72 @@ given and cited by path, not re-derived. Written directly against the post-M6 to
 independently re-confirmed again in this revision (`mcp__cypher__query(graph='nonexistent_probe2',
 ...)` → the live loaded-graphs list contains no CPG relevant to `claude/`, `skills/`, or
 `cypher-mcp/`; only `cpg_falkorchat`/`cpg_salesperson`, unrelated application codebases).
+
+---
+
+## Revision note — 2026-08-20 (Version 5)
+
+**Not a plan-gate revision — a correction during Wave-2 implementation dispatch**, routed to
+`architect` by `teco` because this plan is its document and outside `teco`'s own write guard. Per
+the reviewer's own Pass-3 recommendation (Version 4's note below), this document dispatches without
+a further gate unless something new surfaces at design level; this correction is a scope reduction
+forced by real-world permission enforcement, not a design change, so no fourth gate is opened. Full
+record: `docs/plans/generic-cypher-mcp2-coordination.md`'s ledger row `` `cobb` batch
+(prompt+header, all 12 + self-migration) `` — cited here, not re-derived.
+
+**The header-retarget half of §4.2/P3-M3 is dropped, permanently, by stakeholder decision — real
+permission-system enforcement, not a design choice this plan gets to keep making.** During Wave-2
+dispatch, `cobb` attempted the per-agent `kaizen/inbox.md` header retarget that this plan's §4.2
+(step 3 of the per-`C-<X>` unit description) and P3-M3 (Version 4's note below) authorize — on the
+theory, stated explicitly in both places, that the header note sits outside each file's own
+*"Content below is preserved for historical reference and will not change"* immutability promise.
+The actual Claude Code permission system **denied 3 of the 12 edits** (`analyst`, `data-scientist`,
+`qa-engineer`) with the reason **"this is frozen"** — a real, human-level enforcement signal, not a
+misconfiguration `cobb` could route around. Asked to choose between (a) proceeding with all 12
+header retargets anyway, or (b) dropping the header-retarget half entirely and reverting the one
+file already changed (`teco`'s), **the stakeholder chose (b).** `cobb` reverted `teco`'s header edit
+via `git checkout` and confirmed via `git diff`/`git status` that all 12 `claude/*/kaizen/inbox.md`
+files are byte-identical to `HEAD` — the header-retarget half of every `C-<agent>` unit is fully
+dropped, not deferred.
+
+Effects on this document, recorded here as a narrative correction rather than edited into the step
+table (the table cells stay exactly as gated, as the historical record of what Version 4 designed
+and `analyst` approved — this note is the pointer a later reader follows to know what actually
+happened):
+
+1. **§4.2's per-agent header-retarget instruction** (the second half of step 3: *"...and retargets
+   `claude/<X>/kaizen/inbox.md`'s header note..."*) **and P3-M3's "Content below" scoping
+   rationale** (Version 4's revision note below, plus the "header retarget is scoped narrowly"
+   paragraph immediately under the §4.2 table) **are superseded by this 2026-08-20 stakeholder
+   decision.** Real-world permission enforcement holds every `kaizen/inbox.md` fully frozen, header
+   note included — contradicting this plan's own reading that the header sat outside the file's
+   immutability promise. The textual analysis was a reasonable reading of the header's own wording;
+   the enforcement layer disagreed, and the stakeholder sided with enforcement over the plan's
+   reading.
+2. **Every `C-<agent>` row's done-condition in §4.2's table that references a header retarget — all
+   12 rows' `Files` column and `Done-condition highlights` column — is now read as N/A — dropped,
+   not achieved.** This also covers the paragraph directly below the §4.2 table describing the
+   4-file (`analyst`/`teco`/`qa-engineer`/`data-scientist`) provenance-clause scoping exercise —
+   that scoping is moot now that no header is touched at all, for any of the 12. Nothing in §4.2's
+   table itself is edited by this note; only its header-retarget content is to be read as
+   not-achieved going forward.
+3. **Secondary, independent correction — factual, not a scope change.** The `C-graph-dba` row's
+   parenthetical, *"no entries, so no provenance clause to protect,"* is wrong on a direct read of
+   the file: `graph-dba`'s `claude/graph-dba/kaizen/inbox.md` header does carry a genuine past-tense
+   provenance clause, dated **2026-08-18** — predating the general 2026-08-20 cross-team migration
+   this plan's `C-<agent>` units cover. The row conflated two different facts about two different
+   artifacts: "0 entries in `kaizen_graph_dba`" (true — and the correct reason cited for that row's
+   *data*-migration side being a no-op) with "no provenance clause in the header" (false — the
+   header's provenance clause predates and is unrelated to the `kaizen_graph_dba` entry count). Moot
+   for actual editing now that no header is ever touched, but the row's stated premise was incorrect
+   and is corrected here for anyone reading the plan later.
+
+**Version bumped 4→5** because this note materially changes how 12 of §4.2's table rows (plus the
+scoping paragraph beneath it) are to be read — not a typo fix, and consistent with this document's
+own established pattern of pairing a dated revision note with a `Version:` bump (V2, V3, V4 below).
+**No other content in this document changes** — §3.7, §4.1, §4.3, §4.4, §5, and §6 still describe
+the plan exactly as Version 4 gated it; only the header-retarget half of §4.2 (table cells left
+intact as historical record) and its P3-M3 rationale are affected.
 
 ---
 
