@@ -53,7 +53,7 @@ switching between families:
 | | `cpg_*` (Joern) | `kaizen_team` / `reference` / `ws:*` (`falkor-chat`) |
 |---|---|---|
 | Node labels | `SCREAMING_SNAKE` (`METHOD`, `CALL`) | `PascalCase` (`Message`, `WorkflowRun`) |
-| Relationship types | `SCREAMING_SNAKE` (`AST`, `REACHING_DEF`) | `UPPER_SNAKE` (`POSTED_BY`, `HAS_STEP`) — looks similar but... |
+| Relationship types | `SCREAMING_SNAKE` (`AST`, `REACHING_DEF`) | `UPPER_SNAKE` (`POSTED_BY`, `HAS_STEP`) — same convention, no divergence here |
 | **Property keys** | **`UPPER_CASE`** (`m.NAME`, `m.CODE`, `m.FULL_NAME`) | **`camelCase`** (`m.msgId`, `m.createdAt`) |
 
 A lowercase property lookup on a `cpg_*` graph (`m.name`) silently returns `null` — no
@@ -373,9 +373,13 @@ flowchart LR
     M -->|MENTIONS| EN
 ```
 
-> **This corpus is currently dormant.** Entity extraction is a documented no-op today —
-> the labels/edges above are real (implemented write paths, indexed, live-verified) but
-> in every workspace currently loaded, `Document`/`Chunk`/`Entity` sit at zero nodes.
+> **This corpus is schema-provisioned, not implemented.** The labels/edges above are
+> indexed and live-verified as *schema* (`scripts/bootstrap_schema.sh` provisions
+> `Document`/`Chunk`/`Entity` unconditionally), but — except for `MENTIONS`, a dormant
+> read-side no-op in the hybrid-retrieval query — **no write path in this codebase
+> populates `Document`, `Chunk`, `HAS_CHUNK`, `DERIVED_FROM`, or `ABOUT` at all.** This
+> isn't "implemented but unexercised on this data" — building a document-ingestion/
+> chunking pipeline that actually populates this corpus is still greenfield work.
 > `Message.embedding` is populated (every posted message gets one, out of band), which is
 > what actually powers hybrid retrieval today — the vector lives on the `Message` node
 > itself, not on a separate `Chunk`.
@@ -421,11 +425,12 @@ flowchart LR
     SR1 -->|TRACED| TE["TraceEvent"]
 ```
 
-**Also present, singleton config:** `WorkspaceConfig` — created lazily (`MERGE`) the
-first time a workspace gets a per-kind LLM/embedding model override, as a single
-`{workspaceConfigId: 'default'}` node; **zero or one node per workspace**, not
-guaranteed present (e.g. `ws:acme` currently has none — no override has been set there).
-No relationships; read/written by key, not traversed.
+**Schema also defines a singleton config label:** `WorkspaceConfig` — created lazily
+(`MERGE`) the first time a workspace gets a per-kind LLM/embedding model override, as a
+single `{workspaceConfigId: 'default'}` node; **zero or one node per workspace, not
+guaranteed present** (e.g. `ws:acme` currently has zero — no override has been set
+there; same zero-nodes-is-normal caveat as the gotchas bullet below). No relationships;
+read/written by key, not traversed.
 
 **Try it:**
 
