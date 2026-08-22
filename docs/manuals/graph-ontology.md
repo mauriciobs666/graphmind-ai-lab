@@ -402,11 +402,13 @@ flowchart LR
 | `NEXT` | `StepRun` → `StepRun` | Execution order — the run's own audit trail |
 | `PRODUCED` | `StepRun` → `Message` | A step-emitted chat message — **distinct from `EMITTED`** (§4a); reused a `falkor-chat`-wide naming convention for "who/what created this artifact" |
 | `TRACED` | `StepRun` → `TraceEvent` | Debug-only trace linkage |
+| `TRANSITION` | `Step` → `Step` | Same meaning as in `reference` (§3) — materialized into the workspace along with the rest of the snapshot, so a workspace's own transition graph is walkable locally without reaching back into `reference` |
 
 ```mermaid
 flowchart LR
     WDS["WorkflowDefSnapshot"] -->|HAS_STEP| ST["Step"]
     WDS -->|START| ST
+    ST -->|TRANSITION| ST2["Step"]
     WR["WorkflowRun<br/>runId, status, ctx"] -->|OF_DEF| WDS
     WR -->|AT_STEP| ST
     WR -->|TRIGGERED_BY| MSG["Message"]
@@ -419,8 +421,10 @@ flowchart LR
     SR1 -->|TRACED| TE["TraceEvent"]
 ```
 
-**Also present, singleton config:** `WorkspaceConfig` — one `{workspaceConfigId:
-'default'}` node per workspace holding optional per-kind LLM/embedding model overrides.
+**Also present, singleton config:** `WorkspaceConfig` — created lazily (`MERGE`) the
+first time a workspace gets a per-kind LLM/embedding model override, as a single
+`{workspaceConfigId: 'default'}` node; **zero or one node per workspace**, not
+guaranteed present (e.g. `ws:acme` currently has none — no override has been set there).
 No relationships; read/written by key, not traversed.
 
 **Try it:**
