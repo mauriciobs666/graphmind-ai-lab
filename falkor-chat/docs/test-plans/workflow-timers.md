@@ -1,6 +1,6 @@
 # Workflow timers / scheduled wakeups — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-028
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-028
 
 ## 1. Scope & objective
 

@@ -114,7 +114,8 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 > **K-024 (both proof flows)** delivered 2026-07-21 → HISTORY.md. **All build items are done.**
 > Remaining to M3 ✅: **K-025 (QA acceptance = U15) — unblocked, not yet run**. **K-027**
 > (live-triage reliability) is a parallel follow-up track, explicitly *not* an M3-green gate per
-> decision D12-B; so are **K-028/K-029/K-030**, filed out of the K-024 gates.
+> decision D12-B; so are **K-028 ✅ (delivered 2026-08-21)**/K-029/K-030, filed out of the K-024
+> gates.
 > Canonical item text + slice-1 implementation plan: `docs/archive/plans/m3-workflow-engine.md`
 > (Part A = decomposition, Part B = slice 1). Compact copies below.
 
@@ -630,7 +631,7 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   contract with an explicit n and no cherry-picking; the calibration harness reading
   `golden_guards.jsonl` per the §4/§7 protocol, reporting both arms with the D10 caveat attached.
 
-### K-028 — Workflow timers / scheduled wakeups (🔵 proposed — filed out of K-024, decision D-C)
+### K-028 — Workflow timers / scheduled wakeups (✅ delivered 2026-08-21 — see [`HISTORY.md`](./HISTORY.md))
 
 > **Why it exists.** K-024 settled `wait` as **signal-driven, not timer-driven**, for a verifiable
 > reason: **this system has no scheduler.** FastAPI `BackgroundTasks` are request-scoped, so nothing
@@ -655,6 +656,27 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   out at design time). The real risk is the scheduler becoming a second source of truth for run state.
 - **Test strategy:** offline — an injected clock driving the sweep; a CAS-contention test proving a
   timer wakeup and a concurrent human submit resolve to exactly one resume.
+
+> **Delivered 2026-08-21.** A `wait`/`human` step may declare `config.waitForSeconds`/`waitUntil`
+> plus a required escalation transition guarded on `ctx.timerFired == "<own step key>"`. A periodic
+> sweep (`Services.sweep_due_workflow_runs`, exposed as `POST /workflow-runs/due` and ticked
+> automatically in-process, gated on `WORKFLOW_ENABLED`) resumes a due run through the **existing**
+> `resume_run_with_ctx` CAS, atomically writing the step-scoped, reserved `ctx.timerFired` marker —
+> no new `WorkflowRun` property, no new index, no scheduler state of its own; dueness is derived
+> fresh every sweep from `StepRun.startedAt` + `Step.config`. Additive-only: a step declaring
+> neither key is byte-identical to pre-K-028 behaviour. Design: `docs/plans/workflow-timers.md`
+> (v3 — v1's mandatory-unconditional-fallback-arm churn fix was found, during implementation, to
+> make a conforming step never park at all; v3's marker-guard mechanism replaces it and also
+> resolves the "not yet" foreclosure the same review pass had separately flagged). Gated 3 plan
+> passes + a diff re-gate (`docs/reviews/workflow-timers.md`, `analyst`, final verdict *approve
+> with suggestions*, independently re-verified against live source each time). QA-accepted
+> (`docs/test-reports/workflow-timers-report.md`, `qa-engineer`, **PASS, zero defects**, 12/12
+> planned test items, including the automatic periodic sweep observed ticking in a real running
+> process). Suites: offline pytest 1456 → 1529 passed, 3 deselected; query suite 320/320. One
+> follow-up filed at close, not gating this item: **K-049** (a shared-infra reliability defect
+> found incidentally while testing — an oversized value on an *indexed* graph property crashed the
+> shared dev FalkorDB instance outright; unrelated to K-028's own correctness, which never writes
+> an unbounded value to an indexed property).
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
@@ -1681,6 +1703,42 @@ modified Cypher**, `test_queries.sh` unchanged at **256/256** (the plan's no-new
   today); a live/replay-level regression check (mirroring `docs/plans/ministral-reprobe-ml.md` §4.2's
   own repro) that the fixed shape no longer 400s against a strict-alternation template, without
   requiring a live Ministral instance to be part of the standing suite.
+
+### K-049 — An oversized value on an *indexed* graph property crashes the shared FalkorDB instance outright (🔵 proposed — found during the K-028 workflow-timers implementation, `coder`, 2026-08-21)
+
+> **Why it exists.** While building K-028's ctx-merge length-bound test (`test_workflow_timers.py`),
+> `coder`'s first attempt used a deliberately oversized **`Step.key`** — an indexed/constrained graph
+> property (`falkor-chat/AGENTS.md`'s schema convention: "every entity node has a stable
+> `{label}Id` property, a range index, and a uniqueness constraint") — to trigger the length check.
+> Publishing that def **crashed the shared dev `falkordb-dev` container outright**: the connection
+> dropped mid-request and the `--rm` container vanished entirely from `docker ps -a`, reproduced
+> **twice** across independent restarts. Root cause not established — `--rm` meant no logs survived
+> the crash instant. `coder` worked around it for K-028's own purposes by switching the trigger to
+> an oversized **ctx** value instead (opaque, unindexed, confirmed safe) — K-028 itself never writes
+> an unbounded value to an indexed property, so this is not a K-028 defect, but the underlying engine
+> behavior is real and unresolved.
+- **Why it matters beyond K-028.** This is a **shared-instance** reliability risk: the same
+  `falkordb-dev` container also hosts `cpg_falkorchat`, `kaizen_team`, and every workspace graph any
+  agent is actively using. Any future def/data with an oversized value on *any* indexed/constrained
+  property (not just `Step.key`) could reproduce this — a crash-on-write footgun with a blast radius
+  well outside whatever feature happens to trigger it.
+- **Owner:** **`graph-dba`** — root-cause (reproduce deliberately in an isolated/throwaway container,
+  not the shared dev instance; capture logs by dropping `--rm` for the repro run; identify whether
+  this is a FalkorDB engine limit, a resource-exhaustion crash, or something else) → harden (an
+  app-side length guard before any indexed-property write reaches the graph, and/or an upstream
+  FalkorDB issue filing per the existing `K-007 OQ6`-style precedent for confirmed engine anomalies).
+- **Scope sketch (to be designed, not decided here):** confirm reproducibility in isolation; bound
+  the actual failure mode (a specific length threshold? any oversized value? specific to
+  indexed/constrained properties or broader?); decide the fix layer — likely an app-side
+  `MAX_*_LEN`-style guard on every indexed/constrained-property write path (`services.py`'s existing
+  `MAX_ID_LEN`/`MAX_CONFIG_LEN` precedent), mirrored to cover step keys, def keys, and any other
+  indexed identifier, not just workflow `ctx`/`config`.
+- **Risks:** the shared dev instance itself — reproduce only in a disposable/isolated container, never
+  against `falkordb-dev` while other agents may depend on it (`kaizen_team`, `cpg_falkorchat`, live
+  workspaces).
+- **Test strategy:** an isolated-container repro proving the crash and capturing logs (no `--rm`);
+  once root-caused, a regression test proving the chosen guard rejects the offending shape before it
+  ever reaches a graph write.
 
 > **K-011 + K-012 — delivered ✅ 2026-07-06 → milestone M1 — Chat core complete** (HISTORY.md).
 > **K-008 + K-013 + K-014 + K-015 — delivered ✅ 2026-07-08 → milestone M2 — GraphRAG complete,

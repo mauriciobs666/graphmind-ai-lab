@@ -1,6 +1,6 @@
 # Workflow timers / scheduled wakeups — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-028 · **Version:** 3
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-028 · **Version:** 3
 
 > **Revision note — 2026-08-21 (v2 → v3).** `analyst` Pass 2 gated v2 *approve with suggestions*,
 > but `teco`'s implementation dispatch (`coder`, U3a) surfaced — and `teco` independently

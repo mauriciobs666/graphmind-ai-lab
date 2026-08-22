@@ -1,6 +1,6 @@
 # Workflow timers / scheduled wakeups — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-028
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-028
 
 ## Scope & verdict
 

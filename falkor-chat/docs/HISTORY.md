@@ -5,6 +5,70 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-21 — K-028: workflow timers / scheduled wakeups — delivered, QA-accepted
+
+**What:** A `wait`/`human` workflow step may now declare `config.waitForSeconds` (relative) or
+`config.waitUntil` (absolute epoch-ms), alongside a required escalation transition guarded on
+`ctx.timerFired == "<the step's own key>"`. A periodic sweep (`Services.sweep_due_workflow_runs`,
+exposed as `POST /workflow-runs/due` and also ticked automatically in-process on
+`FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S`, default 30s, gated on `WORKFLOW_ENABLED`) finds runs parked
+past their due time and resumes them through the **existing** `resume_run_with_ctx` CAS, atomically
+writing the step-scoped, reserved `ctx.timerFired` marker so the escalation guard fires
+deterministically and exactly once. `TIMER_FIRED_CTX_KEY` is added to `RESERVED_CTX_KEYS`, so no
+human/API caller can ever set or spoof it. A step declaring neither key keeps today's forever-park,
+signal-only behaviour byte-identical (additive-only) — the existing `access-request@v1` proof flow
+is unmodified and unaffected. New `repository.find_due_wait_candidates` (`QUERIES.md` §12.16) reuses
+the existing `WorkflowRun.status` index — zero new indexes, zero new node/relationship types.
+Publish-time validation rejects a timer-bearing step with no matching escalation transition, and any
+caller-supplied `ctx.timerFired`. The sweep's per-candidate resume re-checks `atStepKey` (not just
+`status`) to avoid a stale-scan race, and applies the same `MAX_CONFIG_LEN` bound
+`submit_workflow_input`'s own ctx merge enforces.
+
+**Why:** `wait` was implemented (K-024) as signal-driven only — parked and released solely by an
+external signal on `POST /workflow-runs/{id}/input` — because the system had no scheduler. That
+meant an SLA/escalation step ("if no approval in 48h, escalate") couldn't be expressed. K-028 adds
+that release mechanism without introducing a second source of truth for run state: the sweep never
+writes a new `WorkflowRun` property and derives dueness fresh, every call, from data the engine
+already writes (`StepRun.startedAt` + `Step.config`).
+
+**How it got here (worth recording — the design changed mid-flight for a real reason):** the first
+gated design (v1/v2, `docs/plans/workflow-timers.md`) closed the churn risk of an automated
+sweep-triggered resume by requiring a timer-bearing step to declare an *unconditional* fallback
+transition. Two `analyst` plan-gate passes approved this. During implementation, writing the
+CAS-contention test surfaced that the fix made the feature **unreachable**: `executor._drive_loop`
+evaluates a step's transitions on every pass, including its very first arrival — an unconditional
+transition fires immediately, before the step can ever park. `teco` independently re-verified this
+against the live source before routing it back. v3 replaces the unconditional arm with the
+step-scoped `ctx.timerFired` marker-guard mechanism described above — a genuinely conditional
+escalation guard, false until the sweep itself resumes the run. `analyst`'s Pass 3 traced the new
+mechanism end to end against live source (not the revision note) and confirmed it works; the
+post-implementation diff re-gate independently re-verified the shipped code the same way (own suite
+runs, own `GRAPH.PROFILE`, own mutation test via a scratch-copy `services.py` load, a recomputed
+SHA-lock hash on `_drive_loop` confirming it, once again, was never touched).
+
+**Verified:** `analyst` — plan gate ×3 passes (`docs/reviews/workflow-timers.md`; Pass 1 needs
+changes, Pass 2 approve with suggestions, Pass 3 approve with suggestions) + a post-implementation
+diff re-gate (approve with suggestions, independently re-run rather than trusted). `qa-engineer` —
+acceptance pass (`docs/test-reports/workflow-timers-report.md`): **PASS, zero defects**, all 12
+planned test items, driving the real running process end to end including the automatic periodic
+sweep actually ticking (not a stub) and the concurrent human-vs-timer race resolving to exactly one
+winner in both orderings. `teco` independently re-ran the full baseline before and after QA.
+
+**Suites:** offline `pytest -q` **1456 → 1529 passed, 3 deselected**; query suite (`test_queries.sh`)
+**320/320** (this component's own last-recorded baseline of 256/256 was already stale before this
+delivery, unrelated to K-028).
+
+**Docs:** `docs/plans/workflow-timers.md` (v3), `docs/reviews/workflow-timers.md` (3 plan-gate
+passes + diff re-gate), `docs/test-plans/workflow-timers.md`, `docs/test-reports/workflow-timers-report.md`,
+`docs/plans/workflow-timers-coordination.md` (the full coordination record). `DESIGN.md` §6.1/§6.2/§6.3
+and `scripts/start_server.sh` updated in the same change.
+
+**Follow-up filed, not gating this item:** **K-049** — while building the ctx-merge length-bound
+test, an oversized value written to an *indexed* graph property (`Step.key`) crashed the shared dev
+FalkorDB instance outright (reproduced twice). Unrelated to K-028's own correctness (the shipped
+feature never writes an unbounded value to an indexed property; the fix landed on the opaque, ctx
+side instead) but a real shared-instance reliability risk, routed to `graph-dba` to root-cause.
+
 ## 2026-08-21 — Hygiene: home-path leak genericized in `docs/test-reports/graphrag-eval-report.md`
 
 **What:** Five occurrences of the maintainer's absolute `/home/<user>/prg/graphmind-ai-lab/…`

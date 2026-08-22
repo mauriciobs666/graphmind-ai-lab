@@ -1,6 +1,6 @@
 # Workflow timers / scheduled wakeups — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-028
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-028
 
 ## Summary
 
