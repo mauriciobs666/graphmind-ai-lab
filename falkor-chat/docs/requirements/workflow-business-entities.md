@@ -1,13 +1,14 @@
 # Durable mutable business entities for workflows — Feature Requirements
 > **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of five sibling capabilities scoped out of a single "business entities in
+This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22). The others:
 `docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-deterministic-compute.md`,
 `docs/requirements/workflow-durable-profile.md`, `docs/requirements/workflow-nl-query-generation.md`
-(the last one added mid-interview, spun off from `workflow-catalog-lookup.md`). Each is
-independently motivated and independently shippable — read this one for cart/order-shaped
-mutable state specifically.
+(added mid-interview, spun off from `workflow-catalog-lookup.md`),
+`docs/requirements/workflow-composition.md` (opened later still, mid-interview of
+`workflow-durable-profile.md`). Each is independently motivated and independently shippable —
+read this one for cart/order-shaped mutable state specifically.
 
 ## Intent
 Close a structural gap ahead of any specific consumer: falkor-chat workflows today have no way

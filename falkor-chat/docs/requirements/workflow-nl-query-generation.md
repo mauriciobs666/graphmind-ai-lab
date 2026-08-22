@@ -1,13 +1,14 @@
 # Natural-language query generation over structured graph data — Feature Requirements
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of five sibling capabilities scoped out of a single "business entities in
+This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
 `docs/requirements/workflow-business-entities.md` for the shared background). The others:
 `docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-business-entities.md`,
-`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-durable-profile.md`.
-This document is younger than the other four — it was spun off mid-interview from
-`workflow-catalog-lookup.md`, not scoped out on day one.
+`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-durable-profile.md`,
+`docs/requirements/workflow-composition.md`. This document was spun off mid-interview from
+`workflow-catalog-lookup.md`, not scoped out on day one; `workflow-composition.md` is younger
+still, opened mid-interview of `workflow-durable-profile.md`.
 
 ## Intent
 Spun off from `workflow-catalog-lookup.md` (2026-08-22): letting a workflow answer

@@ -1,12 +1,13 @@
 # Structured catalog/reference lookup for workflows — Feature Requirements
 > **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of five sibling capabilities scoped out of a single "business entities in
+This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
 `docs/requirements/workflow-business-entities.md` for the shared background). The others:
 `docs/requirements/workflow-business-entities.md`, `docs/requirements/workflow-deterministic-compute.md`,
-`docs/requirements/workflow-durable-profile.md`, `docs/requirements/workflow-nl-query-generation.md`.
-Read this one for read-only, exact/filterable domain data via a fixed set of query shapes (e.g.
+`docs/requirements/workflow-durable-profile.md`, `docs/requirements/workflow-nl-query-generation.md`,
+`docs/requirements/workflow-composition.md` (the last one opened later still, mid-interview of
+`workflow-durable-profile.md`). Read this one for read-only, exact/filterable domain data via a fixed set of query shapes (e.g.
 a product catalog) specifically — not for mutable state (the business-entities doc) and not for
 answering arbitrarily-phrased questions (spun off into its own sibling,
 `workflow-nl-query-generation.md`, once that turned out to be a distinct project).
