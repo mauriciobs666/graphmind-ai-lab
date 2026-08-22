@@ -1,5 +1,5 @@
 # Durable mutable business entities for workflows — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22). The others:
@@ -129,3 +129,4 @@ with a `cancelled` branch possible only before fulfillment — no payment/return
 2026-08-22 — Order lifecycle transitions are driven by explicit human/operator or external-signal
 steps, mirroring `access-request`'s human/wait pattern — no automatic or timer-driven
 transitions, consistent with falkor-chat's existing no-timers design.
+2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
