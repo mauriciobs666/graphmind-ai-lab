@@ -1,5 +1,5 @@
 # Delegate mid-run escalation — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-21
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-21
 
 ## Intent
 Now that `SendMessage` is proven as a live, working mechanism for resuming a delegate (K-007,

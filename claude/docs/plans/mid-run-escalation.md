@@ -1,6 +1,6 @@
 # Delegate mid-run escalation — Design
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** — (—)
 
 **Component:** `claude/` · **Owner altitude:** cobb (design only, per `claude/AGENTS.md`'s routing
 convention — this is agent/prompt engineering, not a codebase change) · **Reviewer:** `analyst`

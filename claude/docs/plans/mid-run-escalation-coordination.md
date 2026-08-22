@@ -1,6 +1,6 @@
 # Delegate mid-run escalation — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—)
 
 ## Goal
 Design and implement the requirements at `claude/docs/requirements/mid-run-escalation.md`

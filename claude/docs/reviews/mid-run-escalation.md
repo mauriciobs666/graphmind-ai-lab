@@ -1,6 +1,6 @@
 # Delegate mid-run escalation — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (—)
 
 ## Scope & verdict
 
