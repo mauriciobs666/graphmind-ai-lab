@@ -1,5 +1,5 @@
 # Deterministic computation inside a workflow — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
@@ -87,3 +87,4 @@ no discounts/tax/rounding — can extend later if a real need arises.
 an LLM call just to compute it (a cost/latency/reliability concern, not just a correctness one).
 The latter (FR-3) directly bears on — without resolving — the step-type-vs-tool fork the
 architect flagged earlier in this effort.
+2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
