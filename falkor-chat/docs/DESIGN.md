@@ -292,7 +292,9 @@ A definition is a directed graph of steps; a run is an execution trace that walk
   - **`human`** — parks the run awaiting an assignee. `config.waitsForHuman: true` is **mandatory**
     and enforced at publish; the `StepRun.output` carries an `awaiting` envelope
     (`prompt`/`fields`/`assignee`), so a client learns what the run is waiting for from
-    `GET /workflow-runs/{id}/step-runs` with no new query.
+    `GET /workflow-runs/{id}/step-runs` with no new query. **Optionally timer-releasable** (K-028,
+    shipped) — see the `wait` bullet just below for the shared mechanism, additive-only, identical
+    for both step types.
   - **`decision`** — **no side effect at all**: its semantics are entirely its outgoing guards. With
     no outgoing transition it is a terminal outcome node (the run ends `done`).
     > ⚠️ **Not enforced (residual).** A `decision` step whose outgoing transitions are *all*
@@ -301,11 +303,16 @@ A definition is a directed graph of steps; a run is an execution trace that walk
     > a park declaration. The equivalent check for `human`/`wait` steps *is* enforced (above); doing
     > the same here would retro-reject existing fixtures, so it is a deliberate gap, not an oversight
     > (K-029).
-  - **`wait`** — **signal-driven, not timer-driven.** This system has **no scheduler** (decision
-    D-C); a `wait` step parks exactly as `human` does and is released by an **external signal**
-    delivered through `POST /workflow-runs/{id}/input`. Mechanically it *is* `human` to the engine —
-    only the `awaiting.kind` string differs, and it carries the same mandatory `waitsForHuman: true`.
-    Real timers/scheduled wakeups are backlog **K-028**, not a gap in this model.
+  - **`wait`** — **signal-driven by default, and optionally timer-releasable too (K-028, shipped).**
+    A `wait`/`human` step parks awaiting an **external signal** delivered through
+    `POST /workflow-runs/{id}/input` — mechanically `wait` *is* `human` to the engine, only the
+    `awaiting.kind` string differs, and both carry the mandatory `waitsForHuman: true`. A step may
+    **additionally** declare `config.waitForSeconds` (relative) or `config.waitUntil` (absolute
+    epoch-ms); a periodic in-process sweep (`Services.sweep_due_workflow_runs`, also exposed as
+    `POST /workflow-runs/due`) then resumes it once due, exactly as an external signal would —
+    additive-only, byte-identical forever-park behaviour for a step that declares neither key. See
+    §6.2 (the sweep's read model) and §6.3's K-025 handoff note (below) for the mechanism and its
+    residual limits; `docs/plans/workflow-timers.md` is the full design.
 - `prompt` / `message` / `tool` → agent-adjacent flows (LLM call, post a message, invoke a tool) —
   **not implemented**: `executor._execute_step` raises `NotImplementedError` naming
   `docs/archive/plans/m3-process-flow.md` (the documented typed-handler seam, decision D-E). A deliberate
@@ -427,6 +434,16 @@ status flip nor the ctx — never a silent loss.
 > step branched on. Single-approver use today; the real fix (a `ctxVersion` counter CAS) is a
 > deliberate follow-up, not built.
 
+**K-028 (shipped): the periodic sweep is one more `resume_run_with_ctx` submitter, not a new write
+path.** `Services.sweep_due_workflow_runs` resumes a genuinely-due `wait`/`human` run through the
+same CAS, merging a step-scoped, engine-reserved `ctx.timerFired = "<parked step's own key>"`
+marker (in `RESERVED_CTX_KEYS` — no human/API caller can ever set or spoof it) so the run's own
+publish-time-required escalation guard fires deterministically on that resume, and only then. It
+inherits R-1's exact shape (one more racing submitter, same single-winner CAS) and adds no new
+residual class — see `docs/plans/workflow-timers.md` §8 for the full argument. The sweep never
+writes `WorkflowRun.wakeAt` or any other new property; dueness is derived fresh, every call,
+from `StepRun.startedAt` (via the existing `LAST_STEP_RUN` tail pointer above) and `Step.config`.
+
 The engine loop: read `AT_STEP` → execute the step (LLM-native agent loop or deterministic handler) →
 evaluate outgoing `TRANSITION` guards against `ctx` (first-firing wins) → `record_step_and_advance`
 (create the `StepRun`, append `NEXT` via the tail, move `AT_STEP`) — **or** suspend to `waiting` if the
@@ -482,12 +499,17 @@ yet — the executor's existing "no transition fired" outcome parks it; writing 
 (`POST /workflow-runs/{id}/input`) makes the same guard fire on resume. The executor's drive loop was
 **not modified** to support any of it.
 
-> **Handoff note for K-025 (QA acceptance) — repeated from §6.1 because it is the single most
-> misreadable thing here:** `wait` is **signal-driven, not timer-driven, and mechanically identical
-> to `human`** — only the `awaiting.kind` string differs. There is no scheduler in this system
-> (decision D-C); a parked `wait` is released by an external signal on the input endpoint, never by
-> elapsed time. Timers/scheduled wakeups are backlog **K-028**. A `wait` step that never advances on
-> its own is the specified behaviour, not a defect.
+> **Handoff note for K-025 (QA acceptance) — repeated from §6.1, corrected for K-028 (shipped).**
+> `wait` is **signal-driven by default, and mechanically identical to `human`** — only the
+> `awaiting.kind` string differs. A parked `wait`/`human` run is normally released only by an
+> external signal on the input endpoint — **this remains the specified, additive-only baseline for
+> a def that declares neither `waitForSeconds` nor `waitUntil`; nothing here changed.** What did
+> change: a step *may* now **additionally** declare one of those two keys to also become
+> releasable by elapsed time, via the periodic sweep (`Services.sweep_due_workflow_runs`, §6.2's
+> "K-028 (shipped)" note above; `docs/plans/workflow-timers.md`). Still true, unconditionally: no
+> `_drive_loop` edit, no new `WorkflowRun` property, no scheduler *state* of its own — the sweep
+> re-derives dueness fresh every call rather than tracking it. A `wait`/`human` step that never
+> advances on its own is still valid, specified behaviour for any def that doesn't opt in.
 
 ---
 

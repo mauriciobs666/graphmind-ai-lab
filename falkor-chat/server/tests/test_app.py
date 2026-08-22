@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import time
+import warnings
 
 import pytest
 from fastapi.testclient import TestClient
@@ -92,6 +93,71 @@ def test_importing_app_module_never_requires_reachable_falkordb():
     assert proc.returncode == 0, proc.stderr
 
 
+# ── K-028 §6 test 6 — the periodic sweep's lifespan wiring ───────────────────────
+# The one test in the whole K-028 plan that touches real wall-clock time (proving
+# the loop actually ticks); everything needing precise due-time behaviour is
+# proven by `test_workflow_timers.py`'s injected clock instead, never by this one.
+# Interval kept tiny (10ms) and the wait generous (10x) so this stays fast and
+# non-flaky.
+
+
+class _StubSweepServices:
+    """The minimal surface `create_app`'s lifespan touches: `ensure_actor` (no-op,
+    so no FalkorDB is needed at all) and a counting `sweep_due_workflow_runs`."""
+
+    def __init__(self) -> None:
+        self.calls: list[int] = []
+
+    def ensure_actor(self, ctx) -> None:
+        pass
+
+    def sweep_due_workflow_runs(self, ctx, *, limit: int):
+        self.calls.append(limit)
+        return {"checked": 0, "due": 0, "resumed": [], "raced": [], "faulted": []}
+
+
+def test_sweep_loop_ticks_on_interval_and_cancels_cleanly_at_shutdown():
+    # NOTE on what this test can and cannot discriminate (found empirically
+    # while mutation-testing this test, not assumed): `TestClient`'s own
+    # portal teardown cancels any task still running on its event loop when
+    # the `with` block exits, REGARDLESS of whether `create_app`'s own
+    # lifespan does its explicit `sweep_task.cancel()` + await — so
+    # `sweep_task.cancelled()` being `True` at the end does not, by itself,
+    # prove the app's own cancellation code ran (verified: removing that code
+    # entirely, the task still ends up `.cancelled() == True` here). What
+    # *does* catch a real regression in this harness is `app_.state.
+    # sweep_task` actually being set — accessing it below raises
+    # `AttributeError` if that line is ever dropped (confirmed by mutation-
+    # testing that specific line). The `.cancelled()`/no-propagated-exception
+    # checks are kept as a secondary, still-meaningful smoke check (a
+    # `CancelledError` escaping the lifespan, or a task left `running` after
+    # the `with` block, would both still fail loudly here) even though they
+    # don't independently pin the shutdown-cancellation code path.
+    services = _StubSweepServices()
+    app = create_app(
+        services, context_provider=CTX, mount_mcp=False,
+        sweep_interval_s=0.01, sweep_limit=7,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with TestClient(app) as c:
+            time.sleep(0.1)
+            sweep_task = c.app.state.sweep_task  # AttributeError if never stored
+            assert not sweep_task.done(), "the loop stopped ticking on its own"
+        # The `with` block above returning cleanly (no propagated
+        # `CancelledError`) is itself part of the assertion.
+
+    assert services.calls, "the sweep tick never fired within the wait window"
+    assert all(limit == 7 for limit in services.calls)
+    assert sweep_task.cancelled(), "the task was left dangling, never cancelled"
+    # No "task was destroyed but it is pending" (or similar asyncio) warning.
+    assert not [
+        w for w in caught
+        if "was destroyed" in str(w.message) or "was never retrieved" in str(w.message)
+    ]
+
+
 def test_startup_against_unreachable_db_fails_fast_with_clear_error(monkeypatch):
     """DEF-2: building the app offline must work; the *lifespan* makes the
     first connection and must fail within the connect-timeout budget with an
@@ -154,6 +220,9 @@ def test_default_app_wiring_is_gated_on_enable_agent(monkeypatch):
     app_mod._build_default_app()
     assert captured.get("responder") is None
     assert captured.get("embed_worker") is None
+    # K-028: this path passes no kwargs at all — `sweep_interval_s` stays at
+    # `create_app`'s own `None` default, untouched.
+    assert "sweep_interval_s" not in captured
 
     # Enabled: both are wired and the responder targets the configured agent id.
     monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", True)
@@ -186,12 +255,17 @@ def test_workflow_wiring_is_gated_on_workflow_enabled(monkeypatch):
     app_mod._build_default_app()
     assert captured.get("responder") is not None
     assert captured.get("trigger") is None
+    # K-028: the periodic sweep depends on the executor, which only exists in
+    # the branch below — `create_app`'s `sweep_interval_s` default (`None`)
+    # must be left untouched here (no keyword passed at all).
+    assert "sweep_interval_s" not in captured
 
     # WORKFLOW on: trigger wired (targets the agent + configured def), responder held
     # by the trigger (not passed to create_app → API schedules only the trigger).
     monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", True)
     monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_KEY", "triage")
     monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_VERSION", "v1")
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_SWEEP_INTERVAL_S", 45.0)
     app_mod._build_default_app()
     assert captured.get("trigger") is not None
     assert captured.get("responder") is None
@@ -199,6 +273,9 @@ def test_workflow_wiring_is_gated_on_workflow_enabled(monkeypatch):
     assert trig._agent_id == "assistant"
     assert trig._def_key == "triage"
     assert trig._responder is not None       # holds the responder for fall-through
+    # K-028 §3.6: the sweep interval is only ever passed inside this same
+    # WORKFLOW_ENABLED branch, sourced from config, not hardcoded.
+    assert captured.get("sweep_interval_s") == 45.0
 
 
 def test_build_llm_judge_parses_a_json_verdict():

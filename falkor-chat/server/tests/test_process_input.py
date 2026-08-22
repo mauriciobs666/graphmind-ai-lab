@@ -296,10 +296,14 @@ def test_submit_input_to_an_unknown_run_raises_not_found(svc, wf_repo):
 # ── §7 U3.6 / 6b / 6c — the reserved-key rule (M-2 / F-6) ───────────────────────
 
 
-@pytest.mark.parametrize("reserved", ["threadId", "error"])
+@pytest.mark.parametrize("reserved", ["threadId", "error", "timerFired"])
 def test_reserved_key_in_submitted_input_is_rejected_and_writes_nothing(
     svc, wf_repo, reserved
 ):
+    # `timerFired` (K-028 v3, `docs/plans/workflow-timers.md` §3.3) joined
+    # `RESERVED_CTX_KEYS` alongside `threadId`/`error` — the sweep's own
+    # engine-owned escalation marker must be exactly as unspoofable by a human
+    # `submit_workflow_input` call as the two pre-existing reserved keys.
     started = _parked_run(svc, wf_repo)
     before = wf_repo.get_run("test", run_id=started["runId"])
 
@@ -313,7 +317,7 @@ def test_reserved_key_in_submitted_input_is_rejected_and_writes_nothing(
     assert after["stepCount"] == before["stepCount"]
 
 
-@pytest.mark.parametrize("reserved", ["threadId", "error"])
+@pytest.mark.parametrize("reserved", ["threadId", "error", "timerFired"])
 def test_reserved_key_in_the_start_ctx_is_rejected_at_the_service_layer(
     svc, wf_repo, reserved
 ):
@@ -809,6 +813,38 @@ def test_starting_a_run_without_a_wired_engine_is_503(wf_repo):
 
     r = TestClient(app).post("/workflow-runs",
                              json={"defKey": "access-request", "version": "1"})
+
+    assert r.status_code == 503
+    assert r.json()["error"] == "WorkflowEngineDisabledError"
+
+
+# ── K-028 §6 test 5 — `POST /workflow-runs/due` REST smoke ───────────────────────
+# `AGENTS.md`'s "Probing shared graph state without mutating it" note: a throwaway
+# app built here (`client`, already wired with a real engine) rather than the
+# shared `wf_client` fixture — zero risk to `reference`/any shared `ws:<id>`.
+
+
+def test_rest_sweep_due_workflow_runs_happy_path(client):
+    r = client.post("/workflow-runs/due", json={})
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "checked": 0, "due": 0, "resumed": [], "raced": [], "faulted": [],
+    }
+
+
+def test_rest_sweep_due_workflow_runs_respects_a_body_limit(client):
+    r = client.post("/workflow-runs/due", json={"limit": 5})
+
+    assert r.status_code == 200
+    assert r.json()["checked"] == 0
+
+
+def test_rest_sweep_due_workflow_runs_without_a_wired_engine_is_503(wf_repo):
+    app = create_app(Services(wf_repo), context_provider=lambda: CTX,
+                     mount_mcp=False)
+
+    r = TestClient(app).post("/workflow-runs/due", json={})
 
     assert r.status_code == 503
     assert r.json()["error"] == "WorkflowEngineDisabledError"

@@ -39,6 +39,12 @@ set -euo pipefail
 #                          fully decoupled from `seed_workflows.sh`'s own
 #                          FALKORCHAT_TRIAGE_DEF_KEY/_VERSION — overriding this pair no
 #                          longer affects what that script publishes.
+#   FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S (default: 30) — K-028: how often the in-process
+#                          sweep resumes a `wait`/`human` run past its declared
+#                          `config.waitForSeconds`/`waitUntil` due time (config.
+#                          WORKFLOW_SWEEP_INTERVAL_S). Only ticks when WORKFLOW_ENABLED is
+#                          also on (the sweep needs the same executor the trigger does);
+#                          `POST /workflow-runs/due` is the manual/cron entry point either way.
 #   UVICORN_ARGS           (default: --reload)
 #
 # Example (custom workspace + headless FalkorDB):
@@ -94,6 +100,7 @@ FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
 # instead of a hardcoded literal.
 FALKORCHAT_TRIGGER_DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
 FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
+FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S="${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S:-30}"
 UVICORN_ARGS="${UVICORN_ARGS:---reload}"
 # K-042 §4.1: the product carries no home-directory default (a default pointing into
 # one specific user's home is the "works on my box" failure mode) — this dev script
@@ -169,7 +176,7 @@ echo "[6/6] Starting uvicorn on http://localhost:8000..."
 echo "      Workspace: $FALKORCHAT_WS_ID  |  User: $FALKORCHAT_USER_ID  |  Dim: $EMBEDDING_DIM"
 echo "      AI agent:  enabled=$FALKORCHAT_ENABLE_AGENT  id=$FALKORCHAT_AGENT_ID (@mention to trigger)"
 echo "      Model config: opencode=$FALKORCHAT_OPENCODE_CONFIG  overlay=${FALKORCHAT_MODEL_CONFIG:-<falkor-chat>/config/models.json}"
-echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def ${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION})"
+echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def ${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION})  sweep_interval=${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S}s"
 echo "      MCP endpoint: http://localhost:8000/mcp"
 echo "      Web UI:       http://localhost:8000/"
 echo "      Stop with Ctrl+C (FalkorDB keeps running in background)"
@@ -181,6 +188,7 @@ export FALKORCHAT_EMBEDDING_DIM="$EMBEDDING_DIM"
 export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
 export FALKORCHAT_WORKFLOW_ENABLED
 export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
+export FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S
 # K-042: the shared, pristine OpenCode file (providers only). FALKORCHAT_MODEL_CONFIG
 # is left unexported — config.py's own default (falkor-chat/config/models.json) is
 # right for the vast majority of runs; export it yourself to point at a different

@@ -11,6 +11,8 @@ K-034 is chartered to change.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from falkorchat import db
@@ -1361,6 +1363,123 @@ def test_resume_run_flips_waiting_to_running_single_flight(wf_repo):
     assert first["status"] == "running"
     assert second is None                              # single-flight CAS
     assert wf_repo.get_run("test", run_id="r1")["waitingThreadId"] == ""
+
+
+# ── §12.16 find_due_wait_candidates (K-028) ───────────────────────────────────
+
+TIMER_STEPS = [
+    {"key": "park", "type": "wait",
+     "config": '{"waitsForHuman":true,"waitForSeconds":60,"signal":"provisioned"}'},
+    {"key": "park_human", "type": "human",
+     "config": '{"waitsForHuman":true,"fields":["provisioned"]}'},
+    {"key": "park_no_timer", "type": "wait",
+     "config": '{"waitsForHuman":true,"signal":"provisioned"}'},
+    {"key": "activate", "type": "decision", "config": "{}"},
+]
+TIMER_TRANSITIONS = [
+    {"from": "park", "to": "activate", "on": "provisioned",
+     "guard": '{"kind":"cmp","path":"ctx.provisioned","op":"truthy"}', "order": 0},
+    {"from": "park_human", "to": "activate", "on": "provisioned",
+     "guard": '{"kind":"cmp","path":"ctx.provisioned","op":"truthy"}', "order": 0},
+    {"from": "park_no_timer", "to": "activate", "on": "provisioned",
+     "guard": '{"kind":"cmp","path":"ctx.provisioned","op":"truthy"}', "order": 0},
+]
+
+
+def _timers_uid(step_key, *, key="timers-q", version="1"):
+    return f"{key}:{version}:{step_key}"
+
+
+def _seed_timer_snapshot(repo):
+    repo.materialize_snapshot(
+        "test", key="timers-q", version="1", name="Timers", kind="process",
+        start_key="park", steps=TIMER_STEPS, transitions=TIMER_TRANSITIONS,
+    )
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="trig-timers", author_id="u1",
+        text="start", role="user", created_at=120,
+    )
+
+
+def _timer_run(repo, *, run_id, step_key="park", parked_at=1000, suspend=True):
+    """Start a run and advance `AT_STEP` to `step_key`, recording a `StepRun`
+    with `startedAt = parked_at` — the read half of what OUTCOME B writes.
+    `suspend=False` leaves the run `running` (for the exclusion tests)."""
+    repo.start_run(
+        "test", run_id=run_id, def_key="timers-q", def_version="1",
+        started_at=parked_at, trigger_msg_id="trig-timers", ctx="{}",
+        trace=False, max_steps=12,
+    )
+    repo.record_step_and_advance(
+        "test", run_id=run_id, step_run_id=f"{run_id}-sr0", step_status="done",
+        started_at=parked_at, ended_at=parked_at, input="{}", output="{}",
+        to_step_uid=_timers_uid(step_key),
+    )
+    if suspend:
+        repo.suspend_run("test", run_id=run_id, thread_id="t1")
+
+
+def test_find_due_wait_candidates_returns_a_waiting_wait_step_with_config_and_parked_at(
+    wf_repo,
+):
+    _seed_timer_snapshot(wf_repo)
+    _timer_run(wf_repo, run_id="r1", step_key="park", parked_at=5000)
+
+    candidates = wf_repo.find_due_wait_candidates("test", limit=10)
+
+    assert len(candidates) == 1
+    row = candidates[0]
+    assert row["runId"] == "r1"
+    assert row["stepKey"] == "park"  # v3: the new RETURN-clause projection
+    assert row["stepType"] == "wait"
+    assert row["parkedAt"] == 5000
+    assert json.loads(row["stepConfig"]) == {
+        "waitsForHuman": True, "waitForSeconds": 60, "signal": "provisioned",
+    }
+
+
+def test_find_due_wait_candidates_is_due_agnostic_human_and_no_timer_steps_too(
+    wf_repo,
+):
+    # The query itself never filters on timer keys or dueness — that is the
+    # app-side job (`services._wait_due_at`/`sweep_due_workflow_runs`).
+    _seed_timer_snapshot(wf_repo)
+    _timer_run(wf_repo, run_id="r_human", step_key="park_human", parked_at=1000)
+    _timer_run(wf_repo, run_id="r_no_timer", step_key="park_no_timer", parked_at=1000)
+
+    candidates = wf_repo.find_due_wait_candidates("test", limit=10)
+
+    by_run = {row["runId"]: row for row in candidates}
+    assert set(by_run) == {"r_human", "r_no_timer"}
+    assert by_run["r_human"]["stepType"] == "human"
+    assert by_run["r_human"]["stepKey"] == "park_human"
+    assert by_run["r_no_timer"]["stepType"] == "wait"
+    assert by_run["r_no_timer"]["stepKey"] == "park_no_timer"
+
+
+def test_find_due_wait_candidates_excludes_non_waiting_runs(wf_repo):
+    _seed_timer_snapshot(wf_repo)
+    _timer_run(wf_repo, run_id="r_running", parked_at=1000, suspend=False)
+    _timer_run(wf_repo, run_id="r_done", parked_at=1000, suspend=False)
+    wf_repo.complete_run("test", run_id="r_done", ended_at=2000)
+    _timer_run(wf_repo, run_id="r_failed", parked_at=1000, suspend=False)
+    wf_repo.fail_run("test", run_id="r_failed", ended_at=2000, ctx="{}")
+    _timer_run(wf_repo, run_id="r_waiting", parked_at=1000)
+
+    candidates = wf_repo.find_due_wait_candidates("test", limit=10)
+
+    assert [row["runId"] for row in candidates] == ["r_waiting"]
+
+
+def test_find_due_wait_candidates_respects_limit(wf_repo):
+    _seed_timer_snapshot(wf_repo)
+    for n in range(3):
+        _timer_run(wf_repo, run_id=f"r{n}", parked_at=1000 + n)
+
+    candidates = wf_repo.find_due_wait_candidates("test", limit=2)
+
+    assert len(candidates) == 2
 
 
 # ── §12.5 complete / fail ────────────────────────────────────────────────────

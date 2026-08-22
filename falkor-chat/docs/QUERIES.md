@@ -1682,6 +1682,58 @@ confirmed live (`CALL db.indexes()` on both `ws:test` and `ws:acme` returns exac
 workspace (same argument §12.9/§12.14 already accepted), so an unindexed residual `Filter` on
 `defKey`/`defVersion` costs nothing worth adding an index for.
 
+### 12.16 `find_due_wait_candidates` — the K-028 sweep's read half (index-anchored)
+
+```cypher
+// $limit — every parked `wait`/`human` candidate, due-agnostic (K-028)
+// v3: RETURN gained `s.key AS stepKey` (additive projection off the already-bound `s`,
+// no new traversal) -- the sweep needs it to write the step-scoped `ctx.timerFired`
+// marker and to detect a candidate that moved to a DIFFERENT waiting step between the
+// scan and the sweep's per-candidate act (docs/plans/workflow-timers.md §3.4/§3.5 step 5.1).
+MATCH (r:WorkflowRun {status: 'waiting'})-[:AT_STEP]->(s:Step)
+OPTIONAL MATCH (r)-[:LAST_STEP_RUN]->(sr:StepRun)
+RETURN r.runId AS runId, s.key AS stepKey, s.type AS stepType, s.config AS stepConfig,
+       sr.startedAt AS parkedAt
+LIMIT $limit
+```
+
+Feeds `Services.sweep_due_workflow_runs` (`docs/plans/workflow-timers.md` §3.4/§3.5): returns
+**every** `waiting` run, regardless of whether it is actually due or even whether its parked step
+declares a timer key at all — dueness is derived app-side (`services._wait_due_at`) from
+`stepConfig`/`parkedAt`, never filtered in Cypher (rule 8). Anchors on the **existing**
+`WorkflowRun.status` value index — the same anchor §12.9 already uses, on the same "waiting set is
+tiny" cardinality argument — then two `Conditional Traverse`s (`AT_STEP`, `LAST_STEP_RUN`), the
+identical traversal shape `get_run` (§12.7) already uses for the same two edges off an
+already-bound node.
+
+**PROFILE finding (live-verified against `ws:test`, one seeded `WorkflowRun {status:'waiting'}`
+with an `AT_STEP`/`LAST_STEP_RUN` pair) — re-confirmed after the v3 `stepKey` RETURN-clause
+addition, not assumed unchanged:**
+
+```
+Results | Records produced: 1, Execution time: 0.000219 ms
+    Limit | Records produced: 1, Execution time: 0.000254 ms
+        Project | Records produced: 1, Execution time: 0.003554 ms
+            Optional Conditional Traverse | (r)->(sr:StepRun) | Records produced: 1, Execution time: 0.080543 ms
+                Conditional Traverse | (r)->(s:Step) | Records produced: 1, Execution time: 0.109142 ms
+                    Node By Index Scan | (r:WorkflowRun) | Records produced: 1, Execution time: 0.015080 ms
+```
+
+`Node By Index Scan | (r:WorkflowRun)` — exactly as expected, no `Node By Label Scan` anywhere
+(rule 3), identical shape to the pre-v3 profile (the `s.key` addition is a free projection off the
+already-bound `s`, confirmed to add no traversal). The probe fixture was created and torn down
+directly against `ws:test` via `redis-cli` (not through the pytest suite), matching the shape
+`repository.find_due_wait_candidates` returns.
+
+**RAM (rule 6): zero new indexes, zero new node/relationship types.** The new bytes on the graph,
+v3: (1) `config.waitForSeconds`/`waitUntil` on a `wait`/`human` step's already-existing,
+already-opaque `config` string (plan §3.4); (2) the reserved `ctx.timerFired: "<stepKey>"` marker
+`Services.sweep_due_workflow_runs` writes into `WorkflowRun.ctx` on a genuine timer-triggered
+resume, via the existing `resume_run_with_ctx` (§12.13) — a short string, only ever written on the
+subset of runs a timer actually fires for. This query itself reuses the `WorkflowRun.status` index
+and the `AT_STEP`/`LAST_STEP_RUN` edges unchanged; `s.key` costs nothing extra to project since
+`Step.key` is already a stored property read by every other `Step`-touching query in this file.
+
 ---
 
 ## 13. Workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)

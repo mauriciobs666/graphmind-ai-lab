@@ -1642,6 +1642,46 @@ class Repository:
             for row in res.result_set
         ]
 
+    def find_due_wait_candidates(
+        self, ws: str, *, limit: int
+    ) -> list[dict[str, Any]]:
+        """The K-028 sweep's read half — every parked `wait`/`human` candidate,
+        due-agnostic. QUERIES.md §12.16 (RO).
+
+        Anchors on the **existing** `WorkflowRun.status` value index (the same
+        anchor §12.9 already uses, on the same "waiting set is tiny" cardinality
+        argument) — no new index, no new `WorkflowRun` property. Dueness itself
+        is derived app-side (`services._wait_due_at`) from data the existing
+        suspend/record path already writes unconditionally on every park
+        (`docs/plans/workflow-timers.md` §3.2); this query only reads. Returns
+        every `waiting` run regardless of whether it is actually due, or even
+        whether its parked step declares a timer at all — `sweep_due_workflow_
+        runs` decides that app-side, never in Cypher (rule 8: never filter
+        inside `config`).
+
+        v3 (`docs/plans/workflow-timers.md` §3.4): `RETURN` gains `s.key AS
+        stepKey` — an additive projection off the already-bound `s`, no new
+        traversal — so the sweep can write the step-scoped `ctx.timerFired`
+        marker (§3.3/§3.5) without a second read, and can also detect (§3.5 step
+        5.1) whether a candidate has since moved to a *different* waiting step
+        between this scan and the sweep's per-candidate act.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (r:WorkflowRun {status: 'waiting'})-[:AT_STEP]->(s:Step) "
+            "OPTIONAL MATCH (r)-[:LAST_STEP_RUN]->(sr:StepRun) "
+            "RETURN r.runId AS runId, s.key AS stepKey, s.type AS stepType, "
+            "       s.config AS stepConfig, sr.startedAt AS parkedAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "runId": row[0], "stepKey": row[1], "stepType": row[2],
+                "stepConfig": row[3], "parkedAt": row[4],
+            }
+            for row in res.result_set
+        ]
+
     def read_recent_post_success(
         self, ws: str, *, def_key: str, def_version: str, limit: int
     ) -> dict[str, int]:

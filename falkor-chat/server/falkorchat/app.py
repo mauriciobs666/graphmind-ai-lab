@@ -15,7 +15,10 @@ Run:  uvicorn falkorchat.app:app   (agents connect at /mcp; REST under /)
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import logging
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +26,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from . import api, config, db
 from . import mcp as mcp_mod
@@ -32,6 +36,7 @@ from .llm import extract_own_line_json_object
 from .modelconfig import ModelGateway, StaticModelGateway
 from .repository import Repository
 from .services import (
+    DEFAULT_SWEEP_LIMIT,
     ChannelNotFoundError,
     ServiceError,
     Services,
@@ -44,6 +49,8 @@ from .services import (
     WorkflowRunNotFoundError,
     WorkflowRunNotWaitingError,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class _McpPathAlias:
@@ -140,6 +147,30 @@ def _register_error_handlers(app: FastAPI) -> None:
         _register(_exc_type, _code)
 
 
+async def _sweep_loop(
+    services: Services, context_provider: Callable[[], CallContext], *,
+    interval_s: float, limit: int,
+) -> None:
+    """K-028 §3.6 — tick `Services.sweep_due_workflow_runs` on a fixed interval.
+
+    `Services.sweep_due_workflow_runs` is synchronous and blocking-on-FalkorDB
+    (like every other `Services` method) — offloaded via
+    `starlette.concurrency.run_in_threadpool` (the same call
+    FastAPI's own `BackgroundTasks` routes a sync callable through,
+    `python-web-quirks` SKILL.md) rather than calling it inline on the event
+    loop. A tick fault is logged and swallowed so one bad sweep never kills the
+    loop — the next interval simply tries again; a def-author/config problem
+    surfaces per-run in the sweep's own `faulted` bucket instead.
+    """
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            ctx = context_provider()
+            await run_in_threadpool(services.sweep_due_workflow_runs, ctx, limit=limit)
+        except Exception:  # noqa: BLE001 — one bad tick must not kill the loop
+            _log.exception("workflow sweep tick failed")
+
+
 def create_app(
     services: Services | None = None,
     *,
@@ -149,6 +180,8 @@ def create_app(
     responder: object | None = None,
     embed_worker: object | None = None,
     trigger: object | None = None,
+    sweep_interval_s: float | None = None,
+    sweep_limit: int = DEFAULT_SWEEP_LIMIT,
 ) -> FastAPI:
     """Build the FastAPI app.
 
@@ -172,6 +205,14 @@ def create_app(
         worker = EmbeddingWorker(repo, models=models)
         responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
         app = create_app(services, responder=responder, embed_worker=worker)
+
+    `sweep_interval_s` (K-028, §3.6) is the same **opt-in** shape: `None` (the
+    default) starts no periodic task at all, so building the default app stays
+    network-free and every existing test is untouched; a production wiring
+    passes `config.WORKFLOW_SWEEP_INTERVAL_S` (see `_build_default_app`). The
+    tick itself is `_sweep_loop`, started/cancelled by the lifespan below.
+    `sweep_limit` is the per-tick `limit` passed to
+    `Services.sweep_due_workflow_runs`.
     """
     if services is None:
         # DEF-2: a deferred connection handle — building the app must never
@@ -209,11 +250,29 @@ def create_app(
         # id colliding with an existing Agent aborts loudly
         # (MemberIdCollisionError) instead of silently shadowing it (DEF-1).
         services.ensure_actor(provider())
+        # K-028 §3.6: the periodic sweep task, opt-in (`sweep_interval_s is
+        # None` starts nothing — the plain M1/M2 app and the disabled-engine
+        # default both leave it `None`, see `_build_default_app`). Held on
+        # `app_.state` — an unreferenced `asyncio.Task` is a real GC risk
+        # (`python-web-quirks` SKILL.md), not just tidiness.
+        sweep_task: asyncio.Task[None] | None = None
+        if sweep_interval_s is not None:
+            sweep_task = asyncio.create_task(
+                _sweep_loop(
+                    services, provider, interval_s=sweep_interval_s,
+                    limit=sweep_limit,
+                )
+            )
+            app_.state.sweep_task = sweep_task
         if mcp_lifespan is not None:
             async with mcp_lifespan(app_):
                 yield
         else:
             yield
+        if sweep_task is not None:
+            sweep_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sweep_task
 
     app = FastAPI(lifespan=_lifespan)
 
@@ -312,7 +371,15 @@ def _build_default_app() -> FastAPI:
             services, agent_id=config.AGENT_ID, def_key=config.TRIGGER_DEF_KEY,
             def_version=config.TRIGGER_DEF_VERSION, responder=responder,
         )
-        return create_app(services, trigger=trigger, embed_worker=worker)
+        # K-028 §3.6: the periodic sweep only ever starts alongside the executor
+        # it depends on — same double-flag gate (`AGENTS.md`: `WORKFLOW_ENABLED`
+        # alone is not enough). Every other path below (M1/M2 app,
+        # disabled-workflow app) leaves `sweep_interval_s` at `create_app`'s
+        # `None` default.
+        return create_app(
+            services, trigger=trigger, embed_worker=worker,
+            sweep_interval_s=config.WORKFLOW_SWEEP_INTERVAL_S,
+        )
 
     return create_app(services, responder=responder, embed_worker=worker)
 

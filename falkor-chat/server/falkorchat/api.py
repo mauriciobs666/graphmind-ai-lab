@@ -24,6 +24,7 @@ from .schemas import (
     PublishWorkflowDefIn,
     StartWorkflowRunIn,
     SubmitWorkflowInputIn,
+    SweepDueWorkflowRunsIn,
     WorkflowDefStructureOut,
     WorkflowDiffOut,
 )
@@ -266,6 +267,12 @@ def build_router(
         ctx: CallContext = Depends(get_context),
     ):
         return services.submit_workflow_input(ctx, run_id=run_id, input=body.input)
+
+    @router.post("/workflow-runs/due")
+    def sweep_due_workflow_runs(
+        body: SweepDueWorkflowRunsIn, ctx: CallContext = Depends(get_context)
+    ):
+        return services.sweep_due_workflow_runs(ctx, limit=body.limit)
 
     # ── §12 Workflow-run inspection (U12 — AC-5 observability seam) ───────────
     # Thin, size-bounded RO pass-throughs so QA can read a run / its step-runs /

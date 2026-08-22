@@ -53,6 +53,18 @@ MAX_STEPS = 200
 MAX_TRANSITIONS = 500
 MAX_CONFIG_LEN = 8000
 
+# `SweepDueWorkflowRunsIn.limit`'s bound (K-028) — declared here, not in
+# `services.py`, and imported from there (`services.py`'s own `from .schemas
+# import MAX_CONFIG_LEN, MAX_DIFF_PREVIEW` is the precedent this mirrors, not
+# reverses: schemas.py is the leaf/boundary module with no imports of its own
+# from `services.py`, so the shared constant has to live on this side for
+# either module to import the other without a cycle — verified: the reverse
+# direction (defining these in `services.py` and importing them here)
+# deadlocks at import time in every module-load order, since `services.py`
+# itself imports `MAX_CONFIG_LEN`/`MAX_DIFF_PREVIEW` from this module).
+DEFAULT_SWEEP_LIMIT = 200
+MAX_SWEEP_LIMIT = 1000
+
 
 class WorkflowStepIn(BaseModel):
     key: str = Field(min_length=1, max_length=MAX_KEY_LEN)
@@ -224,3 +236,10 @@ class SubmitWorkflowInputIn(BaseModel):
     @classmethod
     def _check_input(cls, v):
         return _bounded_flat_dict(v)
+
+
+class SweepDueWorkflowRunsIn(BaseModel):
+    """`POST /workflow-runs/due` — sweep parked wait-timer runs past their due
+    time (K-028, `docs/plans/workflow-timers.md` §3.6)."""
+
+    limit: int = Field(DEFAULT_SWEEP_LIMIT, ge=1, le=MAX_SWEEP_LIMIT)

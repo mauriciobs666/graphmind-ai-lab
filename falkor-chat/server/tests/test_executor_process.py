@@ -522,3 +522,263 @@ def test_shape_matrix_an_opaque_config_on_a_parking_step_is_rejected(wf_repo):
         )
 
     assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+# ── K-028 v3 — workflow timers / scheduled wakeups (plan §3.3 / §6 test 2) ──────
+# v3 replaces v2's "bare unconditional fallback" invariant (functionally defective
+# — see `services.py`'s inline comment on the check) with a genuinely conditional
+# escalation guard keyed to the step-scoped, engine-reserved `ctx.timerFired`
+# marker: `{"kind":"cmp","path":"ctx.timerFired","op":"eq","value":"<own key>"}`.
+
+CONDITIONAL_ONLY_TRANSITION = {
+    "from": "park", "to": "sink", "on": "maybe", "order": 0,
+    "guard": {"kind": "cmp", "path": "ctx.x", "op": "exists"},
+}
+
+
+def _park_step(step_type, config):
+    return {"key": "park", "type": step_type, "config": config, "start": True}
+
+
+def _escalation_transition(step_key, *, to="sink", on="timeout", order=1):
+    """The canonical v3 escalation transition for `step_key`."""
+    return {
+        "from": step_key, "to": to, "on": on, "order": order,
+        "guard": {
+            "kind": "cmp", "path": "ctx.timerFired", "op": "eq", "value": step_key,
+        },
+    }
+
+
+@pytest.mark.parametrize("config_shape", ["dict", "string"])
+def test_publish_rejects_both_timer_keys_declared_together(wf_repo, config_shape):
+    # Ambiguous — reject rather than silently pick one. M-7 shape matrix: both a
+    # dict-shaped and a string-shaped config must be caught.
+    svc = Services(wf_repo)
+    cfg = {"waitsForHuman": True, "waitForSeconds": 60, "waitUntil": 5_000_000_000}
+    config = json.dumps(cfg, separators=(",", ":")) if config_shape == "string" else cfg
+
+    with pytest.raises(WorkflowDefSpecError, match="waitForSeconds.*waitUntil|ambiguous"):
+        _publish(
+            svc,
+            steps=_steps(_park_step("wait", config), SINK_STEP),
+            transitions=[SINK_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("bad_seconds", [0, -1, "soon", 0.0, True])
+def test_publish_rejects_a_malformed_wait_for_seconds(wf_repo, bad_seconds):
+    svc = Services(wf_repo)
+
+    with pytest.raises(WorkflowDefSpecError, match="waitForSeconds"):
+        _publish(
+            svc,
+            steps=_steps(
+                _park_step("wait", {
+                    "waitsForHuman": True, "waitForSeconds": bad_seconds,
+                }),
+                SINK_STEP,
+            ),
+            transitions=[SINK_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+def test_publish_rejects_wait_for_seconds_over_the_max(wf_repo):
+    from falkorchat.services import MAX_WAIT_FOR_SECONDS
+
+    svc = Services(wf_repo)
+
+    with pytest.raises(WorkflowDefSpecError, match="waitForSeconds"):
+        _publish(
+            svc,
+            steps=_steps(
+                _park_step("wait", {
+                    "waitsForHuman": True,
+                    "waitForSeconds": MAX_WAIT_FOR_SECONDS + 1,
+                }),
+                SINK_STEP,
+            ),
+            transitions=[SINK_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("bad_until", [0, -1, "soon", True])
+def test_publish_rejects_a_malformed_wait_until(wf_repo, bad_until):
+    svc = Services(wf_repo)
+
+    with pytest.raises(WorkflowDefSpecError, match="waitUntil"):
+        _publish(
+            svc,
+            steps=_steps(
+                _park_step("wait", {"waitsForHuman": True, "waitUntil": bad_until}),
+                SINK_STEP,
+            ),
+            transitions=[SINK_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("step_type", ["decision", "agent"])
+@pytest.mark.parametrize("timer_key", ["waitForSeconds", "waitUntil"])
+def test_publish_rejects_a_timer_key_on_a_non_waiting_step_type(
+    wf_repo, step_type, timer_key,
+):
+    svc = Services(wf_repo)
+    value = 60 if timer_key == "waitForSeconds" else 5_000_000_000
+
+    with pytest.raises(WorkflowDefSpecError, match="waitForSeconds/waitUntil"):
+        _publish(
+            svc,
+            steps=_steps(
+                {"key": "park", "type": step_type, "config": {timer_key: value},
+                 "start": True},
+                SINK_STEP,
+            ),
+            transitions=[SINK_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("step_type", ["wait", "human"])
+@pytest.mark.parametrize("timer_key", ["waitForSeconds", "waitUntil"])
+def test_publish_rejects_a_timer_bearing_step_with_no_escalation_guard(
+    wf_repo, step_type, timer_key,
+):
+    # v3, plan-gate Finding 1 — the churn-risk invariant, this time via a
+    # genuinely conditional marker guard. `park`'s only outgoing transition is
+    # an unrelated domain guard, mirroring `proof_defs.py`'s shipped `provision`
+    # step's exact shape (a single `ctx.provisioned == true` transition, no
+    # escalation arm at all).
+    svc = Services(wf_repo)
+    value = 60 if timer_key == "waitForSeconds" else 5_000_000_000
+
+    with pytest.raises(WorkflowDefSpecError, match="ctx.timerFired"):
+        _publish(
+            svc,
+            steps=_steps(
+                _park_step(step_type, {"waitsForHuman": True, timer_key: value}),
+                SINK_STEP,
+            ),
+            transitions=[CONDITIONAL_ONLY_TRANSITION],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("step_type", ["wait", "human"])
+@pytest.mark.parametrize(
+    "bad_guard",
+    [
+        {"kind": "cmp", "path": "ctx.timerFired", "op": "eq", "value": "other-key"},
+        {"kind": "cmp", "path": "ctx.timerFired", "op": "eq", "value": True},
+        {"kind": "cmp", "path": "ctx.timerFired", "op": "eq", "value": ""},
+        "",
+        None,
+    ],
+    ids=["wrong-step-key", "literal-true", "empty-string-value", "unconditional",
+         "omitted"],
+)
+def test_publish_rejects_a_wrong_shaped_escalation_guard(
+    wf_repo, step_type, bad_guard,
+):
+    # v3, plan §6 test 2 — proves the check is genuinely shape- AND
+    # value-specific, not merely "has *a* conditional transition." Includes the
+    # v2 shape itself (`""`/omitted, i.e. a bare unconditional arm) to pin that
+    # the old, defective fix no longer satisfies the new invariant either.
+    svc = Services(wf_repo)
+
+    with pytest.raises(WorkflowDefSpecError, match="ctx.timerFired"):
+        _publish(
+            svc,
+            steps=_steps(
+                _park_step(step_type, {"waitsForHuman": True, "waitForSeconds": 60}),
+                SINK_STEP,
+            ),
+            transitions=[{"from": "park", "to": "sink", "on": "timeout", "order": 0,
+                           "guard": bad_guard}],
+        )
+
+    assert wf_repo.get_def(key="access-request", version="1") is None
+
+
+@pytest.mark.parametrize("step_type", ["wait", "human"])
+@pytest.mark.parametrize("timer_key", ["waitForSeconds", "waitUntil"])
+def test_publish_accepts_a_timer_bearing_step_with_the_canonical_escalation_guard(
+    wf_repo, step_type, timer_key,
+):
+    # Positive case, one per step type.
+    svc = Services(wf_repo)
+    value = 60 if timer_key == "waitForSeconds" else 5_000_000_000
+
+    out = _publish(
+        svc,
+        steps=_steps(
+            _park_step(step_type, {"waitsForHuman": True, timer_key: value}),
+            SINK_STEP,
+        ),
+        transitions=[_escalation_transition("park")],
+    )
+
+    assert out["stepCount"] == 2
+    assert wf_repo.get_def(key="access-request", version="1") is not None
+
+
+def test_publish_accepts_a_step_carrying_both_a_domain_guard_and_the_escalation_guard(
+    wf_repo,
+):
+    # Second positive case (plan §6 test 2): the step also carries its own real
+    # conditional guard (e.g. `ctx.provisioned == true`) alongside the
+    # escalation guard — both declared, both legal, order between them
+    # irrelevant (both are conditional).
+    svc = Services(wf_repo)
+
+    out = _publish(
+        svc,
+        steps=_steps(
+            _park_step("wait", {
+                "waitsForHuman": True, "waitForSeconds": 60, "signal": "provisioned",
+            }),
+            SINK_STEP,
+        ),
+        transitions=[
+            {
+                "from": "park", "to": "sink", "on": "provisioned", "order": 0,
+                "guard": {
+                    "kind": "cmp", "path": "ctx.provisioned", "op": "truthy",
+                },
+            },
+            _escalation_transition("park", order=1),
+        ],
+    )
+
+    assert out["transitionCount"] == 2
+    assert wf_repo.get_def(key="access-request", version="1") is not None
+
+
+@pytest.mark.parametrize("step_type", ["wait", "human"])
+def test_publish_still_accepts_a_waiting_step_with_no_timer_key_and_no_escalation_guard(
+    wf_repo, step_type,
+):
+    # Regression guard: the new invariant must only fire when a timer key is
+    # actually declared. `access-request@v1`'s shipped `provision`/`approval`
+    # steps, neither declaring a timer key, must keep publishing unchanged.
+    svc = Services(wf_repo)
+
+    out = _publish(
+        svc,
+        steps=_steps(
+            _park_step(step_type, {"waitsForHuman": True}), SINK_STEP,
+        ),
+        transitions=[CONDITIONAL_ONLY_TRANSITION],
+    )
+
+    assert out["stepCount"] == 2
+    assert wf_repo.get_def(key="access-request", version="1") is not None

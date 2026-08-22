@@ -113,6 +113,12 @@ WORKFLOW_ENABLED: bool = _env_flag("FALKORCHAT_WORKFLOW_ENABLED", default=False)
 # (see `scripts/seed_workflows.sh`) or the trigger's @mention-to-start step never fires.
 TRIGGER_DEF_KEY: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_KEY", "triage")
 TRIGGER_DEF_VERSION: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_VERSION", "v1")
+# K-028 — how often the in-process sweep tick runs (seconds), read only where
+# `WORKFLOW_ENABLED` is already read (`app._build_default_app`). `POST
+# /workflow-runs/due` (the manual/cron entry point) is unaffected by this value.
+WORKFLOW_SWEEP_INTERVAL_S: float = float(
+    os.environ.get("FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S", "30")
+)
 
 
 @dataclass(frozen=True)

@@ -44,12 +44,23 @@ from .repository import WorkflowInputRejectedError as WorkflowInputRejectedError
 from .repository import WorkflowRunNotFoundError as WorkflowRunNotFoundError
 from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
 
-# `MAX_CONFIG_LEN` is the opaque-payload bound declared once at the REST boundary;
-# the service reuses that single number for the bound pydantic structurally CANNOT
-# enforce — the size of the **merged** run ctx (plan m-5). `schemas.py` is a leaf
-# module (pydantic only), so this import adds no cycle and no layering inversion:
-# the constant flows boundary → service, never logic service → boundary.
-from .schemas import MAX_CONFIG_LEN, MAX_DIFF_PREVIEW
+# `MAX_CONFIG_LEN`/`DEFAULT_SWEEP_LIMIT` are opaque-payload/batch-size bounds
+# declared once at the REST boundary; the service reuses those numbers for
+# bounds pydantic structurally CANNOT enforce (the size of the **merged** run
+# ctx, plan m-5; `sweep_due_workflow_runs`'s own `limit` default, K-028).
+# `schemas.py` is a leaf module (pydantic only), so this import adds no cycle
+# and no layering inversion: the constant flows boundary → service, never
+# logic service → boundary. `MAX_SWEEP_LIMIT` (the REST-only upper bound on
+# `SweepDueWorkflowRunsIn.limit`) stays in `schemas.py` alone — the service
+# itself never caps `limit` (an MCP/direct caller is trusted the same way
+# every other service method already is). (K-028 v3's plan text describes the
+# reverse direction — `services.py` defining these two and `schemas.py`
+# importing them — but that deadlocks at import time in every module-load
+# order, since `services.py` already imports from `schemas.py` here; verified
+# empirically while wiring `schemas.SweepDueWorkflowRunsIn`. Keeping both
+# constants on the boundary side, mirrored the same direction as
+# `MAX_CONFIG_LEN`, is the only shape that doesn't deadlock.)
+from .schemas import DEFAULT_SWEEP_LIMIT, MAX_CONFIG_LEN, MAX_DIFF_PREVIEW
 
 _log = logging.getLogger(__name__)
 
@@ -77,7 +88,19 @@ WAITING_STEP_TYPES: frozenset[str] = frozenset({"human", "wait"})
 # no input and no guard data. `error` is the diagnostic note `fail_run` stamps.
 # Enforced in the SERVICE (both the start ctx and submitted input), not only in
 # `schemas.py`: MCP tools and direct service callers never see a pydantic model.
-RESERVED_CTX_KEYS: frozenset[str] = frozenset({"threadId", "error"})
+#
+# `timerFired` (K-028 v3, `docs/plans/workflow-timers.md` §3.3) is the sweep's
+# step-scoped escalation marker — `Services.sweep_due_workflow_runs` is the ONLY
+# writer, via `resume_run_with_ctx` (§12.13). Its structural guarantee (a human/API
+# caller can never set or spoof it) is exactly this reservation: both ctx-mutating
+# entry points (`start_workflow_run`'s untriggered ctx, `submit_workflow_input`'s
+# input) already reject any `RESERVED_CTX_KEYS` member before merging anything, so
+# one frozenset addition closes both paths with no other code change. This is what
+# makes the escalation guard (`ctx.timerFired == "<step's own key>"`) genuinely
+# false until a real sweep-triggered resume happens — see the guard's own publish-
+# time invariant below for the full mechanism.
+TIMER_FIRED_CTX_KEY = "timerFired"
+RESERVED_CTX_KEYS: frozenset[str] = frozenset({"threadId", "error", TIMER_FIRED_CTX_KEY})
 
 # Statuses a run may legitimately hold after the executor's M-1 fault net has
 # stamped it (K-024 D-G / m-12). Anything else — notably a still-`running` zombie —
@@ -109,6 +132,17 @@ RAG_QUERY_TIMEOUT_MS = 5000
 # QUERIES.md §12.15). A plain module constant, mirroring RAG_QUERY_TIMEOUT_MS above
 # — nobody has asked to tune this per-deployment.
 POST_SUCCESS_SAMPLE_SIZE = 20
+
+# ── K-028 — workflow timers / scheduled wakeups (docs/plans/workflow-timers.md) ──
+# `MAX_WAIT_FOR_SECONDS`: the publish-time bound on `config.waitForSeconds`
+# (§3.3) — 180 days, generous for an SLA/escalation use case, defensively bounded
+# against an authoring typo producing an absurd duration. `DEFAULT_SWEEP_LIMIT`
+# (imported above, from `schemas.py`) is `sweep_due_workflow_runs`'s own
+# `limit` default (§3.5/§3.6) — `schemas.SweepDueWorkflowRunsIn` shares the
+# identical number, not a duplicated one; its sibling `MAX_SWEEP_LIMIT` bounds
+# the REST body field only (`schemas.py`), since the service method itself
+# never caps `limit`.
+MAX_WAIT_FOR_SECONDS = 180 * 24 * 3600
 
 # ── errors ─────────────────────────────────────────────────────────────────────
 
@@ -207,6 +241,49 @@ def _normalize_opaque(value: Any) -> Any:
         except (ValueError, TypeError):
             return value
     return value
+
+
+def _wait_due_at(
+    step_type: str, config_raw: Any, parked_at: int | None
+) -> int | None:
+    """K-028 — the sweep's pure due-ness computation (plan §3.2/§5 step 2).
+
+    Returns the step's due epoch-ms, or `None` when there is nothing to be due
+    about: `step_type` is not in `WAITING_STEP_TYPES`, the config declares
+    neither `waitForSeconds` nor `waitUntil` (today's forever-park def — the
+    additive-only case), or `parked_at` is `None` (defensive: should never
+    happen for a genuinely parked run per §2's finding that a suspend always
+    writes a fresh `LAST_STEP_RUN`, but a cheap pure function should never
+    trust a graph read blindly). No repo access, no clock call — the caller
+    (`Services.sweep_due_workflow_runs`) supplies both `parked_at`
+    (`StepRun.startedAt`) and compares the result against its own injected
+    `now`, which is what makes this helper trivially unit-testable.
+
+    `waitUntil` (absolute epoch-ms) is checked first and, when present, wins
+    outright — `parked_at` plays no role in the absolute form. `waitForSeconds`
+    (relative) needs `parked_at` to anchor `dueAt = parked_at + waitForSeconds *
+    1000`. Publish-time validation (`_validate_def_spec`) already rejects a step
+    declaring both keys, so in practice at most one of these branches is ever
+    live for a validly-published def; this function stays defensive about that
+    regardless, the same posture `_validate_def_spec`'s own K-027 check takes
+    toward a hand-crafted graph write.
+    """
+    if step_type not in WAITING_STEP_TYPES:
+        return None
+    cfg = _normalize_opaque(config_raw)
+    if not isinstance(cfg, dict):
+        return None
+    wait_until = cfg.get("waitUntil")
+    if isinstance(wait_until, (int, float)) and not isinstance(wait_until, bool):
+        return int(wait_until)
+    wait_for_seconds = cfg.get("waitForSeconds")
+    if (
+        isinstance(wait_for_seconds, (int, float))
+        and not isinstance(wait_for_seconds, bool)
+        and parked_at is not None
+    ):
+        return int(parked_at) + int(wait_for_seconds * 1000)
+    return None
 
 
 # ── §11 def/snapshot structure canonicalization + diff (K-031) ──────────────────
@@ -893,17 +970,24 @@ class Services:
         service invariant that lets the repository's inner `MATCH (start/from/to
         …)` always resolve for a valid spec (QUERIES.md §11 note).
 
-        Four further invariants run **last**, after all of the above: a `human`/
+        Five further invariants run **last**, after all of the above: a `human`/
         `wait` step must declare `config.waitsForHuman: true` (K-024 U2); a
         step's `config.requiredTools`, when present, must be a list of strings
         naming tools also present in that step's own `config.tools`, and may only
         be declared on a step of type `"agent"` (K-027 item 2,
         `docs/plans/must-post-engine-contract.md`); a `cmp`-family transition
         guard must be structurally sound (K-024 U2, `guards.validate_cmp` →
-        `WorkflowConfigError`); and a def must carry **at least one transition**
-        (K-024 U4b, O-6). Running them last is load-bearing: an older check must
-        keep failing for its **own** reason, so a new invariant can never mask —
-        or make vacuous a test of — a pre-existing one.
+        `WorkflowConfigError`); a `WAITING_STEP_TYPES` step declaring
+        `config.waitForSeconds`/`waitUntil` must also declare an outgoing
+        transition guarded on the canonical, step-scoped escalation marker
+        `{"kind":"cmp","path":"ctx.timerFired","op":"eq","value":"<this step's
+        own key>"}` (K-028 v3, `docs/plans/workflow-timers.md` §3.3 — replaces
+        v2's defective "bare unconditional fallback" invariant, which made a
+        timer-bearing step never park at all; see the inline comment at that
+        check for the full mechanism); and a def must carry **at least one
+        transition** (K-024 U4b, O-6). Running them last is load-bearing: an
+        older check must keep failing for its **own** reason, so a new invariant
+        can never mask — or make vacuous a test of — a pre-existing one.
         """
         if kind not in WORKFLOW_KINDS:
             raise WorkflowDefSpecError(
@@ -996,6 +1080,142 @@ class Services:
             # here; `{"kind":"llm"}`/`{"kind":"expr"}` keep their drive-time semantics.
             if isinstance(guard, dict) and guard.get("kind") in CMP_KINDS:
                 validate_cmp(guard)
+
+        # ── K-028 v3 — workflow timers / scheduled wakeups — also LAST, for the
+        # same reason (docs/plans/workflow-timers.md §3.3 / §5 step 1). A
+        # `wait`/`human` step may declare `config.waitForSeconds` (relative,
+        # whole seconds) or `config.waitUntil` (absolute epoch-ms) to gain a
+        # due-time `Services.sweep_due_workflow_runs` can resume it on,
+        # independent of any external signal. Neither key is required — absent
+        # both is today's forever-park behaviour, unchanged (additive-only,
+        # K-028's own scope).
+        #
+        # **v3 replaces v2's defective "bare unconditional fallback" invariant**
+        # (`docs/plans/workflow-timers.md`'s v2→v3 revision note; `docs/reviews/
+        # workflow-timers.md` Pass 3). Traced against live source: `executor.
+        # _drive_loop` calls `_select_transition` on EVERY evaluation of a step,
+        # first arrival included (`executor.py:471-510`), and `guards.
+        # evaluate_guard` fires an unconditional (`guard: ""`) transition
+        # unconditionally whenever reached (`guards.py:223-224`) — there is no
+        # "first arrival vs. resume" distinction anywhere in guard evaluation.
+        # So a step with a bare unconditional fallback NEVER reaches OUTCOME B
+        # (suspend) at all: on first arrival, before any real signal exists, the
+        # real conditional guard is false, falls through to the unconditional
+        # arm, which fires immediately — the step never parks, so there is
+        # nothing for a timer or the sweep to ever act on. Confirmed empirically
+        # against the real engine (`ws:test`), not just reasoned about.
+        #
+        # **The v3 fix: require a genuinely conditional escalation guard, keyed
+        # to a step-scoped, engine-reserved ctx marker nothing but the sweep can
+        # ever write.** A step declaring a timer key must also declare an
+        # outgoing transition whose guard is exactly `{"kind":"cmp",
+        # "path":"ctx.timerFired","op":"eq","value":"<this step's own key>"}`.
+        # `TIMER_FIRED_CTX_KEY` is in `RESERVED_CTX_KEYS` (module top), so no
+        # human/API caller can ever set or spoof it — `_reject_reserved_keys`
+        # already runs at both `start_workflow_run`'s initial ctx and
+        # `submit_workflow_input`'s input. This guard is therefore FALSE at
+        # first arrival (nothing has written `timerFired` yet — the step
+        # correctly parks, OUTCOME B), FALSE on any ordinary human/system resume
+        # including an explicit-but-negative "not yet" reply (`proof_defs.py`'s
+        # `provision` step pattern: `{"provisioned": false}` writes no
+        # `timerFired`, so the step correctly re-parks — this composes cleanly
+        # with a timer now, unlike v2's bare-unconditional-arm fix), and TRUE
+        # only when `Services.sweep_due_workflow_runs` itself wins the resume
+        # CAS for this exact run and writes `ctx.timerFired = step["key"]`
+        # atomically as part of that same CAS (`resume_run_with_ctx`, §12.13) —
+        # at which point a `cmp` `eq` guard is deterministic and fires with
+        # certainty, guaranteeing the advance the original churn-risk finding
+        # needed, without ever risking a false-positive escalation on an
+        # unrelated resume.
+        #
+        # **Step-scoping (the marker's VALUE is the firing step's own `key`, not
+        # a bare boolean) closes a leakage bug self-caught while designing this
+        # fix.** A bare `ctx.timerFired = true` would leak across DIFFERENT
+        # timer-bearing steps in the same run: once any step's timer fires, a
+        # later, different timer-bearing step reached afterward would see the
+        # stale `true` already set on its own first arrival and immediately
+        # escalate — reproducing the original bug one level down. Scoping the
+        # value to the firing step's own key means a later step's guard
+        # (`ctx.timerFired == "<its own key>"`) never matches an earlier step's
+        # stale value — guaranteed by `_validate_def_spec`'s own pre-existing
+        # "duplicate step key" rejection (above), which already makes step keys
+        # unique within one def. The one residual this does NOT close — a def
+        # whose transitions cycle back to the SAME step after that step's own
+        # timer already fired once — is a narrow, accepted, documented trade-off
+        # (`docs/plans/workflow-timers.md` §8), not engineered around: closing it
+        # would need clearing the marker via a second, non-atomic write outside
+        # the SHA-locked `_drive_loop`, reopening exactly the race window this
+        # whole design exists to avoid (§3.2).
+        transitions_by_from: dict[str, list[dict[str, Any]]] = {}
+        for tr in transitions:
+            transitions_by_from.setdefault(tr["from"], []).append(tr)
+
+        for step in steps:
+            cfg = _normalize_opaque(step.get("config"))
+            if not isinstance(cfg, dict):
+                continue
+            has_seconds = "waitForSeconds" in cfg
+            has_until = "waitUntil" in cfg
+            if not has_seconds and not has_until:
+                continue
+            skey = step["key"]
+            stype = step.get("type")
+            if stype not in WAITING_STEP_TYPES:
+                raise WorkflowDefSpecError(
+                    f"step {skey!r} of type {stype!r} declares "
+                    f"config.waitForSeconds/waitUntil — only a 'wait'/'human' "
+                    f"step's sweep-eligibility check ever reads these keys"
+                )
+            if has_seconds and has_until:
+                raise WorkflowDefSpecError(
+                    f"step {skey!r} declares both config.waitForSeconds and "
+                    f"config.waitUntil — ambiguous, declare at most one"
+                )
+            if has_seconds:
+                seconds = cfg.get("waitForSeconds")
+                if (
+                    not isinstance(seconds, (int, float))
+                    or isinstance(seconds, bool)
+                    or seconds <= 0
+                    or seconds > MAX_WAIT_FOR_SECONDS
+                ):
+                    raise WorkflowDefSpecError(
+                        f"step {skey!r} config.waitForSeconds must be a positive "
+                        f"number <= {MAX_WAIT_FOR_SECONDS}, got {seconds!r}"
+                    )
+            if has_until:
+                until = cfg.get("waitUntil")
+                if (
+                    not isinstance(until, (int, float))
+                    or isinstance(until, bool)
+                    or until <= 0
+                ):
+                    raise WorkflowDefSpecError(
+                        f"step {skey!r} config.waitUntil must be a positive "
+                        f"epoch-ms timestamp, got {until!r}"
+                    )
+            # The canonical escalation guard, checked field-by-field on the
+            # NORMALIZED guard (M-7 shape matrix — matches the existing cmp-guard
+            # structural check two blocks above, `services.py:1071`, which also
+            # normalizes before inspecting). Permissive of any EXTRA field a def
+            # author might include; strict on the four that matter.
+            has_escalation_guard = any(
+                isinstance((g := _normalize_opaque(tr.get("guard"))), dict)
+                and g.get("kind") == "cmp"
+                and g.get("path") == "ctx." + TIMER_FIRED_CTX_KEY
+                and g.get("op") == "eq"
+                and g.get("value") == skey
+                for tr in transitions_by_from.get(skey, [])
+            )
+            if not has_escalation_guard:
+                raise WorkflowDefSpecError(
+                    f"step {skey!r} declares config.waitForSeconds/waitUntil "
+                    f"but has no outgoing transition guarded on "
+                    f"{{\"kind\":\"cmp\",\"path\":\"ctx.{TIMER_FIRED_CTX_KEY}\","
+                    f"\"op\":\"eq\",\"value\":{skey!r}}} — this is what "
+                    f"`sweep_due_workflow_runs` needs to guarantee a due resume "
+                    f"actually advances the run (K-028 v3)"
+                )
 
         # ── K-024 U4b (O-6) — also LAST, for the same reason ───────────────────
         # `repository._PUBLISH_CYPHER` ends in `UNWIND $transitions`, which collapses
@@ -1676,6 +1896,180 @@ class Services:
         executor = self._require_executor()
         status = executor.resume(ctx, run_id=run_id)
         return {"runId": run_id, "status": status}
+
+    def sweep_due_workflow_runs(
+        self, ctx: CallContext, *, limit: int = DEFAULT_SWEEP_LIMIT,
+    ) -> dict[str, Any]:
+        """Resume every `wait`/`human` run whose declared due-time has passed
+        (K-028 v3, `docs/plans/workflow-timers.md` §3.5). `resume_workflow_run`'s
+        batch-mode sibling: `POST /workflow-runs/due`'s manual/cron entry point
+        and the periodic in-process task's tick (both out of this unit's scope)
+        are thin callers of this one method.
+
+        Dueness is derived **fresh on every call**, app-side, from data the
+        engine already writes unconditionally on every park (`StepRun.startedAt`
+        + `Step.config`, via the untouched `AT_STEP`/`LAST_STEP_RUN` edges — plan
+        §3.2) — no new `WorkflowRun` property, no new write path, `now` never
+        client-supplied (the injected `self._clock()`, matching every other
+        server-minted stamp).
+
+        **v3: a due run is resumed via `executor.resume(..., run_ctx_json=...)`
+        → `resume_run_with_ctx` (§12.13)** — the *same* primitive
+        `submit_workflow_input`'s human path already uses (D-F), not the plain
+        no-ctx `resume_run` (§12.4) v2 used. The merged ctx carries the
+        step-scoped, engine-reserved `ctx.timerFired = "<the parked step's own
+        key>"` marker, written atomically as part of the same CAS the resume
+        itself performs — this is what the new publish-time invariant's
+        escalation guard (`_validate_def_spec`, above) is keyed to, and it is
+        what guarantees a genuine sweep-triggered resume actually advances the
+        run (closing the churn risk without a bare, always-fires unconditional
+        arm). Zero new resume semantics either way: a concurrent human reply
+        and a sweep tick race for the identical single-flight CAS and only one
+        of them ever drives the run and has its ctx merge persisted (plan
+        §3.5's "why this design satisfies the single-winner requirement for
+        free").
+
+        Returns `{"checked": N, "due": M, "resumed": [...], "raced": [...],
+        "faulted": [...]}`: `checked` is every `waiting` candidate the read
+        query returned (due or not — the query itself is due-agnostic, §3.4);
+        `due` is how many actually passed their due-time; the three lists
+        partition the due candidates by outcome —
+
+          * **raced** — either the fresh read at step 5.1 already shows the run
+            gone, no longer `waiting`, or moved to a *different* step than the
+            one scanned (v3, plan §3.5 step 5.1 / `docs/reviews/workflow-timers.md`
+            Pass 3 minor — closes a stale-scan window without a second class of
+            harm: a mismatched `atStepKey` can only ever misfire the escalation
+            guard on a def that later cycles back to the exact same step, which
+            is already the plan's own accepted residual, §8); or the CAS itself
+            lost the race (a concurrent human `POST .../input`, or a second
+            sweep tick/process). Harmless, not an error, either way.
+          * **faulted** — `_drive_or_fault` caught one of its four named
+            drive-time faults, an unnamed exception escaped the drive call
+            entirely (batch isolation, below), or the merged ctx (current
+            ctx + the `timerFired` marker) would exceed `MAX_CONFIG_LEN` —
+            the same bound `submit_workflow_input` enforces on its own ctx
+            merge, applied here so an oversized merge is never silently
+            written; the run is already correctly terminal in the graph for
+            the first two cases, and untouched (never resumed) for the third.
+          * **resumed** — drove to a new terminal/parked status
+            (`done`/`waiting`/`failed`).
+
+        A candidate whose step declares no timer key, or isn't yet due, is
+        silently excluded from all three — this is what keeps the feature
+        additive-only (today's forever-park def is never swept).
+
+        **Batch isolation beyond `_drive_or_fault`'s own four named exceptions**
+        (plan §3.5 step 7): an unnamed exception driving candidate N must not
+        stop candidates N+1..last from ever being evaluated — a deliberately
+        different posture from `start_workflow_run`/`submit_workflow_input`,
+        which let an unnamed exception propagate to a 500 for their single
+        caller. Safe precisely because the executor's own M-1 fault net
+        (`executor._drive`) already `fail_run`-stamps the run terminal before
+        re-raising, regardless of exception type — this outer catch only needs
+        to stop the *Python* exception from propagating to the next candidate,
+        never re-derive terminal correctness.
+        """
+        executor = self._require_executor()
+        now = self._clock()
+        candidates = self._repo.find_due_wait_candidates(ctx.ws, limit=limit)
+
+        resumed: list[dict[str, Any]] = []
+        raced: list[dict[str, Any]] = []
+        faulted: list[dict[str, Any]] = []
+        due_count = 0
+        for candidate in candidates:
+            step_type = candidate.get("stepType")
+            # Defensive, mirroring `executor._run_agent_node`'s `& granted_set`
+            # posture (executor.py:697): the read query is due-agnostic by
+            # design (§3.4) — a hand-crafted graph write bypassing publish-time
+            # validation must not be swept just because it happens to carry a
+            # `waitForSeconds`/`waitUntil` key on a non-parking step type.
+            if step_type not in WAITING_STEP_TYPES:
+                continue
+            due_at = _wait_due_at(
+                step_type, candidate.get("stepConfig"), candidate.get("parkedAt")
+            )
+            if due_at is None or due_at > now:
+                continue
+            due_count += 1
+            run_id = candidate["runId"]
+            step_key = candidate.get("stepKey")
+
+            # (v3, plan §3.5 step 5.1) A fresh, immediate read — the same
+            # "read right before acting" doctrine `submit_workflow_input`
+            # already follows (D-H). If the run is gone, no longer `waiting`,
+            # or has moved to a DIFFERENT step than the one this candidate was
+            # scanned at (a concurrent resume drove it elsewhere between the
+            # scan and this read), bucket directly as **raced** without
+            # attempting a resume at all — merging a stale `stepKey` marker
+            # onto whatever step the run sits at now would be meaningless
+            # (Pass 3 minor: `atStepKey`, not just `status`).
+            run = self._repo.get_run(ctx.ws, run_id=run_id)
+            if (
+                run is None
+                or run.get("status") != "waiting"
+                or run.get("atStepKey") != step_key
+            ):
+                raced.append({"runId": run_id})
+                continue
+
+            # (v3, plan §3.5 step 5.2) Merge the step-scoped escalation marker
+            # onto the CURRENT ctx (never a stale one) — the exact same merge
+            # shape `submit_workflow_input` already uses for human input
+            # (`services.py` above: `_load_json_dict` → `.update(...)` →
+            # `_dump_ctx`), with one engine-owned key instead of caller-supplied
+            # ones.
+            merged = _load_json_dict(run.get("ctx"))
+            merged[TIMER_FIRED_CTX_KEY] = step_key
+            merged_json = self._dump_ctx(merged)
+
+            # `submit_workflow_input`'s own merged-ctx bound (D-H, above),
+            # applied here too (`analyst`'s diff-gate finding): the sweep's
+            # marker write must not silently write an oversized ctx. The SAME
+            # exception type `submit_workflow_input` raises for this — but
+            # bucketed as **faulted**, mirroring the four named drive-time
+            # faults `_drive_or_fault` catches, rather than an uncaught
+            # `WorkflowInputRejectedError` that would break batch isolation
+            # for every remaining candidate. This run never reaches
+            # `executor.resume` at all, so nothing is written for it.
+            if len(merged_json) > MAX_CONFIG_LEN:
+                exc = WorkflowInputRejectedError(
+                    f"merged run ctx would be {len(merged_json)} characters, "
+                    f"over the {MAX_CONFIG_LEN}-character bound"
+                )
+                faulted.append(
+                    {"runId": run_id, "error": f"{type(exc).__name__}: {exc}"}
+                )
+                continue
+
+            try:
+                status, error, _fault_ctx = self._drive_or_fault(
+                    ctx, run_id=run_id,
+                    drive=lambda rid=run_id, mj=merged_json: executor.resume(
+                        ctx, run_id=rid, run_ctx_json=mj
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 — deliberate batch isolation
+                _log.exception(
+                    "workflow sweep: unexpected fault driving run %s", run_id
+                )
+                faulted.append(
+                    {"runId": run_id, "error": f"{type(exc).__name__}: {exc}"}
+                )
+                continue
+
+            if status is None and error is None:
+                raced.append({"runId": run_id})
+            elif error is not None:
+                faulted.append({"runId": run_id, "error": error})
+            else:
+                resumed.append({"runId": run_id, "status": status})
+
+        return {
+            "checked": len(candidates), "due": due_count,
+            "resumed": resumed, "raced": raced, "faulted": faulted,
+        }
 
     def link_step_emission(
         self, ctx: CallContext, *, step_run_id: str, msg_id: str

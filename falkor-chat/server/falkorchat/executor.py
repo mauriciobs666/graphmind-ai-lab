@@ -597,12 +597,15 @@ class WorkflowExecutor:
     def _run_wait_node(step: dict[str, Any], config: dict[str, Any]) -> StepResult:
         """A `wait` node: park until an external actor signals back (D-C).
 
-        **Signal-driven, not timer-driven — this system has no scheduler** (no periodic
-        worker, no due-run sweep; `BackgroundTasks` are request-scoped). Real timers are
-        proposed backlog item K-028. To the engine a `wait` step is therefore
-        **mechanically identical to `human`** (plan m-7): same park, same publish
-        invariant, same input path, same guard mechanism. The only difference is the
-        `awaiting.kind` string, which exists so a client renders the right prompt.
+        **Signal-driven by default** — mechanically identical to `human` (plan m-7):
+        same park, same publish invariant, same input path, same guard mechanism. The
+        only difference is the `awaiting.kind` string, which exists so a client
+        renders the right prompt. This node itself stays pure and unaware of time —
+        a step may **additionally** declare `config.waitForSeconds`/`waitUntil`
+        (K-028, shipped) to also become releasable by an elapsed-time sweep
+        (`Services.sweep_due_workflow_runs`); that mechanism lives entirely outside
+        this handler and outside `_drive_loop`, resuming via the same guarded CAS an
+        external signal already uses (`docs/plans/workflow-timers.md`).
         """
         return StepResult(
             output=_dumps({"awaiting": {
