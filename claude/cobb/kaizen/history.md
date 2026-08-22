@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-22 — `agent-maintenance` skill §5 rewritten for the kaizen `:Agent`/`PRODUCED`/`MENTIONS` ontology (M8, S4)
+- **What:** Rewrote `skills/agent-maintenance/SKILL.md` §5 (learnings-graph distillation
+  procedure) for the M8 ontology shipped by `docs/plans/kaizen-agent-ontology.md` (Version 3,
+  approved after 3 `analyst` review passes) and designed by
+  `docs/plans/kaizen-agent-ontology-graph.md` (`graph-dba`). Three changes, per the plan's §3.3/S4
+  row: (1) **step 1's read** now runs two queries side by side — the pre-existing plain
+  `author`-filtered read (still needed, unchanged, for pre-M8 entries with no edges) plus a new
+  traversal-based read (graph-dba §5's verified-idiom `OPTIONAL MATCH` + `collect()` + `UNWIND`
+  fallback, not the `UNION` form flagged unverified on this build) for "every note produced by or
+  mentioning agent X," stated as needed together for as long as any pre-M8 entry remains uncleared
+  (graph-dba §7's no-retrofit consequence). (2) **step 3's routing** gained a new branch: when an
+  entry turns out to really be about a different agent than its producer, `cobb` tags it with the
+  curator-only MENTIONS-write (graph-dba §3) during distillation (FR-4) — never the producing
+  agent's job. (3) **step 4's log-and-clear** replaced the always-full `DETACH DELETE` with a
+  read-then-decide sequence for current-shape entries: count remaining `PRODUCED`/`MENTIONS` edges
+  first (graph-dba §4.1), then delete just the one edge being resolved this pass (§4.2 — the
+  producer's own pass always resolves `PRODUCED` regardless of remaining `MENTIONS`, per FR-6/AC-4;
+  a mentioned agent's pass resolves only its own `MENTIONS` edge, per AC-3) or the whole node once
+  nothing else remains (§4.3, unchanged `DETACH DELETE`) — legacy (pre-M8) entries keep the
+  original unconditional full-clear, since they carry no edges to count. Stated explicitly, as its
+  own numbered item in step 4's per-entry sequence (not left implicit in step ordering): a same-pass
+  MENTIONS tag from step 3 must be durably committed before step 4's count-and-decide read runs for
+  that same entry, else the count could read one edge short and a full `DETACH DELETE` could
+  silently discard the just-added `MENTIONS` edge before it was ever attached. Also updated §5's
+  intro paragraph (describes the new producer-write shape agents call to create an entry, replacing
+  the plain `author`-property description) and added one dated line to the section's own Origin
+  note, for the same "read coherently" reason — no other section of the skill file touched.
+- **Why:** Implements S4 of the approved M8 plan — `cobb` owns `skills/agent-maintenance/SKILL.md`
+  §5, the only place this distillation mechanics actually lives (not `cobb.md` itself).
+- **Scope note:** this unit does **not** cover S3 (retargeting the 13 agents' own
+  "Learning capture" write recipes in `claude/<agent>/*.md`) or S5 (updating `claude/README.md`,
+  `claude/AGENTS.md`, root `AGENTS.md` prose) — separate steps in the same plan, not yet run as of
+  this entry. Ran as a delegated subagent (teco-coordinated); left uncommitted for `teco`'s
+  integration step per the standing delegated-subagent convention.
+
 ## 2026-08-21 — Team-wide: universal interactive-mode git-commit grant added to all 13 agents (`kaizen_team` distillation → live stakeholder decision)
 - **What:** Two related but distinct changes, both stakeholder-decided live in one session:
   1. **tico's own commit grant extended** to cover the returned artifact of a `qa-engineer`/
