@@ -40,12 +40,14 @@ today:
 | Code Property Graph | `cpg_<component>` | `cpg_falkorchat`, `cpg_salesperson` | `graph-dba`, on demand (Joern build) | `analyst`, `architect`, `qa-engineer`, `coder` via the `cpg-analysis` skill |
 | Kaizen working memory | `kaizen_team` | `kaizen_team` (single shared graph) | every Claude Code agent, appending its own notes | `cobb`, distilling |
 | Reference catalog | `reference` | `reference` (one, global) | `falkor-chat`'s server, on workflow-def publish | `falkor-chat`'s server, materializing into workspaces |
-| Workspace | `ws:<workspaceId>` | `ws:acme`, `ws:eval`, `ws:qa028`, `ws:test`, `ws:qa-tico-workflows-manual` | `falkor-chat`'s server, per workspace | `falkor-chat`'s server + its AI participant |
+| Workspace | `ws:<workspaceId>` | `ws:acme` (the demo workspace used throughout §4) | `falkor-chat`'s server, per workspace | `falkor-chat`'s server + its AI participant |
 
-> You may also see a graph key called **`identity`** mentioned in `falkor-chat`'s design
-> docs (global user identity/auth) — it is **designed but not built**; nothing is
-> currently loaded under that name, and it's out of scope here. You may also see a stray
-> **`kaizen_analyst`** key — see the FAQ below; it's an empty leftover, not a live graph.
+> Other `ws:<id>` graphs may be loaded alongside `ws:acme` at any given time (scratch/
+> eval/test workspaces come and go) — `ws:acme` is this manual's one running example;
+> the same ontology applies identically to any workspace, so there's no need to track
+> the full list here. You may also see a graph key called **`identity`** mentioned in
+> `falkor-chat`'s design docs (global user identity/auth) — it is **designed but not
+> built**; nothing is currently loaded under that name, and it's out of scope here.
 
 **Two very different naming conventions.** This is the single most common mistake when
 switching between families:
@@ -304,9 +306,8 @@ RETURN s.key, next.key
 participant's answers, GraphRAG retrieval corpus, and workflow runs. This is the
 busiest, most-written family — one independent graph per workspace, so a problem in one
 workspace can never spill into another and each can be archived/exported/deleted with
-one `GRAPH.DELETE`. Everything below applies identically to every `ws:<id>` graph
-(`ws:acme`, `ws:eval`, `ws:qa028`, `ws:test`, `ws:qa-tico-workflows-manual` are the ones
-currently loaded).
+one `GRAPH.DELETE`. Everything below applies identically to every `ws:<id>` graph;
+`ws:acme` is this manual's demo workspace and every example below runs against it.
 
 Three sub-models share one graph. Splitting the diagram in three keeps each readable.
 
@@ -482,11 +483,6 @@ actually executes.
 No, that's its current, deliberate shape: attribution is the plain `author` property on
 each `KaizenEntry`, not a graph edge. A richer, edge-based ontology is designed
 (`docs/requirements/kaizen-agent-ontology.md`) but not yet built — see §2's gotchas.
-
-**I see a graph called `kaizen_analyst` and it's completely empty.**
-That's a leftover key predating the 2026-08-20 consolidation of every per-agent
-`kaizen_<agent>` graph onto the single shared `kaizen_team` graph — it has zero labels
-and zero nodes. Safe to ignore; `kaizen_team` is the only live kaizen graph.
 
 **`reference` shows an `Entity` label but I can't find any `Entity` nodes.**
 Correct — it's a reserved label for a future tool/ontology catalog, indexed but
