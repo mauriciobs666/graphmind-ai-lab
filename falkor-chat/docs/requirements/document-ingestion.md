@@ -2,9 +2,11 @@
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
 
 ## Intent
-The stakeholder wants to bring knowledge from **multiple external text-based sources** — documents
-and agent-generated text alike — into the graph for GraphRAG, with a **fusion** step: merging/
-reconciling facts that come from more than one source during ingestion, rather than treating each
+The stakeholder wants to bring knowledge from **multiple external text-based sources** — files
+and agent-generated text alike — into the graph for GraphRAG. Ingestion **extracts the entities
+and relationships mentioned in the text** and represents them as real graph nodes/edges (not just
+embedded chunk text), and a **fusion** step reconciles those entities across sources — merging/
+matching the same real-world entity mentioned in more than one source — rather than treating each
 source as a fully independent, unrelated blob of content. The ingested knowledge should serve
 **both** (a) the AI agent answering questions in a chat channel, using the same retrieval path
 chat messages use today, and (b) a **standalone queryable knowledge base**, usable independent of
@@ -57,10 +59,16 @@ fresh labels from scratch.
 - **FR-6 (fusion — conflicting facts)** — When two sources state conflicting facts about the same
   subject, **both are kept**, each carrying its provenance (source + when), rather than one
   silently overwriting the other. Readers (human or agent) weigh the conflicting facts themselves.
-- **FR-7 (fusion — same-entity matching)** — The system attempts to recognize when new content
-  refers to an entity/subject that already exists in the graph (e.g. "Acme Corp" vs. "Acme
-  Corporation"), at some confidence level. **The matching technique itself is a design decision,
-  out of scope for this document** — see Open questions.
+- **FR-7 (fusion — same-entity matching)** — Fusion/matching operates at **entity granularity**
+  (not chunk or whole-file): the system attempts to recognize when an entity extracted from new
+  content is the same real-world entity/subject as one already in the graph (e.g. "Acme Corp" vs.
+  "Acme Corporation"), at some confidence level. **The matching technique itself is a design
+  decision, out of scope for this document** — see Open questions.
+- **FR-7a (extraction, prerequisite to fusion)** — Ingestion **extracts entities and their
+  relationships** from the source text and represents them as graph nodes/edges — not only as
+  embedded chunk text. This extraction is what fusion (FR-6–FR-10) then operates on. The
+  extraction technique itself (NLP pipeline vs. LLM-based, etc.) is a design decision, out of
+  scope here.
 - **FR-8 (fusion — auto-merge tier)** — A **very-high-confidence** match (e.g. an exact shared
   identifier, or near-identical content) is linked/merged **automatically**, no confirmation
   required.
@@ -82,8 +90,9 @@ fresh labels from scratch.
   unit, so a search can surface the one relevant passage instead of the entire file. Recorded as
   the stakeholder's proposed shape (matches the dormant `Chunk` schema already in
   `docs/DESIGN.md` §5.1) — chunk size/splitting strategy is a design decision, not fixed here.
-  **Underlying need:** fine-grained (sub-file) retrieval; **open** — whether fusion/matching
-  (FR-6–FR-10) operates per-chunk or per-file (see Open questions).
+  **Underlying need:** fine-grained (sub-file) retrieval. Chunks are the unit of text fed to
+  extraction (FR-7a); **fusion itself operates on the extracted entities (FR-7), not on chunks or
+  whole files** — resolved, was OQ-4.
 - **FR-14 (search separateness)** — A single unified search across chat messages and ingested
   content is **not required**. It is acceptable for ingested-content search to be its own
   distinct search/capability from chat-message search.
@@ -120,6 +129,9 @@ fresh labels from scratch.
   knowledge), not just the first one.
 - **AC-9** — Given a document was ingested, when someone (human or agent) looks up its provenance
   later, then the **full original document** is retrievable, not just a citation/pointer to it.
+- **AC-10** — Given a file mentioning one or more entities and a relationship between them is
+  ingested, when ingestion completes, then those entities and their relationship exist as nodes/
+  edges in the graph, traceable back to the source file/chunk they were extracted from.
 
 ## Related work (not part of this feature)
 - `falkor-chat/docs/requirements/summary-nodes.md` (Status: Interviewing, unfinished) — condenses
@@ -139,9 +151,8 @@ fresh labels from scratch.
 - **OQ-3** — Where/how does a rejected-but-reconsiderable match get re-evaluated in practice — does
   it need new corroborating content to resurface, or can a human/agent force a re-check on demand?
   Left to design; FR-10/AC-7 only fix that rejection isn't permanent.
-- **OQ-4** — Does fusion/matching (FR-6–FR-10) operate at **chunk** granularity (two chunks from
-  different files both mention "Acme Corp") or at **whole-file** granularity, with chunking being
-  a retrieval-time detail underneath? Still unanswered — asked, not yet settled.
+- ~~OQ-4~~ — **Resolved**: fusion/matching operates at **entity** granularity (FR-7/FR-7a), not
+  chunk or whole-file. Kept struck through for traceability rather than deleted.
 
 ## Decision log
 2026-08-22 — Scope of source formats → **text-based formats broadly** (plain text, Markdown,
@@ -178,3 +189,6 @@ chat-message search (FR-14). Decided after discussing that FalkorDB vector index
 so "one search across everything" would need either app-layer fan-out+merge (tico's suggestion,
 consistent with the existing hybrid-retrieval pattern) or a shared label — moot now that unified
 search isn't a requirement.
+2026-08-22 — Fusion granularity (resolves OQ-4) → **entity level**. Ingestion extracts entities
+and relationships from the text and creates them as graph nodes/edges (FR-7a); fusion/matching
+(FR-6/FR-7) operates on those extracted entities, not on chunks or whole files.
