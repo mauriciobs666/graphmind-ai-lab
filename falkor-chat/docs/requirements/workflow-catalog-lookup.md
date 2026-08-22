@@ -1,13 +1,15 @@
 # Structured catalog/reference lookup for workflows — Feature Requirements
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of four sibling capabilities scoped out of a single "business entities in
+This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
 `docs/requirements/workflow-business-entities.md` for the shared background). The others:
 `docs/requirements/workflow-business-entities.md`, `docs/requirements/workflow-deterministic-compute.md`,
-`docs/requirements/workflow-durable-profile.md`. Read this one for read-only, exact/filterable
-domain data (e.g. a product catalog) specifically — not for mutable state (that's the
-business-entities doc).
+`docs/requirements/workflow-durable-profile.md`, `docs/requirements/workflow-nl-query-generation.md`.
+Read this one for read-only, exact/filterable domain data via a fixed set of query shapes (e.g.
+a product catalog) specifically — not for mutable state (the business-entities doc) and not for
+answering arbitrarily-phrased questions (spun off into its own sibling,
+`workflow-nl-query-generation.md`, once that turned out to be a distinct project).
 
 ## Intent
 Close a structural gap ahead of any specific consumer: today a falkor-chat workflow has no way
@@ -26,13 +28,13 @@ under $Y") because nothing like structured reference data exists in the schema a
 placeholder box for "domain reference data / ontology / catalogs" in the topology diagram, but
 nothing is built there.
 
-There is also a live design tension flagged during the architecture reflection that led to this
-interview: `salesperson` (the comparison case that surfaced this gap) answers arbitrarily-phrased
-questions by having an LLM generate its own Cypher against the schema, fenced off only by a
-keyword blocklist. falkor-chat's existing tools are deliberately the opposite — fixed,
-author-defined schemas, no query-generation tool of any kind. The stakeholder has asked for
-arbitrary-phrasing support (see FR-3), which reopens that tension; this document records the
-requirement but does not resolve the mechanism (see Open questions).
+A related tension surfaced during the interview: `salesperson` (the comparison case that
+originally surfaced this gap) answers arbitrarily-phrased questions by having an LLM generate its
+own Cypher against the schema, fenced off only by a keyword blocklist — a materially different,
+harder problem (safety, schema-awareness, accuracy evaluation) than a fixed-shape lookup tool.
+That capability has been split out into its own sibling document,
+`docs/requirements/workflow-nl-query-generation.md`, and is explicitly out of scope here (see
+below).
 
 ## User stories
 - As a workflow author, I want a step to retrieve an exact fact (name, category, price) about a
@@ -50,9 +52,10 @@ requirement but does not resolve the mechanism (see Open questions).
   named catalog item.
 - **FR-2** — A workflow can retrieve the set of catalog items matching a filter criterion (e.g.
   category, price range) — not single-item lookup only.
-- **FR-3** — The lookup handles arbitrarily-phrased natural-language questions (two different
-  phrasings of the same question both succeed), not just a fixed set of pre-defined question
-  templates.
+- **FR-3** — The lookup supports a fixed, author-defined set of query shapes: exact-name lookup,
+  filter by category, and filter by price range. A question's phrasing must map onto one of
+  these shapes to succeed — answering genuinely arbitrary phrasing is explicitly out of scope
+  (see below).
 - **FR-4** — When a question names an item/category that does not exist in the catalog, the
   workflow states plainly that nothing matched — it does not fabricate an answer. (Mirrors the
   abstention behavior `graphrag_retrieve` already has.)
@@ -70,9 +73,12 @@ requirement but does not resolve the mechanism (see Open questions).
 - Per-workspace catalogs or per-workspace catalog overrides.
 - Attributes beyond name/category/price for the demo catalog (e.g. detailed specs, stock,
   images) — the demo is intentionally flat.
-- The specific mechanism behind FR-3 (arbitrary phrasing) — whether that's a fixed-schema tool
-  with an LLM router, a constrained query-generation approach, or something else — is an
-  architecture decision, not fixed here.
+- Answering arbitrarily-phrased natural-language questions (i.e. anything that doesn't map onto
+  one of FR-3's fixed query shapes) — that is `docs/requirements/workflow-nl-query-generation.md`,
+  a distinct, harder capability (safety, schema-awareness, accuracy evaluation) split out once
+  the stakeholder recognized it as its own project, not a detail of this one.
+- The specific mechanism behind FR-3's fixed query shapes (e.g. how the model is guided to pick
+  and parameterize one) is an architecture decision, not fixed here.
 - Rebuilding or replacing `salesperson`.
 
 ## Acceptance criteria
@@ -83,18 +89,17 @@ requirement but does not resolve the mechanism (see Open questions).
   "which laptops are under $1000"), then the workflow returns the correct matching set.
 - **AC-3** (FR-4) — Given a question naming a product/category absent from the catalog, when
   asked, then the workflow clearly states no match was found rather than fabricating an answer.
-- **AC-4** (FR-3) — Two differently-worded questions asking for the same underlying fact both
-  succeed with the correct answer (proving this isn't a fixed-pattern match).
+- **AC-4** (FR-3) — Two differently-worded questions that both map onto the *same* fixed query
+  shape (e.g. "how much is the X" and "what's the price of the X" — both an exact-name lookup)
+  succeed with the correct answer. This checks the fixed-shape lookup tolerates reasonable
+  wording, not that it handles arbitrary phrasing in general (that's
+  `workflow-nl-query-generation.md`).
 - **AC-5** (FR-5, FR-7) — The demo catalog and workflow can be seeded and verified the same way
   `triage`/`access-request` are today (a seed script, plus a verification check confirming the
   data/definition are actually in place).
 
 ## Open questions
-- **Mechanism for FR-3** (arbitrary phrasing) — a fixed-schema tool with an LLM choosing/filling
-  parameters, a constrained query-generation approach, or something else — is unresolved here by
-  design; it is the architect's call, and may warrant a `security-expert` opinion given the
-  safety trade-off `salesperson`'s own free-text-Cypher approach required (a keyword blocklist as
-  its only safety net).
+None outstanding — pending stakeholder confirmation at readback.
 
 ## Decision log
 2026-08-22 — Split out as one of four sibling capabilities; prioritized first among the four.
@@ -104,8 +109,11 @@ proof-of-concept (like `triage`/`access-request`) as the acceptance bar, not tes
 proposed pastel-flavor menu), flat shape (name, category, price only).
 2026-08-22 — Query surface: both single-item exact lookup and multi-item filtering/listing are
 required (not lookup-only).
-2026-08-22 — Arbitrary natural-language phrasing is required, not a fixed set of question
-shapes — flagged as reopening a deliberate safety trade-off in falkor-chat's existing tool
-design; mechanism left to the architect (see Open questions).
 2026-08-22 — Catalog management: seed-script-only, no runtime CRUD API, for this feature.
 2026-08-22 — Catalog scope: one shared/global catalog, not per-workspace.
+2026-08-22 — Arbitrary natural-language phrasing was initially requested (FR-3) but, once the
+stakeholder recognized it as a distinct project (safety + accuracy-evaluation concerns, not a
+lookup detail), split out into its own sibling document,
+`docs/requirements/workflow-nl-query-generation.md`. This document now scopes FR-3 down to a
+fixed set of author-defined query shapes (exact-name lookup, category filter, price-range
+filter).

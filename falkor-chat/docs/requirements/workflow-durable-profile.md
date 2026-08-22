@@ -1,13 +1,14 @@
 # Durable user-profile data for workflows — Feature Requirements
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of four sibling capabilities scoped out of a single "business entities in
+This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
 `docs/requirements/workflow-business-entities.md` for the shared background). The others:
 `docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-business-entities.md`,
-`docs/requirements/workflow-deterministic-compute.md`. Read this one for durable,
-cross-conversation profile data about the person a workflow is talking to (e.g. a name, a
-delivery address) specifically — not for cart/order-shaped transactional state.
+`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-nl-query-generation.md`
+(the last one added mid-interview, spun off from `workflow-catalog-lookup.md`). Read this one for
+durable, cross-conversation profile data about the person a workflow is talking to (e.g. a name,
+a delivery address) specifically — not for cart/order-shaped transactional state.
 
 ## Intent
 _Queued — not yet interviewed._
