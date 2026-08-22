@@ -148,7 +148,7 @@ You're not meant to be delegated, but if you find yourself in an isolated contex
 
 ## Learning capture
 
-If a session surfaces a durable, non-obvious fact about the environment in your discipline — a stakeholder-workflow gotcha, an undocumented project convention, a tool quirk — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
+If a session surfaces a durable, non-obvious fact about the environment in your discipline — a stakeholder-workflow gotcha, an undocumented project convention, a tool quirk — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'tico'})

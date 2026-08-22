@@ -54,7 +54,7 @@ Your plan is the contract for whoever implements it (often the `coder` or `tdd-e
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tool quirk, an undocumented behavior, a convention that lives only in the code — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tool quirk, an undocumented behavior, a convention that lives only in the code — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'architect'})

@@ -37,10 +37,14 @@ and OpenCode artifacts).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
   history; the 12 agents that existed at the 2026-08-20 migration also carry a now-permanently-frozen
   learnings inbox, never created for an agent since) — every agent's raw capture writes directly
-  into one shared, `author`-partitioned `kaizen_team` FalkorDB graph, a pattern piloted on
+  into one shared `kaizen_team` FalkorDB graph, a pattern piloted on
   `graph-dba` as its own graph, migrated team-wide onto one graph per agent 2026-08-20, then
-  consolidated the same day onto this single shared graph (`docs/plans/generic-cypher-mcp2.md`);
-  `cobb` distills the shared graph). See `claude/README.md` (human catalog)
+  consolidated the same day onto this single shared graph (`docs/plans/generic-cypher-mcp2.md`).
+  An entry created from M8 onward (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) is linked by
+  a `(:Agent)-[:PRODUCED]->(:KaizenEntry)` edge to a real `:Agent` node identifying its producer
+  (plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge onto another agent); a pre-M8 entry
+  keeps its plain `author` property and no edges, unretrofitted; `cobb` distills the shared graph).
+  See `claude/README.md` (human catalog)
   and `claude/AGENTS.md` (agent context; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
   server as a client, restricted to `send_message`/`read_messages`, for a live demo of

@@ -22,27 +22,63 @@ Custom [Claude Code subagents](https://code.claude.com/docs) for this repo. Each
 
 Each agent carries a living improvement plan and a change log, and every
 agent's raw capture writes into one shared **learnings graph**,
-`kaizen_team` (FalkorDB), `author`-partitioned — the capture half of the
-team's self-improvement loop. Piloted on `graph-dba` as its own graph
-(`kaizen_graph_dba`, `docs/plans/generic-cypher-mcp.md`), migrated team-wide
-onto one graph per agent 2026-08-20 (`claude/cobb/kaizen/history.md`), then
-consolidated the same day onto this single shared `kaizen_team` graph
+`kaizen_team` (FalkorDB) — the capture half of the team's self-improvement
+loop. Piloted on `graph-dba` as its own graph (`kaizen_graph_dba`,
+`docs/plans/generic-cypher-mcp.md`), migrated team-wide onto one graph per
+agent 2026-08-20 (`claude/cobb/kaizen/history.md`), then consolidated the
+same day onto this single shared `kaizen_team` graph
 (`docs/plans/generic-cypher-mcp2.md`) so any agent can reach every other
 agent's raw learnings in one query. During runs, every agent writes dated,
 evidence-backed `:KaizenEntry` nodes of durable, non-obvious environment
-facts in its discipline, attributed to itself via `mcp__cypher__query`
-against `kaizen_team` with its own `author` value (a "Learning capture"
-closing protocol in every prompt). One query reaches every agent's raw
-learnings at once (no `author` filter needed):
+facts in its discipline via `mcp__cypher__query` against `kaizen_team` (a
+"Learning capture" closing protocol in every prompt).
+
+M8 (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) gave the graph real
+agent identity: an entry created from that point on is linked by a
+`(:Agent {agentId})-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge to a real
+`:Agent` node identifying its producer (and, when `cobb` judges an entry to
+be substantively about a *different* agent during distillation, a
+`(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge too) — instead of the plain
+`author` string property used before. Entries that already existed when M8
+shipped keep their `author` property and no edges at all; they are never
+retrofitted. Both shapes coexist and both need their own read recipe:
+
+**Historical entries (pre-M8, `author` property, no edges)** — the old
+plain recipe, still the only way to reach them:
 
 ```cypher
-MATCH (e:KaizenEntry)
-RETURN e.author, e.date, e.fact, e.evidence, e.context, e.suggestedHome
+MATCH (e:KaizenEntry {author: '<agent>'})
+RETURN e.date, e.fact, e.evidence, e.context, e.suggestedHome
 ORDER BY e.date
 ```
 
-Add `{author: '<agent>'}` to the `MATCH` pattern to scope to one agent's
-entries. Every one of the 12 agents that existed at the 2026-08-20 migration
+Drop the `{author: ...}` filter to read every historical entry regardless
+of author.
+
+**Current-shape entries (post-M8, `PRODUCED`/`MENTIONS` edges)** — "every
+entry produced by or mentioning agent X," traversal-based since there is no
+`author` property to filter on (the verified idiom,
+`skills/agent-maintenance/SKILL.md` §5 /
+`docs/plans/kaizen-agent-ontology-graph.md` §5):
+
+```cypher
+MATCH (a:Agent {agentId: '<agent-slug>'})
+OPTIONAL MATCH (a)-[:PRODUCED]->(produced:KaizenEntry)
+WITH a, collect(DISTINCT produced) AS producedList
+OPTIONAL MATCH (mentioned:KaizenEntry)-[:MENTIONS]->(a)
+WITH producedList, collect(DISTINCT mentioned) AS mentionedList
+UNWIND (producedList + mentionedList) AS k
+RETURN DISTINCT k.entryId AS entryId, k.date AS date, k.fact AS fact,
+       k.evidence AS evidence, k.context AS context,
+       k.suggestedHome AS suggestedHome ORDER BY date
+```
+
+Both recipes are needed side by side for as long as any pre-M8 entry
+remains uncleared — a historical entry has no edge for either `OPTIONAL
+MATCH` above to traverse, so it's silently absent from the current-shape
+query and only reachable via the legacy one.
+
+Every one of the 12 agents that existed at the 2026-08-20 migration
 carried `<name>/kaizen/inbox.md` — frozen (no longer written to) since that
 migration, and **removed outright on 2026-08-21** once every entry it ever
 held had been distilled into `kaizen_team` and cleared (git history retains
@@ -54,8 +90,9 @@ the shared graph — on request, and with every certification pass, per the
 entry → route it (agent prompt / on-demand knowledge base à la
 `graph-dba/falkordb-quirks.md` / project docs / discard) → log the promotion in
 the entry's own agent's `history.md` → clear (a curator-scoped `DETACH
-DELETE` — `agent='cobb'` — against `kaizen_team`). Agents never promote
-their own entries.
+DELETE` — `agent='cobb'` — against `kaizen_team`, resolving one edge at a
+time for a current-shape entry until none remain, per the skill). Agents
+never promote their own entries.
 
 Plans and histories:
 

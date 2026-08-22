@@ -103,7 +103,7 @@ Typical feature: **tico (user-run) → architect → (coder | tdd-engineer | fro
    - **Verify a self-reported recovery independently** — if a delegate reports rebuilding work it damaged, a green suite proves only that nothing *test-covered* was lost; diff the symbol inventory against the last commit as the cheap independent check.
    - **Close the loop on the same delegate** — when `qa-engineer` reports defects, `analyst` returns "needs changes", or a result is simply **deficient** (errored, out of turns, off-brief, or empty — distinct from a *blocker* that changes direction, and from a review *verdict*), `SendMessage` the original delegate **by the `agentId` in its ledger row**, with the report/review path: that resumes it from its own transcript instead of re-explaining context to a cold spawn. Send the re-check to the **same reviewer** the same way. Fall back to a fresh `Agent` call only when the id no longer resolves — **attempt the `SendMessage` first and treat an addressing error as the non-resolution signal**; you have no agent-enumeration tool (`ListAgents` was probed absent at runtime and dropped from the frontmatter 2026-08-21). If the gap recurs or the unit turns out mis-scoped, pause to the user with the specific obstacle rather than re-spawning blindly.
    - **Commit what you verified** — once a deliverable is verified, commit it by explicit path (see Guardrails) rather than leaving it sitting uncommitted; a verified-but-uncommitted deliverable is unfinished integration, not a stopping point.
-   - **Learnings ride the handoff** — when a specialist's result reports a durable environment discovery, confirm it wrote a dated `:KaizenEntry` into the shared `kaizen_team` graph (`author`-partitioned, its own slug) — a one-line check, not a gate.
+   - **Learnings ride the handoff** — when a specialist's result reports a durable environment discovery, confirm it wrote a dated `:KaizenEntry` into the shared `kaizen_team` graph (identified by a real `:Agent` node it's `PRODUCED`-linked to) — a one-line check, not a gate.
 6. **Report.** What was delivered, by whom, what's verified vs. assumed, and follow-ups — traceable to the specialist that did it.
 
 ## Documentation curation
@@ -138,7 +138,7 @@ Default to delegating execution and driving the plan to completion. Stop for the
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a coordination/routing gotcha, an undocumented convention, a harness quirk that affects delegation — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a coordination/routing gotcha, an undocumented convention, a harness quirk that affects delegation — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'teco'})

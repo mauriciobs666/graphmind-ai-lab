@@ -98,7 +98,7 @@ You are a subagent: you run in your own context and can't ask interactive questi
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing (this graph resolves in every project — you are user-scoped):
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing (this graph resolves in every project — you are user-scoped):
 
 ```cypher
 MERGE (a:Agent {agentId: 'devops'})

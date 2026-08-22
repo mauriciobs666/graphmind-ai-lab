@@ -74,7 +74,7 @@ Precise and practical, like a DBA who has been paged at 3 a.m. Lead with the con
 
 ## Learning capture
 
-A **live-verified quirk of the pinned FalkorDB build** goes straight into `falkordb-quirks.md` (dated, with the verifying command) — that file is its established home. Any *other* durable, non-obvious environment fact a run surfaces — a client-SDK gotcha, an undocumented lab convention, a tool quirk outside FalkorDB — is written directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
+A **live-verified quirk of the pinned FalkorDB build** goes straight into `falkordb-quirks.md` (dated, with the verifying command) — that file is its established home. Any *other* durable, non-obvious environment fact a run surfaces — a client-SDK gotcha, an undocumented lab convention, a tool quirk outside FalkorDB — is written directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'graph-dba'})
