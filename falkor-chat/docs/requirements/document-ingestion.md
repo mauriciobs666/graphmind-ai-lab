@@ -11,10 +11,23 @@ chat messages use today, and (b) a **standalone queryable knowledge base**, usab
 any chat channel. A connected AI agent should also be able to **write** into this store via the
 existing MCP front door — using it as **persistent memory** — not just read from it.
 
+> **Terminology note:** the stakeholder's preferred term for an ingested unit is **"file"**, not
+> "document" (2026-08-22). This document keeps "document" in prose written before that
+> correction — read the two as synonyms; the exact label name is the architect's call (see
+> Related work below on the schema that already exists under the name `Document`).
+
 ## Problem & current state
 Today, falkor-chat's GraphRAG has exactly one knowledge source going into the graph: chat
 messages, embedded as they're posted (`falkor-chat/docs/DESIGN.md` §8). There is no path for
 ingesting knowledge from outside the chat itself.
+
+**Important prior-art finding:** falkor-chat's schema already has a dormant, never-populated
+shape for exactly this kind of corpus — `docs/DESIGN.md` §5.1: `(:Document {documentId})-
+[:HAS_CHUNK]->(:Chunk {chunkId, text, embedding})`, `(:Chunk)-[:ABOUT]->(:Entity)`, plus a
+`Chunk.embedding` vector index already in `scripts/bootstrap_schema.sh`. `docs/QUERIES.md` (line
+472) confirms `Chunk` is "bootstrapped DDL, never populated." This feature is very likely what
+finally populates that scaffolding — the architect should reconcile against it rather than invent
+fresh labels from scratch.
 
 ## User stories
 - As an **AI agent answering in a channel**, I want to ground my replies in ingested document
@@ -61,6 +74,19 @@ ingesting knowledge from outside the chat itself.
   permanently forbid a future match between the same two things.
 - **FR-11 (bulk ingestion)** — The system supports ingesting **multiple documents/sources in one
   batch**, not only one document at a time.
+- **FR-12 (retention)** — The **full original source document is retained**, not discarded after
+  fact extraction/fusion — so it can be fully inspected, re-read, or re-processed later (e.g. if
+  the matching approach improves).
+- **FR-13 (chunking — stakeholder's proposed shape)** — An ingested file is split into smaller
+  retrievable **chunks** (the standard RAG pattern), rather than indexed only as one whole-file
+  unit, so a search can surface the one relevant passage instead of the entire file. Recorded as
+  the stakeholder's proposed shape (matches the dormant `Chunk` schema already in
+  `docs/DESIGN.md` §5.1) — chunk size/splitting strategy is a design decision, not fixed here.
+  **Underlying need:** fine-grained (sub-file) retrieval; **open** — whether fusion/matching
+  (FR-6–FR-10) operates per-chunk or per-file (see Open questions).
+- **FR-14 (search separateness)** — A single unified search across chat messages and ingested
+  content is **not required**. It is acceptable for ingested-content search to be its own
+  distinct search/capability from chat-message search.
 
 ## Out of scope
 - **Binary / non-text document formats** (PDF, images, Office docs, etc.) that require dedicated
@@ -92,6 +118,8 @@ ingesting knowledge from outside the chat itself.
 - **AC-8** — Given a batch of multiple documents is submitted together, when ingestion completes,
   then all of them are processed (including fusion against each other and against existing
   knowledge), not just the first one.
+- **AC-9** — Given a document was ingested, when someone (human or agent) looks up its provenance
+  later, then the **full original document** is retrievable, not just a citation/pointer to it.
 
 ## Related work (not part of this feature)
 - `falkor-chat/docs/requirements/summary-nodes.md` (Status: Interviewing, unfinished) — condenses
@@ -111,6 +139,9 @@ ingesting knowledge from outside the chat itself.
 - **OQ-3** — Where/how does a rejected-but-reconsiderable match get re-evaluated in practice — does
   it need new corroborating content to resurface, or can a human/agent force a re-check on demand?
   Left to design; FR-10/AC-7 only fix that rejection isn't permanent.
+- **OQ-4** — Does fusion/matching (FR-6–FR-10) operate at **chunk** granularity (two chunks from
+  different files both mention "Acme Corp") or at **whole-file** granularity, with chunking being
+  a retrieval-time detail underneath? Still unanswered — asked, not yet settled.
 
 ## Decision log
 2026-08-22 — Scope of source formats → **text-based formats broadly** (plain text, Markdown,
@@ -135,3 +166,15 @@ agent — not human-only.
 re-linked later if warranted.
 2026-08-22 — Ingestion volume → **bulk import supported from day one**, not just one document at
 a time.
+2026-08-22 — Source retention → **keep the full original document**, not just a citation/pointer,
+after facts are extracted/fused — enables full inspection and future re-processing.
+2026-08-22 — Terminology → stakeholder's preferred term is **"file,"** not "document."
+2026-08-22 — Chunking → stakeholder wants the **standard file-has-chunks pattern**, recorded as
+proposed shape (FR-13), not a locked requirement; matches the dormant `Document`/`Chunk`/`Entity`
+schema already scaffolded in `docs/DESIGN.md` §5.1 / `scripts/bootstrap_schema.sh` since M2 but
+never populated.
+2026-08-22 — Unified search → **not required** — ingested-content search may be separate from
+chat-message search (FR-14). Decided after discussing that FalkorDB vector indexes are per-label,
+so "one search across everything" would need either app-layer fan-out+merge (tico's suggestion,
+consistent with the existing hybrid-retrieval pattern) or a shared label — moot now that unified
+search isn't a requirement.
