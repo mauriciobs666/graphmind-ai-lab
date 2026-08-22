@@ -56,7 +56,11 @@ ingesting knowledge from outside the chat itself.
   nothing is linked/merged until it is confirmed.
 - **FR-10 (fusion — confirmation)** — A pending match suggestion can be **confirmed or rejected**
   by either a **human user** or a **connected AI agent**. Confirming links/merges the two;
-  rejecting leaves them separate.
+  rejecting leaves them separate. **Rejection is not permanent** — a rejected pair can later be
+  reconsidered (e.g. re-suggested, or manually linked) if warranted; rejecting does not
+  permanently forbid a future match between the same two things.
+- **FR-11 (bulk ingestion)** — The system supports ingesting **multiple documents/sources in one
+  batch**, not only one document at a time.
 
 ## Out of scope
 - **Binary / non-text document formats** (PDF, images, Office docs, etc.) that require dedicated
@@ -82,6 +86,12 @@ ingesting knowledge from outside the chat itself.
 - **AC-6** — Given knowledge was ingested via the MCP front door by a connected agent, when that
   or another agent later queries the knowledge base, then the previously-written content is
   retrievable.
+- **AC-7** — Given a suggested match was previously rejected, when new corroborating content later
+  arrives (or a human/agent chooses to), then the two can still be linked — a past rejection does
+  not permanently block a future match between the same pair.
+- **AC-8** — Given a batch of multiple documents is submitted together, when ingestion completes,
+  then all of them are processed (including fusion against each other and against existing
+  knowledge), not just the first one.
 
 ## Related work (not part of this feature)
 - `falkor-chat/docs/requirements/summary-nodes.md` (Status: Interviewing, unfinished) — condenses
@@ -98,10 +108,9 @@ ingesting knowledge from outside the chat itself.
   for confirmation — e.g. a message in a channel, a dedicated review surface, an MCP tool response?
   Affects the user experience of fusion, so worth a stakeholder decision once the architect has
   options to weigh in with; not yet settled.
-- **OQ-3** — If a suggested match is **rejected**, can the same pair be re-suggested later (e.g. if
-  more corroborating content arrives), or is a rejection permanent?
-- **OQ-4** — Is there a limit/expectation on how many documents or how much text can be ingested
-  in one go (a single large import vs. one document at a time)?
+- **OQ-3** — Where/how does a rejected-but-reconsiderable match get re-evaluated in practice — does
+  it need new corroborating content to resurface, or can a human/agent force a re-check on demand?
+  Left to design; FR-10/AC-7 only fix that rejection isn't permanent.
 
 ## Decision log
 2026-08-22 — Scope of source formats → **text-based formats broadly** (plain text, Markdown,
@@ -122,3 +131,7 @@ anything less confident is **surfaced as a pending suggestion** requiring confir
 anything links/merges. Matching technique itself deferred to design (OQ-1).
 2026-08-22 — Who can confirm a pending match → **either** a human user **or** a connected AI
 agent — not human-only.
+2026-08-22 — Rejection permanence → **not permanent** — a rejected match can be reconsidered/
+re-linked later if warranted.
+2026-08-22 — Ingestion volume → **bulk import supported from day one**, not just one document at
+a time.
