@@ -2,6 +2,66 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-21 — Team-wide follow-on: universal interactive-mode commit grant (does not change tico's own grant)
+- **What:** Immediately after the entry below landed, the stakeholder — asked how to route the
+  commit request for *this* change — ruled further: every agent, not just tico/teco, should get
+  an interactive-mode commit exception. tico's own grant (below) is unchanged by this — it was
+  already unconditioned on interactive-vs-subagent mode and already covers more than the new
+  universal grant does — but the Bash guardrail bullet gained one trailing sentence clarifying the
+  relationship (yours applies either way; the new universal one is interactive-only and narrower).
+  Full team-wide implementation (all 13 agents, `claude/AGENTS.md` rewrite, `audit-team.sh`
+  check-8 redesign): `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Why:** direct stakeholder ruling, same session, same day — see also the user's own correction
+  that agents "should not refuse when asked by the stakeholder," which shaped how this and the
+  preceding request were handled (act on a direct stakeholder ask rather than routing it through
+  another pause).
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8.
+- **Plan items:** none opened — direct implementation of an explicit stakeholder decision.
+
+## 2026-08-21 — Commit authority extended to a Mode-3 verification pass's returned artifact (`kaizen_team` distillation + live stakeholder decision)
+- **What:** tico's `git add`/`git commit` grant now covers a second case beyond its own doc
+  kinds: the returned artifact of a `qa-engineer`/`analyst` verification pass tico itself offered
+  under Mode 3 and the stakeholder accepted, once tico has read it and confirmed it fits, by
+  explicit path — mirroring `teco`'s integrator authority (step 5: verify a coordinated
+  specialist's deliverable, then commit it) but narrower in scope: only the one
+  ad-hoc-orchestration case tico's own guardrails actually sanction (the offered Mode-3
+  verification pass), not any specialist's deliverable in general. Edited: `tico.md`'s Bash
+  guardrail bullet (now names both grants explicitly) and Mode 3's verification-pass bullet (now
+  says to commit each returned artifact once confirmed to fit); `claude/AGENTS.md`'s "Git-commit
+  authority" section and `claude/README.md`'s tico catalog row updated to state the extension and
+  cross-reference this entry. `claude/scripts/audit-team.sh` unaffected (check 8 only verifies
+  *which* agents claim commit authority in their own prompt, not its scope) — re-ran clean, same
+  113 PASS as before.
+- **Why:** a `kaizen_team` entry from tico (`entryId` `e7a1c9d4-3f2b-4a6e-9c1d-8b5f0a2e6d71`, dated
+  2026-08-21) reported that closing out `docs/manuals/graph-ontology.md`'s verification pass —
+  tico directly delegated to `devops` (env verify), `analyst` (→ `docs/reviews/graph-ontology.md`),
+  `qa-engineer` (→ `docs/test-plans/graph-ontology.md` + `docs/test-reports/graph-ontology-report.md`),
+  and `graph-dba` (dropping two stale kaizen graphs) — left the analyst/qa-engineer artifacts
+  untracked, since tico's Bash guardrail at the time only let it commit files its own Write/Edit
+  guard covered. Stakeholder feedback captured in the entry: tico should get the same commit
+  permit teco has and, as orchestrator of that pass, should own committing what it commissioned,
+  not just its own document. Verified live: re-read `tico.md`'s prior Bash bullet and `teco.md`'s
+  integrator grant (Guardrails, "The grant"/"Why the boundary differs from `tico`'s") side by
+  side — confirmed the asymmetry was real (teco's grant is scoped to its integrator *role*; tico's
+  was scoped to its Write/Edit *guard*, which never covered a delegate's own deliverable). Put to
+  the stakeholder directly (this is a scope-of-authority judgment call, same class as K-008,
+  `cobb`'s not to guess) via `AskUserQuestion`: ruled **extend tico's commit authority**, scoped to
+  the ad-hoc-orchestration case, mirroring teco.
+- **Does not reopen the 2026-07-30 closed ruling** (parking lot, below): that ruling was about
+  whether a *third* agent (analyst/qa-engineer/etc.) gets its own commit rights — still closed, no
+  change here. This widens only `tico`'s existing, stakeholder-granted scope to catch up with a
+  case its guardrails already sanction (the Mode-3 offered verification pass) but its commit grant
+  hadn't yet been written to cover.
+- **Relationship to K-008 (`plan.md`):** related but distinct — K-008's two open incidents (routing
+  a QA finding to `architect` as a design question; committing an arbitrary one-off `BACKLOG.md`
+  entry outside tico's doc kinds) are neither shape considered here and remain unresolved. K-008
+  stays open; a cross-reference note was added to it rather than closing it.
+- **Kaizen-graph distillation:** entry `e7a1c9d4-3f2b-4a6e-9c1d-8b5f0a2e6d71` — **promoted to the
+  prompt** (see What, above). Cleared from `kaizen_team` after this history append landed
+  (curator `DETACH DELETE` via `cobb`, append-before-clear order per the agent-maintenance skill
+  §5).
+- **Plan items:** K-008 extended with a cross-reference note, not closed.
+
 ## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere)
 
 - **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes.

@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
+- **What:** New Principles bullet: when running interactively (`claude --agent graph-dba`, a
+  human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own
+  verified deliverable(s) from the session (a design note, a migration/DDL script), by explicit
+  path, never bulk-staged/pushed/reset/rebased/amended; the grant does not apply when spawned as
+  a delegated subagent.
+- **Why:** Direct stakeholder ruling, 2026-08-21, after `tico` hit exactly this gap closing out a
+  Mode-3 verification pass (its own commissioned artifacts left uncommitted, since only
+  `tico`/`teco` had any commit authority). Rather than pin the fix to those two, the stakeholder
+  ruled the exception should reach every agent, gated by invocation mode, not identity — full
+  rationale, the `claude/AGENTS.md` rewrite, and the `audit-team.sh` check-8 redesign in
+  `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8.
+- **Plan items:** none opened — direct implementation of an explicit stakeholder decision.
+
 ## 2026-08-21 — `kaizen/inbox.md` deleted (content already fully captured elsewhere); also executed `G1`'s last 2 `kaizen_<agent>` retirements
 
 - **What:** `cobb` deleted this agent's frozen `kaizen/inbox.md` (git history retains it in full, unaltered) as part of a team-wide cleanup of all 12 agents' frozen inboxes. In the same session, this agent was dispatched to finish `G1` (`docs/plans/generic-cypher-mcp2-coordination.md`): live-reconfirmed, then `GRAPH.DELETE`d, the last 2 of 12 `kaizen_<agent>` keys (`kaizen_analyst`: 8 entries, `kaizen_teco`: 5 entries), both content-diff-verified already fully distilled elsewhere before deletion. `GRAPH.LIST` re-run afterward confirmed both keys gone.

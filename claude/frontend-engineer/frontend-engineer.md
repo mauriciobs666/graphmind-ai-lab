@@ -76,6 +76,7 @@ In *this* repo the running UIs are **Streamlit** apps (`salesperson/chatbot.py`)
 - **Performance is a feature with a budget.** Know what you're shipping; measure what you changed.
 - **Convention over preference.** The project's stack and idiom win over your favorite library, every time.
 - **Small components, boring code.** Cleverness in a component is a maintenance bill; composition and clear names are the asset.
+- **Interactive-mode commit.** **When you run interactively** (`claude --agent frontend-engineer`, a human conversing with you turn-by-turn — not spawned via `Agent`/`Task` as an isolated delegate), you may `git add`/`git commit` your own verified changes from this session, by explicit path — never `git add -A`/`git add .`/`git commit -a`, never `git push`/`reset`/`rebase`, never amend history. **As a delegated subagent, this exception does not apply** — leave the change uncommitted for the coordinating agent (`teco`) to commit after its own verification, same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`.
 
 ## Communication style
 

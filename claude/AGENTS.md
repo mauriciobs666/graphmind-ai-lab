@@ -102,15 +102,43 @@ missing `subagent_type` — an omitted field silently spawns a `general-purpose`
 of the named agent's prompt/tools/hooks (verified live 2026-08-21, `teco/kaizen/history.md`), and
 prompt-level discipline alone had already let two such dispatches through.
 
-**Git-commit authority is prompt-level, not hook-enforced.** Only `tico` and `teco` document
-`git add`/`git commit` authority — `tico` for its own doc kinds (requirements, manuals; mirrors
-its Write/Edit guard exactly), `teco` for a coordinated specialist's already-verified deliverable
-by explicit path (its integrator role, deliberately wider than its own Write/Edit guard). No
-`PreToolUse` hook matches `git commit` (the destructive-ops guards match Bash command patterns
-like `GRAPH.DELETE`, not versioning commands), so this is self-discipline backstopped only by
-`scripts/audit-team.sh` check 8, which fails if any agent other than `tico`/`teco` claims the
-same authority. Stakeholder decision, 2026-07-30: no proliferation of commit rights beyond these
-two — see `claude/teco/kaizen/history.md` and `claude/cobb/kaizen/history.md` for the reasoning.
+**Git-commit authority is prompt-level, not hook-enforced.** No `PreToolUse` hook matches `git
+commit` (the destructive-ops guards match Bash command patterns like `GRAPH.DELETE`, not
+versioning commands), so this is entirely self-discipline, backstopped only by
+`scripts/audit-team.sh` check 8. The policy has two layers, both stakeholder decisions:
+
+- **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.**
+  Stakeholder decision, 2026-07-30: `tico` may commit its own doc kinds (requirements, manuals;
+  mirrors its Write/Edit guard exactly), `teco` may commit any coordinated specialist's
+  already-verified deliverable by explicit path (its integrator role, deliberately wider than its
+  own Write/Edit guard) — reasoning in `claude/teco/kaizen/history.md` and
+  `claude/cobb/kaizen/history.md`. **Extended 2026-08-21:** `tico`'s grant now also covers the
+  returned artifact of a `qa-engineer`/`analyst` verification pass it itself offered under Mode 3
+  and the stakeholder accepted, once tico has confirmed the artifact fits — narrower than `teco`'s
+  grant, scoped to the one ad-hoc-orchestration case tico's own guardrails sanction
+  (`tico/kaizen/history.md`, 2026-08-21 entry). Both of these grants apply whether the agent is
+  running interactively or as a delegated subagent — they're tied to the agent's role, not its
+  invocation mode.
+- **Universal interactive-mode grant — every agent, added 2026-08-21.** Stakeholder ruling,
+  same day, in direct response to a live friction case (this document's own edit history, plus
+  `cobb/kaizen/history.md`, 2026-08-21): every one of the 13 agents in this directory may `git
+  add`/`git commit` its **own verified work from the current session**, by explicit path only
+  (never `git add -A`/`git add .`/`git commit -a`, never `git push`/`reset`/`rebase`, never amend
+  history) — **but only when it is running interactively** (`claude --agent <name>`, a human
+  conversing with it turn-by-turn). **The grant does not apply when the same agent is spawned as a
+  delegated subagent** (via `Agent`/`Task`, isolated context, no live human turn) — there,
+  committing stays the coordinating agent's (`teco`'s) integration step, after its own
+  verification, exactly as before this ruling. The distinction exists because a human directly
+  steering an interactive session *is* the real-time review the "no proliferation" rule was
+  protecting; an isolated subagent chain has no such reviewer in the loop, so nothing changes
+  there. Each agent's own Guardrails/Principles/Boundaries section states this grant in its own
+  words; `scripts/audit-team.sh` check 8 verifies every agent's file both claims it and states the
+  delegated-subagent carve-out.
+
+This second layer **does not touch** the first: `tico`'s and `teco`'s broader, mode-unconditioned
+grants stand exactly as documented above, and this still isn't a delegation of *coordination* —
+an agent running interactively still only commits what it itself verified, never another agent's
+in-flight work.
 
 ## Maintenance rules
 

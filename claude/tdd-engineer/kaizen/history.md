@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
+- **What:** New Guardrails bullet: when running interactively (`claude --agent tdd-engineer`, a
+  human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own
+  verified code changes from the session, by explicit path, never bulk-staged/pushed/reset/
+  rebased/amended; the grant does not apply when spawned as a delegated subagent.
+- **Why:** Direct stakeholder ruling, 2026-08-21, after `tico` hit exactly this gap closing out a
+  Mode-3 verification pass (its own commissioned artifacts left uncommitted, since only
+  `tico`/`teco` had any commit authority). Rather than pin the fix to those two, the stakeholder
+  ruled the exception should reach every agent, gated by invocation mode, not identity — full
+  rationale, the `claude/AGENTS.md` rewrite, and the `audit-team.sh` check-8 redesign in
+  `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8.
+- **Plan items:** none opened — direct implementation of an explicit stakeholder decision.
+
 ## 2026-08-21 — `CPG:` line gained a `not applicable` vs. `considered, not relevant` disambiguation (C-408)
 
 - **What:** `cobb` added one clause to this agent's `CPG:` evidence-trail sentence (§ "Verify honestly"): `not applicable` is now explicitly scoped to a task with no code-level component at all, distinct from `considered, not relevant` (a code-level task in a component that simply has no loaded CPG). This is the agent whose live dispatch (D3′, U9) originally surfaced the ambiguity — it picked `not applicable` for a code-level task on a component with no loaded CPG, which the plan's own wording calls `considered, not relevant`. See `claude/cobb/kaizen/history.md`'s matching 2026-08-21 entry for the full reasoning and the defect this closes (`docs/BACKLOG.md` C-408, DEF-4).

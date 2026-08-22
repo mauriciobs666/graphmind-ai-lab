@@ -40,15 +40,22 @@
 #      grep`; the scan now unions tracked files with untracked-but-not-
 #      ignored ones so the gate catches a leak before the first commit, not
 #      only after.
-#   8. git-commit-authority containment — only tico and teco may document
-#      `git add`/`git commit` authority in their own prompt (COMMIT_AUTHORS
-#      below); every other agent's <name>.md must stay free of those verbs
-#      entirely. Stakeholder decision, 2026-07-30: "I dont want the subagents
-#      to proliferate commits, tico and teco are special and have coordination
-#      rights" — this check is the deterministic backstop so a future prompt
-#      edit can't silently re-open commit authority for a specialist without
-#      a human noticing (no PreToolUse hook can gate this: it's a prose
-#      capability, not a Write/Edit path or a Bash command pattern).
+#   8. git-commit-authority scoping — every one of the 13 agents must document
+#      `git add`/`git commit` authority AND state the delegated-subagent
+#      carve-out (the grant applies only when the agent runs interactively,
+#      not when spawned as an isolated delegate). Stakeholder decision,
+#      2026-07-30: "I dont want the subagents to proliferate commits, tico
+#      and teco are special and have coordination rights" — restricted broad,
+#      mode-unconditioned commit authority to tico/teco only (still true;
+#      documented in claude/AGENTS.md's "Git-commit authority" section).
+#      Superseded in part, 2026-08-21: every agent may now additionally
+#      commit its own verified work specifically when running interactively
+#      — this check is the deterministic backstop so a future prompt edit
+#      can't silently drop either half (claiming the verb with no carve-out
+#      reads as the old unconditioned grant, which stays tico/teco-only; no
+#      claim at all misses the 2026-08-21 policy). No PreToolUse hook can
+#      gate this either way: it's prose capability, not a Write/Edit path or
+#      a Bash command pattern.
 #
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
@@ -180,23 +187,21 @@ for label in "${!pii[@]}"; do
 done
 [ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked or untracked (non-ignored) file"
 
-# 8. git-commit-authority containment — only tico/teco may claim git add/commit
+# 8. git-commit-authority scoping — every agent claims it, and correctly
+#    carves out delegated-subagent mode (2026-08-21 universal grant); tico/teco
+#    additionally carry a broader, mode-unconditioned grant documented in
+#    claude/AGENTS.md, which this check doesn't distinguish — it only verifies
+#    every agent has *some* correctly-scoped commit language.
 echo
-COMMIT_AUTHORS=("tico" "teco")
-is_commit_author() { local n; for n in "${COMMIT_AUTHORS[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 for a in "${agents[@]}"; do
-  if is_commit_author "$a"; then
-    if grep -qE '`?git (add|commit)`?' "$CL/$a/$a.md"; then
-      pass "$a: documents its git commit authority (stakeholder-approved coordination right)"
+  if grep -qE '`?git (add|commit)`?' "$CL/$a/$a.md"; then
+    if grep -qi "delegated subagent" "$CL/$a/$a.md"; then
+      pass "$a: documents git add/commit authority, scoped to interactive mode (delegated-subagent carve-out present)"
     else
-      failmsg "$a: is a designated commit author (COMMIT_AUTHORS) but its prompt documents no git add/commit authority — grant missing or worded unrecognizably"
+      failmsg "$a: claims git add/commit authority but doesn't state the delegated-subagent carve-out — reads as an unconditioned grant, which only tico/teco may claim"
     fi
   else
-    if grep -qE '`?git (add|commit)`?' "$CL/$a/$a.md"; then
-      failmsg "$a: prompt claims git add/commit authority — only tico/teco may (stakeholder decision 2026-07-30, no proliferation of commit rights)"
-    else
-      pass "$a: no git commit authority claimed (correct — not tico/teco)"
-    fi
+    failmsg "$a: documents no git add/commit authority — expected under the 2026-08-21 universal interactive-mode grant (claude/AGENTS.md, 'Git-commit authority')"
   fi
 done
 

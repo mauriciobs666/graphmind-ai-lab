@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
+- **What:** New Guardrails bullet: when running interactively (`claude --agent security-expert`,
+  a human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own
+  findings report from the session, by explicit path, never bulk-staged/pushed/reset/rebased/
+  amended; the grant does not apply when spawned as a delegated subagent — separate from, and
+  additive to, the existing FR-10 exploitation-approval gate, which is unaffected.
+- **Why:** Direct stakeholder ruling, 2026-08-21, after `tico` hit exactly this gap closing out a
+  Mode-3 verification pass (its own commissioned artifacts left uncommitted, since only
+  `tico`/`teco` had any commit authority). Rather than pin the fix to those two, the stakeholder
+  ruled the exception should reach every agent, gated by invocation mode, not identity — full
+  rationale, the `claude/AGENTS.md` rewrite, and the `audit-team.sh` check-8 redesign in
+  `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8.
+- **Plan items:** none opened — direct implementation of an explicit stakeholder decision.
+
 ## 2026-08-20 — Fix pass on analyst's independent review (`claude/docs/reviews/security-expert.md`): three FR-10 majors + one cheap minor
 
 - **What:** `analyst`'s review of the newly-created agent (same day, "approve with suggestions",

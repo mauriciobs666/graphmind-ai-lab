@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-21 — Team-wide: universal interactive-mode git-commit grant added to all 13 agents (`kaizen_team` distillation → live stakeholder decision)
+- **What:** Two related but distinct changes, both stakeholder-decided live in one session:
+  1. **tico's own commit grant extended** to cover the returned artifact of a `qa-engineer`/
+     `analyst` verification pass tico itself offered under Mode 3 and the stakeholder accepted
+     (`tico/tico.md`, `claude/AGENTS.md`, `claude/README.md`, `tico/kaizen/history.md` — first
+     entry, same date).
+  2. **Universal interactive-mode commit grant**, team-wide: every one of the 13 agents in
+     `claude/` may now `git add`/`git commit` its own verified work **when running interactively**
+     (`claude --agent <name>`, a human present turn-by-turn) — never when spawned as a delegated
+     subagent, where committing stays `teco`'s integration step after its own verification, same
+     as before. `tico`'s and `teco`'s pre-existing, broader grants (own doc kinds; any coordinated
+     specialist's verified deliverable) are unaffected — they're unconditioned on invocation mode,
+     tied to role, not mode; this new grant is deliberately narrower (own work only) and
+     mode-conditioned. Edited: a new/extended Guardrails-equivalent bullet in all 13 agents'
+     `<name>.md` (`analyst`, `architect`, `cobb`, `coder`, `data-scientist`, `devops`,
+     `frontend-engineer`, `graph-dba`, `qa-engineer`, `security-expert`, `tdd-engineer`, `teco`,
+     `tico`); `claude/AGENTS.md`'s "Git-commit authority" section rewritten as a two-layer policy
+     (standing broad grants vs. the new universal one); `claude/scripts/audit-team.sh` check 8
+     redesigned from an allow-list (`COMMIT_AUTHORS=(tico teco)`) to a scoping check — every agent
+     must claim `git add`/`git commit` authority **and** state the delegated-subagent carve-out
+     (grepped via the literal phrase "delegated subagent"); `claude/README.md`'s intro paragraph
+     and the `teco`/`tico` rows corrected (both previously claimed to be "the only two agents with
+     commit authority," now false).
+- **Why:** A `kaizen_team` entry from `tico` (`entryId` `e7a1c9d4-3f2b-4a6e-9c1d-8b5f0a2e6d71`,
+  dated 2026-08-21) reported that closing out `docs/manuals/graph-ontology.md`'s verification pass
+  left three subagent-produced artifacts uncommitted, since tico's commit grant only ever covered
+  files its own Write/Edit guard permitted. Put to the stakeholder as a scope-of-authority
+  decision (same class as the still-open K-008) via `AskUserQuestion`: ruled to extend tico's own
+  grant (change 1). The user then asked cobb directly to commit the resulting diff; cobb declined,
+  citing the team's own documented invariant (only `tico`/`teco` may commit, `audit-team.sh` check
+  8) and offered three paths via a second `AskUserQuestion` (user commits it themselves; route
+  through teco; a one-off override). **The user rejected the premise of asking again**: "we need
+  to make an exception for all agents when executed in interactive mode" — a direct ruling, not a
+  menu pick — and, when cobb's first response still read as hedging, corrected further: "you guys
+  should not refuse when asked by the stakeholder." Implemented change 2 accordingly, without
+  further pauses, and committed the result under the very grant just added (cobb's own Principles
+  section) once the policy existed to permit it.
+- **A genuine reopening, not a bypass.** The 2026-07-30 "no proliferation of commit rights beyond
+  tico/teco, do not re-open" ruling was closed by the same stakeholder who is the sole authority to
+  reopen it — this is that reopening, done explicitly and on the record, not cobb's or any agent's
+  unilateral drift. The 2026-07-30 ruling's *broad, mode-unconditioned* form for tico/teco stands
+  untouched; what's new is a narrower, mode-gated form for everyone else (and additively for
+  tico/teco too, though their existing grants already exceed it).
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8, full
+  113+ PASS / 0 new FAIL (diff against the pre-change baseline captured earlier this session).
+- **Plan items:** none opened — direct implementation of an explicit, fully-executed stakeholder
+  decision; nothing left pending.
+
 ## 2026-08-21 — C-101 verified already-fixed (doc-only close), C-408 `CPG:` shape-ambiguity fix landed in the six wired agents
 
 - **What:** Two unrelated `docs/BACKLOG.md` follow-ups picked up on request. **C-101** (`joern-cpg` loader `MAX_ARG_STRLEN` failure + masked exit code): read current `cpg-to-falkordb.py`/`pipeline.sh` source directly rather than assuming the backlog's 🔵 status was accurate — both defects were already fixed, in commit `e773060` (2026-07-17), *before* this backlog file even reached its current form. No code touched; flipped the entry to ✅ with the commit reference and a description of what the fix actually does (persistent-socket streaming sidesteps `MAX_ARG_STRLEN` by construction; `sys.exit(1 if failed else 0)` + `pipeline.sh`'s `set -euo pipefail` propagate real failure). Also bumped the file's `Last reviewed:` header 2026-07-25 → 2026-08-21. **C-408** (`CPG:` shape-selection ambiguity, DEF-4): the source design, `docs/plans/cpg-agent-adoption.md` §3, is `Status: archived` (header-pointer-only, left unedited) and gives worked examples for `used`/`considered, not relevant` but none for `not applicable` — the gap U9's live re-pass caught (`tdd-engineer` picked `not applicable` for a code-level task on a component with no loaded CPG, when the plan's own wording calls that `considered, not relevant`). Took the report's "worked counter-example" fix option, landed directly in the six *live* wiring points instead — `claude/{analyst,architect,qa-engineer,coder,tdd-engineer,frontend-engineer}/<name>.md`'s `CPG:` sentence each gained one disambiguating clause: `not applicable` is only for a task with no code-level component at all (e.g. a pure requirements/process/documentation task), never for a code-level task in a component that simply has no loaded CPG.

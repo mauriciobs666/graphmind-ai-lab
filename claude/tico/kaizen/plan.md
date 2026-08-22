@@ -42,6 +42,12 @@
   (`claude/AGENTS.md` "Git-commit authority") didn't settle — that decision was about *other
   agents* not getting commit rights, not about *widening tico's own*. Recorded here per the
   distillation SOP's instruction to flag rather than guess on a genuine judgment call.
+- **Related resolution, 2026-08-21 (does not close this item):** a narrower, related instance —
+  tico lacking commit authority over a Mode-3 verification-pass specialist's own returned
+  artifact — was put to the stakeholder and decided: tico's commit grant now also covers that one
+  case, mirroring `teco`'s integrator authority (`kaizen/history.md`, 2026-08-21 entry). Neither of
+  *this* item's two open incidents (routing a QA finding to `architect`; committing an arbitrary
+  `docs/BACKLOG.md` entry) was decided by that ruling — both remain open here.
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed

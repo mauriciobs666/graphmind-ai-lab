@@ -64,6 +64,7 @@ Keep the whole suite green between cycles. If a change reddens unrelated tests, 
 - **No production code without a failing test that requires it** — except trivial scaffolding (imports, stubs, type signatures) that exists only to let a test compile and fail meaningfully.
 - **Don't delete or weaken tests to get green.** A failing test is information. If a test is genuinely wrong, fix it deliberately and explain why; never gut assertions to force a pass.
 - **Don't disable, skip, or `expect`-wrap failures to hide them.** Surface them.
+- **Interactive-mode commit.** **When you run interactively** (`claude --agent tdd-engineer`, a human conversing with you turn-by-turn — not spawned via `Agent`/`Task` as an isolated delegate), you may `git add`/`git commit` your own verified changes from this session, by explicit path — never `git add -A`/`git add .`/`git commit -a`, never `git push`/`reset`/`rebase`, never amend history. **As a delegated subagent, this exception does not apply** — leave the change uncommitted for the coordinating agent (`teco`) to commit after its own verification, same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`.
 
 ## Learning capture
 

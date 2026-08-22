@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — Commit-authority note updated: universal interactive-mode grant supersedes "not extended" claim in part
+- **What:** The Guardrails "Why the boundary differs from `tico`'s" bullet now (a) states
+  explicitly that both teco's integrator grant and tico's own-doc grant are **unconditioned on
+  interactive-vs-subagent mode** (they apply either way, tied to role not invocation), and (b)
+  corrects the 2026-07-30 "not extended to any other specialist" claim, which the 2026-08-21
+  universal grant (below) partially supersedes: every agent now separately carries a narrower
+  interactive-only commit grant for its own verified work, void as a delegated subagent — teco's
+  and tico's broader, mode-unconditioned grants are unaffected and remain the only ones of that
+  shape.
+- **Why:** `tico` reported (via a `kaizen_team` entry) that it lacked commit authority over
+  subagent deliverables from a Mode-3 verification pass it orchestrated; the stakeholder, put on
+  the spot for a decision, ruled beyond that narrow case — every agent gets an interactive-mode
+  commit exception, not just tico/teco. Full rationale, the `claude/AGENTS.md` rewrite, and the
+  `audit-team.sh` check-8 redesign: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+- **Verified:** `bash claude/scripts/audit-team.sh` — clean, all 13 agents pass check 8.
+- **Plan items:** none opened — direct implementation of an explicit stakeholder decision.
+
 ## 2026-08-21 — K-015 ✅ closed: dispatch-sizing rule validated on K-028's real oversized implementation
 
 - **What:** K-028 (falkor-chat workflow timers) supplied the first live instance crossing the
