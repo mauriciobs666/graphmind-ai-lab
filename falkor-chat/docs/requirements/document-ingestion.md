@@ -1,17 +1,38 @@
-# Document Ingestion & Fusion — Feature Requirements
+# Ingestion Pipeline & Entity Fusion — Feature Requirements
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
 
 ## Intent
-The stakeholder wants to bring knowledge from **multiple external text-based sources** — files
-and agent-generated text alike — into the graph for GraphRAG. Ingestion **extracts the entities
-and relationships mentioned in the text** and represents them as real graph nodes/edges (not just
-embedded chunk text), and a **fusion** step reconciles those entities across sources — merging/
-matching the same real-world entity mentioned in more than one source — rather than treating each
-source as a fully independent, unrelated blob of content. The ingested knowledge should serve
-**both** (a) the AI agent answering questions in a chat channel, using the same retrieval path
-chat messages use today, and (b) a **standalone queryable knowledge base**, usable independent of
-any chat channel. A connected AI agent should also be able to **write** into this store via the
-existing MCP front door — using it as **persistent memory** — not just read from it.
+The stakeholder wants an **ingestion pipeline**: a new capability that takes in knowledge from
+**multiple external text-based sources** — files and agent-generated text alike — and turns it
+into fused, GraphRAG-usable graph knowledge. Concretely, the pipeline's job is not to just store
+raw text; for each file it (1) splits the text into retrievable **chunks**, (2) **extracts the
+entities and relationships mentioned in the text** from those chunks and represents them as real
+graph nodes/edges, and (3) **fuses** each extracted entity against what the graph already knows —
+recognizing when it's the same real-world entity another source already mentioned, merging or
+flagging accordingly — rather than treating each source as a fully independent, unrelated blob of
+content. The ingested knowledge should serve **both** (a) the AI agent answering questions in a
+chat channel, using the same retrieval path chat messages use today, and (b) a **standalone
+queryable knowledge base**, usable independent of any chat channel. A connected AI agent should
+also be able to **write** into this store via the existing MCP front door — using it as
+**persistent memory** — not just read from it.
+
+### Pipeline shape (what happens, not how)
+```
+file / agent text  →  chunk (FR-13)  →  extract entities & relationships (FR-7a)
+                                              │
+                                              ▼
+                                   fuse against existing graph
+                                   (match FR-7, conflicts FR-6,
+                                    auto-merge/suggest FR-8-FR-10)
+                                              │
+                                              ▼
+                    graph: original file retained (FR-12) + chunks +
+                    entities/relationships, retrievable via chat (FR-2),
+                    standalone query (FR-3), and MCP write/read (FR-5)
+```
+This is the shape of the pipeline, not its implementation — each stage's actual technique
+(chunking strategy, extraction method, matching algorithm) is a design decision for the architect,
+as flagged at each relevant FR/Open question below.
 
 > **Terminology note:** the stakeholder's preferred term for an ingested unit is **"file"**, not
 > "document" (2026-08-22). This document keeps "document" in prose written before that
