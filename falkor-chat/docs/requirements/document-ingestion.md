@@ -1,5 +1,5 @@
 # Ingestion Pipeline & Entity Fusion — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
 
 ## Intent
 The stakeholder wants an **ingestion pipeline**: a new capability that takes in knowledge from
@@ -213,3 +213,5 @@ search isn't a requirement.
 2026-08-22 — Fusion granularity (resolves OQ-4) → **entity level**. Ingestion extracts entities
 and relationships from the text and creates them as graph nodes/edges (FR-7a); fusion/matching
 (FR-6/FR-7) operates on those extracted entities, not on chunks or whole documents.
+2026-08-22 — Readback confirmed; stakeholder flipped **Status → Ready for design**. OQ-1/OQ-2/OQ-3
+remain open as architect-level design decisions, explicitly not blocking handoff.
