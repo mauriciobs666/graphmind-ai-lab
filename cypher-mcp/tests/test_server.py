@@ -13,6 +13,7 @@ The `live` tests run against a REAL FalkorDB and are deselected by default
 from __future__ import annotations
 
 import asyncio
+import time
 from uuid import uuid4
 
 import pytest
@@ -815,6 +816,365 @@ def test_nested_create_decoy_in_free_text_is_excluded(fake_client):
 
 
 # --------------------------------------------------------------------------
+# 8 (cont'd) — M8 kaizen-agent-ontology: 4 new write shapes (plan §5, items 2-23)
+# docs/plans/kaizen-agent-ontology.md, Version 3, approved Pass 3
+# --------------------------------------------------------------------------
+
+_PRODUCER_WRITE_CYPHER = (
+    "MERGE (a:Agent {agentId: 'graph-dba'}) "
+    "CREATE (a)-[:PRODUCED {sessionId: 's1'}]->(k:KaizenEntry {"
+    "entryId: 'e1', date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+    "suggestedHome: 'unsure', createdAt: 't'})"
+)
+
+_MENTIONS_WRITE_CYPHER = (
+    "MATCH (k:KaizenEntry {entryId: 'e1'}) "
+    "MERGE (a:Agent {agentId: 'security-expert'}) "
+    "MERGE (k)-[:MENTIONS]->(a)"
+)
+
+_PRODUCER_EDGE_RESOLVE_CYPHER = (
+    "MATCH (:Agent)-[p:PRODUCED]->(k:KaizenEntry {entryId: 'e1'}) DELETE p"
+)
+
+_MENTION_EDGE_RESOLVE_CYPHER = (
+    "MATCH (k:KaizenEntry {entryId: 'e1'})-[m:MENTIONS]->(:Agent {agentId: 'security-expert'}) "
+    "DELETE m"
+)
+
+# Finding-1 closure regression fixtures — reproduced verbatim from
+# docs/reviews/kaizen-agent-ontology.md (Attacks A/B, Pass 1; Attack C, Pass 2/3).
+_ATTACK_A_CYPHER = (
+    "CREATE (junk:KaizenEntry {entryId:'z1', date:'2026-08-22', fact:'f', evidence:'e', "
+    "context:'c', suggestedHome:'unsure', author:'analyst', createdAt:'t'}) "
+    "MATCH (victim:KaizenEntry {entryId:'not-mine'}) DETACH DELETE victim"
+)
+
+_ATTACK_B_CYPHER = (
+    "CREATE (junk:KaizenEntry {entryId:'z1', date:'2026-08-22', fact:'f', evidence:'e', "
+    "context:'c', suggestedHome:'unsure', author:'analyst', createdAt:'t'}) "
+    "MERGE (a:Agent {agentId: 'cobb'}) "
+    "CREATE (a)-[:PRODUCED {sessionId:'s'}]->(k:KaizenEntry {entryId:'forged', "
+    "date:'2026-08-22', fact:'fabricated, attributed to cobb', evidence:'e', context:'c', "
+    "suggestedHome:'unsure', createdAt:'t'})"
+)
+
+_ATTACK_C_SET_CYPHER = (
+    "CREATE (junk:KaizenEntry {entryId:'z1', date:'2026-08-22', fact:'f', evidence:'e', "
+    "context:'c', suggestedHome:'unsure', author:'analyst', createdAt:'t'}) "
+    "MATCH (victim:KaizenEntry {entryId:'not-mine'}) "
+    "SET victim.author = 'nobody', victim.fact = 'tampered'"
+)
+
+_ATTACK_C_REMOVE_CYPHER = (
+    "CREATE (junk:KaizenEntry {entryId:'z1', date:'2026-08-22', fact:'f', evidence:'e', "
+    "context:'c', suggestedHome:'unsure', author:'analyst', createdAt:'t'}) "
+    "MATCH (victim:KaizenEntry {entryId:'not-mine'}) REMOVE victim.author"
+)
+
+
+def test_producer_write_with_matching_agent_succeeds(fake_client):
+    """17 (plan item 2) — a real producer-write, `agent` matching the MERGE's
+    `agentId` → authorized, write summary rendered (mirrors test 3's shape)."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1, "relationships_created": 1, "properties_set": 8},
+    )
+    out = server.run_query("kaizen_team", _PRODUCER_WRITE_CYPHER, "graph-dba")
+    assert ("query", _PRODUCER_WRITE_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+    assert "relationships_created=1" in out
+
+
+def test_producer_write_with_mismatched_agent_is_rejected(fake_client):
+    """18 (plan item 3) — `agent` mismatched against the MERGE's `agentId` →
+    rejected, no partial write (mirrors test 4)."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _PRODUCER_WRITE_CYPHER, "cobb")
+    assert "MERGE (:Agent {agentId: 'graph-dba'})" in out
+    assert "agent='cobb'" in out
+    assert _writes_never_ran(client)
+
+
+def test_producer_write_with_session_id_map_present_succeeds(fake_client):
+    """19 (plan item 4) — the optional `{sessionId: ...}` property map present
+    → authorized."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1, "relationships_created": 1},
+    )
+    assert "sessionId" in _PRODUCER_WRITE_CYPHER
+    out = server.run_query("kaizen_team", _PRODUCER_WRITE_CYPHER, "graph-dba")
+    assert ("query", _PRODUCER_WRITE_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_producer_write_with_session_id_map_omitted_succeeds(fake_client):
+    """20 (plan item 5) — the `sessionId` map omitted entirely (the template's
+    "or omit this key" case) → still authorized."""
+    cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        "CREATE (a)-[:PRODUCED]->(k:KaizenEntry {"
+        "entryId: 'e1', date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1, "relationships_created": 1},
+    )
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_producer_write_with_literal_braces_in_free_text_succeeds(fake_client):
+    """21 (plan item 6) — free-text `fact`/`evidence` containing literal
+    `{`/`}` characters → still authorized (mirrors tests 14/16's decoy-
+    robustness intent, now for the new anchor)."""
+    cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        "CREATE (a)-[:PRODUCED {sessionId: 's1'}]->(k:KaizenEntry {"
+        "entryId: 'e1', date: '2026-08-22', fact: 'contains { and } braces', "
+        "evidence: 'also has { nested } text', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_created": 1, "relationships_created": 1},
+    )
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_producer_write_with_trailing_extra_clause_is_rejected(fake_client):
+    """22 (plan item 7) — a trailing extra clause after the CREATE's closing
+    `)` → rejected — pins the "nothing else follows" structural check (§3.1
+    step 2e)."""
+    cypher = _PRODUCER_WRITE_CYPHER + " SET k.extra = 'x'"
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_producer_write_with_mismatched_create_variable_is_rejected(fake_client):
+    """23 (plan item 8) — the `CREATE`'s referenced variable not matching the
+    `MERGE`'s bound variable → rejected — pins the var-binding check (§3.1
+    step 2b)."""
+    cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        "CREATE (b)-[:PRODUCED {sessionId: 's1'}]->(k:KaizenEntry {"
+        "entryId: 'e1', date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_producer_write_with_reversed_clause_order_is_rejected(fake_client):
+    """24 (plan item 9) — `CREATE`/`MERGE` in reversed order → rejected (not
+    the one recognized skeleton)."""
+    cypher = (
+        "CREATE (a)-[:PRODUCED {sessionId: 's1'}]->(k:KaizenEntry {"
+        "entryId: 'e1', date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'}) "
+        "MERGE (a:Agent {agentId: 'graph-dba'})"
+    )
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_mentions_write_with_cobb_succeeds(fake_client):
+    """25 (plan item 10) — MENTIONS-write, `agent='cobb'` → authorized;
+    mirrors test 5's shape but for the new regex."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_created": 1},
+    )
+    out = server.run_query("kaizen_team", _MENTIONS_WRITE_CYPHER, "cobb")
+    assert ("query", _MENTIONS_WRITE_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_mentions_write_with_non_curator_is_rejected(fake_client):
+    """26 (plan item 11) — MENTIONS-write, non-curator `agent` → rejected
+    (mirrors test 6)."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _MENTIONS_WRITE_CYPHER, "graph-dba")
+    assert "not a recognized curator" in out
+    assert _writes_never_ran(client)
+
+
+def test_mentions_write_with_mismatched_backreference_is_rejected(fake_client):
+    """27 (plan item 12) — MENTIONS-write with the second `MERGE`'s
+    referenced variables not matching the first `MATCH`/`MERGE`'s bound
+    variables → rejected — pins the backreference check."""
+    cypher = (
+        "MATCH (k:KaizenEntry {entryId: 'e1'}) "
+        "MERGE (a:Agent {agentId: 'security-expert'}) "
+        "MERGE (other)-[:MENTIONS]->(a)"
+    )
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", cypher, "cobb")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_producer_edge_resolve_with_cobb_succeeds(fake_client):
+    """28 (plan item 13) — producer-edge-resolve, `agent='cobb'` →
+    authorized (`relationships_deleted=1`, mirroring test 5's
+    counter-assertion style)."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_deleted": 1},
+    )
+    out = server.run_query("kaizen_team", _PRODUCER_EDGE_RESOLVE_CYPHER, "cobb")
+    assert ("query", _PRODUCER_EDGE_RESOLVE_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "relationships_deleted=1" in out
+
+
+def test_producer_edge_resolve_with_non_curator_is_rejected(fake_client):
+    """29 (plan item 14) — producer-edge-resolve, non-curator → rejected."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _PRODUCER_EDGE_RESOLVE_CYPHER, "graph-dba")
+    assert "not a recognized curator" in out
+    assert _writes_never_ran(client)
+
+
+def test_mention_edge_resolve_with_cobb_succeeds(fake_client):
+    """30 (plan item 15) — mention-edge-resolve, `agent='cobb'` →
+    authorized."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_deleted": 1},
+    )
+    out = server.run_query("kaizen_team", _MENTION_EDGE_RESOLVE_CYPHER, "cobb")
+    assert ("query", _MENTION_EDGE_RESOLVE_CYPHER, server.TIMEOUT_MS) in client.calls
+    assert "relationships_deleted=1" in out
+
+
+def test_mention_edge_resolve_with_non_curator_is_rejected(fake_client):
+    """31 (plan item 16) — mention-edge-resolve, non-curator → rejected."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _MENTION_EDGE_RESOLVE_CYPHER, "graph-dba")
+    assert "not a recognized curator" in out
+    assert _writes_never_ran(client)
+
+
+def test_all_four_new_shapes_rejected_without_agent(fake_client):
+    """32 (plan item 17) — all 4 new shapes still correctly rejected without
+    `agent` supplied (mirrors test 2's coverage, extended)."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    for cypher in (
+        _PRODUCER_WRITE_CYPHER,
+        _MENTIONS_WRITE_CYPHER,
+        _PRODUCER_EDGE_RESOLVE_CYPHER,
+        _MENTION_EDGE_RESOLVE_CYPHER,
+    ):
+        out = server.run_query("kaizen_team", cypher, None)
+        assert "no `agent` parameter supplied" in out, cypher
+    assert _writes_never_ran(client)
+
+
+def test_finding1_attack_a_is_rejected(fake_client):
+    """33 (plan item 18) — Finding-1 closure, Attack A (analyst review,
+    docs/reviews/kaizen-agent-ontology.md, reproduced verbatim): the exact
+    self-attributed-decoy-CREATE-plus-DETACH-DELETE compound statement
+    (§3.1a), called with `agent='analyst'` → rejected in full; no partial
+    write."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _ATTACK_A_CYPHER, "analyst")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_finding1_attack_b_is_rejected(fake_client):
+    """34 (plan item 19) — Finding-1 closure, Attack B (same source,
+    reproduced verbatim): the exact self-attributed-decoy-CREATE-plus-forged-
+    MERGE(:Agent{agentId:'cobb'})-PRODUCED compound statement (§3.1a), called
+    with `agent='analyst'` → rejected in full; no partial write."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _ATTACK_B_CYPHER, "analyst")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_migration_batch_and_plain_author_write_contain_no_foreign_trigger_keywords():
+    """35 (plan item 20) — a legitimate single-clause author-write and the
+    legitimate migration-batch shape both still succeed after
+    `_has_foreign_trigger_outside_strings()` is added (already covered by not
+    modifying tests 3/8/10) — add one explicit, documentation-grade
+    regression pin independent of the end-to-end test: a bare-word scan of
+    both fixtures' exact text finds neither `MERGE`, `DELETE`, `SET` nor
+    `REMOVE`."""
+    assert server._has_foreign_trigger_outside_strings(_MIGRATION_CYPHER) is False
+    plain_author_write = (
+        "CREATE (k:KaizenEntry {entryId:'e1', date:'2026-08-17', fact:'x', "
+        "evidence:'y', context:'z', suggestedHome:'unsure', author:'graph-dba', "
+        "createdAt:'2026-08-17T00:00:00Z'})"
+    )
+    assert server._has_foreign_trigger_outside_strings(plain_author_write) is False
+
+
+def test_author_write_succeeds_with_decoy_foreign_trigger_words_quoted_in_free_text(
+    fake_client,
+):
+    """36 (plan item 21, extended per Pass 3's non-blocking nit) — a decoy
+    that itself quotes "MERGE"/"DELETE" (Pass-1 era) — and, symmetrically,
+    "SET"/"REMOVE" (Pass-3 nit) — inside a free-text field of an otherwise-
+    legitimate single-clause author-write → still authorized (string-literal
+    exclusion in `_has_foreign_trigger_outside_strings()` correctly ignores
+    it) — extends the existing decoy-robustness style (tests 14/16) to the
+    new check specifically, symmetrically across all 4 widened keywords."""
+    for keyword in ("MERGE", "DELETE", "SET", "REMOVE"):
+        cypher = (
+            "CREATE (k:KaizenEntry {entryId:'e1', date:'2026-08-17', fact:'x', "
+            f"evidence: \"a decoy quoting {keyword} (n) right here\", context:'z', "
+            "suggestedHome:'unsure', author:'graph-dba', createdAt:'t'})"
+        )
+        client = fake_client(
+            error=_response_error(_READ_ONLY_ERROR),
+            write_stats={"nodes_created": 1},
+        )
+        out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+        assert ("query", cypher, server.TIMEOUT_MS) in client.calls, keyword
+        assert "write ok" in out, keyword
+
+
+def test_finding1_attack_c_set_chained_variant_is_rejected(fake_client):
+    """37 (plan item 22) — Finding-1 closure, Attack C, `SET`-chained variant
+    (analyst review Pass 2, reproduced verbatim, §3.1a): the self-attributed-
+    decoy-CREATE-plus-MATCH...SET compound statement, called with
+    `agent='analyst'` → rejected in full; no partial write. Explicitly
+    includes the `victim.author = '<other-agent>'` sub-case (not just
+    `victim.fact = 'tampered'`) — the sub-case that reopens tests 15/15b's
+    exact concern in chained form."""
+    assert "victim.author = 'nobody'" in _ATTACK_C_SET_CYPHER
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _ATTACK_C_SET_CYPHER, "analyst")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+def test_finding1_attack_c_remove_chained_variant_is_rejected(fake_client):
+    """38 (plan item 23) — Finding-1 closure, `REMOVE`-chained variant
+    (symmetric to 37, per the review's own note that a `REMOVE
+    victim.author` variant is symmetric and equally unguarded): the same
+    decoy-CREATE chained with a `MATCH (victim:KaizenEntry {...}) REMOVE
+    victim.author` clause, `agent='analyst'` → rejected in full; no partial
+    write."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    out = server.run_query("kaizen_team", _ATTACK_C_REMOVE_CYPHER, "analyst")
+    assert "Rejected" in out
+    assert _writes_never_ran(client)
+
+
+# --------------------------------------------------------------------------
 # live — against a REAL FalkorDB, on a scratch graph this module owns
 # --------------------------------------------------------------------------
 
@@ -870,6 +1230,119 @@ def test_live_two_column_query(live_graph):
     assert lines[0].startswith(f"graph={live_graph} · rows=2 · ")
     assert lines[1] == "name | note"
     assert lines[2:] == ["alpha | line1\\nline2", "beta | plain"]
+
+
+@pytest.fixture(scope="module")
+def live_kaizen_graph():
+    """A throwaway scratch graph with `Agent.agentId`'s index+constraint
+    freshly provisioned (mirrors `kaizen_team`'s own real DDL, plan §5 "Live,
+    automated") — provisioned directly via the raw client, never through
+    `mcp__cypher__query` (schema DDL is unconditionally rejected there, same
+    restriction as `kaizen_team`'s own S0). No dependency on S0 having
+    already landed against the real `kaizen_team` graph."""
+    client = server.get_client()
+    name = _scratch_graph_name()
+    graph = client.select_graph(name)
+    graph.create_node_range_index("Agent", "agentId")
+    graph.create_node_unique_constraint("Agent", "agentId")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        constraints = graph.list_constraints()
+        if constraints and all(c.get("status") == "OPERATIONAL" for c in constraints):
+            break
+        time.sleep(0.1)
+    try:
+        yield name
+    finally:
+        graph.delete()
+
+
+@pytest.mark.live
+def test_live_producer_write_then_traversal_read(live_kaizen_graph):
+    """New producer-write shape, executed for real, then read back via
+    graph-dba's own §5 traversal recipe."""
+    entry_id = f"e-{uuid4().hex[:8]}"
+    cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        f"CREATE (a)-[:PRODUCED {{sessionId: 's1'}}]->(k:KaizenEntry {{entryId: '{entry_id}', "
+        "date: '2026-08-22', fact: 'live producer-write test', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    out = server.run_query(live_kaizen_graph, cypher, "graph-dba")
+    assert "write ok" in out
+    assert "relationships_created=1" in out
+
+    read = server.run_query(
+        live_kaizen_graph,
+        "MATCH (a:Agent {agentId: 'graph-dba'})-[:PRODUCED]->(k:KaizenEntry) "
+        "RETURN k.entryId AS entryId",
+    )
+    assert entry_id in read
+
+
+@pytest.mark.live
+def test_live_producer_write_mismatched_agent_is_rejected(live_kaizen_graph):
+    """Mismatched `agent` against a real graph — still rejected server-side,
+    nothing written."""
+    entry_id = f"e-{uuid4().hex[:8]}"
+    cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        f"CREATE (a)-[:PRODUCED]->(k:KaizenEntry {{entryId: '{entry_id}', "
+        "date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    out = server.run_query(live_kaizen_graph, cypher, "cobb")
+    assert "Rejected" in out
+    read = server.run_query(
+        live_kaizen_graph, f"MATCH (k:KaizenEntry {{entryId: '{entry_id}'}}) RETURN k"
+    )
+    assert "(no rows)" in read
+
+
+@pytest.mark.live
+def test_live_mentions_write_then_producer_and_mention_edge_resolve(live_kaizen_graph):
+    """MENTIONS-write, both edge-resolve shapes, all executed for real
+    against the same disposable entry, ending with zero residue."""
+    entry_id = f"e-{uuid4().hex[:8]}"
+    producer_cypher = (
+        "MERGE (a:Agent {agentId: 'graph-dba'}) "
+        f"CREATE (a)-[:PRODUCED {{sessionId: 's1'}}]->(k:KaizenEntry {{entryId: '{entry_id}', "
+        "date: '2026-08-22', fact: 'f', evidence: 'e', context: 'c', "
+        "suggestedHome: 'unsure', createdAt: 't'})"
+    )
+    out = server.run_query(live_kaizen_graph, producer_cypher, "graph-dba")
+    assert "write ok" in out
+
+    mentions_cypher = (
+        f"MATCH (k:KaizenEntry {{entryId: '{entry_id}'}}) "
+        "MERGE (a:Agent {agentId: 'security-expert'}) "
+        "MERGE (k)-[:MENTIONS]->(a)"
+    )
+    out = server.run_query(live_kaizen_graph, mentions_cypher, "cobb")
+    assert "write ok" in out
+
+    resolve_producer_cypher = (
+        f"MATCH (:Agent)-[p:PRODUCED]->(k:KaizenEntry {{entryId: '{entry_id}'}}) DELETE p"
+    )
+    out = server.run_query(live_kaizen_graph, resolve_producer_cypher, "cobb")
+    assert "relationships_deleted=1" in out
+
+    resolve_mention_cypher = (
+        f"MATCH (k:KaizenEntry {{entryId: '{entry_id}'}})-[m:MENTIONS]->"
+        "(:Agent {agentId: 'security-expert'}) DELETE m"
+    )
+    out = server.run_query(live_kaizen_graph, resolve_mention_cypher, "cobb")
+    assert "relationships_deleted=1" in out
+
+    # Both edges resolved, node not yet cleared — confirm it's still there,
+    # then clear it via the unchanged curator-clear shape, leaving no residue.
+    clear_cypher = f"MATCH (e:KaizenEntry {{entryId: '{entry_id}'}}) DETACH DELETE e"
+    out = server.run_query(live_kaizen_graph, clear_cypher, "cobb")
+    assert "nodes_deleted=1" in out
+    read = server.run_query(
+        live_kaizen_graph, f"MATCH (k:KaizenEntry {{entryId: '{entry_id}'}}) RETURN k"
+    )
+    assert "(no rows)" in read
 
 
 @pytest.mark.live

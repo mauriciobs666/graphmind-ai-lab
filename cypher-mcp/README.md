@@ -129,23 +129,48 @@ This is a property of this tool only. FalkorDB itself remains open on `:6379` wi
 ### Writing through this tool
 
 Design and rationale in full:
-[`../docs/plans/generic-cypher-mcp.md`](../docs/plans/generic-cypher-mcp.md) §3.2. The short
-version: a write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement it could parse,
-or — pre-migration only — a lightweight keyword scan on an "empty key" response), then gated by
-`authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **two**
-write shapes are ever authorized, both scoped to the `:KaizenEntry` label backing the team's
-kaizen working memory (`kaizen_team`, author-partitioned); every other write is rejected
-regardless of `agent` — **schema DDL included**: `CREATE INDEX FOR (e:KaizenEntry) ON
-(e.entryId)` and `GRAPH.CONSTRAINT CREATE` are rejected the same as any other non-`KaizenEntry`
-write, with no carve-out for schema statements over data statements, even from a valid,
-recognized agent slug (live-verified during `docs/plans/generic-cypher-mcp2.md` S0's `kaizen_team`
-index/constraint provisioning, which had to fall back to `redis-cli GRAPH.QUERY` for exactly this
-reason):
+[`../docs/plans/generic-cypher-mcp.md`](../docs/plans/generic-cypher-mcp.md) §3.2 (the original 2
+shapes) and [`../docs/plans/kaizen-agent-ontology.md`](../docs/plans/kaizen-agent-ontology.md)
+§3.1/§3.1a (the 4 added for the `:Agent`/`PRODUCED`/`MENTIONS` ontology, M8). The short version: a
+write is detected server-side (`GRAPH.RO_QUERY` rejecting a statement it could parse, or — pre-
+migration only — a lightweight keyword scan on an "empty key" response), then gated by
+`authorize_write()`, a static, string-literal-aware text scan — not a Cypher parser. Only **6**
+write shapes are ever authorized, every one scoped to the `:KaizenEntry`/`:Agent` labels backing
+the team's kaizen working memory (`kaizen_team`); every other write is rejected regardless of
+`agent` — **schema DDL included**: `CREATE INDEX FOR (e:KaizenEntry) ON (e.entryId)` and
+`GRAPH.CONSTRAINT CREATE` are rejected the same as any other non-recognized write, with no
+carve-out for schema statements over data statements, even from a valid, recognized agent slug
+(live-verified during `docs/plans/generic-cypher-mcp2.md` S0's `kaizen_team` index/constraint
+provisioning and again for `Agent.agentId`'s own index/constraint, M8 S0 — both had to fall back to
+`redis-cli GRAPH.QUERY` for exactly this reason):
 
-1. **Author** — an agent creates its own entry. The `cypher` text's `CREATE (<var>:KaizenEntry
-   {...})` map literal must carry a literal `author: '<value>'` matching the declared `agent`
-   exactly (a `SET`-based reassignment of an existing entry's `author` is never recognized as this
-   shape, regardless of the value — only entry *creation* is authorized):
+1. **Producer-write** — the current shape (M8, FR-2/FR-8). Any agent creates its own entry,
+   attributed via a `:Agent` node it merges onto (idempotent — the same node is reused across that
+   agent's every future write) and a `PRODUCED` edge (carrying `sessionId`) to the freshly-created
+   `:KaizenEntry`. Not curator-gated — any agent may run this for its own `agentId`. The recognizer
+   requires **exactly** one `MERGE (<var>:Agent {agentId:...})` immediately followed by **exactly**
+   one `CREATE (<var>)-[:PRODUCED {...}]->(<var2>:KaizenEntry {...})`, nothing else in the
+   statement — the trailing `{sessionId: ...}` property map is optional (omit the key entirely if
+   `$CLAUDE_CODE_SESSION_ID` is unavailable):
+
+   ```
+   mcp__cypher__query(
+     graph='kaizen_team',
+     cypher="MERGE (a:Agent {agentId: 'graph-dba'}) "
+            "CREATE (a)-[:PRODUCED {sessionId: '...'}]->(k:KaizenEntry {entryId:'...', "
+            "date:'...', fact:'...', evidence:'...', context:'...', suggestedHome:'...', "
+            "createdAt:'...'})",
+     agent='graph-dba',
+   )
+   ```
+
+2. **Author-write (legacy)** — an agent creates its own entry via a plain `author:` property
+   instead of a `:PRODUCED` edge. The `cypher` text's `CREATE (<var>:KaizenEntry {...})` map
+   literal must carry a literal `author: '<value>'` matching the declared `agent` exactly (a
+   `SET`-based reassignment of an existing entry's `author` is never recognized as this shape,
+   regardless of the value — only entry *creation* is authorized). Kept recognized for
+   already-shipped callers and the historical entry population; no agent prompt targets it after
+   M8 (see [`../claude/AGENTS.md`](../claude/AGENTS.md)):
 
    ```
    mcp__cypher__query(
@@ -156,13 +181,59 @@ reason):
    )
    ```
 
-2. **Curator-clear** — a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS` env var,
-   comma-separated, default `cobb`) clears an entry it did not author, by `entryId`. Exactly one
-   skeleton is recognized — no other write shape gets curator treatment. **The space after the
-   colon is load-bearing:** `_CURATOR_CLEAR_RE` (`server.py`) matches the literal substring
-   `entryId: ` (colon **then a space**) before the quote, and the pre-match whitespace
-   normalization only *collapses* existing runs of whitespace — it never *inserts* one, so
-   `{entryId:'...'}` (no space) fails the regex and is rejected as an unrecognized shape, while
+   **A self-attributed author-write may not chain a second, unrelated clause onto itself.** A
+   compound statement whose *first* clause is a valid, self-attributed `CREATE (...:KaizenEntry
+   {..., author:'<self>', ...})` is rejected outright if a bare (not-inside-a-string) `MERGE`,
+   `DELETE`, `SET`, or `REMOVE` keyword appears anywhere else in the same statement — even though
+   the first clause alone would authorize. This closes a smuggling gap (`docs/reviews/
+   kaizen-agent-ontology.md`, Findings 1/1-Pass-2) where a harmless self-attributed decoy `CREATE`
+   could otherwise carry an unrelated curator-only delete, a forged `PRODUCED` edge, or arbitrary
+   `SET`/`REMOVE` tampering past authorization on its own strength. A free-text field that merely
+   *quotes* one of those four words inside a string literal is unaffected (string-literal exclusion
+   still applies).
+
+3. **Curator MENTIONS-write** — `cobb`, during distillation, tags an existing entry as also
+   concerning a second agent — `MERGE`d throughout, so double-tagging is a free no-op:
+
+   ```
+   mcp__cypher__query(
+     graph='kaizen_team',
+     cypher="MATCH (k:KaizenEntry {entryId: '...'}) "
+            "MERGE (a:Agent {agentId: '...'}) "
+            "MERGE (k)-[:MENTIONS]->(a)",
+     agent='cobb',
+   )
+   ```
+
+4. **Curator producer-edge-resolve** — `cobb` deletes just the `PRODUCED` edge (the entry survives
+   if a `MENTIONS` edge still points at it):
+
+   ```
+   mcp__cypher__query(
+     graph='kaizen_team',
+     cypher="MATCH (:Agent)-[p:PRODUCED]->(k:KaizenEntry {entryId: '...'}) DELETE p",
+     agent='cobb',
+   )
+   ```
+
+5. **Curator mention-edge-resolve** — `cobb` deletes just one `MENTIONS` edge, for one agent:
+
+   ```
+   mcp__cypher__query(
+     graph='kaizen_team',
+     cypher="MATCH (k:KaizenEntry {entryId: '...'})-[m:MENTIONS]->(:Agent {agentId: '...'}) "
+            "DELETE m",
+     agent='cobb',
+   )
+   ```
+
+6. **Curator-clear** — a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS` env var,
+   comma-separated, default `cobb`) clears an entry whole, whatever edges (or none) it still has,
+   by `entryId`. Exactly one skeleton is recognized — no other write shape gets curator treatment.
+   **The space after the colon is load-bearing:** `_CURATOR_CLEAR_RE` (`server.py`) matches the
+   literal substring `entryId: ` (colon **then a space**) before the quote, and the pre-match
+   whitespace normalization only *collapses* existing runs of whitespace — it never *inserts* one,
+   so `{entryId:'...'}` (no space) fails the regex and is rejected as an unrecognized shape, while
    `{entryId: '...'}` (space present, as below) is accepted — live-verified 2026-08-20:
 
    ```
@@ -181,13 +252,13 @@ reason):
 > `size()`-based byte-exact verification step, not by inspection — verify any multi-line string
 > write against `size()`/a direct re-read, not a visual read of the truncated-for-display result.
 
-A write with no `agent` supplied, an author mismatch, a non-curator attempting the clear shape, or
-any Cypher that isn't one of the two shapes above, is rejected with a curated message **before**
-`GRAPH.QUERY` is ever called — nothing is written on a rejected call. This is enforced at the
-trust level `docs/requirements/generic-cypher-mcp.md` FR-8 states explicitly: "well-behaved callers
-can't do this by accident," not hardened against a malicious one — a caller that aliases the
-literal (e.g. `WITH 'graph-dba' AS a CREATE (k:KaizenEntry {author: a})`) evades detection, a known,
-accepted limitation.
+A write with no `agent` supplied, an attribution mismatch, a non-curator attempting a curator-only
+shape, or any Cypher that isn't one of the 6 shapes above, is rejected with a curated message
+**before** `GRAPH.QUERY` is ever called — nothing is written on a rejected call. This is enforced at
+the trust level `docs/requirements/generic-cypher-mcp.md` FR-8 states explicitly: "well-behaved
+callers can't do this by accident," not hardened against a malicious one — a caller that aliases
+the literal (e.g. `WITH 'graph-dba' AS a CREATE (k:KaizenEntry {author: a})`) evades detection, a
+known, accepted limitation.
 
 On a successful write, the response line reports which mutation counters moved — e.g. `graph=... ·
 write ok (nodes_created=1.0, properties_set=8.0) · 4.2ms`; only non-zero counters are shown.

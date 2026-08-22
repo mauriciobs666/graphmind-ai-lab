@@ -18,11 +18,16 @@ short version:
   ``GRAPH.RO_QUERY`` rejecting a statement (or FalkorDB reporting "empty key"
   for a plausibly-first write, e.g. the one-time kaizen-graph migration) is
   what routes a call into enforcement — never the mere presence of the
-  ``agent`` argument. Only two write shapes are ever authorized: an agent
-  creating its own ``:KaizenEntry`` (a literal ``author:`` match), or a
-  recognised curator agent clearing one by ``entryId``. See
-  ``docs/plans/generic-cypher-mcp.md`` §3.1/§3.2 for the full design and
-  rationale, including the false-positive/false-negative fixes verified there.
+  ``agent`` argument. Six write shapes are ever authorized: the legacy
+  author-write (an agent creating its own ``:KaizenEntry`` via a literal
+  ``author:`` match), the current producer-write (any agent, its own
+  ``MERGE (:Agent {agentId:...}) + CREATE (...)-[:PRODUCED]->(...:KaizenEntry
+  {...})``), a curator MENTIONS-write, two curator edge-resolve shapes
+  (``PRODUCED``/``MENTIONS``), and the curator full-node clear by ``entryId``.
+  See ``docs/plans/generic-cypher-mcp.md`` §3.1/§3.2 (the original two shapes)
+  and ``docs/plans/kaizen-agent-ontology.md`` §3.1/§3.1a (the four added for
+  the ``:Agent``/``PRODUCED``/``MENTIONS`` ontology, plus the cross-clause
+  smuggling closure) for the full design and rationale.
 * **``EXPLAIN`` is honoured, ``PROFILE`` is actively refused.** Raw FalkorDB
   *ignores* both prefixes and executes the query, so a passive drop would return
   results to a caller that asked for a profile — a wrong answer rather than an
@@ -119,9 +124,11 @@ TOOL_DESCRIPTION = (
     "is the graph key (caller-supplied); `cypher` is the query text, sent verbatim — "
     "multi-line welcome, no shell quoting. Reads run unrestricted via GRAPH.RO_QUERY. A "
     "write additionally requires the optional `agent` parameter (your agent slug) and is "
-    "authorized only in two shapes: creating a `:KaizenEntry` whose CREATE map literal "
-    "carries a matching `author:` value, or a recognized curator agent clearing one by "
-    "`entryId` (`MATCH (...) DETACH DELETE`) — every other write is rejected. Prefix "
+    "authorized only in 6 shapes: a producer-write (MERGE (:Agent {agentId:...}) + CREATE "
+    "(...)-[:PRODUCED]->(...:KaizenEntry {...}) for one's own agentId), the legacy author-write "
+    "(a CREATE map literal with a matching `author:` value), a curator MENTIONS-write, two "
+    "curator edge-resolve shapes (PRODUCED/MENTIONS), or a curator full-node clear by `entryId` "
+    "— every other write is rejected. Prefix "
     "EXPLAIN for a query plan; PROFILE is not supported (it executes the query). FalkorDB "
     "is OpenCypher: no APOC, no GDS. CPG schema: "
     "skills/joern-cpg/references/cpg-model.md."
@@ -131,16 +138,18 @@ SERVER_INSTRUCTIONS = (
     "The `cypher` server exposes a single tool, `query`: OpenCypher against a named FalkorDB "
     "graph — not limited to cpg_* graphs; typically a Joern Code Property Graph loaded as "
     "`cpg_<component>`, but any graph key on this instance is reachable, e.g. "
-    "`kaizen_team` (the team's kaizen working memory, author-partitioned). Use it to answer "
-    "call-graph, data-flow, impact-analysis and test-gap questions about a codebase without "
-    "reading files, or to read/write the team's kaizen entries. Graph names are always supplied by "
-    "the caller; a query against an unknown graph answers with the list of loaded graphs. "
-    "Reads need no `agent` and are unrestricted. A write additionally requires `agent` (the "
-    "caller's agent slug) and is authorized only in two shapes: an agent creating its own "
-    "`:KaizenEntry` (a CREATE map literal with a matching `author:` value), or a recognized "
-    "curator agent (`CYPHER_MCP_CURATOR_AGENTS`, default `cobb`) clearing an entry by `entryId` "
-    "(`MATCH (e:KaizenEntry {entryId:'...'}) DETACH DELETE e`) — every other write shape, "
-    "and any author mismatch, is rejected."
+    "`kaizen_team` (the team's kaizen working memory: :Agent nodes, PRODUCED/MENTIONS edges). "
+    "Use it to answer call-graph, data-flow, impact-analysis and test-gap questions about a "
+    "codebase without reading files, or to read/write the team's kaizen entries. Graph names are "
+    "always supplied by the caller; a query against an unknown graph answers with the list of "
+    "loaded graphs. Reads need no `agent` and are unrestricted. A write additionally requires "
+    "`agent` (the caller's agent slug) and is authorized only in 6 shapes: any agent's own "
+    "producer-write (MERGE (:Agent {agentId:...}) + CREATE (...)-[:PRODUCED]->(...:KaizenEntry "
+    "{...})), the legacy author-write (a CREATE map literal with a matching `author:` value), or "
+    "a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS`, default `cobb`) running a MENTIONS-"
+    "write, a PRODUCED/MENTIONS edge-resolve, or a full-node clear by `entryId` (`MATCH "
+    "(e:KaizenEntry {entryId:'...'}) DETACH DELETE e`) — every other write shape, and any "
+    "attribution mismatch, is rejected."
 )
 
 PROFILE_REFUSAL = (
@@ -222,15 +231,20 @@ def split_directive(cypher: str) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------
-# Write authorization (FR-8) — `docs/plans/generic-cypher-mcp.md` §3.2
+# Write authorization (FR-8) — `docs/plans/generic-cypher-mcp.md` §3.2 (the
+# original 2 shapes) and `docs/plans/kaizen-agent-ontology.md` §3.1/§3.1a (4
+# more, for the :Agent/PRODUCED/MENTIONS ontology).
 #
 # A static, pre-execution, string-literal-aware text scan — deliberately not a
 # real Cypher parser (FR-8's own stated trust bar: "well-behaved callers can't
-# do this by accident," not hardened against a malicious one). Two, and only
-# two, recognized write shapes: an agent creating its own `:KaizenEntry` via a
-# literal `author:` claim inside a `CREATE (...:KaizenEntry {...})` map body,
-# and a recognized curator agent clearing one by `entryId`
-# (`MATCH (...) DETACH DELETE`).
+# do this by accident," not hardened against a malicious one). Six recognized
+# write shapes: the legacy author-write (an agent creating its own
+# `:KaizenEntry` via a literal `author:` claim inside a
+# `CREATE (...:KaizenEntry {...})` map body), the current producer-write (any
+# agent, its own `MERGE (:Agent {agentId:...}) + CREATE (...)-[:PRODUCED]->
+# (...:KaizenEntry {...})`), a curator MENTIONS-write, two curator edge-resolve
+# shapes (PRODUCED/MENTIONS), and a recognized curator agent clearing an entry
+# whole by `entryId` (`MATCH (...) DETACH DELETE`).
 # --------------------------------------------------------------------------
 
 #: Lightweight pre-classification only, used solely on the "empty key" branch
@@ -288,10 +302,39 @@ def _string_literal_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+def _scan_matched_brace(text: str, open_index: int) -> int | None:
+    """Given ``text[open_index] == "{"``, return the index just past the
+    matching ``"}"`` (string-literal aware — a free-text field's own `{`/`}`
+    or quoted decoy text can't desync it), or ``None`` if unterminated.
+
+    Factored out of `_kaizen_entry_create_map_spans()` (plan §3.1 step 1) as a
+    shared primitive — the brace-depth-counting logic is identical, only the
+    caller's anchor pattern differs (a `CREATE (...:KaizenEntry {` clause vs.
+    `_producer_write_agent_id`'s optional `{sessionId: ...}` map and its
+    `KaizenEntry` map)."""
+    depth, i, in_string, n = 1, open_index + 1, None, len(text)
+    while i < n and depth > 0:
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_string:
+                in_string = None
+        elif ch in ("'", '"'):
+            in_string = ch
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        i += 1
+    return i if depth == 0 else None
+
+
 def _kaizen_entry_create_map_spans(cypher: str) -> list[str]:
     """Body text of every map literal `{...}` immediately following a
-    `CREATE (<var>:KaizenEntry ...)` clause. Brace-matched using the same
-    string-literal scan as above, so a free-text field containing a literal `{`/`}`
+    `CREATE (<var>:KaizenEntry ...)` clause. Brace-matched via
+    `_scan_matched_brace()`, so a free-text field containing a literal `{`/`}`
     can't desync the match. A `SET`, `MATCH`, or `MERGE` clause simply produces no
     spans here — there is no separate "exclude SET" rule to get wrong.
 
@@ -311,23 +354,10 @@ def _kaizen_entry_create_map_spans(cypher: str) -> list[str]:
         if not m:
             continue
         body_start = cm.end() + m.end()
-        depth, i, in_string = 1, body_start, None
-        while i < len(cypher) and depth > 0:
-            ch = cypher[i]
-            if in_string:
-                if ch == "\\":
-                    i += 2
-                    continue
-                if ch == in_string:
-                    in_string = None
-            elif ch in ("'", '"'):
-                in_string = ch
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-            i += 1
-        spans.append(cypher[body_start:i - 1])
+        end = _scan_matched_brace(cypher, body_start - 1)
+        if end is None:
+            continue
+        spans.append(cypher[body_start:end - 1])
     return spans
 
 
@@ -343,6 +373,121 @@ def _author_claims(cypher: str) -> list[str]:
             if not any(s <= m.start() < e for s, e in literal_ranges):
                 claims.append(m.group(1))
     return claims
+
+
+# --------------------------------------------------------------------------
+# M8 kaizen-agent-ontology (docs/plans/kaizen-agent-ontology.md §3.1) — 4 new
+# write shapes: a non-curator producer-write, and 3 curator shapes (MENTIONS-
+# write, producer-edge-resolve, mention-edge-resolve).
+# --------------------------------------------------------------------------
+
+#: §3.1 step 2a — the `MERGE (<var>:Agent {agentId:'<value>'})` clause a
+#: producer-write must open with, anchored at the very start of the string.
+_PRODUCER_WRITE_MERGE_RE = re.compile(
+    r"\A\s*MERGE\s*\(\s*([a-zA-Z_]\w*)\s*:\s*Agent\s*\{\s*agentId\s*:\s*(['\"])([^'\"]+)\2\s*\}\s*\)\s*",
+    re.IGNORECASE,
+)
+
+#: §3.1 step 2d — the tail after the optional `{sessionId:...}` map: the
+#: `PRODUCED` relationship pattern's close, then the `KaizenEntry` node and
+#: the opening `{` of its own map.
+_PRODUCER_WRITE_TAIL_RE = re.compile(
+    r"\s*\]\s*->\s*\(\s*[a-zA-Z_]\w*\s*:\s*KaizenEntry\s*\{", re.IGNORECASE
+)
+
+#: §3.1 step 2e — nothing may follow the `KaizenEntry` map's closing `}` but
+#: the `CREATE` clause's own node-pattern close, an optional semicolon, and
+#: end of string. This is what makes the shape "exactly one `MERGE` clause
+#: followed by exactly one `CREATE` clause, nothing else" — not merely
+#: "contains."
+_PRODUCER_WRITE_TRAILER_RE = re.compile(r"\s*\)\s*;?\s*\Z")
+
+
+def _producer_write_agent_id(cypher: str) -> str | None:
+    """Recognize exactly one `MERGE (<var>:Agent {agentId:...})` clause
+    immediately followed by exactly one
+    `CREATE (<var>)-[:PRODUCED {...}]->(<var2>:KaizenEntry {...})` clause,
+    nothing else in the statement (plan §3.1 step 2). Returns the claimed
+    `agentId`, or `None` if the text isn't shaped exactly like this skeleton
+    — never raises, never partially authorizes."""
+    merge_match = _PRODUCER_WRITE_MERGE_RE.match(cypher)
+    if not merge_match:
+        return None
+    var, agent_id = merge_match.group(1), merge_match.group(3)
+
+    create_re = re.compile(
+        r"CREATE\s*\(\s*" + re.escape(var) + r"\s*\)\s*-\s*\[\s*:\s*PRODUCED\s*",
+        re.IGNORECASE,
+    )
+    create_match = create_re.match(cypher, merge_match.end())
+    if not create_match:
+        return None
+    pos = create_match.end()
+
+    # Optional `{sessionId: ...}` property map on the `PRODUCED` relationship
+    # (step 2c) — brace-depth-matched, string-literal aware, same as the
+    # KaizenEntry map below. Anything other than `{` here (e.g. `]`) means
+    # the map was omitted, exactly per the template's own "or omit this key".
+    if pos < len(cypher) and cypher[pos] == "{":
+        end = _scan_matched_brace(cypher, pos)
+        if end is None:
+            return None
+        pos = end
+
+    tail_match = _PRODUCER_WRITE_TAIL_RE.match(cypher, pos)
+    if not tail_match:
+        return None
+    map_open = tail_match.end() - 1  # index of the KaizenEntry map's own '{'
+    map_end = _scan_matched_brace(cypher, map_open)
+    if map_end is None:
+        return None
+
+    if not _PRODUCER_WRITE_TRAILER_RE.match(cypher, map_end):
+        return None
+    return agent_id
+
+
+#: The 3 new curator-gated shapes (plan §3.1) — narrow fixed skeletons,
+#: matched against a whitespace-collapsed copy of the statement, same style
+#: as `_CURATOR_CLEAR_RE`. The backreferences (`\1`/`\2`) enforce that the
+#: second clause's variables are the *same* ones the first clause bound —
+#: stricter than `_CURATOR_CLEAR_RE`, which doesn't need to be (single clause,
+#: single variable, nothing to cross-reference).
+_MENTIONS_WRITE_RE = re.compile(
+    r"^MATCH \(([a-zA-Z_]\w*):KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\) "
+    r"MERGE \(([a-zA-Z_]\w*):Agent \{agentId: ['\"][^'\"]+['\"]\}\) "
+    r"MERGE \(\1\)-\[:MENTIONS\]->\(\2\);?$",
+    re.IGNORECASE,
+)
+_PRODUCER_EDGE_RESOLVE_RE = re.compile(
+    r"^MATCH \(:Agent\)-\[([a-zA-Z_]\w*):PRODUCED\]->\([a-zA-Z_]\w*:KaizenEntry "
+    r"\{entryId: ['\"][^'\"]+['\"]\}\) DELETE \1;?$",
+    re.IGNORECASE,
+)
+_MENTION_EDGE_RESOLVE_RE = re.compile(
+    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\)-\[([a-zA-Z_]\w*):MENTIONS\]"
+    r"->\(:Agent \{agentId: ['\"][^'\"]+['\"]\}\) DELETE \1;?$",
+    re.IGNORECASE,
+)
+
+# Same keyword set as `_WRITE_KEYWORD_RE` (line 239), minus `CREATE` — every
+# write keyword a *second*, unrelated clause could open with, since an
+# accepted shape-1 statement's own `CREATE` is exactly what this check must
+# not itself trip on.
+_FOREIGN_TRIGGER_RE = re.compile(r"\b(?:MERGE|DELETE|SET|REMOVE)\b", re.IGNORECASE)
+
+
+def _has_foreign_trigger_outside_strings(cypher: str) -> bool:
+    """True if `cypher` contains a bare (not inside a string literal) `MERGE`,
+    `DELETE`, `SET`, or `REMOVE` keyword anywhere in the statement — i.e. a
+    second, different recognized shape's trigger (or an arbitrary-tampering
+    `SET`/`REMOVE`) chained alongside an accepted author-write clause (Finding
+    1, Pass 1 + Pass 2, docs/reviews/kaizen-agent-ontology.md)."""
+    literal_ranges = _string_literal_spans(cypher)
+    for m in _FOREIGN_TRIGGER_RE.finditer(cypher):
+        if not any(s <= m.start() < e for s, e in literal_ranges):
+            return True
+    return False
 
 
 def authorize_write(cypher: str, agent: str | None) -> str | None:
@@ -361,8 +506,26 @@ def authorize_write(cypher: str, agent: str | None) -> str | None:
                 f"but the call declared agent='{agent}'. One agent's write cannot be "
                 "accepted as another's (FR-8)."
             )
+        if _has_foreign_trigger_outside_strings(cypher):
+            return (
+                "Rejected: this statement combines a valid author-write with another "
+                "recognized shape's trigger (a bare MERGE, DELETE, SET, or REMOVE elsewhere "
+                "in the same statement) — chaining an unrelated clause onto a self-attributed "
+                "CREATE is not authorized, regardless of the author-write's own validity."
+            )
         return None   # every author: literal found inside a CREATE:KaizenEntry body
-                       # matches the declared agent — allowed
+                       # matches the declared agent, and nothing else is chained on — allowed
+
+    producer_agent_id = _producer_write_agent_id(cypher)
+    if producer_agent_id is not None:
+        if producer_agent_id != agent:
+            return (
+                f"Rejected: this write's MERGE (:Agent {{agentId: '{producer_agent_id}'}}) "
+                f"claims a different agent than the call declared (agent='{agent}'). One "
+                "agent's write cannot be accepted as another's (FR-8)."
+            )
+        return None   # producer-write, any agent may write its own
+
     normalized = " ".join(cypher.split())
     if _CURATOR_CLEAR_RE.match(normalized):
         if agent in CURATOR_AGENTS:
@@ -373,11 +536,27 @@ def authorize_write(cypher: str, agent: str | None) -> str | None:
             f"({sorted(CURATOR_AGENTS)}). Only a curator may clear an entry it did not "
             "author."
         )
+
+    if (
+        _MENTIONS_WRITE_RE.match(normalized)
+        or _PRODUCER_EDGE_RESOLVE_RE.match(normalized)
+        or _MENTION_EDGE_RESOLVE_RE.match(normalized)
+    ):
+        if agent in CURATOR_AGENTS:
+            return None
+        return (
+            f"Rejected: this is a curator-only write shape (MENTIONS tagging or edge "
+            f"resolution), but agent='{agent}' is not a recognized curator "
+            f"({sorted(CURATOR_AGENTS)})."
+        )
+
     return (
         "Rejected: this write is neither an author-write (no literal `author: "
-        f"'{agent}'` found inside a CREATE (...:KaizenEntry {{...}}) clause) nor the "
-        "recognized curator-clear shape. This tool only authorizes those two write "
-        "shapes (FR-8)."
+        f"'{agent}'` found inside a CREATE (...:KaizenEntry {{...}}) clause), a "
+        "producer-write (no matching MERGE (:Agent {agentId:...}) + CREATE (...)-"
+        "[:PRODUCED]->(...:KaizenEntry {...}) found), nor a recognized curator shape "
+        "(MENTIONS-write, edge-resolve, or the full-node clear). This tool only "
+        "authorizes those shapes (FR-8)."
     )
 
 
@@ -694,9 +873,10 @@ def query(graph: str, cypher: str, agent: str | None = None) -> str:
     """Run Cypher against `graph` and return a plain-text table (or write summary).
 
     Reads run unrestricted, exactly as before, and need no `agent`. A write is
-    only ever authorized when `agent` names the entry's own author, or a
-    recognized curator clearing an entry by `entryId` — see
-    `docs/plans/generic-cypher-mcp.md` §3.2.
+    only ever authorized in one of 6 shapes: any agent's own producer-write,
+    the legacy author-write, or a recognized curator's MENTIONS-write,
+    edge-resolve, or full-node clear — see `docs/plans/generic-cypher-mcp.md`
+    §3.2 and `docs/plans/kaizen-agent-ontology.md` §3.1/§3.1a.
     """
     return run_query(graph, cypher, agent)
 
