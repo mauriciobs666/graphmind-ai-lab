@@ -1,5 +1,5 @@
 # Security expert (new agent) — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-17
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-17
 
 ## Intent
 Introduce a dedicated security-expert team member to close two gaps the current roster doesn't
