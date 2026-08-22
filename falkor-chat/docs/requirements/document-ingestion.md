@@ -26,6 +26,8 @@ ingesting knowledge from outside the chat itself.
 - As a **contributor (human or agent) submitting multiple documents**, I want overlapping or
   conflicting facts across those documents merged/reconciled, so that the graph doesn't end up
   with messy duplicates or silently-inconsistent knowledge.
+- As a **human or connected AI agent**, I want to confirm or reject a suggested entity match, so
+  that ambiguous fusion decisions don't happen silently/incorrectly behind my back.
 
 ## Functional requirements
 - **FR-1** — The system can ingest content from text-based sources (plain text, Markdown,
@@ -39,14 +41,47 @@ ingesting knowledge from outside the chat itself.
   human-supplied document.
 - **FR-5** — The ingestion (write) capability is reachable via the existing MCP front door, so a
   connected agent can use it as persistent memory, not only as a reader.
-- **FR-6 (fusion, core)** — _(eliciting mechanics)_ When newly ingested content overlaps or
-  conflicts with already-ingested knowledge, the system reconciles it rather than creating
-  disconnected duplicates or silently inconsistent facts.
+- **FR-6 (fusion — conflicting facts)** — When two sources state conflicting facts about the same
+  subject, **both are kept**, each carrying its provenance (source + when), rather than one
+  silently overwriting the other. Readers (human or agent) weigh the conflicting facts themselves.
+- **FR-7 (fusion — same-entity matching)** — The system attempts to recognize when new content
+  refers to an entity/subject that already exists in the graph (e.g. "Acme Corp" vs. "Acme
+  Corporation"), at some confidence level. **The matching technique itself is a design decision,
+  out of scope for this document** — see Open questions.
+- **FR-8 (fusion — auto-merge tier)** — A **very-high-confidence** match (e.g. an exact shared
+  identifier, or near-identical content) is linked/merged **automatically**, no confirmation
+  required.
+- **FR-9 (fusion — suggested-match tier)** — A match that is plausible but not very-high-confidence
+  is **not** linked/merged automatically. Instead it is surfaced as a **pending suggestion**;
+  nothing is linked/merged until it is confirmed.
+- **FR-10 (fusion — confirmation)** — A pending match suggestion can be **confirmed or rejected**
+  by either a **human user** or a **connected AI agent**. Confirming links/merges the two;
+  rejecting leaves them separate.
 
 ## Out of scope
 - **Binary / non-text document formats** (PDF, images, Office docs, etc.) that require dedicated
   parsing/extraction machinery — v1 handles **text-based formats** (plain text, Markdown,
   Mermaid, CSV, JSON, and similar; not a fixed/closed list) (stakeholder decision, 2026-08-22).
+
+## Acceptance criteria
+- **AC-1** — Given two sources describing conflicting facts about the same subject are both
+  ingested, when the knowledge base is queried, then both facts are returned with their
+  originating source and ingestion time, and neither has silently overwritten the other.
+- **AC-2** — Given new content is ingested that matches existing knowledge at very-high
+  confidence, when ingestion completes, then the two are linked/merged with no pending
+  confirmation required.
+- **AC-3** — Given new content is ingested that plausibly, but not very-confidently, matches
+  existing knowledge, when ingestion completes, then the match appears as a pending suggestion
+  and the two remain unlinked until confirmed.
+- **AC-4** — Given a pending match suggestion, when a human user or a connected AI agent confirms
+  it, then the two become linked/merged; when rejected, they remain permanently separate (or until
+  re-suggested by a future ingestion, per Open questions).
+- **AC-5** — Given knowledge was ingested from a document, when the AI agent grounds a chat-channel
+  answer in it, then that answer's provenance traces back to the source document (mirroring how
+  chat-message grounding already works today via `EMITTED` edges).
+- **AC-6** — Given knowledge was ingested via the MCP front door by a connected agent, when that
+  or another agent later queries the knowledge base, then the previously-written content is
+  retrievable.
 
 ## Related work (not part of this feature)
 - `falkor-chat/docs/requirements/summary-nodes.md` (Status: Interviewing, unfinished) — condenses
@@ -55,11 +90,18 @@ ingesting knowledge from outside the chat itself.
   same GraphRAG retrieval path.
 
 ## Open questions
-- What is the ingested knowledge *for* — grounding the AI agent's answers in chat (same retrieval
-  path as messages today), a separate queryable knowledge base, or both?
-- What exactly is meant by "input from agents" as a source — agent-generated text (e.g. a
-  summarizer or external tool's output) treated as an ingestible document, same as a
-  human-provided text file?
+- **OQ-1** — What counts as "very-high confidence" for auto-merge (FR-8), and what
+  matching technique produces it (shared IDs, fuzzy name matching, embedding similarity, LLM
+  confirmation, some layered combination)? Design decision — architect/data-scientist territory,
+  not decided here. This document only fixes the *behavior* at each confidence tier.
+- **OQ-2** — Where/how does a pending match suggestion (FR-9) actually surface to a human or agent
+  for confirmation — e.g. a message in a channel, a dedicated review surface, an MCP tool response?
+  Affects the user experience of fusion, so worth a stakeholder decision once the architect has
+  options to weigh in with; not yet settled.
+- **OQ-3** — If a suggested match is **rejected**, can the same pair be re-suggested later (e.g. if
+  more corroborating content arrives), or is a rejection permanent?
+- **OQ-4** — Is there a limit/expectation on how many documents or how much text can be ingested
+  in one go (a single large import vs. one document at a time)?
 
 ## Decision log
 2026-08-22 — Scope of source formats → **text-based formats broadly** (plain text, Markdown,
@@ -73,3 +115,10 @@ treated the same as a human-supplied document.
 2026-08-22 — Interface → the ingestion (write) capability will be offered via the **existing MCP
 front door**, so a connected agent can use it as **persistent memory** (write, not just read).
 Recorded as a stated interface preference/need — exact MCP tool shape is the architect's call.
+2026-08-22 — Conflicting facts → **keep both**, with provenance, and let the reader (human or
+agent) weigh them — no silent overwrite, no automatic winner.
+2026-08-22 — Same-entity matching → confidence-tiered: **very-high confidence auto-merges**;
+anything less confident is **surfaced as a pending suggestion** requiring confirmation before
+anything links/merges. Matching technique itself deferred to design (OQ-1).
+2026-08-22 — Who can confirm a pending match → **either** a human user **or** a connected AI
+agent — not human-only.
