@@ -1,5 +1,5 @@
 # Structured catalog/reference lookup for workflows — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
@@ -117,3 +117,4 @@ lookup detail), split out into its own sibling document,
 `docs/requirements/workflow-nl-query-generation.md`. This document now scopes FR-3 down to a
 fixed set of author-defined query shapes (exact-name lookup, category filter, price-range
 filter).
+2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
