@@ -3,9 +3,9 @@
 
 ## Intent
 The stakeholder wants an **ingestion pipeline**: a new capability that takes in knowledge from
-**multiple external text-based sources** — files and agent-generated text alike — and turns it
+**multiple external text-based sources** — documents and agent-generated text alike — and turns it
 into fused, GraphRAG-usable graph knowledge. Concretely, the pipeline's job is not to just store
-raw text; for each file it (1) splits the text into retrievable **chunks**, (2) **extracts the
+raw text; for each document it (1) splits the text into retrievable **chunks**, (2) **extracts the
 entities and relationships mentioned in the text** from those chunks and represents them as real
 graph nodes/edges, and (3) **fuses** each extracted entity against what the graph already knows —
 recognizing when it's the same real-world entity another source already mentioned, merging or
@@ -18,7 +18,7 @@ also be able to **write** into this store via the existing MCP front door — us
 
 ### Pipeline shape (what happens, not how)
 ```
-file / agent text  →  chunk (FR-13)  →  extract entities & relationships (FR-7a)
+document / agent text  →  chunk (FR-13)  →  extract entities & relationships (FR-7a)
                                               │
                                               ▼
                                    fuse against existing graph
@@ -26,7 +26,7 @@ file / agent text  →  chunk (FR-13)  →  extract entities & relationships (FR
                                     auto-merge/suggest FR-8-FR-10)
                                               │
                                               ▼
-                    graph: original file retained (FR-12) + chunks +
+                    graph: original document retained (FR-12) + chunks +
                     entities/relationships, retrievable via chat (FR-2),
                     standalone query (FR-3), and MCP write/read (FR-5)
 ```
@@ -34,10 +34,9 @@ This is the shape of the pipeline, not its implementation — each stage's actua
 (chunking strategy, extraction method, matching algorithm) is a design decision for the architect,
 as flagged at each relevant FR/Open question below.
 
-> **Terminology note:** the stakeholder's preferred term for an ingested unit is **"file"**, not
-> "document" (2026-08-22). This document keeps "document" in prose written before that
-> correction — read the two as synonyms; the exact label name is the architect's call (see
-> Related work below on the schema that already exists under the name `Document`).
+> **Terminology note:** briefly used "file" for the ingested unit (2026-08-22), then reverted to
+> **"document"** the same day once the stakeholder confirmed reusing the existing schema's own
+> label name (`Document` — see Related work below) rather than introducing a new term.
 
 ## Problem & current state
 Today, falkor-chat's GraphRAG has exactly one knowledge source going into the graph: chat
@@ -81,7 +80,7 @@ fresh labels from scratch.
   subject, **both are kept**, each carrying its provenance (source + when), rather than one
   silently overwriting the other. Readers (human or agent) weigh the conflicting facts themselves.
 - **FR-7 (fusion — same-entity matching)** — Fusion/matching operates at **entity granularity**
-  (not chunk or whole-file): the system attempts to recognize when an entity extracted from new
+  (not chunk or whole-document): the system attempts to recognize when an entity extracted from new
   content is the same real-world entity/subject as one already in the graph (e.g. "Acme Corp" vs.
   "Acme Corporation"), at some confidence level. **The matching technique itself is a design
   decision, out of scope for this document** — see Open questions.
@@ -106,14 +105,14 @@ fresh labels from scratch.
 - **FR-12 (retention)** — The **full original source document is retained**, not discarded after
   fact extraction/fusion — so it can be fully inspected, re-read, or re-processed later (e.g. if
   the matching approach improves).
-- **FR-13 (chunking — stakeholder's proposed shape)** — An ingested file is split into smaller
-  retrievable **chunks** (the standard RAG pattern), rather than indexed only as one whole-file
-  unit, so a search can surface the one relevant passage instead of the entire file. Recorded as
+- **FR-13 (chunking — stakeholder's proposed shape)** — An ingested document is split into smaller
+  retrievable **chunks** (the standard RAG pattern), rather than indexed only as one whole-document
+  unit, so a search can surface the one relevant passage instead of the entire document. Recorded as
   the stakeholder's proposed shape (matches the dormant `Chunk` schema already in
   `docs/DESIGN.md` §5.1) — chunk size/splitting strategy is a design decision, not fixed here.
-  **Underlying need:** fine-grained (sub-file) retrieval. Chunks are the unit of text fed to
+  **Underlying need:** fine-grained (sub-document) retrieval. Chunks are the unit of text fed to
   extraction (FR-7a); **fusion itself operates on the extracted entities (FR-7), not on chunks or
-  whole files** — resolved, was OQ-4.
+  whole documents** — resolved, was OQ-4.
 - **FR-14 (search separateness)** — A single unified search across chat messages and ingested
   content is **not required**. It is acceptable for ingested-content search to be its own
   distinct search/capability from chat-message search.
@@ -150,9 +149,9 @@ fresh labels from scratch.
   knowledge), not just the first one.
 - **AC-9** — Given a document was ingested, when someone (human or agent) looks up its provenance
   later, then the **full original document** is retrievable, not just a citation/pointer to it.
-- **AC-10** — Given a file mentioning one or more entities and a relationship between them is
+- **AC-10** — Given a document mentioning one or more entities and a relationship between them is
   ingested, when ingestion completes, then those entities and their relationship exist as nodes/
-  edges in the graph, traceable back to the source file/chunk they were extracted from.
+  edges in the graph, traceable back to the source document/chunk they were extracted from.
 
 ## Related work (not part of this feature)
 - `falkor-chat/docs/requirements/summary-nodes.md` (Status: Interviewing, unfinished) — condenses
@@ -173,7 +172,7 @@ fresh labels from scratch.
   it need new corroborating content to resurface, or can a human/agent force a re-check on demand?
   Left to design; FR-10/AC-7 only fix that rejection isn't permanent.
 - ~~OQ-4~~ — **Resolved**: fusion/matching operates at **entity** granularity (FR-7/FR-7a), not
-  chunk or whole-file. Kept struck through for traceability rather than deleted.
+  chunk or whole-document. Kept struck through for traceability rather than deleted.
 
 ## Decision log
 2026-08-22 — Scope of source formats → **text-based formats broadly** (plain text, Markdown,
@@ -200,8 +199,9 @@ re-linked later if warranted.
 a time.
 2026-08-22 — Source retention → **keep the full original document**, not just a citation/pointer,
 after facts are extracted/fused — enables full inspection and future re-processing.
-2026-08-22 — Terminology → stakeholder's preferred term is **"file,"** not "document."
-2026-08-22 — Chunking → stakeholder wants the **standard file-has-chunks pattern**, recorded as
+2026-08-22 — Terminology → briefly set to **"file"**, then **reverted to "document"** the same
+day — reuse the existing schema's own label name (`Document`) rather than introduce a new term.
+2026-08-22 — Chunking → stakeholder wants the **standard document-has-chunks pattern**, recorded as
 proposed shape (FR-13), not a locked requirement; matches the dormant `Document`/`Chunk`/`Entity`
 schema already scaffolded in `docs/DESIGN.md` §5.1 / `scripts/bootstrap_schema.sh` since M2 but
 never populated.
@@ -212,4 +212,4 @@ consistent with the existing hybrid-retrieval pattern) or a shared label — moo
 search isn't a requirement.
 2026-08-22 — Fusion granularity (resolves OQ-4) → **entity level**. Ingestion extracts entities
 and relationships from the text and creates them as graph nodes/edges (FR-7a); fusion/matching
-(FR-6/FR-7) operates on those extracted entities, not on chunks or whole files.
+(FR-6/FR-7) operates on those extracted entities, not on chunks or whole documents.
