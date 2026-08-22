@@ -89,6 +89,30 @@ to the general fact here.
   `db.idx.vector.queryNodes(…, k, …)` may return fewer than `k` (approximate recall of distant/
   orthogonal candidates). Near neighbors are returned and correctly ordered; don't treat
   "returns exactly k" as an invariant.
+- **A value over 4096 bytes written into a `UNIQUE`-constrained property crashes the ENTIRE
+  instance — SIGSEGV, not a query error** (verified 2026-08-22 on v4.18.11 / module `41811`, in an
+  isolated throwaway container, never against a shared instance). `CREATE`/`MERGE` writing a value
+  >4096 bytes into any property backed by `GRAPH.CONSTRAINT CREATE ... UNIQUE` segfaults the whole
+  `redis-server` process (signal 11, si_code 1 `SEGV_MAPERR`, faulting address `(nil)` — a
+  null-pointer dereference, confirmed `OOMKilled: false`, so not resource exhaustion). Stack:
+  `EnforceUniqueEntity` ← `Schema_EnforceConstraints` ← `CommitNewEntities` — it fires specifically
+  while the engine checks the `UNIQUE` constraint at commit time, not while indexing or storing.
+  **Exact boundary: 4096 bytes safe, 4097 crashes** — binary-searched and reproduced deterministically
+  at 4097/4104/4112/4128/4200/4500/5000/6000/7000/8000, safe at 100/1000/4000/4096. **Constraint-
+  specific, not index-specific**: a RANGE-indexed property with no constraint is safe at least to
+  1MB tested; an unindexed property is safe at least to 8000 bytes. **Per-property for a composite
+  constraint** (`PROPERTIES 2 a b`) — two columns each under 4096 (e.g. 3000+3000) are safe; one
+  column over 4096 crashes regardless of the other's size. **Independent of write-clause shape** —
+  bare `CREATE`, bare `MERGE`, and `MERGE` on a computed string-concatenation expression inside an
+  `UNWIND` (falkor-chat's exact `_PUBLISH_CYPHER` shape) all reproduce identically once the final
+  value exceeds the threshold. The crashed container does **not** self-heal — `redis-server` dies
+  (exit 139); a non-`--rm` container comes back empty (no persisted data) on `docker start`, a
+  `--rm` container vanishes from `docker ps -a` entirely. Consequence: any caller-supplied string
+  that reaches a `UNIQUE`-constrained property needs an app-side length guard well under 4096
+  bytes — a pydantic/REST-only bound is not enough, since any in-process caller (test, script, a
+  future MCP tool) bypasses it entirely; the guard belongs at the service/repository boundary too.
+  Full write-up incl. crash log: `falkor-chat/docs/reviews/unique-constraint-oversized-value-
+  crash-rca.md` (K-049).
 
 ## Cypher dialect & query behavior
 
