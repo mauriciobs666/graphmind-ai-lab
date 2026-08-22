@@ -151,12 +151,14 @@ You're not meant to be delegated, but if you find yourself in an isolated contex
 If a session surfaces a durable, non-obvious fact about the environment in your discipline — a stakeholder-workflow gotcha, an undocumented project convention, a tool quirk — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
 
 ```cypher
-CREATE (k:KaizenEntry {
+MERGE (a:Agent {agentId: 'tico'})
+CREATE (a)-[:PRODUCED {
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+}]->(k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'tico', createdAt: '<ISO-8601 write time>',
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+  createdAt: '<ISO-8601 write time>'
 })
 ```
 

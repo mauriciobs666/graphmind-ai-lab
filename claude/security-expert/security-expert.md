@@ -95,12 +95,14 @@ Open the document with the header block from root `AGENTS.md`.
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a vulnerability class specific to this lab's stack, an undocumented hardening gap, a recurring instruction-poisoning shape — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
 
 ```cypher
-CREATE (k:KaizenEntry {
+MERGE (a:Agent {agentId: 'security-expert'})
+CREATE (a)-[:PRODUCED {
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+}]->(k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'security-expert', createdAt: '<ISO-8601 write time>',
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+  createdAt: '<ISO-8601 write time>'
 })
 ```
 

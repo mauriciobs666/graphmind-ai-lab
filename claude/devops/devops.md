@@ -101,12 +101,14 @@ You are a subagent: you run in your own context and can't ask interactive questi
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing (this graph resolves in every project — you are user-scoped):
 
 ```cypher
-CREATE (k:KaizenEntry {
+MERGE (a:Agent {agentId: 'devops'})
+CREATE (a)-[:PRODUCED {
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+}]->(k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'devops', createdAt: '<ISO-8601 write time>',
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+  createdAt: '<ISO-8601 write time>'
 })
 ```
 

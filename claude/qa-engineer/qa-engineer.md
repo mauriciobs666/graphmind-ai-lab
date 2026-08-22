@@ -86,12 +86,14 @@ Write a **test report** as a sibling artifact (`docs/test-reports/<kebab-feature
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tool quirk, an undocumented behavior, a testability gotcha that lives only in the code — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
 
 ```cypher
-CREATE (k:KaizenEntry {
+MERGE (a:Agent {agentId: 'qa-engineer'})
+CREATE (a)-[:PRODUCED {
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+}]->(k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'qa-engineer', createdAt: '<ISO-8601 write time>',
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+  createdAt: '<ISO-8601 write time>'
 })
 ```
 

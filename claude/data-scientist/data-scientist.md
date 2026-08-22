@@ -91,12 +91,14 @@ Like a principal data scientist consulted by engineers: lead with the recommenda
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a model/eval quirk observed in this lab's systems, an undocumented data-shape gotcha, a convention that lives only in the code — write it directly into the shared working-memory graph, `kaizen_team`, `author`-partitioned, as a new `:KaizenEntry` node attributed to yourself, before finishing:
 
 ```cypher
-CREATE (k:KaizenEntry {
+MERGE (a:Agent {agentId: 'data-scientist'})
+CREATE (a)-[:PRODUCED {
+  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+}]->(k:KaizenEntry {
   entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
   evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
   suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  author: 'data-scientist', createdAt: '<ISO-8601 write time>',
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
+  createdAt: '<ISO-8601 write time>'
 })
 ```
 
