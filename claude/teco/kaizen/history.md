@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — K-015 ✅ closed: dispatch-sizing rule validated on K-028's real oversized implementation
+
+- **What:** K-028 (falkor-chat workflow timers) supplied the first live instance crossing the
+  ~3-step/5-file boundary the 2026-08-11 sizing rule targets — its implementation touched
+  `services.py`, `repository.py`, `schemas.py`, `api.py`, `config.py`, `app.py`, `executor.py`,
+  plus `QUERIES.md`/`DESIGN.md`/`start_server.sh` and 5 test files (15+ files total), and hit a
+  plan-level defect mid-implementation forcing a full mechanism redesign. teco did not hand this
+  to one mega-dispatch: it split the implementation into named ledger units by concern —
+  **U3a** ("core logic": `services.py`'s sweep/invariant, `executor.py` docstring) vs. **U3b**
+  ("wiring": `schemas.py`/`api.py`/`config.py`/`app.py` + docs + tests) — and tracked the
+  defect-driven rework as its own distinct rows (**U3a-fix**, **U3c**) rather than silently
+  absorbing it back into a growing single dispatch. Per-unit costs stayed well inside the K-042
+  baseline (458k tok/222 tools) despite the mid-run redesign: U1 (plan) 212k/42, U2 (plan gate)
+  164k/49, **U3a (core logic, the largest single unit) 307k/134**, U5 (QA) 175k/59 — no unit came
+  close to K-042's mega-dispatch cost, and no scope was silently dropped (QA: PASS, zero defects,
+  12/12 planned items).
+- **Why:** K-015 tracked the rule as unproven since 2026-08-11 — "a claim, same epistemic shape as
+  K-013's unexercised `SendMessage` loop" — because every prior coordination's dispatches (K-026
+  included) had stayed single-unit and never actually crossed the boundary that would exercise it.
+- **Disposition:** ✅ confirmed — the rule holds under real, defect-heavy pressure, not just in
+  the prompt. One refinement worth carrying into K-016's consolidation pass: the split that
+  actually happened here was **by logical concern** ("core logic" vs. "wiring"), not a literal
+  file-count tally against the ~3-step/5-file threshold at decomposition time — the concern-based
+  split happened to keep every unit's footprint far below the threshold anyway. The rule's intent
+  (bounded per-unit cost, no dropped scope) was met; its mechanism, as actually practiced, is
+  closer to "cluster by concern" than "count files." Consider restating it that way if K-016
+  touches this bullet.
+- **Left open:** the parking-lot idea "architect plans annotate dispatch-unit boundaries" was
+  *not* exercised here — architect's plan didn't pre-mark U3a/U3b clusters; teco derived the split
+  itself at dispatch time. Still open, still worth raising when K-016 or that item is worked.
+- **Plan items:** K-015 (✅ done, moved out of Active).
+
 ## 2026-08-21 — Optimization pass from a stakeholder-requested in-depth analysis: dispatch guard hook, status-flip carve-out, tool-grant reconciliation (K-012 ✅), Cost ledger column, gate-as-you-go, AskUserQuestion dual-mode
 
 - **What:** seven changes from a stakeholder-requested "analyze teco in depth / optimize its way

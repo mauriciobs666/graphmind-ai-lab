@@ -8,7 +8,6 @@
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-015 | 2026-08-15 | high | 🔵 | Validate the dispatch-sizing rule on a real oversized plan — still no evidence (K-026's dispatches all stayed single-unit); the new ledger `Cost` column (2026-08-21) is what will supply the per-unit numbers |
 | K-016 | 2026-08-21 | high | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
 
 ### K-016 — consolidate teco.md + split rare-path rules into an on-demand knowledge base
@@ -31,29 +30,17 @@
   for it" bar more aggressively when the suggested home is teco's always-loaded prompt — belongs
   to `cobb`'s procedure, worth raising in the same pass.
 
-### K-015 — validate the dispatch-sizing rule on a real oversized plan
-- **Status:** 🔵 proposed · **Priority:** high
-- **Rationale:** the 2026-08-11 change (step 3, "Delegate with complete briefs") added the
-  step-table sizing rule — split a dispatch at ~3 steps/5 files instead of handing a whole
-  landing to one agent — directly in response to the stakeholder's "please never again create a
-  landing so big" after K-042 Landing 1 (458k tokens / 222 tool calls, 3 of 11 test files and 3
-  of 5 rewired bindings silently dropped from scope). **The rule has never fired in a live run
-  since** — it is a prompt-level instruction with no observed instance of it actually splitting a
-  plan. A rule that's only ever been read, never followed under real conditions, is a claim, same
-  epistemic shape as K-013's unexercised `SendMessage` loop.
-- **Proposed change:** on the next goal whose architect plan produces a step table crossing the
-  ~3-step/5-file boundary, deliberately watch teco's step-2 decomposition: does it actually draw
-  per-step (or small-cluster) units instead of one mega-unit, and does the resulting per-unit
-  token/tool-call cost look sane relative to K-042's 458k/222 baseline? Record the datapoint here
-  — first real instance either confirms the rule holds under pressure or shows it needs
-  reinforcement (e.g., a self-check line at dispatch time, not just at decomposition time).
-- **Synergy (partially realized 2026-08-16):** K-026's own coordination produced real evidence
-  for **K-013** (SendMessage continuation, ✅ done — see history.md) and **K-014** (agentId ledger
-  discipline, ✅ done — see history.md) without a dedicated push, confirming the "one coordination,
-  several datapoints" premise. **K-012** (`ListAgents` probe) still has no evidence — nothing in
-  that coordination invoked it. This item (K-015 itself) also stayed untested: every K-026 unit,
-  including its closing ones (qa-engineer acceptance pass, doc closeout), stayed single-unit and
-  never crossed the ~3-step/5-file boundary that would exercise the sizing rule.
+> **K-015 — validate the dispatch-sizing rule on a real oversized plan — ✅ done 2026-08-21**
+> (moved to history.md). K-028's implementation (15+ files across `services.py`, `repository.py`,
+> `schemas.py`, `api.py`, `config.py`, `app.py`, `executor.py`, docs, and 5 test files, plus a
+> mid-run plan-level defect forcing a mechanism redesign) finally crossed the ~3-step/5-file
+> boundary this rule targets. teco split the work into named units by concern (**U3a** core logic
+> vs. **U3b** wiring) and tracked defect-driven rework as its own distinct units (**U3a-fix**,
+> **U3c**) rather than one mega-dispatch. Per-unit costs stayed well inside the K-042 baseline
+> (458k tok/222 tools): largest single unit (U3a) 307k tok/134 tools; QA closed PASS, zero
+> defects, no scope silently dropped. Rule confirmed under real pressure. One refinement flagged
+> for K-016: the split-that-worked was by logical concern, not a literal file-count tally —
+> consider restating the rule that way.
 
 > **K-012 — verify `ListAgents` actually materializes — ✅ done 2026-08-21** (moved to
 > history.md). Fresh-session probe (a spawned teco run, current `teco.md`): defined tools were
@@ -131,6 +118,20 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
+- **Grant `SendMessage` to dispatched specialists for self-reporting (noted 2026-08-21).** Live
+  during the K-028 coordination (K-015's validation vehicle): `architect` and `analyst` each
+  finished a unit and could not report the result back to teco directly — `architect` stated
+  outright it had no `SendMessage` tool available; `analyst` said it would send one but no such
+  message ever reached teco. Both times the launching/parent session had to observe the
+  specialist's own completion and relay the result into teco by hand to keep the coordination
+  moving. Raw fact logged to `kaizen_team` (`teco-20260821-specialist-sendmessage-gap`,
+  `suggestedHome: prompt`) for `cobb` to verify/route. If adopted, the change is at least two
+  parts: (1) a `cobb` agent-standards pass adding `SendMessage` to the relevant specialists'
+  `tools:` allowlists, and (2) a protocol line in each one's own prompt — relay your result to the
+  coordinator's `agentId` when the brief names one, and only that address, not open-ended
+  messaging to arbitrary agents/sessions. Worth weighing against the fact that the current
+  "parent relays" workaround already works; this would mainly save a manual step, not unblock
+  anything. Decide when `cobb` next touches specialist tool grants, not as a standalone push.
 - ~~Live-verify the `mcp__cypher__query` grant (added 2026-08-19 for the centralized CPG-freshness duty, `docs/plans/cpg-agent-adoption2.md`).~~ *(✅ Resolved 2026-08-21 — the K-012 fresh-session probe called it live: a `kaizen_team` read succeeded. Caveat removed from Guardrails; the freshness duty stands on a verified tool. See history.md.)*
 - **Architect plans annotate dispatch-unit boundaries (noted 2026-08-21).** The dispatch-sizing rule (K-015) asks teco to derive unit boundaries from a step table under pressure; if `architect`'s plan template instead marked suggested dispatch clusters in the step table itself, teco's job becomes verification, and K-015 gets exercised far more easily. Cross-agent change — belongs to `architect`'s prompt/handoff contract; raise when K-015 or K-016 is worked.
 - **Cross-session addressing hygiene (noted 2026-08-21).** The 2026-08-16 misrouting incident is mitigated by a pause-and-confirm rule; a cheaper preventive convention would be: the coordination doc records its session's identity, and any inter-session `SendMessage` must echo the coordination slug — a message without a matching slug is declined without analysis. Decide from the next incident, not now.
