@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-21 — Mid-run escalation: delegates can stop on a high-stakes fork and be resumed, instead of guessing (mid-run-escalation FR-1..FR-5)
+- **What:** Three edits to `teco.md`, applied per `claude/docs/plans/mid-run-escalation.md` §2
+  (analyst-reviewed, verdict approve with suggestions — `claude/docs/reviews/mid-run-escalation.md`
+  — Findings 2-4 folded in during this implementation):
+  1. **Step 2** — the ledger `Status` enum gains a new value, **`paused`** (a unit whose delegate
+     stopped mid-run with an open question, now relayed and awaiting an answer); a `paused` row
+     repurposes the `Deliverable` column to carry the question + relay date instead of a path
+     (noted explicitly as the one `Status` value that breaks that column's normal path-typed
+     convention — Finding 4), with a full seven-column example row added next to the existing
+     sample. The "open a coordination doc" trigger gains a third, **reactive** condition: any unit
+     that escalates via stop-and-ask forces a coordination doc into existence (backfilling a ledger
+     row per already-dispatched unit) even below the 3-unit/gate threshold, since a paused unit's
+     `agentId` and question must survive a compaction and only the ledger — not context — persists
+     that.
+  2. **Step 3** — the Subagent-awareness bullet now carves out one narrow exception to "cannot ask
+     mid-run": a **high-stakes fork** (would change scope, touch something irreversible, or waste
+     substantial downstream work if guessed wrong) may be stopped on and returned as the unit's
+     result instead of guessed or held for the final report. The brief clause to fold into every
+     dispatch (with a qualifying/non-qualifying worked example) is now scoped — skipped for a unit
+     already classified **mechanical** per Model routing, since a mechanical dispatch structurally
+     cannot hit a fork worth stopping for (Finding 3).
+  3. **Step 4** — four new bullets: recognizing a paused result by shape and relaying it (first-order
+     via `AskUserQuestion`, or in-report as a subagent — including the two-hop `SendMessage` chain
+     this implies when teco itself is a delegated subagent: its own dispatcher must resume
+     teco-as-subagent first, before teco-as-subagent can perform the inner resume — Finding 2);
+     resuming the same delegate via `SendMessage` by its ledger `agentId` once answered (with the
+     existing step-5 addressing-failure fallback cross-referenced); the non-blocking guarantee (a
+     `paused` unit stalls only itself and its structural dependents, no cap/deadline/auto-escalation
+     — deliberate, per the requirements doc); no fixed cap on stop-and-ask round trips per unit.
+  Also updated: `claude/README.md`'s `teco` catalog entry (one clause describing the capability,
+  inserted after the existing `SendMessage`/`agentId` sentence).
+- **Why:** `claude/docs/requirements/mid-run-escalation.md` (Ready for design, confirmed
+  2026-08-21) — the stakeholder wanted to relax the standing "no mid-run questions" rule for
+  genuinely high-stakes forks now that `SendMessage`-based resume is proven (K-007, K-013), so an
+  undecided fork doesn't get guessed into a deliverable or only surface after the fact. Designed by
+  `cobb` per `claude/AGENTS.md`'s routing convention (agent/prompt engineering, not a codebase
+  change); gated by `analyst` (approve with suggestions, no blocker) before this implementation.
+- **Verified:** Read-through of the three landed `teco.md` edits against each of AC-1..AC-5 and
+  against the plan's own §7 mapping; no hook, frontmatter, or tool-grant file touched anywhere in
+  this change (confirmed by inspection — `claude/AGENTS.md` needed no edit, per the plan's own
+  scope discipline). No automated suite covers prompt text; a live dry-run exercise of the actual
+  relay/resume path is still a follow-up, not performed in this pass.
+- **Plan items:** none opened.
+
 ## 2026-08-21 — Commit-authority note updated: universal interactive-mode grant supersedes "not extended" claim in part
 - **What:** The Guardrails "Why the boundary differs from `tico`'s" bullet now (a) states
   explicitly that both teco's integrator grant and tico's own-doc grant are **unconditioned on
