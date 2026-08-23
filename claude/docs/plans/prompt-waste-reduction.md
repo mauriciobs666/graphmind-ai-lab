@@ -1,12 +1,15 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 3
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 4
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
 *Rev 3 (2026-08-23, pilot calibration — stakeholder ruling): class-5/6 material is deleted
 outright, no inline dated pointers; only normative citations (specs/templates the rule uses)
 stay. §3 table and Stage B block dispositions updated accordingly.*
+*Rev 4 (2026-08-23, stakeholder ruling): commit granularity is one **complete unit** per commit
+(all files the unit touched — prompts, kaizen histories, catalogs — landing and rolling back
+together), not one file per commit. §4.0 and Stage B updated.*
 
 Reduce verbosity at its two roots — narrative-laden agent prompts (the register the agents
 imitate) and accretion-friendly output conventions — without losing a single behavioral rule.
@@ -83,8 +86,11 @@ agent session *before* any commit. Therefore:
 
 - **Clean tree before each unit** — no unrelated uncommitted changes, so a single-file revert is
   always trivial and unambiguous.
-- **One prompt file per commit**, committed promptly after gates (a)–(d) pass — never batch two
-  agents' compressions in one commit. The commit is the rollback unit.
+- **One complete unit per commit**, committed promptly after gates (a)–(e) pass — a commit is a
+  complete set: every file the unit touched (prompt edits, their `kaizen/history.md` entries,
+  any catalog updates) lands together, so it also rolls back together. A unit may span several
+  agents (a Stage B wave is one unit); what's forbidden is splitting one unit across commits or
+  bundling unrelated work in. The commit is the rollback unit.
 - **Complete each file's edit in one sitting** — never leave a prompt half-edited across a pause;
   a half-edited prompt is a live, untested hybrid.
 - **Revert procedure** (the "broken agent" answer): `git checkout <last-good-sha> --
@@ -115,7 +121,7 @@ The pilot already exercises all three boilerplate blocks on `architect.md` — S
 pilot's validated compression shape, it does not invent one. Rollout in **two waves**: wave 1 =
 three agents (one per discipline shape: an implementer, a reviewer, an advisory specialist),
 then an observation window (§6); wave 2 = the remaining nine only after wave 1 shows no
-regression. One file per commit throughout (§4.0).
+regression. Each wave is one unit = one commit (§4.0).
 
 The three blocks near-identical across agents, compressed identically:
 1. Learning-capture tail — keep the Cypher template (class 2) + "raw capture; `cobb` promotes;
