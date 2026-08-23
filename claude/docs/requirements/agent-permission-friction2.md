@@ -18,6 +18,14 @@ suppress the plain default confirm-before-Edit/Write prompt — that's exactly w
 (same shape: broad implementer, no guard) still needed a hook-based fix in phase 1 despite already
 having `acceptEdits` since July. `coder` is in that identical shape today, unfixed.
 
+The cost compounds **per edit, not per task** — same finding as phase 1's `tdd-engineer` instances
+7/8 ("a single legitimate TDD cycle can trigger several separate confirmations against the same
+file"). Instances 1-3 here are all one continuous `coder` pass over the single active K-050 plan,
+and each individual `Write`/`Edit` — source file, its paired test file, another source file —
+triggered its own separate prompt. Stakeholder, 2026-08-23: "yeah it is annoying, all the time
+recurring requests" — confirms the friction isn't an occasional nuisance, it's continuous
+interruption across one otherwise-uninterrupted implementation task.
+
 ## Instances observed (live)
 1. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/falkorchat/services.py`.** Coincides with
    `coder` implementing the gated `document-ingestion-coordination` plan (K-050,
@@ -74,3 +82,6 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
 - 2026-08-23 — Instance 3 (`coder` → `falkor-chat/server/tests/test_repository.py`, Edit) relayed;
   assessed in-remit (pairs with instance 1's `repository.py`), no challenge raised, counted as
   evidence.
+- 2026-08-23 — Stakeholder: "yeah it is annoying, all the time recurring requests" → confirms the
+  per-edit compounding cost (same shape as phase 1's `tdd-engineer` finding) rather than an
+  occasional one-off; folded into Problem & current state.
