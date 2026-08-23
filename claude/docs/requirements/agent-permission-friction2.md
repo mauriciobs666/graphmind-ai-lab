@@ -49,3 +49,12 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
   shortcut for the rest of this round → every further relayed instance counts as evidence without a
   per-instance confirmation, until/unless the stakeholder flags one as unsure (phase 1 precedent:
   U1, still relayed as an open question when genuinely unsure).
+- 2026-08-23 — Stakeholder: "please be critic about the cases in the first phase you correctly
+  recognized some cases I proposed by mistake so please feel free to challenge me if you think it
+  is not applicable" → **"pre-confirmed" mode is not a rubber stamp.** Same standard as phase 1's
+  C1/C2 counter-examples (`data-scientist` → `tests/eval/probe_ministral_judge.py`,
+  `cobb` → `docs/BACKLOG.md`, both initially proposed as evidence and reclassified on reflection)
+  and U1 (flagged as ambiguous unprompted, even mid-"only sharing approved cases"): `tico` will
+  actively flag a relayed `coder` instance that looks out-of-remit (e.g. a path with no visible
+  connection to an approved plan/task) rather than silently counting it, even though individual
+  reconfirmation is otherwise skipped.
