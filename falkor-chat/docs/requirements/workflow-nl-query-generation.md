@@ -1,5 +1,5 @@
 # Natural-language query generation over structured graph data — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
@@ -137,3 +137,5 @@ acceptance bar, not deferred to a separate later step. A broader, comprehensive
 `security-expert`-led audit (threat modeling, ongoing red-teaming) remains valuable and is still
 noted as a good later step, but it is additive — FR-3a's baseline adversarial test cases are not
 contingent on it happening.
+2026-08-22 — Stakeholder confirmed the updated readback with no further changes; flipped to
+Ready for design.
