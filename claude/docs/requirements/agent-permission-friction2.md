@@ -49,6 +49,12 @@ interruption across one otherwise-uninterrupted implementation task.
    No challenge: clearly in-remit. → third evidence instance, second `Edit` (not Create) on a test
    file.
 
+4. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/falkorchat/embedding.py`.** Cross-checked
+   against `document-ingestion-coordination.md`'s ledger: row U12 shows `coder` currently `in-flight`
+   on "Stage 2: chunk embeddings + standalone search (FR-3)" — exactly where this edit lands. No
+   challenge: clearly in-remit. → fourth evidence instance; first genuinely new source file this
+   round (not a repeat, not paired with an already-seen file).
+
 ## Open questions
 1. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
    deny-list guard over `guard-broad-write.sh`), or does live evidence point somewhere else (e.g.
@@ -136,3 +142,17 @@ interruption across one otherwise-uninterrupted implementation task.
   or a demo). Pointed the stakeholder to relay open question 3 to their concurrent `teco`/`cobb`
   session directly, with this document plus the `kaizen_team` entries (2026-08-23, `tico`-authored)
   as the evidence trail.
+- 2026-08-23 — Stakeholder challenged the "concurrent teco/cobb session" framing ("what running
+  teco/cobb session?") → `tico` had inferred a session existed by analogy to phase 1's document
+  rather than stakeholder confirmation; corrected: only the `tdd-engineer`-via-`teco` half was
+  actually stakeholder-confirmed, the `cobb` half was `tico`'s own assumption. Stakeholder: "never
+  send anything to random sessions you are not sure, if needed you should spawn your own teco
+  session" → `tico` declined to spawn `teco` itself (outside its three sanctioned `Agent`-tool uses
+  — routing/coordinating a finding isn't a read-only sweep, an offered manual-verification pass, or a
+  demo lifecycle); logged the open tension to `kaizen_team` for `cobb` to weigh in on. Net effect: no
+  session assumed, nothing routed anywhere by `tico` — the finding stays in this document and the
+  kaizen entries until the stakeholder hands it to a session of their own choosing.
+- 2026-08-23 — Instance 4 (`coder` → `falkor-chat/server/falkorchat/embedding.py`, Edit) relayed;
+  cross-checked against the `document-ingestion-coordination.md` ledger (row U12: `coder` in-flight
+  on "Stage 2: chunk embeddings + standalone search (FR-3)" — exactly where this edit lands),
+  assessed in-remit, no challenge raised, counted as evidence.
