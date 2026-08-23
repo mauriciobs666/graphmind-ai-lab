@@ -2,6 +2,31 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste compression, Stage B wave 1 (boilerplate sweep)
+- **What:** Applied the three pilot-validated boilerplate compressions from
+  `claude/docs/plans/prompt-waste-reduction.md` (§3 doctrine, Stage B), same shapes as the
+  `architect.md` pilot. (1) CPG-freshness clause (§ "Orient"): dropped the "(2026-08-19)" date and
+  the redundant "without re-deriving staleness yourself" tail; rule now reads "CPG freshness is
+  `teco`'s responsibility, not yours: a `teco`-issued brief that states the graph's freshness, take
+  it as given; running standalone, use the CPG's answers as current." (2) Interactive-commit-grant
+  bullet (§ Guardrails): dropped the provenance sentence "Stakeholder decision, 2026-08-21 — see
+  `kaizen/history.md`." and ", same as before"; the "(spawned via `Agent`/`Task`)" clarifier moved
+  from the interactive-definition parenthetical to the carve-out sentence (was stated in both).
+  (3) Learning capture: intro dropped "directly" and "identified by a real `:Agent` node it's
+  `PRODUCED`-linked to," (the Cypher template below shows the MERGE + PRODUCED edge); tail dropped
+  the inbox-replacement history sentence and "exactly like the old inbox was".
+- **Rule inventory (gate a), edited regions — all preserved:** freshness is `teco`'s / brief taken
+  as given / standalone = current (block 1); interactive-mode definition, explicit-path grant,
+  full never-list, delegated-subagent carve-out, deliverable left for `teco` post-verification
+  (block 2); capture trigger + graph + Cypher template, skip-known-facts, raw-capture/`cobb`
+  promotes, never edit own definition (block 3). Verbatim `CPG:` three-form sentence and
+  audit-check-8 tokens untouched.
+- **Removed class-5/6 material, recorded where:** inbox-replacement history → this file's
+  2026-08-21 "kaizen/inbox.md deleted" entry; commit-grant provenance → this file's 2026-08-21
+  grant entry + `claude/AGENTS.md` § Hook machinery; freshness centralization date → this file's
+  2026-08-19 "Freshness-check clause removed" entry.
+- **Verified:** `audit-team.sh` PASS; `cobb` §7 lint pass on the result.
+
 ## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
 - **What:** New Guardrails bullet: when running interactively (`claude --agent coder`, a human
   present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own verified

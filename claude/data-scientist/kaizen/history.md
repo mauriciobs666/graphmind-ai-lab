@@ -2,6 +2,27 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste compression, Stage B wave 1 (boilerplate sweep)
+- **What:** Applied the pilot-validated boilerplate compressions from
+  `claude/docs/plans/prompt-waste-reduction.md` (§3 doctrine, Stage B), same shapes as the
+  `architect.md` pilot — two of the three shared blocks; this file has no CPG-freshness clause.
+  (1) Interactive-commit-grant passage (§ Guardrails, Bash bullet): dropped the provenance
+  sentence "Stakeholder decision, 2026-08-21 — see `kaizen/history.md`." and ", same as before";
+  the "(spawned via `Agent`/`Task`)" clarifier moved from the interactive-definition parenthetical
+  to the carve-out sentence (was stated in both). (2) Learning capture: intro dropped "directly"
+  and "identified by a real `:Agent` node it's `PRODUCED`-linked to," (the Cypher template below
+  shows the MERGE + PRODUCED edge); tail dropped the inbox-replacement history sentence and
+  "exactly like the old inbox was".
+- **Rule inventory (gate a), edited regions — all preserved:** interactive-mode definition,
+  explicit-path grant, full never-list, delegated-subagent carve-out, deliverable left for `teco`
+  post-verification (block 1); capture trigger + graph + Cypher template, skip-known-facts,
+  raw-capture/`cobb` promotes, never edit own definition (block 2). Audit-check-8 tokens
+  untouched.
+- **Removed class-5/6 material, recorded where:** inbox-replacement history → this file's
+  2026-08-21 "kaizen/inbox.md deleted" entry; commit-grant provenance → this file's 2026-08-21
+  grant entry + `claude/AGENTS.md` § Hook machinery.
+- **Verified:** `audit-team.sh` PASS; `cobb` §7 lint pass on the result.
+
 ## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
 - **What:** The Bash guardrail's "investigation only" bullet now also grants: when running
   interactively (`claude --agent data-scientist`, a human present turn-by-turn — not a delegated

@@ -131,6 +131,14 @@ The three blocks near-identical across agents, compressed identically:
 3. CPG-freshness clause — keep the rule ("teco-issued brief states freshness: take it as given");
    drop the decision retelling.
 
+*Wave-1 executed 2026-08-23 (`coder`, `analyst`, `data-scientist`); cobb lint pass ×3. Lint
+carry-forwards:* **wave 2 adds a fourth micro-shape** — the shared freshness clause's
+hanging-topic construction ("a `teco`-issued brief that states…, take it as given") becomes
+"when a `teco`-issued brief states the graph's freshness, take it as given", applied uniformly
+to all four already-compressed files (`architect` included) plus any wave-2 file carrying the
+clause; *and C3 picks up two pre-existing analyst waste candidates* (the traps-list "have bitten
+a review before" framing; the placeholder-token bullet's incident narration).
+
 ### Stage C — Heavy singles, descending payoff
 
 | Unit | File | Now | Target | Notes |
