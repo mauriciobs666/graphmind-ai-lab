@@ -1,5 +1,5 @@
 # Durable user-profile data for workflows — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
@@ -104,3 +104,4 @@ stakeholder wants, but is explicitly not required to ship this capability.
 cross-workspace, not writing to `identity`) — the harder identity-write-path question flagged by
 the architect and graph-dba is deliberately deferred, to be revisited "when needed," not resolved
 now.
+2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
