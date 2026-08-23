@@ -5,6 +5,59 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-08-22 — M8: Kaizen agent/learning-note ontology — delivery & gate closure (S0…S6) ✅
+
+`:KaizenEntry`'s plain `author` string property (M5/M7) is replaced, for entries created from this
+point on, by real `:Agent {agentId}` identity connected via a locked
+`(:Agent)-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge, plus an optional
+`(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge `cobb` tags during distillation — names/directions
+matched exactly to `falkor-chat`'s own `PRODUCED`/`MENTIONS` precedent. Historical (pre-M8) entries
+are unretrofitted, unchanged. Full unit-by-unit detail lives in
+`docs/plans/kaizen-agent-ontology-coordination.md` (U1…U10 ledger) and
+`docs/test-reports/kaizen-agent-ontology.md`.
+
+- **U1** (`graph-dba`) — `docs/plans/kaizen-agent-ontology-graph.md`: the schema, both
+  relationships' exact Cypher shapes, and the crux — dropping `author` leaves
+  `cypher-mcp/server.py`'s `authorize_write()` with no non-curator allow-path at all, since its
+  only recognition signal is the property this milestone removes.
+- **U2/U2b/U2c** (`architect`) — `docs/plans/kaizen-agent-ontology.md` (Version 3): grew
+  `authorize_write()`'s design from 2 to 6 recognized write shapes. Plan gate (`analyst`,
+  `docs/reviews/kaizen-agent-ontology.md`) ran **3 passes**: Pass 1 approve with suggestions,
+  flagging a real gap — a self-attributed decoy write clause chained with an unrelated malicious
+  clause (`MERGE`/`DELETE`) rides through unauthorized on the first clause's strength alone; the
+  stakeholder directed **close it, not accept it**. Pass 2 found the first closure itself
+  under-scoped (missing `SET`/`REMOVE`, reopening a known SET-based author-reassignment attack) —
+  **needs changes**. Pass 3, on the widened closure, **approve**.
+- **U4/U5 (S0/S1)** (`graph-dba` + `tdd-engineer`, parallel) — `Agent.agentId` index+constraint
+  provisioned live on `kaizen_team` via `redis-cli` (schema DDL is rejected unconditionally through
+  the MCP tool); `cypher-mcp/server.py`/`tests/test_server.py`/`README.md` implement the approved
+  design test-first, 23 new tests (mutation-tested against 4 deliberate regressions, each caught at
+  the exact granularity required), existing 16-case suite byte-unmodified. Commit `e01045b`. Code
+  re-gate (`analyst`, `docs/reviews/kaizen-agent-ontology-impl.md`) — **approve**, independently
+  re-ran all 4 mutation tests via hash-diff and the offline+live suites.
+- **U7/U8 (S3/S4)** (`cobb`, parallel) — all 13 `claude/<agent>/*.md` Learning-capture blocks
+  retargeted to the producer-write shape (commit `4da588a`); `skills/agent-maintenance/SKILL.md`
+  §5's distillation procedure rewritten for the dual read, `MENTIONS`-tagging routing branch, and
+  read-then-decide partial-edge-or-full-node clear, with the MENTIONS-before-count ordering
+  invariant stated explicitly (commit `b7520f0`).
+- **U9 (S5)** (`cobb`) — catalog docs (`claude/README.md`, `claude/AGENTS.md`, root `AGENTS.md`)
+  updated to describe the new ontology; a stale "`author`-partitioned" claim independently found
+  (not in the original plan scope) across 15 occurrences in 13 agent files' own prose, corrected in
+  the same unit (commit `e0eabf0`).
+- **U10 (S6)** (`qa-engineer`) — live dry-run acceptance, `docs/test-reports/
+  kaizen-agent-ontology.md`. **PASS**: all 3 adversarial attacks the plan review traced correctly
+  rejected by the deployed, rebuilt container; one full producer-write → MENTIONS-tag →
+  count-and-decide → partial-resolve ×2 → full-clear distillation cycle completed cleanly, graph
+  left at its exact pre-run baseline. Two non-regression findings recorded as follow-ups
+  (`docs/BACKLOG.md` C-809…C-812): a long-running session's MCP connection can stay silently bound
+  to a pre-rebuild image, and the review's literal attack-text needs a `WITH`-bridge to be valid
+  live Cypher.
+
+**Milestone closed.** `docs/BACKLOG.md`'s M8 milestone-map row and C-801…C-808 items reflect this
+same delivery; C-809…C-812 are its follow-ups. Per-document `Status: archived` flips on the
+requirements/graph-design/plan/reviews/test-plan/test-report/coordination files are handled by
+`teco` in the same close (see each document's own header).
+
 ## 2026-08-19 — M6: MCP tool rename — delivery & gate closure (U1…U8) ✅
 
 The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated

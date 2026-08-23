@@ -49,6 +49,7 @@ against a real loaded CPG before M2 is called ✅, not just authored.
 | **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
 | **M6 — MCP tool rename** ✅ | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. Plan gate (`analyst`, `docs/reviews/cpg-mcp-rename.md`) — 2 passes: needs changes → approve with suggestions. Implementation: commits `e00b9f6` (step 1), `59a03c4` (step 2, includes U4-fix), `acecb34` (step 3a), `cd4142f` (step 3b). Acceptance (`qa-engineer`, `docs/test-reports/cpg-mcp-rename-report.md`) — **PASS**, AC-1…AC-6 all hold, regression floor 84 passed/7 deselected unchanged; one low-severity defect D-1 found and fixed in this same unit (mcp-monitor source-comment path citations). | **C-601 → C-605** |
 | **M7 — Generic Cypher MCP, team-wide rollout** ✅ | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph (`author`-partitioned), FR-7's one-query team-wide surface and FR-8a's `sessionId` field delivered, FR-12/AC-9 delivered as written (no `inbox.md` for a new agent) — the interim ad hoc per-agent-graph rollout (`ccf9c8b`, 2026-08-20) reconciled onto this design; closing acceptance (`Q2`, `docs/test-reports/generic-cypher-mcp2-report.md`) — **PASS with noted open items**, delivered 2026-08-20. Per FR-13's incremental-delivery framing, three items are deliberately not fully closed: the inbox-header retarget half of every `C-<agent>` unit was **dropped entirely by stakeholder decision** (not deferred — every `inbox.md` stays frozen, header included); `teco`'s and `analyst`'s per-agent migrations each carry one known data-fidelity defect on a single entry, pending a separate stakeholder approval for the `cobb` curator-clear fix; `G1` correspondingly leaves `kaizen_teco`/`kaizen_analyst` live pending that same fix. `Q2`'s own new finding, D-1 (`claude/cobb/cobb.md` stale wording), fixed same-day. **2026-08-21 close-out:** all three items resolved, superseding the "not fully closed" framing above — `kaizen_team` was independently confirmed completely empty (every entry any agent ever wrote there, including the two flagged data-fidelity defects, had by then already been distilled and cleared through routine team distillation passes, mooting the planned curator-clear fix); `G1`'s last 2 of 12 `kaizen_<agent>` keys (`kaizen_analyst`, `kaizen_teco`) retired by `graph-dba`; and, going beyond this milestone's own "stays frozen" decision, the stakeholder separately directed that all 12 `kaizen/inbox.md` files be deleted outright (git history retains each one) — see `claude/cobb/kaizen/history.md`, 2026-08-21 entry, for the full verification trail. The coordination doc itself (`docs/plans/generic-cypher-mcp2-coordination.md`) stays `archived` and unedited per the doc-lifecycle convention (a header-pointer-only exception); this BACKLOG row is the current record. | `C-701 → C-721` |
+| **M8 — Kaizen agent/learning-note ontology** ✅ | `:KaizenEntry`'s plain `author` string property (M5/M7) is replaced, for entries created from this point on, by a real `:Agent {agentId}` identity node connected via a locked `(:Agent)-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge, plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge `cobb` tags during distillation — names/directions matched exactly to `falkor-chat`'s own `PRODUCED`/`MENTIONS` precedent. Historical (pre-M8) entries are unretrofitted, unchanged, and still read/cleared via the old `author`-filtered path. `cypher-mcp/server.py`'s `authorize_write()` grew from 2 to 6 recognized write shapes to support this, closing a real cross-clause smuggling gap (a self-attributed decoy write chained with an unrelated malicious clause) across two `analyst` review rounds. Closing acceptance (`qa-engineer`, `docs/test-reports/kaizen-agent-ontology.md`) — **PASS**, live dry-run confirms the closure and the full distillation cycle; two non-regression findings recorded (stale-container MCP staleness, a review-fixture grammar note) — delivered 2026-08-22. | `C-801 → C-808` |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 
@@ -701,6 +702,95 @@ one" rule). Requirements: [`requirements/generic-cypher-mcp2.md`](./requirements
   generic-cypher-mcp2.md` / `docs/test-reports/generic-cypher-mcp2-report.md`. Q2's one new
   defect, D-1 (`claude/cobb/cobb.md:65,71` stale pre-M7 wording), fixed same-day by `cobb`'s
   self-edit carve-out.
+
+## M8 — Kaizen agent/learning-note ontology
+
+Replaces `:KaizenEntry`'s plain `author` string property (M5/M7) with real `:Agent` identity and
+two locked, directional relationships, for entries created from this point on — FR-1…FR-8 /
+AC-1…AC-7 of [`requirements/kaizen-agent-ontology.md`](./requirements/kaizen-agent-ontology.md).
+Design: [`plans/kaizen-agent-ontology-graph.md`](./plans/kaizen-agent-ontology-graph.md) (schema/
+query mechanics) + [`plans/kaizen-agent-ontology.md`](./plans/kaizen-agent-ontology.md)
+(implementation plan, Version 3 after 3 `analyst` review passes) · coordination:
+[`plans/kaizen-agent-ontology-coordination.md`](./plans/kaizen-agent-ontology-coordination.md).
+
+### Items
+- **C-801 — Graph schema/write-shape design.** ✅ `:Agent {agentId}` (identity-only),
+  `(:Agent)-[:PRODUCED {sessionId}]->(:KaizenEntry)`, `(:KaizenEntry)-[:MENTIONS]->(:Agent)`;
+  `authorize_write()`-compatibility analysis identifying the crux (dropping `author` leaves the
+  mechanism's only non-curator allow-path with nothing to find). Owner: `graph-dba` (U1).
+- **C-802 — Implementation plan.** ✅ Step table S0…S6; grew `authorize_write()`'s design from 2 to
+  6 recognized shapes. Revised twice under review (Version 2 closed a cross-clause smuggling gap
+  the plan review traced — a self-attributed decoy write chained with an unrelated malicious
+  clause; Version 3 widened that closure after Pass 2 found it under-scoped, missing `SET`/
+  `REMOVE`). Plan gate (`analyst`, `docs/reviews/kaizen-agent-ontology.md`): 3 passes — approve
+  with suggestions → needs changes (Blocker: the `SET`/`REMOVE` gap) → **approve**. Owner:
+  `architect` (U2/U2b/U2c).
+- **C-803 — `authorize_write()` redesign, 6 write shapes.** ✅ `cypher-mcp/server.py` +
+  `cypher-mcp/tests/test_server.py` (23 new tests, mutation-tested) + `cypher-mcp/README.md`,
+  commit `e01045b`. Closes the cross-clause smuggling gap for the full `MERGE|DELETE|SET|REMOVE`
+  keyword set. Code re-gate (`analyst`, `docs/reviews/kaizen-agent-ontology-impl.md`) — **approve**
+  (independently re-ran all 4 mutation tests via hash-diff). Owner: `tdd-engineer` (S1).
+- **C-804 — `Agent.agentId` DDL provisioning.** ✅ Index + uniqueness constraint on `kaizen_team`,
+  via `redis-cli` (schema DDL is rejected unconditionally through the MCP tool). Owner: `graph-dba`
+  (S0).
+- **C-805 — 13 agent prompts retargeted.** ✅ Every `claude/<agent>/*.md`'s Learning-capture Cypher
+  block moved to the producer-write shape (`author` dropped). Commit `4da588a`. Owner: `cobb` (S3).
+- **C-806 — Distillation procedure rewrite.** ✅ `skills/agent-maintenance/SKILL.md` §5: dual
+  legacy/current-shape read, `MENTIONS`-tagging routing branch (FR-4), read-then-decide
+  partial-edge-or-full-node clear (FR-6/AC-3/AC-4), with the MENTIONS-before-count ordering
+  invariant stated explicitly (plan-review Finding 2). Commit `b7520f0`. Owner: `cobb` (S4).
+- **C-807 — Catalog docs + wording fix.** ✅ `claude/README.md`, `claude/AGENTS.md`, root
+  `AGENTS.md` describe the new ontology; a stale "`author`-partitioned" claim found (not in the
+  original plan scope) across 15 occurrences in 13 agent files' own prose, corrected same unit.
+  Commit `e0eabf0`. Owner: `cobb` (S5).
+- **C-808 — Closing acceptance.** ✅ Live dry-run against the deployed, rebuilt `cypher-mcp`
+  container and the real `kaizen_team` graph — `docs/test-plans/kaizen-agent-ontology.md` /
+  `docs/test-reports/kaizen-agent-ontology.md`. **PASS**: all 3 adversarial attacks the plan review
+  traced (A, B, C) correctly rejected on the deployed image; one full producer-write →
+  MENTIONS-tag → count-and-decide → partial-resolve ×2 → full-clear distillation cycle completed
+  cleanly. Two non-regression findings recorded: a long-running session's MCP connection can stay
+  silently bound to a pre-rebuild image (Medium, operational — see Follow-ups), and the review's
+  literal attack-text needs a `WITH`-bridge to be valid live Cypher (Low, informational). Owner:
+  `qa-engineer` (S6).
+
+## Follow-ups (post-M8)
+
+- **C-809 — A `cypher-mcp` rebuild does not affect an already-running MCP connection.** 🔵
+  Live-confirmed during S6: `docker-run.sh` resolves the image by content hash per new connection,
+  so a long-running Claude Code session (or a subagent inheriting its parent's stdio pipe) keeps
+  talking to whichever container it started with, indefinitely, until that connection restarts —
+  a rebuild is not retroactive. At S6 time, `docker ps` showed 3 live `cypher-mcp` containers on 2
+  different images simultaneously (one fresh, two pre-M8, 10h/21h old) with nothing in the tool's
+  responses to let a caller detect which build it's actually talking to. Two concrete
+  improvements worth considering: (a) `cypher-mcp/README.md` should state this explicitly rather
+  than imply "resolves automatically"; (b) surface a short image/version marker in the tool's
+  responses (or a dedicated no-op diagnostic query) so a caller can positively confirm its build
+  without shelling out to `docker ps`/`docker inspect`. Owner: `devops` (README + possible
+  server-side change).
+- **C-810 — Decide whether to restart the two containers found still running the pre-M8 image.**
+  🔵 Found live during S6 (`cypher-mcp:aa088de045e2`, containers `recursing_lamarr`/
+  `vibrant_knuth`, 10h/21h old at the time) — for as long as they keep running, whatever session
+  each is bound to is silently exposed to the pre-M8 cross-clause smuggling gap this milestone
+  closes (C-803), and cannot use any of the 4 new write shapes. Not acted on during this milestone
+  since each belongs to a different long-running session that may still be in active use — a
+  restart decision needs the owning session's own context, not a unilateral call from this
+  coordination. Owner: whoever owns those sessions, or `devops` if they're confirmed abandoned.
+- **C-811 — The review's literal Attack A/C reproduction text is not valid live Cypher grammar.**
+  🔵 `docs/reviews/kaizen-agent-ontology.md`'s Attack A/C text (`CREATE (...) MATCH (...) DETACH
+  DELETE/SET/REMOVE ...`) parses as a genuine FalkorDB grammar error live (a `WITH` must separate
+  an updating clause from a following `MATCH`) — it never reaches `authorize_write()` on this
+  engine, though the offline pytest suite is unaffected (it calls the function directly, no real
+  parser involved). If these strings are ever reused as a live fixture, they need a bridging
+  `WITH 1 AS _dummy` to actually exercise anything. No owner assigned — informational, act on it
+  only if/when these strings get copy-pasted into a live context.
+- **C-812 — Consider making `cobb`'s partial-vs-full deletion branch programmatic, not manual.** 🔵
+  S6's dry-run self-caught one execution slip: the read-then-decide branch
+  (`skills/agent-maintenance/SKILL.md` §5) is documented correctly, but a human/agent computing
+  `otherRemaining` by hand and choosing the branch is easy to get wrong under procedural discipline
+  alone (caught and corrected in the same run, no lasting effect). Low-priority: worth a future
+  look at whether `cobb`'s tooling could compute the count and select the branch automatically
+  rather than relying purely on manual arithmetic every pass. Owner: `cobb`/`architect`, next time
+  this distillation mechanism is revisited.
 
 ## Follow-ups (post-M2)
 

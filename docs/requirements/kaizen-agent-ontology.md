@@ -1,5 +1,5 @@
 # Kaizen agent/learning-note ontology — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M8) · **Last updated:** 2026-08-20
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M8) · **Last updated:** 2026-08-20
 
 ## Intent
 Make `cobb`'s distillation work better by making the kaizen graphs' agent/note structure explicit
