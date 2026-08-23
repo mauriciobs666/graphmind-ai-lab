@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-23 — K-009 refinement: dropped "decision cluster closes" / topic-switch as independent commit triggers
+- **What:** immediately after the resolution below shipped, the stakeholder reviewed the actual
+  wording and flagged that the shipped rule still let a **topic switch within a single document**
+  count as "switching away" — functionally the same over-triggering as the old rule's "a cluster
+  of related decisions closes," since both fire many times inside one document. Rewrote the same
+  `tico.md` bullet: the only commit triggers now are leaving the document entirely (switching to a
+  *different* document), stepping out of Mode 1, or the interview/session closing — settled
+  threads and decision clusters accumulate uncommitted no matter how many close along the way.
+  Corrected the bullet's own claim that single-document behavior "collapses to the same as
+  before" — it doesn't; single-document sessions now commit less often too, not just
+  multi-document ones, since decision/topic-level pauses no longer independently trigger a commit.
+- **Why:** direct stakeholder correction, same session — "this is not a good point, occurs too
+  often -> a cluster of related decisions closes." Acted on immediately rather than treated as a
+  future backlog item, since it's the stakeholder narrowing their own just-made K-009 decision,
+  not a fresh open question needing another round-trip.
+- **Plan items:** none — refinement of the same-day K-009 resolution above, K-009 stays closed.
+
 ## 2026-08-23 — K-009 resolved: stakeholder chose document-level commit batching
 - **What:** put K-009's open question directly to the stakeholder (`AskUserQuestion`, four
   options: document-level batching, a time-boxed cap, session-end/checkpoint-only, or "keep the
