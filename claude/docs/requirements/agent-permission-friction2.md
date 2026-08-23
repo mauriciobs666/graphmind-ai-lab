@@ -26,6 +26,12 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
    in-progress implementation of that plan. **Confirmed legitimate** by the stakeholder — squarely
    `coder`'s own in-remit implementation work. → first evidence instance for this round.
 
+2. **2026-08-23 — `coder`, `Create` (Write) on `falkor-chat/server/tests/test_chunking.py`.** Pairs
+   with the new `falkor-chat/server/falkorchat/chunking.py` from the same K-050 implementation work
+   — `coder`'s remit explicitly includes tests for the code it writes. No challenge: clearly in-remit,
+   same task as instance 1. → second evidence instance; first Create (not Edit) and first test-file
+   instance for this round.
+
 ## Open questions
 1. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
    deny-list guard over `guard-broad-write.sh`), or does live evidence point somewhere else (e.g.
@@ -58,3 +64,5 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
   actively flag a relayed `coder` instance that looks out-of-remit (e.g. a path with no visible
   connection to an approved plan/task) rather than silently counting it, even though individual
   reconfirmation is otherwise skipped.
+- 2026-08-23 — Instance 2 (`coder` → `falkor-chat/server/tests/test_chunking.py`, Create) relayed;
+  assessed in-remit (pairs with instance 1's `chunking.py`), no challenge raised, counted as evidence.
