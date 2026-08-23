@@ -47,7 +47,8 @@ interruption across one otherwise-uninterrupted implementation task.
 3. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/tests/test_repository.py`.** Pairs with the
    already-modified `falkor-chat/server/falkorchat/repository.py`, same K-050 task as instances 1-2.
    No challenge: clearly in-remit. → third evidence instance, second `Edit` (not Create) on a test
-   file.
+   file. (`repository.py` itself edited again shortly after — same compounding-cost pattern as
+   instance 1's `services.py` repeat.)
 
 4. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/falkorchat/embedding.py`.** Cross-checked
    against `document-ingestion-coordination.md`'s ledger: row U12 shows `coder` currently `in-flight`
@@ -156,3 +157,6 @@ interruption across one otherwise-uninterrupted implementation task.
   cross-checked against the `document-ingestion-coordination.md` ledger (row U12: `coder` in-flight
   on "Stage 2: chunk embeddings + standalone search (FR-3)" — exactly where this edit lands),
   assessed in-remit, no challenge raised, counted as evidence.
+- 2026-08-23 — `coder` → `falkor-chat/server/falkorchat/repository.py` (Edit) relayed; same file as
+  instance 3's pair, already established in-remit. Folded into instance 3 as a repeat, not logged as
+  a new instance 5.
