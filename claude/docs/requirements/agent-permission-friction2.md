@@ -23,20 +23,19 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
    `coder` implementing the gated `document-ingestion-coordination` plan (K-050,
    `falkor-chat/docs/plans/document-ingestion-coordination.md`, Status: active, owner `teco`) — repo
    state shows `repository.py`/`services.py` modified and a new `chunking.py`, consistent with
-   in-progress implementation of that plan. Pending stakeholder confirmation this was in-remit
-   (not yet confirmed as legitimate — this document does not assume it).
+   in-progress implementation of that plan. **Confirmed legitimate** by the stakeholder — squarely
+   `coder`'s own in-remit implementation work. → first evidence instance for this round.
 
 ## Open questions
-1. Is instance 1 confirmed as `coder` doing its own approved-plan implementation work (in-remit),
-   or something else? (Needed before it counts as FR evidence, same discipline as phase 1's
-   instance-by-instance confirmation.)
-2. Same "im only sharing approved cases" shortcut from phase 1 — does the stakeholder want to
-   re-adopt it for this round (treat every relayed instance as pre-confirmed), or confirm each one?
-3. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
+1. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
    deny-list guard over `guard-broad-write.sh`), or does live evidence point somewhere else (e.g.
    a narrower path pattern, or a different tool class like Bash)? Needs more instances before
    this is answerable — this is a WHAT/WHY question about what's actually firing, not a
    solutioning question (the HOW is the architect's, once this document is ready).
+2. Are there Bash-confirmation instances too? Phase 1 flagged that `coder`'s friction might not be
+   pure `Write`/`Edit` at all ("whatever it's hitting is suspected to be a *different* mechanism
+   (e.g. Bash/terminal-command confirmations) than the `Write`/`Edit` confirmation this document
+   resolves"). Worth keeping an eye out for as more instances land.
 
 ## Decision log
 - 2026-08-23 — Stakeholder: "we recently implemented permission friction and i did not have
@@ -45,3 +44,8 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
   (`agent-permission-friction2.md`) since phase 1 is `archived` (approved/executed).
 - 2026-08-23 — First live instance relayed mid-turn (`coder` → `services.py`) while this document
   was being opened; logged as instance 1, not yet confirmed legitimate.
+- 2026-08-23 — Stakeholder confirmed instance 1 legitimate ("Yes, legitimate") → counted as first
+  evidence instance. Stakeholder also chose to re-adopt phase 1's "I'm only sharing approved cases"
+  shortcut for the rest of this round → every further relayed instance counts as evidence without a
+  per-instance confirmation, until/unless the stakeholder flags one as unsure (phase 1 precedent:
+  U1, still relayed as an open question when genuinely unsure).
