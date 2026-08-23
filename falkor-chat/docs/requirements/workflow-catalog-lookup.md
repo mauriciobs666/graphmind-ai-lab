@@ -1,13 +1,15 @@
 # Structured catalog/reference lookup for workflows — Feature Requirements
 > **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of six sibling capabilities scoped out of a single "business entities in
-falkor-chat workflows" idea (decision log, 2026-08-22 — see
-`docs/requirements/workflow-business-entities.md` for the shared background). The others:
-`docs/requirements/workflow-business-entities.md`, `docs/requirements/workflow-deterministic-compute.md`,
-`docs/requirements/workflow-durable-profile.md`, `docs/requirements/workflow-nl-query-generation.md`,
-`docs/requirements/workflow-composition.md` (the last one opened later still, mid-interview of
-`workflow-durable-profile.md`). Read this one for read-only, exact/filterable domain data via a fixed set of query shapes (e.g.
+This is one of five sibling capabilities scoped out of a single "business entities in
+falkor-chat workflows" idea (decision log, 2026-08-22 — originally six documents; two of them,
+durable mutable business state and deterministic computation, were later merged into one — see
+`docs/requirements/workflow-cart-and-totals.md`). The others:
+`docs/requirements/workflow-cart-and-totals.md` (supersedes `workflow-business-entities.md` and
+`workflow-deterministic-compute.md`), `docs/requirements/workflow-durable-profile.md`,
+`docs/requirements/workflow-nl-query-generation.md`, `docs/requirements/workflow-composition.md`
+(still `Interviewing`, on hold at the stakeholder's request). Read this one for read-only,
+exact/filterable domain data via a fixed set of query shapes (e.g.
 a product catalog) specifically — not for mutable state (the business-entities doc) and not for
 answering arbitrarily-phrased questions (spun off into its own sibling,
 `workflow-nl-query-generation.md`, once that turned out to be a distinct project).
@@ -65,10 +67,10 @@ below).
 - **FR-6** — The catalog is a single, shared, global dataset — not scoped per workspace.
 - **FR-7** — A demo proof-of-concept ships with the capability: a seeded demo catalog of
   consumer electronics (flat shape — name, category, price only), looked up from inside the
-  single combined "salesperson" demo agent shared with `workflow-business-entities.md`,
-  `workflow-deterministic-compute.md`, and `workflow-durable-profile.md` (one orchestrating
-  `agent` step, many tools — not a separate demo workflow of its own), materialized and
-  verifiable the same way `triage`/`access-request` are today.
+  single combined "salesperson" demo agent shared with `workflow-cart-and-totals.md` and
+  `workflow-durable-profile.md` (one orchestrating `agent` step, many tools — not a separate demo
+  workflow of its own), materialized and verifiable the same way `triage`/`access-request` are
+  today.
 
 ## Out of scope
 - Mutating catalog data from within a workflow (create/update/delete) — that belongs to the
@@ -127,3 +129,7 @@ interview): the demo is looked up from inside one single combined "salesperson" 
 shared with `workflow-business-entities.md`, `workflow-deterministic-compute.md`, and
 `workflow-durable-profile.md` — not a demo workflow of its own. FR-7 updated accordingly; no
 other content changed.
+2026-08-22 — `workflow-business-entities.md` and `workflow-deterministic-compute.md` merged into
+`docs/requirements/workflow-cart-and-totals.md` (stakeholder-requested, per a cross-document
+coherence review). FR-7/sibling references above updated to point at the merged document; no
+content of this document's own requirements changed.

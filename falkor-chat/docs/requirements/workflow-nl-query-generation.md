@@ -1,21 +1,24 @@
 # Natural-language query generation over structured graph data — Feature Requirements
 > **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of six sibling capabilities scoped out of a single "business entities in
-falkor-chat workflows" idea (decision log, 2026-08-22 — see
-`docs/requirements/workflow-business-entities.md` for the shared background). The others:
-`docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-business-entities.md`,
-`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-durable-profile.md`,
-`docs/requirements/workflow-composition.md`. This document was spun off mid-interview from
-`workflow-catalog-lookup.md`, not scoped out on day one; `workflow-composition.md` is younger
-still, opened mid-interview of `workflow-durable-profile.md`.
+This is one of five sibling capabilities scoped out of a single "business entities in
+falkor-chat workflows" idea (decision log, 2026-08-22 — originally six documents; two of them,
+durable mutable business state and deterministic computation, were later merged into one — see
+`docs/requirements/workflow-cart-and-totals.md`). The others:
+`docs/requirements/workflow-catalog-lookup.md`,
+`docs/requirements/workflow-cart-and-totals.md` (supersedes `workflow-business-entities.md` and
+`workflow-deterministic-compute.md`), `docs/requirements/workflow-durable-profile.md`,
+`docs/requirements/workflow-composition.md` (still `Interviewing`, on hold at the stakeholder's
+request). This document was spun off mid-interview from `workflow-catalog-lookup.md`, not scoped
+out on day one; `workflow-composition.md` is younger still, opened mid-interview of
+`workflow-durable-profile.md`.
 
 ## Intent
 Close a structural gap ahead of a concrete consumer, same proactive-infrastructure framing as
 the other siblings — but the stakeholder has flagged this one as **a major aspect** of the whole
 effort, not a minor add-on: it needs proof at three levels, not one. First, live: the same
-combined "salesperson" demo agent (`workflow-catalog-lookup.md`, `workflow-business-entities.md`,
-`workflow-deterministic-compute.md`, `workflow-durable-profile.md`) must be able to answer
+combined "salesperson" demo agent (`workflow-catalog-lookup.md`, `workflow-cart-and-totals.md`,
+`workflow-durable-profile.md`) must be able to answer
 arbitrarily-phrased questions, not just the fixed shapes `workflow-catalog-lookup.md` already
 proves. Second, rigorously: a golden-set evaluation methodology (question/answer pairs, accuracy
 scoring), in the spirit of `docs/plans/graphrag-eval.md`, because "does it answer correctly" is

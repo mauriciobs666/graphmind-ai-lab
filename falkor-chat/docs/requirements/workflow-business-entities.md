@@ -1,5 +1,6 @@
 # Durable mutable business entities for workflows — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** superseded · **Owner:** `tico` · **Tracks:** — (M<n> TBD) ·
+> **Superseded by:** `docs/requirements/workflow-cart-and-totals.md`
 
 This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22). The others:
@@ -139,3 +140,9 @@ agent shared with `workflow-catalog-lookup.md`, `workflow-deterministic-compute.
 `workflow-durable-profile.md` — not a demo of its own. Order fulfillment (FR-5) remains a
 separate process-kind workflow, since that split is inherent to falkor-chat's engine (conversation
 vs. process workflows), not a new decision. FR-7 updated accordingly; no other content changed.
+2026-08-22 — **Superseded** by `docs/requirements/workflow-cart-and-totals.md`, which merges this
+document with `workflow-deterministic-compute.md` into one complete view of cart/order state plus
+the deterministic computation its totals/snapshots depend on. Stakeholder-requested merge,
+following a cross-document coherence review; no content here was found to be wrong, only split
+across two documents that were never independently acceptance-testable. This document stays
+intact as historical record.

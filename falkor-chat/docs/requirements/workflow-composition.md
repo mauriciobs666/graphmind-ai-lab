@@ -1,11 +1,13 @@
 # Workflow composition (sub-workflow orchestration) — Feature Requirements
 > **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of six sibling capabilities scoped out of a single "business entities in
-falkor-chat workflows" idea (decision log, 2026-08-22 — see
-`docs/requirements/workflow-business-entities.md` for the shared background). The others:
-`docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-business-entities.md`,
-`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-durable-profile.md`,
+This is one of five sibling capabilities scoped out of a single "business entities in
+falkor-chat workflows" idea (decision log, 2026-08-22 — originally six documents; two of them,
+durable mutable business state and deterministic computation, were later merged into one — see
+`docs/requirements/workflow-cart-and-totals.md`). The others:
+`docs/requirements/workflow-catalog-lookup.md`,
+`docs/requirements/workflow-cart-and-totals.md` (supersedes `workflow-business-entities.md` and
+`workflow-deterministic-compute.md`), `docs/requirements/workflow-durable-profile.md`,
 `docs/requirements/workflow-nl-query-generation.md`. This document is the youngest of the six —
 it was opened mid-interview, once the stakeholder confirmed a longer-term intent to compose
 several dedicated workflows under one orchestrating agent, rather than only ever granting one

@@ -1,23 +1,26 @@
 # Durable user-profile data for workflows — Feature Requirements
 > **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
-This is one of six sibling capabilities scoped out of a single "business entities in
-falkor-chat workflows" idea (decision log, 2026-08-22 — see
-`docs/requirements/workflow-business-entities.md` for the shared background). The others:
-`docs/requirements/workflow-catalog-lookup.md`, `docs/requirements/workflow-business-entities.md`,
-`docs/requirements/workflow-deterministic-compute.md`, `docs/requirements/workflow-nl-query-generation.md`
+This is one of five sibling capabilities scoped out of a single "business entities in
+falkor-chat workflows" idea (decision log, 2026-08-22 — originally six documents; two of them,
+durable mutable business state and deterministic computation, were later merged into one — see
+`docs/requirements/workflow-cart-and-totals.md`). The others:
+`docs/requirements/workflow-catalog-lookup.md`,
+`docs/requirements/workflow-cart-and-totals.md` (supersedes `workflow-business-entities.md` and
+`workflow-deterministic-compute.md`), `docs/requirements/workflow-nl-query-generation.md`
 (added mid-interview, spun off from `workflow-catalog-lookup.md`),
-`docs/requirements/workflow-composition.md` (opened mid-*this* document's own interview). Read
-this one for durable, cross-conversation profile data about the person a workflow is talking to
-(e.g. a name, a delivery address) specifically — not for cart/order-shaped transactional state.
+`docs/requirements/workflow-composition.md` (opened mid-*this* document's own interview, still
+`Interviewing`, on hold at the stakeholder's request). Read this one for durable, cross-conversation
+profile data about the person a workflow is talking to (e.g. a name, a delivery address)
+specifically — not for cart/order-shaped transactional state.
 
 ## Intent
 Close a structural gap ahead of any specific consumer — same proactive-infrastructure framing as
 the other sibling capabilities. Proven as part of the **single combined "salesperson" demo
 agent** that also covers catalog lookup, cart/order, and deterministic totals
-(`workflow-catalog-lookup.md`, `workflow-business-entities.md`,
-`workflow-deterministic-compute.md`): this capability adds durable name/address capture to that
-same agent, rather than shipping as its own separate demo. Building one complete agent now and
+(`workflow-catalog-lookup.md`, `workflow-cart-and-totals.md`): this capability adds durable
+name/address capture to that same agent, rather than shipping as its own separate demo. Building
+one complete agent now and
 splitting it into composed sub-workflows later is an explicit, deliberate phasing decision —
 tracked as its own future capability in `workflow-composition.md`, not required here.
 
@@ -52,8 +55,8 @@ actual need for it materializes.
 - **FR-3** — If a customer provides updated name/address information later, the stored profile is
   updated, not frozen after the first write.
 - **FR-4** — This capability is proven as part of the single combined "salesperson" demo agent
-  shared with `workflow-catalog-lookup.md`, `workflow-business-entities.md`, and
-  `workflow-deterministic-compute.md` — no separate standalone demo workflow is required.
+  shared with `workflow-catalog-lookup.md` and `workflow-cart-and-totals.md` — no separate
+  standalone demo workflow is required.
 
 ## Out of scope
 - Cross-workspace profile persistence — deferred to a future refactor once an actual need
@@ -105,3 +108,7 @@ cross-workspace, not writing to `identity`) — the harder identity-write-path q
 the architect and graph-dba is deliberately deferred, to be revisited "when needed," not resolved
 now.
 2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
+2026-08-22 — `workflow-business-entities.md` and `workflow-deterministic-compute.md` merged into
+`docs/requirements/workflow-cart-and-totals.md` (stakeholder-requested, per a cross-document
+coherence review). Sibling references and FR-4 above updated to point at the merged document; no
+content of this document's own requirements changed.

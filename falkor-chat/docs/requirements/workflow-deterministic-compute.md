@@ -1,5 +1,6 @@
 # Deterministic computation inside a workflow — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** superseded · **Owner:** `tico` · **Tracks:** — (M<n> TBD) ·
+> **Superseded by:** `docs/requirements/workflow-cart-and-totals.md`
 
 This is one of six sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — see
@@ -93,3 +94,8 @@ architect flagged earlier in this effort.
 content change needed here — `workflow-business-entities.md`'s demo, which this capability was
 already piggybacking on (FR-4), is itself now the single combined "salesperson" demo agent
 shared with `workflow-catalog-lookup.md` and `workflow-durable-profile.md` too.
+2026-08-22 — **Superseded** by `docs/requirements/workflow-cart-and-totals.md`, which merges this
+document with `workflow-business-entities.md` into one complete view. This document never had an
+acceptance bar independent of that document's demo (see AC-3 above) — a cross-document coherence
+review surfaced that as the reason to merge rather than keep two documents. This document stays
+intact as historical record.
