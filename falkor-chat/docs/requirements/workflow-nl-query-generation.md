@@ -108,6 +108,14 @@ acceptable to simply copy forward.
   arbitrarily-phrased question that would not match any of `workflow-catalog-lookup.md`'s fixed
   query shapes.
 
+## Related work
+- `docs/requirements/document-ingestion.md` (Status: Ready for design, active `teco` coordination
+  in flight) — a separately-interviewed capability that extracts entities/relationships from
+  ingested documents into the graph. Not part of this feature, and no requirement here depends on
+  it, but its extracted-entity schema is a real candidate for AC-2's "second structured dataset
+  with its own schema" — worth the architect's consideration as a natural fit rather than a
+  synthetic second dataset invented solely for that acceptance criterion.
+
 ## Open questions
 - The specific accuracy metric and passing threshold (FR-4) are intentionally undefined here —
   they are a `data-scientist` design decision to be made during the design phase, not a gap in
@@ -142,3 +150,7 @@ noted as a good later step, but it is additive — FR-3a's baseline adversarial 
 contingent on it happening.
 2026-08-22 — Stakeholder confirmed the updated readback with no further changes; flipped to
 Ready for design.
+2026-08-22 — Cross-document coherence review (against `docs/requirements/document-ingestion.md`,
+a separate initiative under active `teco` coordination) found no conflict, but surfaced that
+ingestion's extracted-entity graph is a real candidate for AC-2's second-schema test dataset —
+recorded in a new Related work section, not a requirement change.
