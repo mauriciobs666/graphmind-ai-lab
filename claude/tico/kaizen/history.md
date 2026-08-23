@@ -2,6 +2,25 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-23 — K-009 resolved: stakeholder chose document-level commit batching
+- **What:** put K-009's open question directly to the stakeholder (`AskUserQuestion`, four
+  options: document-level batching, a time-boxed cap, session-end/checkpoint-only, or "keep the
+  current rule, the 17-commit session was a one-off"). Stakeholder chose **document-level
+  batching**: one commit per document per natural pause, not per thread/decision-log line, even
+  while several documents are being interleaved in the same session. Rewrote Mode 1's "Commit as
+  you go" bullet in `tico.md` accordingly — the unit of commit is now the document, not the
+  thread: settled threads within a document accumulate uncommitted, and a commit fires only when
+  tico is about to switch away from that document (to a different document/topic/mode) or the
+  session/interview is closing. Explicitly noted this collapses to the old per-pause behavior in
+  a single-document session and only changes the cadence when several documents are interleaved.
+  Marked **K-009 ✅ done** in `plan.md`, moved out of the active table.
+- **Why:** K-009 (opened same day, prior entry below) was deliberately left open rather than
+  guessed a second time — the 2026-08-19 tightening had already tried "batch at natural pause
+  points" for this exact complaint and it didn't hold under a higher-multiplicity (six-document)
+  session, so a second unilateral rewrite risked repeating the same failure or overcorrecting.
+  This entry is that stakeholder input landing.
+- **Plan items:** K-009 closed.
+
 ## 2026-08-23 — `kaizen_team` distillation: 2 entries (tico's per-agent `kaizen/inbox.md` no longer exists — both were legacy graph entries)
 - **What:** `cobb` read tico's entries in the shared `kaizen_team` graph (legacy `author`-shape
   query — both entries predate M8's `:Agent`/`PRODUCED` edges; the current-shape query returned
