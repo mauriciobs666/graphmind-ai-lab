@@ -32,6 +32,11 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
    same task as instance 1. → second evidence instance; first Create (not Edit) and first test-file
    instance for this round.
 
+3. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/tests/test_repository.py`.** Pairs with the
+   already-modified `falkor-chat/server/falkorchat/repository.py`, same K-050 task as instances 1-2.
+   No challenge: clearly in-remit. → third evidence instance, second `Edit` (not Create) on a test
+   file.
+
 ## Open questions
 1. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
    deny-list guard over `guard-broad-write.sh`), or does live evidence point somewhere else (e.g.
@@ -66,3 +71,6 @@ having `acceptEdits` since July. `coder` is in that identical shape today, unfix
   reconfirmation is otherwise skipped.
 - 2026-08-23 — Instance 2 (`coder` → `falkor-chat/server/tests/test_chunking.py`, Create) relayed;
   assessed in-remit (pairs with instance 1's `chunking.py`), no challenge raised, counted as evidence.
+- 2026-08-23 — Instance 3 (`coder` → `falkor-chat/server/tests/test_repository.py`, Edit) relayed;
+  assessed in-remit (pairs with instance 1's `repository.py`), no challenge raised, counted as
+  evidence.
