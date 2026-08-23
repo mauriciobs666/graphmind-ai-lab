@@ -32,7 +32,11 @@ interruption across one otherwise-uninterrupted implementation task.
    `falkor-chat/docs/plans/document-ingestion-coordination.md`, Status: active, owner `teco`) — repo
    state shows `repository.py`/`services.py` modified and a new `chunking.py`, consistent with
    in-progress implementation of that plan. **Confirmed legitimate** by the stakeholder — squarely
-   `coder`'s own in-remit implementation work. → first evidence instance for this round.
+   `coder`'s own in-remit implementation work. → first evidence instance for this round. (Edited
+   again shortly after — same `services.py`, shown as `server/falkorchat/services.py` relative to a
+   different cwd this time, confirmed the only such file in the repo — same compounding-cost pattern
+   as phase 1's `tdd-engineer` instances 7/8: one file, several separate confirmations across one
+   continuous implementation pass.)
 
 2. **2026-08-23 — `coder`, `Create` (Write) on `falkor-chat/server/tests/test_chunking.py`.** Pairs
    with the new `falkor-chat/server/falkorchat/chunking.py` from the same K-050 implementation work
@@ -102,3 +106,7 @@ interruption across one otherwise-uninterrupted implementation task.
   way) → Stakeholder: "Yes, it prompted." → **not counted as `coder` evidence** (wrong agent, out of
   this document's scope) — logged instead as open question 3, a regression risk on phase 1's shipped
   fix that threatens this round's eventual design; routed to `cobb`/architect, not investigated here.
+- 2026-08-23 — `coder` → `server/falkorchat/services.py` (Edit) relayed; confirmed the same file as
+  instance 1 (only one `server/falkorchat/services.py` in the repo — `find` check), just shown
+  relative to a different cwd. Folded into instance 1 as a repeat, not logged as a new instance 4 —
+  same convention phase 1 used for repeat edits on one file (its instances 4, 7, 10).
