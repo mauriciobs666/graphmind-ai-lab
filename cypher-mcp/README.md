@@ -164,6 +164,13 @@ provisioning and again for `Agent.agentId`'s own index/constraint, M8 S0 — bot
    )
    ```
 
+   **Gotcha, confirmed live 2026-08-23:** "nothing else in the statement" is literal — a trailing
+   `RETURN k.entryId` (or anything else) after the `KaizenEntry` map's closing `}`/`)` is rejected,
+   with the same generic FR-8 message as an unrecognized shape. This is the opposite of shape 2
+   below, where a trailing `RETURN` is fine — don't assume the two shapes are equally permissive.
+   Send the write with nothing appended; if you want the `entryId` back, issue a **separate**
+   follow-up read (`MATCH (k:KaizenEntry {entryId:'...'}) RETURN k`) after the write succeeds.
+
 2. **Author-write (legacy)** — an agent creates its own entry via a plain `author:` property
    instead of a `:PRODUCED` edge. The `cypher` text's `CREATE (<var>:KaizenEntry {...})` map
    literal must carry a literal `author: '<value>'` matching the declared `agent` exactly (a

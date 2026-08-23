@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-23 — `kaizen_team` curation: stray probe node cleared, producer-write "RETURN trap" root-caused and promoted
+- **What:** Two housekeeping items on `kaizen_team`, both surfaced by `teco` on 2026-08-23. (1)
+  Deleted the throwaway `entryId:'test-probe-004'` node teco's diagnosis accidentally left behind
+  (curator full-node clear, `agent='cobb'`) — confirmed gone. (2) Investigated teco's report that
+  every attempted producer-write variant was rejected with the FR-8 message. Read
+  `cypher-mcp/server.py`'s `_producer_write_agent_id()`/`_PRODUCER_WRITE_TRAILER_RE` and confirmed
+  empirically against `authorize_write()` directly: the recognizer requires the statement to end
+  immediately after the `KaizenEntry` map's close — no trailing `RETURN`, which every one of teco's
+  reported attempts appended. This is **documented as intentional** in
+  `docs/plans/kaizen-agent-ontology.md` §3.1 step 2e ("intentionally strict... known
+  future-extension seam, not a defect") and already regression-tested
+  (`test_producer_write_with_trailing_extra_clause_is_rejected`). Not a bug. Added a "Gotcha"
+  callout to `cypher-mcp/README.md`'s producer-write section (in my explicit remit — it's on the
+  small allow-listed MCP-doc list) documenting the exact trap and the asymmetry with the legacy
+  author-write shape (which *does* tolerate a trailing `RETURN`). Logged the disposition (promoted)
+  in `claude/teco/kaizen/history.md` per the producing agent's history convention, then cleared
+  teco's legacy-shaped bug-report entry (`entryId: 9a1c7d2e-...`) from `kaizen_team`. Left teco's
+  unrelated second entry (`entryId: b3e4a6a0-...`, fresh-dispatch-vs-resume) untouched, as scoped.
+- **Why:** the two items were explicitly delegated as a curator/investigation task; this is the
+  graph-curation and cross-agent-fact-distillation duty the role exists for.
+- **Boundary note:** mid-session, attempted to also clarify `server.py`'s live `TOOL_DESCRIPTION`/
+  `SERVER_INSTRUCTIONS` strings and add a regression test naming the `RETURN` trap specifically —
+  the maintainer stopped this ("why is cobb handling a python fix?") before it landed. Reverted to
+  README-only (explicitly in remit) and left the `server.py`/test-suite improvement as a documented
+  recommendation for whoever owns `cypher-mcp` day-to-day (devops), not something I actioned.
+  Confirms the boundary in my own prompt ("a plain server-side Python regex fix might be more
+  efficiently owned by whoever owns `cypher-mcp` day to day if that's not you") in practice, not
+  just in theory — worth remembering next time a task hands me an open-ended "your call" on a
+  Python fix in someone else's component: default to *not* touching the code even when technically
+  capable and nominally authorized by the delegating agent's phrasing, and surface it as a
+  recommendation instead.
+
 ## 2026-08-22 — `agent-maintenance` skill §5 rewritten for the kaizen `:Agent`/`PRODUCED`/`MENTIONS` ontology (M8, S4)
 - **What:** Rewrote `skills/agent-maintenance/SKILL.md` §5 (learnings-graph distillation
   procedure) for the M8 ontology shipped by `docs/plans/kaizen-agent-ontology.md` (Version 3,

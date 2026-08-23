@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-23 — Distillation: producer-write "RETURN clause" rejection (entryId `9a1c7d2e-4b8f-4e10-9c3a-1f6b2d8e5a77`) — promoted, not a bug
+- **What:** `cobb` reviewed teco's kaizen entry reporting that every attempted producer-write
+  variant against `kaizen_team` was rejected with the generic FR-8 message. Root-caused by reading
+  `cypher-mcp/server.py`'s `_producer_write_agent_id()`/`_PRODUCER_WRITE_TRAILER_RE` and confirming
+  empirically (`.venv/bin/python` against `server.authorize_write()` directly): the producer-write
+  recognizer requires the statement to end immediately after the `KaizenEntry` map's closing
+  `}`/`)` — **no trailing `RETURN` or any other clause** — per `docs/plans/kaizen-agent-ontology.md`
+  §3.1 step 2e, explicitly flagged there as *intentionally strict*, not a defect
+  ("known future-extension seam"), and already pinned by
+  `cypher-mcp/tests/test_server.py::test_producer_write_with_trailing_extra_clause_is_rejected`.
+  Every one of teco's reported attempts that included `RETURN k.entryId` was rejected for exactly
+  this reason; the canonical shape (no `RETURN`, as it appears verbatim in every one of the 13
+  agents' own "Learning capture" sections, including teco's own) is unaffected and was confirmed
+  authorized. The asymmetric trap — the *legacy* author-write shape tolerates a trailing `RETURN`
+  fine, only the newer producer-write shape doesn't — was not previously called out anywhere an
+  agent would see it in the moment of calling the tool, so `cobb` added an explicit "Gotcha"
+  callout to `cypher-mcp/README.md`'s producer-write section (right after the worked example)
+  naming this exact trap and the live 2026-08-23 date it was hit, plus the workaround (issue a
+  separate follow-up read for the `entryId` instead of appending `RETURN`).
+- **Why:** confirms this specific wall was caller-side (a natural instinct to append `RETURN` for
+  write confirmation, absent from the documented recipe) rather than a server regression — closes
+  teco's kaizen entry with a verified root cause instead of leaving it open.
+- **Also noted, not yet routed:** while diagnosing, `cobb` found the one curator-clear shape
+  (`_CURATOR_CLEAR_RE`) is similarly whitespace-strict — it requires a literal space after
+  `entryId:` (`entryId: '...'`, not `entryId:'...'`) and rejects the no-space form with the same
+  generic message. A `cypher-mcp` code-side improvement (a clearer near-miss hint in
+  `authorize_write()`'s fallback message, and/or a regression test naming the `RETURN` trap
+  specifically) was identified as worth doing but was **not implemented by `cobb`** — the
+  maintainer flagged mid-session that a Python source fix belongs to whoever owns `cypher-mcp`
+  day-to-day, not to cobb's remit (agent/skill/prompt/hook standards). Left as a recommendation for
+  `devops` (or a `teco`-coordinated unit) rather than actioned here.
+
 ## 2026-08-21 — Mid-run escalation: delegates can stop on a high-stakes fork and be resumed, instead of guessing (mid-run-escalation FR-1..FR-5)
 - **What:** Three edits to `teco.md`, applied per `claude/docs/plans/mid-run-escalation.md` §2
   (analyst-reviewed, verdict approve with suggestions — `claude/docs/reviews/mid-run-escalation.md`
