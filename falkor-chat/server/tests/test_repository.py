@@ -680,6 +680,111 @@ def test_get_message_none_when_absent(repo):
     assert repo.get_message("test", msg_id="nope") is None
 
 
+# ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────
+
+
+def _chunks(*texts: str) -> list[dict]:
+    return [
+        {"chunkId": f"c{i}", "text": t, "seq": i} for i, t in enumerate(texts)
+    ]
+
+
+def test_create_document_then_get_round_trips_full_text(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    status = repo.create_document(
+        "test", document_id="d1", title="My Doc", text="full original text",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=_chunks("full ", "original text"),
+    )
+
+    assert status.written is True
+    assert status.ingestor_found is True
+
+    doc = repo.get_document("test", document_id="d1")
+    assert doc["documentId"] == "d1"
+    assert doc["title"] == "My Doc"
+    assert doc["text"] == "full original text"  # AC-9: byte-identical
+    assert doc["sourceFormat"] == "text"
+    assert doc["status"] == "processing"
+    assert doc["createdAt"] == 100
+    assert doc["ingestedByKind"] == "User"
+    assert doc["ingestedById"] == "u1"
+
+
+def test_create_document_known_user_actor_source_kind_document(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d1", title="t", text="x",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=_chunks("x"),
+    )
+    assert repo.get_document("test", document_id="d1")["sourceKind"] == "document"
+
+
+def test_create_document_known_agent_actor_source_kind_agent(repo):
+    repo.ensure_agent("test", agent_id="bot1", name="Bot")
+    repo.create_document(
+        "test", document_id="d1", title="t", text="x",
+        source_format="text", ingested_by="bot1", created_at=100,
+        chunks=_chunks("x"),
+    )
+    assert repo.get_document("test", document_id="d1")["sourceKind"] == "agent"
+
+
+def test_create_document_unknown_actor_nothing_written(repo):
+    status = repo.create_document(
+        "test", document_id="d1", title="t", text="x",
+        source_format="text", ingested_by="ghost", created_at=100,
+        chunks=_chunks("x"),
+    )
+
+    assert status.written is False
+    assert status.ingestor_found is False
+    assert repo.get_document("test", document_id="d1") is None
+
+
+def test_create_document_writes_chunks_in_order_with_denormalized_documentId(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d1", title="t", text="abcdef",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=_chunks("abc", "def"),
+    )
+
+    rows = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'})-[:HAS_CHUNK]->(c:Chunk) "
+        "RETURN c.chunkId, c.text, c.seq, c.documentId ORDER BY c.seq",
+    )
+    assert rows == [
+        ["c0", "abc", 0, "d1"],
+        ["c1", "def", 1, "d1"],
+    ]
+
+
+def test_get_document_none_when_absent(repo):
+    assert repo.get_document("test", document_id="nope") is None
+
+
+def test_create_document_is_non_idempotent_on_retry(repo, conn):
+    """§2.4's deliberate posture: a retried call mints a second Document."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d1", title="t", text="x",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=_chunks("x"),
+    )
+    repo.create_document(
+        "test", document_id="d2", title="t", text="x",
+        source_format="text", ingested_by="u1", created_at=101,
+        chunks=[{"chunkId": "c99", "text": "x", "seq": 0}],
+    )
+
+    [[count]] = _probe(conn, "MATCH (d:Document) RETURN count(d)")
+    assert count == 2
+
+
 # ── §5 Full-text search ────────────────────────────────────────────────────────
 
 

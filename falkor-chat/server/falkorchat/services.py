@@ -22,11 +22,10 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
-from . import config, proof_defs
+from . import chunking, config, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 from .modelconfig import ModelConfigError, ModelResolutionError
-from .transport import ProviderCallError
 
 # `MemberIdCollisionError`/`EmbeddingDimensionError`/`WorkflowDef*Error` are
 # re-exported (redundant-alias idiom) as part of the service error surface: the
@@ -60,7 +59,13 @@ from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
 # empirically while wiring `schemas.SweepDueWorkflowRunsIn`. Keeping both
 # constants on the boundary side, mirrored the same direction as
 # `MAX_CONFIG_LEN`, is the only shape that doesn't deadlock.)
-from .schemas import DEFAULT_SWEEP_LIMIT, MAX_CONFIG_LEN, MAX_DIFF_PREVIEW
+from .schemas import (
+    DEFAULT_SWEEP_LIMIT,
+    MAX_CONFIG_LEN,
+    MAX_DIFF_PREVIEW,
+    MAX_DOCUMENT_CHARS,
+)
+from .transport import ProviderCallError
 
 _log = logging.getLogger(__name__)
 
@@ -174,6 +179,29 @@ class UnknownActorError(ServiceError):
 
 class InvalidSearchQueryError(ServiceError):
     """Raised when the full-text query is rejected by RediSearch syntax."""
+
+
+class DocumentTooLargeError(ServiceError):
+    """Raised when `ingest_document`'s text exceeds `MAX_DOCUMENT_CHARS` (plan §3.5).
+
+    Enforced in the service, not only at the REST pydantic boundary — an MCP
+    caller has no schema layer, so this is the one place both transports are
+    bound by the same cap.
+    """
+
+
+class EmptyDocumentError(ServiceError):
+    """Raised when `ingest_document`'s text is empty or whitespace-only.
+
+    `IngestDocumentIn.text = Field(min_length=1, ...)` blocks a literal ``""``
+    at the REST boundary but not a whitespace-only string, and MCP has no
+    schema layer at all — this is the one place both transports are bound.
+    Without it, `chunking.split_into_chunks` happily returns `[]` (it has no
+    opinion on validity, by design) and `create_document` would write a real
+    `Document` with zero `Chunk`s, permanently stuck at `status:'processing'`
+    since nothing downstream can ever advance a chunkless document
+    (`docs/reviews/document-ingestion-impl.md` MAJOR finding).
+    """
 
 
 def _default_id() -> str:
@@ -950,6 +978,55 @@ class Services:
 
     def get_message(self, ctx: CallContext, *, msg_id: str) -> dict[str, Any] | None:
         return self._repo.get_message(ctx.ws, msg_id=msg_id)
+
+    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ─────────────────────────────────
+
+    def ingest_document(
+        self, ctx: CallContext, *, text: str, title: str | None = None,
+        source_format: str = "text", source_label: str | None = None,
+    ) -> dict[str, Any]:
+        """Split, chunk, and write a document (FR-1/FR-4/FR-13, plan §3.2/§3.5).
+
+        Rejects empty/whitespace-only text (`EmptyDocumentError`) and text over
+        `MAX_DOCUMENT_CHARS` (`DocumentTooLargeError`) before any split/write
+        happens — both mirror the REST-boundary size caps elsewhere in this
+        codebase, `schemas.MAX_TEXT_LEN`/`PostMessageIn`, but are enforced here
+        too, not only at the REST pydantic boundary, so an MCP caller (no
+        schema layer at all) is bound the same way. `title` falls back to
+        `source_label` (a caller-supplied descriptive source name, e.g. a
+        filename) when omitted, and to `""` when neither is given —
+        `Document.title` has no other natural default. `Document.status`
+        starts `'processing'`; nothing in this stage flips it to `'ready'`
+        (that's a later stage's background pipeline, plan §3.6).
+        """
+        if not text.strip():
+            raise EmptyDocumentError("document text must not be empty or whitespace-only")
+        if len(text) > MAX_DOCUMENT_CHARS:
+            raise DocumentTooLargeError(
+                f"document text is {len(text)} characters, "
+                f"exceeding the {MAX_DOCUMENT_CHARS} limit"
+            )
+        chunk_texts = chunking.split_into_chunks(text)
+        document_id = self._id()
+        now = self._clock()
+        chunks = [
+            {"chunkId": self._id(), "text": chunk_text, "seq": seq}
+            for seq, chunk_text in enumerate(chunk_texts)
+        ]
+        status = self._repo.create_document(
+            ctx.ws, document_id=document_id, title=title or source_label or "",
+            text=text, source_format=source_format, ingested_by=ctx.actor,
+            created_at=now, chunks=chunks,
+        )
+        if not status.ingestor_found:
+            raise UnknownActorError(ctx.actor)
+        return {
+            "documentId": document_id, "chunkCount": len(chunks),
+            "status": "processing",
+        }
+
+    def get_document(self, ctx: CallContext, *, document_id: str) -> dict[str, Any] | None:
+        return self._repo.get_document(ctx.ws, document_id=document_id)
 
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
     #

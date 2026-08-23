@@ -5,6 +5,48 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-23 — K-050 M5 Stage 1: document ingestion — chunking + Document/Chunk write path
+
+**What:** The first of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`).
+A new pure `falkorchat.chunking.split_into_chunks(text, *, size=1000, overlap=150)` splits text on
+paragraph breaks first, falling back to sentence boundaries, then a hard cut carrying `overlap`
+characters forward regardless of boundary. New `repository.create_document`/`get_document`
+(`QUERIES.md` §14) write a `Document` + its `Chunk`s + `HAS_CHUNK` edges in one guarded `GRAPH.QUERY`
+(actor-resolved `INGESTED_BY`, `Document.sourceKind` derived server-side from which label resolved —
+never trusted from the caller, same posture as `Message.role`); no `dup` guard — a retried call mints
+a second `Document` (deliberate, mirrors the channel/thread-creation precedent). New
+`services.ingest_document`/`get_document` mint the document/chunk ids and timestamps, enforce
+`MAX_DOCUMENT_CHARS = 500_000` in the service itself (`DocumentTooLargeError`) so an MCP caller is
+bound the same as REST, and set `Document.status = 'processing'` (a later stage's background
+pipeline flips it to `'ready'` — not built here). Wired as `ingest_document`/`get_document` on both
+MCP and REST (`POST /documents`, `GET /documents/{id}`), attributed to the `get_context()` actor
+(FR-4) exactly like `send_message`. `bootstrap_schema.sh` needed no change — `Document`/`Chunk`
+indexes+constraints and the `Chunk.embedding` vector index already existed since M2; confirmed
+against the live script rather than trusted from the plan.
+
+**Why:** Stage 1 lands the fast/deterministic half of ingestion (splitting + verbatim retention,
+AC-9) with no LLM dependency, so it's provable in isolation before extraction/fusion/embedding
+(Stages 2–4) add complexity. Design fully gated (`analyst` plan-gate, approve, Pass 2) before this
+build — `coder` implemented against the locked plan + `graph-dba`'s live-verified Cypher
+(`docs/plans/document-ingestion-graph.md` §2.1/§2.4), not designing.
+
+**Tests:** `tests/test_chunking.py` (new, 10 pure unit tests covering the boundary-rule priority
+order + overlap carry); `tests/test_repository.py` (+7, live `ws:test` integration — round trip,
+actor-kind derivation, unknown-actor no-op, chunk ordering/denorm, non-idempotent retry);
+`tests/test_services.py` (+9, `FakeRepo` unit — id/chunk minting, title fallback, size-limit
+boundary, unknown-actor error); `tests/test_api.py` (+6 REST contract); `tests/test_mcp.py` (+3 MCP
+contract, plus the tool-discovery set updated). Suite: offline `pytest -q` 1529→1563 passed (+34), 3
+deselected unchanged; `./scripts/test_queries.sh` 320/320 unchanged (no new DDL/Cypher shape added to
+that suite — the Document/Chunk Cypher was already live-verified in `-graph.md`, this stage only
+wraps it in `repository.py`/documents it in `QUERIES.md`). Mutation-tested: deliberately broke chunk
+minting (dropped a chunk), the actor guard (repository always reporting `ingestorFound=true`), the
+`MAX_DOCUMENT_CHARS` boundary (off-by-one), the overlap carry (dropped), and the `sourceKind`
+derivation (flipped) — each confirmed to fail the relevant test(s) before being reverted.
+
+**Scope boundary:** Stage 1 only — no chunk embedding/`search_documents` (Stage 2), no extraction
+(Stage 3), no fusion (Stage 4), no chat-grounding change (Stage 5). `document-ingestion.md`/
+`-graph.md`/`-ml.md`/`BACKLOG.md` untouched (locked design/tracking documents).
+
 ## 2026-08-21 — K-028: workflow timers / scheduled wakeups — delivered, QA-accepted
 
 **What:** A `wait`/`human` workflow step may now declare `config.waitForSeconds` (relative) or

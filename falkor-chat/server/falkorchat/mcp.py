@@ -204,3 +204,29 @@ def list_threads(channel_id: str, limit: int = 50) -> list[dict[str, Any]]:
     """
     ctx = _get_context()
     return _svc().list_threads(ctx, channel_id=channel_id, limit=limit)
+
+
+@mcp.tool()
+def ingest_document(
+    text: str, title: str | None = None, source_format: str = "text",
+    source_label: str | None = None,
+) -> dict[str, Any]:
+    """Ingest a text document: split into chunks, retained verbatim (K-050).
+
+    Attributed to the configured `get_context()` actor (FR-4) — same posture
+    as `send_message`, MCP ignores any notion of a client-supplied author.
+    Chunk extraction/fusion/embedding are later stages; this call only
+    returns `{documentId, chunkCount, status: 'processing'}`.
+    """
+    ctx = _get_context()
+    return _svc().ingest_document(
+        ctx, text=text, title=title, source_format=source_format,
+        source_label=source_label,
+    )
+
+
+@mcp.tool()
+def get_document(document_id: str) -> dict[str, Any] | None:
+    """Fetch a document (verbatim `text`, plus its ingestion status/actor)."""
+    ctx = _get_context()
+    return _svc().get_document(ctx, document_id=document_id)

@@ -44,6 +44,24 @@ class PostMessageIn(BaseModel):
     mentions: list[str] | None = Field(None, max_length=MAX_MENTIONS)
 
 
+# ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────
+# `MAX_DOCUMENT_CHARS` is declared here (not `services.py`) for the same
+# leaf-module reason `MAX_CONFIG_LEN`/`MAX_DIFF_PREVIEW` are: `services.py`
+# already imports from this module, so the reverse direction deadlocks at
+# import time (see that module's own note on `MAX_CONFIG_LEN`). `services.py`
+# imports this constant so an MCP caller (no pydantic layer) is bound by the
+# identical cap, not just the REST boundary below.
+MAX_DOCUMENT_CHARS = 500_000
+MAX_SOURCE_FORMAT_LEN = 50
+
+
+class IngestDocumentIn(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_DOCUMENT_CHARS)
+    title: str | None = Field(None, max_length=MAX_NAME_LEN)
+    sourceFormat: str = Field("text", min_length=1, max_length=MAX_SOURCE_FORMAT_LEN)
+    sourceLabel: str | None = Field(None, max_length=MAX_NAME_LEN)
+
+
 # ── §11 Workflow definition publish (M3 Slice 1) ────────────────────────────────
 # Size bounds are the RAM guard (rule 6): a def is a handful of steps/transitions
 # in the global `reference` graph; `config`/`guard` are opaque strings the caller

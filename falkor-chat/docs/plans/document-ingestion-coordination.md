@@ -34,6 +34,9 @@ design, confirmed by the stakeholder 2026-08-22).
 | U6 | `data-scientist` | `a7118bfb884d3eccf` (resumed) | accepted | fix `document-ingestion-ml.md` (major #2 terminology) | `analyst` → **approve** (Pass 2) | 123k tok / 17 tools |
 | U7 | `graph-dba` | `af233df4cee5889c0` (resumed) | accepted | fix `document-ingestion-graph.md` (blocker mechanism + major #3a + minor #3) | `analyst` → **approve** (Pass 2) | 310k tok / 35 tools |
 | U8 | `analyst` | `a22557e8972eec926` | accepted | `docs/reviews/document-ingestion.md` Pass 2 | plan re-gate → **approve** | 127k tok / 10 tools |
+| U9 | `coder` | `a1d788e3e8868b48a` | delivered | Stage 1: chunking + Document/Chunk write path | `analyst` (U10) → — | 284k tok / 137 tools |
+| U10 | `analyst` | `a1f9d0b8d1f75e6cc` | accepted | `docs/reviews/document-ingestion-impl.md` | code gate → **approve with suggestions** | 126k tok / 45 tools |
+| U11 | `coder` | `a1d788e3e8868b48a` (resumed) | delivered | fix: reject empty/whitespace-only `ingest_document` text | (verified by teco) | 303k tok / 26 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -127,19 +130,53 @@ design-phase commit.
   rather than a fresh `Agent` dispatch — same lapse as U5, caught after the fact again. Brief was
   self-contained; flagging as a pattern worth a kaizen entry, not just a one-off.
 
-## Plan
+- **U9 verified independently, not just on report**: read the `chunking.py`/`repository.py` diffs
+  directly (Cypher matches `document-ingestion-graph.md` §2.1 verbatim), re-ran the new/related
+  tests (35 passed) and the **full** offline suite myself (1563 passed / 3 deselected — matches
+  reported), and the query suite (320/320 — matches reported, unchanged as expected since no new
+  DDL entered it). Both runs wiped the shared `reference` graph at teardown as documented
+  (`falkor-chat/AGENTS.md`); re-seeding a bare `seed_workflows.sh` after `test_queries.sh`
+  specifically **failed** ("Invalid graph operation on empty key" — `GRAPH.DELETE` removes the key
+  entirely, not just its contents) until `bootstrap_schema.sh acme` ran first to recreate the graph
+  key; `verify_workflows.sh` confirms in-sync after the full bootstrap→seed sequence. Worth a kaizen
+  note for future coordination sessions hitting the same teardown gotcha back-to-back.
+  Mutation-testing was real (5 deliberate breaks, each caught by the right test, all reverted via
+  targeted `Edit` — including recovering cleanly from an accidental `git checkout` that wiped
+  in-progress edits mid-mutation-test). Three named deviations from the plan's exact wording are all
+  reasonable, routine judgment calls, not scope changes. Dispatching U10 (`analyst` diff-scoped
+  re-gate) now.
 
-1. ~~**U1 — architect**~~ ✅ delivered — `docs/plans/document-ingestion.md` + `BACKLOG.md` (K-050 +
-   M5 row).
-2. **U2/U3 (parallel, dispatching now)** — `graph-dba` `-graph` note (schema for `MatchSuggestion`,
-   exact Document/Chunk/Entity/RELATES_TO Cypher, `Entity.name` full-text index, generalized
-   `EMITTED` write/read, the `extraction` ModelGateway-kind call) + `data-scientist` `-ml` note
-   (extraction technique/prompt/schema, OQ-1 default validity/replacement). Both read U1's plan by
-   path, independent of each other (different files, different concerns) — dispatched in parallel.
-3. **U4 — plan gate** — `analyst` reviews the full design set (plan + graph + ml notes) once U2/U3
-   land.
-4. **Implementation** — sized to the plan's own 6-stage step table (§4): likely one unit per stage
-   or small adjacent-stage cluster, per the step-table sizing rule.
-5. **Diff-scoped re-gate** — `analyst`, after implementation.
-6. **QA acceptance pass** — `qa-engineer`, against AC-1..AC-10 (`docs/test-plans/document-ingestion.md`
+- **U10 verdict: approve with suggestions.** One MAJOR, real, live-verified finding: `ingest_document`
+  silently accepts empty/whitespace-only text (only `MAX_DOCUMENT_CHARS` is checked), creating a
+  `Document` node with zero `Chunk`s permanently stuck at `status:'processing'` — contradicts
+  `chunking.py`'s own docstring claim that the service rejects this upstream, and is reachable via
+  MCP with no schema layer at all. Not a blocker (doesn't corrupt data, doesn't violate a tested AC)
+  but cheap to fix and would otherwise let later stages (extraction/fusion) waste work on empty
+  documents. Everything else — Cypher fidelity, the three self-reported deviations, scope discipline,
+  test quality (own independent mutation-test spot check performed), conventions fit — confirmed
+  solid. Deciding to fix now rather than defer to Stage 6 (cheap, and avoids compounding into later
+  stages) — dispatching U11 (resuming `coder`).
+
+## Design phase — ✅ complete, committed `30366f4`
+
+Design phase (U1-U8) is done: three-document design set (main plan + graph note + ML note)
+plan-gated by `analyst` — Pass 1 needs changes (1 blocker, 4 major, 4 minor), all routed to owners
+and fixed, Pass 2 **approve**. Committed as one design-phase change: `30366f4` (plan, graph note,
+ML note, review, `BACKLOG.md` K-050/M5 entries, `claude/graph-dba/falkordb-quirks.md` additions,
+this coordination doc).
+
+## Plan — implementation phase (not yet dispatched)
+
+1. ~~**U1-U8 — design phase**~~ ✅ complete, see above.
+2. **Implementation** — sized to the plan's own 6-stage step table (`document-ingestion.md` §4):
+   Stage 1 (chunking + Document/Chunk write path), Stage 2 (chunk embeddings + standalone search),
+   Stage 3 (extraction), **checkpoint** (advisory `data-scientist` qualitative review of real
+   extraction output, non-blocking), Stage 4 (fusion — the atomic `create_entity_with_auto_match` +
+   fuzzy/suggested tier + audit surface), Stage 5 (chat-grounding integration, touches
+   `test_provenance.py`), Stage 6 (batch hardening + QA acceptance). Likely one unit per stage or a
+   small adjacent-stage cluster, per the step-table sizing rule — not yet dispatched, pending a
+   stakeholder decision on how much to build now (see report to user).
+3. **Diff-scoped re-gate** — `analyst`, after implementation (a second, code-level gate distinct
+   from the design-phase plan gate above).
+4. **QA acceptance pass** — `qa-engineer`, against AC-1..AC-10 (`docs/test-plans/document-ingestion.md`
    + `-report.md`).

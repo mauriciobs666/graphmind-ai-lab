@@ -59,6 +59,7 @@ def test_tool_discovery_lists_all_tools(repo):
     assert {t.name for t in tools} == {
         "send_message", "read_messages", "create_thread",
         "search_messages", "create_channel", "list_channels", "list_threads",
+        "ingest_document", "get_document",
     }
 
 
@@ -208,6 +209,45 @@ def test_send_message_unknown_mention_errors(repo):
 
     with pytest.raises(Exception):
         asyncio.run(scenario())
+
+
+# ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────
+
+
+def test_ingest_document_then_get_document_round_trips(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        posted = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello world", "title": "My Doc"}
+        ))
+        got = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": posted["documentId"]}
+        ))
+        return posted, got
+
+    posted, got = asyncio.run(scenario())
+    assert posted["chunkCount"] == 1
+    assert posted["status"] == "processing"
+    assert got["text"] == "hello world"  # AC-9 round trip
+    assert got["sourceKind"] == "document"
+
+
+def test_ingest_document_unknown_actor_errors(repo):
+    _configure(repo, actor="ghost")  # not a known User or Agent
+
+    with pytest.raises(Exception):
+        asyncio.run(mcp_mod.mcp.call_tool("ingest_document", {"text": "hello"}))
+
+
+def test_get_document_missing_returns_none(repo):
+    _configure(repo)
+
+    got = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("get_document", {"document_id": "nope"})
+    ))
+    assert got is None
 
 
 # ── K-041: MCP send_message must schedule the same background work the REST ────

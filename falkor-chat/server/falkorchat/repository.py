@@ -141,6 +141,20 @@ class MessageWriteStatus:
     author_found: bool   # authorId resolved to a User or Agent
 
 
+@dataclass(frozen=True)
+class DocumentWriteStatus:
+    """Status row returned by `create_document` (§14.1 — K-050 M5 Stage 1).
+
+    Mirrors `MessageWriteStatus`'s "always return a status row, let the
+    service decide what to do with it" shape. ``written`` is False only when
+    ``ingestor_found`` is False — the actor guard is the only thing that can
+    make this write a no-op (no HEAD/TAIL race here, §2.4).
+    """
+
+    written: bool
+    ingestor_found: bool
+
+
 class Repository:
     """Cypher access over a FalkorDB connection.
 
@@ -929,6 +943,75 @@ class Repository:
             return None
         row = res.result_set[0]
         return (row[0], row[1])
+
+    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────
+
+    def create_document(
+        self, ws: str, *, document_id: str, title: str, text: str,
+        source_format: str, ingested_by: str, created_at: int,
+        chunks: list[dict[str, Any]],
+    ) -> DocumentWriteStatus:
+        """Create a `Document` + all its `Chunk`s + `HAS_CHUNK` edges. QUERIES.md §14.1.
+
+        One `GRAPH.QUERY`, per `document-ingestion-graph.md` §2.1: the actor
+        (`ingested_by`) is resolved against `User`/`Agent` the same
+        `coalesce(u, a)` way `post_first_message` resolves an author, and
+        `Document.sourceKind` is derived server-side from *which* label
+        resolved — never trusted from the caller (same posture as
+        `Message.role`). Plain guarded `CREATE`, no `dup` guard: a retried
+        call mints a second `Document` (§2.4's deliberate non-idempotent
+        posture, matching the channel/thread-creation precedent). `chunks` is
+        a list of `{chunkId, text, seq}` maps, pre-split app-side
+        (`chunking.split_into_chunks`).
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
+            "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
+            "WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (d:Document {"
+            "    documentId: $documentId, title: $title, text: $text, "
+            "    sourceFormat: $sourceFormat, "
+            "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
+            "    status: 'processing', createdAt: $createdAt"
+            "  }) "
+            "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
+            "  FOREACH (ch IN $chunks | "
+            "    CREATE (d)-[:HAS_CHUNK]->(:Chunk {"
+            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId"
+            "    })"
+            "  )"
+            ") "
+            "RETURN ok AS written, ingestor IS NOT NULL AS ingestorFound",
+            {
+                "documentId": document_id, "title": title, "text": text,
+                "sourceFormat": source_format, "ingestedBy": ingested_by,
+                "createdAt": created_at, "chunks": chunks,
+            },
+        )
+        row = res.result_set[0]
+        return DocumentWriteStatus(written=bool(row[0]), ingestor_found=bool(row[1]))
+
+    def get_document(self, ws: str, *, document_id: str) -> dict[str, Any] | None:
+        """Fetch a document (verbatim `text`, AC-9) + its ingesting actor. §14.2."""
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+            "RETURN d.documentId AS documentId, d.title AS title, d.text AS text, "
+            "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+            "d.status AS status, d.createdAt AS createdAt, "
+            "labels(actor)[0] AS ingestedByKind, "
+            "coalesce(actor.userId, actor.agentId) AS ingestedById",
+            {"documentId": document_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "documentId": row[0], "title": row[1], "text": row[2],
+            "sourceFormat": row[3], "sourceKind": row[4], "status": row[5],
+            "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
+        }
 
     def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
         """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""

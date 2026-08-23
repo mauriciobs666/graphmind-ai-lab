@@ -1846,3 +1846,84 @@ behave exactly as documented against it.
 one constraint over a single row — below `GRAPH.MEMORY USAGE`'s 1 MB resolution (`-graph.md` §5).
 No new relationship type, no new adjacency matrix. `reference` and `identity` are untouched — this
 is workspace-scoped state, per DESIGN §1/§3's single-store philosophy.
+
+---
+
+## 14. Documents & Chunks (K-050 M5 Stage 1)
+
+Design: `docs/plans/document-ingestion.md` (architect, §3.2/§2.4/§3.5/§3.6, Stage 1) and
+`docs/plans/document-ingestion-graph.md` §2.1/§2.4 (graph-dba — the exact Cypher below, already
+live-verified there against a throwaway probe graph). `Document`/`Chunk` node indexes+constraints
+and the `Chunk.embedding` vector index are bootstrapped DDL since M2 (`scripts/bootstrap_schema.sh`)
+— no schema change for this stage; `Chunk.seq`/`Chunk.documentId` are plain unindexed properties
+(read-time ordering / navigation metadata, the same posture as `Message.threadId`).
+
+`Document.text` stores the full original source verbatim (FR-12/AC-9); `Chunk`s are pre-split
+app-side (`falkorchat.chunking.split_into_chunks`) and ride in as a `$chunks` list-of-maps
+parameter. `Document.sourceKind` is derived server-side from which label resolved the ingesting
+actor (`'document'` for `User`, `'agent'` for `Agent`) — never trusted from the caller, the same
+posture as `Message.role`. No `dup` guard: per §2.4's deliberate non-idempotent-on-retry posture
+(mirrors the channel/thread-creation precedent), a retried call mints a second `Document`.
+
+### 14.1 `create_document` — Document + Chunks + HAS_CHUNK, one guarded write
+
+```cypher
+// $documentId/$chunkIds server-minted uuids. $chunks = [{chunkId, text, seq}, ...].
+OPTIONAL MATCH (u:User  {userId:  $ingestedBy})
+OPTIONAL MATCH (a:Agent {agentId: $ingestedBy})
+WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (d:Document {
+    documentId: $documentId, title: $title, text: $text,
+    sourceFormat: $sourceFormat,
+    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END,
+    status: 'processing', createdAt: $createdAt
+  })
+  CREATE (d)-[:INGESTED_BY]->(ingestor)
+  FOREACH (ch IN $chunks |
+    CREATE (d)-[:HAS_CHUNK]->(:Chunk {
+      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId
+    })
+  )
+)
+RETURN ok AS written, ingestor IS NOT NULL AS ingestorFound
+```
+
+**[verified]** (`document-ingestion-graph.md` §2.1, `gdba_probe_docs`): a 3-chunk document with a
+known `User` actor writes 1 `Document` + 3 `Chunk` nodes, 1 `INGESTED_BY` + 3 `HAS_CHUNK` edges, all
+`seq`/`text`/`chunkId` correctly populated from the `$chunks` list-of-maps parameter. Unknown-actor
+case writes nothing (`written=false, ingestorFound=false`) — same "unknown actor ⇒ silent no-op,
+guarded by a status row" contract §4's message write paths use, so the service can distinguish it
+from a genuine fault and raise `UnknownActorError` rather than reporting false success.
+
+### 14.2 `get_document` — read back the verbatim text + ingesting actor
+
+```cypher
+MATCH (d:Document {documentId: $documentId})
+OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor)
+RETURN d.documentId AS documentId, d.title AS title, d.text AS text,
+       d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind,
+       d.status AS status, d.createdAt AS createdAt,
+       labels(actor)[0] AS ingestedByKind,
+       coalesce(actor.userId, actor.agentId) AS ingestedById
+```
+
+Same shape as `document-ingestion-graph.md` §2.1's `get_document` note, projected as explicit
+properties (this repository's own convention throughout — e.g. `get_message` §4 — rather than
+returning a whole node, which the graph note's own illustrative Cypher does but no other query in
+this library relies on). `AC-9`: `text` round-trips byte-identical to the ingested input.
+
+### 14.3 MCP / REST surface (Stage 1 slice of plan §3.5)
+
+| MCP tool | REST | Service method |
+|---|---|---|
+| `ingest_document(text, title=None, source_format="text", source_label=None)` | `POST /documents` | `services.ingest_document` |
+| `get_document(document_id)` | `GET /documents/{id}` | `services.get_document` |
+
+`ingest_document` stamps the ingesting actor from `get_context()` (FR-4) — MCP ignores any
+client-supplied actor, exactly the existing `send_message` posture. `MAX_DOCUMENT_CHARS = 500_000`
+is enforced in `services.ingest_document` itself (`DocumentTooLargeError`, maps to 400), not only at
+the REST pydantic boundary — an MCP caller has no schema layer, so this is the one place both
+transports are bound by the same cap. Stages 2–6 (embedding/search, extraction, fusion,
+chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s MCP/REST table; not
+built here.

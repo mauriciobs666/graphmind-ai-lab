@@ -16,12 +16,14 @@ from redis.exceptions import ResponseError
 from falkorchat import config
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
-from falkorchat.repository import MessageWriteStatus
+from falkorchat.repository import DocumentWriteStatus, MessageWriteStatus
 from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
     ChannelNotFoundError,
+    DocumentTooLargeError,
+    EmptyDocumentError,
     InvalidSearchQueryError,
     MemberIdCollisionError,
     Services,
@@ -78,6 +80,7 @@ class FakeRepo:
         self.runs_by_thread: dict[str, list[dict]] = {}  # threadId -> run history (§12.14)
         self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
         self.post_success_result = _UNSET  # override to script read_recent_post_success (§12.15)
+        self.documents: dict[str, dict] = {}  # documentId -> created_document (K-050)
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -169,6 +172,34 @@ class FakeRepo:
             raise MemberIdCollisionError(user_id)
         self.members.add(user_id)
         self.calls.append(("ensure_user", ws, user_id))
+
+    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ─────────────────────────────────
+
+    def create_document(
+        self, ws, *, document_id, title, text, source_format,
+        ingested_by, created_at, chunks,
+    ):
+        self.calls.append(("create_document", ws, document_id, ingested_by, chunks))
+        if ingested_by in self.agents:
+            kind, actor_label = "agent", "Agent"
+        elif ingested_by in self.members:
+            kind, actor_label = "document", "User"
+        else:
+            return DocumentWriteStatus(written=False, ingestor_found=False)
+        self.documents[document_id] = {
+            "documentId": document_id, "title": title, "text": text,
+            "sourceFormat": source_format, "sourceKind": kind,
+            "status": "processing", "createdAt": created_at,
+            "ingestedByKind": actor_label, "ingestedById": ingested_by,
+            "chunks": chunks,
+        }
+        return DocumentWriteStatus(written=True, ingestor_found=True)
+
+    def get_document(self, ws, *, document_id):
+        doc = self.documents.get(document_id)
+        if doc is None:
+            return None
+        return {k: v for k, v in doc.items() if k != "chunks"}
 
     # ── §11 workflow defs (reference) + snapshots (workspace) ────────────────────
 
@@ -333,6 +364,134 @@ def test_create_thread_creates_when_channel_exists():
     assert th["threadId"] == "id1"
     assert th["channelId"] == "c1"
     assert th["createdAt"] == 1000
+
+
+# ── ingest_document / get_document (K-050 M5 Stage 1) ───────────────────────────
+
+
+def test_ingest_document_mints_id_splits_and_returns_processing_status():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo, now=1000)
+
+    result = svc.ingest_document(CTX, text="hello world", title="My Doc")
+
+    assert result == {"documentId": "id1", "chunkCount": 1, "status": "processing"}
+    doc = repo.documents["id1"]
+    assert doc["title"] == "My Doc"
+    assert doc["text"] == "hello world"
+    assert doc["chunks"] == [{"chunkId": "id2", "text": "hello world", "seq": 0}]
+    assert doc["createdAt"] == 1000
+
+
+def test_ingest_document_chunk_count_matches_split(monkeypatch):
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+    monkeypatch.setattr(
+        "falkorchat.services.chunking.split_into_chunks",
+        lambda text, **kw: ["a", "b", "c"],
+    )
+
+    result = svc.ingest_document(CTX, text="whatever")
+
+    assert result["chunkCount"] == 3
+    chunks = repo.documents[result["documentId"]]["chunks"]
+    assert [c["seq"] for c in chunks] == [0, 1, 2]
+    assert [c["text"] for c in chunks] == ["a", "b", "c"]
+    # chunk ids are distinct server-minted ids, not derived from position
+    assert len({c["chunkId"] for c in chunks}) == 3
+
+
+def test_ingest_document_defaults_title_to_source_label_then_empty():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    with_label = svc.ingest_document(CTX, text="x", source_label="report.txt")
+    assert repo.documents[with_label["documentId"]]["title"] == "report.txt"
+
+    with_neither = svc.ingest_document(CTX, text="x")
+    assert repo.documents[with_neither["documentId"]]["title"] == ""
+
+
+def test_ingest_document_rejects_whitespace_only_text():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    with pytest.raises(EmptyDocumentError):
+        svc.ingest_document(CTX, text="   \n\n\t  ")
+
+    assert repo.documents == {}  # rejected before any split/repo call
+
+
+def test_ingest_document_rejects_empty_text():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    with pytest.raises(EmptyDocumentError):
+        svc.ingest_document(CTX, text="")
+
+    assert repo.documents == {}
+
+
+def test_ingest_document_rejects_oversized_text():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    with pytest.raises(DocumentTooLargeError):
+        svc.ingest_document(CTX, text="x" * 500_001)
+
+    assert repo.documents == {}  # nothing written — rejected before any split/call
+
+
+def test_ingest_document_at_exactly_the_limit_is_accepted():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    result = svc.ingest_document(CTX, text="x" * 500_000)
+
+    assert result["status"] == "processing"
+
+
+def test_ingest_document_unknown_actor_raises_instead_of_silent_write():
+    repo = FakeRepo()  # actor "u1" not registered as a User or Agent
+    svc = make_service(repo)
+
+    with pytest.raises(UnknownActorError):
+        svc.ingest_document(CTX, text="hello")
+
+    assert repo.documents == {}
+
+
+def test_ingest_document_known_agent_actor_source_kind_agent():
+    repo = FakeRepo()
+    repo.agents.add("bot1")
+    svc = make_service(repo)
+    ctx = CallContext(ws="test", actor="bot1")
+
+    result = svc.ingest_document(ctx, text="hello")
+
+    assert repo.documents[result["documentId"]]["sourceKind"] == "agent"
+
+
+def test_get_document_passes_through():
+    repo = FakeRepo()
+    repo.documents["d1"] = {"documentId": "d1", "text": "hi", "chunks": []}
+    svc = make_service(repo)
+
+    assert svc.get_document(CTX, document_id="d1") == {"documentId": "d1", "text": "hi"}
+
+
+def test_get_document_none_when_absent():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_document(CTX, document_id="nope") is None
 
 
 # ── post_message: dispatch + validation ─────────────────────────────────────────

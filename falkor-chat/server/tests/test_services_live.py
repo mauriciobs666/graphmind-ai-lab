@@ -9,9 +9,11 @@ from __future__ import annotations
 import itertools
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from falkorchat import db
 from falkorchat.config import CallContext
-from falkorchat.services import Services
+from falkorchat.services import EmptyDocumentError, Services
 
 CTX = CallContext(ws="test", actor="u1")
 
@@ -136,3 +138,25 @@ def test_agent_actor_posts_as_assistant_end_to_end(repo):
     rows = svc.read_messages(CTX, thread_id="t1", since=0, advance=False)
     assert [r["authorId"] for r in rows] == ["a1"]
     assert [r["role"] for r in rows] == ["assistant"]  # derived from the Agent label
+
+
+# ── K-050 M5 Stage 1 review follow-up: whitespace-only ingest_document ──────────
+# `docs/reviews/document-ingestion-impl.md` MAJOR finding — a whitespace-only
+# `text` used to be silently accepted, writing a real `Document` with zero
+# `Chunk`s, permanently stuck at `status:'processing'`. This is the live-graph
+# proof that the `EmptyDocumentError` guard rejects it *before any write*, not
+# just that the call raises — the fake-repo unit tests in `test_services.py`
+# can't prove "nothing landed in the graph" the way a real `MATCH` can.
+
+
+def test_ingest_document_whitespace_only_writes_no_document_node(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _svc(repo)
+
+    with pytest.raises(EmptyDocumentError):
+        svc.ingest_document(CTX, text="   \n\n\t  ")
+
+    [[count]] = db.workspace_graph(conn, "test").ro_query(
+        "MATCH (d:Document) RETURN count(d)"
+    ).result_set
+    assert count == 0

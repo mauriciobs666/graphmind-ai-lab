@@ -106,6 +106,48 @@ def test_get_missing_message_404(client):
     assert r.status_code == 404
 
 
+# ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────
+
+
+def test_ingest_and_get_document_round_trips_full_text(client):
+    r = client.post("/documents", json={"text": "hello world", "title": "My Doc"})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["chunkCount"] == 1
+    assert body["status"] == "processing"
+    doc_id = body["documentId"]
+
+    got = client.get(f"/documents/{doc_id}")
+    assert got.status_code == 200
+    doc = got.json()
+    assert doc["text"] == "hello world"  # AC-9: byte-identical round trip
+    assert doc["title"] == "My Doc"
+    assert doc["sourceKind"] == "document"  # actor "u1" is a known User
+    assert doc["ingestedById"] == "u1"
+
+
+def test_ingest_document_defaults_source_format_to_text(client):
+    r = client.post("/documents", json={"text": "hello"})
+    assert r.status_code == 201
+    doc = client.get(f"/documents/{r.json()['documentId']}").json()
+    assert doc["sourceFormat"] == "text"
+
+
+def test_get_missing_document_404(client):
+    r = client.get("/documents/nope")
+    assert r.status_code == 404
+
+
+def test_ingest_document_oversized_text_is_422(client):
+    r = client.post("/documents", json={"text": "x" * 500_001})
+    assert r.status_code == 422
+
+
+def test_ingest_document_empty_text_is_422(client):
+    r = client.post("/documents", json={"text": ""})
+    assert r.status_code == 422
+
+
 def test_search_returns_matching_messages(client):
     cid = _new_channel(client)
     tid = _new_thread(client, cid)

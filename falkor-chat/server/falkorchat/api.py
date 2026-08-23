@@ -20,6 +20,7 @@ from .schemas import (
     MAX_KEY_LEN,
     CreateChannelIn,
     CreateThreadIn,
+    IngestDocumentIn,
     PostMessageIn,
     PublishWorkflowDefIn,
     StartWorkflowRunIn,
@@ -145,6 +146,25 @@ def build_router(
         if msg is None:
             raise HTTPException(status_code=404, detail="message not found")
         return msg
+
+    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ─────────────────────────────
+    # `DocumentTooLargeError` maps to 400 via the generic `ServiceError`
+    # handler; `UnknownActorError` (an unresolvable `get_context()` actor) also
+    # maps to 400 the same way.
+
+    @router.post("/documents", status_code=201)
+    def ingest_document(body: IngestDocumentIn, ctx: CallContext = Depends(get_context)):
+        return services.ingest_document(
+            ctx, text=body.text, title=body.title,
+            source_format=body.sourceFormat, source_label=body.sourceLabel,
+        )
+
+    @router.get("/documents/{document_id}")
+    def get_document(document_id: str, ctx: CallContext = Depends(get_context)):
+        doc = services.get_document(ctx, document_id=document_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        return doc
 
     # ── K-036 web-api-coverage: thread-scoped reads (FR-2/FR-8, Wave 2) ──────
     # New read paths for the web UI's inline run cue + participants list; both
