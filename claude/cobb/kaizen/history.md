@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste doctrine institutionalized in `agent-maintenance` (§5 promotion rule + §7 seventh lint dimension)
+- **What:** Two additions to `skills/agent-maintenance/SKILL.md`, per
+  `claude/docs/plans/prompt-waste-reduction.md` §3 (v3) Stage F and the 2026-08-23 pilot
+  calibration ruling (recorded in `claude/architect/kaizen/history.md`, 2026-08-23 entry):
+  (1) §5 step 3's always-loaded-prompt destination now states the promoted form — rule + ≤1-clause
+  why, nothing else; evidence/story/provenance land in the producing agent's `kaizen/history.md`
+  disposition entry, non-negotiability expressed by stating the rule absolutely. (2) §7 gained
+  dimension 7, **Prompt waste** — flags inline provenance (dates, decision-authority markers,
+  supersession history, incident retellings), dated `kaizen/history.md` pointers (the calibration
+  ruling: pointers are waste too — the history file is the standing greppable home), and duplicate
+  restatements within one file; normative citations (paths a rule requires the agent to *use*)
+  exempt; the doctrine table cited as the one normative reference. The existing six dimensions are
+  unchanged. Consistency touches: §7 intro "six"→"seven", §4 fold-in enumeration, frontmatter
+  `description`, `skills/README.md` catalog line, `claude/README.md` skill pointer, and the
+  "six semantic dimensions" mention in this agent's own `plan.md` parking lot. §7's Origin note kept as-is (accurate about the
+  six-dimension origin).
+- **Why:** Stage F of the waste-reduction plan — make the ratchet durable so prompts don't regrow
+  the weight the fleet compression (separate coordinated rollout, in flight) is removing.
+- **Out of scope, flagged:** `cobb.md`'s own "§7: a semantic judgment pass over six dimensions"
+  phrase is now stale — left for the fleet compression rollout, which owns agent-prompt edits.
+- **Plan items:** none opened.
+
 ## 2026-08-23 — `kaizen_team` curation: stray probe node cleared, producer-write "RETURN trap" root-caused and promoted
 - **What:** Two housekeeping items on `kaizen_team`, both surfaced by `teco` on 2026-08-23. (1)
   Deleted the throwaway `entryId:'test-probe-004'` node teco's diagnosis accidentally left behind

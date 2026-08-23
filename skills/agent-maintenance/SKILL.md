@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph, `author`-partitioned; `kaizen/inbox.md` is a frozen historical relic), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph, `author`-partitioned; `kaizen/inbox.md` is a frozen historical relic), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and prompt-waste review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -310,8 +310,8 @@ runtime (the personal-info rule, §2). Fix any FAIL before judging the rest.
 **Fold in the single-artifact lint (§7):** run the prompt-quality lint over
 every artifact changed since the last certification — the semantic,
 intra-artifact defects (contradiction, ambiguity, persona, cognitive load,
-coverage, composition conflict) that the five inter-agent checks above can't
-see. Mirrors the §5 graph-distillation fold-in; roll its findings into the
+coverage, composition conflict, prompt waste) that the five inter-agent checks
+above can't see. Mirrors the §5 graph-distillation fold-in; roll its findings into the
 certificate.
 
 **Certificate:** log a dated entry in the maintainer's kaizen history (cobb's,
@@ -420,6 +420,13 @@ distills — on request, and folded into every certification pass (§4):
 3. **Route each surviving entry to exactly one destination:**
    - **The agent's always-loaded prompt** — only if it changes behavior or
      routing in most sessions. Highest bar: every session pays tokens for it.
+     **Promoted form: the rule plus at most one clause of why — nothing
+     else.** The evidence, incident story, and provenance (dates, deciding
+     authority, supersession trail) land in the producing agent's
+     `kaizen/history.md` disposition entry (step 4), never in the prompt. A
+     rule's non-negotiability is expressed by stating it absolutely, not by
+     citing authority or dates. Full classification table:
+     `claude/docs/plans/prompt-waste-reduction.md` §3.
    - **An on-demand knowledge base** — the `graph-dba/falkordb-quirks.md`
      pattern: dated, live-verified entries in a `<agent>/<topic>.md` referenced
      from the prompt but loaded on demand. Create one when an agent's domain
@@ -629,7 +636,7 @@ defects an LLM reviewer can see but a grep can't. Run it when authoring or
 reviewing any one artifact, and — folded into §4 — over every artifact changed
 since the last certification.
 
-It is LLM judgment, not a script: read the artifact, then work the six
+It is LLM judgment, not a script: read the artifact, then work the seven
 dimensions below. For each, emit findings as **`finding — severity
 (blocker / major / minor) — suggested rewrite`** (a concrete rewrite where the
 fix is a wording change; a pointer where it's structural). "Clean" on a
@@ -674,6 +681,17 @@ several times.
    rule its memory file already sets? Does a loaded skill's persona fight the
    prompt's? Do two loaded sources give conflicting defaults? Report each
    conflict as a pair (artifact rule ↔ load-set rule) with which should win.
+7. **Prompt waste** — story where only a rule belongs: a prompt carries rules
+   and mechanisms, never stories. Probes: inline provenance (dates,
+   decision-authority markers such as "stakeholder decision, <date>",
+   supersession/replacement history, incident retellings); dated pointers into
+   `kaizen/history.md` (the history file is the standing, greppable home — a
+   pointer to it is still waste); the same rule restated more than once in the
+   file. **Exempt: a normative citation** — a path the rule requires the agent
+   to *use* (a spec, a template location). Rewrite: state the rule absolutely;
+   a counterintuitive rule keeps ≤1 clause of why; the story routes to the
+   artifact's `kaizen/history.md` (verify it's recorded there before deleting).
+   Full doctrine table: `claude/docs/plans/prompt-waste-reduction.md` §3.
 
 **Output:** a per-dimension list of findings (or "clean"), each with severity
 and a rewrite/pointer. On a review-only pass, record the notable ones in the
