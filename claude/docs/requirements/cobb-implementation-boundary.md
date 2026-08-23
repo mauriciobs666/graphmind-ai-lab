@@ -1,5 +1,5 @@
 # `cobb` implementation-boundary recognition — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-23
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-23
 
 ## Intent
 `cobb` should recognize, on its own, when a task in front of it needs actual application/product
@@ -92,3 +92,6 @@ None currently — see Decision log for the readback pending confirmation.
 - 2026-08-23 — Asked what should happen instead: cobb delegates on its own, or cobb stops and asks
   → Stakeholder: "2 but one the possible options should be the 1" → settles FR-2 (stop and ask) with
   FR-3 (delegation offered as a choice, not decided unilaterally by cobb).
+- 2026-08-23 — Readback given (intent, FR-1..3, out of scope, generalization from "python" to any
+  application/product source code) → Stakeholder: "looks right, mark it ready for design" →
+  Status → **Ready for design**; next step is an `architect`/`cobb` pass over this document.
