@@ -59,17 +59,29 @@ interruption across one otherwise-uninterrupted implementation task.
    pure `Write`/`Edit` at all ("whatever it's hitting is suspected to be a *different* mechanism
    (e.g. Bash/terminal-command confirmations) than the `Write`/`Edit` confirmation this document
    resolves"). Worth keeping an eye out for as more instances land.
-3. **Risk, not `coder` evidence — flagged, not resolved here:** 2026-08-23, `analyst` `Create` on
-   `docs/reviews/document-ingestion-impl.md` **still triggered a manual confirmation prompt**,
-   confirmed by the stakeholder, despite the path matching `analyst`'s already-shipped phase-1
-   allowlist (`docs/reviews/*|*/docs/reviews/*` in `guard-review-doc-writes.sh`) and
-   `guard-doc-writes.sh` statically confirmed today to emit the explicit `permissionDecision:
-   "allow"` JSON on a match (`grep -n permissionDecision claude/scripts/guard-doc-writes.sh`). This
-   looks like a **regression on phase 1's shipped fix**, not a gap in this document's scope — but it
-   directly threatens whatever fix this phase-2 round eventually designs for `coder`, since it would
-   rely on the identical `PreToolUse` `"allow"` mechanism. Not investigated further here (outside
-   `tico`'s remit — no hook/execution debugging); needs routing to `cobb`/an architect pass before
-   this document's eventual FR is trusted to actually suppress `coder`'s prompts once implemented.
+3. **Risk, not `coder` evidence — flagged, not resolved here. Now TWO independent data points,
+   different guard cores, same symptom:**
+   - 2026-08-23, `analyst` `Create` on `docs/reviews/document-ingestion-impl.md` **still triggered a
+     manual confirmation prompt**, confirmed by the stakeholder, despite the path matching
+     `analyst`'s already-shipped phase-1 allowlist (`docs/reviews/*|*/docs/reviews/*` in
+     `guard-review-doc-writes.sh`) and `guard-doc-writes.sh` statically confirmed to emit the
+     explicit `permissionDecision: "allow"` JSON on a match.
+   - 2026-08-23, `tdd-engineer` `Edit` on `cypher-mcp/tests/test_server.py` (relayed via a concurrent
+     `teco` session) **also triggered a manual confirmation prompt**, confirmed by the stakeholder,
+     despite the path matching none of `guard-tdd-broad-write.sh`'s deny-list entries (a plain test
+     file — everything not on the deny-list is explicitly allowed by that guard's design) and the
+     hook confirmed wired in `tdd-engineer.md`'s frontmatter.
+
+   These are **two different guard cores** (`guard-doc-writes.sh`'s allow-list vs.
+   `guard-broad-write.sh`'s deny-list) on **two different agents**, both statically verified correct,
+   both still producing a live prompt on a case each was specifically designed to suppress. This no
+   longer looks like an isolated glitch — it looks like the `PreToolUse` `"allow"` mechanism itself
+   isn't reliably suppressing the prompt in practice, which would undermine phase 1's entire
+   root-cause finding (§1.3: "an explicit `PreToolUse` `'allow'` suppresses the prompt... every
+   time"). Directly threatens whatever fix this phase-2 round eventually designs for `coder`, since
+   it would rely on the identical mechanism. Not investigated further here (outside `tico`'s remit —
+   no hook/execution debugging); needs routing to `cobb`/an architect pass, and probably before
+   phase-2 design proceeds rather than after, given how directly it undercuts the approach.
 
 ## Decision log
 - 2026-08-23 — Stakeholder: "we recently implemented permission friction and i did not have
@@ -110,3 +122,11 @@ interruption across one otherwise-uninterrupted implementation task.
   instance 1 (only one `server/falkorchat/services.py` in the repo — `find` check), just shown
   relative to a different cwd. Folded into instance 1 as a repeat, not logged as a new instance 4 —
   same convention phase 1 used for repeat edits on one file (its instances 4, 7, 10).
+- 2026-08-23 — Readback given (Intent, Problem, all 3 evidence instances, open questions 1-3,
+  what's still missing before Ready for design) → no corrections from the stakeholder; instead a
+  fourth relay landed: `tdd-engineer` → `cypher-mcp/tests/test_server.py` (Edit), via a concurrent
+  `teco` session running `tdd-engineer` directly. Confirmed statically outside the deny-list (should
+  have been auto-allowed). Asked whether it actually prompted → Stakeholder: "Yes, it prompted." →
+  second regression data point, folded into open question 3 alongside the `analyst` instance — two
+  different guard cores, two different agents, same symptom, escalating this from an isolated
+  anomaly to a likely systemic issue with the `PreToolUse` `"allow"` mechanism itself.
