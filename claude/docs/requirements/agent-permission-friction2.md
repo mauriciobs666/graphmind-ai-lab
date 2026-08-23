@@ -55,6 +55,17 @@ interruption across one otherwise-uninterrupted implementation task.
    pure `Write`/`Edit` at all ("whatever it's hitting is suspected to be a *different* mechanism
    (e.g. Bash/terminal-command confirmations) than the `Write`/`Edit` confirmation this document
    resolves"). Worth keeping an eye out for as more instances land.
+3. **Risk, not `coder` evidence — flagged, not resolved here:** 2026-08-23, `analyst` `Create` on
+   `docs/reviews/document-ingestion-impl.md` **still triggered a manual confirmation prompt**,
+   confirmed by the stakeholder, despite the path matching `analyst`'s already-shipped phase-1
+   allowlist (`docs/reviews/*|*/docs/reviews/*` in `guard-review-doc-writes.sh`) and
+   `guard-doc-writes.sh` statically confirmed today to emit the explicit `permissionDecision:
+   "allow"` JSON on a match (`grep -n permissionDecision claude/scripts/guard-doc-writes.sh`). This
+   looks like a **regression on phase 1's shipped fix**, not a gap in this document's scope — but it
+   directly threatens whatever fix this phase-2 round eventually designs for `coder`, since it would
+   rely on the identical `PreToolUse` `"allow"` mechanism. Not investigated further here (outside
+   `tico`'s remit — no hook/execution debugging); needs routing to `cobb`/an architect pass before
+   this document's eventual FR is trusted to actually suppress `coder`'s prompts once implemented.
 
 ## Decision log
 - 2026-08-23 — Stakeholder: "we recently implemented permission friction and i did not have
@@ -85,3 +96,9 @@ interruption across one otherwise-uninterrupted implementation task.
 - 2026-08-23 — Stakeholder: "yeah it is annoying, all the time recurring requests" → confirms the
   per-edit compounding cost (same shape as phase 1's `tdd-engineer` finding) rather than an
   occasional one-off; folded into Problem & current state.
+- 2026-08-23 — `analyst` → `docs/reviews/document-ingestion-impl.md` (Create) relayed. Path matches
+  `analyst`'s already-shipped phase-1 allowlist; static check confirms `guard-doc-writes.sh` emits
+  the explicit `"allow"` on match today. Asked whether it actually prompted (not assumed either
+  way) → Stakeholder: "Yes, it prompted." → **not counted as `coder` evidence** (wrong agent, out of
+  this document's scope) — logged instead as open question 3, a regression risk on phase 1's shipped
+  fix that threatens this round's eventual design; routed to `cobb`/architect, not investigated here.
