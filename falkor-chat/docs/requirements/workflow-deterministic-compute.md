@@ -89,3 +89,7 @@ an LLM call just to compute it (a cost/latency/reliability concern, not just a c
 The latter (FR-3) directly bears on — without resolving — the step-type-vs-tool fork the
 architect flagged earlier in this effort.
 2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
+2026-08-22 — Retroactive note (surfaced during `workflow-durable-profile.md`'s interview): no
+content change needed here — `workflow-business-entities.md`'s demo, which this capability was
+already piggybacking on (FR-4), is itself now the single combined "salesperson" demo agent
+shared with `workflow-catalog-lookup.md` and `workflow-durable-profile.md` too.

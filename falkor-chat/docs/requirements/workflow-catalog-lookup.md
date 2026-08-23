@@ -63,9 +63,12 @@ below).
 - **FR-5** — The demo catalog's data is seeded via a one-time script (comparable to
   `seed_workflows.sh`) — no runtime API for creating/editing catalog entries is required.
 - **FR-6** — The catalog is a single, shared, global dataset — not scoped per workspace.
-- **FR-7** — A demo proof-of-concept ships with the capability: a runnable workflow definition
-  plus a seeded demo catalog of consumer electronics (flat shape — name, category, price only),
-  materialized and verifiable the same way `triage`/`access-request` are today.
+- **FR-7** — A demo proof-of-concept ships with the capability: a seeded demo catalog of
+  consumer electronics (flat shape — name, category, price only), looked up from inside the
+  single combined "salesperson" demo agent shared with `workflow-business-entities.md`,
+  `workflow-deterministic-compute.md`, and `workflow-durable-profile.md` (one orchestrating
+  `agent` step, many tools — not a separate demo workflow of its own), materialized and
+  verifiable the same way `triage`/`access-request` are today.
 
 ## Out of scope
 - Mutating catalog data from within a workflow (create/update/delete) — that belongs to the
@@ -119,3 +122,8 @@ lookup detail), split out into its own sibling document,
 fixed set of author-defined query shapes (exact-name lookup, category filter, price-range
 filter).
 2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
+2026-08-22 — Retroactive clarification (surfaced during `workflow-durable-profile.md`'s
+interview): the demo is looked up from inside one single combined "salesperson" demo agent
+shared with `workflow-business-entities.md`, `workflow-deterministic-compute.md`, and
+`workflow-durable-profile.md` — not a demo workflow of its own. FR-7 updated accordingly; no
+other content changed.

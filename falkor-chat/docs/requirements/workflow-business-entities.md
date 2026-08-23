@@ -63,11 +63,13 @@ nothing today demonstrates for a *stateful business record*.
   driven by an explicit step (an operator/human input or an external signal) — mirroring
   `access-request`'s human/wait pattern. No transition happens automatically or on a timer.
 - **FR-6** — An order's current lifecycle status is queryable at any time after it's placed.
-- **FR-7** — A demo proof-of-concept ships with the capability: a runnable workflow (or a pair —
-  a conversation-style flow for cart-building/checkout and a process-style flow for fulfillment,
-  left to the architect) built on the consumer-electronics catalog from
-  `workflow-catalog-lookup.md`, materialized and verifiable the same way `triage`/`access-request`
-  are today.
+- **FR-7** — Cart-building and checkout are proven inside the same single combined "salesperson"
+  demo agent as `workflow-catalog-lookup.md` and `workflow-deterministic-compute.md` (one
+  orchestrating `agent` step, many tools — see the decision log). Order *fulfillment* — the
+  human/operator-driven lifecycle in FR-5 — is a separate, process-kind workflow, mirroring
+  `access-request`'s own conversation/process split (an inherent distinction in falkor-chat's
+  engine, not a new one introduced here): materialized and verifiable the same way
+  `triage`/`access-request` are today.
 
 ## Out of scope
 - Cart persistence across *different* workspaces — that would require resolving the
@@ -131,3 +133,9 @@ with a `cancelled` branch possible only before fulfillment — no payment/return
 steps, mirroring `access-request`'s human/wait pattern — no automatic or timer-driven
 transitions, consistent with falkor-chat's existing no-timers design.
 2026-08-22 — Stakeholder confirmed the readback with no changes; flipped to Ready for design.
+2026-08-22 — Retroactive clarification (surfaced during `workflow-durable-profile.md`'s
+interview): cart-building/checkout is proven inside one single combined "salesperson" demo
+agent shared with `workflow-catalog-lookup.md`, `workflow-deterministic-compute.md`, and
+`workflow-durable-profile.md` — not a demo of its own. Order fulfillment (FR-5) remains a
+separate process-kind workflow, since that split is inherent to falkor-chat's engine (conversation
+vs. process workflows), not a new decision. FR-7 updated accordingly; no other content changed.
