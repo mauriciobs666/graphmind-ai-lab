@@ -45,7 +45,26 @@ to the general fact here.
   confirmation; poll `CALL db.constraints()` (or `db.indexes()` for the paired index) and
   check `status` for `OPERATIONAL` before relying on the constraint being enforced.
 - **Composite constraints** (`PROPERTIES 2 key version`) are supported and operational.
-- **Fulltext** (`db.idx.fulltext.createNodeIndex` / `queryNodes`) confirmed working.
+- **Fulltext** (`db.idx.fulltext.createNodeIndex` / `queryNodes`) confirmed working. RediSearch
+  fuzzy term syntax also confirmed live: `%term%` (1-edit-distance fuzzy) and `%%term%%` (2-edit)
+  both match a typo'd query against an indexed exact string (verified 2026-08-22, module `41811`,
+  e.g. `%Acmee%` and `%%Acmeee%%` both still matched an indexed `'Acme Corporation'`); a
+  non-matching term correctly returns zero rows.
+- **Relationship-property indexes and `RELATIONSHIP`-scoped `UNIQUE` constraints are fully
+  supported** (verified 2026-08-22, module `41811` — previously flagged unverified by
+  `falkor-chat/docs/plans/document-ingestion.md`, now settled). `CREATE INDEX FOR ()-[r:TYPE]-()
+  ON (r.prop)` and `GRAPH.CONSTRAINT CREATE <key> UNIQUE RELATIONSHIP <TYPE> PROPERTIES <n>
+  <prop...>` both work exactly like their `NODE` counterparts (same index-before-constraint
+  ordering, same async `PENDING`→`OPERATIONAL` constraint lifecycle); `db.indexes()` reports
+  `entitytype: RELATIONSHIP` for the paired index. A query filtering on the indexed relationship
+  property profiles as `Edge By Index Scan`, confirmed for a pattern-property match
+  (`{prop:$x}`), for a `SET` immediately after one, and for a `WHERE`-filtered global scan —
+  directed or undirected pattern, doesn't matter. This makes a property-bearing relationship a
+  genuine, index-anchored alternative to a reified "decision record" node for any schema that
+  needs a hot-filterable status property between two existing nodes (see
+  `falkor-chat/docs/plans/document-ingestion-graph.md` §1 for the full worked comparison,
+  including a live RAM measurement showing the two shapes cost about the same — this only settles
+  *capability*, not which shape wins on RAM).
 - **Vector dimension is enforced at query time and index-membership time, but NOT at write
   time** (verified 2026-07-08, module 999999). A wrong-dimension `SET n.embedding =
   vecf32([...])` is **silently accepted** (`Properties set: 1`, no error) — but the node then
@@ -227,6 +246,23 @@ to the general fact here.
 
 ## Query tuning
 
+- **A `$param IS NULL OR prop = $param` optional-filter idiom defeats an otherwise-available
+  index — even when `$param` is bound to a real, selective value** (verified 2026-08-22 on
+  v4.18.11 / module `41811`, at 1000-node scale). `MATCH (a)-[r:SAME_AS]->(b) WHERE $status IS
+  NULL OR r.status = $status ...` — the standard "optional filter parameter" idiom for a
+  listing endpoint that's sometimes filtered, sometimes not — profiles as `All Node Scan | (a)`
+  (1000 records) → `Conditional Traverse` → `Filter`, completely ignoring the `SAME_AS.status`
+  relationship index, **even on the call where `$status` is set to a real value** (not just the
+  `NULL` "list everything" call, where a full scan is unavoidable anyway). The exact same
+  predicate written as a direct pattern-property match on the same parameter —
+  `MATCH (a)-[r:SAME_AS {status: $status}]->(b) ...` — profiles as a clean `Edge By Index Scan`
+  the moment `$status` carries a real value. Consequence: don't write a single query with an
+  `IS NULL OR` guard for an "optionally filtered" listing endpoint on this build — branch at the
+  repository layer into two distinct query strings (filtered: direct pattern-property match;
+  unfiltered: the same shape minus the property, which costs a full scan regardless of how it's
+  written — verified no phrasing avoids that for "list everything with no anchor" queries).
+  Surfaced designing `list_matches(status=None, limit)` for `falkor-chat`'s entity-fusion audit
+  surface — full comparison at `falkor-chat/docs/plans/document-ingestion-graph.md` §1.7.
 - **An `OR` across two label-specific properties as the scan anchor**
   (`WHERE n.propA = $x OR n.propB = $x`) profiles as an `All Node Scan` even when
   both properties are indexed. Use two separate `OPTIONAL MATCH`es (one indexed
@@ -287,6 +323,24 @@ to the general fact here.
   predicates present, the honest answer is **both, combined** — don't force a single-index
   answer when profiling a query shaped like this. Full isolation-test write-up (drop-each-
   predicate variants + the probe-row test) in `falkor-chat/docs/QUERIES.md` §12.15.
+
+- **A bare label constraint on a relationship-pattern endpoint forces a full `Node By Label Scan`
+  on that label, even when the relationship itself carries a selective index and that endpoint
+  node has no property predicate of its own** (verified 2026-08-22 on v4.18.11 / module `41811`,
+  at 1000-row label cardinality). `MATCH (a:Entity)-[r:SAME_AS {matchId:$id}]->(b:Entity) SET
+  r.status=... ` profiles as `Edge By Index Scan | [r:SAME_AS]` (correctly selective, 1 record)
+  sitting *underneath* a `Node By Label Scan | (a:Entity)` that reports **1000** records produced
+  — the full label — even though the edge index alone already fully determines the match. The
+  label scan fires whether the label sits on the start endpoint alone, the end endpoint alone, or
+  both; dropping the label from the pattern entirely (`MATCH (a)-[r:SAME_AS {matchId:$id}]->(b)
+  SET ...`) collapses the plan to a single clean `Edge By Index Scan`, with the node's actual
+  label/properties still readable off the unlabeled pattern variable (`a.entityId`,
+  `labels(a)[0]`) — omitting the label from the pattern costs nothing semantically when the
+  relationship type already implies what the endpoints are. Consequence: for any query anchored
+  on an indexed relationship property (a matchId-style lookup, a status-filtered global listing),
+  don't assert the endpoint labels "for clarity" — it silently reintroduces the full label scan
+  the relationship index was supposed to avoid. Full worked example (with PROFILE output at both
+  1000- and unlabeled-clean shapes): `falkor-chat/docs/plans/document-ingestion-graph.md` §1.4.
 
 ## Ops, config & tooling
 
