@@ -2,6 +2,40 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-23 — `kaizen_team` distillation: 2 entries (tico's per-agent `kaizen/inbox.md` no longer exists — both were legacy graph entries)
+- **What:** `cobb` read tico's entries in the shared `kaizen_team` graph (legacy `author`-shape
+  query — both entries predate M8's `:Agent`/`PRODUCED` edges; the current-shape query returned
+  zero rows, confirming neither is post-M8). Two entries, both dated 2026-08-22:
+  1. **`a3f5e6d2-9c1b-4e77-8a2f-6b1d0c9e4f31` — promoted to the prompt.** Fact: a blind
+     `replace_all` during an in-session terminology reversal (`falkor-chat/docs/requirements/
+     document-ingestion.md`, "file" → "document") also corrupts meta-sentences that *describe*
+     the swap ("preferred term is X, not Y" → "preferred term is X, not X"), not just the target
+     product nouns. **Re-derived, not just cited:** `git show cd0b300` (the commit that actually
+     landed the reversal) shows the terminology note and its decision-log line already correctly,
+     narratively rewritten by hand ("briefly used 'file' ..., then reverted to 'document' ...") —
+     no committed version of the file ever carried the broken form, confirming the corruption was
+     caught and hand-fixed *before* commit, exactly as the entry describes. Added one bullet to
+     Mode 1 (after "Write as you go"): rewrite a terminology-swap's own meta-sentences by hand,
+     `replace_all` only the product-noun occurrences elsewhere.
+  2. **`e1f2a3b4-7c6d-4e8f-9a1b-2c3d4e5f6a7b` — kept open, not re-promoted.** Fact: tico
+     committed too frequently again (near one commit per small edit) in a six-document capability-
+     family interview, despite the 2026-08-19 fix that already retuned "Commit as you go" for
+     this exact stakeholder complaint. **Re-derived:** `git log` on
+     `falkor-chat/docs/requirements/` for 2026-08-22 shows 17 commits in ≈51 minutes (19:03–19:54),
+     several under 2 minutes apart, across interleaved document-ingestion and business-entities-
+     family threads — confirms the complaint. Not re-promoted as a second silent prompt tweak:
+     the first tightening was tried for this exact complaint and didn't hold under a
+     higher-multiplicity (many-document) session, so a second unilateral guess risks the same
+     failure or overcorrecting the other way. Opened **K-009** in `plan.md`, modeled on K-008's
+     "flag, don't guess" pattern — needs the stakeholder's actual tolerance, not another inferred
+     rewrite.
+  Both graph nodes cleared after this entry and the K-009 backlog item were written (legacy
+  entries — `DETACH DELETE` by `entryId`, curator-gated, `agent='cobb'`).
+- **Why:** requested distillation pass ("distill tico inbox") — tico's own `kaizen/inbox.md` file
+  no longer exists (removed 2026-08-21, agent-maintenance skill §5); its raw capture lives in the
+  shared `kaizen_team` graph instead, so this pass read that graph directly.
+- **Plan items:** K-009 opened (kept open, entry 2); entry 1 fully promoted, no K-item needed.
+
 ## 2026-08-21 — Team-wide follow-on: universal interactive-mode commit grant (does not change tico's own grant)
 - **What:** Immediately after the entry below landed, the stakeholder — asked how to route the
   commit request for *this* change — ruled further: every agent, not just tico/teco, should get

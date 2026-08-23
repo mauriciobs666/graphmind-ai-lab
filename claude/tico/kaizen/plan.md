@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-21
+> Last reviewed: 2026-08-23
 
 ## Active
 
@@ -15,6 +15,7 @@
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
 | K-008 | 2026-08-11 | — | 🔵 | **Needs a stakeholder decision, not a cobb guess** — relax tico's write/`Agent` scope? See below. |
+| K-009 | 2026-08-23 | — | 🔵 | **Needs a stakeholder decision, not a cobb guess** — commit-frequency rule recurred despite the 2026-08-19 fix, in a many-document session. See below. |
 
 ### K-008 — Stakeholder pushback on tico's write-scope and `Agent`-routing guardrails
 - **Status:** 🔵 proposed, **held for stakeholder decision**
@@ -48,6 +49,40 @@
   case, mirroring `teco`'s integrator authority (`kaizen/history.md`, 2026-08-21 entry). Neither of
   *this* item's two open incidents (routing a QA finding to `architect`; committing an arbitrary
   `docs/BACKLOG.md` entry) was decided by that ruling — both remain open here.
+
+### K-009 — Commit-frequency rule recurred despite the 2026-08-19 fix, in a many-document session
+- **Status:** 🔵 proposed, **held for stakeholder input before a second unilateral rewrite**
+- **Rationale:** the 2026-08-19 distillation pass (`kaizen/history.md` same date) retuned "Commit
+  as you go" to "batch at natural pause points, not after every edit," verified at the time
+  against a 12-commits/2-documents session. A `kaizen_team` entry captured 2026-08-22
+  (`entryId: e1f2a3b4-7c6d-4e8f-9a1b-2c3d4e5f6a7b`, distilled 2026-08-23) reported the same
+  stakeholder complaint recurring — "you are commiting too often and should reduce frequency,"
+  mid-interview, this time across a six-document capability family (catalog-lookup,
+  business-entities, deterministic-compute, durable-profile, nl-query-generation, composition)
+  plus a concurrent document-ingestion interview.
+- **Re-derived, not just cited:** `git log` for `falkor-chat/docs/requirements/` on 2026-08-22
+  shows 17 commits between 19:03:38 and 19:54:19 (≈51 minutes) — roughly one every 3 minutes,
+  several a single decision-log line or one terminology fix apart (e.g. 19:39:57 → 19:40:48 →
+  19:41:44 → 19:43:41 → 19:45:55, five commits in six minutes, interleaving two different
+  documents' threads). Each individual commit is arguably a legitimate "thread settled" per the
+  letter of the current rule — but the *aggregate* cadence across many interleaved
+  documents/threads in one session reproduces exactly the density the 2026-08-19 fix was meant to
+  eliminate.
+- **Why this is flagged, not fixed:** the rule already got tightened once for this exact
+  complaint and the tightening didn't hold under a higher-multiplicity session (several documents
+  open/interleaved, not two). A second silent rewrite risks either not fixing it again (same
+  failure mode) or overcorrecting into batching too infrequently, which trades away the
+  "stakeholder can open the shared record at any moment" value "Commit as you go" exists for. The
+  right tuning (a numeric/time cap? document-level rather than thread-level granularity? explicit
+  guidance for many-document sessions specifically?) is a product call about how much commit
+  density the stakeholder actually tolerates — better surfaced and confirmed with them directly
+  (as K-008 models) than guessed a second time.
+- **Proposed change:** next live `claude --agent tico` session, or a direct question to the
+  stakeholder, ask what commit granularity they actually want in a many-document session, then
+  encode the answer precisely (not another vague "batch at natural pause points" restatement).
+- **Notes:** distilled from `kaizen_team` entry `e1f2a3b4-7c6d-4e8f-9a1b-2c3d4e5f6a7b`
+  (`author: tico`, legacy pre-M8 shape); the entry node has been cleared (see
+  `kaizen/history.md`, 2026-08-23 distillation entry) — this K-item is now the durable record.
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
