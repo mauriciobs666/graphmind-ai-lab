@@ -130,3 +130,9 @@ interruption across one otherwise-uninterrupted implementation task.
   second regression data point, folded into open question 3 alongside the `analyst` instance — two
   different guard cores, two different agents, same symptom, escalating this from an isolated
   anomaly to a likely systemic issue with the `PreToolUse` `"allow"` mechanism itself.
+- 2026-08-23 — Stakeholder: "let's route this to cobb for investigation" → declined to spawn `cobb`
+  directly (same call as phase 1's decision log: outside `tico`'s Write/Edit scope and its sanctioned
+  `Agent`-delegation uses — investigation isn't a wide read-only sweep, an offered verification pass,
+  or a demo). Pointed the stakeholder to relay open question 3 to their concurrent `teco`/`cobb`
+  session directly, with this document plus the `kaizen_team` entries (2026-08-23, `tico`-authored)
+  as the evidence trail.
