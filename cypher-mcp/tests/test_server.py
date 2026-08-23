@@ -958,6 +958,38 @@ def test_producer_write_with_trailing_extra_clause_is_rejected(fake_client):
     assert _writes_never_ran(client)
 
 
+def test_producer_write_with_trailing_return_clause_gives_specific_trailer_message(
+    fake_client,
+):
+    """New (2026-08-23) — cobb's Finding 1: a producer-write with a trailing
+    `RETURN` clause after the `KaizenEntry` map's closing brace is still
+    rejected (unchanged outcome, mirrors test 22), but the message now names
+    the trailing-clause trap specifically instead of falling through to the
+    generic FR-8 fallback that lists all 6 shapes with no signal about how
+    close the statement came."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = _PRODUCER_WRITE_CYPHER + " RETURN k.entryId"
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert "Rejected" in out
+    assert "KaizenEntry map's closing brace" in out
+    assert "RETURN k.entryId" in out
+    assert "neither an author-write" not in out  # not the generic FR-8 fallback
+    assert _writes_never_ran(client)
+
+
+def test_producer_write_with_trailing_return_k_gives_specific_trailer_message(fake_client):
+    """New (2026-08-23) — same trap, `RETURN k` spelling (no property
+    accessor) — proves the near-miss check isn't keyed to `.entryId`
+    specifically."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = _PRODUCER_WRITE_CYPHER + " RETURN k"
+    out = server.run_query("kaizen_team", cypher, "graph-dba")
+    assert "Rejected" in out
+    assert "KaizenEntry map's closing brace" in out
+    assert "RETURN k" in out
+    assert _writes_never_ran(client)
+
+
 def test_producer_write_with_mismatched_create_variable_is_rejected(fake_client):
     """23 (plan item 8) — the `CREATE`'s referenced variable not matching the
     `MERGE`'s bound variable → rejected — pins the var-binding check (§3.1
@@ -1064,6 +1096,79 @@ def test_mention_edge_resolve_with_non_curator_is_rejected(fake_client):
     out = server.run_query("kaizen_team", _MENTION_EDGE_RESOLVE_CYPHER, "graph-dba")
     assert "not a recognized curator" in out
     assert _writes_never_ran(client)
+
+
+def test_curator_clear_shape_zero_space_entryid_succeeds_for_cobb(fake_client):
+    """New (2026-08-23) — cobb's Finding 2: `entryId:'e1'` with NO space after
+    the colon (today rejected by a hardcoded literal single space in
+    `_CURATOR_CLEAR_RE`) now authorizes for a recognized curator agent —
+    whitespace has no semantic meaning in Cypher here, so this only widens
+    formatting tolerance, not the set of authorized statements."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"nodes_deleted": 1},
+    )
+    cypher = "MATCH (e:KaizenEntry {entryId:'e1'}) DETACH DELETE e"
+    out = server.run_query("kaizen_graph_dba", cypher, "cobb")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "nodes_deleted=1" in out
+
+
+def test_curator_clear_shape_zero_space_entryid_rejected_for_non_curator(fake_client):
+    """New (2026-08-23) — same zero-space statement, non-curator agent → still
+    rejected; the tolerance widening changes nothing about *who* is
+    authorized, only whitespace shape recognition."""
+    client = fake_client(error=_response_error(_READ_ONLY_ERROR))
+    cypher = "MATCH (e:KaizenEntry {entryId:'e1'}) DETACH DELETE e"
+    out = server.run_query("kaizen_graph_dba", cypher, "graph-dba")
+    assert "not a recognized curator" in out
+    assert _writes_never_ran(client)
+
+
+def test_mentions_write_zero_space_entryid_and_agentid_succeeds_for_cobb(fake_client):
+    """New (2026-08-23) — Finding 2, `_MENTIONS_WRITE_RE`: zero space after
+    both `entryId:` and `agentId:` now authorizes for `cobb`."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_created": 1},
+    )
+    cypher = (
+        "MATCH (k:KaizenEntry {entryId:'e1'}) "
+        "MERGE (a:Agent {agentId:'security-expert'}) "
+        "MERGE (k)-[:MENTIONS]->(a)"
+    )
+    out = server.run_query("kaizen_team", cypher, "cobb")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "write ok" in out
+
+
+def test_producer_edge_resolve_zero_space_entryid_succeeds_for_cobb(fake_client):
+    """New (2026-08-23) — Finding 2, `_PRODUCER_EDGE_RESOLVE_RE`: zero space
+    after `entryId:` now authorizes for `cobb`."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_deleted": 1},
+    )
+    cypher = "MATCH (:Agent)-[p:PRODUCED]->(k:KaizenEntry {entryId:'e1'}) DELETE p"
+    out = server.run_query("kaizen_team", cypher, "cobb")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "relationships_deleted=1" in out
+
+
+def test_mention_edge_resolve_zero_space_entryid_and_agentid_succeeds_for_cobb(fake_client):
+    """New (2026-08-23) — Finding 2, `_MENTION_EDGE_RESOLVE_RE`: zero space
+    after both `entryId:` and `agentId:` now authorizes for `cobb`."""
+    client = fake_client(
+        error=_response_error(_READ_ONLY_ERROR),
+        write_stats={"relationships_deleted": 1},
+    )
+    cypher = (
+        "MATCH (k:KaizenEntry {entryId:'e1'})-[m:MENTIONS]->(:Agent {agentId:'security-expert'}) "
+        "DELETE m"
+    )
+    out = server.run_query("kaizen_team", cypher, "cobb")
+    assert ("query", cypher, server.TIMEOUT_MS) in client.calls
+    assert "relationships_deleted=1" in out
 
 
 def test_all_four_new_shapes_rejected_without_agent(fake_client):

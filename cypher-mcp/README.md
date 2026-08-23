@@ -165,8 +165,10 @@ provisioning and again for `Agent.agentId`'s own index/constraint, M8 S0 — bot
    ```
 
    **Gotcha, confirmed live 2026-08-23:** "nothing else in the statement" is literal — a trailing
-   `RETURN k.entryId` (or anything else) after the `KaizenEntry` map's closing `}`/`)` is rejected,
-   with the same generic FR-8 message as an unrecognized shape. This is the opposite of shape 2
+   `RETURN k.entryId` (or anything else) after the `KaizenEntry` map's closing `}`/`)` is rejected.
+   The rejection message names this specific trap (as of the 2026-08-23 message fix) rather than
+   the fully generic FR-8 text, so a caller who appends `RETURN` gets a direct pointer back to the
+   trailing clause instead of a bare "not a recognized shape." This is the opposite of shape 2
    below, where a trailing `RETURN` is fine — don't assume the two shapes are equally permissive.
    Send the write with nothing appended; if you want the `entryId` back, issue a **separate**
    follow-up read (`MATCH (k:KaizenEntry {entryId:'...'}) RETURN k`) after the write succeeds.
@@ -237,11 +239,12 @@ provisioning and again for `Agent.agentId`'s own index/constraint, M8 S0 — bot
 6. **Curator-clear** — a recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS` env var,
    comma-separated, default `cobb`) clears an entry whole, whatever edges (or none) it still has,
    by `entryId`. Exactly one skeleton is recognized — no other write shape gets curator treatment.
-   **The space after the colon is load-bearing:** `_CURATOR_CLEAR_RE` (`server.py`) matches the
-   literal substring `entryId: ` (colon **then a space**) before the quote, and the pre-match
-   whitespace normalization only *collapses* existing runs of whitespace — it never *inserts* one,
-   so `{entryId:'...'}` (no space) fails the regex and is rejected as an unrecognized shape, while
-   `{entryId: '...'}` (space present, as below) is accepted — live-verified 2026-08-20:
+   Whitespace around the colon in `entryId:`/`agentId:` is tolerant in all 4 curator shapes
+   (`_CURATOR_CLEAR_RE` and its 3 siblings, `server.py`) — `{entryId:'...'}` (no space) and
+   `{entryId: '...'}` (one space) are both accepted, matching the tolerance the producer-write
+   shape's own `agentId\s*:\s*` already had (fixed 2026-08-23; from 2026-08-20 through then, the
+   no-space form was rejected as an unrecognized shape — a formatting gap, not a narrower
+   authorization, so nothing that was previously authorized stopped being so):
 
    ```
    mcp__cypher__query(

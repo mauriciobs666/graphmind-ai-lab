@@ -277,7 +277,7 @@ _AUTHOR_LITERAL_RE = re.compile(r"""\bauthor\s*:\s*['"]([^'"]*)['"]""", re.IGNOR
 # collapsed before matching. Deliberately narrow to :KaizenEntry — see the risks
 # section of `docs/plans/generic-cypher-mcp.md` §9 for the revisit trigger.
 _CURATOR_CLEAR_RE = re.compile(
-    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\) "
+    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId\s*:\s*['\"][^'\"]+['\"]\}\) "
     r"DETACH DELETE [a-zA-Z_]\w*;?$",
     re.IGNORECASE,
 )
@@ -403,13 +403,21 @@ _PRODUCER_WRITE_TAIL_RE = re.compile(
 _PRODUCER_WRITE_TRAILER_RE = re.compile(r"\s*\)\s*;?\s*\Z")
 
 
-def _producer_write_agent_id(cypher: str) -> str | None:
-    """Recognize exactly one `MERGE (<var>:Agent {agentId:...})` clause
-    immediately followed by exactly one
-    `CREATE (<var>)-[:PRODUCED {...}]->(<var2>:KaizenEntry {...})` clause,
-    nothing else in the statement (plan §3.1 step 2). Returns the claimed
-    `agentId`, or `None` if the text isn't shaped exactly like this skeleton
-    — never raises, never partially authorizes."""
+def _producer_write_shape_match(cypher: str) -> tuple[str, int] | None:
+    """Match the producer-write skeleton up through a valid `KaizenEntry` map
+    — `MERGE (<var>:Agent {agentId:...})` immediately followed by
+    `CREATE (<var>)-[:PRODUCED {...}]->(<var2>:KaizenEntry {...})`, with the
+    map's own braces balanced — WITHOUT checking what (if anything) follows
+    the map's closing `}` (that is `_PRODUCER_WRITE_TRAILER_RE`'s job, done
+    by the caller). Returns `(agent_id, map_end)` — `map_end` is the index
+    just past the `KaizenEntry` map's closing `}` — or `None` if any
+    component through the map itself failed to match.
+
+    Factored out of `_producer_write_agent_id()` so that a near-miss (shape
+    matches everywhere except the trailer) can be told apart from any other
+    kind of non-match, for a more specific rejection message (`authorize_write`,
+    FR-8) — this helper is pure shape recognition and asserts nothing about
+    authorization on its own."""
     merge_match = _PRODUCER_WRITE_MERGE_RE.match(cypher)
     if not merge_match:
         return None
@@ -442,9 +450,48 @@ def _producer_write_agent_id(cypher: str) -> str | None:
     if map_end is None:
         return None
 
+    return agent_id, map_end
+
+
+def _producer_write_agent_id(cypher: str) -> str | None:
+    """Recognize exactly one `MERGE (<var>:Agent {agentId:...})` clause
+    immediately followed by exactly one
+    `CREATE (<var>)-[:PRODUCED {...}]->(<var2>:KaizenEntry {...})` clause,
+    nothing else in the statement (plan §3.1 step 2). Returns the claimed
+    `agentId`, or `None` if the text isn't shaped exactly like this skeleton
+    — never raises, never partially authorizes."""
+    match = _producer_write_shape_match(cypher)
+    if match is None:
+        return None
+    agent_id, map_end = match
     if not _PRODUCER_WRITE_TRAILER_RE.match(cypher, map_end):
         return None
     return agent_id
+
+
+#: Longest trailing-text excerpt shown in the near-miss trailer message
+#: (`_producer_write_trailer_message`) — long enough to show the offending
+#: clause, short enough to stay a one-line pointer rather than an echo of the
+#: whole statement.
+_PRODUCER_WRITE_TRAILER_EXCERPT_MAX = 80
+
+
+def _producer_write_trailer_message(cypher: str, map_end: int) -> str:
+    """The specific near-miss rejection for a statement that matches the
+    producer-write skeleton through a valid `KaizenEntry` map, but continues
+    afterward (a trailing `RETURN`, or any other clause) — the one thing
+    `_PRODUCER_WRITE_TRAILER_RE` requires not happen (plan §3.1 step 2e,
+    deliberately strict, not to be relaxed). Names the trap instead of
+    falling through to the fully generic FR-8 message."""
+    trailing = cypher[map_end:].strip()
+    if len(trailing) > _PRODUCER_WRITE_TRAILER_EXCERPT_MAX:
+        trailing = trailing[:_PRODUCER_WRITE_TRAILER_EXCERPT_MAX] + "…"
+    return (
+        "Rejected: this looks like a producer-write, but the statement continues "
+        f"after the KaizenEntry map's closing brace (found: '{trailing}'). The "
+        "producer-write shape must end there — no trailing RETURN or other clause. "
+        "Issue a separate follow-up read for the entryId instead."
+    )
 
 
 #: The 3 new curator-gated shapes (plan §3.1) — narrow fixed skeletons,
@@ -454,19 +501,19 @@ def _producer_write_agent_id(cypher: str) -> str | None:
 #: stricter than `_CURATOR_CLEAR_RE`, which doesn't need to be (single clause,
 #: single variable, nothing to cross-reference).
 _MENTIONS_WRITE_RE = re.compile(
-    r"^MATCH \(([a-zA-Z_]\w*):KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\) "
-    r"MERGE \(([a-zA-Z_]\w*):Agent \{agentId: ['\"][^'\"]+['\"]\}\) "
+    r"^MATCH \(([a-zA-Z_]\w*):KaizenEntry \{entryId\s*:\s*['\"][^'\"]+['\"]\}\) "
+    r"MERGE \(([a-zA-Z_]\w*):Agent \{agentId\s*:\s*['\"][^'\"]+['\"]\}\) "
     r"MERGE \(\1\)-\[:MENTIONS\]->\(\2\);?$",
     re.IGNORECASE,
 )
 _PRODUCER_EDGE_RESOLVE_RE = re.compile(
     r"^MATCH \(:Agent\)-\[([a-zA-Z_]\w*):PRODUCED\]->\([a-zA-Z_]\w*:KaizenEntry "
-    r"\{entryId: ['\"][^'\"]+['\"]\}\) DELETE \1;?$",
+    r"\{entryId\s*:\s*['\"][^'\"]+['\"]\}\) DELETE \1;?$",
     re.IGNORECASE,
 )
 _MENTION_EDGE_RESOLVE_RE = re.compile(
-    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId: ['\"][^'\"]+['\"]\}\)-\[([a-zA-Z_]\w*):MENTIONS\]"
-    r"->\(:Agent \{agentId: ['\"][^'\"]+['\"]\}\) DELETE \1;?$",
+    r"^MATCH \([a-zA-Z_]\w*:KaizenEntry \{entryId\s*:\s*['\"][^'\"]+['\"]\}\)-\[([a-zA-Z_]\w*):MENTIONS\]"
+    r"->\(:Agent \{agentId\s*:\s*['\"][^'\"]+['\"]\}\) DELETE \1;?$",
     re.IGNORECASE,
 )
 
@@ -525,6 +572,18 @@ def authorize_write(cypher: str, agent: str | None) -> str | None:
                 "agent's write cannot be accepted as another's (FR-8)."
             )
         return None   # producer-write, any agent may write its own
+
+    # Not a full producer-write — but if the skeleton matched everywhere
+    # through a valid KaizenEntry map and only the trailer failed (i.e. the
+    # statement continues after the map's closing brace), that specific near-
+    # miss gets a specific message instead of falling through to the fully
+    # generic FR-8 rejection below. Message-only: the authorization outcome
+    # (rejected) is unchanged from before this check existed.
+    producer_shape = _producer_write_shape_match(cypher)
+    if producer_shape is not None:
+        _, map_end = producer_shape
+        if not _PRODUCER_WRITE_TRAILER_RE.match(cypher, map_end):
+            return _producer_write_trailer_message(cypher, map_end)
 
     normalized = " ".join(cypher.split())
     if _CURATOR_CLEAR_RE.match(normalized):
