@@ -186,8 +186,23 @@ adds to the doctrine, all carried in `claude/teco/kaizen/history.md`:*
 write guard described as reaching "the coordination doc and your own inbox" — the inbox was
 deleted 2026-08-21), and a pre-existing repo-level `audit-team.sh` FAIL from commit `6193083`
 (username leaked into a transcript path in `claude/cobb/kaizen/history.md`) fixed as its own
-separate commit `c3f621d`, deliberately not bundled into the unit. Pass 2 is gated on this pass's
-observation window closing clean.*
+separate commit `c3f621d`, deliberately not bundled into the unit.*
+
+***C1 pass 1's observation window CLOSED clean, 2026-08-24**, on a two-round synthetic probe
+(§6's substitute where no organic dispatch occurs) — full result in `claude/teco/kaizen/history.md`.
+Every watch-list rule fired, including all seven whose narratives pass 1 removed; the repaired
+commit-grant clause was confirmed **behaviorally**, not just by re-reading it. **C1 pass 2 is
+unblocked.** Two things the probe taught about probe design itself, for the remaining units:*
+
+- ***Probe the rewritten clauses, not just the deleted ones.*** *The highest-value evidence came
+  from the two rules whose surviving wording pass 1 changed (the commit grant, the milestone-close
+  flip) — consistent with finding 1 above. A probe that only exercises rules whose narratives were
+  cut tests the safe half of the change.*
+- ***A single scenario under-covers; use a resume, not a second probe.*** *Round 1 left two rules
+  untriggered (model routing had no mechanical unit; the commit grant was suppressed by the
+  probe's own no-commit constraint). A `SendMessage` resume closed both cheaply, with context
+  intact — and produced the probe's strongest signal, an unprompted self-diagnosis of a rule the
+  agent had bent in round 1. Design round 2 to force what round 1 could not reach.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
