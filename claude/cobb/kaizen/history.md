@@ -2255,6 +2255,49 @@
 - **Why:** Two durable learnings surfaced from the session: (1) when `CLAUDE.md` and `AGENTS.md` would carry the same catalog, importing avoids divergence and keeps `AGENTS.md` as the broadest-reach source; (2) reconciling an already-drifted context doc is a recurring task distinct from the "sync on my own edits" duty already in the prompt.
 - **Plan items:** K-004 (added).
 
+## 2026-08-24 — Revised `write-guard-classifier-gap.md` (v2) addressing `analyst`'s review
+
+- **What:** `analyst` reviewed the design (`claude/docs/reviews/write-guard-classifier-gap.md`,
+  `374a350`, verdict "needs changes"). Independently re-read the live wrapper scripts to confirm
+  each finding before revising rather than trusting the review's summary: (1) **Blocker**
+  confirmed — `guard-cobb-topic-writes.sh`'s allowlist bundles low-stakes kaizen/catalog docs with
+  prompt-governing files (`claude/*/*.md` = every agent's own definition/hooks/tool-grants,
+  `skills/agent-maintenance/*`, `skills/agent-standards/*`), none of which the protected-path
+  carve-out catches (it's dot-prefix-only; this repo's agent defs live at plain
+  `claude/<name>/<name>.md`). Split §5.3 in two: kaizen/catalog docs stay a candidate, the
+  agent-definition/skill-package globs are excluded outright — a standing `Edit(claude/**/*.md)`
+  rule would silently reopen the exact self-modification hazard already caught and stopped
+  2026-08-20. (2) Added §5.2's per-glob risk table — `docs/reviews/**`/`docs/test-reports/**`
+  flagged as self-approval risk (the agent under review/test could silently edit its own verdict),
+  `docs/requirements/**` as moving the acceptance-criteria goalposts unnoticed, `docs/plans/**` as
+  moderate (backstopped by a companion review), test-plans/manuals as fine — folded into a
+  revised §8 as an explicit per-glob sign-off rather than one blanket trade judgment. (3) Re-`grep`'d
+  `claude/teco/hooks/guard-coordination-doc-writes.sh` and `claude/data-scientist/hooks/guard-ds-doc-writes.sh`
+  myself and confirmed the review's finding: both prior-table descriptions ("`-coordination.md`
+  suffix," "ML-scoped") were wrong — the live globs are byte-identical to `architect`'s and the
+  union of `architect`'s+`analyst`'s respectively. Rewrote §5.1 to state the real shape (four
+  distinct glob surfaces claimed by multiple agents, not eight independent decisions). (4) Rewrote
+  §6 to show, not just assert, why an `ask`-only (no blanket allow) translation doesn't rescue
+  `tdd-engineer`'s deny-list shape — it never touches the actual friction source, since it only
+  fires on paths that were already correctly escalating. Also folded in the review's "Note" finding
+  (§2.1 caveat: two live hypotheses on whether rules bypass the classifier for subagent writes at
+  all, not just one) so whoever runs the live test in §7 knows to distinguish them. Bumped
+  `Version: 2`, added a `Reviews:` header pointer, left `Status: active` (in-place revision — not
+  yet approved/executed, no ordinal successor needed per the repo's doc-lifecycle convention).
+  Judgment call on a second full review pass: **recommended against** — every change traces
+  directly to one of the review's four numbered findings and its own suggested fix, re-verified
+  independently against the live scripts rather than taken on faith, with no new judgment calls
+  introduced beyond what the review proposed; a second full pass would be re-checking corrections
+  against their own source rather than surfacing anything new.
+- **Why:** `analyst`'s review (routed through `teco`) found the design's reasoning framework sound
+  but flagged one genuine blocker (a self-modification-hazard exposure the original §5 didn't
+  differentiate from lower-stakes doc-kind globs) plus two description-accuracy errors that would
+  have misrepresented the design's actual incremental exposure to the review gate. All four
+  findings held up under independent re-verification, so all four got folded in as specified rather
+  than adjudicated.
+- **Plan items:** — (unchanged: empirical validation via a human's live interactive session is still
+  the gate before any implementation, per the document's own §7.)
+
 ## 2026-08-24 — Wrote `write-guard-classifier-gap.md`: `permissions.allow`-rule design for the classifier gap (dispatched by `teco`)
 
 - **What:** Follow-up to the same-day RCA (below). Re-read `code.claude.com/docs/en/permissions`
