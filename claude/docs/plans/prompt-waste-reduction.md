@@ -152,7 +152,7 @@ Both Stage B observation windows now run concurrently.*
 
 | Unit | File | Now | Target | Notes |
 |---|---|---|---|---|
-| C1 | `teco.md` | 5,987 w | ~3,400 w | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
+| C1 | `teco.md` | 5,987 w | ~4,300–4,600 w (revised at pass 1) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
 | C2 | `tico.md` | 3,531 w | set after inventory | Not yet read in this analysis — inventory first, then target |
 | C3 | `analyst.md` | 2,569 w | ~1,900 w | Evidence-traps list stays (class 3 payloads); trims are provenance and restatement |
 | C4 | `security-expert.md` + `devops.md` | 2,471 + 2,266 w | after inventory | |
@@ -160,6 +160,34 @@ Both Stage B observation windows now run concurrently.*
 | C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
 
 Serialized or in review-gated pairs — never two units editing one file.
+
+*C1 pass 1 executed 2026-08-24 (5,948 → 5,728 w; 15 edits, class-5/6 only). Gates (a)–(e) green;
+cobb §7 lint pass-with-findings, all five findings fixed before commit. Three findings this unit
+adds to the doctrine, all carried in `claude/teco/kaizen/history.md`:*
+
+1. ***The class-5/6 cut is not where the risk lives — the prose repair around the hole is.***
+   *The one real defect this pass produced came from **rewording a rule while deleting the story
+   attached to it**: a tightened commit-grant sentence silently wrote `teco` out of the universal
+   interactive-mode grant. Nothing was "lost" by deletion; scope moved during the rewrite. §6's
+   attribution step 2 gains a third branch — rule kept, narrative correctly cut, but the
+   surviving sentence's **scope** changed. On every remaining unit, re-read each reworded
+   sentence as a rule diff, not a length diff.*
+2. ***On a rule-dense file, class-5/6 removal alone buys ~4%, not ~40%.*** *Read the C1–C6 word
+   targets as the sum of both passes; a single narrative sweep will not approach them. Cobb's
+   independent estimate, given C1's load-bearing keep-list: **teco lands nearer ~4,300–4,600 w
+   with every rule intact**, which §7 ("targets are estimates, not quotas") counts as a pass.
+   Revise C1's ~3,400 target to that band.*
+3. ***A pass-2 keep-list is a required output of pass 1.*** *Pass 1 is the cheapest moment to
+   identify what looks like class-7 duplication but is mechanism (a verbatim brief template, an
+   example row that **is** the spec, audit-enforced tokens restated three times). C1's list is in
+   teco's kaizen entry; every later two-pass unit should produce one.*
+
+*Two items rode along, both logged: a stale clause corrected inside an edited sentence (teco's
+write guard described as reaching "the coordination doc and your own inbox" — the inbox was
+deleted 2026-08-21), and a pre-existing repo-level `audit-team.sh` FAIL from commit `6193083`
+(username leaked into a transcript path in `claude/cobb/kaizen/history.md`) fixed as its own
+separate commit `c3f621d`, deliberately not bundled into the unit. Pass 2 is gated on this pass's
+observation window closing clean.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
