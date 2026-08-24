@@ -53,6 +53,30 @@ enforcement is unconfirmed under Auto Mode) and one Minor (undercounted `Agent`-
 agents: 6 named vs. actually all 13). Neither Major finding overturns the recommendation. Sent
 back to `cobb` (U11) to fold in, same in-place precedent as the earlier v2 revision.
 
+| U11 | `cobb` | `a3b4c777bd3b19360` | delivered | `permission-default-mode.md` v2, commit `7fc1e8d` | — | 221k tok / 28 tool uses |
+| U12 | `teco` | — | delivered | One-line fix: stale "backport open" claim in v2's Cross-references section, commit `7fc1e8d` | — (trivial fix, no gate) → — | — |
+
+## Close-out
+
+Both levers this whole investigation could find are now exhausted:
+
+1. **`permissions.allow` settings-rule supplement** (`write-guard-classifier-gap.md`) — design
+   reviewed to approve-with-suggestions, then **empirically refuted** (§U7): the rule does not
+   suppress the confirmation prompt for a Task-delegated write, even stacked with a hook that
+   independently returns `"allow"` for the same path.
+2. **`defaultMode` switch away from `auto`** (`permission-default-mode.md`, v2, reviewed to
+   approve-with-suggestions) — the mechanism is real and precisely documented (parent-mode
+   inheritance), but the blast radius is whole-session/every-Bash-call at any persisted scope,
+   with no narrower option available, and the cost-benefit doesn't clear the bar. **Recommended:
+   stay on `auto`, accept the documented friction** — the same conclusion shape both investigations
+   independently reached.
+
+**Bottom line for the stakeholder:** there is no clean, narrowly-scoped fix for the
+Task/Agent-delegated write classifier gap available today. The gap is now fully explained and
+durably documented (`skills/agent-standards/claude-code.md`), not mysterious — but closing it
+would cost more (in Bash-prompt volume, team-wide, indefinitely) than living with it. This
+coordination is ready to close pending the stakeholder's sign-off on that recommendation.
+
 **U8 summary:** precisely identifies the subagent parent-mode-inheritance mechanism
 (`bypassPermissions`/`acceptEdits` on the parent takes precedence and can't be overridden;
 `auto` on the parent forces `auto` on every dispatched subagent, discarding its frontmatter).
