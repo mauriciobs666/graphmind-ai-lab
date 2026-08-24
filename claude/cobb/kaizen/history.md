@@ -2255,6 +2255,36 @@
 - **Why:** Two durable learnings surfaced from the session: (1) when `CLAUDE.md` and `AGENTS.md` would carry the same catalog, importing avoids divergence and keeps `AGENTS.md` as the broadest-reach source; (2) reconciling an already-drifted context doc is a recurring task distinct from the "sync on my own edits" duty already in the prompt.
 - **Plan items:** K-004 (added).
 
+## 2026-08-24 — Wrote `write-guard-classifier-gap.md`: `permissions.allow`-rule design for the classifier gap (dispatched by `teco`)
+
+- **What:** Follow-up to the same-day RCA (below). Re-read `code.claude.com/docs/en/permissions`
+  specifically for the rule mechanism (not hooks) and found: (1) the classifier's own documented
+  decision order resolves a matching settings.json `allow`/`ask`/`deny` **rule** at step 1, before
+  the classifier is ever invoked — unlike a `PreToolUse` hook's `"allow"`, which is never named as
+  an input to that decision order; (2) rules only key off `Edit(path)`/`Read(path)`, never
+  `Write(path)` — a naive dual-rule translation would silently no-op half of it. Attempted a live
+  empirical test (isolated git worktree, ephemeral `--settings` CLI flag, never persisted) to
+  confirm a rule actually suppresses the prompt for a Task-delegated write; the attempt was blocked
+  outright by my own session's auto-mode classifier before it could run ("spawning a nested
+  `claude -p` process" read as exactly the kind of action it's built to catch) — cleaned up fully
+  (worktree removed, `git status` clean), did not attempt a workaround per the denial's own
+  instruction, reported this as still-open rather than guessing. Wrote up a split-verdict design in
+  `claude/docs/plans/write-guard-classifier-gap.md`: the narrow allow-list guards (`analyst`,
+  `architect`, `data-scientist`, `teco`, `tico`, `cobb`, `qa-engineer`, `security-expert`'s review
+  guard) are reasonable rule-supplement candidates, explicitly trading a per-agent escalation
+  guarantee for a per-path one (flagged, not silently accepted); `tdd-engineer`'s deny-list shape is
+  explicitly excluded — rules aren't agent-scoped, so the only literal translation would blanket-open
+  the entire repo to every session, not just that one agent. Design only, not implemented; routed to
+  `teco` for the `analyst` review gate.
+- **Why:** The coordinator pushed back on "proceed as-is, defaultMode is the only lever" and asked
+  specifically whether a declarative permission *rule* (a documented mechanism separate from hooks)
+  closes the gap the RCA found, before the `defaultMode` change becomes the only option on the
+  table. The scoping tradeoff (per-agent vs. per-path) is the crux the design had to make explicit
+  rather than paper over — a mechanical glob-string copy from hook to rule would look like a clean
+  fix while quietly widening who gets auto-approved.
+- **Plan items:** — (the document itself carries the open items: empirical validation before any
+  implementation, and the three questions flagged for `analyst`'s gate in its §8.)
+
 ## 2026-08-24 — Root-caused the `PreToolUse` "allow" write-prompt regression (dispatched by `teco`, `agent-permission-friction2.md` open question 3)
 
 - **What:** Investigated why two live, stakeholder-confirmed instances (`analyst` → `docs/reviews/document-ingestion-impl.md`, `tdd-engineer` → `cypher-mcp/tests/test_server.py`, both 2026-08-23) still triggered a manual confirmation prompt despite each path statically matching its shipped write-guard's allowlist/deny-list and each guard core confirmed (by direct read, both scripts unchanged since `93c3a39`/2026-08-21) to emit an explicit `permissionDecision:"allow"` on that match. Ruled out, with direct evidence: stale `$HOME/.claude/agents/{analyst,tdd-engineer}` symlinks (both live, correct targets), a guard-script regression (git log clean since 2026-08-21), a single-CLI-version bug (instances reproduced on both v2.1.240 and v2.1.241), and a nested-git-repo trust gap (`falkor-chat`/`cypher-mcp` are plain subdirectories, not nested repos; project trust `hasTrustDialogAccepted` confirmed `true`). Found the actual mechanism by reading the two failing tool calls' own session transcripts (`~/.claude/projects/<project-slug>/a668e215-.../subagents/agent-*.jsonl`): both showed a genuine multi-minute-to-multi-hour gap between `tool_use` and its `toolUseResult` (14 min; 4h38m) — a live human-decision gap, not a fabricated report — and the parent (`teco`) top-level session's own transcript carries an explicit `"type":"permission-mode"` record showing the session stayed in **`auto`** mode continuously across both incidents (this account's Pro/Max/Team default, confirmed also in `~/.claude/settings.json`'s `defaultMode:"auto"`). Fetched `code.claude.com/docs/en/permissions` and `.../permission-modes` fresh (2026-08-24, not from phase 1's cached reading) and found: (1) phase 1's §1.3 "hook allow suppresses the prompt... every time" already over-claimed its own cited quote, which carries the caveat "a matching ask rule still prompts even when the hook returned allow" — no such settings.json ask/deny rule exists here, so this alone doesn't explain the instances; (2) auto mode's own documented decision order says a non-protected-path working-directory file edit is auto-approved at step 2, with **zero classifier involvement and zero human prompt, regardless of hooks** — which the two instances directly contradict, since neither target is a protected path; (3) nothing in the docs states whether a `PreToolUse` hook's `"allow"` exempts a **subagent-delegated** action from the auto-mode classifier's own review (the "How auto mode handles subagents" section says subagent actions go through the classifier "with the same rules as the parent session" but is silent on the hook interaction). Conclusion: the friction is a real, live-reproduced gap in the auto-mode-classifier-vs-`PreToolUse`-hook interaction for **Task/Agent-tool-delegated writes specifically** — outside my remit to fix (it isn't a guard-script or settings.json bug; changing the account's or project's `defaultMode` away from `auto` to route around it is a broad, non-hook-engineering call I flagged rather than made unilaterally, per my own standing "stop and ask" instruction for costly-to-reverse scope changes). Promoted the verified finding into `skills/agent-standards/claude-code.md`'s Hooks section (dated 2026-08-24, alongside the existing Bash-classifier note) so a future phase-2-style write-guard design doesn't re-derive phase 1's now-falsified "hook allow is unconditional" premise. Reported back to `teco`: root cause identified and documented; not fixed (no lever in my remit); recommended phase-2 `coder` design proceed, since blocking on this would also block on something that already affects the five shipped agents equally, plus a concrete next test (a fresh, non-concurrent, top-level `--agent analyst` write, mode-bar watched live) that only the stakeholder's own interactive terminal can run.
