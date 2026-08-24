@@ -26,6 +26,24 @@ triggered its own separate prompt. Stakeholder, 2026-08-23: "yeah it is annoying
 recurring requests" — confirms the friction isn't an occasional nuisance, it's continuous
 interruption across one otherwise-uninterrupted implementation task.
 
+## User stories
+- As the stakeholder, I don't want to be interrupted approving `coder`'s `Write`/`Edit` when it's
+  squarely `coder` doing its own in-remit implementation work on an active, gated plan — same story
+  as phase 1's, just for `coder`.
+- As the stakeholder, I still want to be asked when `coder` does something genuinely outside its
+  remit (e.g. touching another specialist's documented deliverable path) — the interruption should
+  mean something when it happens, exactly as phase 1 preserved for the five agents it fixed.
+
+## Functional requirements
+- **FR-1 (governing):** A `coder` `Write`/`Edit` that stays within its own broad implementer remit —
+  any source or test file needed for its current, approved task — must not require a manual
+  per-action confirmation. A `coder` `Write`/`Edit` genuinely outside that (e.g. a path that's
+  another specialist's documented deliverable kind — a plan, review, requirements, manual,
+  test-plan/test-report doc, an agent definition or kaizen file, a team catalog or skill package, an
+  MCP-standards doc, or the project backlog) must still escalate for approval. Evidenced by
+  instances 1-4 below — all one continuous `coder` pass on the same active, gated plan, all
+  correctly recognized as in-remit, none challenged.
+
 ## Instances observed (live)
 1. **2026-08-23 — `coder`, `Edit` on `falkor-chat/server/falkorchat/services.py`.** Coincides with
    `coder` implementing the gated `document-ingestion-coordination` plan (K-050,
@@ -56,39 +74,68 @@ interruption across one otherwise-uninterrupted implementation task.
    challenge: clearly in-remit. → fourth evidence instance; first genuinely new source file this
    round (not a repeat, not paired with an already-seen file).
 
-## Open questions
-1. Is `coder`'s fix shaped like `tdd-engineer`'s (phase 1 §6 — broad implementer, inverse
-   deny-list guard over `guard-broad-write.sh`), or does live evidence point somewhere else (e.g.
-   a narrower path pattern, or a different tool class like Bash)? Needs more instances before
-   this is answerable — this is a WHAT/WHY question about what's actually firing, not a
-   solutioning question (the HOW is the architect's, once this document is ready).
-2. Are there Bash-confirmation instances too? Phase 1 flagged that `coder`'s friction might not be
-   pure `Write`/`Edit` at all ("whatever it's hitting is suspected to be a *different* mechanism
-   (e.g. Bash/terminal-command confirmations) than the `Write`/`Edit` confirmation this document
-   resolves"). Worth keeping an eye out for as more instances land.
-3. **Risk, not `coder` evidence — flagged, not resolved here. Now TWO independent data points,
-   different guard cores, same symptom:**
-   - 2026-08-23, `analyst` `Create` on `docs/reviews/document-ingestion-impl.md` **still triggered a
-     manual confirmation prompt**, confirmed by the stakeholder, despite the path matching
-     `analyst`'s already-shipped phase-1 allowlist (`docs/reviews/*|*/docs/reviews/*` in
-     `guard-review-doc-writes.sh`) and `guard-doc-writes.sh` statically confirmed to emit the
-     explicit `permissionDecision: "allow"` JSON on a match.
-   - 2026-08-23, `tdd-engineer` `Edit` on `cypher-mcp/tests/test_server.py` (relayed via a concurrent
-     `teco` session) **also triggered a manual confirmation prompt**, confirmed by the stakeholder,
-     despite the path matching none of `guard-tdd-broad-write.sh`'s deny-list entries (a plain test
-     file — everything not on the deny-list is explicitly allowed by that guard's design) and the
-     hook confirmed wired in `tdd-engineer.md`'s frontmatter.
+## Out of scope
+- **The exact deny-list/guard shape** (which paths to enumerate, whether it reuses
+  `guard-broad-write.sh`) — a HOW decision for the architect, not this document. Phase 1's
+  `tdd-engineer` fix (§6) is the obvious precedent given the matching evidence shape, but this
+  document doesn't dictate reuse.
+- **The auto-mode-classifier-vs-`PreToolUse`-hook interaction for subagent-delegated writes**
+  (former open question 3) — root-caused and documented (`skills/agent-standards/claude-code.md`,
+  2026-08-24), but not fixable within a repo-local guard script. Per `cobb`'s explicit
+  recommendation, this document's eventual fix should still ship — it puts `coder` on equal footing
+  with the five already-shipped agents, not behind them. The suggested live isolation test is a
+  candidate follow-up, not a prerequisite.
+- **Bash-triggered confirmations** — no live evidence this round. If a future instance surfaces one,
+  it's a new document, not a revision of this one (per phase 1's precedent scoping `coder`'s Bash
+  question out entirely).
+- **The destructive-ops guards, git-commit authority scoping** — unaffected, same as phase 1.
 
-   These are **two different guard cores** (`guard-doc-writes.sh`'s allow-list vs.
-   `guard-broad-write.sh`'s deny-list) on **two different agents**, both statically verified correct,
-   both still producing a live prompt on a case each was specifically designed to suppress. This no
-   longer looks like an isolated glitch — it looks like the `PreToolUse` `"allow"` mechanism itself
-   isn't reliably suppressing the prompt in practice, which would undermine phase 1's entire
-   root-cause finding (§1.3: "an explicit `PreToolUse` `'allow'` suppresses the prompt... every
-   time"). Directly threatens whatever fix this phase-2 round eventually designs for `coder`, since
-   it would rely on the identical mechanism. Not investigated further here (outside `tico`'s remit —
-   no hook/execution debugging); needs routing to `cobb`/an architect pass, and probably before
-   phase-2 design proceeds rather than after, given how directly it undercuts the approach.
+## Acceptance criteria
+- **AC-1:** Given `coder` performs a `Write`/`Edit` within its own broad implementer remit (any
+  source/test file for its current approved task) from a top-level interactive `coder` session, when
+  the tool call runs, then no manual confirmation prompt appears.
+- **AC-2 (safety net preserved):** Given `coder` performs a `Write`/`Edit` genuinely outside its
+  remit (another specialist's documented deliverable path), when the tool call runs, then a manual
+  "ask" confirmation still appears — unchanged from today.
+- **AC-3 (known limitation, not a failing condition):** For a `coder` `Write`/`Edit` that is
+  Task/`Agent`-delegated (e.g. via a `teco` session) rather than run from a top-level interactive
+  session, the guard's hook decision will be correct (explicit `"allow"` on an in-remit match), but
+  live suppression of the prompt is not guaranteed today, per the documented auto-mode-classifier gap
+  (`skills/agent-standards/claude-code.md`, 2026-08-24). This is a pre-existing condition shared with
+  all five phase-1-fixed agents, not a regression introduced by this feature — verifying or closing
+  it depends on the live isolation test `cobb` recommended, outside this document's scope.
+- **AC-4 (regression check):** `coder`'s existing, unfixed friction on paths outside its remit is
+  unaffected — this feature narrows *when* confirmation fires, it does not remove the safety net.
+
+## Open questions
+None currently open — see Decision log for how each was resolved or reclassified.
+
+- *Fix shape (deny-list like `tdd-engineer`'s vs. something narrower)* — reclassified: this is a
+  HOW question, not a WHAT/WHY one. It doesn't belong as an open question in a requirements
+  document at all; it's the architect's call once this document is ready, informed by the evidence
+  below (all 4 instances match `tdd-engineer`'s "broad implementer, no single folder" shape).
+- *Bash-confirmation instances* — none observed this round. A fact, not a blocker; noted in Out of
+  scope in case future evidence surfaces it.
+- *The cross-agent regression risk (`analyst`, `tdd-engineer` both still prompting despite a
+  correct hook `"allow"`)* — **investigated and resolved as "root-caused, not a blocker."** Dispatched
+  to `cobb` (2026-08-24, commit `6193083`, `claude/cobb/kaizen/history.md`): a real, live-reproduced,
+  undocumented interaction between Claude Code's auto-mode permission classifier and `PreToolUse`
+  hooks, specific to Task/`Agent`-tool-delegated writes (exactly the shape both regression instances
+  had — relayed via a concurrent `teco` session). Not a guard-script bug, stale deployment, or
+  version regression — all ruled out with direct evidence (symlinks live, git history clean since
+  2026-08-21, reproduced on two CLI versions, no nested-repo trust gap). Phase 1's own root-cause
+  finding (§1.3, "hook allow suppresses the prompt... every time") over-claimed its source: the docs
+  only guarantee that relative to settings.json ask/deny rules, and are silent on the auto-mode
+  classifier's interaction with a hook's `"allow"` on a **subagent-delegated** write specifically.
+  Promoted into `skills/agent-standards/claude-code.md` (2026-08-24) as a durable fact for future
+  write-guard design. **Not fixable from `cobb`'s remit** (no guard-script/settings.json lever; the
+  only lever — changing the account/project default away from `auto` mode — is a broad,
+  costly-to-reverse call flagged rather than made unilaterally) and, critically, **`cobb`'s explicit
+  recommendation is that phase-2 design should proceed anyway**: this gap already affects the five
+  already-shipped guards equally, so waiting for it doesn't put `coder` in any worse a position than
+  today's shipped agents are already in. A live isolation test (fresh, non-concurrent, top-level
+  `--agent analyst` session, mode-bar watched live) was suggested as a follow-up, not a gate — only
+  runnable interactively by the stakeholder.
 
 ## Decision log
 - 2026-08-23 — Stakeholder: "we recently implemented permission friction and i did not have
@@ -160,3 +207,12 @@ interruption across one otherwise-uninterrupted implementation task.
 - 2026-08-23 — `coder` → `falkor-chat/server/falkorchat/repository.py` (Edit) relayed; same file as
   instance 3's pair, already established in-remit. Folded into instance 3 as a repeat, not logged as
   a new instance 5.
+- 2026-08-24 — Stakeholder: "cobb did his job please check" → verified commit `6193083` and
+  `claude/cobb/kaizen/history.md`: `cobb` root-caused the cross-agent regression as an undocumented
+  auto-mode-classifier/`PreToolUse`-hook interaction on subagent-delegated writes, promoted the
+  finding to `skills/agent-standards/claude-code.md`, and explicitly recommended phase-2 design
+  proceed rather than block. Resolved former open question 3 accordingly; reclassified questions 1
+  (HOW, not tico's to resolve) and 2 (no evidence, not a blocker) as non-blocking. With all three
+  cleared, drafted User stories, FR-1, Out of scope, and AC-1..4 — AC-3 explicitly documents the
+  known Task/`Agent`-delegation limitation as a shared pre-existing condition, not a new regression,
+  per `cobb`'s finding.
