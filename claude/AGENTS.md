@@ -108,15 +108,25 @@ versioning commands), so this is entirely self-discipline, backstopped only by
 `scripts/audit-team.sh` check 8. The policy has two layers, both stakeholder decisions:
 
 - **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.**
-  Stakeholder decision, 2026-07-30: `tico` may commit its own doc kinds (requirements, manuals;
-  mirrors its Write/Edit guard exactly), `teco` may commit any coordinated specialist's
+  Stakeholder decision, 2026-07-30: `tico` may commit its own doc kinds (requirements, manuals),
+  `teco` may commit any coordinated specialist's
   already-verified deliverable by explicit path (its integrator role, deliberately wider than its
   own Write/Edit guard) — reasoning in `claude/teco/kaizen/history.md` and
   `claude/cobb/kaizen/history.md`. **Extended 2026-08-21:** `tico`'s grant now also covers the
   returned artifact of a `qa-engineer`/`analyst` verification pass it itself offered under Mode 3
   and the stakeholder accepted, once tico has confirmed the artifact fits — narrower than `teco`'s
   grant, scoped to the one ad-hoc-orchestration case tico's own guardrails sanction
-  (`tico/kaizen/history.md`, 2026-08-21 entry). Both of these grants apply whether the agent is
+  (`tico/kaizen/history.md`, 2026-08-21 entry). **Extended again 2026-08-24** (stakeholder
+  decision, closing one of `tico` K-008's two open incidents): `tico` may also commit **a file it
+  itself wrote in the current session that its `Write`/`Edit` guard let through** — including a
+  one-off the human approved at the guard's escalation prompt, e.g. a `docs/BACKLOG.md` entry. The
+  write-approval is what confers committability, so the grant does **not** reach a file `tico`
+  didn't write or an earlier session's writes; explicit-path staging still applies. This
+  deliberately breaks the write-scope==commit-scope identity `tico` previously held — the
+  stakeholder's reasoning being that a human who has just approved the write at an escalation
+  prompt has already supplied the review that identity was standing in for
+  (`tico/kaizen/history.md`, 2026-08-24 entry). K-008's other incident (routing a finding to
+  `architect` via `Agent`) is untouched and stays open. Both of these grants apply whether the agent is
   running interactively or as a delegated subagent — they're tied to the agent's role, not its
   invocation mode.
 - **Universal interactive-mode grant — every agent, added 2026-08-21.** Stakeholder ruling,

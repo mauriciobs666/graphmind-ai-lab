@@ -14,7 +14,7 @@
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
-| K-008 | 2026-08-11 | — | 🔵 | **Needs a stakeholder decision, not a cobb guess** — relax tico's write/`Agent` scope? See below. |
+| K-008 | 2026-08-11 | — | 🔵 | **Partially decided 2026-08-24** — incident 2 (commit scope) closed via shape (a); incident 1 (`Agent`-routing a finding) still needs a stakeholder call. See below. |
 | K-009 | 2026-08-23 | — | ✅ | Commit-frequency recurrence — stakeholder chose document-level batching; encoded in `tico.md`. See `kaizen/history.md`. |
 
 ### K-008 — Stakeholder pushback on tico's write-scope and `Agent`-routing guardrails
@@ -43,6 +43,19 @@
   (`claude/AGENTS.md` "Git-commit authority") didn't settle — that decision was about *other
   agents* not getting commit rights, not about *widening tico's own*. Recorded here per the
   distillation SOP's instruction to flag rather than guess on a genuine judgment call.
+- **Incident 2 CLOSED, 2026-08-24 (stakeholder decision):** shape **(a)** chosen — the commit
+  allowance now tracks what the `Write`/`Edit` guard actually let through, not the two directories.
+  `tico.md` Guardrails gained clause (c): a file tico itself wrote **in the current session** that
+  the guard let through, including a human-approved one-off (the `docs/BACKLOG.md` case). The
+  blast-radius risk noted above is bounded three ways — tico's own write, this session only,
+  explicit path — so it reaches no file tico didn't write and no earlier session. Also propagated
+  to `claude/AGENTS.md` and `claude/README.md`; see `kaizen/history.md`, 2026-08-24 entry. **Note
+  this overturns cobb's 2026-07-30 declination below on the write-scope==commit-scope invariant** —
+  the stakeholder's reasoning is that a human approving the write at the escalation prompt already
+  supplies the review that invariant stood in for.
+- **Incident 1 remains open** — routing an already-written, fully-formed finding to a named
+  next-agent as a fourth sanctioned `Agent` use (shape (b)). Undecided; still needs a stakeholder
+  call, and it is the reason this item stays 🔵 rather than ✅.
 - **Related resolution, 2026-08-21 (does not close this item):** a narrower, related instance —
   tico lacking commit authority over a Mode-3 verification-pass specialist's own returned
   artifact — was put to the stakeholder and decided: tico's commit grant now also covers that one
@@ -91,7 +104,6 @@
 - **Notes:** run independently of K-001/K-004; a different mode and a different agent boundary than either.
 
 ## Parking lot / ideas
-- **The departure-trigger list is closed and omits an explicit stakeholder request (raised by `cobb`'s C2 lint, 2026-08-24 — needs a stakeholder decision, not a cobb or coder guess; sits next to K-008).** Mode 1's commit triggers are: switching to a different document, stepping out of Mode 1, session/interview closing. A literal reader can decline a stakeholder's direct "commit this now" on the grounds that no departure point has been reached. That is not hypothetical for this agent — **K-008's second open incident is exactly a declined stakeholder commit request**, and the 2026-08-21 history records the stakeholder's own correction that agents should not refuse when asked. One clause fixes it (`…or the interview/session closing — or the stakeholder asks for it`), but it **widens a rule the stakeholder themself decided** (K-009), so it must not be folded into a compression unit. Resolve with K-008.
 - **`tico.md`'s archived-flip ownership over-claims against root `AGENTS.md` (pre-existing; found by `cobb`'s C2 lint, not introduced by it).** Mode 3 states "You are this kind's owner — you perform that flip yourself, on the same evidence basis as any other doc kind." Root `AGENTS.md` assigns `archived` to **`teco`, at milestone close** (its write guard auto-allows the mechanical one-token edit) and routes only the *non-mechanical* archived flips to the by-kind owner. Root `AGENTS.md` wins — it is the convention's home and explicitly carves the mechanical case out. `tico.md` cites the right table and states the conclusion absolutely. Proposed rewrite: *"You are this kind's owner: the `superseded` flip is yours, as is any `archived` flip that needs judgment — the mechanical archived flip at milestone close is `teco`'s (root `AGENTS.md`)."* Left out of C2 deliberately: it is an authority correction, not a compression, and belongs under its own gate.
 - **Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition):** clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.
 - **Existing requirements docs still carry the pre-2026-07-27 unbolded status line** — do **not** hand-normalise them mid-interview. The one-time backfill across all active feature documents is step 3 of `docs/plans/doc-reference-convention.md` (owner: `coder`, whose writes aren't doc-guarded); after it lands, `tico` only ever writes the new form (noted 2026-07-27).
