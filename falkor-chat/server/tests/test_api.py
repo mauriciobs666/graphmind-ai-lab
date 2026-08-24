@@ -10,6 +10,7 @@ from __future__ import annotations
 import itertools
 
 import pytest
+from conftest import TEST_EMBEDDING_DIM
 from fastapi.testclient import TestClient
 
 from falkorchat import config, db
@@ -256,13 +257,18 @@ def test_read_thread_since_limit_paginates(conn):
 
 
 class RecordingWorker:
-    """Records embed_message calls scheduled on BackgroundTasks."""
+    """Records embed_message/embed_chunk calls scheduled on BackgroundTasks."""
 
     def __init__(self):
         self.calls: list[tuple] = []
+        self.chunk_calls: list[tuple] = []
 
     def embed_message(self, ws, *, msg_id, text):
         self.calls.append((ws, msg_id, text))
+        return [0.0]
+
+    def embed_chunk(self, ws, *, chunk_id, text):
+        self.chunk_calls.append((ws, chunk_id, text))
         return [0.0]
 
 
@@ -434,6 +440,103 @@ def test_trigger_wired_still_embeds_every_message(wired_wf):
     # embedding path is independent of the trigger path
     assert ("test", mid, "hello") in worker.calls
     assert len(trigger.calls) == 1
+
+
+# ── K-050 M5 Stage 2: chunk embedding + search_documents ────────────────────────
+
+
+def test_ingesting_a_document_schedules_every_chunk_for_embedding(wired):
+    client, worker, _ = wired
+    text = "First paragraph.\n\nSecond paragraph, a little longer than the first."
+    r = client.post("/documents", json={"text": text, "title": "Doc"})
+    assert r.status_code == 201
+    body = r.json()
+
+    assert len(worker.chunk_calls) == body["chunkCount"]
+    assert {ws for ws, _cid, _text in worker.chunk_calls} == {"test"}
+    # every scheduled chunk's text is a non-empty slice of the ingested document
+    for _ws, _chunk_id, chunk_text in worker.chunk_calls:
+        assert chunk_text
+        assert chunk_text in text
+
+
+def test_default_app_ingest_document_has_no_chunk_embed_wiring(client):
+    # No embed_worker configured (the plain `client` fixture, mirrors
+    # `test_default_app_has_no_wiring_and_posts_normally`) → ingest still
+    # succeeds with nothing scheduled, no crash from a None embed_worker.
+    r = client.post("/documents", json={"text": "hello"})
+    assert r.status_code == 201
+
+
+class _StubQueryEmbedder:
+    """Returns a fixed TEST_EMBEDDING_DIM vector for any query text."""
+
+    def embed(self, text):
+        return [1.0] + [0.0] * (TEST_EMBEDDING_DIM - 1)
+
+
+class _StubEmbeddingGateway:
+    def embedder(self, kind, *, ws=None):
+        return _StubQueryEmbedder()
+
+
+@pytest.fixture()
+def search_client(conn):
+    """App wired with a stub `ModelGateway` so `search_documents` can embed a
+    query — the other fixtures above never wire `models=` (K-050 M5 Stage 2 is
+    the first REST surface that needs it). Returns `(client, repo)` — the repo
+    is used to write a chunk embedding directly, since this fixture has no
+    `embed_worker` (the search path itself is what's under test).
+    """
+    repo = Repository(conn)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    services = Services(repo, models=_StubEmbeddingGateway())
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+    )
+    return TestClient(app), repo
+
+
+def test_search_documents_returns_ranked_chunks(search_client):
+    client, repo = search_client
+    r = client.post("/documents", json={"text": "about cats", "title": "Doc"})
+    assert r.status_code == 201
+    doc_id = r.json()["documentId"]
+    chunk_id = repo.list_document_chunks("test", document_id=doc_id)[0]["chunkId"]
+    repo.set_chunk_embedding(
+        "test", chunk_id=chunk_id,
+        embedding=[1.0] + [0.0] * (TEST_EMBEDDING_DIM - 1),
+        expected_dim=TEST_EMBEDDING_DIM,
+    )
+
+    hits = client.get("/documents/search", params={"q": "cats"})
+
+    assert hits.status_code == 200
+    body = hits.json()
+    assert chunk_id in [h["chunkId"] for h in body]
+    hit = next(h for h in body if h["chunkId"] == chunk_id)
+    assert hit["documentId"] == doc_id
+    assert hit["text"] == "about cats"
+
+
+def test_search_documents_503_when_no_models_wired(client):
+    # The plain `client` fixture builds `Services(repo)` with `models=None` —
+    # `search_documents` refuses cleanly (SearchNotAvailableError -> 503)
+    # rather than an AttributeError on a None gateway.
+    r = client.get("/documents/search", params={"q": "cats"})
+    assert r.status_code == 503
+    assert r.json()["error"] == "SearchNotAvailableError"
+
+
+def test_search_documents_route_not_shadowed_by_document_id_route(search_client):
+    # Registration-order regression guard: `/documents/search` must resolve to
+    # the search route, not `/documents/{document_id}` treating "search" as an id.
+    client, _repo = search_client
+    r = client.get("/documents/search", params={"q": "anything"})
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
 
 
 # ── §11 Workflow definitions & snapshots REST surface (M3 Slice 1) ──────────────

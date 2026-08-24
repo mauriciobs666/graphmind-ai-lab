@@ -15,7 +15,12 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import config
-from .background import _safe_embed, _safe_respond, _safe_run_workflow
+from .background import (
+    _safe_embed,
+    _safe_embed_chunk,
+    _safe_respond,
+    _safe_run_workflow,
+)
 from .config import CallContext
 from .services import Services
 
@@ -215,14 +220,22 @@ def ingest_document(
 
     Attributed to the configured `get_context()` actor (FR-4) — same posture
     as `send_message`, MCP ignores any notion of a client-supplied author.
-    Chunk extraction/fusion/embedding are later stages; this call only
-    returns `{documentId, chunkCount, status: 'processing'}`.
+    Chunks are embedded out-of-band right after this call returns (K-050 M5
+    Stage 2) — readable and full-text-round-trippable via `get_document`
+    immediately, ranked-searchable via `search_documents` once the background
+    embed lands (same eventually-consistent posture as a posted message).
+    Extraction/fusion are later stages; this call only returns
+    `{documentId, chunkCount, status: 'processing'}`.
     """
     ctx = _get_context()
-    return _svc().ingest_document(
+    receipt = _svc().ingest_document(
         ctx, text=text, title=title, source_format=source_format,
         source_label=source_label,
     )
+    if _embed_worker is not None:
+        for chunk in _svc().list_document_chunks(ctx, document_id=receipt["documentId"]):
+            _schedule(_safe_embed_chunk, _embed_worker, ctx.ws, chunk["chunkId"], chunk["text"])
+    return receipt
 
 
 @mcp.tool()
@@ -230,3 +243,17 @@ def get_document(document_id: str) -> dict[str, Any] | None:
     """Fetch a document (verbatim `text`, plus its ingestion status/actor)."""
     ctx = _get_context()
     return _svc().get_document(ctx, document_id=document_id)
+
+
+@mcp.tool()
+def search_documents(query: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Rank ingested document chunks by similarity to `query` (K-050 M5 Stage 2,
+    FR-3 standalone KB search — independent of chat/`search_messages`).
+
+    Returns chunks ordered most-similar-first (`score` is cosine distance —
+    lower is more similar), each carrying its source `documentId` so a caller
+    can `get_document` the full text. Raises a tool error if no embedding
+    model is configured for this deployment.
+    """
+    ctx = _get_context()
+    return _svc().search_documents(ctx, query=query, limit=limit)

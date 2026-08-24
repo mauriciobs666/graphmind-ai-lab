@@ -38,6 +38,7 @@ from .repository import Repository
 from .services import (
     DEFAULT_SWEEP_LIMIT,
     ChannelNotFoundError,
+    SearchNotAvailableError,
     ServiceError,
     Services,
     ThreadNotFoundError,
@@ -145,6 +146,12 @@ def _register_error_handlers(app: FastAPI) -> None:
 
     for _exc_type, _code in _wf_run_error_codes:
         _register(_exc_type, _code)
+
+    # `search_documents` (K-050 M5 Stage 2, FR-3): no `ModelGateway` wired is a
+    # deployment-configuration gap, not a caller mistake — same 503 precedent
+    # as `WorkflowEngineDisabledError` above, registered separately since it is
+    # not a workflow-run error.
+    _register(SearchNotAvailableError, 503)
 
 
 async def _sweep_loop(

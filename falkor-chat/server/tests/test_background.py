@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from falkorchat.background import _safe_respond
+from falkorchat.background import _safe_embed_chunk, _safe_respond
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.responder import AgentResponder
@@ -72,3 +72,47 @@ def test_safe_respond_swallows_an_unresolvable_model_logs_error_and_posts_nothin
     # that made the model unresolvable is reachable from the record
     assert error_records[0].exc_info is not None
     assert "nope/thing" in str(error_records[0].exc_info[1])
+
+
+# ── _safe_embed_chunk (K-050 M5 Stage 2) ─────────────────────────────────────────
+#
+# Mirrors `_safe_respond`'s failure-isolation contract exactly (this module has
+# no dedicated `_safe_embed` unit test to mirror — that path is covered via the
+# REST/MCP integration fixtures in test_api.py/test_mcp.py instead — but the
+# failure-isolation discipline itself is the same for every `_safe_*` wrapper,
+# so it is pinned directly here for the new one).
+
+
+class _RecordingChunkWorker:
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def embed_chunk(self, ws, *, chunk_id, text):
+        self.calls.append((ws, chunk_id, text))
+
+
+class _FailingChunkWorker:
+    def embed_chunk(self, ws, *, chunk_id, text):
+        raise RuntimeError(f"boom embedding {chunk_id}")
+
+
+def test_safe_embed_chunk_calls_the_worker():
+    worker = _RecordingChunkWorker()
+
+    _safe_embed_chunk(worker, "test", "c1", "about cats")
+
+    assert worker.calls == [("test", "c1", "about cats")]
+
+
+def test_safe_embed_chunk_swallows_failure_logs_error_never_raises(caplog):
+    worker = _FailingChunkWorker()
+
+    with caplog.at_level(logging.ERROR):
+        _safe_embed_chunk(worker, "test", "c1", "about cats")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background chunk embed failed" in error_records[0].getMessage()
+    assert "c1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom embedding c1" in str(error_records[0].exc_info[1])

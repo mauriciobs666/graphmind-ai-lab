@@ -182,6 +182,10 @@ def test_read_index_dimension_none_for_an_unknown_label(repo):
     assert repo.read_index_dimension(WS, label="NoSuchLabelAtAll") is None
 
 
+def test_read_index_dimension_returns_the_configured_dimension_for_chunk(repo):
+    assert repo.read_index_dimension(WS, label="Chunk") == TEST_EMBEDDING_DIM
+
+
 def test_read_index_dimension_none_when_the_graph_key_does_not_exist(repo, conn):
     # -graph.md §3.2 edge case 4: a `ws:{id}` graph that was never bootstrapped
     # makes FalkorDB raise "ERR Invalid graph operation on empty key" rather than
@@ -197,3 +201,99 @@ def test_read_index_dimension_none_when_the_graph_key_does_not_exist(repo, conn)
 
     after = set(conn.list_graphs())
     assert f"ws:{ghost_ws}" not in after  # confirmed: the read created nothing
+
+
+# ── set_chunk_embedding / search_chunks (K-050 M5 Stage 2, FR-3) ────────────────
+#
+# Mirrors the `set_embedding`/`hybrid_search` section above exactly, `Chunk` in
+# place of `Message` — same live `ws:test` vector index (bootstrapped at
+# TEST_EMBEDDING_DIM=4, `document-ingestion-graph.md` §2.1 confirms no new DDL
+# was needed for it). `search_chunks` has no scope traversal (a chunk has no
+# Thread/Channel) and no Entity expansion (ABOUT is dormant until Stage 3).
+
+
+def _seed_document(repo, *, document_id, chunks):
+    """Create `document_id` with `chunks` = [(chunk_id, text, vec_or_None)],
+    embedding each chunk whose `vec` is not None. Actor is a fixed `u1` user,
+    ensured idempotently (mirrors `_seed_thread` above)."""
+    repo.ensure_user(WS, user_id="u1")
+    repo.create_document(
+        WS, document_id=document_id, title="t",
+        text="".join(text for _cid, text, _vec in chunks),
+        source_format="text", ingested_by="u1", created_at=1,
+        chunks=[
+            {"chunkId": cid, "text": text, "seq": i}
+            for i, (cid, text, _vec) in enumerate(chunks)
+        ],
+    )
+    for cid, _text, vec in chunks:
+        if vec is not None:
+            repo.set_chunk_embedding(
+                WS, chunk_id=cid, embedding=vec, expected_dim=TEST_EMBEDDING_DIM
+            )
+
+
+def test_set_chunk_embedding_rejects_wrong_dimension_loudly(repo):
+    repo.ensure_user(WS, user_id="u1")
+    repo.create_document(
+        WS, document_id="d1", title="t", text="x", source_format="text",
+        ingested_by="u1", created_at=1,
+        chunks=[{"chunkId": "c1", "text": "x", "seq": 0}],
+    )
+    with pytest.raises(EmbeddingDimensionError):
+        repo.set_chunk_embedding(
+            WS, chunk_id="c1", embedding=[1.0] * (TEST_EMBEDDING_DIM + 1),
+            expected_dim=TEST_EMBEDDING_DIM,
+        )
+
+
+def test_set_chunk_embedding_writes_and_chunk_is_ann_retrievable(repo):
+    _seed_document(
+        repo, document_id="d1", chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+    assert "c1" in [r["chunkId"] for r in rows]
+
+
+def test_search_chunks_ranks_by_cosine_distance_asc(repo):
+    _seed_document(
+        repo, document_id="d1",
+        chunks=[
+            ("c1", "about cats", _pad([1.0, 0.0])),
+            ("c2", "more on cats", _pad([0.9, 0.1])),
+            ("c3", "about dogs", _pad([0.0, 0.0, 1.0])),
+        ],
+    )
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0, 0.0]), k=4, limit=5)
+    ids = [r["chunkId"] for r in rows]
+
+    assert ids[0] == "c1"
+    assert "c2" in ids
+    assert ids.index("c1") < ids.index("c2")
+    scores = [r["score"] for r in rows]
+    assert scores == sorted(scores)
+    assert rows[0]["score"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_search_chunks_returns_denormalized_document_id_and_seq(repo):
+    _seed_document(
+        repo, document_id="d7",
+        chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+    row = next(r for r in rows if r["chunkId"] == "c1")
+    assert row["text"] == "about cats"
+    assert row["documentId"] == "d7"
+    assert row["seq"] == 0
+
+
+def test_search_chunks_never_returns_a_message_seed(repo):
+    # `search_chunks` is Chunk-only (FR-3, a genuinely separate capability from
+    # `hybrid_search`'s Message-only ANN, plan §3.7/FR-14) — seeding a Message
+    # at the identical vector must not leak into a Chunk search.
+    _seed_thread(
+        repo, channel_id="c1", thread_id="t1",
+        messages=[("m1", "about cats", _pad([1.0]))],
+    )
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+    assert rows == []

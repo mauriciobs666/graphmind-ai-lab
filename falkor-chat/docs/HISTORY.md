@@ -5,6 +5,69 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-23 — K-050 M5 Stage 2: document ingestion — chunk embeddings + standalone search
+
+**What:** The second of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
+"Stage 2 — Chunk embeddings + standalone search (FR-3)"). `EmbeddingWorker` (`embedding.py`) gains
+`embed_chunk`, a sibling of the existing `embed_message` — both now share a factored-out
+`_resolve_and_embed` helper (the FR-19 pre-flight dimension guard + gateway resolution logic was
+identical between the two, only the write label differed), so a `Chunk` embed consults only
+`Chunk`'s vector index and a `Message` embed only `Message`'s, never the other's. New
+`repository.set_chunk_embedding` (mirrors `set_embedding`, same pre-write dimension validation) and
+`repository.search_chunks` (a `Chunk`-only ANN read, `QUERIES.md` §14.3 — no scope traversal, no
+Entity expansion since `ABOUT` stays dormant until Stage 3). New `background._safe_embed_chunk`
+mirrors `_safe_embed`'s try/except-log-never-raise isolation, so one chunk's embedding failure can
+never corrupt the `Document` or block sibling chunks. `services.search_documents` embeds the query
+text through the injected `ModelGateway` (mirroring `GraphragRetrieveTool`/`AgentResponder`'s own
+text→vector step) then ranks via `search_chunks`; raises the new `SearchNotAvailableError` (maps to
+REST 503, same precedent as `WorkflowEngineDisabledError`) when no gateway is wired. Wired as
+`search_documents` on both MCP and REST (`GET /documents/search?q=`) — registered *before*
+`GET /documents/{document_id}` in `api.py`, since Starlette's registration-order route matching would
+otherwise let the dynamic path swallow a literal `search` segment as a document id (caught and fixed
+during this build, not by a later bug report). `ingest_document` on both transports now schedules a
+background chunk-embed for every chunk right after the write returns, via a new internal (non-public)
+`repository.list_document_chunks`/`services.list_document_chunks` seam — kept separate from
+`ingest_document`'s own return value so that receipt stays at its documented
+`{documentId, chunkCount, status}` shape rather than echoing up to ~500,000 characters of chunk text
+back into the response body. `bootstrap_schema.sh` needed no change — `Chunk.embedding`'s vector
+index has existed since M2, dormant until this stage populates it.
+
+**Why:** Stage 2 makes an ingested document's content retrievable as a standalone knowledge base
+(FR-3), independent of chat search (FR-14) — an ingested document's chunks are readable via
+`get_document` before their embeddings land (same eventually-consistent posture already used for
+posted messages), and `search_documents` returns them ranked once embedding catches up. AC-6 (MCP
+write, then read by any agent) is provable end-to-end at this stage, with no entity/fusion work
+existing yet (Stage 3/4).
+
+**Tests:** `tests/test_embedding.py` (+7 unit — `embed_chunk` happy path, wrong-dimension rejection,
+gateway-resolved dim, the FR-19 mismatch/no-index guards, per-label index-cache isolation, and the
+mirror-image "chunk gates only on Chunk, never Message" guarantee); `tests/test_background.py` (+2 —
+`_safe_embed_chunk` calls the worker, and swallows+logs a failure without raising);
+`tests/test_graphrag.py` (+6, live `ws:test` integration — `set_chunk_embedding` dimension rejection,
+ANN retrievability, cosine-distance ranking, denormalized `documentId`/`seq`, `Chunk`↔`Message`
+search-surface isolation, and `Chunk`'s own `read_index_dimension`); `tests/test_repository.py` (+2 —
+`list_document_chunks` ordering + empty-document case); `tests/test_services.py` (+5 — chunk-list
+passthrough, `search_documents` embeds-then-searches, default `limit`, and the no-gateway
+`SearchNotAvailableError`); `tests/test_api.py` (+5 REST contract, including the route-ordering
+regression guard); `tests/test_mcp.py` (+4 MCP contract, plus the tool-discovery set updated). Suite:
+offline `pytest -q` 1566→1597 passed (+31), 3 deselected unchanged; `./scripts/test_queries.sh`
+320/320 unchanged (no new DDL entered that suite — mirrors Stage 1's own precedent: the new Cypher
+shapes are direct analogues of already-verified §6 patterns, covered by the pytest integration suite
+instead). Mutation-tested: deliberately broke the chunk/message index-label mix-up in
+`_resolve_and_embed`, removed `_safe_embed_chunk`'s try/except, flipped `search_chunks`'s
+`ORDER BY` to DESC, dropped `set_chunk_embedding`'s dimension check, skipped embedding the query text
+in `search_documents`, and removed the chunk-embed scheduling loop from both `api.py` and `mcp.py` —
+each confirmed to fail the relevant test(s) before being reverted.
+
+**Scope boundary:** Stage 2 only — no extraction (Stage 3), no fusion (Stage 4), no chat-grounding
+change (Stage 5). `document-ingestion.md`/`-graph.md`/`-ml.md`/`BACKLOG.md` untouched (locked
+design/tracking documents). Two routine implementation judgment calls, not scope changes: (1)
+`search_chunks` omits the Entity co-occurrence expansion `hybrid_search` has, since `ABOUT` stays
+unpopulated until Stage 3 — the OPTIONAL MATCH would only ever no-op today; (2) a new
+`list_document_chunks` internal seam (repository + service) was added, not named in the plan's Stage
+2 file list, to let `api.py`/`mcp.py` fetch a just-ingested document's chunks for background
+embedding without bloating `ingest_document`'s own return payload.
+
 ## 2026-08-23 — K-050 M5 Stage 1: document ingestion — chunking + Document/Chunk write path
 
 **What:** The first of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`).

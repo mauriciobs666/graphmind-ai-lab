@@ -767,6 +767,26 @@ def test_get_document_none_when_absent(repo):
     assert repo.get_document("test", document_id="nope") is None
 
 
+def test_list_document_chunks_returns_chunkid_and_text_in_order(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d1", title="t", text="abcdef",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=_chunks("abc", "def"),
+    )
+
+    rows = repo.list_document_chunks("test", document_id="d1")
+
+    assert rows == [
+        {"chunkId": "c0", "text": "abc"},
+        {"chunkId": "c1", "text": "def"},
+    ]
+
+
+def test_list_document_chunks_empty_for_unknown_document(repo):
+    assert repo.list_document_chunks("test", document_id="nope") == []
+
+
 def test_create_document_is_non_idempotent_on_retry(repo, conn):
     """§2.4's deliberate posture: a retried call mints a second Document."""
     repo.ensure_user("test", user_id="u1", display_name="Alice")

@@ -21,11 +21,13 @@ from falkorchat.schemas import MAX_DIFF_PREVIEW
 from falkorchat.services import (
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
+    RAG_QUERY_TIMEOUT_MS,
     ChannelNotFoundError,
     DocumentTooLargeError,
     EmptyDocumentError,
     InvalidSearchQueryError,
     MemberIdCollisionError,
+    SearchNotAvailableError,
     Services,
     ThreadNotFoundError,
     UnknownActorError,
@@ -200,6 +202,17 @@ class FakeRepo:
         if doc is None:
             return None
         return {k: v for k, v in doc.items() if k != "chunks"}
+
+    def list_document_chunks(self, ws, *, document_id):
+        self.calls.append(("list_document_chunks", ws, document_id))
+        doc = self.documents.get(document_id)
+        if doc is None:
+            return []
+        return [{"chunkId": c["chunkId"], "text": c["text"]} for c in doc["chunks"]]
+
+    def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
+        self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
+        return self.since_rows
 
     # ── §11 workflow defs (reference) + snapshots (workspace) ────────────────────
 
@@ -492,6 +505,89 @@ def test_get_document_none_when_absent():
     svc = make_service(repo)
 
     assert svc.get_document(CTX, document_id="nope") is None
+
+
+# ── list_document_chunks / search_documents (K-050 M5 Stage 2) ──────────────────
+
+
+def test_list_document_chunks_returns_chunkid_and_text_only():
+    repo = FakeRepo()
+    repo.documents["d1"] = {
+        "documentId": "d1",
+        "chunks": [
+            {"chunkId": "c1", "text": "a", "seq": 0},
+            {"chunkId": "c2", "text": "b", "seq": 1},
+        ],
+    }
+    svc = make_service(repo)
+
+    rows = svc.list_document_chunks(CTX, document_id="d1")
+
+    assert rows == [{"chunkId": "c1", "text": "a"}, {"chunkId": "c2", "text": "b"}]
+
+
+def test_list_document_chunks_empty_when_document_absent():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.list_document_chunks(CTX, document_id="nope") == []
+
+
+class FakeEmbeddingGateway:
+    """Minimal `ModelGateway`-shaped double for `search_documents`: only
+    `.embedder(kind, *, ws=None)` is exercised (unlike `FakeModels` above,
+    which only implements `.resolve` for the publish-time check)."""
+
+    def __init__(self, vector):
+        self._vector = vector
+        self.embedder_calls: list[tuple] = []
+        self.embedded: list[str] = []
+
+    def embedder(self, kind, *, ws=None):
+        self.embedder_calls.append((kind, ws))
+        return self
+
+    def embed(self, text):
+        self.embedded.append(text)
+        return list(self._vector)
+
+
+def test_search_documents_embeds_the_query_then_searches_chunks():
+    repo = FakeRepo()
+    repo.since_rows = [
+        {"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 0.1},
+    ]
+    models = FakeEmbeddingGateway([1.0, 0.0])
+    svc = make_service(repo, models=models)
+
+    rows = svc.search_documents(CTX, query="hello", limit=5)
+
+    assert rows == repo.since_rows
+    assert models.embedded == ["hello"]
+    assert models.embedder_calls == [("embedding", "test")]
+    call = next(c for c in repo.calls if c[0] == "search_chunks")
+    assert call == ("search_chunks", "test", (1.0, 0.0), 5, 5, RAG_QUERY_TIMEOUT_MS)
+
+
+def test_search_documents_defaults_limit_to_20():
+    repo = FakeRepo()
+    models = FakeEmbeddingGateway([1.0])
+    svc = make_service(repo, models=models)
+
+    svc.search_documents(CTX, query="hello")
+
+    call = next(c for c in repo.calls if c[0] == "search_chunks")
+    assert call[3:5] == (20, 20)  # k, limit both default to 20
+
+
+def test_search_documents_raises_when_no_models_wired():
+    repo = FakeRepo()
+    svc = make_service(repo, models=None)
+
+    with pytest.raises(SearchNotAvailableError):
+        svc.search_documents(CTX, query="hello")
+
+    assert repo.calls == []  # never reaches search_chunks
 
 
 # ── post_message: dispatch + validation ─────────────────────────────────────────

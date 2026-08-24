@@ -130,3 +130,153 @@ meaningful, and the docstring shows the implementer's own intent was to reject i
   acceptance pass, or is a `chunkCount: 0` document an acceptable (if unintended) degenerate case for
   v1? The plan/requirements doc don't address it either way — worth a quick coordinator call rather
   than assuming.
+
+---
+
+## Pass 2 (2026-08-24) — Stage 2 diff-scoped code gate
+
+**Scope.** Diff-scoped code gate against the (then-)uncommitted working-tree changes implementing
+Stage 2 (chunk embeddings + standalone search, FR-3) of `docs/plans/document-ingestion.md`. This is
+a **new** diff, layered on top of Stage 1's already-gated (and by now committed, `167eeac`) changes —
+not a re-review of Pass 1's findings, which are unaffected (the Stage 1 MAJOR finding was fixed
+separately, U11 in `docs/plans/document-ingestion-coordination.md`, verified present at
+`services.py:1001-1014` and out of scope here). Baseline: the locked plan (§3.7 FR-3, §4 Stage 2) and
+`docs/plans/document-ingestion-graph.md` (consulted; Stage 2's Cypher — `set_chunk_embedding`,
+`search_chunks`, `list_document_chunks` — has no dedicated graph-dba section since it's a direct
+analogue of already-verified §6 `Message` patterns, confirmed by reading `QUERIES.md` §14.3/§14.4
+directly against the implementation rather than assuming). Files reviewed: `server/falkorchat/
+{embedding,repository,background,services,api,mcp,app}.py` and their 7 corresponding test files
+(`test_embedding.py`, `test_background.py`, `test_repository.py`, `test_graphrag.py`, `test_services.py`,
+`test_api.py`, `test_mcp.py`), `docs/QUERIES.md` §14.3/§14.4, `docs/HISTORY.md`'s new Stage 2 entry.
+Per the brief, suite counts (1566→1597 offline, +31; 320/320 query suite unchanged) and doc
+completeness/accuracy were independently pre-verified by the dispatching session and are taken as
+given here — this pass focuses on code correctness, Cypher fidelity, FR-19/scope-gating correctness,
+and spot-checking the claimed mutation tests against their actual assertions.
+
+**Verdict: approve.** No blockers, no majors. One minor (a real, newly-introduced resource-usage
+concern, not a correctness bug) and one nit.
+
+**CPG:** considered, not relevant — `cpg_falkorchat` is stale relative to this diff (built
+2026-08-17, 9+ commits since including both Stage 1 and this Stage 2 diff, per the brief's own
+freshness note) and this is a small, self-contained diff over freshly-read current files, not a
+call-graph impact-analysis task; read the files directly instead, as directed.
+
+### Findings
+
+**MINOR — MCP's chunk-embed scheduling amplifies an already-accepted unbounded-thread trade-off by
+up to ~500x per call, undocumented at the new scale.**
+
+`mcp.py`'s `_default_schedule` (`mcp.py:47`) spawns one raw, untracked daemon `threading.Thread`
+per scheduled call — a trade-off the codebase already knowingly accepts for M1's lab-scale posture
+(its own docstring cites `docs/reviews/mcp-background-scheduling-impl.md` Minor 1/2). Before this
+diff, that trade-off was exercised at most once per MCP call (`send_message` → one `_safe_embed`
+thread). This diff's `ingest_document` chunk-scheduling loop (`mcp.py:235-237`) calls `_schedule`
+once per chunk, synchronously, inside the tool handler, before the call returns — at the plan's own
+stated bounds (`MAX_DOCUMENT_CHARS = 500_000` at the §3.2 1,000-char target ≈ 500-600 chunks), a
+single `ingest_document` MCP call now spawns on the order of 500 raw OS threads in a tight loop
+before the tool returns. This is a materially different order of magnitude from the precedent the
+existing docstring's risk framing describes (1 thread/call), even though the *general* fan-out risk
+was already named in the plan (`document-ingestion.md` §3.5, in the context of Stage 3's extraction
+fan-out, not Stage 2's embedding). REST's equivalent path (`api.py:174-183`) does not have this
+amplification — `BackgroundTasks.add_task` is a cheap list append per chunk, bounded execution
+happens later via anyio's ~40-worker capacity limiter — so the two transports now diverge more
+sharply in resource behavior than they did before this diff, and neither `HISTORY.md`'s new entry
+nor `QUERIES.md` §14.4 mentions the amplification. Not a blocker: it's lab-scale, self-contained
+(daemon threads that do a bounded amount of I/O and exit), and consistent with an already-accepted
+codebase posture, not a new kind of risk. **Suggested improvement:** either cap/batch the MCP
+chunk-embed scheduling (e.g. one thread that iterates the chunk list internally, rather than one
+thread per chunk), or — cheaper — add a line to `mcp.py`'s `_default_schedule` docstring and/or
+`QUERIES.md` §14.4 noting that `ingest_document` can fan this out to hundreds of threads per call,
+so a future reader of the "accepted for M1 lab-scale" reasoning isn't reasoning about 1x when the
+real number is now ~500x.
+
+**NIT — `search_documents`'s MCP tool has no `limit` upper bound, consistent with existing precedent
+but worth naming.** `mcp.py`'s `search_documents(query, limit=20)` (no REST-style `Query(..., le=200)`
+cap) mirrors the pre-existing `search_messages(query, limit=50)` MCP tool
+(`mcp.py:175-182`), which has the identical gap — not a regression this diff introduces, and matching
+established convention is the right call here, not a lapse. Flagged only because the REST sibling
+(`api.py:192`, `Query(20, ge=1, le=200)`) does bound it, so the two transports diverge on this one
+input the same way `search_messages`'s REST/MCP pair already does — a pre-existing, not new,
+inconsistency; no action needed for this diff specifically.
+
+### Verified claims (evidence, not trust)
+
+- **`EmbeddingWorker._resolve_and_embed` factor-out is correct and independently gated.** Read
+  `embedding.py:86-239` (`class EmbeddingWorker`, `_resolve_and_embed` at :139, `embed_message` at
+  :208, `embed_chunk` at :222) in full: `embed_message`/`embed_chunk` each pass their own `write_label`
+  (`"Message"`/`"Chunk"`) into the shared helper, which is the only place `_index_dimension(ws,
+  write_label)` is called — a `Chunk` embed genuinely never consults `Message`'s index and vice
+  versa. Confirmed against the tests, not just the prose:
+  `test_worker_gates_chunk_embed_on_chunk_index_only_never_message` and the pre-existing
+  `test_worker_never_queries_or_considers_chunk_when_writing_a_message`
+  (`test_embedding.py:293-421`) are the mirror-image pair that would catch a label mix-up in either
+  direction.
+- **Cypher fidelity — exact match against `QUERIES.md` §14.3.** `repository.set_chunk_embedding`
+  (`repository.py:1041`) and `search_chunks` (`repository.py:1071`) are byte-identical (up
+  to inert string concatenation) to the documented Cypher, including the pre-write dimension guard
+  ported verbatim from `set_embedding` and `search_chunks`'s explicit `ORDER BY score ASC` (no
+  scope traversal, no `ABOUT` expansion — correctly deferred, not a gap: `ABOUT` stays unpopulated
+  until Stage 3, so an `OPTIONAL MATCH` on it today would just no-op).
+- **`GET /documents/search` route-ordering fix is real, correctly placed, and behaviorally
+  verified — not just claimed.** Grepped `api.py` for every `@router.get("/documents...")`
+  registration (`api.py:161,189,197`): `POST /documents` → `GET /documents/search` → `GET
+  /documents/{document_id}`, in that literal source order. This is the right fix for the right
+  reason — Starlette/FastAPI's `APIRouter` matches routes in registration order, so a static path
+  registered ahead of a dynamic sibling wins; a `{document_id}` route registered first would swallow
+  `/documents/search` as `document_id="search"`. `test_api.py`'s
+  `test_search_documents_route_not_shadowed_by_document_id_route` is a real regression guard for this
+  specific claim, not a restatement of it — it exercises the live route table via `TestClient`, not
+  a unit-level assertion about registration order.
+- **`SearchNotAvailableError` → 503 wiring is complete and consistent.** `services.py`'s new
+  exception class, `app.py`'s `_register_error_handlers` registration (`app.py:150-155`), and the
+  “deployment gap, not caller mistake” posture all mirror `WorkflowEngineDisabledError` exactly —
+  confirmed by reading all three sites together, not inferring from one.
+- **Mutation-test claims spot-checked against actual test assertions, not just labels — all six
+  hold up:**
+  - *Label mix-up in `_resolve_and_embed`* — would be caught by
+    `test_worker_gates_chunk_embed_on_chunk_index_only_never_message`'s exact-call assertion
+    (`repo.index_dim_calls == [("acme", "Chunk", "embedding")]`), which fails outright on a swapped
+    label.
+  - *`_safe_embed_chunk`'s try/except removed* — `test_safe_embed_chunk_swallows_failure_logs_error_
+    never_raises` (`test_background.py`) calls it with a worker whose `embed_chunk` always raises;
+    removing the try/except means the test itself raises `RuntimeError` instead of passing.
+  - *`search_chunks`'s `ORDER BY` flipped to DESC* — `test_search_chunks_ranks_by_cosine_distance_asc`
+    asserts `scores == sorted(scores)` (ascending by `sorted`'s default) against three seeded chunks
+    at three different cosine distances from the query vector; a DESC flip fails this directly.
+  - *`set_chunk_embedding`'s dimension check dropped* — `test_set_chunk_embedding_rejects_wrong_
+    dimension_loudly` asserts `pytest.raises(EmbeddingDimensionError)` on a wrong-length vector;
+    removing the check means the write silently succeeds and the test fails on the missing raise.
+  - *`search_documents` skips the query-embed step* — `test_search_documents_embeds_the_query_then_
+    searches_chunks` asserts `models.embedded == ["hello"]`, which is empty if the embed call is
+    skipped (and the mock gateway's stub vector would also then be undefined input to
+    `search_chunks`, likely a `TypeError` before the assertion even runs).
+  - *Chunk-scheduling loop removed from `api.py`/`mcp.py`* — `test_ingesting_a_document_schedules_
+    every_chunk_for_embedding` (REST) and `test_ingest_document_schedules_every_chunk_for_embedding`
+    (MCP) both assert `len(worker.chunk_calls/calls) == posted["chunkCount"]` against a
+    multi-paragraph (non-trivial `chunkCount`) document — a removed loop leaves the count at 0 and
+    fails directly.
+- **Scope discipline confirmed.** `git diff --stat` matches the brief's file list exactly (7 server
+  files + 7 test files + 3 docs); `document-ingestion.md`/`-graph.md`/`-ml.md`/`BACKLOG.md` are
+  untouched, matching `HISTORY.md`'s own disclosure; `git diff -- scripts/bootstrap_schema.sh` is
+  empty, confirming the "no new DDL" claim (`Chunk.embedding`'s vector index predates this stage).
+- **Layering/conventions fit is native.** `repository.py` still owns 100% of the new Cypher 1:1 with
+  `QUERIES.md`; `services.py` owns the one new invariant (`SearchNotAvailableError` gating) and the
+  query→vector translation; `api.py`/`mcp.py` stay thin, differing only in how each transport
+  schedules background work — exactly the Stage 1 precedent this stage extends, not a new pattern.
+
+### What's solid (beyond the verified claims above)
+
+- The two genuinely new implementation judgment calls the implementer self-disclosed (`search_chunks`
+  omitting Entity co-occurrence expansion; the internal `list_document_chunks` seam not named in the
+  plan's Stage 2 file list) are both the right call, correctly reasoned, and correctly disclosed
+  rather than silently introduced — same posture Pass 1 credited Stage 1's `get_document` projection
+  deviation for.
+- Test coverage genuinely exercises new behavior, not just new code paths — e.g.
+  `test_worker_caches_message_and_chunk_index_dimensions_independently` pins a real, easy-to-regress
+  interaction (two independent per-label caches on one worker instance) that a shallower "it embeds a
+  chunk" test would miss.
+
+### Open questions
+
+- None new. Pass 1's open question (whether the whitespace-only-document degenerate case needs a
+  product decision) is resolved as of U11 (fixed) and is out of scope for this pass.

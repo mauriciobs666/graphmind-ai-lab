@@ -21,11 +21,13 @@ TEST_CTX = CallContext(ws="test", actor="u1")
 
 
 def _configure(
-    repo, *, actor="u1", responder=None, embed_worker=None, trigger=None
+    repo, *, actor="u1", responder=None, embed_worker=None, trigger=None, models=None
 ):
     clock = itertools.count(1000)
     ids = (f"id{n}" for n in itertools.count(1))
-    svc = Services(repo, clock=lambda: next(clock), id_gen=lambda: next(ids))
+    svc = Services(
+        repo, clock=lambda: next(clock), id_gen=lambda: next(ids), models=models
+    )
     mcp_mod.configure(
         svc,
         context_provider=lambda: CallContext(ws="test", actor=actor),
@@ -59,7 +61,7 @@ def test_tool_discovery_lists_all_tools(repo):
     assert {t.name for t in tools} == {
         "send_message", "read_messages", "create_thread",
         "search_messages", "create_channel", "list_channels", "list_threads",
-        "ingest_document", "get_document",
+        "ingest_document", "get_document", "search_documents",
     }
 
 
@@ -248,6 +250,84 @@ def test_get_document_missing_returns_none(repo):
         mcp_mod.mcp.call_tool("get_document", {"document_id": "nope"})
     ))
     assert got is None
+
+
+# ── K-050 M5 Stage 2: chunk embedding + search_documents ────────────────────────
+
+
+class RecordingChunkWorker:
+    """Records embed_chunk calls scheduled off-band (mirrors RecordingWorker
+    below, but for `ingest_document`'s chunk-embed scheduling rather than
+    `send_message`'s message embed)."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def embed_chunk(self, ws, *, chunk_id, text):
+        self.calls.append((ws, chunk_id, text))
+        return [0.0]
+
+
+def test_ingest_document_schedules_every_chunk_for_embedding(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingChunkWorker()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous, like sync_schedule
+    try:
+        _configure(repo, embed_worker=worker)
+        posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "First para.\n\nSecond, longer paragraph."}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert len(worker.calls) == posted["chunkCount"]
+    assert {ws for ws, _cid, _text in worker.calls} == {"test"}
+
+
+def test_ingest_document_with_no_embed_worker_schedules_nothing(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)  # no embed_worker
+
+    posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_document", {"text": "hello"}
+    )))
+    assert posted["status"] == "processing"  # succeeds; nothing to assert-not-crash on
+
+
+class _StubQueryEmbedder:
+    def embed(self, text):
+        return [1.0, 0.0, 0.0, 0.0]
+
+
+class _StubEmbeddingGateway:
+    def embedder(self, kind, *, ws=None):
+        return _StubQueryEmbedder()
+
+
+def test_search_documents_tool_returns_ranked_chunks(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo, models=_StubEmbeddingGateway())
+
+    posted = svc.ingest_document(TEST_CTX, text="about cats")
+    chunk_id = svc.list_document_chunks(
+        TEST_CTX, document_id=posted["documentId"]
+    )[0]["chunkId"]
+    repo.set_chunk_embedding(
+        "test", chunk_id=chunk_id, embedding=[1.0, 0.0, 0.0, 0.0], expected_dim=4
+    )
+
+    hits = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("search_documents", {"query": "cats"})
+    ))
+    assert chunk_id in [h["chunkId"] for h in hits]
+
+
+def test_search_documents_tool_errors_when_no_models_wired(repo):
+    _configure(repo)  # no models gateway
+
+    with pytest.raises(Exception):
+        asyncio.run(mcp_mod.mcp.call_tool("search_documents", {"query": "cats"}))
 
 
 # ── K-041: MCP send_message must schedule the same background work the REST ────

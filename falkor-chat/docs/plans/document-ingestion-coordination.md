@@ -34,9 +34,11 @@ design, confirmed by the stakeholder 2026-08-22).
 | U6 | `data-scientist` | `a7118bfb884d3eccf` (resumed) | accepted | fix `document-ingestion-ml.md` (major #2 terminology) | `analyst` → **approve** (Pass 2) | 123k tok / 17 tools |
 | U7 | `graph-dba` | `af233df4cee5889c0` (resumed) | accepted | fix `document-ingestion-graph.md` (blocker mechanism + major #3a + minor #3) | `analyst` → **approve** (Pass 2) | 310k tok / 35 tools |
 | U8 | `analyst` | `a22557e8972eec926` | accepted | `docs/reviews/document-ingestion.md` Pass 2 | plan re-gate → **approve** | 127k tok / 10 tools |
-| U9 | `coder` | `a1d788e3e8868b48a` | delivered | Stage 1: chunking + Document/Chunk write path | `analyst` (U10) → — | 284k tok / 137 tools |
+| U9 | `coder` | `a1d788e3e8868b48a` | accepted | Stage 1: chunking + Document/Chunk write path | `analyst` (U10) → **approve w/ suggestions** | 284k tok / 137 tools |
 | U10 | `analyst` | `a1f9d0b8d1f75e6cc` | accepted | `docs/reviews/document-ingestion-impl.md` | code gate → **approve with suggestions** | 126k tok / 45 tools |
-| U11 | `coder` | `a1d788e3e8868b48a` (resumed) | delivered | fix: reject empty/whitespace-only `ingest_document` text | (verified by teco) | 303k tok / 26 tools |
+| U11 | `coder` | `a1d788e3e8868b48a` (resumed) | accepted | fix: reject empty/whitespace-only `ingest_document` text | (verified by teco) | 303k tok / 26 tools |
+| U12 | `coder` | `a5db435e79c550371` | delivered | Stage 2: chunk embeddings + standalone search (FR-3) | `analyst` (U13) → — | 344k tok / 19 tools |
+| U13 | `analyst` | `a1854598c0cc66618` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 2 | code gate → **approve** | 141k tok / 52 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -156,6 +158,39 @@ design-phase commit.
   test quality (own independent mutation-test spot check performed), conventions fit — confirmed
   solid. Deciding to fix now rather than defer to Stage 6 (cheap, and avoids compounding into later
   stages) — dispatching U11 (resuming `coder`).
+
+- **U12 verified independently, not just on report**: run was interrupted mid-task by a platform
+  session-limit error (not a deficient result — resumed the same agent via `SendMessage` per
+  standing practice rather than re-dispatching cold; its work was already substantially on disk
+  and it confirmed nothing was mid-sentence before finishing verification). Read the full
+  `embedding.py`/`repository.py`/`services.py`/`api.py`/`mcp.py`/`app.py` diffs directly:
+  `embed_chunk`/`_resolve_and_embed` correctly factor out the FR-19 dimension guard while keeping
+  `Message`/`Chunk` gated independently on their own index only; `search_chunks` mirrors
+  `hybrid_search`'s ANN shape with no scope traversal/Entity expansion (correctly deferred, `ABOUT`
+  is dormant until Stage 3); the `/documents/search` route is registered before
+  `/documents/{document_id}` with a correct explanation (Starlette registration-order matching —
+  a real bug the agent caught and fixed during the build, not left for QA). Re-ran the full offline
+  suite myself (1597 passed / 3 deselected, +31 over Stage 1's 1566 — matches reported) and the
+  query suite (320/320, unchanged as expected — no new DDL), re-seeding `reference` afterward
+  (`bootstrap_schema.sh acme` → `seed_demo.sh acme` → `seed_workflows.sh acme` →
+  `verify_workflows.sh acme`: OK). Read `docs/HISTORY.md`'s new entry and `docs/QUERIES.md` §14.3/
+  §14.4 in full — both complete and accurate, not truncated by the earlier interruption. Two
+  reasonable, narrowly-scoped deviations from the brief (both self-disclosed): `search_chunks`
+  omits Entity co-occurrence expansion (deferred, not speculative); added an internal
+  `list_document_chunks` seam (repository + service) rather than changing `ingest_document`'s
+  documented response shape. Dispatching U13 (`analyst` diff-scoped code gate) now.
+
+- **U13 verdict: approve.** No blockers, no majors. One MINOR (real, not a correctness bug):
+  `mcp.py`'s `ingest_document` now spawns one raw daemon thread per chunk synchronously in the tool
+  handler before returning — up to ~500 threads for a max-size document, a ~500x amplification of an
+  already-accepted "1 thread per MCP call" trade-off, undocumented at the new scale. REST's
+  `BackgroundTasks`-based equivalent doesn't have this amplification. Explicitly flagged non-blocking
+  (lab-scale, self-contained, consistent with existing accepted posture) — **deferring to Stage 6
+  (batch hardening)** rather than patching now, since this is exactly the concern that stage exists
+  to address and the review itself offers cheap/thorough options as Stage 6 implementer's call, not
+  an immediate fix. One NIT (MCP `search_documents` has no `limit` cap, matching pre-existing
+  `search_messages` precedent) — no action needed, not a regression. All mutation-test claims
+  spot-checked against actual test assertions (not just labels) and confirmed real.
 
 ## Design phase — ✅ complete, committed `30366f4`
 

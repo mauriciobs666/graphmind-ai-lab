@@ -1013,6 +1013,100 @@ class Repository:
             "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
         }
 
+    def list_document_chunks(
+        self, ws: str, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """List a document's chunks in order (`chunkId` + `text` only).
+
+        K-050 M5 Stage 2: the internal seam `services.ingest_document`'s caller
+        (`api.py`/`mcp.py`) uses to schedule background chunk embedding right
+        after a document is written — not part of the public MCP/REST surface
+        (mirrors `posted["text"]` riding `post_message`'s own return for the
+        same purpose at message scale; a document's chunks are read back
+        instead of echoed in the receipt to keep `ingest_document`'s response
+        at the documented `{documentId, chunkCount, status}` shape, QUERIES.md §14.4,
+        rather than doubling a up-to-500,000-char payload back into the
+        response body). Always traversed from an already-anchored `Document`,
+        never independently scanned — no new index needed, same posture as
+        `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId})-[:HAS_CHUNK]->(c:Chunk) "
+            "RETURN c.chunkId AS chunkId, c.text AS text "
+            "ORDER BY c.seq",
+            {"documentId": document_id},
+        )
+        return [{"chunkId": row[0], "text": row[1]} for row in res.result_set]
+
+    def set_chunk_embedding(
+        self, ws: str, *, chunk_id: str, embedding: list[float],
+        expected_dim: int | None = None,
+    ) -> bool:
+        """Set a chunk's embedding (async, after ingestion). QUERIES.md §6.
+
+        K-050 M5 Stage 2: mirrors `set_embedding` exactly, `Chunk` in place of
+        `Message` — the same decoupled-from-the-write-path posture (a chunk is
+        readable before its embedding lands, plan §4 Stage 2) and the same
+        pre-write dimension validation (a wrong-dimension `vecf32` write is
+        silently accepted by the engine but the node then drops out of the ANN
+        index permanently — item-2 quirk, applies identically to `Chunk`).
+
+        Returns True if the chunk existed and the embedding committed, False if
+        no chunk matched `$chunkId`.
+        """
+        dim = config.EMBEDDING_DIM if expected_dim is None else expected_dim
+        if len(embedding) != dim:
+            raise EmbeddingDimensionError(
+                f"embedding has {len(embedding)} dimensions, expected {dim} "
+                f"(chunkId={chunk_id!r}) — a wrong-dimension vecf32 write is "
+                f"silently accepted but drops the node out of the ANN index; "
+                f"refusing to write"
+            )
+        res = self._graph(ws).query(
+            "MATCH (c:Chunk {chunkId: $chunkId}) SET c.embedding = vecf32($embedding)",
+            {"chunkId": chunk_id, "embedding": list(embedding)},
+        )
+        return res.properties_set > 0
+
+    def search_chunks(
+        self, ws: str, *, q_vec: list[float], k: int = 10, limit: int = 10,
+        timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """`Chunk`-only ANN retrieval — the standalone KB search surface (FR-3,
+        plan §3.7). K-050 M5 Stage 2. Read path (`ro_query`).
+
+        Mirrors `hybrid_search`'s `CALL db.idx.vector.queryNodes(...) YIELD ...`
+        shape, `Chunk` in place of `Message` — but with no scope traversal (a
+        chunk has no Thread/Channel to scope by, unlike a message) and no
+        Entity co-occurrence expansion (`ABOUT` is dormant until extraction,
+        Stage 3 — an `OPTIONAL MATCH` on it here would just no-op today, so it
+        is deferred rather than added speculatively). `documentId` rides
+        denormalized on `Chunk` itself (§3.2), so the source document is
+        reported with no extra hop.
+
+        `score` is cosine distance (0 = identical) — rows come back already
+        `ORDER BY score ASC` (most similar first), same convention as
+        `hybrid_search`; do not re-sort. `timeout` (ms) is a per-query client
+        override, same posture as `hybrid_search`'s.
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($qVec)) "
+            "YIELD node AS seed, score "
+            "RETURN seed.chunkId AS chunkId, seed.text AS text, "
+            "seed.documentId AS documentId, seed.seq AS seq, score "
+            "ORDER BY score ASC "
+            "LIMIT $limit",
+            {"qVec": list(q_vec), "k": k, "limit": limit},
+            timeout=timeout,
+        )
+        return [
+            {
+                "chunkId": row[0], "text": row[1], "documentId": row[2],
+                "seq": row[3], "score": row[4],
+            }
+            for row in res.result_set
+        ]
+
     def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
         """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""
         res = self._graph(ws).ro_query(

@@ -34,6 +34,22 @@ def _safe_embed(embed_worker: Any, ws: str, msg_id: str, text: str) -> None:
         _log.exception("background embed failed (msgId=%s)", msg_id)
 
 
+def _safe_embed_chunk(embed_worker: Any, ws: str, chunk_id: str, text: str) -> None:
+    """Embed an ingested document's chunk out-of-band, swallowing+logging any
+    failure (K-050 M5 Stage 2 — mirrors `_safe_embed` exactly).
+
+    Runs off-band, decoupled from `services.ingest_document`'s write path: a
+    chunk is readable before its embedding lands, and an embedder hiccup for
+    one chunk must never surface to the ingesting caller nor corrupt the
+    `Document` or block sibling chunks (same failure-isolation discipline as
+    every other `_safe_*` wrapper in this module).
+    """
+    try:
+        embed_worker.embed_chunk(ws, chunk_id=chunk_id, text=text)
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background chunk embed failed (chunkId=%s)", chunk_id)
+
+
 def _safe_respond(responder: Any, ctx: CallContext, posted: dict[str, Any]) -> None:
     """Fire the AI responder out-of-band, swallowing+logging any failure.
 

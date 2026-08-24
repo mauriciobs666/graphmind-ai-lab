@@ -124,6 +124,17 @@ class WorkflowEngineDisabledError(RuntimeError):
     concern and no repository code can raise it.
     """
 
+
+class SearchNotAvailableError(RuntimeError):
+    """`search_documents` has no `ModelGateway` wired (K-050 M5 Stage 2).
+
+    Same posture as `WorkflowEngineDisabledError` — a **named** `RuntimeError`
+    subclass, not a `ServiceError`, because this is a deployment-configuration
+    gap (no embedding model resolvable), not a caller mistake: maps to 503 in
+    `app._register_error_handlers`, mirroring the workflow-engine precedent
+    exactly rather than the generic `ServiceError` 400 default.
+    """
+
 # ── GraphRAG read posture (K-007 TIMEOUT / DESIGN §10) ──────────────────────────
 # The FalkorDB global TIMEOUT default is 1000 ms and writes ignore it; GraphRAG
 # reads (ANN seed + traversal) can legitimately run longer, so they pass a single
@@ -1027,6 +1038,45 @@ class Services:
 
     def get_document(self, ctx: CallContext, *, document_id: str) -> dict[str, Any] | None:
         return self._repo.get_document(ctx.ws, document_id=document_id)
+
+    def list_document_chunks(
+        self, ctx: CallContext, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """Thin passthrough (mirrors `get_document`) — the internal seam
+        `api.py`/`mcp.py` use to fetch a just-ingested document's chunks for
+        background embedding scheduling (K-050 M5 Stage 2). Not part of the
+        public MCP/REST surface — see `Repository.list_document_chunks`.
+        """
+        return self._repo.list_document_chunks(ctx.ws, document_id=document_id)
+
+    def search_documents(
+        self, ctx: CallContext, *, query: str, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """FR-3 standalone KB search: rank ingested `Chunk`s by similarity to
+        `query` (plan §3.5/§3.7; K-050 M5 Stage 2's done-condition).
+
+        Embeds `query` through the injected `ModelGateway` first — mirrors
+        `GraphragRetrieveTool`/`AgentResponder`'s own text→`q_vec` step
+        (`tools.py`/`responder.py`), since `repository.search_chunks` (like
+        `hybrid_search`) takes a vector, not text. `k`/`limit` are the same
+        value here (unlike `hybrid_search`, there is no downstream scope
+        traversal to over-fetch for — the ANN fan-out IS the result set).
+
+        Raises `SearchNotAvailableError` when no gateway is wired (`Services`
+        built with `models=None`, e.g. `FALKORCHAT_ENABLE_AGENT` off) — mirrors
+        `WorkflowEngineDisabledError`'s "deployment gap, not a caller mistake"
+        posture (503, not 400).
+        """
+        if self._models is None:
+            raise SearchNotAvailableError(
+                "search_documents requires a configured ModelGateway (no "
+                "embedding model wired into this deployment)"
+            )
+        embedder = self._models.embedder("embedding", ws=ctx.ws)
+        q_vec = embedder.embed(query)
+        return self._repo.search_chunks(
+            ctx.ws, q_vec=q_vec, k=limit, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
+        )
 
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
     #

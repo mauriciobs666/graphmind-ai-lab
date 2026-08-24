@@ -1913,17 +1913,80 @@ properties (this repository's own convention throughout — e.g. `get_message` �
 returning a whole node, which the graph note's own illustrative Cypher does but no other query in
 this library relies on). `AC-9`: `text` round-trips byte-identical to the ingested input.
 
-### 14.3 MCP / REST surface (Stage 1 slice of plan §3.5)
+### 14.3 Chunk embeddings + `search_chunks` (K-050 M5 Stage 2, FR-3)
+
+Mirrors §6's `Message` embedding pattern exactly, `Chunk` in place of `Message` — same
+decoupled-from-the-write-path posture (a chunk is readable before its embedding lands, the same
+eventually-consistent posture already used for a posted message) and the same §6.1 FR-19
+pre-flight dimension guard, gated per-label: a `Chunk` embed consults only `Chunk`'s vector index,
+never `Message`'s, and vice versa. **No new DDL** — `Chunk.embedding`'s vector index has existed
+since M2 (§2.1 above), dormant until this stage populates it.
+
+**Set a chunk's embedding (async, after ingestion)**
+```cypher
+MATCH (c:Chunk {chunkId: $chunkId})
+SET c.embedding = vecf32($embedding)
+```
+*Run from `EmbeddingWorker.embed_chunk` right after `ingest_document` returns — same
+decoupled-from-the-write-path posture as §6's message embed.*
+
+**`search_chunks` — the FR-3 standalone-KB-search read**
+```cypher
+CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($qVec))
+YIELD node AS seed, score
+RETURN seed.chunkId, seed.text, seed.documentId, seed.seq, score
+ORDER BY score ASC
+LIMIT $limit
+```
+No scope traversal (a `Chunk` has no Thread/Channel to scope by, unlike §6's Message-seeded
+`hybrid_search`) and no Entity co-occurrence expansion: `(:Chunk)-[:ABOUT]->(:Entity)` is dormant
+until extraction lands (Stage 3), so an `OPTIONAL MATCH` on it here would just no-op today —
+deferred rather than added speculatively; wire it in when Stage 3 makes it meaningful.
+`documentId` rides denormalized on `Chunk` itself (plan §3.2), so a search hit reports its source
+document with no extra hop. `score` is cosine distance (0 = identical) — rows come back already
+`ORDER BY score ASC` (most similar first), same convention as §6; do not re-sort.
+
+`Repository.set_chunk_embedding`/`Repository.search_chunks`
+(`server/falkorchat/repository.py`); `EmbeddingWorker.embed_chunk`
+(`server/falkorchat/embedding.py`).
+
+**`list_document_chunks` — internal seam, not a public query**
+
+```cypher
+MATCH (d:Document {documentId: $documentId})-[:HAS_CHUNK]->(c:Chunk)
+RETURN c.chunkId, c.text
+ORDER BY c.seq
+```
+
+Not part of the MCP/REST surface (§14.4) — `api.py`/`mcp.py` call it right after
+`services.ingest_document` returns, to fetch the just-created chunks and schedule each one for
+background embedding (`_safe_embed_chunk`). Kept out of `ingest_document`'s own return value
+deliberately: that receipt stays at the documented `{documentId, chunkCount, status}` shape
+(§14.4) rather than echoing up to ~500,000 characters of chunk text back into the response body.
+Always traversed from an already-anchored `Document`, never independently scanned — no new index
+needed, same posture as `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
+
+### 14.4 MCP / REST surface (Stages 1-2 slice of plan §3.5)
 
 | MCP tool | REST | Service method |
 |---|---|---|
 | `ingest_document(text, title=None, source_format="text", source_label=None)` | `POST /documents` | `services.ingest_document` |
 | `get_document(document_id)` | `GET /documents/{id}` | `services.get_document` |
+| `search_documents(query, limit=20)` | `GET /documents/search?q=` | `services.search_documents` |
 
 `ingest_document` stamps the ingesting actor from `get_context()` (FR-4) — MCP ignores any
 client-supplied actor, exactly the existing `send_message` posture. `MAX_DOCUMENT_CHARS = 500_000`
 is enforced in `services.ingest_document` itself (`DocumentTooLargeError`, maps to 400), not only at
 the REST pydantic boundary — an MCP caller has no schema layer, so this is the one place both
-transports are bound by the same cap. Stages 2–6 (embedding/search, extraction, fusion,
-chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s MCP/REST table; not
-built here.
+transports are bound by the same cap.
+
+`search_documents` embeds `query` through the injected `ModelGateway` (mirrors
+`GraphragRetrieveTool`/`AgentResponder`'s own text→vector step) then calls `search_chunks` (§14.3)
+above. Raises `SearchNotAvailableError` (maps to REST 503, mirroring `WorkflowEngineDisabledError`)
+when no `ModelGateway` is wired into this deployment — a configuration gap, not a caller mistake.
+`GET /documents/search` is registered **before** `GET /documents/{document_id}` in `api.py` —
+Starlette matches routes in registration order, and the dynamic path would otherwise swallow the
+literal `search` segment as a `document_id`.
+
+Stages 3–6 (extraction, fusion, chat-grounding, batch hardening) add the rest of
+`document-ingestion.md`'s MCP/REST table; not built here.

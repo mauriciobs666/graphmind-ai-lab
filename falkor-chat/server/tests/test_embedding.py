@@ -20,20 +20,25 @@ _UNSET = object()
 
 
 class SpyRepo:
-    """Records set_embedding calls; mimics its length validation.
+    """Records set_embedding/set_chunk_embedding calls; mimics their length
+    validation.
 
-    `index_dim` (K-042 FR-19) is what `read_index_dimension` reports back for the
-    `Message` label — defaults to `expected_dim` so every pre-existing test (which
-    never passes it) keeps exercising the "the index matches the declared dim"
-    path unchanged, exactly like `ws:test`'s real dim-4 fixture. Pass an explicit
-    `index_dim` (including `None`, for "no vector index") to simulate the FR-19
-    guard's other branches.
+    `index_dim` (K-042 FR-19) is what `read_index_dimension` reports back
+    **regardless of label** — defaults to `expected_dim` so every pre-existing
+    test (which never passes it) keeps exercising the "the index matches the
+    declared dim" path unchanged, exactly like `ws:test`'s real dim-4 fixture.
+    Pass an explicit `index_dim` (including `None`, for "no vector index") to
+    simulate the FR-19 guard's other branches. `index_dim_calls` records the
+    `(ws, label, prop)` of every call, which is what K-050 Stage 2's tests use
+    to pin that `embed_message`/`embed_chunk` each consult only their own
+    label's index (`Message`/`Chunk` respectively, never the other).
     """
 
     def __init__(self, expected_dim: int, *, index_dim=_UNSET):
         self._dim = expected_dim
         self._index_dim = expected_dim if index_dim is _UNSET else index_dim
         self.calls: list[tuple] = []
+        self.chunk_calls: list[tuple] = []
         self.index_dim_calls: list[tuple] = []
 
     def read_index_dimension(self, ws, *, label, prop="embedding"):
@@ -45,6 +50,13 @@ class SpyRepo:
         if len(embedding) != dim:
             raise EmbeddingDimensionError(f"len {len(embedding)} != {dim}")
         self.calls.append((ws, msg_id, tuple(embedding), expected_dim))
+        return True
+
+    def set_chunk_embedding(self, ws, *, chunk_id, embedding, expected_dim=None):
+        dim = self._dim if expected_dim is None else expected_dim
+        if len(embedding) != dim:
+            raise EmbeddingDimensionError(f"len {len(embedding)} != {dim}")
+        self.chunk_calls.append((ws, chunk_id, tuple(embedding), expected_dim))
         return True
 
 
@@ -291,6 +303,123 @@ def test_worker_never_queries_or_considers_chunk_when_writing_a_message():
 
     assert repo.index_dim_calls == [("acme", "Message", "embedding")]
     assert all(label == "Message" for (_ws, label, _prop) in repo.index_dim_calls)
+
+
+# ── worker: embed_chunk (K-050 M5 Stage 2) ──────────────────────────────────────
+#
+# Mirrors every `embed_message` test above, `Chunk` in place of `Message` — both
+# now share `_resolve_and_embed`, so these pin that the shared helper is
+# parameterized correctly per label, not just that it "works once".
+
+
+def test_worker_embeds_chunk_then_writes_via_repository():
+    repo = SpyRepo(expected_dim=4)
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    worker = EmbeddingWorker(repo, embedder, expected_dim=4)
+
+    worker.embed_chunk("test", chunk_id="c1", text="about cats")
+
+    assert embedder.seen == ["about cats"]
+    assert len(repo.chunk_calls) == 1
+    ws, chunk_id, vec, expected_dim = repo.chunk_calls[0]
+    assert (ws, chunk_id) == ("test", "c1")
+    assert vec == (1.0, 0.0, 0.0, 0.0)
+    assert expected_dim == 4
+    assert repo.calls == []  # never touches the Message write path
+
+
+def test_worker_rejects_wrong_dimension_from_embedder_for_chunk_loudly():
+    repo = SpyRepo(expected_dim=4)
+    embedder = StubEmbedder([1.0, 0.0, 0.0])  # 3 dims, expected 4
+    worker = EmbeddingWorker(repo, embedder, expected_dim=4)
+
+    with pytest.raises(EmbeddingDimensionError):
+        worker.embed_chunk("test", chunk_id="c1", text="oops")
+
+    assert repo.chunk_calls == []
+
+
+def test_worker_resolves_chunk_dim_from_the_gateway_when_no_expected_dim_given():
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    gateway = _StubGateway(embedder, dim=4)
+    repo = SpyRepo(expected_dim=4)
+    worker = EmbeddingWorker(repo, models=gateway)
+
+    worker.embed_chunk("test", chunk_id="c1", text="about cats")
+
+    assert embedder.seen == ["about cats"]
+    assert len(repo.chunk_calls) == 1
+    assert repo.chunk_calls[0][3] == 4
+
+
+def test_worker_raises_before_calling_embedder_on_chunk_index_dimension_mismatch():
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    gateway = _StubGateway(embedder, dim=4, ref="lmstudio/embed-4")
+    # workspace's Chunk index is dimension 8 — the model declares 4
+    repo = SpyRepo(expected_dim=4, index_dim=8)
+    worker = EmbeddingWorker(repo, models=gateway)
+
+    with pytest.raises(EmbeddingDimensionError) as excinfo:
+        worker.embed_chunk("acme", chunk_id="c1", text="about cats")
+
+    assert embedder.seen == []
+    assert repo.chunk_calls == []
+    msg = str(excinfo.value)
+    assert "acme" in msg
+    assert "Chunk" in msg
+    assert "8" in msg
+    assert "lmstudio/embed-4" in msg
+    assert "chunkId='c1'" in msg
+    assert "cannot be changed in place" in msg
+
+
+def test_worker_raises_when_no_vector_index_exists_for_chunk_at_all():
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    gateway = _StubGateway(embedder, dim=4)
+    repo = SpyRepo(expected_dim=4, index_dim=None)
+    worker = EmbeddingWorker(repo, models=gateway)
+
+    with pytest.raises(EmbeddingDimensionError):
+        worker.embed_chunk("fresh-ws", chunk_id="c1", text="hello")
+
+    assert embedder.seen == []
+    assert repo.chunk_calls == []
+
+
+def test_worker_gates_chunk_embed_on_chunk_index_only_never_message():
+    # The mirror-image guarantee of
+    # test_worker_never_queries_or_considers_chunk_when_writing_a_message: a
+    # `Chunk` write is gated ONLY on the `Chunk` index.
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    gateway = _StubGateway(embedder, dim=4)
+    repo = SpyRepo(expected_dim=4, index_dim=4)
+    worker = EmbeddingWorker(repo, models=gateway)
+
+    worker.embed_chunk("acme", chunk_id="c1", text="hello")
+
+    assert repo.index_dim_calls == [("acme", "Chunk", "embedding")]
+    assert all(label == "Chunk" for (_ws, label, _prop) in repo.index_dim_calls)
+
+
+def test_worker_caches_message_and_chunk_index_dimensions_independently():
+    # Same worker, same ws — `Message` and `Chunk` are cached under separate
+    # `(ws, label)` keys, and each is only probed once across repeated calls.
+    embedder = StubEmbedder([1.0, 0.0, 0.0, 0.0])
+    gateway = _StubGateway(embedder, dim=4)
+    repo = SpyRepo(expected_dim=4, index_dim=4)
+    worker = EmbeddingWorker(repo, models=gateway)
+
+    worker.embed_message("acme", msg_id="m1", text="one")
+    worker.embed_chunk("acme", chunk_id="c1", text="two")
+    worker.embed_message("acme", msg_id="m2", text="three")
+    worker.embed_chunk("acme", chunk_id="c2", text="four")
+
+    assert repo.index_dim_calls == [
+        ("acme", "Message", "embedding"),
+        ("acme", "Chunk", "embedding"),
+    ]
+    assert len(repo.calls) == 2
+    assert len(repo.chunk_calls) == 2
 
 
 # ── OpenAICompatibleEmbedder: parses the OpenAI-compatible response ────────────

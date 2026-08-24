@@ -12,7 +12,12 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 
-from .background import _safe_embed, _safe_respond, _safe_run_workflow
+from .background import (
+    _safe_embed,
+    _safe_embed_chunk,
+    _safe_respond,
+    _safe_run_workflow,
+)
 from .config import CallContext
 from .config import get_context as _resolve_context
 from .schemas import (
@@ -147,17 +152,47 @@ def build_router(
             raise HTTPException(status_code=404, detail="message not found")
         return msg
 
-    # ── §14 Documents & Chunks (K-050 M5 Stage 1) ─────────────────────────────
+    # ── §14 Documents & Chunks (K-050 M5 Stages 1-2) ──────────────────────────
     # `DocumentTooLargeError` maps to 400 via the generic `ServiceError`
     # handler; `UnknownActorError` (an unresolvable `get_context()` actor) also
-    # maps to 400 the same way.
+    # maps to 400 the same way. `SearchNotAvailableError` (no `ModelGateway`
+    # wired) maps to 503 (`app._register_error_handlers`).
 
     @router.post("/documents", status_code=201)
-    def ingest_document(body: IngestDocumentIn, ctx: CallContext = Depends(get_context)):
-        return services.ingest_document(
+    def ingest_document(
+        body: IngestDocumentIn, background: BackgroundTasks,
+        ctx: CallContext = Depends(get_context),
+    ):
+        receipt = services.ingest_document(
             ctx, text=body.text, title=body.title,
             source_format=body.sourceFormat, source_label=body.sourceLabel,
         )
+        # Out-of-band, off the guarded write path (K-050 M5 Stage 2, mirrors
+        # the message embed scheduling above): every chunk of a just-ingested
+        # document is embedded so it joins the standalone-KB-searchable corpus.
+        # The document is readable before any chunk's embedding lands.
+        if embed_worker is not None:
+            chunks = services.list_document_chunks(
+                ctx, document_id=receipt["documentId"]
+            )
+            for chunk in chunks:
+                background.add_task(
+                    _safe_embed_chunk, embed_worker, ctx.ws,
+                    chunk["chunkId"], chunk["text"],
+                )
+        return receipt
+
+    # Registered BEFORE `/documents/{document_id}`: Starlette matches routes in
+    # registration order, and `{document_id}` would otherwise swallow a literal
+    # `/documents/search` path (treating "search" as the id) — the same static-
+    # before-dynamic ordering this router already relies on elsewhere.
+    @router.get("/documents/search")
+    def search_documents(
+        q: str = Query(..., min_length=1),
+        limit: int = Query(20, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.search_documents(ctx, query=q, limit=limit)
 
     @router.get("/documents/{document_id}")
     def get_document(document_id: str, ctx: CallContext = Depends(get_context)):
