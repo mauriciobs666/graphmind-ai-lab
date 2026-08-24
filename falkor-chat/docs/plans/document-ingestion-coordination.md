@@ -43,6 +43,7 @@ design, confirmed by the stakeholder 2026-08-22).
 | U15 | `analyst` | `a451eafaf56d89c64` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 3 | code gate → **approve w/ suggestions** | 166k tok / 66 tools |
 | U16 | `coder` | `aa3b282bce11b9f3b` (resumed) | accepted | fix U15's 2 MAJORs (cap/stub-repair ordering; MCP schedule try/except + doc the doubled fan-out) | `analyst` (U17) → **approve** | 357k tok / 43 tools |
 | U17 | `analyst` | `a451eafaf56d89c64` (resumed) | accepted | Pass 3 re-gate of U16's fixes | code re-gate → **approve** | 194k tok / 31 tools |
+| U18 | `data-scientist` | `a454015041210268b` | accepted | `docs/reviews/document-ingestion-ml.md` — checkpoint | advisory, non-blocking — no gate (verified by teco) | 228k tok / 149 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -275,6 +276,32 @@ design-phase commit.
   `extraction` is a fifth defined kind — `KINDS` itself is a test-parametrization/documentation
   constant only, never a runtime validation gate, so this doesn't block anything. **Stage 3 is done:
   implementation + diff-scoped gate + fix + re-gate, all independently verified. Committing.**
+
+- **U18 (checkpoint) verified independently, not just on report.** Read the delivered review
+  (`docs/reviews/document-ingestion-ml.md`) in full. Independently re-queried `ws:acme` directly
+  (`mcp__cypher__query`) rather than trusting the reported figures: `Entity` count 523 (matches),
+  `RELATES_TO` count 371 via `count(r)` on a bound relationship variable (matches), and recomputed
+  the headline 30% type-inconsistency statistic from scratch with my own Cypher (84 repeat-mention
+  normalized names, 25 with >1 distinct `type`, 29.76% ≈ 30% — exact match) plus spot-checked one
+  concrete example cited (`falkordb` → 9 mentions, `[Product, Organization]` — exact match). Both
+  filed `kaizen_team` entries (LM Studio concurrent-model-swap thrashing under combined embed+
+  extract background load; the stale `192.168.0.69:1234` gateway IP) confirmed genuinely present,
+  correctly attributed to `data-scientist`. Confirmed the environment was left clean: no `uvicorn`
+  process running, port 8000 unreachable, matching the review's own "stopped, no orphaned process"
+  claim — the `ws:acme` graph data (README's 523 entities/371 edges) was left in place as disclosed,
+  intentionally, as a usable starting corpus for Stage 4. Disclosed method deviation (Apollo 11
+  sample run via direct `extraction.extract()` calls after live concurrent-background-task ingestion
+  destabilized the local LM Studio instance) is judged reasonable and adequately flagged — same
+  code path under review, decoupled only from the background-scheduling machinery, not from the
+  extraction logic itself; the instability that forced it is exactly the same MCP/background
+  thread-fan-out class of concern already tracked into Stage 6, now with a second data point.
+  **Advisory-only, no gate, but the finding is real and load-bearing for Stage 4 planning**: FR-8's
+  exact-match auto-merge tier will under-perform naive same-name-match intuition on real content
+  from day one (30% of repeat mentions carry a type conflict, not a rare edge case) — this is now
+  on record before Stage 4 design work starts, exactly what the checkpoint existed to surface. Two
+  concrete, cheap follow-ups recommended (widen stub-repair to a same-call substring/containment
+  match; flag the type-inconsistency rate to whoever tunes Stage 4's exact-match tier) — both
+  explicitly scoped as Stage 4 design-time considerations, not built here, not blocking.
 
 ## Design phase — ✅ complete, committed `30366f4`
 
