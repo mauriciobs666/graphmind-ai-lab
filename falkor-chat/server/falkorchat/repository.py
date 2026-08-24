@@ -1107,6 +1107,92 @@ class Repository:
             for row in res.result_set
         ]
 
+    # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3, FR-7a) ─────────────────────
+
+    def create_entity(
+        self, ws: str, *, entity_id: str, name: str, name_normalized: str,
+        type: str, created_at: int,
+    ) -> dict[str, Any]:
+        """Create a fresh `Entity` node. QUERIES.md §14.5.
+
+        **Always a NEW node** — this method never looks up or reuses an
+        existing entity; fusion (a future stage) never blocks creation here,
+        only decides *linking* after the fact. `name_normalized` is computed
+        app-side by the caller (`IngestionPipeline`) using the SAME shared
+        normalization helper `extraction.normalize_name` — one function, not
+        two independently-written normalizers that can drift
+        (`document-ingestion-graph.md` §2.2, `document-ingestion-ml.md` §3.2).
+        Written starting this stage even though fusion is the first reader,
+        so no backfill migration is needed later. Both `entityId` and every
+        edge here are freshly minted by *this same pipeline run* moments
+        apart — a plain `CREATE`, no guard-and-status-row contract (unlike
+        `Document`/message writes, a `MATCH` miss downstream would indicate a
+        real bug, not routine caller input).
+        """
+        res = self._graph(ws).query(
+            "CREATE (e:Entity {"
+            "  entityId: $entityId, name: $name, nameNormalized: $nameNormalized, "
+            "  type: $type, createdAt: $createdAt"
+            "}) "
+            "RETURN e.entityId AS entityId",
+            {
+                "entityId": entity_id, "name": name,
+                "nameNormalized": name_normalized, "type": type,
+                "createdAt": created_at,
+            },
+        )
+        return {"entityId": res.result_set[0][0]}
+
+    def link_chunk_about_entity(
+        self, ws: str, *, chunk_id: str, entity_id: str
+    ) -> None:
+        """Write the dormant `(:Chunk)-[:ABOUT]->(:Entity)` edge (schema
+        scaffolded since M2, `docs/DESIGN.md` §5.1 — never populated until
+        this stage). QUERIES.md §14.5.
+
+        Plain `CREATE`, never `MERGE`: a chunk is extracted exactly once per
+        ingestion, so a duplicate `(chunk, entity)` `ABOUT` pair shouldn't
+        occur under normal operation; if it ever did, an extra co-occurrence
+        edge is harmless (no properties to conflict) — the same
+        never-deduplicated posture already adopted for `RELATES_TO` (§3.1).
+        """
+        self._graph(ws).query(
+            "MATCH (c:Chunk {chunkId: $chunkId}) "
+            "MATCH (e:Entity {entityId: $entityId}) "
+            "CREATE (c)-[:ABOUT]->(e)",
+            {"chunkId": chunk_id, "entityId": entity_id},
+        )
+
+    def create_entity_relationship(
+        self, ws: str, *, subject_id: str, object_id: str, label: str,
+        source_chunk_id: str, source_document_id: str, created_at: int,
+    ) -> None:
+        """Write one `RELATES_TO` fact edge. QUERIES.md §14.5.
+
+        `label` is the LLM-extracted predicate, stored as free text — never
+        its own Cypher relationship type (plan §3.3/§3.1: an unbounded,
+        LLM-controlled set of relationship types is a real risk this avoids,
+        the same "opaque string, parsed app-side" convention already used for
+        `Step.config`/`TRANSITION.guard`). **Never deduplicated** — every
+        extracted fact is independent provenance and is written even if an
+        identical `RELATES_TO` edge already exists between the same two
+        entities (FR-6/§3.1: conflicting or repeated facts are always kept,
+        never merged or overwritten).
+        """
+        self._graph(ws).query(
+            "MATCH (subj:Entity {entityId: $subjectId}) "
+            "MATCH (obj:Entity  {entityId: $objectId}) "
+            "CREATE (subj)-[:RELATES_TO {"
+            "  label: $label, sourceChunkId: $sourceChunkId, "
+            "  sourceDocumentId: $sourceDocumentId, createdAt: $createdAt"
+            "}]->(obj)",
+            {
+                "subjectId": subject_id, "objectId": object_id, "label": label,
+                "sourceChunkId": source_chunk_id,
+                "sourceDocumentId": source_document_id, "createdAt": created_at,
+            },
+        )
+
     def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
         """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""
         res = self._graph(ws).ro_query(

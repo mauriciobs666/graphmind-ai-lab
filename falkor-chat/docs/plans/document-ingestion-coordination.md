@@ -37,8 +37,12 @@ design, confirmed by the stakeholder 2026-08-22).
 | U9 | `coder` | `a1d788e3e8868b48a` | accepted | Stage 1: chunking + Document/Chunk write path | `analyst` (U10) → **approve w/ suggestions** | 284k tok / 137 tools |
 | U10 | `analyst` | `a1f9d0b8d1f75e6cc` | accepted | `docs/reviews/document-ingestion-impl.md` | code gate → **approve with suggestions** | 126k tok / 45 tools |
 | U11 | `coder` | `a1d788e3e8868b48a` (resumed) | accepted | fix: reject empty/whitespace-only `ingest_document` text | (verified by teco) | 303k tok / 26 tools |
-| U12 | `coder` | `a5db435e79c550371` | delivered | Stage 2: chunk embeddings + standalone search (FR-3) | `analyst` (U13) → — | 344k tok / 19 tools |
+| U12 | `coder` | `a5db435e79c550371` | accepted | Stage 2: chunk embeddings + standalone search (FR-3) | `analyst` (U13) → **approve** | 344k tok / 19 tools |
 | U13 | `analyst` | `a1854598c0cc66618` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 2 | code gate → **approve** | 141k tok / 52 tools |
+| U14 | `coder` | `aa3b282bce11b9f3b` | accepted | Stage 3: extraction (FR-7a) | `analyst` (U15/U17) → **approve** (re-gate) | 318k tok / 161 tools |
+| U15 | `analyst` | `a451eafaf56d89c64` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 3 | code gate → **approve w/ suggestions** | 166k tok / 66 tools |
+| U16 | `coder` | `aa3b282bce11b9f3b` (resumed) | accepted | fix U15's 2 MAJORs (cap/stub-repair ordering; MCP schedule try/except + doc the doubled fan-out) | `analyst` (U17) → **approve** | 357k tok / 43 tools |
+| U17 | `analyst` | `a451eafaf56d89c64` (resumed) | accepted | Pass 3 re-gate of U16's fixes | code re-gate → **approve** | 194k tok / 31 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -191,6 +195,86 @@ design-phase commit.
   an immediate fix. One NIT (MCP `search_documents` has no `limit` cap, matching pre-existing
   `search_messages` precedent) — no action needed, not a regression. All mutation-test claims
   spot-checked against actual test assertions (not just labels) and confirmed real.
+
+- **U14 verified independently, not just on report**: read `extraction.py`/`ingestion.py` in full
+  and the `repository.py`/`background.py`/`api.py`/`mcp.py`/`app.py` diffs directly. Confirmed:
+  `normalize_name` is genuinely the one shared helper both `extraction.py`'s stub-repair and
+  `ingestion.py`'s `create_entity` call use; the closed 7-value type enum coerces (not rejects) an
+  out-of-enum/missing `type` to `Other`; `create_entity_relationship` is a plain `CREATE`, never a
+  guarded `MERGE` (FR-6 never-deduplicated); `_safe_extract` mirrors `_safe_embed_chunk`'s
+  try/except-log-never-raise shape exactly; no fusion/matching/lookup-existing-entity logic is
+  present anywhere (correct Stage 3/4 boundary — every path is unconditional create); extraction and
+  embedding are scheduled as two independent background calls per chunk on both transports, neither
+  chained to the other; `config/models.json`'s new `extraction` kind resolves generically through
+  `ModelGateway.resolve()`/`default_for(kind)` with no closed-KINDS check blocking it (confirmed by
+  reading `modelconfig.py` directly — the implementer's scope note about deferring
+  `WorkspaceConfig.extractionModelOverride` wiring is correct: not named in Stage 3's file list, and
+  `_workspace_override_ref` degrades to "no override" for a kind absent from `_KIND_TO_OVERRIDE_KEY`,
+  not an error). Re-ran the full offline suite myself (1647 passed / 3 deselected, +50 over Stage
+  2's 1597 — matches reported) and the query suite (320/320, unchanged as expected — no new DDL
+  entered that suite), re-seeding `reference` afterward (`bootstrap_schema.sh acme` →
+  `seed_demo.sh acme` → `seed_workflows.sh acme` → `verify_workflows.sh acme`: OK). Read
+  `docs/HISTORY.md`'s new entry and `docs/QUERIES.md` §14.5 in full — both complete and accurate.
+  Confirmed a genuinely new, live-verified FalkorDB quirk the implementer found and captured as a
+  `KaizenEntry` in `kaizen_team` (producer `coder`): `MATCH ()-[:REL]->() RETURN count(*)`
+  under-counts parallel edges between the same node pair (returns 1 for 2 identical edges) —
+  `count(r)` with a bound relationship variable correctly returns 2; the never-deduplicated
+  `RELATES_TO` tests use the correct `count(r)` form. One scope note self-disclosed by the
+  implementer (workspace-override wiring for the new `extraction` kind, not built) verified as a
+  reasonable, correctly-scoped omission, not a gap. **Compounding note carried into U15's brief**:
+  Stage 3 adds a second per-chunk `threading.Thread` spawn on the MCP path (`_safe_extract`,
+  alongside Stage 2's `_safe_embed_chunk`) — doubling U13's already-deferred MINOR (up to ~500 →
+  ~1000 threads for a max-size document on MCP). Still judging this as correctly deferred to Stage 6
+  rather than an immediate fix (same reasoning as U13: lab-scale, self-contained, exactly the class
+  of concern that stage exists to address) — asked U15 for an independent second opinion on whether
+  the compounding changes that severity/urgency judgment, not just a note that it exists. Dispatching
+  U15 (`analyst` diff-scoped code gate, Pass 3) now.
+
+- **U15 verdict: approve with suggestions.** Two real MAJORs, both cheap to fix, neither a blocker:
+  (1) the entity-cap/stub-repair truncation order silently drops a relationship fact when a chunk's
+  raw entity list is already at the 20-cap and a relationship references a not-yet-listed name — the
+  exact failure stub-repair exists to prevent (FR-6), live-reproduced by the reviewer both via a
+  direct `extract()` call and end-to-end through `IngestionPipeline`, no existing test covers this
+  interaction; (2) confirmed and independently judged my carried-forward compounding question — the
+  reviewer's own verdict is that the doubling (now ~1,000-1,200 MCP threads for a max-size document)
+  is not just "more of the same accepted trade-off" but introduces a genuinely new, currently-uncaught
+  failure mode (`_schedule()`'s bare `threading.Thread(...).start()` has no try/except, so a
+  thread-creation failure under resource pressure now propagates unhandled out of the tool call) —
+  and recommends the cheapest of three fixes (a try/except wrap) now, deferring the fuller
+  batching/pooling redesign to Stage 6 same as before. Everything else — Cypher fidelity,
+  shared-normalizer discipline, enum coercion, stage-boundary discipline, scheduling independence, all
+  6 mutation-test claims, docs accuracy, suite counts (1647/3 deselected, 320/320 query suite) — spot-
+  checked and confirmed clean. Deciding to fix both MAJORs now (same precedent as Stage 1's U10→U11):
+  cheap, correctness-critical for #1 (FR-6 is a load-bearing guarantee), and the reviewer's own
+  judgment on #2 is that it shouldn't keep sliding to Stage 6 unexamined a second time — resuming the
+  same `coder` agent (`aa3b282bce11b9f3b`) via `SendMessage` as U16, scoped to the gate's own cheapest
+  suggested fixes (fix #1's ordering bug + a new test; fix #2's try/except wrap + doc the doubled
+  count), explicitly NOT building the heavier Stage-6-deferred batching/pooling redesign.
+
+- **U16 verified independently, not just on report**: read both diffs (`extraction.py`, `mcp.py`) in
+  full — the entity cap now runs before `_repair_stub_entities` (not after), and `_default_schedule`'s
+  `threading.Thread(...).start()` is wrapped in the same try/except-log-never-raise shape every other
+  `_safe_*` isolation point in this codebase uses, with the doubled fan-out documented explicitly in
+  both the docstring and a new `QUERIES.md` §14.5 "Resource note." Re-ran the full offline suite
+  myself (1650 passed / 3 deselected, +3 over the pre-fix 1647) and the query suite (320/320
+  unchanged), re-seeding `reference` afterward (full bootstrap→seed→verify sequence, confirmed OK).
+  Read both new regression tests (`test_extract_stub_repair_is_not_truncated_away_by_the_entity_cap`,
+  `test_default_schedule_swallows_a_thread_start_failure_and_logs` +
+  `test_default_schedule_still_runs_the_job_on_the_happy_path`) and confirmed they genuinely exercise
+  the fixed behavior, not just restate the mutation's own description. Dispatching U17 (resuming
+  `analyst`, `a451eafaf56d89c64`) for the re-gate now — asking the reviewer to independently
+  re-verify rather than accept the coordinator's own check, per standing practice.
+
+- **U17 verdict: approve.** Both Pass 3 MAJORs confirmed genuinely closed — the reviewer re-ran their
+  own original reproduction scripts against the fixed code (both now behave correctly), mutation-spot-
+  checked both new regression tests by reconstructing the pre-fix behavior in memory and confirming
+  each fails against it, confirmed no file outside the two fixes + their tests + the `QUERIES.md` note
+  changed (no drive-by scope creep), and re-ran both suites themselves with matching counts (1650/3
+  deselected, 320/320). One pre-existing documentation nit noted as still open, not urgent, no action
+  needed: `modelconfig.KINDS`'s docstring says "four closed consumer kinds," now stale in spirit since
+  `extraction` is a fifth defined kind — `KINDS` itself is a test-parametrization/documentation
+  constant only, never a runtime validation gate, so this doesn't block anything. **Stage 3 is done:
+  implementation + diff-scoped gate + fix + re-gate, all independently verified. Committing.**
 
 ## Design phase — ✅ complete, committed `30366f4`
 

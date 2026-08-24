@@ -8,6 +8,7 @@ tests), so this module never hardcodes the tenant.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -18,11 +19,14 @@ from . import config
 from .background import (
     _safe_embed,
     _safe_embed_chunk,
+    _safe_extract,
     _safe_respond,
     _safe_run_workflow,
 )
 from .config import CallContext
 from .services import Services
+
+_log = logging.getLogger(__name__)
 
 mcp = FastMCP("falkor-chat")
 # Serve the Streamable-HTTP handler at the mount root so that mounting the app
@@ -42,6 +46,7 @@ _get_context: Callable[[], CallContext] = config.get_context
 _responder: Any | None = None
 _embed_worker: Any | None = None
 _trigger: Any | None = None
+_ingestion_pipeline: Any | None = None
 
 
 def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
@@ -63,6 +68,32 @@ def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
     Overridable as `mcp._schedule` — tests swap it for an inline call to
     assert deterministically instead of racing a background thread.
 
+    **The fan-out is doubled as of K-050 M5 Stage 3** (`docs/reviews/
+    document-ingestion-impl.md` Pass 3 MAJOR 2): `ingest_document` now
+    schedules TWO independent per-chunk jobs (embed + extract, both via this
+    function) instead of one, so a single call against a max-size document
+    (`MAX_DOCUMENT_CHARS = 500_000`, ~1,000-char chunks) now spawns on the
+    order of **~1,000-1,200 raw OS threads**, sequentially and synchronously,
+    inside the tool handler, before it returns — up from Pass 2's ~500-600.
+    Still accepted for M1's lab-scale posture, not silently re-reasoning about
+    half the real number; a bounded thread pool (batching each transport's
+    fan-out instead of one-thread-per-(chunk × job)) is deferred to Stage 6,
+    the same disposition Pass 2's original finding already had.
+
+    **Thread-creation failures are caught here, not propagated (Pass 3 MAJOR
+    2 fix (a)).** If OS thread creation itself fails
+    (`RuntimeError: can't start new thread` — a real failure mode once a
+    process's thread count nears a `ulimit -u`/cgroup `pids.max` ceiling,
+    commonly in the low thousands in constrained/containerized environments,
+    now within a small constant factor of the doubled fan-out above), the
+    failure is logged and swallowed rather than propagating out of the
+    calling `@mcp.tool()` handler as an unhandled exception — one job's
+    thread-start failure no longer aborts the rest of a per-chunk scheduling
+    loop or turns an otherwise-successful `ingest_document` call into a
+    caller-visible error (the underlying `Document`/`Chunk`s are already
+    committed by the time this runs, so no data is lost either way — only the
+    one scheduled background job is skipped).
+
     **No shutdown/drain awareness.** Unlike REST, where Starlette awaits
     `BackgroundTasks` as part of the same ASGI request coroutine (so the
     request isn't "done" until the background task completes), a thread
@@ -73,7 +104,13 @@ def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
     would mean tracking spawned threads in a small registry and joining them
     with a timeout in `_lifespan`'s shutdown branch.
     """
-    threading.Thread(target=fn, args=args, daemon=True).start()
+    try:
+        threading.Thread(target=fn, args=args, daemon=True).start()
+    except Exception:  # noqa: BLE001 — see docstring: log, never propagate
+        _log.exception(
+            "mcp background schedule failed to start a thread (fn=%s)",
+            getattr(fn, "__name__", fn),
+        )
 
 
 _schedule: Callable[..., None] = _default_schedule
@@ -86,20 +123,24 @@ def configure(
     responder: Any | None = None,
     embed_worker: Any | None = None,
     trigger: Any | None = None,
+    ingestion_pipeline: Any | None = None,
 ) -> FastMCP:
     """Wire the MCP tools to a `Services` instance (and optional context seam).
 
-    `responder`/`embed_worker`/`trigger` mirror `api.build_router`'s same-named
-    parameters (K-041) — pass the exact same objects `create_app` wires into
-    the REST router so both transports run the identical post-message policy.
+    `responder`/`embed_worker`/`trigger`/`ingestion_pipeline` mirror
+    `api.build_router`'s same-named parameters (K-041) — pass the exact same
+    objects `create_app` wires into the REST router so both transports run
+    the identical post-message policy.
     """
     global _services, _get_context, _responder, _embed_worker, _trigger
+    global _ingestion_pipeline
     _services = services
     if context_provider is not None:
         _get_context = context_provider
     _responder = responder
     _embed_worker = embed_worker
     _trigger = trigger
+    _ingestion_pipeline = ingestion_pipeline
     return mcp
 
 
@@ -224,17 +265,30 @@ def ingest_document(
     Stage 2) — readable and full-text-round-trippable via `get_document`
     immediately, ranked-searchable via `search_documents` once the background
     embed lands (same eventually-consistent posture as a posted message).
-    Extraction/fusion are later stages; this call only returns
-    `{documentId, chunkCount, status: 'processing'}`.
+    Entity/relationship extraction is scheduled independently, per chunk,
+    right alongside the embed (K-050 M5 Stage 3) — no fusion yet, every
+    extracted entity is a fresh node (plan §3.1). Fusion is a later stage;
+    this call only returns `{documentId, chunkCount, status: 'processing'}`.
     """
     ctx = _get_context()
     receipt = _svc().ingest_document(
         ctx, text=text, title=title, source_format=source_format,
         source_label=source_label,
     )
-    if _embed_worker is not None:
+    if _embed_worker is not None or _ingestion_pipeline is not None:
         for chunk in _svc().list_document_chunks(ctx, document_id=receipt["documentId"]):
-            _schedule(_safe_embed_chunk, _embed_worker, ctx.ws, chunk["chunkId"], chunk["text"])
+            if _embed_worker is not None:
+                _schedule(
+                    _safe_embed_chunk, _embed_worker, ctx.ws,
+                    chunk["chunkId"], chunk["text"],
+                )
+            # K-050 M5 Stage 3: extraction is scheduled independently of
+            # embedding for the same chunk — neither blocks the other.
+            if _ingestion_pipeline is not None:
+                _schedule(
+                    _safe_extract, _ingestion_pipeline, ctx.ws,
+                    chunk["chunkId"], receipt["documentId"], chunk["text"],
+                )
     return receipt
 
 

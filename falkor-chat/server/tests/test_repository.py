@@ -805,6 +805,145 @@ def test_create_document_is_non_idempotent_on_retry(repo, conn):
     assert count == 2
 
 
+# ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
+
+
+def _document_with_chunk(repo, *, document_id="d1", chunk_id="c0"):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id=document_id, title="t", text="x",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=[{"chunkId": chunk_id, "text": "x", "seq": 0}],
+    )
+
+
+def test_create_entity_writes_all_fields(repo, conn):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme Corp", name_normalized="acme corp",
+        type="Organization", created_at=100,
+    )
+
+    rows = _probe(
+        conn,
+        "MATCH (e:Entity {entityId:'e1'}) "
+        "RETURN e.name, e.nameNormalized, e.type, e.createdAt",
+    )
+    assert rows == [["Acme Corp", "acme corp", "Organization", 100]]
+
+
+def test_create_entity_returns_entity_id(repo):
+    result = repo.create_entity(
+        "test", entity_id="e1", name="Bob", name_normalized="bob",
+        type="Person", created_at=100,
+    )
+
+    assert result["entityId"] == "e1"
+
+
+def test_create_entity_always_creates_a_new_node_never_reuses(repo, conn):
+    # Fusion (a future stage) never blocks creation here — two mentions with
+    # the identical normalized name + type still produce two Entity nodes.
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme", name_normalized="acme",
+        type="Organization", created_at=101,
+    )
+
+    [[count]] = _probe(
+        conn, "MATCH (e:Entity {nameNormalized:'acme', type:'Organization'}) RETURN count(e)"
+    )
+    assert count == 2
+
+
+def test_link_chunk_about_entity_writes_the_edge(repo, conn):
+    _document_with_chunk(repo)
+    repo.create_entity(
+        "test", entity_id="e1", name="Bob", name_normalized="bob",
+        type="Person", created_at=100,
+    )
+
+    repo.link_chunk_about_entity("test", chunk_id="c0", entity_id="e1")
+
+    rows = _probe(
+        conn,
+        "MATCH (c:Chunk {chunkId:'c0'})-[r:ABOUT]->(e:Entity {entityId:'e1'}) RETURN count(r)",
+    )
+    assert rows == [[1]]
+
+
+def test_link_chunk_about_entity_is_never_deduplicated(repo, conn):
+    _document_with_chunk(repo)
+    repo.create_entity(
+        "test", entity_id="e1", name="Bob", name_normalized="bob",
+        type="Person", created_at=100,
+    )
+
+    repo.link_chunk_about_entity("test", chunk_id="c0", entity_id="e1")
+    repo.link_chunk_about_entity("test", chunk_id="c0", entity_id="e1")
+
+    rows = _probe(
+        conn,
+        "MATCH (c:Chunk {chunkId:'c0'})-[r:ABOUT]->(e:Entity {entityId:'e1'}) RETURN count(r)",
+    )
+    assert rows == [[2]]  # a plain CREATE, never a guarded MERGE
+
+
+def test_create_entity_relationship_writes_the_edge_with_provenance(repo, conn):
+    _document_with_chunk(repo)
+    repo.create_entity(
+        "test", entity_id="e1", name="Alice", name_normalized="alice",
+        type="Person", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+
+    repo.create_entity_relationship(
+        "test", subject_id="e1", object_id="e2", label="works at",
+        source_chunk_id="c0", source_document_id="d1", created_at=200,
+    )
+
+    rows = _probe(
+        conn,
+        "MATCH (:Entity {entityId:'e1'})-[r:RELATES_TO]->(:Entity {entityId:'e2'}) "
+        "RETURN r.label, r.sourceChunkId, r.sourceDocumentId, r.createdAt",
+    )
+    assert rows == [["works at", "c0", "d1", 200]]
+
+
+def test_create_entity_relationship_is_never_deduplicated(repo, conn):
+    # FR-6: conflicting/repeated facts are always kept, never merged.
+    _document_with_chunk(repo)
+    repo.create_entity(
+        "test", entity_id="e1", name="Alice", name_normalized="alice",
+        type="Person", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+
+    repo.create_entity_relationship(
+        "test", subject_id="e1", object_id="e2", label="works at",
+        source_chunk_id="c0", source_document_id="d1", created_at=200,
+    )
+    repo.create_entity_relationship(
+        "test", subject_id="e1", object_id="e2", label="works at",
+        source_chunk_id="c0", source_document_id="d1", created_at=200,
+    )
+
+    rows = _probe(
+        conn,
+        "MATCH (:Entity {entityId:'e1'})-[r:RELATES_TO]->(:Entity {entityId:'e2'}) "
+        "RETURN count(r)",
+    )
+    assert rows == [[2]]
+
+
 # ── §5 Full-text search ────────────────────────────────────────────────────────
 
 

@@ -103,6 +103,15 @@ bootstrap_workspace() {
   echo "[index] Entity.entityId"
   gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.entityId)"
 
+  # K-050 M5 Stage 3: the FR-8 exact-tier fusion lookup (a future stage) needs a
+  # real `=` comparison, decoupled from RediSearch tokenizer/stemmer behavior —
+  # a plain RANGE index, no uniqueness constraint (distinct real entities can
+  # share a normalized name+type before fusion runs). Written starting this
+  # stage (`repository.create_entity`) even though fusion is the first reader,
+  # so no backfill migration is needed later (`document-ingestion-graph.md` §2.3).
+  echo "[index] Entity.nameNormalized"
+  gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.nameNormalized)"
+
   # Materialized snapshot steps land in the workspace graph too (K-021), so the
   # same Step identity DDL as the reference graph applies here.
   # Step.key: display/traversal anchor only, no constraint (§7.1).
@@ -214,6 +223,12 @@ bootstrap_workspace() {
   # ── full-text index ─────────────────────────────────────────
   echo "[fulltext] Message.text"
   gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Message', 'text')"
+
+  # K-050 M5 Stage 3: the FR-9 suggested-tier fusion lookup (a future stage) —
+  # inert until then, same "bootstrapped, not yet queried" posture the original
+  # Chunk scaffolding demonstrated (`document-ingestion-graph.md` §2.3/§5).
+  echo "[fulltext] Entity.name"
+  gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Entity', 'name')"
 
   # ── vector indexes ───────────────────────────────────────────
   # Dimension must match the embedding model and is FIXED at index creation —

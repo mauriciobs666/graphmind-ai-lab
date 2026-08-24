@@ -50,6 +50,30 @@ def _safe_embed_chunk(embed_worker: Any, ws: str, chunk_id: str, text: str) -> N
         _log.exception("background chunk embed failed (chunkId=%s)", chunk_id)
 
 
+def _safe_extract(
+    ingestion_pipeline: Any, ws: str, chunk_id: str, document_id: str, text: str
+) -> None:
+    """Extract an ingested document's chunk into entities/relationships
+    out-of-band, swallowing+logging any failure (K-050 M5 Stage 3 — mirrors
+    `_safe_embed_chunk` exactly).
+
+    Runs off-band, independent of `_safe_embed_chunk` for the same chunk (both
+    are scheduled side by side from `api.py`/`mcp.py`'s `ingest_document`, not
+    chained) and decoupled from `services.ingest_document`'s write path: a
+    chunk is readable — and its embedding may already be searchable — before
+    its extraction lands. An extraction failure for one chunk must never
+    surface to the ingesting caller, corrupt the `Document`, or block sibling
+    chunks (same failure-isolation discipline as every other `_safe_*`
+    wrapper in this module).
+    """
+    try:
+        ingestion_pipeline.extract_chunk(
+            ws, chunk_id=chunk_id, document_id=document_id, text=text
+        )
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background extract failed (chunkId=%s)", chunk_id)
+
+
 def _safe_respond(responder: Any, ctx: CallContext, posted: dict[str, Any]) -> None:
     """Fire the AI responder out-of-band, swallowing+logging any failure.
 

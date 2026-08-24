@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from falkorchat.background import _safe_embed_chunk, _safe_respond
+from falkorchat.background import _safe_embed_chunk, _safe_extract, _safe_respond
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.responder import AgentResponder
@@ -116,3 +116,43 @@ def test_safe_embed_chunk_swallows_failure_logs_error_never_raises(caplog):
     assert "c1" in error_records[0].getMessage()
     assert error_records[0].exc_info is not None
     assert "boom embedding c1" in str(error_records[0].exc_info[1])
+
+
+# ── _safe_extract (K-050 M5 Stage 3) ─────────────────────────────────────────
+#
+# Mirrors `_safe_embed_chunk`'s failure-isolation contract exactly.
+
+
+class _RecordingIngestionPipeline:
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def extract_chunk(self, ws, *, chunk_id, document_id, text):
+        self.calls.append((ws, chunk_id, document_id, text))
+
+
+class _FailingIngestionPipeline:
+    def extract_chunk(self, ws, *, chunk_id, document_id, text):
+        raise RuntimeError(f"boom extracting {chunk_id}")
+
+
+def test_safe_extract_calls_the_pipeline():
+    pipeline = _RecordingIngestionPipeline()
+
+    _safe_extract(pipeline, "test", "c1", "d1", "about cats")
+
+    assert pipeline.calls == [("test", "c1", "d1", "about cats")]
+
+
+def test_safe_extract_swallows_failure_logs_error_never_raises(caplog):
+    pipeline = _FailingIngestionPipeline()
+
+    with caplog.at_level(logging.ERROR):
+        _safe_extract(pipeline, "test", "c1", "d1", "about cats")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background extract failed" in error_records[0].getMessage()
+    assert "c1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom extracting c1" in str(error_records[0].exc_info[1])

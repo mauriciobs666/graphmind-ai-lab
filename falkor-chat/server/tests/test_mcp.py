@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import logging
+import threading
 
 import pytest
 
@@ -21,7 +23,8 @@ TEST_CTX = CallContext(ws="test", actor="u1")
 
 
 def _configure(
-    repo, *, actor="u1", responder=None, embed_worker=None, trigger=None, models=None
+    repo, *, actor="u1", responder=None, embed_worker=None, trigger=None,
+    models=None, ingestion_pipeline=None,
 ):
     clock = itertools.count(1000)
     ids = (f"id{n}" for n in itertools.count(1))
@@ -34,6 +37,7 @@ def _configure(
         responder=responder,
         embed_worker=embed_worker,
         trigger=trigger,
+        ingestion_pipeline=ingestion_pipeline,
     )
     return svc
 
@@ -288,6 +292,123 @@ def test_ingest_document_schedules_every_chunk_for_embedding(repo):
 def test_ingest_document_with_no_embed_worker_schedules_nothing(repo):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     _configure(repo)  # no embed_worker
+
+    posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_document", {"text": "hello"}
+    )))
+    assert posted["status"] == "processing"  # succeeds; nothing to assert-not-crash on
+
+
+# ── Pass 3 MAJOR 2 fix (a): a thread-start failure must not escape a tool ────
+
+
+def test_default_schedule_swallows_a_thread_start_failure_and_logs(monkeypatch, caplog):
+    # Simulates the real OS failure mode (`RuntimeError: can't start new
+    # thread`, near a ulimit/cgroup ceiling) without actually exhausting OS
+    # threads — `threading.Thread` itself is monkeypatched to raise on start.
+    class _FailingThread:
+        def __init__(self, target, args, daemon):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(mcp_mod.threading, "Thread", _FailingThread)
+    calls: list[str] = []
+
+    def _fn(marker):
+        calls.append(marker)  # pragma: no cover — never reached, start() raises first
+
+    with caplog.at_level(logging.ERROR):
+        mcp_mod._default_schedule(_fn, "c1")  # must not raise
+
+    assert calls == []  # the job never ran — thread creation itself failed
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "mcp background schedule failed to start a thread" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "can't start new thread" in str(error_records[0].exc_info[1])
+
+
+def test_default_schedule_still_runs_the_job_on_the_happy_path(monkeypatch):
+    # Regression guard: the try/except must not swallow the real dispatch —
+    # confirmed against the REAL threading.Thread (no monkeypatch here),
+    # joined so the assertion isn't racing the background thread.
+    calls: list[str] = []
+    threads: list[threading.Thread] = []
+    original_thread = mcp_mod.threading.Thread
+
+    def _tracking_thread(target, args, daemon):
+        t = original_thread(target=target, args=args, daemon=daemon)
+        threads.append(t)
+        return t
+
+    monkeypatch.setattr(mcp_mod.threading, "Thread", _tracking_thread)
+
+    mcp_mod._default_schedule(calls.append, "ran")
+    for t in threads:
+        t.join(timeout=5)
+
+    assert calls == ["ran"]
+
+
+# ── K-050 M5 Stage 3: extraction scheduling ──────────────────────────────────
+
+
+class RecordingIngestionPipeline:
+    """Records extract_chunk calls scheduled off-band (mirrors
+    RecordingChunkWorker above, but for extraction rather than embedding)."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def extract_chunk(self, ws, *, chunk_id, document_id, text):
+        self.calls.append((ws, chunk_id, document_id, text))
+
+
+def test_ingest_document_schedules_every_chunk_for_extraction(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    pipeline = RecordingIngestionPipeline()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo, ingestion_pipeline=pipeline)
+        posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "First para.\n\nSecond, longer paragraph."}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert len(pipeline.calls) == posted["chunkCount"]
+    for ws, _chunk_id, document_id, _text in pipeline.calls:
+        assert ws == "test"
+        assert document_id == posted["documentId"]
+
+
+def test_ingest_document_schedules_extraction_and_embedding_independently(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    embed_worker = RecordingChunkWorker()
+    pipeline = RecordingIngestionPipeline()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo, embed_worker=embed_worker, ingestion_pipeline=pipeline)
+        posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "One paragraph of text."}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert len(embed_worker.calls) == posted["chunkCount"]
+    assert len(pipeline.calls) == posted["chunkCount"]
+    assert {cid for _ws, cid, _text in embed_worker.calls} == {
+        cid for _ws, cid, _doc, _text in pipeline.calls
+    }
+
+
+def test_ingest_document_with_no_ingestion_pipeline_schedules_nothing(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)  # no ingestion_pipeline
 
     posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
         "ingest_document", {"text": "hello"}

@@ -5,6 +5,123 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-24 — K-050 M5 Stage 3: document ingestion — extraction (FR-7a)
+
+**What:** The third of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
+"Stage 3 — Extraction (FR-7a)"). New `falkorchat.extraction` module: one LLM call per chunk
+(entities + relationships combined, `data-scientist`'s recommendation adopted as-is,
+`docs/plans/document-ingestion-ml.md` §3), parsed via the same fence-tolerant
+`llm.extract_own_line_json_object` the K-027 guard judge uses, plus mandatory app-side schema
+validation the parser's `require_key` alone does not provide (ML note F1) — a closed 7-value
+`Entity.type` taxonomy (`Person, Organization, Location, Product, Event, Concept, Other`) with
+out-of-enum/missing types coerced to `Other` rather than rejected; a deterministic stub-repair pass
+that synthesizes a `{name, type: "Other"}` entity for any relationship `subject`/`object` name the
+model forgot to also list, matched via one shared `extraction.normalize_name` (case-fold +
+whitespace-collapse) helper reused, unchanged, by `repository.create_entity`'s `nameNormalized`
+write — one normalizer, not two that can drift; and a 20-entities/20-relationships-per-chunk cap
+(relationships truncated first off the raw list, then the raw entities list is truncated, THEN
+stub-repair runs on top uncapped — fixed mid-build per the `analyst` diff-gate's Pass 3 MAJOR 1
+finding, below; the original ordering capped entities *after* repair, which could slice a
+just-added stub back off and silently drop the relationship fact it belonged to). New
+`repository.create_entity`/`link_chunk_about_entity`/
+`create_entity_relationship` (`QUERIES.md` §14.5) populate the `Entity` node and the previously-
+dormant `ABOUT` edge, plus the new `RELATES_TO` fact edge (predicate stored as a free-text `label`
+property, never its own relationship type — plan §3.3/§3.1); `RELATES_TO` is never deduplicated
+(FR-6). New `falkorchat.ingestion.IngestionPipeline` (a peer of `AgentResponder`/`EmbeddingWorker`)
+orchestrates one chunk's extraction into writes — **no fusion yet**: every extracted mention becomes
+a fresh `Entity` node even across duplicate mentions, the deliberate Stage 3 degenerate case (plan
+§3.1/§3.3). New `background._safe_extract` mirrors `_safe_embed_chunk`'s try/except-log-never-raise
+isolation. `ingest_document` on both MCP and REST now schedules one `_safe_extract` per chunk
+alongside (never instead of, never chained to) that chunk's own `_safe_embed_chunk` schedule — both
+independent background jobs for the same chunk. `config/models.json` (and the test fixture mirror,
+`tests/data/models.json`) gain a fifth `ModelGateway` kind, `extraction`, defaulted to the same local
+model already used for `agent`/`step`/`guard` (`document-ingestion-graph.md` §4 — "zero graph cost,"
+resolved through the existing per-kind config, no new resolution mechanism). `bootstrap_schema.sh`
+gains `Entity.name`'s full-text index and a plain RANGE index on `Entity.nameNormalized` (no
+uniqueness constraint — distinct real entities can share a normalized name+type before fusion runs)
+— both bootstrapped-but-dormant until a future fusion stage queries them, the same posture the
+original `Chunk` scaffolding demonstrated.
+
+**Diff-gate fixes (Pass 3, `docs/reviews/document-ingestion-impl.md`):** `analyst`'s diff-scoped code
+gate (verdict: approve with suggestions, no blockers) found two MAJOR issues, both fixed before this
+lands. **MAJOR 1** — `extraction.extract`'s cap ordering (entities truncated *after* stub-repair)
+could slice a just-synthesized stub entity back off when the raw entity list was already at the
+20-item cap, silently dropping the relationship fact whose endpoint it was — the exact failure
+stub-repair exists to prevent (ML note §3.2). Fixed by truncating the *raw* entities to the cap
+**before** calling `_repair_stub_entities`, letting repair add on top uncapped (worst case
+`MAX_ENTITIES_PER_CHUNK + 2×MAX_RELATIONSHIPS_PER_CHUNK`, still small/RAM-safe). New regression test
+`test_extract_stub_repair_is_not_truncated_away_by_the_entity_cap`. **MAJOR 2** — Stage 3 doubles
+Stage 2's already-flagged MCP per-chunk `threading.Thread` fan-out (now ~1,000-1,200 raw threads for
+a max-size document, up from ~500-600), and `mcp.py`'s `_default_schedule` had no try/except around
+`threading.Thread(...).start()` itself — a thread-creation failure (`RuntimeError: can't start new
+thread`, a real ceiling near a process's `ulimit -u`/cgroup limit) would propagate unhandled out of
+the `ingest_document` tool handler, a new caller-visible failure mode this diff introduced. Fixed
+(the gate's cheapest suggested fix (a)+(c), per coordinator direction — the fuller fix, a bounded
+thread pool, stays deferred to Stage 6 alongside Pass 2's original finding): wrapped
+`_default_schedule`'s thread-start call in a try/except that logs and continues; updated its
+docstring and `QUERIES.md` §14.5 to state the doubled fan-out explicitly, so the "accepted for M1
+lab-scale" reasoning isn't silently reasoning about half the real number. Two new tests
+(`test_default_schedule_swallows_a_thread_start_failure_and_logs`,
+`test_default_schedule_still_runs_the_job_on_the_happy_path`). REST is unaffected (`BackgroundTasks
+.add_task` is a cheap list append, not a thread spawn) — confirmed by the gate, not re-verified here.
+
+**Why:** Stage 3 makes an ingested document's chunks yield real graph knowledge — `Entity` nodes and
+`RELATES_TO` fact edges, each traceable back to its source chunk/document (AC-10) — without yet
+attempting identity fusion, which is a genuinely separate axis (plan §3.1: entity identity fusion
+vs. fact/relationship provenance) deferred to Stage 4. Building extraction first, against a
+provably-duplicating "always create new" entity population, lets FR-7a/AC-10 be proven in isolation
+before fusion's added complexity.
+
+**Tests:** `tests/test_extraction.py` (+25 unit — bare/fenced/prose-wrapped JSON parsing, the
+explicit empty-result shape, mandatory schema validation for both missing top-level keys and
+non-list values, per-item malformed-entry skipping, enum coercion for out-of-enum/missing types,
+stub-repair including case/whitespace-insensitive matching and the "never silently drop a
+relationship fact" guarantee, the entities/relationships caps including the "a relationship dropped
+by the cap gets no stub" ordering, and — added for the Pass 3 MAJOR 1 fix — the "entities at cap +
+a relationship needing a not-yet-listed stub" regression); `tests/test_ingestion.py` (+11 unit —
+per-chunk orchestration with a fake repository: entity+`ABOUT` writes, `RELATES_TO` writes between
+same-extraction entities including stub-repaired ones, fresh id/timestamp minting per entity, no
+fusion lookup ever attempted, a dangling relationship endpoint defensively skipped, empty/
+unparseable results write nothing, FR-4 `llm=` injection sugar, and two tests pinning that the
+shared `extraction.normalize_name` helper — not an independently-written one — drives both the
+`nameNormalized` write and relationship-endpoint matching); `tests/test_background.py` (+2 —
+`_safe_extract` calls the pipeline, and swallows+logs a failure without raising);
+`tests/test_repository.py` (+7, live `ws:test` integration — `create_entity`'s field write and
+`{entityId}` return shape, always-a-new-node even for identical `(nameNormalized, type)`,
+`link_chunk_about_entity`'s edge write and non-deduplication, `create_entity_relationship`'s
+provenance fields and non-deduplication); `tests/test_api.py` (+3 REST contract — every chunk
+scheduled for extraction, extraction scheduled independently alongside embedding, and the
+no-`ingestion_pipeline`-wired no-crash case); `tests/test_mcp.py` (+5 MCP contract — the Stage 3
+scheduling shape (+3, same as `test_api.py`) plus, added for the Pass 3 MAJOR 2 fix,
+`_default_schedule`'s thread-start-failure isolation and its happy-path regression guard (+2)).
+Suite: offline `pytest -q` 1597→1650 passed (+53), 3 deselected unchanged; `./scripts/test_queries.sh`
+320/320 unchanged (no new DDL entered that suite — same precedent Stage 2 set: the new Cypher shapes
+are direct analogues of already-verified patterns, covered by the pytest integration suite instead);
+the suite's teardown wipe of `reference` was re-seeded (`bootstrap_schema.sh acme` →
+`seed_demo.sh acme` → `seed_workflows.sh acme` → `verify_workflows.sh acme`, confirmed in sync) both
+before and after the diff-gate fixes.
+
+Mutation-tested (Stage 3 build): removed the stub-repair step (3 tests caught it), removed
+enum-coercion (2 tests), removed `_safe_extract`'s try/except (1 test), flipped
+`create_entity_relationship`'s never-deduplicated posture to a guarded `MERGE` (1 test), replaced
+`IngestionPipeline`'s use of the shared `extraction.normalize_name` helper with an
+independently-written naive normalizer lacking whitespace-collapse (2 tests — added during that
+pass specifically because the existing suite did not yet catch this drift), and removed the
+extraction-scheduling loop from `api.py` (2 tests) — each confirmed to fail the relevant test(s)
+before being reverted. Mutation-tested (diff-gate fixes): reverted the MAJOR 1 fix (restored the
+old cap-after-repair ordering) — the new `test_extract_stub_repair_is_not_truncated_away_by_the_
+entity_cap` failed as expected (`assert False` on the stub not being present), confirmed, then
+reapplied; reverted the MAJOR 2 fix (removed `_default_schedule`'s try/except) —
+`test_default_schedule_swallows_a_thread_start_failure_and_logs` failed with the unhandled
+`RuntimeError` propagating, confirmed, then reapplied.
+
+**Scope boundary:** Stage 3 only — no fusion (`SAME_AS` edges, exact/fuzzy matching, `confirm_match`/
+`reject_match`/`recheck_match`, Stage 4), no chat-grounding change (Stage 5), no batch hardening
+(Stage 6). `document-ingestion.md`/`-graph.md`/`-ml.md`/`BACKLOG.md` untouched (locked design/
+tracking documents). The `Entity.name` full-text index and `Entity.nameNormalized` are wired into
+NO query yet — inert until Stage 4's fusion lookups use them, the same "bootstrapped, not yet
+queried" posture Stage 1 used for the original `Chunk` scaffolding.
+
 ## 2026-08-23 — K-050 M5 Stage 2: document ingestion — chunk embeddings + standalone search
 
 **What:** The second of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,

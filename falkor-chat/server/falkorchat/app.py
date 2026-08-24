@@ -187,6 +187,7 @@ def create_app(
     responder: object | None = None,
     embed_worker: object | None = None,
     trigger: object | None = None,
+    ingestion_pipeline: object | None = None,
     sweep_interval_s: float | None = None,
     sweep_limit: int = DEFAULT_SWEEP_LIMIT,
 ) -> FastAPI:
@@ -201,17 +202,26 @@ def create_app(
     `responder`/`embed_worker` (K-013) are **opt-in** out-of-band handlers wired
     onto `BackgroundTasks` in the message-post path; both default to `None` so
     building the default app stays network-free and existing tests are untouched.
-    A production wiring constructs them explicitly and passes them in, e.g.::
+    `ingestion_pipeline` (K-050 M5 Stage 3) is the same **opt-in** shape, scheduled
+    per chunk on `ingest_document` alongside (never instead of) `embed_worker`'s
+    own chunk-embed scheduling — the two are independent background jobs for the
+    same chunk. A production wiring constructs them explicitly and passes them
+    in, e.g.::
 
         from falkorchat.embedding import EmbeddingWorker
+        from falkorchat.ingestion import IngestionPipeline
         from falkorchat.modelconfig import GraphWorkspaceOverrides, ModelGateway
         from falkorchat.responder import AgentResponder
 
         models = ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))
         services.set_models(models)  # K-042 L2-4: publish-time model-resolvability check
         worker = EmbeddingWorker(repo, models=models)
+        ingestion_pipeline = IngestionPipeline(repo, models=models)
         responder = AgentResponder(services, worker=worker, agent_id="bot1", models=models)
-        app = create_app(services, responder=responder, embed_worker=worker)
+        app = create_app(
+            services, responder=responder, embed_worker=worker,
+            ingestion_pipeline=ingestion_pipeline,
+        )
 
     `sweep_interval_s` (K-028, §3.6) is the same **opt-in** shape: `None` (the
     default) starts no periodic task at all, so building the default app stays
@@ -238,6 +248,7 @@ def create_app(
             responder=responder,
             embed_worker=embed_worker,
             trigger=trigger,
+            ingestion_pipeline=ingestion_pipeline,
         )
         mcp_app = mcp_mod.mcp.streamable_http_app()
         # Forward the MCP app's lifespan or the session manager never inits
@@ -288,7 +299,8 @@ def create_app(
 
     app.include_router(
         api.build_router(
-            services, responder=responder, embed_worker=embed_worker, trigger=trigger
+            services, responder=responder, embed_worker=embed_worker,
+            trigger=trigger, ingestion_pipeline=ingestion_pipeline,
         )
     )
     _register_error_handlers(app)
@@ -333,6 +345,7 @@ def _build_default_app() -> FastAPI:
     # Imported lazily so the disabled path carries no import-time weight and the
     # dependency surface for offline imports stays minimal.
     from .embedding import EmbeddingWorker
+    from .ingestion import IngestionPipeline
     from .modelconfig import GraphWorkspaceOverrides, ModelGateway
     from .responder import AgentResponder
 
@@ -352,6 +365,9 @@ def _build_default_app() -> FastAPI:
     # pattern as `set_executor` below.
     services.set_models(models)
     worker = EmbeddingWorker(repo, models=models)
+    # K-050 M5 Stage 3: shares the same repo/gateway as `worker` — its own
+    # background job, scheduled independently, never chained off the embed.
+    ingestion_pipeline = IngestionPipeline(repo, models=models)
     responder = AgentResponder(
         services, worker=worker, agent_id=config.AGENT_ID, models=models
     )
@@ -385,10 +401,14 @@ def _build_default_app() -> FastAPI:
         # `None` default.
         return create_app(
             services, trigger=trigger, embed_worker=worker,
+            ingestion_pipeline=ingestion_pipeline,
             sweep_interval_s=config.WORKFLOW_SWEEP_INTERVAL_S,
         )
 
-    return create_app(services, responder=responder, embed_worker=worker)
+    return create_app(
+        services, responder=responder, embed_worker=worker,
+        ingestion_pipeline=ingestion_pipeline,
+    )
 
 
 _JUDGE_SYSTEM_PROMPT = (

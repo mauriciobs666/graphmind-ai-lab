@@ -468,6 +468,72 @@ def test_default_app_ingest_document_has_no_chunk_embed_wiring(client):
     assert r.status_code == 201
 
 
+# ── K-050 M5 Stage 3: extraction scheduling ──────────────────────────────────
+
+
+class RecordingIngestionPipeline:
+    """Records extract_chunk calls scheduled on BackgroundTasks."""
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def extract_chunk(self, ws, *, chunk_id, document_id, text):
+        self.calls.append((ws, chunk_id, document_id, text))
+
+
+@pytest.fixture()
+def wired_ingestion(conn):
+    """App wired with a recording embed-worker AND ingestion pipeline."""
+    services = Services(Repository(conn))
+    Repository(conn).ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingWorker()
+    ingestion_pipeline = RecordingIngestionPipeline()
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+        embed_worker=worker,
+        ingestion_pipeline=ingestion_pipeline,
+    )
+    return TestClient(app), worker, ingestion_pipeline
+
+
+def test_ingesting_a_document_schedules_every_chunk_for_extraction(wired_ingestion):
+    client, _worker, pipeline = wired_ingestion
+    text = "First paragraph.\n\nSecond paragraph, a little longer than the first."
+    r = client.post("/documents", json={"text": text, "title": "Doc"})
+    assert r.status_code == 201
+    body = r.json()
+
+    assert len(pipeline.calls) == body["chunkCount"]
+    for ws, _chunk_id, document_id, chunk_text in pipeline.calls:
+        assert ws == "test"
+        assert document_id == body["documentId"]
+        assert chunk_text
+        assert chunk_text in text
+
+
+def test_ingesting_a_document_schedules_extraction_alongside_embedding_independently(
+    wired_ingestion,
+):
+    # Both background jobs fire for every chunk — neither replaces the other.
+    client, worker, pipeline = wired_ingestion
+    r = client.post("/documents", json={"text": "One paragraph of text."})
+    body = r.json()
+
+    assert len(worker.chunk_calls) == body["chunkCount"]
+    assert len(pipeline.calls) == body["chunkCount"]
+    assert {cid for _ws, cid, _text in worker.chunk_calls} == {
+        cid for _ws, cid, _doc, _text in pipeline.calls
+    }
+
+
+def test_default_app_ingest_document_has_no_extraction_wiring(client):
+    # No ingestion_pipeline configured → ingest still succeeds, no crash.
+    r = client.post("/documents", json={"text": "hello"})
+    assert r.status_code == 201
+
+
 class _StubQueryEmbedder:
     """Returns a fixed TEST_EMBEDDING_DIM vector for any query text."""
 

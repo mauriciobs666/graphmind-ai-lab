@@ -1988,5 +1988,107 @@ when no `ModelGateway` is wired into this deployment — a configuration gap, no
 Starlette matches routes in registration order, and the dynamic path would otherwise swallow the
 literal `search` segment as a `document_id`.
 
-Stages 3–6 (extraction, fusion, chat-grounding, batch hardening) add the rest of
-`document-ingestion.md`'s MCP/REST table; not built here.
+### 14.5 Entities & `RELATES_TO` (K-050 M5 Stage 3, FR-7a)
+
+Design: `docs/plans/document-ingestion.md` §3.3 (architect, extraction recommendation),
+`docs/plans/document-ingestion-ml.md` §3 (data-scientist, extraction technique/prompt/schema —
+adopted as-is) and `docs/plans/document-ingestion-graph.md` §2.2/§2.3 (graph-dba, the exact Cypher
+below, already live-verified there). One LLM call per chunk (`falkorchat.extraction.extract`)
+produces a `{entities: [{name, type}], relationships: [{subject, predicate, object}]}` payload —
+parsed via the same fence-tolerant `llm.extract_own_line_json_object` the K-027 guard judge uses,
+then independently schema-validated app-side (the parser's `require_key` alone does not reject a
+malformed top-level shape — ML note F1). `falkorchat.ingestion.IngestionPipeline` writes the result:
+a fresh `Entity` per mention (including any subject/object stub-repaired by `extraction.py`) plus
+its `ABOUT` edge, and one `RELATES_TO` edge per extracted relationship. **No fusion yet** (plan
+§3.1/§3.3) — every mention is a brand-new node, even a repeat of one already in the graph; that's a
+later stage, not a defect here.
+
+**`create_entity` — always a NEW node**
+```cypher
+// $nameNormalized = case-folded + whitespace-collapsed $name, computed app-side by the
+// SAME normalization helper (`extraction.normalize_name`) extraction's own subject/object
+// stub-repair uses — one shared function, not two independently-written normalizers.
+CREATE (e:Entity {
+  entityId: $entityId, name: $name, nameNormalized: $nameNormalized,
+  type: $type, createdAt: $createdAt
+})
+RETURN e.entityId AS entityId
+```
+Never looks up or reuses an existing entity — fusion (a future stage) never blocks creation, only
+decides *linking* after the fact. Plain `CREATE`, no guard-and-status-row contract: both the
+`Entity` id and every edge below are freshly minted moments apart by *this same pipeline run*, so a
+`MATCH` miss downstream would indicate a real bug, not routine caller input (same posture as
+`create_document`'s `HAS_CHUNK` writes, §14.1).
+
+**`link_chunk_about_entity` — the dormant `ABOUT` edge, now populated**
+```cypher
+MATCH (c:Chunk {chunkId: $chunkId})
+MATCH (e:Entity {entityId: $entityId})
+CREATE (c)-[:ABOUT]->(e)
+```
+Scaffolded since M2 (`docs/DESIGN.md` §5.1) and never written until this stage. Plain `CREATE`,
+never `MERGE` — a chunk is extracted exactly once per ingestion, so a duplicate `(chunk, entity)`
+pair shouldn't occur under normal operation; if it ever did, an extra co-occurrence edge is
+harmless (no properties to conflict), the same never-deduplicated posture `RELATES_TO` adopts below.
+
+**`create_entity_relationship` — the `RELATES_TO` fact edge**
+```cypher
+MATCH (subj:Entity {entityId: $subjectId})
+MATCH (obj:Entity  {entityId: $objectId})
+CREATE (subj)-[:RELATES_TO {
+  label: $label, sourceChunkId: $sourceChunkId,
+  sourceDocumentId: $sourceDocumentId, createdAt: $createdAt
+}]->(obj)
+```
+`label` is the LLM-extracted predicate, free text — **not** its own Cypher relationship type (plan
+§3.3/§3.1: an unbounded, LLM-controlled set of relationship types is a real risk this avoids, the
+same "opaque string, parsed app-side" convention `Step.config`/`TRANSITION.guard` already use).
+**Never deduplicated**: every extracted fact is independent provenance and is written even if an
+identical edge already exists between the same two entities (FR-6 — conflicting or repeated facts
+are always kept, never merged or overwritten). `sourceChunkId`/`sourceDocumentId` are what makes
+AC-10's traceability provable: every fact traces back to the exact chunk (and, transitively via
+`HAS_CHUNK`, the document) that produced it.
+
+No DDL for `ABOUT` or `RELATES_TO` — both are always traversed *from* an already-anchored
+`Chunk`/`Entity`, never independently scanned by their own properties (the same `EMITTED`/
+`MENTIONS_MEMBER` precedent, §4/§10).
+
+**`Entity.name` full-text index + `Entity.nameNormalized` — new DDL, inert until Stage 4**
+```cypher
+CALL db.idx.fulltext.createNodeIndex('Entity', 'name')
+CREATE INDEX FOR (n:Entity) ON (n.nameNormalized)
+```
+`nameNormalized` is written starting this stage (`create_entity`, above) even though a future fusion
+stage is the first reader — this avoids a backfill migration once that stage lands. No uniqueness
+constraint: distinct real entities can and do share a normalized name+type before fusion runs. Two
+separate mechanisms, deliberately: the fulltext index exists for a future fuzzy-suggestion tier;
+`nameNormalized`'s plain RANGE index exists for a future deterministic exact-match tier, kept off
+RediSearch's tokenizer/stemmer behavior entirely. Neither is queried yet — bootstrapped-but-dormant,
+the same posture the original `Chunk` scaffolding demonstrated (§14 intro).
+
+`Repository.create_entity`/`link_chunk_about_entity`/`create_entity_relationship`
+(`server/falkorchat/repository.py`); `falkorchat.extraction.extract`, `falkorchat.ingestion.
+IngestionPipeline.extract_chunk` (new modules); `background._safe_extract` (mirrors
+`_safe_embed_chunk`'s failure isolation — an extraction failure for one chunk never corrupts the
+`Document` or blocks sibling chunks). Wired the same way as Stage 2's chunk-embed scheduling:
+`ingest_document` on both MCP and REST schedules one `_safe_extract` per chunk, alongside (never
+instead of, never chained to) that chunk's own `_safe_embed_chunk` schedule. `config/models.json`
+gains a fifth `ModelGateway` kind, `extraction` (`document-ingestion-graph.md` §4 — "zero graph
+cost," resolved through the existing per-kind config, no new resolution mechanism). No `test_queries.sh`
+additions for this stage, same precedent Stage 2 set: the new Cypher shapes are direct analogues of
+already-verified patterns in this library, covered by the pytest integration suite instead.
+
+**Resource note (Pass 3 code-gate MAJOR 2, `docs/reviews/document-ingestion-impl.md`).** On the MCP
+transport, "scheduled independently, alongside" means a **second** raw `threading.Thread` per chunk
+(`mcp.py`'s `_default_schedule` — see its docstring): a max-size document (`MAX_DOCUMENT_CHARS =
+500_000`, ~1,000-char chunks) now spawns on the order of **~1,000-1,200 threads** per `ingest_document`
+call, up from Stage 2's ~500-600 — doubled, not incidental. `_default_schedule` now catches a
+thread-creation failure itself (`RuntimeError: can't start new thread`, a real ceiling once thread
+count nears a `ulimit -u`/cgroup limit) and logs+continues rather than letting it escape the tool
+handler mid-loop — fixed this stage, not deferred. The fuller fix (a bounded thread pool instead of
+one-thread-per-(chunk × job)) is still deferred to Stage 6, same disposition as Stage 2's original
+finding. REST is unaffected: `BackgroundTasks.add_task` is a cheap list append, not a thread spawn,
+so no equivalent amplification or failure mode exists on that transport.
+
+Stages 4–6 (fusion, chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s
+MCP/REST table; not built here.

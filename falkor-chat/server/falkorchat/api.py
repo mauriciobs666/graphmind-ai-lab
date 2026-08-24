@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from .background import (
     _safe_embed,
     _safe_embed_chunk,
+    _safe_extract,
     _safe_respond,
     _safe_run_workflow,
 )
@@ -47,6 +48,7 @@ def get_context() -> CallContext:
 def build_router(
     services: Services, *, responder: Any | None = None,
     embed_worker: Any | None = None, trigger: Any | None = None,
+    ingestion_pipeline: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -171,15 +173,23 @@ def build_router(
         # the message embed scheduling above): every chunk of a just-ingested
         # document is embedded so it joins the standalone-KB-searchable corpus.
         # The document is readable before any chunk's embedding lands.
-        if embed_worker is not None:
+        if embed_worker is not None or ingestion_pipeline is not None:
             chunks = services.list_document_chunks(
                 ctx, document_id=receipt["documentId"]
             )
             for chunk in chunks:
-                background.add_task(
-                    _safe_embed_chunk, embed_worker, ctx.ws,
-                    chunk["chunkId"], chunk["text"],
-                )
+                if embed_worker is not None:
+                    background.add_task(
+                        _safe_embed_chunk, embed_worker, ctx.ws,
+                        chunk["chunkId"], chunk["text"],
+                    )
+                # K-050 M5 Stage 3: extraction is scheduled independently of
+                # embedding for the same chunk — neither blocks the other.
+                if ingestion_pipeline is not None:
+                    background.add_task(
+                        _safe_extract, ingestion_pipeline, ctx.ws,
+                        chunk["chunkId"], receipt["documentId"], chunk["text"],
+                    )
         return receipt
 
     # Registered BEFORE `/documents/{document_id}`: Starlette matches routes in
