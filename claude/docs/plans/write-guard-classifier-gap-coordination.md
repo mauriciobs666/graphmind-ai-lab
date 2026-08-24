@@ -18,7 +18,20 @@ friction specifically; this is the deeper mechanism issue phase-2 design would o
 | U1 | `cobb` | `a283853afe8b7e6d2` | delivered | `skills/agent-standards/claude-code.md` + `claude/cobb/kaizen/history.md`, commit `6193083` | — (skipped: low-risk doc-only addition) → — | 201k tok / 41 tool uses |
 | U2 | `cobb` | `a283853afe8b7e6d2` | delivered | `claude/docs/plans/write-guard-classifier-gap.md` | `analyst` → pending | 228k+241k tok / 5+3 tool uses |
 | U3 | `analyst` | `aa2dec35279344ddb` | delivered | `docs/reviews/write-guard-classifier-gap.md` | `analyst` → needs changes | 128k tok / 25 tool uses |
-| U4 | `cobb` | `a283853afe8b7e6d2` | in-flight | revised `write-guard-classifier-gap.md` | — | — |
+| U4 | `cobb` | `a283853afe8b7e6d2` | delivered | `write-guard-classifier-gap.md` v2, commit `df00237` | — | 274k tok / 4 tool uses |
+| U5 | `analyst` | `aa2dec35279344ddb` | delivered | Pass 2 appended to `docs/reviews/write-guard-classifier-gap.md` | `analyst` → approve with suggestions | 148k tok / 4 tool uses |
+| U6 | `teco` | — | delivered | `skills/README.md` added to §5.3/§8, per Pass 2's one Minor finding | — (trivial fix, no gate) → — | — |
+
+## Close-out (pending)
+
+Design gated **approve with suggestions** (`analyst`, Pass 2). The design is ready as a reasoning
+framework and per-glob risk catalog, but **implementation-gated** on the stakeholder's own live
+empirical test (`write-guard-classifier-gap.md` §7) — nobody, including `cobb`, could confirm
+whether a `permissions.allow` `Edit(path)` rule actually bypasses the auto-mode classifier for a
+Task/Agent-delegated write; the investigating session's own classifier blocked the one non-invasive
+test attempt. This coordination stays open (not archived) until that test lands and either confirms
+the mechanism (→ implementation unit, gated the same way) or refutes it (→ back to the stakeholder
+for the `defaultMode` tradeoff `cobb`'s original RCA flagged, still undecided).
 
 ## Notes
 - Existing `~/.claude/settings.json` blanket `Edit`/`Write`/`NotebookEdit` allow rule, flagged as

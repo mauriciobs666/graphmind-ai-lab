@@ -178,7 +178,8 @@ guard here" sign-off from the stakeholder, separately from `docs/plans/**`/`docs
 `guard-cobb-topic-writes.sh`'s allowlist is not homogeneous. It bundles:
 
 - **Lower-stakes, candidate half:** `claude/*/kaizen/history.md`, `claude/*/kaizen/plan.md`,
-  `claude/README.md`, `claude/AGENTS.md`, `claude/CLAUDE.md`, `cypher-mcp/README.md` — raw-capture
+  `claude/README.md`, `claude/AGENTS.md`, `claude/CLAUDE.md`, `skills/README.md`,
+  `cypher-mcp/README.md` — raw-capture
   and cross-component pointer docs, same general shape as the doc-kind rows above. **Explicit
   callout:** `AGENTS.md`/`CLAUDE.md` auto-load into every subagent's context via the always-loaded
   memory hierarchy (`skills/agent-standards/claude-code.md`) — a bad silent edit there has unusually
@@ -271,7 +272,7 @@ docs-supported hypothesis, not a confirmed fix.
    by a companion review), `docs/test-plans/**` (the pilot), and `docs/manuals/**` carry materially
    lower stakes and don't need the same individual scrutiny.
 2. **`cobb`'s split (§5.3).** Confirm the kaizen/catalog half (`claude/*/kaizen/{history,plan}.md`,
-   `claude/README.md`/`AGENTS.md`/`CLAUDE.md`, `cypher-mcp/README.md`) proceeds as a candidate on the
+   `claude/README.md`/`AGENTS.md`/`CLAUDE.md`, `skills/README.md`, `cypher-mcp/README.md`) proceeds as a candidate on the
    same terms as the doc-kind rows, with the `AGENTS.md`/`CLAUDE.md` wide-blast-radius callout noted
    but not treated as disqualifying; confirm the agent-definition/skill-package half (`claude/*/*.md`,
    both `skills/agent-*` globs) is excluded outright, not merely deferred.

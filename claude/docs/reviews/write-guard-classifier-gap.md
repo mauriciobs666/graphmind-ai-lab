@@ -234,3 +234,107 @@ this review doesn't remove it.
   should the whole row wait for the same live test as everything else regardless? I don't see a
   reason it needs to wait longer than the rest, but it's the stakeholder's call given `AGENTS.md`'s
   wide blast radius (every session).
+
+## Pass 2 (2026-08-24) — re-check against Version 2 (commit `df00237`)
+
+**Scope:** targeted re-check of the four Pass-1 findings against the revised
+`claude/docs/plans/write-guard-classifier-gap.md` (Version 2), per `teco`'s request — not a fresh
+full review. I re-read the revised document directly and independently re-`grep`'d one of the two
+corrected glob rows myself (both, in fact) rather than trusting the doc's self-report, plus the
+full live `guard-cobb-topic-writes.sh` glob to check the §5.3 split against it.
+
+**Updated verdict: approve with suggestions.** All four Pass-1 findings are substantively resolved
+— not cosmetic touch-ups, verified below — but the revision itself introduced one small, low-severity
+completeness gap that should be closed before implementation, and one scope-limit question the
+coordinator asked me to sanity-check.
+
+### Finding 1 (Blocker) — resolved
+
+§5.3's split holds up. I re-read the live `claude/cobb/hooks/guard-cobb-topic-writes.sh` glob in
+full to check the split against it (not just the doc's restatement): the wrapper's actual union has
+**ten** distinct members before doubling — `claude/*/*.md`, `claude/*/kaizen/history.md`,
+`claude/*/kaizen/plan.md`, `claude/README.md`, `claude/AGENTS.md`, `claude/CLAUDE.md`,
+`skills/agent-maintenance/*`, `skills/agent-standards/*`, `skills/README.md`,
+`cypher-mcp/README.md`. §5.3's excluded half (`claude/*/*.md` + both `skills/agent-*` globs)
+correctly captures the three prompt-governing/skill-body members, and the self-modification-hazard
+reasoning is sound and independently checks out: I re-confirmed the `.claude`-vs-`claude/`
+protected-path distinction the argument rests on still holds (this repo's agent defs are edited at
+the plain, non-dot-prefixed `claude/<name>/<name>.md`, symlinked in from `~/.claude/agents/<name>/`
+— nothing routes those writes through Claude Code's dot-prefixed protected-path carve-out). The
+blocker is resolved on its merits, not just restated.
+
+**One new gap this revision introduced (see "New issue" below):** the candidate half's enumeration
+(6 items) plus the excluded half's enumeration (3 items) sums to 9, not the live glob's 10 —
+`skills/README.md` is missing from both lists.
+
+### Finding 2 (Major, risk differentiation) — resolved
+
+§5.2's table matches the differentiation I asked for: `docs/reviews/**`/`docs/test-reports/**` as
+self-approval risk, `docs/requirements/**` alongside them as the "moves the goalposts upstream"
+case, `docs/plans/**` as moderate-but-backstopped-by-companion-review, `docs/test-plans/**`/
+`docs/manuals/**` as fine. §8 item 1 correctly folds this into an individual-sign-off framing
+rather than one blanket judgment. No gaps.
+
+### Finding 3 (Major, teco/data-scientist glob mis-description) — resolved, independently re-verified
+
+I re-`grep`'d both live scripts myself rather than trusting either the document's or `teco`'s
+relayed claim:
+
+- `claude/teco/hooks/guard-coordination-doc-writes.sh:70` → `'docs/plans/*|*/docs/plans/*'` — no
+  suffix restriction, byte-identical to `architect`'s glob. Matches §5.1's corrected row exactly.
+- `claude/data-scientist/hooks/guard-ds-doc-writes.sh:13` → `'docs/plans/*|*/docs/plans/*|docs/reviews/*|*/docs/reviews/*'`
+  — no `-ml.md` suffix restriction, the exact union of `architect`'s and `analyst`'s globs. Matches
+  §5.1's corrected row exactly.
+
+Both corrections are accurate. §5.1's "net effect" framing (four distinct glob surfaces, not eight
+independent decisions) is a correct and useful restatement given these two confirmations.
+
+### Finding 4 (Minor, tdd-engineer ask-only alternative) — resolved
+
+§6 now states "Alternative 2 considered — `ask`-only rules... no companion blanket allow" and gives
+the reasoning I worked through in Pass 1: the allow side is unbounded by design, so an `ask`-only
+translation never gets in-remit writes onto the rule-resolves-first path, and enumerating the allow
+side directory-by-directory is operationally close to `Edit(**)` anyway. This is the actual
+argument, not a gesture at the topic — resolved.
+
+### New issue (Minor) — `skills/README.md` dropped from §5.3's split, propagates to §8 item 2
+
+Introduced by this revision, not present in my Pass 1 review (I only glossed cobb's union at a high
+level there and didn't enumerate it exhaustively). The live wrapper's glob includes
+`skills/README.md`/`*/skills/README.md` as an eleventh-and-tenth-doubled member (verified via
+`grep -n "skills/README" claude/cobb/hooks/guard-cobb-topic-writes.sh`), analogous in kind to
+`claude/README.md` — a catalog doc, not prompt-injected content, so it belongs in the candidate
+(lower-stakes) half by the same reasoning already applied to `claude/README.md`/`AGENTS.md`/
+`CLAUDE.md`. It's absent from **both** §5.3's candidate list and its excluded list, and the same
+omission repeats in §8 item 2's parenthetical. **Severity: Minor, not Blocker/Major** — the
+omission defaults to the safe direction (an item left off either list simply stays hook-only,
+ungoverned by any new rule, same as today), it doesn't misstate a risk the way the two Major
+findings from Pass 1 did, and it's a one-line fix: add `skills/README.md` to §5.3's candidate
+bullet and to §8 item 2's parenthetical, next to `claude/README.md`.
+
+### Sanity-check requested: is the `tico`/`qa-engineer` "not independently re-`grep`'d this
+revision" caveat an acceptable scope limit?
+
+Yes — and I can go further than just accepting the scope limit: I independently verified both rows
+myself in Pass 1 (full file reads, not the summary table) and they're accurate as stated in the
+current §5.1:
+
+- `claude/tico/hooks/guard-tico-doc-writes.sh` → `'docs/requirements/*|*/docs/requirements/*|docs/manuals/*|*/docs/manuals/*'`,
+  matches §5.1's `tico` row verbatim.
+- `claude/qa-engineer/hooks/guard-qa-doc-writes.sh` → `'docs/test-plans/*|*/docs/test-plans/*|docs/test-reports/*|*/docs/test-reports/*'`,
+  matches §5.1's `qa-engineer` row verbatim.
+
+So the caveat is honest self-scoping (this revision only re-checked the two rows the review flagged
+as *wrong*, not every row) rather than a live accuracy gap — both rows already check out from my
+own independent read, and §5.1's closing "re-confirm before implementation" instruction is a
+reasonable backstop for anyone who hasn't seen this cross-check. Doesn't need closing before
+sign-off.
+
+### Net assessment
+
+All four Pass-1 findings resolved on their merits, independently spot-checked rather than taken on
+the document's word (teco/data-scientist globs re-`grep`'d live; cobb's full union re-read against
+the §5.3 split; the self-modification-hazard argument's premise re-confirmed). One small,
+safe-direction completeness gap (`skills/README.md`) introduced by this revision, easy to close.
+Recommend `teco`/`cobb` fold the one-line fix in before implementation; no further review round
+needed for it — this doesn't need a Pass 3.
