@@ -1,6 +1,9 @@
 # `defaultMode` as a lever for the Task/Agent-delegation classifier gap — Design
 
 > **Status:** active · **Owner:** `cobb` · **Tracks:** —
+> **Version:** 2 (revised 2026-08-24, folding in `claude/docs/reviews/permission-default-mode.md`'s
+> findings) · **Reviews:** `claude/docs/reviews/permission-default-mode.md` (verdict: approve with
+> suggestions → corrections folded in below)
 
 **Background (not re-derived here):** `claude/docs/plans/write-guard-classifier-gap.md` (design,
 refuted) and its `claude/docs/plans/write-guard-classifier-gap-coordination.md` (ledger, close-out)
@@ -66,26 +69,51 @@ runs under the parent's mode, "and can't be overridden." Mode inheritance, not a
 one documented path that plausibly closes this gap. This is a materially different mechanism than
 the refuted design (§5 there), and isn't undermined by that refutation.
 
-**Gap in the docs:** neither passage states what happens when the parent is in `default`, `plan`,
-or `dontAsk` — only `bypassPermissions`/`acceptEdits` (takes precedence) and `auto` (forces auto)
-are covered. Not load-bearing for this document's analysis (§3 below only considers `acceptEdits`
-as the candidate), but worth flagging as genuinely undocumented if a future design considers those
-modes.
+**The docs do resolve the other parent modes — by a general rule stated one paragraph earlier, not
+a gap.** From `code.claude.com/docs/en/sub-agents`, "Permission modes," the paragraph immediately
+preceding the passage quoted above (verbatim):
 
-### 1.3 Hooks are mode-independent — confirms `acceptEdits` doesn't lose the escalation guarantee
+> "Set `permissionMode` to choose the permission mode a subagent runs in... If you leave it unset,
+> the subagent inherits the main conversation's mode, which starts as auto mode on Pro, Max, and
+> Team plans unless your settings or your organization change it. **Setting it overrides that mode,
+> except in the cases described below.**"
+
+"The cases described below" are exactly the two branches already quoted
+(`bypassPermissions`/`acceptEdits`-parent takes precedence; `auto`-parent forces `auto`). That's an
+exhaustive if/else: for every *other* parent mode — `default` (Manual), `plan`, `dontAsk` — the
+general rule applies, and a dispatched subagent's own frontmatter `permissionMode` governs
+independently of the parent's. See §3 for why this third branch doesn't change this document's
+recommendation despite looking, at first glance, like a narrower option than `acceptEdits`-parent.
+
+### 1.3 Hooks are mode-independent on paper — but this repo already has live counter-evidence that `"ask"` enforcement is unconfirmed under `auto`, and that's not yet tested under `acceptEdits`
 
 From `code.claude.com/docs/en/permissions`, "Extend permissions with hooks" (verbatim):
 
 > "When Claude Code makes a tool call, `PreToolUse` hooks run before the permission prompt... The
 > hook output can deny the tool call, force a prompt, or skip the prompt to let the call proceed."
 
-Nothing here is gated on permission mode — a hook's `"ask"` decision is documented to force a
-prompt regardless of mode, the same mechanism that already makes AC-2 (`agent-permission-friction2.md`
-— "safety net preserved") hold today. This means switching a delegating parent to `acceptEdits`
-would **not** weaken the per-agent escalation guarantee the guard hooks provide for a genuinely
-out-of-remit path: the hook's `"ask"` still fires; only the in-remit `"allow"` path changes, from
-"allow, then re-litigated by a classifier that may re-prompt anyway" (today, under `auto`) to
-"allow, then no classifier exists to re-litigate it" (under `acceptEdits`).
+Nothing here is gated on permission mode — on the docs' own account, a hook's `"ask"` decision
+forces a prompt regardless of mode. But `skills/agent-standards/claude-code.md` — the exact file
+this document's §1.2/§1.3 findings are folded into, in the same change — already carries a dated,
+live-reproduced, filed-upstream finding that contradicts relying on that account at face value:
+four isolated live tests (2026-08-21, Claude Code 2.1.238, under `auto` mode) found a `PreToolUse`
+hook, confirmed correctly wired and confirmed to compute `"ask"` in isolation, **did not** pause
+execution for the real matching command, from either a Task-dispatched subagent or the main session
+itself — "matcher-agnostic and context-agnostic, not a narrow subagent-dispatch-only gap." That
+file's own working hypothesis is that `auto` mode's classifier layer is what silently overrides the
+`"ask"` decision — which would mean removing the classifier (switching to `acceptEdits`) could
+plausibly fix this as a side effect, consistent with what this section originally concluded. But
+that's a hypothesis, not a confirmed fact: all four tests ran under `auto`; nobody has verified
+whether a hook's `"ask"` reliably fires under `acceptEdits` specifically. This document's claim that
+"the hook's `"ask"` still fires" under `acceptEdits` is therefore a docs-supported inference, not an
+empirically closed question — and the KB entry, from the moment it's folded into the same file,
+should not be read as having settled it.
+
+**Consequence for the argument, not the conclusion:** this doesn't overturn §5's recommendation —
+if anything, an unresolved `"ask"`-reliability risk is one more reason to stay on `auto` rather than
+switch, since it means the out-of-remit safety net's actual behavior under `acceptEdits` is unknown,
+not merely "small-cost." It does mean §5's optional pilot, if ever run, needs to check both
+directions, not just the one this document originally described — see §5.
 
 ---
 
@@ -162,6 +190,19 @@ worth stating plainly:
   would require the human operator to do it by hand around every single `Agent` call in a
   `teco`-coordinated run — not a realistic standing practice.
 
+**A fourth option the §1.2 general rule opens — a `default`-parent — is dominated by `acceptEdits`,
+not a free win.** Since setting a subagent's `permissionMode` frontmatter "overrides that mode,
+except" the two named branches (§1.2), a coordinator running in plain `default` (Manual) would
+leave every dispatched subagent's already-declared `permissionMode: acceptEdits` frontmatter live
+at dispatch time — no classifier, same net effect as the `acceptEdits`-parent candidate above. But
+this doesn't beat that candidate: both land the dispatched subagent in the identical place (its own
+`acceptEdits`, either by the general rule or by the takes-precedence branch), while `default` is
+strictly worse for the *parent's own* actions — Manual mode auto-approves nothing at all (every
+edit, every Bash command, every network call prompts), where `acceptEdits` at least silently clears
+file edits and the small filesystem allowlist. A `default`-parent buys nothing an
+`acceptEdits`-parent doesn't already buy, and costs strictly more for the parent's own work.
+Dominated; not carried forward as a separate row in §4's cost analysis.
+
 **Other consumers checked (root `AGENTS.md`, `claude/AGENTS.md` roster):** `opencode/` and `kiro/`
 are separate tools with their own permission models entirely — `defaultMode` is Claude-Code-specific
 and doesn't touch them. `cypher-mcp`, `mcp-monitor`, `salesperson`, `falkor-chat` are components, not
@@ -188,10 +229,14 @@ each instead, which is safer in the sense that nothing gets silently *allowed* t
 is a large step back in the specific thing `auto` mode was adopted to reduce: interruption volume.
 
 This matters more than it looks, because of the §1.2 inheritance rule: switching a delegating
-session (`teco`, or any of `architect`/`analyst`/`data-scientist`/`security-expert`/`tico`, all of
-which also carry the `Agent` tool per the roster) to `acceptEdits` doesn't just change *that
-session's own* Bash friction — it hands the same loss of classifier coverage to **every subagent it
-dispatches**, for the duration of that delegation. A typical `teco`-coordinated unit routinely
+session — `teco`, or in principle any of the other 12 agents, since **all 13** can dispatch via
+`Agent` (six — `architect`/`analyst`/`data-scientist`/`security-expert`/`tico`/`teco` — declare it
+explicitly in a `tools:` list; the other seven — `coder`/`tdd-engineer`/`qa-engineer`/`graph-dba`/
+`devops`/`frontend-engineer`/`cobb` — omit `tools:` entirely and so inherit the full built-in set,
+`Agent` included) — to `acceptEdits` doesn't just change *that session's own* Bash friction — it
+hands the same loss of classifier coverage to **every subagent it dispatches**, for the duration of
+that delegation, through a wider set of possible delegating parents than a glance at explicit
+`tools:` lists alone would suggest. A typical `teco`-coordinated unit routinely
 involves `coder`/`tdd-engineer` running test suites, `qa-engineer` or `graph-dba` shelling out to
 `redis-cli`/`docker`, or `analyst` grepping and diffing — none of that is the guarded doc-write
 problem this investigation is chasing, but all of it would newly prompt under `acceptEdits`, where
@@ -209,19 +254,26 @@ not recommend the switch as a standing default, at either scope in §3's table.
 understood (§1.2) — unlike the refuted rules approach, this one is documented to work by removing
 the classifier from the loop entirely rather than trying to out-race it — but the blast radius at
 either persisted scope is "every session, every Bash call, indefinitely," to fix a narrower,
-occasional, already-partially-mitigated (hooks correctly emit `"allow"`/`"ask"`; only the
-delegated-write case is affected) friction. §4's cost-benefit doesn't clear the bar at either scope
-in §3's table, and there's no narrower persisted scope available to reach for instead.
+occasional, already-partially-mitigated (hooks are *designed* to emit `"allow"`/`"ask"` correctly —
+§1.3 flags that whether `"ask"` reliably *enforces* is itself unconfirmed under `auto`, and untested
+under `acceptEdits`; only the delegated-write case is affected either way) friction. §4's
+cost-benefit doesn't clear the bar at either scope in §3's table, and there's no narrower persisted
+scope available to reach for instead.
 
 **If the mechanism is worth empirically confirming anyway** (research value: nobody has verified
 `acceptEdits`-parent inheritance the way `write-guard-classifier-gap-coordination.md` §U7 verified —
 and refuted — the rules approach), the only low-commitment way to do it is the per-launch flag:
 start one `teco` session as `claude --agent teco --permission-mode acceptEdits`, deliberately for a
-single, low-Bash-volume coordination unit, and observe whether a delegated `analyst`/`tdd-engineer`
-write is silently approved this time. Nothing persists; reverting is simply not passing the flag next
-time. This is optional — the recommendation to not adopt a standing default holds regardless of the
+single, low-Bash-volume coordination unit, and observe **both** directions, not just the one this
+document originally proposed testing: (a) whether a delegated `analyst`/`tdd-engineer` in-remit
+write's hook `"allow"` is now silently approved, and (b) — per §1.3's unresolved `"ask"` question —
+whether a delegated write genuinely *outside* that agent's remit still produces a hook `"ask"`
+confirmation prompt under `acceptEdits`, rather than assuming the safety net holds just because it's
+undocumented as mode-gated. Nothing persists; reverting is simply not passing the flag next time.
+This is optional — the recommendation to not adopt a standing default holds regardless of the
 outcome, given §4 — but it would turn "docs say this should work" into the same empirical footing
-`write-guard-classifier-gap-coordination.md` reached (and refuted) for the rules approach.
+`write-guard-classifier-gap-coordination.md` reached (and refuted) for the rules approach, on both
+the `"allow"` and `"ask"` paths rather than just one.
 
 **Recommended standing position: stay on `auto`, accept the documented delegated-write friction.**
 This is the same shape of conclusion `agent-permission-friction2.md` AC-3 already reached for
@@ -261,6 +313,13 @@ with its own blast-radius question, out of scope for this document. Logged to `c
 - `claude/docs/requirements/agent-permission-friction2.md` — open question 3, the original trace
   back to this whole line of investigation; AC-3's framing is what §5's recommendation extends to
   the whole team.
-- `skills/agent-standards/claude-code.md` — carries the original classifier/hook RCA; this document's
-  §1.2/§1.3 quotes and §2 finding are being folded in as a durable addition in the same change (see
-  `claude/cobb/kaizen/history.md`).
+- `skills/agent-standards/claude-code.md` — carries the original classifier/hook RCA, including the
+  2026-08-21 `PreToolUse` "ask"-enforcement-gap finding §1.3 now cross-references; this document's
+  §1.2/§1.3 quotes and §2 finding were folded in as a durable addition in commit `773328c` (see
+  `claude/cobb/kaizen/history.md`). The KB entry itself has since been backported with the matching
+  caveat (its "Resolution/update, 2026-08-24" entry now cross-references the "ask"-enforcement-gap
+  callout the same way §1.3 here does), closing the split-across-two-documents gap
+  `claude/docs/reviews/permission-default-mode.md` flagged as an open question.
+- `claude/docs/reviews/permission-default-mode.md` — `analyst`'s review (approve with suggestions)
+  of v1 of this document; both Major findings and the Minor finding are folded into this v2
+  in place, per the same precedent as `write-guard-classifier-gap.md`'s v2 revision.

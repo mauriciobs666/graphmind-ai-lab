@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-24 — `permission-default-mode.md` v2: folded in `analyst`'s review (approve with suggestions)
+- **What:** `analyst` reviewed v1 (`claude/docs/reviews/permission-default-mode.md`, approve with
+  suggestions). Folded both Major findings and the Minor finding into the plan in place (v2,
+  same precedent as `write-guard-classifier-gap.md`'s v2 — no ordinal successor for suggestion-level
+  fixes). **Major 1:** §1.2's "gap in the docs" claim for `default`/`plan`/`dontAsk` parent modes was
+  false — the docs state a general rule ("setting it overrides that mode, except in the cases
+  described below") one paragraph before the quote, resolving those modes by elimination. Replaced
+  the false-gap claim with the actual quote and added a §3 paragraph working the `default`-parent
+  branch through explicitly: dominated by the `acceptEdits`-parent candidate already on the table
+  (same subagent outcome, strictly worse for the parent's own actions), so the recommendation is
+  unaffected. **Major 2:** §1.3 asserted a hook's `"ask"` "still fires" under `acceptEdits` without
+  cross-referencing this exact KB file's own 2026-08-21 finding that `PreToolUse` "ask" enforcement
+  is empirically unconfirmed under `auto` mode — an internal inconsistency, since that finding was
+  folded into the same file in the same commit (`773328c`) as v1 of this plan. Fixed: §1.3 now states
+  the claim as a docs-supported inference, not a closed fact, and notes the untested-under-`acceptEdits`
+  gap strengthens rather than weakens the stay-on-`auto` recommendation. Extended §5's optional pilot
+  to test the `"ask"` path (an out-of-remit write) alongside the `"allow"` path, not just the latter.
+  Backported a short caveat into the KB entry itself (`skills/agent-standards/claude-code.md`) so the
+  two findings cross-reference each other going forward, per the review's "Open questions" — closing
+  that gap rather than leaving it split across two documents. **Minor:** §4 named 6 agents as
+  `Agent`-tool-capable; corrected to all 13 (6 declare `tools:` explicitly, 7 inherit it by omitting
+  `tools:` — verified via `grep -c '^tools:'` on all 7), which strengthens rather than weakens the
+  blast-radius argument. Header bumped to Version 2 with a `Reviews:` pointer, matching the
+  `write-guard-classifier-gap.md` precedent.
+- **Not disputed:** none of the three findings changed the document's central recommendation (stay
+  on `auto`); all were argument/citation-accuracy fixes `analyst` correctly flagged as not
+  conclusion-altering.
+
 ## 2026-08-24 — `defaultMode` investigation for the write-guard classifier gap: design doc + RCA promotion
 - **What:** Dispatched to investigate the one lever `write-guard-classifier-gap.md`'s RCA had left
   undecided after its `permissions.allow`-rule fix was empirically refuted

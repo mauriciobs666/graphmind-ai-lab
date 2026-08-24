@@ -398,7 +398,12 @@ the always-loaded project memory (`CLAUDE.md`).
   documented, mechanistically sound way to close this gap for whatever session's mode is changed —
   `permission-default-mode.md` works through why it's nonetheless **not recommended** as a standing
   default at any persisted scope (the Bash-classifier coverage a delegating session and everything
-  it dispatches would lose outweighs the write-confirmation friction being solved).
+  it dispatches would lose outweighs the write-confirmation friction being solved). **Caveat this
+  entry should carry alongside the "Hooks — `PreToolUse` 'ask' enforcement gap" callout above:** that
+  gap was reproduced only under `auto` mode; whether a hook's `"ask"` reliably enforces under
+  `acceptEdits` specifically is untested, so don't assume `acceptEdits` both closes the `"allow"`
+  gap *and* leaves the `"ask"` safety net intact just because switching modes wasn't the thing that
+  broke it originally (`claude/docs/reviews/permission-default-mode.md`, Major finding 2).
 
 ## Bash tool environment
 
