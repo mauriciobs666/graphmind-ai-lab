@@ -17,7 +17,8 @@ friction specifically; this is the deeper mechanism issue phase-2 design would o
 |---|---|---|---|---|---|---|
 | U1 | `cobb` | `a283853afe8b7e6d2` | delivered | `skills/agent-standards/claude-code.md` + `claude/cobb/kaizen/history.md`, commit `6193083` | — (skipped: low-risk doc-only addition) → — | 201k tok / 41 tool uses |
 | U2 | `cobb` | `a283853afe8b7e6d2` | delivered | `claude/docs/plans/write-guard-classifier-gap.md` | `analyst` → pending | 228k+241k tok / 5+3 tool uses |
-| U3 | `analyst` | pending dispatch | queued | review of U2's plan | — | — |
+| U3 | `analyst` | `aa2dec35279344ddb` | delivered | `docs/reviews/write-guard-classifier-gap.md` | `analyst` → needs changes | 128k tok / 25 tool uses |
+| U4 | `cobb` | `a283853afe8b7e6d2` | in-flight | revised `write-guard-classifier-gap.md` | — | — |
 
 ## Notes
 - Existing `~/.claude/settings.json` blanket `Edit`/`Write`/`NotebookEdit` allow rule, flagged as
