@@ -36,9 +36,13 @@ suppression mechanisms this design and phase 1 relied on — hook `"allow"` and 
 **Consequence:** the whole `permissions.allow`-supplement approach in `write-guard-classifier-gap.md`
 §5 is not viable as designed and should not be implemented. The only remaining lever identified
 across this investigation is the `defaultMode` tradeoff `cobb`'s original RCA flagged and never
-resolved — escalated back to the stakeholder now (see report). This coordination stays **open**
-pending that decision; scratch test artifact (`claude/docs/reviews/_permission-test-scratch.md`)
-was cleaned up by the same `analyst` dispatch that created it.
+resolved. Escalated to the stakeholder, who chose to investigate it (U8 below). Scratch test
+artifact (`claude/docs/reviews/_permission-test-scratch.md`) was cleaned up by the same `analyst`
+dispatch that created it.
+
+| U8 | `cobb` | `a3b4c777bd3b19360` | in-flight | `claude/docs/plans/permission-default-mode.md` (new topic slug) | `analyst` → — | — |
+
+This coordination stays **open** pending U8's design and its review gate.
 
 ## Notes
 - Existing `~/.claude/settings.json` blanket `Edit`/`Write`/`NotebookEdit` allow rule, flagged as
