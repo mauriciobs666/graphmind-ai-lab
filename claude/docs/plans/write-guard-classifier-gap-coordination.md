@@ -21,17 +21,24 @@ friction specifically; this is the deeper mechanism issue phase-2 design would o
 | U4 | `cobb` | `a283853afe8b7e6d2` | delivered | `write-guard-classifier-gap.md` v2, commit `df00237` | — | 274k tok / 4 tool uses |
 | U5 | `analyst` | `aa2dec35279344ddb` | delivered | Pass 2 appended to `docs/reviews/write-guard-classifier-gap.md` | `analyst` → approve with suggestions | 148k tok / 4 tool uses |
 | U6 | `teco` | — | delivered | `skills/README.md` added to §5.3/§8, per Pass 2's one Minor finding | — (trivial fix, no gate) → — | — |
+| U7 | `teco` + stakeholder | `a69060e60424e0cf1` | delivered | Live empirical test: `.claude/settings.local.json` (project root) given `"Edit(**/docs/reviews/**)"`; `analyst` dispatched via `Agent` to write `claude/docs/reviews/_permission-test-scratch.md`; stakeholder directly observed the OS/CLI confirmation prompt ("Create file · from the analyst agent") fire anyway | — (empirical observation, not a review gate) → **hypothesis refuted** | 23k tok / 1 tool use (analyst side) |
 
-## Close-out (pending)
+## Close-out
 
-Design gated **approve with suggestions** (`analyst`, Pass 2). The design is ready as a reasoning
-framework and per-glob risk catalog, but **implementation-gated** on the stakeholder's own live
-empirical test (`write-guard-classifier-gap.md` §7) — nobody, including `cobb`, could confirm
-whether a `permissions.allow` `Edit(path)` rule actually bypasses the auto-mode classifier for a
-Task/Agent-delegated write; the investigating session's own classifier blocked the one non-invasive
-test attempt. This coordination stays open (not archived) until that test lands and either confirms
-the mechanism (→ implementation unit, gated the same way) or refutes it (→ back to the stakeholder
-for the `defaultMode` tradeoff `cobb`'s original RCA flagged, still undecided).
+Design gated **approve with suggestions** (`analyst`, Pass 2) as a reasoning framework, but the
+empirical test it was gated on (§7) has now run and **refutes the core mechanism**: a
+`permissions.allow` `Edit(path)` rule in `.claude/settings.local.json` did **not** suppress the
+confirmation prompt for a Task/Agent-delegated write to a path the rule covered, even though the
+target agent's own `PreToolUse` hook independently returns `"allow"` for that same path. Both
+suppression mechanisms this design and phase 1 relied on — hook `"allow"` and settings.json
+`Edit(path)` rules — fail to bypass the classifier for delegated writes specifically.
+
+**Consequence:** the whole `permissions.allow`-supplement approach in `write-guard-classifier-gap.md`
+§5 is not viable as designed and should not be implemented. The only remaining lever identified
+across this investigation is the `defaultMode` tradeoff `cobb`'s original RCA flagged and never
+resolved — escalated back to the stakeholder now (see report). This coordination stays **open**
+pending that decision; scratch test artifact (`claude/docs/reviews/_permission-test-scratch.md`)
+was cleaned up by the same `analyst` dispatch that created it.
 
 ## Notes
 - Existing `~/.claude/settings.json` blanket `Edit`/`Write`/`NotebookEdit` allow rule, flagged as
