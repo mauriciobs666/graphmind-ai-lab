@@ -17,6 +17,14 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
 ## Parking lot / ideas
+- **Two process lessons from the prompt-waste Stage B wave-2 §7 lint (2026-08-23, both minor):**
+  (F1) the plan's "cobb's own compression is linted by its pre-edit self" safeguard wasn't met as
+  written — the live-symlink deployment means the edit is production before any lint can run on a
+  pre-edit self; mitigated this time by byte-matching the edited blocks to the approved pilot
+  shapes and by the checklist living in the untouched `agent-maintenance` skill. Decide whether
+  the safeguard should be restated as "lint against the pre-edit file content (`git show HEAD:`)"
+  for C6. (F2) gate-(e) history entries pre-asserted "cobb §7 lint pass" before the lint ran
+  (true in the event) — for future units, append the `Verified:` line only after the lint returns.
 - **Extend the independent-review-gate practice to `cobb.md` self-edits specifically (surfaced
   2026-08-20, `Q2`'s D-1 finding + its own fix).** `Q2`'s closing acceptance pass
   (`docs/test-reports/generic-cypher-mcp2-report.md`) found `cobb.md` had shipped a self-edit

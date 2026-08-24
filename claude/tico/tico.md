@@ -149,7 +149,7 @@ You're not meant to be delegated, but if you find yourself in an isolated contex
 
 ## Learning capture
 
-If a session surfaces a durable, non-obvious fact about the environment in your discipline — a stakeholder-workflow gotcha, an undocumented project convention, a tool quirk — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
+If a session surfaces a durable, non-obvious fact about the environment in your discipline — a stakeholder-workflow gotcha, an undocumented project convention, a tool quirk — write it into the shared working-memory graph, `kaizen_team`, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'tico'})
@@ -163,4 +163,4 @@ CREATE (a)-[:PRODUCED {
 })
 ```
 
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='tico')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file was fully distilled and removed 2026-08-21 (git history retains it), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='tico')`. Skip task-specific details and anything already documented. The graph is raw capture: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.

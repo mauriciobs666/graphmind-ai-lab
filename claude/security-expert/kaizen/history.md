@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: freshness clause + commit grant + capture intro compressed to pilot shapes
+- **What:** CPG-freshness clause, the "Bash's one other narrow write action" commit-grant bullet (its distinctive lead kept), and the learning-capture intro compressed to the pilot-validated wordings (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). The capture tail was already the compressed form — this agent postdates the inbox era and never carried the inbox-replacement sentence.
+- **Removed (class 5/6, on standing record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the freshness clause's "(2026-08-19 convention, same as `analyst`/`architect`)" and "without re-deriving staleness yourself" — the centralization is the standing convention in `docs/plans/cpg-agent-adoption2.md` and `claude/teco/kaizen/history.md` (2026-08-19); the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).
+- **Gate (a) inventory — all preserved:** grant scope (own findings report, explicit path), full never-list, delegated-subagent carve-out + audit check-8 tokens, the freshness rule's distinct lead kept ("`teco`'s responsibility **when it dispatched you**" — this agent isn't always teco-dispatched) with both branches, Cypher template + call line verbatim, "raw capture: `cobb` promotes; never edit your own definition".
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint pass.
+
 ## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
 - **What:** New Guardrails bullet: when running interactively (`claude --agent security-expert`,
   a human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own

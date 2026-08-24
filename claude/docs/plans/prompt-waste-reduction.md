@@ -139,6 +139,15 @@ to all four already-compressed files (`architect` included) plus any wave-2 file
 clause; *and C3 picks up two pre-existing analyst waste candidates* (the traps-list "have bitten
 a review before" framing; the placeholder-token bullet's incident narration).
 
+*Wave-2 executed 2026-08-23, stakeholder-directed ahead of wave 1's observation-window close
+("next wave please"). All nine remaining agents, blocks as present per file: `tdd-engineer`/
+`frontend-engineer`/`qa-engineer` all three blocks + micro-shape; `security-expert` freshness +
+grant + capture-intro (tail already compressed — postdates the inbox era); `graph-dba`/`devops`/
+`cobb` grant + capture; `teco`/`tico` capture only — their non-standard broad commit-grant
+paragraphs and teco's centralized freshness paragraph are deliberately deferred to C1/C2.
+Retro micro-fix applied to `architect`/`coder`/`analyst`. Gates (a)–(e) green; audit PASS.
+Both Stage B observation windows now run concurrently.*
+
 ### Stage C — Heavy singles, descending payoff
 
 | Unit | File | Now | Target | Notes |

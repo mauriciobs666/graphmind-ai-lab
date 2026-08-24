@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: learning-capture block compressed to pilot shape
+- **What:** Learning-capture intro and tail compressed to the pilot-validated wording (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). Only this block — the broad mode-unconditioned commit-grant paragraph and the centralized CPG-freshness duty are *not* the shared boilerplate shape and stay for Stage C1.
+- **Removed (class 5/6, already on record):** the tail's inbox-replacement sentence ("This replaces the earlier `kaizen/inbox.md`-append convention…") and ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement — the mechanics live in the Cypher template directly below.
+- **Gate (a) inventory — all preserved:** capture trigger (durable, non-obvious fact in discipline), full Cypher template + `mcp__cypher__query` call line verbatim, "skip task-specific details and anything already documented", "raw capture: `cobb` reads/verifies/promotes; never edit your own agent definition".
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint pass.
+
 ## 2026-08-23 — Distillation: producer-write "RETURN clause" rejection (entryId `9a1c7d2e-4b8f-4e10-9c3a-1f6b2d8e5a77`) — promoted, not a bug
 - **What:** `cobb` reviewed teco's kaizen entry reporting that every attempted producer-write
   variant against `kaizen_team` was rejected with the generic FR-8 message. Root-caused by reading

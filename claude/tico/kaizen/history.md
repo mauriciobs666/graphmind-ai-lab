@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: learning-capture block compressed to pilot shape
+- **What:** Learning-capture intro and tail compressed to the pilot-validated wording (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). Only this block — the broad mode-unconditioned commit-grant paragraph is *not* the shared boilerplate shape and stays for Stage C2.
+- **Removed (class 5/6, already on record):** the tail's inbox-replacement sentence ("This replaces the earlier `kaizen/inbox.md`-append convention…") and ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement — the mechanics live in the Cypher template directly below.
+- **Gate (a) inventory — all preserved:** capture trigger (durable, non-obvious fact in discipline), full Cypher template + `mcp__cypher__query` call line verbatim, "skip task-specific details and anything already documented", "raw capture: `cobb` reads/verifies/promotes; never edit your own agent definition".
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint pass.
+
 ## 2026-08-23 — K-009 refinement: dropped "decision cluster closes" / topic-switch as independent commit triggers
 - **What:** immediately after the resolution below shipped, the stakeholder reviewed the actual
   wording and flagged that the shipped rule still let a **topic switch within a single document**

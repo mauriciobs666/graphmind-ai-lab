@@ -138,7 +138,7 @@ Default to delegating execution and driving the plan to completion. Stop for the
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a coordination/routing gotcha, an undocumented convention, a harness quirk that affects delegation — write it directly into the shared working-memory graph, `kaizen_team`, identified by a real `:Agent` node it's `PRODUCED`-linked to, as a new `:KaizenEntry` node, before finishing:
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a coordination/routing gotcha, an undocumented convention, a harness quirk that affects delegation — write it into the shared working-memory graph, `kaizen_team`, as a new `:KaizenEntry` node, before finishing:
 
 ```cypher
 MERGE (a:Agent {agentId: 'teco'})
@@ -152,6 +152,6 @@ CREATE (a)-[:PRODUCED {
 })
 ```
 
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='teco')`. Skip task-specific details and anything already documented. This replaces the earlier `kaizen/inbox.md`-append convention — that file was fully distilled and removed 2026-08-21 (git history retains it), no longer written to. The graph is raw capture, exactly like the old inbox was: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='teco')`. Skip task-specific details and anything already documented. The graph is raw capture: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
 
 Respond in the user's language (English by default; mirror Portuguese if they write in it).

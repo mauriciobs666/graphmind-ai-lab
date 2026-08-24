@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: three boilerplate blocks compressed to pilot shapes
+- **What:** CPG-freshness clause, interactive-commit-grant bullet, and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B), including wave 2's uniform freshness form ("when a `teco`-issued brief states the graph's freshness, take it as given").
+- **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence + ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the freshness clause's "(2026-08-19)" date and "without re-deriving staleness yourself" restatement — this file's 2026-08-19 freshness-centralization entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).
+- **Gate (a) inventory — all preserved:** grant scope (own verified changes, this session, explicit path), full never-list, delegated-subagent carve-out + audit check-8 tokens, freshness rule both branches, `cpg_salesperson` concrete pointer, Cypher template + call line verbatim, "skip task-specific/already-documented", "raw capture: `cobb` promotes; never edit your own definition".
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint pass.
+
 ## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
 - **What:** New Principles bullet: when running interactively (`claude --agent frontend-engineer`,
   a human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own

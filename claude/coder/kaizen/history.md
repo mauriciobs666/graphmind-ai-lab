@@ -2,6 +2,9 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-23 — Freshness-clause grammar fix (Stage B wave 2 micro-shape)
+- **What:** "a `teco`-issued brief that states the graph's freshness, take it as given" → "when a `teco`-issued brief states the graph's freshness, take it as given" — closing the hanging-topic construction cobb's wave-1 lint flagged as minor; applied uniformly across all files carrying the clause. No rule change; both branches intact.
+
 ## 2026-08-23 — Prompt-waste compression, Stage B wave 1 (boilerplate sweep)
 - **What:** Applied the three pilot-validated boilerplate compressions from
   `claude/docs/plans/prompt-waste-reduction.md` (§3 doctrine, Stage B), same shapes as the

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: two boilerplate blocks compressed to pilot shapes
+- **What:** Interactive-commit-grant bullet and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). No CPG-freshness clause exists in this file (graph-dba *builds* CPGs; it isn't one of the six consumer agents).
+- **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence + ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).
+- **Gate (a) inventory — all preserved:** grant scope and objects (design note, migration/DDL script, explicit path), full never-list, delegated-subagent carve-out + audit check-8 tokens, the FalkorDB-quirk routing rule (live-verified quirk → `falkordb-quirks.md`, dated with verifying command; everything else → graph), Cypher template + call line verbatim, "skip task-specific/already-documented", "raw capture: `cobb` promotes; never edit your own definition".
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint pass.
+
 ## 2026-08-21 — Interactive-mode commit grant added (team-wide stakeholder decision)
 - **What:** New Principles bullet: when running interactively (`claude --agent graph-dba`, a
   human present turn-by-turn — not a delegated subagent), may `git add`/`git commit` its own

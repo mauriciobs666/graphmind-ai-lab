@@ -2,6 +2,9 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-23 — Freshness-clause grammar fix (Stage B wave 2 micro-shape)
+- **What:** "a `teco`-issued brief that states the graph's freshness, take it as given" → "when a `teco`-issued brief states the graph's freshness, take it as given" — closing the hanging-topic construction cobb's wave-1 lint flagged as minor; applied uniformly across all files carrying the clause. No rule change; both branches intact.
+
 ## 2026-08-23 — Prompt compression: narratives → history pointers (waste-reduction pilot, Stage A)
 
 - **What:** Compressed `architect.md` 1,738 → 1,547 words per `claude/docs/plans/prompt-waste-reduction.md` §3 (Stage A pilot). Every behavioral rule and mechanism preserved; only class-5/6/7 material (narratives, provenance retellings, duplicate restatements) moved or tightened. Frontmatter, hooks, and all externally-cited anchors untouched: the three verbatim `CPG:` forms, `git add`/`git commit` + "delegated subagent" (audit-team.sh check 8), "never edit your own agent definition" (cited by `docs/plans/generic-cypher-mcp2-coordination.md` P2-B2), and the step name "Investigate the codebase first" (cited by `docs/test-reports/cpg-agent-adoption-report.md:81`).

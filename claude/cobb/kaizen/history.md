@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-23 — Prompt-waste Stage B wave 2: two boilerplate blocks compressed to pilot shapes (own file)
+- **What:** Interactive-commit-grant bullet and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). No CPG-freshness clause exists in this file. Edited by the main session; the §7 lint gate ran over the result including this file (flagged for extra scrutiny since cobb is itself the gate — the lint machinery lives in the `agent-maintenance` skill, untouched by these edits).
+- **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence — this file's 2026-08-21 inbox-deletion entry (the tail now ends at "(full §1/§2 bookkeeping applies)."; no "raw capture" sentence was re-added — that would duplicate the Learnings-distillation bullet's §5 statement, a class-7 restatement); the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).
+- **Gate (a) inventory — all preserved:** grant scope (own verified deliverables, explicit path), full never-list, delegated-subagent carve-out + audit check-8 tokens, the maintainer-only promote-in-same-run clause ("unless you verify and promote it to its proper home … full §1/§2 bookkeeping applies"), Cypher template + call line verbatim.
+- **Verified:** `audit-team.sh` PASS; cobb §7 lint — 12/12 files pass, this one "pass with minor findings", both process-level: F1 the "pre-edit self lints cobb's own edit" safeguard is unmeetable as written under live-symlink deployment (mitigated: blocks byte-match the pilot shapes; the checklist lives in the untouched `agent-maintenance` skill); F2 the wave's gate-(e) entries asserted the lint verdict before the lint ran (true in the event). Both logged in `kaizen/plan.md` for C6.
+
 ## 2026-08-23 — Prompt-waste doctrine institutionalized in `agent-maintenance` (§5 promotion rule + §7 seventh lint dimension)
 - **What:** Two additions to `skills/agent-maintenance/SKILL.md`, per
   `claude/docs/plans/prompt-waste-reduction.md` §3 (v3) Stage F and the 2026-08-23 pilot
