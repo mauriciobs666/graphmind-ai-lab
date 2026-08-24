@@ -318,6 +318,55 @@ the always-loaded project memory (`CLAUDE.md`).
   Bypass/Self-Modification") and correctly not acted on. A coordinator's own "proceed" does not
   substitute for the harness's own human-approval gate on a write it chooses to gate — and a
   delegate's proposal to route around that gate via self-modification is itself the signal to stop.
+- **A `PreToolUse` hook's explicit `"allow"` is not a full override of the confirm-before-Write/Edit
+  prompt — it composes with two separate layers, and neither the shipped write-guards (
+  `agent-permission-friction.md`) nor its own root-cause finding (§1.3) accounted for the second
+  one.** Verified 2026-08-24 against `code.claude.com/docs/en/permissions` ("Extend permissions
+  with hooks") and `.../permission-modes` ("How the classifier evaluates actions" /
+  "How auto mode handles subagents"), both fetched fresh (not from a cached prior read):
+  1. **Settings-rule layer (already correctly quoted by phase 1, but under-weighted in its own
+     summary):** "Hook decisions don't bypass permission rules. Claude Code evaluates deny and ask
+     rules regardless of what a `PreToolUse` hook returns: a matching deny rule blocks the call,
+     and a matching ask rule still prompts even when the hook returned `"allow"` or `"ask"`." A
+     hook `"allow"` is therefore conditional on no matching settings.json `ask`/`deny` rule existing
+     — not literally unconditional "every time" as `agent-permission-friction.md` §1.3 asserted from
+     the same source quote.
+  2. **Auto-mode classifier layer (undocumented interaction with hooks — the actual live-reproduced
+     gap, graphmind-ai-lab, `agent-permission-friction2.md` open question 3, 2026-08-23/24):** on
+     Pro/Max/Team, `auto` is the account-default `permissionMode` (confirmed live via this repo's
+     own session transcripts, `~/.claude/projects/<proj>/<session>.jsonl` — a `"type":"permission-mode"`
+     record announces the session's mode, and it stayed `"auto"` continuously across two independent
+     manual-confirmation-prompt incidents on 2026-08-23). Auto mode's own documented decision order
+     (`permission-modes` doc, "How the classifier evaluates actions") is: (1) explicit settings
+     allow/ask/deny rules resolve immediately — protected-path writes route to the classifier even
+     past a matching allow rule; (2) **"Read-only actions and file edits in your working directory
+     are auto-approved, except writes to protected paths"**; (3) everything else goes to the
+     classifier. Nowhere in this decision order, nor in "How auto mode handles subagents" ("each of
+     its actions goes through the classifier with the same rules as the parent session, and any
+     `permissionMode` in the subagent's frontmatter is ignored"), does a `PreToolUse` hook's
+     `"allow"` get named as exempting an action from classifier review — the hook layer and the
+     auto-mode classifier layer are only documented to interact through the settings-rule
+     precedence in point 1 above, never directly with each other. **Live-reproduced result:** two
+     separate agents (`analyst`, `tdd-engineer`), two separate shared guard cores (allow-list vs.
+     deny-list), both statically verified to emit an explicit `permissionDecision:"allow"` on a
+     genuinely in-remit, non-protected, working-directory path — and both still produced a
+     multi-minute/multi-hour human-confirmation gap in the session transcript (`toolUseResult`
+     landing 14 min and 4h38m after the matching `tool_use`, respectively) when the write was
+     **subagent-delegated from a concurrent top-level session already confirmed to be in `auto`
+     mode throughout**. Per the documented decision order alone, step 2 should have auto-approved
+     both with zero classifier involvement and zero human prompt, hook or no hook — so either a
+     delegated subagent's own file edits don't get step 2's "your working directory" fast path the
+     same way a top-level session's own edit would, or the classifier's per-subagent review
+     (point 2, "How auto mode handles subagents") independently re-opens a confirmation the hook
+     already resolved. **This could not be fully disambiguated by static analysis or transcript
+     reading — it needs a live, human-observed test** (a fresh, non-concurrent, top-level
+     `--agent analyst` session making one in-allowlist write, mode-bar watched at the moment of the
+     call) to determine whether the friction is specific to Task/Agent-tool delegation or reproduces
+     even without it. **Practical guidance until that test lands:** don't extend or re-derive a
+     phase-2-style write-guard design from phase 1's §1.3 "hook allow is unconditional" premise
+     without re-verifying against this note — the premise is only half true, and the half that's
+     false (the auto-mode classifier) is not something a repo-local hook script can see or
+     special-case, the same caveat already logged above for the Bash classifier.
 
 ## Bash tool environment
 
