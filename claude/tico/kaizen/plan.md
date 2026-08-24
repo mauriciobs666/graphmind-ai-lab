@@ -14,7 +14,7 @@
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
-| K-008 | 2026-08-11 | — | 🔵 | **Partially decided 2026-08-24** — incident 2 (commit scope) closed via shape (a); incident 1 (`Agent`-routing a finding) still needs a stakeholder call. See below. |
+| K-008 | 2026-08-11 | — | ✅ | **Closed 2026-08-24** — both incidents decided by the stakeholder: commit scope via shape (a), `Agent`-routing via shape (b) with offer rights. See `kaizen/history.md`. |
 | K-009 | 2026-08-23 | — | ✅ | Commit-frequency recurrence — stakeholder chose document-level batching; encoded in `tico.md`. See `kaizen/history.md`. |
 
 ### K-008 — Stakeholder pushback on tico's write-scope and `Agent`-routing guardrails
@@ -53,9 +53,15 @@
   this overturns cobb's 2026-07-30 declination below on the write-scope==commit-scope invariant** —
   the stakeholder's reasoning is that a human approving the write at the escalation prompt already
   supplies the review that invariant stood in for.
-- **Incident 1 remains open** — routing an already-written, fully-formed finding to a named
-  next-agent as a fourth sanctioned `Agent` use (shape (b)). Undecided; still needs a stakeholder
-  call, and it is the reason this item stays 🔵 rather than ✅.
+- **Incident 1 CLOSED, 2026-08-24 (stakeholder decision):** shape **(b)** chosen, at the wider of
+  the two variants offered — routing an already-written, fully-formed artifact to a named next
+  agent is now a **fourth sanctioned `Agent` use**, and tico may **offer** it proactively rather
+  than only execute an explicit request. Targets: `architect`, `analyst`, `qa-engineer` — *not*
+  any named specialist. The "delegation hub" risk noted above is bounded in the prompt itself:
+  only already-written work may be routed, and **"routing is not coordinating"** is stated
+  explicitly, with sequencing/gating/chaining named as `teco`'s and a duty to point at `teco`
+  rather than grow into it. See `kaizen/history.md`, 2026-08-24 entry.
+- **K-008 is fully closed** — both incidents decided the same day.
 - **Related resolution, 2026-08-21 (does not close this item):** a narrower, related instance —
   tico lacking commit authority over a Mode-3 verification-pass specialist's own returned
   artifact — was put to the stakeholder and decided: tico's commit grant now also covers that one
