@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-24 — Prompt-waste compression, Stage C3 (analyst-specific pass) — file measured at its editorial floor
+
+- **What:** Five edits, one pass (per the Stage C one-pass-by-default rule), 2,510 → 2,473 w (−37, 1.5%).
+  (1) § "How you work" step 3 blockquote: dropped the tail "it is not part of this always-loaded
+  prompt" (meta-commentary about prompt structure, no behavioral content); the
+  `review-techniques.md` pointer and its three technique examples kept — the examples *are* the
+  trigger, since "specialized verification techniques" is not a condition the agent can check.
+  (2) § Guardrails "Evidence over vibes" lead: "Specific traps that have bitten a review before:"
+  → "Specific traps:". (3) Placeholder-token trap: the frequency generalization ("Plans routinely
+  paste…") replaced with a direct imperative ("Watch for a pasted doc-template placeholder"); the
+  placeholder-vs-expanded-key mechanism deliberately kept, since it is what makes the trap
+  recognizable. (4) "held, pending until X lands" trap: wording compressed, both halves intact.
+  (5) "A deliverable that already exists at your target path" bullet: dropped "e.g. resuming after
+  an interruption", `Offline/static` → `Static` (binds to this prompt's own "static reviewer"
+  vocabulary), both branches intact.
+- **Rule inventory (gate a), edited regions — all preserved:** consult `review-techniques.md` on
+  demand + its three trigger examples (1); evidence-vs-inference distinction, the two hard nevers
+  (suite-green, traced-path), all six traps with their mechanisms and consequences (2–4);
+  not-authoritative half + grep-siblings half (4); side-effecting-claims-unverified branch and
+  static-claims-inheritable branch (5). Verbatim `CPG:` three-form sentence, audit-check-8 commit-grant
+  tokens, frontmatter, hooks, learning-capture block and RCA skeleton untouched.
+- **Removed class-5/6 material, recorded where:** the traps' incident provenance → this file's
+  2026-08-23 entry (line 90, the placeholder-token trap) and 2026-08-19 "Evidence over vibes"
+  entry (which names all five original traps individually).
+- **Two dedup candidates considered and rejected**, both the shape that caused the C1 pass-2
+  regression: the intro's "the artifact under review stays untouched" against Guardrail 1 (kept —
+  the intro is the *scope contract* stating what the agent's output **is**, the guardrail is a
+  *prohibition* with a hook behind it; different speech acts, and deleting the intro sentence
+  opens the prompt describing a job without saying what it produces), and step 3's "did you check,
+  or does it just look wrong?" against "Evidence over vibes" (kept — step 3 is a per-finding
+  *sufficiency gate* that pressures toward going and checking; the guardrail explicitly *permits*
+  inferring provided you label it. Two different behaviors at two decision points).
+- **Correction to that second rejection, from the lint:** the reason originally given was
+  gather-time vs. reporting-time, which does not hold — step 3's tail "— say which" genuinely is
+  a reporting-time labeling instruction duplicating the guardrail. What earns the keep is step 3's
+  *first half*, not the split. Recorded so a later pass doesn't re-derive the wrong rationale.
+- **Fixed while in there (composition conflict, pre-existing):** the placeholder-token trap cited
+  `kaizen_analyst` as an example of "the repo's expanded keys" — but that graph key was **retired**
+  (this file's 2026-08-21 entry, `G1`'s last two retirements). The prompt was asserting as current
+  a key its own auto-loaded context says no longer exists. Now `cpg_salesperson`, live-verified
+  against the FalkorDB instance's loaded-graph list.
+- **Verified:** `audit-team.sh` PASS (all 13 agents, including the personal-identifier and
+  check-8 sweeps); `cobb` §7 lint on the result — **0 blockers, 0 majors**, 3 minors + 2 nits, all
+  four actionable ones applied (the retired-key fix, +3 w restoring the unanchored comparative's
+  referent, +5 w restoring "side-effecting ones are not" as anti-trigger fencing on the
+  static-claims permission, +2 w restoring the distributive "any of its"). First unit in this plan
+  with no MAJOR.
+- **Finding for the plan — this file is at its editorial floor.** Post-edit residual class-6/7
+  inventory across the *whole* file is **under 25 words**. C3's plan target of ~1,900 w (a 26% cut)
+  was unreachable without deleting rules; the measured floor is ~2,473 w. The ~350 w evidence-traps
+  block is distilled class-3/4 lesson payload, not narrative — no further prose editing reaches it.
+- **Plan items:** opened **K-003** (progressive disclosure — move the traps' mechanisms to
+  `review-techniques.md`, keep trigger stubs), the structural lever this floor leaves.
+
 ## 2026-08-23 — Freshness-clause grammar fix (Stage B wave 2 micro-shape)
 - **What:** "a `teco`-issued brief that states the graph's freshness, take it as given" → "when a `teco`-issued brief states the graph's freshness, take it as given" — closing the hanging-topic construction cobb's wave-1 lint flagged as minor; applied uniformly across all files carrying the clause. No rule change; both branches intact.
 

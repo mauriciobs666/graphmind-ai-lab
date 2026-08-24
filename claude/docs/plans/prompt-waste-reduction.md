@@ -163,7 +163,7 @@ Both Stage B observation windows now run concurrently.*
 |---|---|---|---|---|
 | C1 | `teco.md` | 5,987 w | **done: 5,377 w** (both passes) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
 | C2 | `tico.md` | 3,627 w | **done: 3,503 w** (one pass) | Ran as a single pass — the inventory found ~no class-7 duplication. Also un-staled Mode 3's commit rule against K-009 |
-| C3 | `analyst.md` | 2,569 w | ~1,900 w | Evidence-traps list stays (class 3 payloads); trims are provenance and restatement |
+| C3 | `analyst.md` | 2,569 w | **done: 2,473 w** (one pass) | Evidence-traps list stayed (class 3/4 payloads); trims were provenance and restatement. **Measured at its editorial floor** — residual class-6/7 inventory across the whole file is under 25 w. Structural lever routed to `analyst` K-003 |
 | C4 | `security-expert.md` + `devops.md` | 2,471 + 2,266 w | after inventory | |
 | C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | ~2,200 w each | after inventory | |
 | C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
@@ -266,6 +266,34 @@ pass-with-findings (1 major, 6 minor, 0 blockers), all fixed before commit. Deta
 unreviewed edits for a ~2% gain against a floor just certified, and one touches the commit-grant
 paragraph — pass 1's regression site, which must not be re-edited inside the unit whose lint has
 already run. Available to a future unit under its own gate.*
+
+***C3 executed 2026-08-24 (2,510 → 2,473 w, −37, −1.5%).** Five edits, one pass; both wave-1 lint
+carry-forwards discharged. Gates (a)–(e) green; `cobb` §7 lint **0 blockers, 0 majors** (3 minors,
+2 nits) — the first unit in this plan with no MAJOR, and the first where the pre-declared
+"considered and rejected" list did the work the lint used to. Detail in
+`claude/analyst/kaizen/history.md`. **Two findings:***
+
+7. ***The editorial floor is not a `teco` anomaly — it is where a post-Stage-B file sits, and it
+   is reached in one pass.*** *`analyst.md`'s residual class-6/7 inventory across the whole file
+   after C3 is **under 25 words** — three candidates totalling ~22 w, none near an enforced token.
+   Finding 4 already emptied C4–C6's target cells to "after inventory"; C3 says go further and
+   **calibrate what those inventories should be expected to return**. Two files now land at ~1.5–4% for a class-5/6+7
+   sweep, and the second was a mid-size file at less than half `teco`'s length, so the floor tracks
+   **rule count, not word count**. §1's headline ("25–45% per heavy file") is retired for anything
+   post-Stage-B; the honest expectation for C4–C6 is single digits, and a unit that reports 2% with
+   a certified inventory has **passed**, not underperformed.*
+8. ***Progressive disclosure has one non-negotiable design constraint, and the payoff argument is
+   consistency rather than tokens.*** *Generalizing finding 6's caveat into a rule: an offloaded
+   reactive rule must leave a **trigger stub** in the prompt — the mechanism moves, the trigger
+   never does. The failure mode is the tempting one: a single vague pointer ("consult X for
+   evidence traps") requires recognizing a trap as a trap in order to know to load the file that
+   names the traps. Circular, and it fails **silently**, which is why it survives review. Test each
+   candidate rule for a trigger recognizable from the task surface **without already knowing the
+   rule's content**; all six of analyst's traps pass, so the offload is safe at ~9% net. But the
+   reason to do it is that `review-techniques.md` **already holds entries of the same genre**, with
+   no stated criterion for which home a new lesson takes — that split, not the word count, is what
+   keeps generating drift. Opened as `analyst` **K-003**, the second K-016-style item this plan has
+   produced rather than absorbed.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
