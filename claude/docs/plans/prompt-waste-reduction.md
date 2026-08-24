@@ -65,7 +65,16 @@ a kept narrative costs words; a lost rule costs a repeated incident.
 | 4 | **Consequence detail** | Secondary failure mode ("a later `SendMessage` resume inherits the wrong identity") | Keep only if it changes what the agent does; else class 5 |
 | 5 | **Incident narrative** | The story: what happened, which units, what it cost, who caught it | **Move**: verify present in that agent's `kaizen/history.md` (append first if absent), then **delete — no inline pointer** (stakeholder calibration, pilot: dates/file pointers contaminate context; the history file is the standing, greppable home) |
 | 6 | **Provenance/governance** | "Stakeholder decision, 2026-08-21", supersession trails, "this replaces the earlier convention…" | **Delete** (after the same verify-in-history step). Non-negotiability is expressed by stating the rule absolutely, never by citing authority or dates. Distinguish from a **normative citation** — a path the rule requires the agent to *use* (a spec like the `CPG:` forms' source, a template location) — which stays |
-| 7 | **Duplicate restatement** | Same rule stated twice in one file; cross-references that re-explain instead of pointing | One canonical statement + short cross-ref |
+| 7 | **Duplicate restatement** | Same rule stated twice in one file; cross-references that re-explain instead of pointing | One canonical statement + short cross-ref. **Test: not "is it said twice" but "is it *needed* twice"** — name the decision point that loses it and ask whether the agent stands there (C1 finding 5) |
+
+**Anti-trigger vs. supersession trail — the class-1/class-6 boundary (added at C2).** A sentence
+that says *X is not a trigger* looks like a reference to a superseded rule and is often deleted as
+class 6. The test: **would the agent plausibly infer that trigger with the sentence absent?**
+*Yes* ⇒ the sentence is a live **anti-trigger** (class 1, keep) — e.g. "not as each section lands"
+in a manual that is section-structured, or "a topic switch within a document is not a departure."
+*No* ⇒ it exists only as an artifact of the old rule's wording (class 6, delete) — e.g. "commits
+far less often than per-topic," where the per-topic trigger has no independent source. Both calls
+occurred in the same C2 bullet, in opposite directions.
 
 Hard preservation constraints (mechanically checked, not judgment):
 
@@ -153,13 +162,34 @@ Both Stage B observation windows now run concurrently.*
 | Unit | File | Now | Target | Notes |
 |---|---|---|---|---|
 | C1 | `teco.md` | 5,987 w | **done: 5,377 w** (both passes) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
-| C2 | `tico.md` | 3,531 w | set after inventory | Not yet read in this analysis — inventory first, then target |
+| C2 | `tico.md` | 3,627 w | **done: 3,503 w** (one pass) | Ran as a single pass — the inventory found ~no class-7 duplication. Also un-staled Mode 3's commit rule against K-009 |
 | C3 | `analyst.md` | 2,569 w | ~1,900 w | Evidence-traps list stays (class 3 payloads); trims are provenance and restatement |
 | C4 | `security-expert.md` + `devops.md` | 2,471 + 2,266 w | after inventory | |
 | C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | ~2,200 w each | after inventory | |
 | C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
 
 Serialized or in review-gated pairs — never two units editing one file.
+
+**Stage C runs one pass by default (set at C2, 2026-08-24).** The two-pass rule was keyed to
+projected cut size (>30%), which finding 4 already retired as a predictor. The split's real value
+was never volume but **risk isolation** — pass 2's characteristic defect (cutting a rule that is
+needed twice) is a different failure mode from pass 1's (scope drift while repairing prose), and
+separating them gives each its own rollback unit and observation window. That argument survives,
+because it depends on class-7 edits being riskier *per edit*, not more numerous. So: fold the
+dedup sweep into the single pass as a **semantic read**, still emitting a keep-list (finding 3).
+**Split into a second gated pass only if** the sweep yields **more than 5 candidate cuts**, **or**
+any candidate touches an **audit-enforced token** (check 8's `git add`/"delegated subagent",
+`teco`'s roster, the `CPG:` line contract) **or a grant/authority clause**. Under this rule C1
+correctly ran as two passes (18 dedup edits, one touching the commit grant) and C2 correctly ran
+as one (2 candidates, neither near a token); C3–C6 decide from their own inventories.
+
+**Method warning — an n-gram scan is not a class-7 detector.** Used at C2 and it *inverts*:
+prompt duplication is paraphrase-level by construction (one author restating one rule in each
+section's local register, choosing different words each time), while verbatim repeats in a prompt
+are overwhelmingly class-2 mechanism. A 6-gram scan on `tico.md` returned 5 hits, all of them
+things that must be **kept** (two brief templates, a `git add <path>` form, a path convention),
+and missed 4 real repeats — two of which shared no contiguous wording at all. Use it as a
+**keep-list generator**, never as a cut-list. Class 7 requires the semantic read.
 
 *C1 pass 1 executed 2026-08-24 (5,948 → 5,728 w; 15 edits, class-5/6 only). Gates (a)–(e) green;
 cobb §7 lint pass-with-findings, all five findings fixed before commit. Three findings this unit
