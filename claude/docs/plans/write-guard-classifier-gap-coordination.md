@@ -42,7 +42,16 @@ dispatch that created it.
 
 | U8 | `cobb` | `a3b4c777bd3b19360` | delivered | `claude/docs/plans/permission-default-mode.md`, commit `773328c` | `analyst` → pending | 195k tok / 28 tool uses |
 | U9 | `teco` | — | delivered | Fixed pre-existing `audit-team.sh` FAIL (leaked home path) in `docs/reviews/write-guard-classifier-gap.md`, commit `773328c` | — (trivial fix, no gate) → — | — |
-| U10 | `analyst` | `a21ab3bb588d7f368` | in-flight | `claude/docs/reviews/permission-default-mode.md` | `analyst` → — | — |
+| U10 | `analyst` | `a21ab3bb588d7f368` | delivered | `claude/docs/reviews/permission-default-mode.md` | `analyst` → approve with suggestions | 135k tok / 23 tool uses |
+| U11 | `cobb` | `a3b4c777bd3b19360` | in-flight | Revision of `permission-default-mode.md` per U10's 2 Major + 1 Minor findings | — | — |
+
+**U10 summary:** core mechanism claims verified byte-for-byte against fresh doc fetches; the
+"dead configuration" finding independently re-confirmed. No blockers — recommendation to stay on
+`auto` holds. Two Major findings (a false "gap in the docs" claim resolvable by elimination; an
+internal inconsistency with this repo's own already-documented finding that hook `"ask"`
+enforcement is unconfirmed under Auto Mode) and one Minor (undercounted `Agent`-tool-carrying
+agents: 6 named vs. actually all 13). Neither Major finding overturns the recommendation. Sent
+back to `cobb` (U11) to fold in, same in-place precedent as the earlier v2 revision.
 
 **U8 summary:** precisely identifies the subagent parent-mode-inheritance mechanism
 (`bypassPermissions`/`acceptEdits` on the parent takes precedence and can't be overridden;
