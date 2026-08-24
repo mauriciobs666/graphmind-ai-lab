@@ -25,6 +25,10 @@
 > subagent's own frontmatter or in `settings.json`. Treat `PreToolUse` "ask" enforcement as
 > unverified under Auto Mode until re-confirmed — matcher-agnostic and context-agnostic, not a
 > narrow subagent-dispatch-only gap.
+> **`defaultMode`/subagent-mode-inheritance re-verified 2026-08-24** against
+> `code.claude.com/docs/en/permission-modes`, `.../permissions`, and `.../sub-agents` (whole
+> pages) — see the `## Hooks` section's 2026-08-24 resolution callout for the parent-mode
+> inheritance rule and the frontmatter-`permissionMode`-is-inert-for-primary-sessions finding.
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -367,6 +371,34 @@ the always-loaded project memory (`CLAUDE.md`).
      without re-verifying against this note — the premise is only half true, and the half that's
      false (the auto-mode classifier) is not something a repo-local hook script can see or
      special-case, the same caveat already logged above for the Bash classifier.
+- **Resolution/update, 2026-08-24 (`claude/docs/plans/write-guard-classifier-gap-coordination.md`
+  §U7, `claude/docs/plans/permission-default-mode.md`):** the live test the note above called for
+  has now run, twice, and both attempted fixes are refuted for the delegated-write case. (1) A
+  `permissions.allow` `Edit(path)` settings rule does **not** suppress the prompt for a
+  Task/Agent-delegated write either, even matching a hook that independently returns `"allow"` —
+  so settings-rule precedence (point 1 above) doesn't reach a delegated action the way it reaches a
+  top-level one. (2) The actual documented mechanism that *would* remove the classifier from a
+  delegated write's path is **parent-session mode inheritance**, precisely quoted from
+  `code.claude.com/docs/en/sub-agents` ("Permission modes"): "If the parent uses `bypassPermissions`
+  or `acceptEdits`, this takes precedence and can't be overridden. If the parent uses auto mode, the
+  subagent inherits auto mode and any `permissionMode` in its frontmatter is ignored." So it's
+  specifically the **delegating parent's own ambient mode being `auto`** that forces every dispatched
+  subagent through the classifier — not a hook or rule failing to bypass it. **A second finding this
+  surfaced, worth knowing before reaching for that lever:** every one of this repo's 13 agents
+  already declares `permissionMode: acceptEdits` in its own frontmatter, and it has never once taken
+  effect for controlling that agent's own top-level starting mode — the documented "which mode a
+  session starts in" decision order (`--permission-mode` flag → `permissions.defaultMode` in a
+  settings file → built-in default) has no step for a custom agent's own frontmatter at all; only
+  `~/.claude/settings.json`'s (this repo's) explicit `"defaultMode": "auto"` pin decides it, which is
+  also exactly what the `teco` session transcript in the note above independently confirmed. The
+  frontmatter field is real and does matter, but only inside the dispatch-time inheritance rule
+  quoted above — and since the delegating parent is always itself in `auto` today, that rule's
+  `auto`-forces-`auto` branch fires every time, so the frontmatter never gets a turn. Switching
+  `defaultMode` away from `auto` (globally, per-project, or per-launch via `--permission-mode`) is a
+  documented, mechanistically sound way to close this gap for whatever session's mode is changed —
+  `permission-default-mode.md` works through why it's nonetheless **not recommended** as a standing
+  default at any persisted scope (the Bash-classifier coverage a delegating session and everything
+  it dispatches would lose outweighs the write-confirmation friction being solved).
 
 ## Bash tool environment
 

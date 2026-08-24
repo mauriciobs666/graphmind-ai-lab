@@ -2,6 +2,43 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-24 — `defaultMode` investigation for the write-guard classifier gap: design doc + RCA promotion
+- **What:** Dispatched to investigate the one lever `write-guard-classifier-gap.md`'s RCA had left
+  undecided after its `permissions.allow`-rule fix was empirically refuted
+  (`write-guard-classifier-gap-coordination.md` §U7): switching `defaultMode` away from `auto`.
+  Delivered `claude/docs/plans/permission-default-mode.md` (Status: active, Tracks: —). Fetched
+  fresh `code.claude.com/docs/en/{permission-modes,permissions,sub-agents}` (whole pages) and found
+  the actual documented mechanism: a delegating parent session in `bypassPermissions`/`acceptEdits`
+  hands that mode straight to every subagent it dispatches, "and can't be overridden," while a
+  parent in `auto` forces `auto` on the subagent and **discards its frontmatter `permissionMode`
+  entirely** — the classifier only exists in `auto`, so a non-`auto` parent removes it from a
+  delegated write's path structurally, not by racing it the way the refuted rules approach tried to.
+- **New finding beyond the RCA:** all 13 agents already declare `permissionMode: acceptEdits` in
+  frontmatter, and it has **never once controlled a top-level session's own starting mode** — the
+  documented start-mode decision order (`--permission-mode` flag → `defaultMode` in a settings file
+  → built-in default) has no frontmatter step, and `~/.claude/settings.json` pins `"defaultMode":
+  "auto"` explicitly (read directly this session), consistent with the `teco` transcript evidence
+  already on record showing it ran in literal `auto` throughout both 2026-08-23 incidents despite
+  its own frontmatter. Promoted this, plus the exact inheritance-rule quotes, into
+  `skills/agent-standards/claude-code.md`'s `## Hooks` section (new dated bullet) and bumped the
+  file's top `Verified:` stamp — durable, worth having on hand for any future write-guard/permission
+  design without re-deriving it.
+- **Recommendation given, not implemented (design-only unit):** don't adopt the switch as a
+  standing default at global or project scope — `acceptEdits`'s Bash auto-approval is a small fixed
+  filesystem allowlist, so every non-trivial Bash call any delegated agent runs (test suites,
+  `docker`/`redis-cli`, scripts) would newly prompt where `auto`'s classifier silently clears it
+  today; that cost plausibly exceeds the guarded-write friction being removed, and no scope narrower
+  than "every session in the project" exists (mode is a whole-session scalar, inherited wholesale by
+  dispatched subagents; Claude Code doesn't let a session flip its own mode mid-chat). Optional,
+  fully-reversible empirical pilot offered instead: a single `--permission-mode acceptEdits` launch,
+  no settings change. Standing position recommended: stay on `auto`, document the gap as known —
+  same shape of conclusion `write-guard-classifier-gap-coordination.md` reached for the rules
+  approach.
+- **Not done (flagged as a separate follow-up, logged to `plan.md`):** deciding whether to remove
+  the now-confirmed-inert `permissionMode: acceptEdits` frontmatter line from all 13 agents, or
+  leave it as declared intent — a 13-file change with its own blast-radius question, out of scope
+  for a design-only unit.
+
 ## 2026-08-23 — Prompt-waste Stage B wave 2: two boilerplate blocks compressed to pilot shapes (own file)
 - **What:** Interactive-commit-grant bullet and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B). No CPG-freshness clause exists in this file. Edited by the main session; the §7 lint gate ran over the result including this file (flagged for extra scrutiny since cobb is itself the gate — the lint machinery lives in the `agent-maintenance` skill, untouched by these edits).
 - **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence — this file's 2026-08-21 inbox-deletion entry (the tail now ends at "(full §1/§2 bookkeeping applies)."; no "raw capture" sentence was re-added — that would duplicate the Learnings-distillation bullet's §5 statement, a class-7 restatement); the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).

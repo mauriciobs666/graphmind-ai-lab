@@ -54,8 +54,8 @@ close this gap on its own. It doesn't: the doc names `.claude` (dot-prefixed) as
 example ("`bypassPermissions` mode skips permission prompts, including for writes to protected
 paths such as `.git` and `.claude`"), but the repo's actual agent definitions are edited at
 `claude/<name>/<name>.md` — a **plain, non-dot-prefixed** top-level directory in this repo,
-confirmed by `ls -la ~/.claude/agents/`: every entry there is a **symlink out to
-`/home/mauricio/prg/graphmind-ai-lab/claude/<name>/`**, so the `tool_input.file_path` an agent
+confirmed by `ls -la $HOME/.claude/agents/`: every entry there is a **symlink out to
+`<repo-root>/claude/<name>/`**, so the `tool_input.file_path` an agent
 actually edits is the `claude/...` project path, not anything under a literal `.claude/` prefix.
 Nothing about this design's candidate rules would route through the protected-path carve-out.
 
