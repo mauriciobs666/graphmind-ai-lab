@@ -152,7 +152,7 @@ Both Stage B observation windows now run concurrently.*
 
 | Unit | File | Now | Target | Notes |
 |---|---|---|---|---|
-| C1 | `teco.md` | 5,987 w | ~4,300–4,600 w (revised at pass 1) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
+| C1 | `teco.md` | 5,987 w | **done: 5,377 w** (both passes) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
 | C2 | `tico.md` | 3,531 w | set after inventory | Not yet read in this analysis — inventory first, then target |
 | C3 | `analyst.md` | 2,569 w | ~1,900 w | Evidence-traps list stays (class 3 payloads); trims are provenance and restatement |
 | C4 | `security-expert.md` + `devops.md` | 2,471 + 2,266 w | after inventory | |
@@ -203,6 +203,39 @@ unblocked.** Two things the probe taught about probe design itself, for the rema
   probe's own no-commit constraint). A `SendMessage` resume closed both cheaply, with context
   intact — and produced the probe's strongest signal, an unprompted self-diagnosis of a rule the
   agent had bent in round 1. Design round 2 to force what round 1 could not reach.*
+
+***C1 pass 2 executed 2026-08-24 — C1 complete at 5,377 w** (5,948 → 5,377 over both passes,
+−9.6%). 18 dedup edits, then 6 restorations from the lint. Gates (a)–(e) green; `cobb` §7 lint
+pass-with-findings (1 major, 6 minor, 0 blockers), all fixed before commit. Detail in
+`claude/teco/kaizen/history.md`. **Three findings that change the rest of this plan:***
+
+4. ***The word targets in the Stage C table are wrong, and C1 is the evidence.*** *`cobb`
+   re-measured mechanically (repeated-5-gram scan, not impression): **under 200 w of cross-line
+   restatement remained** in a 5,728-w file, most of it class-2 mechanism that must repeat. Its
+   verdict — `teco.md`'s editorial floor is **~5,200–5,250 with every rule intact**; the file is
+   ~60 distinct rules at ~85 w each and stopped being narrative after pass 1. **Set no word target
+   for C2–C6 before that unit's own inventory.** §1's original 25–45% estimate was calibrated on
+   narrative density these files no longer carry post-Stage-B. Per §7, a file above target with
+   every rule intact passes — the band moves, not the file.*
+5. ***Pass 2's characteristic defect differs from pass 1's: a rule stated twice **on purpose**.***
+   *C1's one major was cutting "delegate wide searches to `Explore`" from step 1 as a duplicate of
+   the `Explore` routing row — but the row routes *someone else's unit*, while the step-1 sentence
+   governed *teco's own orientation reads*. Same words, two decision points, two different actors.
+   **The pass-2 test is not "is this said twice" but "is it needed twice."** Ask per occurrence:
+   which decision point loses it, and does the agent stand there? Two lesser instances confirmed
+   the shape — a trailing clause that was a scope **extender** rather than a second why, and a
+   routing row whose reminder existed to block an inference the row itself invited.*
+6. ***Below the editorial floor the only lever is structural, and it is outside this plan.***
+   *`teco/kaizen/plan.md` **K-016** (split rare-path rules into an on-demand
+   `coordination-techniques.md`) now carries C1's measurement. Caveat recorded there: a
+   **reactive** protocol can move only its mechanics, never its trigger — the agent must recognize
+   the trigger to know to load the file. A later Stage C unit that hits the same floor routes to
+   K-016-style progressive disclosure, not to cutting rules to reach a number.*
+
+*Declined deliberately: ~115 w of further trims `cobb` named post-lint. Shipping them would mean
+unreviewed edits for a ~2% gain against a floor just certified, and one touches the commit-grant
+paragraph — pass 1's regression site, which must not be re-edited inside the unit whose lint has
+already run. Available to a future unit under its own gate.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 

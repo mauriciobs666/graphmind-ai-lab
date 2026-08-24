@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-21
+> Last reviewed: 2026-08-24
 
 ## Active
 
@@ -29,6 +29,17 @@
 - **Notes:** the same analysis's distillation-side counterweight — apply §5's "every session pays
   for it" bar more aggressively when the suggested home is teco's always-loaded prompt — belongs
   to `cobb`'s procedure, worth raising in the same pass.
+- **2026-08-24 (C1 pass-2 lint, `cobb`) — K-016 is now the *only* remaining lever.** Prompt-waste
+  C1 passes 1+2 took `teco.md` 5,948 → 5,343 w by editorial means (class 5/6/7). A mechanical
+  repeated-phrase scan over the result finds well under 200 w of cross-line restatement left, and
+  cobb can name only ~115 w of further defensible class-7 cuts. **The editorial floor with every
+  rule intact is ~5,200–5,250 w** — the file is ~60 distinct rules at ~85 w each, not a narrative
+  file. Anything below that requires moving rules out of always-loaded context, i.e. this item.
+  Caveat for whoever executes it: the strongest KB candidate by word count is the paused-unit /
+  stop-and-ask protocol (~380 w, step 4), but it is a **reactive** protocol — teco must recognize
+  the trigger to know to load the file, so only the mechanics (two-hop chain, resume addressing)
+  can move; the trigger and ledger shape must stay inline. Same test applies to the
+  misrouting/staleness rules already named above.
 
 > **K-015 — validate the dispatch-sizing rule on a real oversized plan — ✅ done 2026-08-21**
 > (moved to history.md). K-028's implementation (15+ files across `services.py`, `repository.py`,
