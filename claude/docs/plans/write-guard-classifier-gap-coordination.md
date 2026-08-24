@@ -40,9 +40,21 @@ resolved. Escalated to the stakeholder, who chose to investigate it (U8 below). 
 artifact (`claude/docs/reviews/_permission-test-scratch.md`) was cleaned up by the same `analyst`
 dispatch that created it.
 
-| U8 | `cobb` | `a3b4c777bd3b19360` | in-flight | `claude/docs/plans/permission-default-mode.md` (new topic slug) | `analyst` → — | — |
+| U8 | `cobb` | `a3b4c777bd3b19360` | delivered | `claude/docs/plans/permission-default-mode.md`, commit `773328c` | `analyst` → pending | 195k tok / 28 tool uses |
+| U9 | `teco` | — | delivered | Fixed pre-existing `audit-team.sh` FAIL (leaked home path) in `docs/reviews/write-guard-classifier-gap.md`, commit `773328c` | — (trivial fix, no gate) → — | — |
+| U10 | `analyst` | — | queued | Review of `permission-default-mode.md` | `analyst` → — | — |
 
-This coordination stays **open** pending U8's design and its review gate.
+**U8 summary:** precisely identifies the subagent parent-mode-inheritance mechanism
+(`bypassPermissions`/`acceptEdits` on the parent takes precedence and can't be overridden;
+`auto` on the parent forces `auto` on every dispatched subagent, discarding its frontmatter).
+Surfaces that all 13 agents' `permissionMode: acceptEdits` frontmatter is dead configuration —
+never consulted for a session's own start mode (only `--permission-mode`, `defaultMode` in a
+settings file, or the built-in default are), and irrelevant at dispatch time too since the parent
+is always itself in `auto`. Maps blast radius (no scope narrower than whole-session; global vs.
+project vs. per-launch) and the Bash-friction trade `acceptEdits` would introduce team-wide.
+**Recommends staying on `auto`, accepting the documented friction** — the same shape of
+conclusion as U7's rules-approach close-out. This coordination stays **open** pending U10's
+review gate and the stakeholder's final call.
 
 ## Notes
 - Existing `~/.claude/settings.json` blanket `Edit`/`Write`/`NotebookEdit` allow rule, flagged as
