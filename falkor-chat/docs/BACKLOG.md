@@ -1,124 +1,136 @@
 # Backlog — falkor-chat
 
-> Forward-looking backlog for the `falkor-chat` component (formerly `kaizen/plan.md`; item IDs
-> keep the `K-` prefix). Delivered work is logged in [`HISTORY.md`](./HISTORY.md); completed
-> plan documents stay in place and are marked `Status: archived` (root `AGENTS.md`);
-> `archive/` holds frozen documents from the previous convention.
-> Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to HISTORY.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-21 (**K-025 delivered ✅ ⇒ MILESTONE M3 ✅** — the `qa-engineer`
-> acceptance pass ran against commit `98a3cc8` on green baselines (server pytest **533 passed / 1
-> deselected**, query suite **256/256**, both re-confirmed afterwards) and returned **PASS with
-> parked, model-gated limitations, zero blocking defects**. **AC-1 / AC-5 / AC-6 verified by
-> execution**; the entire `access-request@v1` process flow verified (all three §4.3 paths reproduce
-> the plan's step table exactly); **AC-2b / AC-3 / AC-4 recorded model-gated, structurally
-> demonstrated** per D12-B / D7 — observed working in a live interactive run, with `pytest -m live`
-> red 2/2 on the AC-4 answer post, which is **K-027**, not a new defect. Two non-blocking findings:
-> **K-031** (new — no black-box read of a def's/snapshot's structure, making the create-only
-> split-brain undetectable; plus a one-step budget overshoot nit) and an addendum on **K-027** (the
-> prose-tool-call failure is not terminal-node-specific and has a cheap parse-layer mitigation).
-> Artifacts: `docs/archive/test-plans/m3-workflow-engine.md` + `docs/archive/test-reports/m3-workflow-engine-report.md`;
-> see HISTORY.md 2026-07-21. Prior review 2026-07-21: **K-024 delivered ✅ + analyst-gated twice** — the LLM-free
-> `kind:'process'` proof flow (`access-request@v1`) closes M3's last **build** item, so **K-025 (QA
-> acceptance) is unblocked** and is now all that stands between the component and **M3 ✅**. Units
-> U0–U5: deterministic `cmp` guards, typed `human`/`decision`/`wait` step handlers + two publish
-> invariants, start-without-trigger + the human-input REST endpoint, the proof def + offline
-> acceptance test, closeout. The central design claim held — **`_drive_loop` was never modified**
-> (SHA `71055f756280` throughout). New baselines: server pytest **523 → 533 passed / 1 deselected**;
-> query suite **241 → 256**. Gates: plan gate (request-changes → v2.1 approved), implementation gate
-> U0–U4 and re-gate U4b (both *approve with suggestions*, no blockers) →
-> `docs/archive/reviews/m3-process-flow.md`. Three items filed out of it: **K-028** (workflow timers),
-> **K-029** (converge the seed def sources), **K-030** (allow zero-transition defs). See
-> HISTORY.md 2026-07-21. Prior review 2026-07-19 (**K-022 Landing 2 delivered ✅ + analyst-gated** — trigger + triage proof
-> flow (U11–U14), the Defect-A guard thread-context seam fix, Defect-B tool-error survival, the U13
-> workflow seed; gate `approve with suggestions`, 0 blocker / 2 major (both closed) / 3 minor / 3 nit
-> → `docs/archive/reviews/m3-guard-thread-context-impl.md`. New server baseline **pytest 350 passed, 0
-> skipped**; query suite unchanged **241/241**. **U15 (qa-engineer acceptance = K-025) was NOT run** —
-> per decision D12-B the executor *mechanism* is proven and live-triage *reliability* is descoped to
-> the new **K-027**, which also carries the gate's minors/nits. K-023 (chat linkage) closed by the U11
-> trigger + Option-B `PRODUCED` wiring; K-024 is half-delivered (conversational triage flow seeded and
-> run; the LLM-free `kind:'process'` flow not built). See HISTORY.md 2026-07-19. Prior review
-> 2026-07-12 — **K-022 amended:** analyst post-implementation review added to its
-> owner chain and done-condition — the team's first fully-gated coordinated run; see the
-> review-gate note on the item. Prior review 2026-07-09: **M3 — Workflow engine started: slice 1
-> delivered ✅** — K-020 (def
-> model in `reference`) + K-021 (snapshot materialization) landed via the teco-coordinated run,
-> see HISTORY.md 2026-07-09; new baselines **pytest 196 / query suite 193/193**. Full M3
-> decomposition (K-020…K-025) in `docs/archive/plans/m3-workflow-engine.md` Part A — canonical item text
-> lives there; compact copies below. **K-022 Landing 1 (offline executor + capabilities, U1–U10)
-> delivered ✅ + analyst-approved 2026-07-12** (§13 guard-language decision resolved; suites
-> 241/283 green; see HISTORY.md). Next on the critical path: **Landing 2 — the trigger + triage
-> proof flow (K-023/K-024) → K-025 QA** ⇒ M3 ✅. Prior: M2 GraphRAG complete ✅ 2026-07-08 (K-008 +
-> K-013 + K-014 + K-015, QA-accepted); M2.5 hardening still deferred: K-016/K-017/K-018 + a
-> channel-scoped retrieval read.) See the milestone map below.
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-050
 
-## Milestone-to-green map (architect plan, 2026-07-05)
-
-| Milestone | Reaches ✅ when | Items |
-|---|---|---|
-| **M1 — Chat core** ✅ | **Reached** — DoD closed: append path load-tested, hot reads PROFILEd (DESIGN §11.1/§11.2), request/response web UI de-staled | **K-011 + K-012** (delivered ✅) |
-| **M2 — GraphRAG** ✅ | **Reached (2026-07-08)** — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance, QA-accepted (K-015 PASS, zero defects) | **K-008 + K-013 + K-014 + K-015** (delivered ✅ → HISTORY.md) |
-| **M3 — Workflows** ✅ | **Reached (2026-07-21)** — def model + snapshot + executor + chat linkage, proven by one conversational + one business-process flow, **QA-accepted**: K-025 verdict **PASS with parked, model-gated limitations**, zero blocking defects (`docs/archive/test-reports/m3-workflow-engine-report.md`) | **K-020 ✅ + K-021 ✅** (slice 1) + **K-022 ✅ + K-023 ✅** (2026-07-19, Landing 1 + 2) + **K-024 ✅** (2026-07-21 — **both** proof flows) + **K-025 ✅** (QA = U15, 2026-07-21) ⇒ **M3 ✅**. K-027 (live-triage reliability), K-028/K-029/K-030 (filed out of K-024), **K-031 ✅** (filed out of K-025; delivered 2026-07-24 — def/snapshot structure read surface) and K-032 (CPG-style data-dependence overlay for publish-time static analysis) are follow-ups, **not** M3-green gates. |
-| **M2.5 — Hardening** *(deferred)* | Real auth, transport-level agent path, real-time push | **K-016 → K-017, K-018** |
-| **M3.5 — Web API Coverage** ✅ | **Reached (2026-07-29)** — FR-1..FR-10/AC-1..AC-6 wired into `web/` (defs viewer, inline run cue + detail panel, structured-input resume, participants list, ready-to-demo banner), **QA-accepted**: K-036 verdict **PASS with parked/non-blocking limitations**, zero blocking defects (`docs/test-reports/web-api-coverage-report.md`) | **K-036 ✅** (5 waves, 2026-07-28→2026-07-29) ⇒ **M3.5 ✅**. K-037 (`TRIGGER_DEF_KEY` graft bug + banner cosmetic) and K-038 (`refreshRunPanel` overlapping-poll-tick race) are follow-ups, **not** M3.5-green gates. |
-| **M4 — LLM provider & model configuration** ✅ | **Reached (2026-08-11)** — providers/models declared **once** in two hand-edited files (a pristine OpenCode `opencode.json` + falkor-chat's overlay), every LLM consumer resolving through **one** internal seam, each consumer able to name its own model or role, the resolved concrete model visible on the run's execution trace, and the four legacy per-provider/per-model env vars **replaced** — **QA-accepted** (both landings) with AC-2/AC-3 recorded model-gated (no cloud API key available), zero blocking defects (`docs/test-reports/llm-provider-config-report.md`, `docs/test-reports/llm-provider-config2-report.md`) | **K-042 ✅** (two landings — **L1**: FR-1..FR-6/FR-11..FR-15/FR-20, the `ModelGateway` seam, `transport.py`, both config files, the cutover, QA-accepted `20d0262`; **L2**: FR-7..FR-10/FR-16..FR-19 — roles, fallback chains, workspace override (closing finding B-1), trace recording, publish-time rejection, the dimension guard, QA-accepted `719870b` — one Major defect (D-2, a REST-layer fault-envelope gap) found and fixed same-session, `analyst`-gated `b3c3019`) ⇒ **M4 ✅**. Requirements `docs/requirements/llm-provider-config.md`; plan `docs/plans/llm-provider-config.md`; graph-side `docs/plans/llm-provider-config-graph.md`; coordination `docs/plans/llm-provider-config-coordination.md`. Three non-blocking follow-ups filed at close, none gating M4: **K-043** (`compose.yaml`/`Dockerfile` never verified against a real Docker build), **K-044** (whether an admin manual is wanted — open `tico` decision), **K-045** (FR-10's requirements text is stale against the shipped `failed`-with-cause behavior). |
-| **M5 — Ingestion pipeline & entity fusion** 🟡 | Documents (and agent-generated text) chunked, entity/relationship-extracted, and fused against existing knowledge at three confidence tiers (auto-merge / suggested-pending / confirm-reject-reconsiderable); ingested knowledge retrievable via the existing chat-grounding path **and** as a standalone knowledge base; a connected MCP agent can write ingested content as persistent memory | **K-050** 🟡 (chunking, extraction, fusion, MCP/REST write+read surface, chat-grounding integration). Requirements `docs/requirements/document-ingestion.md`; plan `docs/plans/document-ingestion.md`; graph-side `docs/plans/document-ingestion-graph.md` (not yet authored); ML `docs/plans/document-ingestion-ml.md` (not yet authored). |
-
-> ✅ **Scope decision — CONFIRMED (user, 2026-07-05).** "M2 green" = **functional GraphRAG** (the
-> narrow §12 roadmap DoD: embeddings + vector index + hybrid retrieval + agent participant +
-> `EMITTED`). Real auth and real-time push are **deferred to the M2.5 hardening track**
-> (K-016/K-017/K-018) — rationale: "long road before production." This is safe because the AI
-> participant is a **server-side responder** that posts as a configured Agent and needs no
-> per-request auth to function, so auth never blocks M2 green.
+> **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
+> changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
+> delivered item; `## Delivered` below is the index into it, not a summary of it. Design lives in
+> [`DESIGN.md`](./DESIGN.md), the query library in [`QUERIES.md`](./QUERIES.md). Completed plan
+> documents stay where they are, marked `Status: archived` (root `AGENTS.md`); `archive/` holds
+> frozen documents from the previous convention.
 >
-> The identity source-of-truth axis that used to gate K-016 is now **decided** (2026-07-05, user):
-> the `identity` graph is **authoritative (standalone)**, not an external-IdP projection — DESIGN §1.2.
-> K-016 (deferred track — not on any M2 path) implements auth *per* that decision; no user input pending.
-
-## Sequencing (critical path + parallelism)
-
-```
-Parallel wave 1 (start now):
-  K-011 (M1 load/PROFILE)   ─ independent (harness/docs, read-only on data)
-  K-012 (M1 web polish)     ─ independent (web/ only)
-  devops LM-Studio spike ─▶ K-008 gate (graph-dba) ─▶ K-008 impl (tdd)
-                                                            │
-                                                            ▼
-                                       K-013 (agent + EMITTED)  ◀─ needs K-008 + K-010 [done]
-                                                            │
-                                            ┌───────────────┴──▶ K-014 (web M2) ◀─ also needs K-012
-                                            ▼
-                                       K-015 (QA M2 pass) ◀─ needs K-008+K-013+K-014  ⇒ M2 ✅
-
-M1 ✅ = K-011 + K-012 — ACHIEVED (both delivered 2026-07-06).
-Deferred M2.5 (after M2-green): K-016 (auth) ─▶ K-017 (transport agent QA);  K-018 (real-time)
-K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touches), or standalone anytime.
-```
-
-- **Critical path to M2 green:** devops spike → K-008 gate → K-008 impl → K-013 → K-014 → K-015.
-- **Fully parallel with the K-008 chain:** K-011 (harness/docs) and K-012 (`web/`) — no shared files.
-- **Suite discipline:** only the graph-dba gates in K-008 and K-013 touch `QUERIES.md` / `test_queries.sh`
-  (raising the 126 baseline with enumerated assertions); K-011/K-012/K-014 are suite-neutral; K-015 is a QA overlay.
-
-## Locked M2 stack decisions
-
-> **M2 stack (embedding model/dim, agent LLM, runtime, VRAM, upgrade path) is locked in
-> `docs/DESIGN.md` §1.3** (decided 2026-07-04). Implemented in K-008/K-013.
-
-> `bootstrap_schema.sh` default is `EMBEDDING_DIM=1536` — **must** be run with `EMBEDDING_DIM=1024`
-> for any new workspace from K-008 on. (`start_server.sh` guidance defaults to 1536 too — fold the
-> 1024 note into both in the K-008 gate.)
+> **Milestone status is authoritative here**, not in DESIGN.md or any README.
+>
+> Status markers: 🔵 proposed · 🟡 in-progress · ✅ delivered (→ `HISTORY.md`) · ⚪ rejected/deferred.
+> Item IDs keep the `K-` prefix from the former `kaizen/plan.md`.
 
 ## Active
 
-> **Milestone M3 — Workflow engine, in progress.** Slice 1 (**K-020 + K-021**) delivered
-> 2026-07-09; **K-022 (executor, both landings) + K-023 (chat linkage)** delivered 2026-07-19;
-> **K-024 (both proof flows)** delivered 2026-07-21 → HISTORY.md. **All build items are done.**
-> Remaining to M3 ✅: **K-025 (QA acceptance = U15) — unblocked, not yet run**. **K-027**
-> (live-triage reliability) is a parallel follow-up track, explicitly *not* an M3-green gate per
-> decision D12-B; so are **K-028 ✅ (delivered 2026-08-21)**/K-029/K-030, filed out of the K-024
-> gates.
-> Canonical item text + slice-1 implementation plan: `docs/archive/plans/m3-workflow-engine.md`
-> (Part A = decomposition, Part B = slice 1). Compact copies below.
+**M5 — Ingestion pipeline & entity fusion** 🟡, the only item under construction, is **K-050**
+below. Its six implementation stages run out of `docs/plans/document-ingestion.md`, tracked in
+`docs/plans/document-ingestion-coordination.md`: Stages 1–4 (chunking, chunk embeddings +
+standalone search, extraction, fusion) are delivered and `analyst`-gated; **Stage 5**
+(chat-grounding integration, FR-2) is delivered with its gate in flight; **Stage 6** (the
+deferred hardening set — thread fan-out, batching/pooling) is the last one open. M5 reaches ✅ on
+a `qa-engineer` acceptance pass over the whole pipeline.
+
+Everything else open is a follow-up filed out of a closed milestone (`## Open follow-ups`) or the
+deferred M2.5 hardening track — neither is on the M5 path.
+
+### K-050 — Ingestion pipeline & entity fusion: chunk, extract, fuse, and serve as both chat grounding and a standalone knowledge base (🟡 in-progress — requirements `docs/requirements/document-ingestion.md`, plan `docs/plans/document-ingestion.md`, 2026-08-22)
+
+> **Why it exists.** Today falkor-chat's GraphRAG has exactly one knowledge source: chat messages,
+> embedded as they're posted. There is no path for ingesting knowledge from outside the chat itself,
+> even though the schema has carried a dormant, never-populated shape for exactly this
+> (`Document`-`[:HAS_CHUNK]`->`Chunk`-`[:ABOUT]`->`Entity`, plus a `Chunk.embedding` vector index,
+> bootstrapped since M2 — `docs/DESIGN.md` §5.1/§7.1, `docs/QUERIES.md:472`). K-050 finally
+> populates that scaffolding: documents (and agent-generated text, treated identically) are chunked,
+> entities/relationships are extracted from chunk text into real graph nodes/edges, and each
+> extracted entity is fused against what the graph already knows at one of three confidence tiers —
+> auto-merge, suggested-pending, or confirm/reject (with rejection reversible) — while conflicting
+> facts from different sources are always kept side by side with their own provenance, never
+> silently overwritten.
+- **Scope (FR-1..FR-14/AC-1..AC-10, plan §4 six stages).** Chunking (FR-13, a deterministic
+  size/overlap/boundary splitter — no LLM); extraction (FR-7a, LLM-based entity/relationship
+  extraction into `Entity` nodes + a new `RELATES_TO` fact edge, predicate carried as an opaque
+  property rather than an open-ended relationship-type vocabulary); fusion (FR-6/FR-8/FR-9/FR-10 —
+  a recommended `MatchSuggestion` node per candidate pair, mirroring the `WorkflowRun.status`
+  index-anchored pattern, rather than ever physically merging `Entity` nodes — FalkorDB has no
+  APOC-style node-merge procedure, and physical merge would also make FR-6's "keep both conflicting
+  facts" a separate mechanism instead of a structural guarantee); a new MCP/REST write+read surface
+  (FR-5: `ingest_document`/`ingest_documents`/`get_document`/`search_documents`/
+  `list_pending_matches`/`confirm_match`/`reject_match`/`recheck_match`); bulk ingestion (FR-11) and
+  full-source retention (FR-12, `Document.text` verbatim); and chat-grounding integration (FR-2 —
+  extending the existing `AgentResponder`/`EMITTED`-provenance retrieval path to also seed from
+  `Chunk` vectors, app-layer fan-out+merge, per the requirements doc's own decision log) alongside a
+  standalone `Chunk`-only search capability (FR-3), deliberately **not** unified into one search
+  index (FR-14 — the requirements doc explicitly does not require that).
+- **OQ-1/OQ-2/OQ-3 (requirements doc, explicitly left open there for design):** OQ-2 (where a
+  pending match surfaces) resolved to a **dedicated review surface** (`list_pending_matches`, MCP +
+  REST), not a chat post — a pending fusion decision has no natural channel/thread anchor and FR-14
+  already keeps ingested-content concerns separate from chat. OQ-3 (re-evaluating a rejected match)
+  resolved to **two** paths — automatic reopen to `pending` (never straight to `confirmed`) when a
+  later ingestion independently re-derives the same candidate pair, plus an explicit
+  `recheck_match` tool for an on-demand human/agent-forced recheck. OQ-1 (what "very-high
+  confidence" means) gets a **recommended default** (exact normalized-name+type match, zero
+  ML-confidence numbers, chosen because this pipeline has no calibration data yet — unlike the K-027
+  guard judge, which was calibrated against a golden set before being trusted) — flagged to
+  `data-scientist` to confirm or replace, not locked here.
+- **Two design axes delegated, not decided in the main plan (plan §0):**
+  1. **`docs/plans/document-ingestion-ml.md` (`data-scientist`)** — the extraction
+     technique/prompt/schema (FR-7a) and whether the OQ-1 default above is defensible for v1 or
+     needs semantic (embedding) matching to catch non-lexical synonyms fuzzy string matching can't.
+  2. **`docs/plans/document-ingestion-graph.md` (`graph-dba`)** — final schema for `MatchSuggestion`
+     (node vs. edge-property, indexes/constraints, RAM), the exact `Document`/`Chunk`/`Entity`/
+     `RELATES_TO` Cypher, the `Entity.name` full-text index DDL, and generalizing the `EMITTED`
+     provenance write/read (today `Message`→`Message` only, `QUERIES.md` §10.1) to also target
+     `Chunk` for FR-2.
+- **Owner chain:** `tico` (requirements ✅) → `architect` (plan ✅) + `graph-dba`/`data-scientist`
+  (the two notes above) → `analyst` (plan gate) → implementers per stage (plan §4: chunking/write
+  path → chunk embeddings/standalone search → extraction → fusion → chat-grounding integration →
+  batch hardening) → `analyst` re-gate → `qa-engineer`
+  (`docs/test-plans/document-ingestion.md` + `-report.md`). Coordinated by `teco`
+  (`docs/plans/document-ingestion-coordination.md`, not yet authored).
+- **Risks/RAM (rule 6):** `Chunk.embedding`'s vector index is the dominant new RAM line (same
+  empirical ~12.4 KB/vector-at-1024-dim shape as `Message.embedding`, `docs/DESIGN.md` §11) — no new
+  DDL needed (the index already exists, bootstrapped since M2), but ingestion is a materially new,
+  corpus-size-driven growth axis the existing per-workspace RAM budget did not account for. The
+  recommended fusion default deliberately adds **no** second vector index (`Entity.embedding`) —
+  reuses the existing `Message.text`-style RediSearch full-text mechanism instead — to avoid
+  doubling that growth axis; if data-scientist's note argues for semantic matching instead, that
+  RAM trade-off must be made visibly, not silently. Per-chunk extraction is capped (recommended 20
+  entities/relationships per chunk) to bound both LLM output and graph growth, mirroring the
+  existing `docs/DESIGN.md` §5.4 entity-fan-out mitigation.
+- **Test strategy:** full AC-1..AC-10 → test-altitude map in plan §5, plus chunking boundary-rule
+  unit tests, extraction-parser robustness tests (reusing the K-027-proven fence-tolerant JSON
+  parser rather than a bare `json.loads`), background-job failure isolation
+  (`Document.status` reflects a failed/partial pipeline rather than silently sticking at
+  `'processing'`), and `graph-dba`'s `test_queries.sh` baseline raise for every new Cypher shape.
+- **Done-condition:** all six implementation stages delivered and `analyst`-gated, `qa-engineer`
+  acceptance PASS (or PASS-with-parked-defects) on green baselines, DESIGN §5.1/§7 and this
+  component's docs updated in the same changes ⇒ **M5 ✅**.
+## Milestone-to-green map
+
+| Milestone | Reaches ✅ when | Items |
+|---|---|---|
+| **M1 — Chat core** ✅ | Reached 2026-07-06 | K-011, K-012 |
+| **M2 — GraphRAG** ✅ | Reached 2026-07-08 — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance; QA-accepted, zero defects | K-008, K-013, K-014, K-015 |
+| **M3 — Workflows** ✅ | Reached 2026-07-21 — def model + snapshot + executor + chat linkage, proven by one conversational and one business-process flow; QA-accepted (PASS with parked, model-gated limitations) | K-020, K-021, K-022, K-023, K-024, K-025 |
+| **M3.5 — Web API Coverage** ✅ | Reached 2026-07-29 — FR-1..FR-10/AC-1..AC-6 wired into `web/`; QA-accepted (PASS with parked limitations) | K-036 |
+| **M4 — LLM provider & model configuration** ✅ | Reached 2026-08-11 — providers/models declared once in two hand-edited files, every consumer resolving through one `ModelGateway` seam, per-consumer model or role, resolved model on the run trace, the four legacy env vars replaced; QA-accepted on both landings | K-042 |
+| **M5 — Ingestion pipeline & entity fusion** 🟡 | Documents (and agent-generated text) chunked, entity/relationship-extracted, and fused against existing knowledge at three confidence tiers (auto-merge / suggested-pending / confirm-reject-reconsiderable); ingested knowledge retrievable via the existing chat-grounding path **and** as a standalone knowledge base; a connected MCP agent can write ingested content as persistent memory | **K-050** 🟡. Requirements `docs/requirements/document-ingestion.md`; plan `docs/plans/document-ingestion.md`; graph-side `docs/plans/document-ingestion-graph.md`; ML `docs/plans/document-ingestion-ml.md`; coordination `docs/plans/document-ingestion-coordination.md`. |
+| **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
+
+Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
+`## Open follow-ups`.
+
+## Standing decisions
+
+- **"M2 green" = functional GraphRAG** (user, 2026-07-05) — embeddings + vector index + hybrid
+  retrieval + agent participant + `EMITTED`. Real auth and real-time push are deferred to the M2.5
+  track; rationale: "long road before production." Safe because the AI participant is a
+  **server-side responder** posting as a configured Agent, needing no per-request auth to function.
+- **The `identity` graph is authoritative (standalone)**, not an external-IdP projection (user,
+  2026-07-05; DESIGN §1.2). K-016 implements auth *per* that decision — no user input pending.
+- **The M2 model stack** (embedding model/dim, agent LLM, runtime, VRAM, upgrade path) is locked in
+  `docs/DESIGN.md` §1.3.
+- **`bootstrap_schema.sh` still defaults to `EMBEDDING_DIM=1536`** and **must** be run with
+  `EMBEDDING_DIM=1024` for any new workspace (`scripts/bootstrap_schema.sh:255-264` documents this
+  inline). `start_server.sh` already defaults to 1024.
+
+## Open follow-ups
+
+Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
@@ -278,32 +290,27 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 - **The change is two characters, in two places** — `>` → `>=` at `executor.py:410` and `:427`.
   Everything else about this item is ceremony, and the ceremony is the reason it was deferred out of
   an observability slice rather than the difficulty of the edit.
-- **Both sites are *inside* the SHA-locked `_drive_loop`** (`71055f756280`,
-  `docs/archive/plans/m3-process-flow.md` §3.1). Landing it therefore costs:
-  - a lock break + **re-lock ceremony**: recompute the SHA, then re-quote it in `falkor-chat/AGENTS.md`,
-    `docs/BACKLOG.md` (×2), `docs/HISTORY.md` (×2) — grep `71055f756280`, the line numbers drift;
-  - **frozen archive documents that must not be rewritten** — `docs/archive/plans/m3-process-flow.md`
-    (×4), `docs/archive/reviews/m3-process-flow.md` (×5),
-    `docs/archive/plans/m3-executor-coordination.md` (×3), `m3-process-flow-coordination.md`. These
-    are *historical records* asserting the SHA was unchanged throughout K-024. The re-lock has to be
-    expressed as *"as of K-033 the lock is `<new>`; archived records quote the pre-K-033 value"* —
-    i.e. the lock stops being a single grep-able constant. **Decide that framing before editing.**
+- **Both sites are *inside* the SHA-locked `_drive_loop`** (`71055f756280`, still live on the
+  tree — recompute with the DESIGN §6.2 recipe). Landing it therefore costs:
+  - a lock break + **re-lock ceremony**: recompute the SHA, then re-quote it everywhere it is
+    asserted. Scope it with `grep -rn 71055f756280` rather than a count here — the number only
+    grows, and it is now well past forty sites across plans, reviews and test plans;
+  - **records that assert the SHA was unchanged during their own work must not be rewritten** —
+    every `archived` plan/review that quotes it is a historical claim about its own delivery, true
+    when written. The re-lock has to be expressed as *"as of K-033 the lock is `<new>`; earlier
+    records quote the pre-K-033 value"* — i.e. the lock stops being a single grep-able constant.
+    **Decide that framing before editing**; it is the item's only real design question.
   - **test edits**: `tests/test_executor.py:142-158` (the pinned count 4 → 3, and its explanatory
     comment), plus a sweep of `tests/test_process_flow.py`'s step accounting and the
     `access-request@v1` `maxSteps: 24` headroom;
   - **behavioural blast radius**: every existing run's effective budget shrinks by one.
-- **Bundling is a PREFERENCE, not a precondition — and its premise is UNVERIFIED.** It would be
-  pleasant to land this alongside the next item that legitimately breaks the `_drive_loop` lock,
-  plausibly **K-027 item 2** (the terminal-node-must-post engine contract): one re-lock ceremony,
-  two fixes. But *"K-027 item 2 must break the lock anyway"* is an **assumption, never established**
-  — the lock covers `_drive_loop` **only**, and `_execute_step`, `_select_transition`, `_trace_step`
-  and `resume` sit **outside** it (`AGENTS.md`, executor-invariants block), so a terminal-post
-  guarantee might well be implementable at one of those seams. K-027 is itself **🟡 in-progress**
-  — slice A delivered 2026-07-24; items 2–5, **item 2 included**, remain open and unscheduled.
-  **K-033 therefore does not depend on K-027**: if no such item arrives, K-033 breaks
-  the lock on its own — the ceremony is the cost either way, and waiting only leaves the honest
-  `maxSteps + 1` prose sitting in six documents indefinitely, which is the cheap half of a permanent
-  divergence.
+- **There is no bundling opportunity left — settled 2026-08-25.** This item was filed hoping to
+  ride the next change that legitimately broke the `_drive_loop` lock, plausibly K-027 item 2 (the
+  terminal-node-must-post engine contract). K-027 closed 2026-08-21 and **item 2 shipped without
+  breaking the lock** — it was implemented at `_run_agent_node`, outside it, exactly as this item's
+  original scepticism predicted. K-033 now pays the full re-lock ceremony on its own, or the honest
+  `maxSteps + 1` prose stays in six documents indefinitely. That is the decision to make; nothing is
+  waiting on anything else.
 - **Also decide (part of the item, not a separate one):** whether the *park* path (OUTCOME B,
   `executor.py:415-421`) and the terminal path stay deliberately unchecked. They are unchecked today
   by design — a parked run cannot self-drive — and K-031's documentation says so explicitly, so
@@ -589,82 +596,9 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   once root-caused, a regression test proving the chosen guard rejects the offending shape before it
   ever reaches a graph write.
 
-### — Milestone M5 (Ingestion pipeline & entity fusion) — 🟡 IN PROGRESS —
+## Deferred — M2.5 hardening track
 
-### K-050 — Ingestion pipeline & entity fusion: chunk, extract, fuse, and serve as both chat grounding and a standalone knowledge base (🟡 in-progress — requirements `docs/requirements/document-ingestion.md`, plan `docs/plans/document-ingestion.md`, 2026-08-22)
-
-> **Why it exists.** Today falkor-chat's GraphRAG has exactly one knowledge source: chat messages,
-> embedded as they're posted. There is no path for ingesting knowledge from outside the chat itself,
-> even though the schema has carried a dormant, never-populated shape for exactly this
-> (`Document`-`[:HAS_CHUNK]`->`Chunk`-`[:ABOUT]`->`Entity`, plus a `Chunk.embedding` vector index,
-> bootstrapped since M2 — `docs/DESIGN.md` §5.1/§7.1, `docs/QUERIES.md:472`). K-050 finally
-> populates that scaffolding: documents (and agent-generated text, treated identically) are chunked,
-> entities/relationships are extracted from chunk text into real graph nodes/edges, and each
-> extracted entity is fused against what the graph already knows at one of three confidence tiers —
-> auto-merge, suggested-pending, or confirm/reject (with rejection reversible) — while conflicting
-> facts from different sources are always kept side by side with their own provenance, never
-> silently overwritten.
-- **Scope (FR-1..FR-14/AC-1..AC-10, plan §4 six stages).** Chunking (FR-13, a deterministic
-  size/overlap/boundary splitter — no LLM); extraction (FR-7a, LLM-based entity/relationship
-  extraction into `Entity` nodes + a new `RELATES_TO` fact edge, predicate carried as an opaque
-  property rather than an open-ended relationship-type vocabulary); fusion (FR-6/FR-8/FR-9/FR-10 —
-  a recommended `MatchSuggestion` node per candidate pair, mirroring the `WorkflowRun.status`
-  index-anchored pattern, rather than ever physically merging `Entity` nodes — FalkorDB has no
-  APOC-style node-merge procedure, and physical merge would also make FR-6's "keep both conflicting
-  facts" a separate mechanism instead of a structural guarantee); a new MCP/REST write+read surface
-  (FR-5: `ingest_document`/`ingest_documents`/`get_document`/`search_documents`/
-  `list_pending_matches`/`confirm_match`/`reject_match`/`recheck_match`); bulk ingestion (FR-11) and
-  full-source retention (FR-12, `Document.text` verbatim); and chat-grounding integration (FR-2 —
-  extending the existing `AgentResponder`/`EMITTED`-provenance retrieval path to also seed from
-  `Chunk` vectors, app-layer fan-out+merge, per the requirements doc's own decision log) alongside a
-  standalone `Chunk`-only search capability (FR-3), deliberately **not** unified into one search
-  index (FR-14 — the requirements doc explicitly does not require that).
-- **OQ-1/OQ-2/OQ-3 (requirements doc, explicitly left open there for design):** OQ-2 (where a
-  pending match surfaces) resolved to a **dedicated review surface** (`list_pending_matches`, MCP +
-  REST), not a chat post — a pending fusion decision has no natural channel/thread anchor and FR-14
-  already keeps ingested-content concerns separate from chat. OQ-3 (re-evaluating a rejected match)
-  resolved to **two** paths — automatic reopen to `pending` (never straight to `confirmed`) when a
-  later ingestion independently re-derives the same candidate pair, plus an explicit
-  `recheck_match` tool for an on-demand human/agent-forced recheck. OQ-1 (what "very-high
-  confidence" means) gets a **recommended default** (exact normalized-name+type match, zero
-  ML-confidence numbers, chosen because this pipeline has no calibration data yet — unlike the K-027
-  guard judge, which was calibrated against a golden set before being trusted) — flagged to
-  `data-scientist` to confirm or replace, not locked here.
-- **Two design axes delegated, not decided in the main plan (plan §0):**
-  1. **`docs/plans/document-ingestion-ml.md` (`data-scientist`)** — the extraction
-     technique/prompt/schema (FR-7a) and whether the OQ-1 default above is defensible for v1 or
-     needs semantic (embedding) matching to catch non-lexical synonyms fuzzy string matching can't.
-  2. **`docs/plans/document-ingestion-graph.md` (`graph-dba`)** — final schema for `MatchSuggestion`
-     (node vs. edge-property, indexes/constraints, RAM), the exact `Document`/`Chunk`/`Entity`/
-     `RELATES_TO` Cypher, the `Entity.name` full-text index DDL, and generalizing the `EMITTED`
-     provenance write/read (today `Message`→`Message` only, `QUERIES.md` §10.1) to also target
-     `Chunk` for FR-2.
-- **Owner chain:** `tico` (requirements ✅) → `architect` (plan ✅) + `graph-dba`/`data-scientist`
-  (the two notes above) → `analyst` (plan gate) → implementers per stage (plan §4: chunking/write
-  path → chunk embeddings/standalone search → extraction → fusion → chat-grounding integration →
-  batch hardening) → `analyst` re-gate → `qa-engineer`
-  (`docs/test-plans/document-ingestion.md` + `-report.md`). Coordinated by `teco`
-  (`docs/plans/document-ingestion-coordination.md`, not yet authored).
-- **Risks/RAM (rule 6):** `Chunk.embedding`'s vector index is the dominant new RAM line (same
-  empirical ~12.4 KB/vector-at-1024-dim shape as `Message.embedding`, `docs/DESIGN.md` §11) — no new
-  DDL needed (the index already exists, bootstrapped since M2), but ingestion is a materially new,
-  corpus-size-driven growth axis the existing per-workspace RAM budget did not account for. The
-  recommended fusion default deliberately adds **no** second vector index (`Entity.embedding`) —
-  reuses the existing `Message.text`-style RediSearch full-text mechanism instead — to avoid
-  doubling that growth axis; if data-scientist's note argues for semantic matching instead, that
-  RAM trade-off must be made visibly, not silently. Per-chunk extraction is capped (recommended 20
-  entities/relationships per chunk) to bound both LLM output and graph growth, mirroring the
-  existing `docs/DESIGN.md` §5.4 entity-fan-out mitigation.
-- **Test strategy:** full AC-1..AC-10 → test-altitude map in plan §5, plus chunking boundary-rule
-  unit tests, extraction-parser robustness tests (reusing the K-027-proven fence-tolerant JSON
-  parser rather than a bare `json.loads`), background-job failure isolation
-  (`Document.status` reflects a failed/partial pipeline rather than silently sticking at
-  `'processing'`), and `graph-dba`'s `test_queries.sh` baseline raise for every new Cypher shape.
-- **Done-condition:** all six implementation stages delivered and `analyst`-gated, `qa-engineer`
-  acceptance PASS (or PASS-with-parked-defects) on green baselines, DESIGN §5.1/§7 and this
-  component's docs updated in the same changes ⇒ **M5 ✅**.
-
-### — Deferred M2.5 hardening track (auth + real-time; not on any M2-green path) —
+Auth + real-time. Not on the M5 path; no scheduled start.
 
 ### K-016 — Real auth/tenancy replacing the hardcoded `get_context` seam (🔵 proposed — M2.5, deferred)
 
@@ -734,31 +668,21 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
 | **K-046** | Root `conftest.py`'s `_falkordb_reachable()` write-mode `GRAPH.QUERY` bug | 2026-08-16 | — |
 | **K-047** | `generate_report.py` rendering/branching test coverage | 2026-08-16 | — |
 
-## Recommended plan docs (author when each item is picked up — not yet created)
+## Plan docs still to author
 
-| Path | Scope |
-|---|---|
-| `docs/archive/test-plans/m3-workflow-engine.md` + `docs/archive/test-reports/m3-workflow-engine-report.md` | **Created ✅ 2026-07-21** — the K-025 M3 acceptance pass: risk-based plan (written before execution) + report (verdict **PASS with parked, model-gated limitations** ⇒ M3 ✅). |
-| `docs/archive/plans/m3-workflow-engine.md` | **Created ✅ 2026-07-09** — M3 decomposition (Part A, K-020…K-025) + slice-1 plan (Part B). Coordination log: `m3-workflow-engine-coordination.md`. |
-| `docs/archive/plans/m3-executor.md` | **Created ✅ 2026-07-10** — K-022: run/step-run executor + the §13 guard-language decision. §8 is the seeded triage def (kept in sync with the reverted `seed_workflows.sh`); §2.2 carries the D16 tool-error rule. Coordination log: `m3-executor-coordination.md`. |
-| `docs/archive/plans/m3-executor-landing2.md` | **Created ✅ 2026-07-12** — K-022 Landing 2 design patch: U11 trigger wiring, Option-B `PRODUCED` linking, the M-1 fault net. |
-| `docs/archive/plans/m3-process-flow.md` | **Created ✅ 2026-07-19, v2.1 approved 2026-07-20** — K-024's second half: the LLM-free `kind:'process'` proof flow (park-and-branch, the `cmp` guard family, typed step handlers, start-without-trigger + the input endpoint, the `access-request@v1` def in §4). Coordination log: `m3-process-flow-coordination.md`; gates: `docs/archive/reviews/m3-process-flow.md`. |
-| `docs/archive/plans/m3-guard-thread-context.md` | **Created ✅ 2026-07-15** — the Defect-A design (guard thread-context seam; ~40 lines, zero graph change, `_drive_loop` untouched by construction). |
-| `docs/archive/plans/m3-guard-calibration.md` | **Created ✅ 2026-07-16** — K-027 item 3: the judge-calibration protocol (D9 gate = false-advance ≤ 10% ∧ advance-recall ≥ 0.80; D10 small-n caveat mandatory). |
-| `docs/archive/plans/m3-capability-probe-ml.md` | **Created ✅ 2026-07-19** — the D13 fits-16GB Qwen3-4B-vs-Ministral-3B comparison + its run results (no model swap). |
-| `docs/plans/local-model-ram-budget-ml.md` | **Created ✅ 2026-07-18** — local-model RAM budget for the downgraded 16GB host (what fits alongside FalkorDB + the co-resident embedder). |
-| `docs/archive/plans/m2-graphrag.md` | K-008 re-scoped: embedding worker + vector-index-@1024 verification + hybrid retrieval read path. |
-| `docs/archive/plans/m2-agent-participant.md` | K-013: `EMITTED` provenance edge + LLM responder posting as the `Agent`. |
-| `docs/plans/m1-hardening-loadtest.md` | K-011: append-path load harness + hot-read PROFILE targets + per-workspace RAM budget. |
-| `docs/plans/m2-auth-tenancy.md` | K-016 (deferred): real auth replacing `get_context`, per the §1.2 identity-authoritative decision. |
-| `docs/plans/m2-realtime.md` | K-018 (deferred): Pub/Sub → WebSocket/SSE, resolving §13 Bolt-vs-RESP. |
-| `docs/plans/graphrag-eval-ml.md` | **Created ✅ 2026-07-10** — K-026 (M2.5-quality): retrieval + generation eval harness (golden set, recall@k/MRR, calibrated LLM-as-judge faithfulness). |
+Every other plan named by a delivered item now exists; this is what is left.
+
+| Path | For | Scope |
+|---|---|---|
+| `docs/plans/auth-tenancy.md` | K-016 (deferred) | Real auth replacing the `get_context` seam, per the §1.2 identity-authoritative decision. |
+| `docs/plans/realtime-push.md` | K-018 (deferred) | Pub/Sub → WebSocket/SSE, resolving DESIGN §13's Bolt-vs-RESP question. |
+
+> Both slugs were previously listed as `m2-auth-tenancy.md` / `m2-realtime.md`. Renamed here before
+> creation: root `AGENTS.md`'s filename grammar forbids a new document's basename beginning with
+> `m<digit>`, and neither topic *is* a milestone.
 
 ## Parking lot / ideas
 
-- **`Entity` extraction pipeline** (M3-adjacent) — build the `MENTIONS→Entity` corpus so the §6 hybrid query's entity
-  expansion becomes live (today it's an `OPTIONAL MATCH` no-op). Enables entity-anchored GraphRAG; watch the `Entity`
-  supernode risk (DESIGN §5.4).
 - Verify the K-009 GitHub Action goes green on first push (path-filtered `.github/workflows/falkor-chat.yml`; FalkorDB
   service container). Note the CI baseline echoes in its comments (75/92) predate K-007/K-010's 110/126 — the suites
   themselves are the source of truth. (K-019 fixes the README/DESIGN body numbers; the CI comments are separate.)
@@ -776,12 +700,15 @@ K-019 (doc sync) ─ rolls into the K-008 graph-dba gate (docs it already touche
   the plan review — uses `workflow-def-structure-read`. The filename grammar's family rule (*the same
   slug across several kinds **is** the family; a downstream document inventing a new slug is a
   defect*) is therefore broken by one member. Correcting it to `workflow-def-structure-read-impl`
-  costs **4 occurrences across 3 files** (this backlog, the component change log, and the M3
-  follow-ups coordination plan). Fold it into a change that already opens all three; it does not earn
-  a change of its own, and renames in this repo are forward-only by ruling.
-- DESIGN §13 remaining open questions — resolve as their milestones arrive: workflow guard expression language (M3),
-  real auth (K-016), message/embedding retention, cross-workspace analytics, Bolt vs RESP
-  for the gateway (K-018).
+  spans **four files** as of 2026-08-25 (this backlog, `docs/HISTORY.md`,
+  `docs/plans/m3-followups-coordination.md`, `docs/plans/workflow-republish-semantics.md`) — check
+  with `grep -rln k031-structure-read-impl docs/` rather than trusting that count. Fold it into a
+  change that already opens them; it does not earn a change of its own, and renames in this repo are
+  forward-only by ruling.
+- DESIGN §13 remaining open questions — resolve as their milestones arrive: real auth (K-016),
+  message/embedding retention, cross-workspace analytics, Bolt vs RESP for the gateway (K-018).
+  (The workflow guard expression language is **no longer** among them — resolved at DESIGN §6.1,
+  and §13 records it struck through.)
 - **WSL2 memory cap for the 16GB host** (parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
   default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
   likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +
