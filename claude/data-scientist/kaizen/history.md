@@ -2,6 +2,64 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-24 — Prompt-waste compression, Stage C5: two "this lab" attributives cut from the LLM-as-judge bullet
+- **What:** Unit C5 of `claude/docs/plans/prompt-waste-reduction.md` (with `tdd-engineer.md` and
+  `qa-engineer.md` as one commit). **2,098 → 2,083 w (−15, −0.7%).** Two edits, one pass.
+- **The file's citation habit (plan finding 9 — name it before cutting):** the **"this lab"
+  attributive parenthetical**. This is the only prompt on the team that cites the lab as the
+  *authority* for a promoted rule — a habit it has because its rules come from evaluation work done
+  here. `cobb` independently checked the four remaining `this lab` instances against that definition
+  and confirmed the habit inventory is **exhausted at two cuts**; none of the four qualifies.
+- **Removed (class 6, provenance):** from the "LLM-as-judge with its validity caveats" bullet,
+  "— a real, recurring pattern in this lab's guard judges" and "(a real hardware-driven pattern
+  here)". Both state where the lesson came from, not how to recognize the situation; both triggers
+  survive intact in the bolded lead-ins ("**For a judge deliberately biased toward one verdict**",
+  "**When the judge collapses onto the same model as the agent-under-test**"), and the recognition
+  aid "(e.g. bias-to-suspend / abstention-favoring by design)" was deliberately kept.
+- **Gate (b) — where the provenance now lives, in full:** this file's **2026-08-11** inbox-distillation
+  entry (bias-to-suspend judges needing class-conditional gating, promoted into the LLM-as-judge
+  bullet) and its **2026-08-21** `kaizen_team` distillation entry (`8f6e20a1` — the judge collapsing
+  onto the same model as the agent-under-test). Neither entry spelled out the two attributives'
+  specific content, so recording it here completes the trace: the bias-to-suspend shape recurs
+  across this lab's **guard judges** specifically, and the judge/agent model collapse is **forced by
+  hardware** — one local LM Studio model serving both roles — rather than chosen. The weak *prior*
+  the second parenthetical carried ("expect this here") is not orphaned by the cut: the "Model
+  selection" bullet two entries up already establishes that this lab runs local models via LM
+  Studio, and the trigger is directly observable to the agent designing the eval.
+- **Gate (a) inventory — all preserved:** the advisory-scientist identity and the never-implement
+  rule; the isolated-subagent contract (`AskUserQuestion` unavailable, return the sharp question);
+  all three standing modes and the `architect`/`analyst` altitude splits; every Core-expertise
+  bullet across the five sections, including the full `1/n`-vs-CI-width gate rule, the
+  report-each-probe-individually rule, the class-conditional-rates gating rule with its κ critique,
+  the split-the-self-preference-caveat rule, the `graph-dba` boundary, the Wilson-interval
+  convention with its anti-trigger parenthetical, and the perishable-facts rule in **both** its
+  places; "This lab's terrain"; all five "How you work" steps; the three deliverable kinds with
+  their exact paths, structures and verdict scale; the header-block instruction; all four
+  Guardrails including the write-guard scope and the interactive-commit grant with its full
+  never-list and delegated-subagent carve-out; the Cypher capture template and call line. Audit
+  check-8 tokens verified present after the edits. *(This file carries no `CPG:` line — correct; it
+  is not one of the six CPG-adoption agents.)*
+- **Considered and rejected — judged keeps, both upheld by the lint** (recorded in `kaizen/plan.md`):
+  "(e.g. 2-of-3 probes failing)" and "(still a legitimate rubric-following signal)" — both change
+  what the agent does; the perishable-facts rule stated in both "Model selection" and the
+  "No fabricated numbers" guardrail; and "You do **not** implement" in the opening paragraph vs. the
+  `Write`/`Edit` guardrail.
+- **One recorded rationale corrected by the lint.** The C5 inventory justified keeping the
+  perishability rule twice on the grounds that *a capability claim isn't a number, so the guardrail's
+  first sentence doesn't cover it*. That explains why the guardrail's second sentence exists but not
+  why it isn't redundant against the fuller statement in "Model selection". The keep survives on a
+  different basis — **two decision points**: model-selection time vs. claim-writing time, and a
+  deliverable can carry a capability claim with no model-selection step in sight. Corrected in
+  `kaizen/plan.md` so a later unit doesn't cut the clause after finding the stated reason weak.
+- **Residual after this unit: 31 w, all class-7 keeps; class-6 = 0 w.** `cobb`'s measurement. The
+  file is at its editorial floor.
+- **Verified:** gates (a)–(e) green. `./claude/scripts/audit-team.sh` **PASS**. `cobb` §7 lint:
+  **0 blockers, 0 majors, 0 minors, 0 findings introduced by the edits** — the cleanest of the three
+  files, with dimensions 1–6 clean across the board and enforcement parity independently confirmed
+  against the shared guard core. Orphan-phrase grep across the repo clean.
+- **Plan items:** none opened. Two judged-and-kept records and one rationale correction added to the
+  parking lot.
+
 ## 2026-08-23 — Prompt-waste compression, Stage B wave 1 (boilerplate sweep)
 - **What:** Applied the pilot-validated boilerplate compressions from
   `claude/docs/plans/prompt-waste-reduction.md` (§3 doctrine, Stage B), same shapes as the

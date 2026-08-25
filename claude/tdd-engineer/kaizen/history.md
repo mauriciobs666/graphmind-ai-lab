@@ -2,6 +2,52 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-08-24 — Prompt-waste compression, Stage C5: one class-5 cut; file certified at its editorial floor
+- **What:** Unit C5 of `claude/docs/plans/prompt-waste-reduction.md` (with `qa-engineer.md` and
+  `data-scientist.md` as one commit). **2,163 → 2,154 w (−9, −0.4%).** One edit, one pass.
+- **The file's citation habit (plan finding 9 — name it before cutting):** **incident
+  fingerprints.** This file carries no dates, no authority markers and no supersession trails
+  anywhere — its class-6 residual is literally zero. What survives instead is hyper-specific failure
+  nouns naming the exact case a promoted lesson came from. `cobb` independently scanned the whole
+  file and confirmed the habit inventory is **exhausted at one cut**.
+- **Removed (class 5, already on record):** the parenthetical "(one item in a list of several small
+  fixes)" from Workflow step 1's carried-finding branch. The originating incident is this file's
+  **2026-08-21 distillation entry** (entry `a3f1c9e2…`: a backlog-carried `analyst`-gate finding
+  already silently resolved by unrelated work) — and **that entry's own restatement of the promoted
+  rule already omits the parenthetical**, so the prompt and the promoted form now agree. It was also
+  narrowing the rule to batches, which the branch's lead phrase never did; the trigger ("a carried
+  finding from a backlog or coordination doc") is untouched.
+- **Gate (a) inventory — all preserved:** the red→green→refactor loop's four steps and its
+  fail-for-the-right-reason and never-refactor-on-red rules; all ten Principles including symmetric
+  fixture teardown, marker/tag gating over bare reachability checks, the positional-rule corpus
+  rule, and the shared-helper caller-risk rule; Workflow steps 1–5 with all three task-arrival
+  branches and all three baseline branches (greenfield / already red / can't run here); the CPG
+  check + freshness rule both branches; the verbatim three-form `CPG:` line contract with its
+  `not applicable` scoping clause; all four Guardrails including the write-guard deny-list and the
+  interactive-commit grant with its full never-list and delegated-subagent carve-out; the Cypher
+  capture template and call line. Audit check-8 tokens (`` `git add` ``/`` `git commit` ``,
+  "delegated subagent") verified present after the edit.
+- **Considered and rejected — judged keeps, all upheld by the lint:** the "double-fire or
+  idempotency bug" phrase in step 5 (looks like a fingerprint, but it names the *class* of bug a
+  reproduction test structurally cannot catch — generalising it makes the why circular); both
+  conventions sentences in "Idiomatic, clean production code" (they answer differently when a file
+  deviates locally — see **K-006**, opened because that non-equivalence is itself the defect); the
+  three separate "as a subagent you can't ask mid-run" fallbacks (`cobb` strengthened this from
+  three-decision-points to a **certification requirement** — `agent-maintenance` §4 check 3 obliges
+  *every* "ask" phrasing to carry its own carve-out, so thinning one is a regression, not a trim);
+  "(deliberately left escalating either way — genuinely unresolved, not a bug)" on the
+  `docs/BACKLOG.md` guard (stops the agent reporting the escalation as a misconfiguration); and the
+  near-duplicate brevity instructions "Announce each cycle briefly" / "Narrate the cycle compactly"
+  — cutting an anti-verbosity rule inside a verbosity-reduction plan is the wrong trade, and Stage D
+  of that same plan *adds* rules of this kind.
+- **Residual after this unit: 29 w, all class-7 keeps; class-6 = 0 w.** `cobb`'s measurement. The
+  file is at its editorial floor; the only remaining lever is structural.
+- **Verified:** gates (a)–(e) green. `./claude/scripts/audit-team.sh` **PASS**. `cobb` §7 lint:
+  **0 blockers, 0 majors, 0 findings introduced by the edit** (1 pre-existing minor → K-006, 1 nit
+  keep-listed). Orphan-phrase grep across the repo clean.
+- **Plan items:** **K-006 opened** (conventions precedence). Not fixed here — it is a rule change,
+  and bundling it would make this commit non-revertible as a pure waste-reduction change.
+
 ## 2026-08-23 — Prompt-waste Stage B wave 2: three boilerplate blocks compressed to pilot shapes
 - **What:** CPG-freshness clause, interactive-commit-grant bullet, and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B), including wave 2's uniform freshness form ("when a `teco`-issued brief states the graph's freshness, take it as given").
 - **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence + ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the freshness clause's "(2026-08-19)" date and "without re-deriving staleness yourself" restatement — this file's 2026-08-19 freshness-centralization entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence: "**As a delegated subagent** (spawned via `Agent`/`Task`)…").

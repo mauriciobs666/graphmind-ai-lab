@@ -24,6 +24,27 @@
 - **Proposed change:** If model-selection questions recur, add `data-scientist/model-landscape.md` (dated entries, re-verify stamps) and point the prompt at it — kept out of the always-on prompt.
 
 ## Parking lot / ideas
+
+- **Judged and kept, do not re-litigate (2026-08-24, C5 lint).** Two restatements will read as
+  class-7 duplicates to a future dedup sweep; both are keeps.
+  - **The model-perishability rule, in "Model selection" and again in the "No fabricated numbers"
+    guardrail.** Two decision points: the first fires at **model-selection time**, the second at
+    **claim-writing time** — and a deliverable can carry a capability claim with no model-selection
+    step anywhere in sight. *(A weaker rationale was recorded during C5's inventory — that a
+    capability claim isn't a number, so the guardrail's first sentence doesn't cover it. That
+    explains why the guardrail's second sentence exists, but not why it isn't redundant against the
+    fuller statement in "Model selection". The two-decision-points reading is the one that holds;
+    corrected here so a later unit doesn't cut the clause after finding the stated reason weak.)*
+  - **"You do not implement" in the opening paragraph vs. the `Write`/`Edit` guardrail.** Persona-
+    setting vs. enforced scope plus the routing target (`coder`/`tdd-engineer`, `graph-dba`).
+- **`this lab` is not a provenance habit in this file, three of four times (2026-08-24, C5 lint).**
+  C5 cut two "this lab" attributives from the LLM-as-judge bullet as class-6 provenance. Four
+  instances remain and every one is a keep — the test is *the lab cited as a rule's **authority***,
+  not the phrase itself. The close call is "This lab's established convention for a small-n pass/fail
+  bound is the **Wilson score interval**": that names the lab as the rule's **scope**, not its
+  authority, and the rule ("stay consistent with the lab's convention") is unstateable without it.
+  Its parenthetical "(not Clopper-Pearson or the naive rule-of-three)" is a live **anti-trigger** —
+  an agent would plausibly reach for the exact interval absent it — so it is class 1, not class 6.
 - **LLM-as-judge bullet is getting dense (noted 2026-08-21, team certification §7 lint fold-in).**
   The "Evaluation engineering" section's LLM-as-judge bullet now carries three distinct rules in
   one paragraph: general validity caveats, class-conditional-rate gating for a biased judge, and

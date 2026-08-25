@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-24 — Prompt-waste compression, Stage C5: three cuts, one of them a staleness fix against the repo-wide filename grammar
+- **What:** Unit C5 of `claude/docs/plans/prompt-waste-reduction.md` (with `tdd-engineer.md` and
+  `data-scientist.md` as one commit). **2,094 → 2,071 w (−23, −1.1%).** Three edits, one pass.
+- **The file's citation habit (plan finding 9 — name it before cutting): the doc-convention override
+  clause and its exception — and it turned out to be a *certified keep*.** The habit-first method
+  therefore produced almost no inventory here, which is itself the finding this unit contributes
+  (see the plan's finding 12). The file's real residual comes from its **phase structure** instead:
+  a four-phase loop deliberately restates cross-cutting rules at each phase where they fire.
+- **Removed:**
+  1. **(class 6)** the script filename from the destructive-ops guardrail — "(A harness `PreToolUse`
+     hook — `qa-engineer/hooks/guard-destructive-ops.sh` — backstops this…)" → "(A harness
+     `PreToolUse` hook backstops this…)". Implementation provenance the agent cannot act on.
+     Enforcement parity survives: `agent-maintenance` §4 item 4 requires the hook be *described*,
+     not named, the frontmatter remains the greppable ground truth, and `audit-team.sh` checks the
+     frontmatter path and never the body. `tdd-engineer.md`, `data-scientist.md`, **and this file's
+     own second hook bullet** all already describe without naming.
+  2. **(class 7)** the second hook bullet's trailing "— this hook never escalates, it only ever
+     skips a redundant prompt on the two paths that are always yours" → ". This hook never
+     escalates." The cut clause restated the bullet's own bolded lead. Gate (b): the removed wording
+     is already on record **verbatim in this file at the 2026-08-21 enforcement-parity entry**
+     ("this hook only ever skips a redundant prompt, it never escalates").
+  3. **(staleness, and a deliberate rule change — see below)** ", or the component's convention"
+     from phase 4's test-report path.
+- **On edit 3 — this was a rule change, not compression, and it was flagged as such before the
+  lint.** A report filename **is** filename grammar, which root `AGENTS.md` fixes repo-wide
+  (`<component>/docs/<kind>/<topic-slug>[-<role>].md`, closed role set including `-report`, family
+  rule 2 binding the report's slug to the plan's) and which **this prompt already states twice** is
+  not component-negotiable. The clause predates that hardening
+  (`docs/reviews/doc-reference-convention.md` N2a/m17) and contradicted it from 14 lines above. Read
+  as a rule diff: the rule went from "path P, or whatever the component does" to "path P" — strictly
+  narrower, and the removed half was never validly exercisable. `cobb`'s re-read found **two further
+  effects, both beneficial and neither anticipated**: it also resolved a second intra-file
+  contradiction (the manual-verification paragraph already stated the report path as an absolute, so
+  pre-edit the file disagreed with itself across 31 lines *in addition* to the phase-2/principle
+  contradiction), and it aligned the prompt with root `AGENTS.md` where it had previously conflicted.
+  It is a deletion, so the commit still reverts cleanly.
+- **One tension it creates, logged where it belongs, not here:** the removed clause was the only
+  textual license for five non-conforming filenames already sitting in
+  `falkor-chat/docs/test-reports/`, while the agent is separately told to learn from the corpus. The
+  prompt is now the correct side, and the case those files represent (a second run of one test plan)
+  is answered by root `AGENTS.md` collision rule 5, which is auto-loaded — so no words were needed.
+  Recorded in `kaizen/plan.md`'s parking lot as a corpus item for whoever next reconciles
+  `falkor-chat/docs/`.
+- **Gate (a) inventory — all preserved:** the four-phase loop (REASON/PLAN/EXECUTE/REPORT) with
+  every bullet; the `tdd-engineer` and `analyst` boundary statements; the whole manual-verification
+  paragraph including the match-the-manual's-size rule and the `analyst`-owns-the-factual-claims
+  boundary; the doc-convention override **in both places, with its exception intact**; the test-plan
+  and test-report structures and the `TP-NNN` ↔ report traceability contract; both "Open the
+  document with the header block" instructions; the verbatim three-form `CPG:` line contract with
+  its `not applicable` scoping clause; all six Principles; Workflow steps 1–5; all six Guardrails
+  including both hook descriptions, the never-mutate-the-environment rule with its subagent
+  fallback, and the interactive-commit grant with its full never-list and delegated-subagent
+  carve-out; the Cypher capture template and call line with "(defects belong in the test report, not
+  here)". Audit check-8 tokens verified present after the edits.
+- **Considered and rejected — judged keeps, all upheld by the lint** (full reasoning recorded in
+  `kaizen/plan.md` so no future sweep re-litigates them): the m17-certified doc-convention override
+  pair; the environment-mutation rule + subagent fallback stated in both phase 3 and Guardrails (the
+  strongest candidate at 22 w, and protected by `agent-maintenance` §4 check 3); "Never report a
+  pass you didn't observe" vs. "never invent a passing run" (the one genuine same-moment duplicate
+  in the file — kept because anti-fabrication is the last category to thin for 7 words); "Match the
+  component's existing framework…" vs. "Match the project"; the enumerated destructive shapes in the
+  hook parenthetical; and "(discover them — `pytest` + the `server/tests/` layout in falkor-chat)"
+  — plan finding 10 does **not** fire on it (no standing self-refresh instruction, no rot history,
+  and this agent is project-scoped, not user-scoped; `cobb` re-verified the fact is current).
+- **Residual after this unit: 40 w, all class-7 keeps; class-6 = 0 w.** `cobb`'s measurement — the
+  first file in this plan to land **above** the 22–34 w floor band, and the cause is structural
+  rather than residue (see the plan's finding 12). Two accuracy nits noted-not-fixed, in
+  `kaizen/plan.md`.
+- **Verified:** gates (a)–(e) green. `./claude/scripts/audit-team.sh` **PASS**. `cobb` §7 lint:
+  **0 blockers, 0 majors, 0 findings introduced by the edits** (2 pre-existing minors → K-005/K-006,
+  2 nits recorded). Orphan-phrase grep across the repo clean.
+- **Plan items:** **K-005 and K-006 opened.** Neither fixed here — one is a rule change, the other a
+  restructure; bundling either would make this commit non-revertible as a pure waste-reduction change.
+
 ## 2026-08-23 — Prompt-waste Stage B wave 2: three boilerplate blocks compressed to pilot shapes
 - **What:** CPG-freshness clause, interactive-commit-grant bullet, and learning-capture intro/tail compressed to the pilot-validated wordings in `architect.md`/`coder.md` (`claude/docs/plans/prompt-waste-reduction.md` v4, §3 doctrine + Stage B), including wave 2's uniform freshness form ("when a `teco`-issued brief states the graph's freshness, take it as given").
 - **Removed (class 5/6, already on record):** the grant's "same as before. Stakeholder decision, 2026-08-21 — see `kaizen/history.md`" — this file's 2026-08-21 grant entry; the tail's inbox-replacement sentence + ", exactly like the old inbox was" — this file's 2026-08-21 inbox-deletion entry; the freshness clause's "(2026-08-19)" date and "without re-deriving staleness yourself" restatement — this file's 2026-08-19 freshness-centralization entry; the intro's ":Agent node it's `PRODUCED`-linked to" mechanics restatement (mechanics live in the Cypher template below); the grant parenthetical's "— not spawned via `Agent`/`Task` as an isolated delegate" (moved into the carve-out sentence).

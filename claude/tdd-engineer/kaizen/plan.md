@@ -8,10 +8,30 @@
 
 | ID | Added | Priority | Status | Summary |
 |-------|------------|----------|--------|---------|
-| _(none active)_ | | | | All tracked items resolved — see Done/Deferred below and parking lot. |
+| K-006 | 2026-08-24 | low | 🔵 | "Idiomatic, clean production code" states two conventions rules with no precedence between them. See below — surfaced by the C5 prompt-waste lint, deliberately not bundled into it. |
 
 > Done: K-001, K-002, K-004, K-005 (2026-06-05) — see history.md.
 > Deferred: K-003 (2026-06-05) — keep tools unconstrained for flexibility; see history.md.
+
+### K-006 — The conventions bullet never says which convention wins
+- **Status:** 🔵 proposed
+- **Priority:** low — an ambiguity, not a gap; both readings produce reasonable code.
+- **Rationale:** The Principles bullet "**Idiomatic, clean production code**" opens with "Follow the
+  language and project conventions you observe" and closes with "Match the surrounding code's
+  style." These answer *differently* when the file being edited deviates locally from the project
+  norm — and that is a decision point the agent stands at on essentially every edit. The C5
+  compression sweep flagged the pair as a class-7 duplicate and kept it precisely because the two
+  sentences are not equivalent; the lint's sharper reading is that the non-equivalence is the
+  defect. It is an **ambiguity finding wearing class-7 clothes**, which is why a dedup sweep would
+  never fix it — the sweep's only available move is to delete one, and deleting either silently
+  picks a winner.
+- **Proposed change:** state the precedence in one sentence, e.g. "Follow the language and project
+  conventions you observe; where the file you're editing deviates locally, match the file, not the
+  project norm — a mixed-style file is worse than either style."
+- **Provenance:** surfaced by `cobb`'s §7 lint during C5 of `claude/docs/plans/prompt-waste-reduction.md`.
+  **Pre-existing, not introduced by C5.** Deliberately *not* folded into that commit: it is a rule
+  **change**, and bundling it would make the commit non-revertible as a pure waste-reduction change,
+  against §4.0's rollback contract.
 
 ### K-003 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose to keep `tools` unconstrained for now.

@@ -165,7 +165,7 @@ Both Stage B observation windows now run concurrently.*
 | C2 | `tico.md` | 3,627 w | **done: 3,503 w** (one pass) | Ran as a single pass — the inventory found ~no class-7 duplication. Also un-staled Mode 3's commit rule against K-009 |
 | C3 | `analyst.md` | 2,569 w | **done: 2,473 w** (one pass) | Evidence-traps list stayed (class 3/4 payloads); trims were provenance and restatement. **Measured at its editorial floor** — residual class-6/7 inventory across the whole file is under 25 w. Structural lever routed to `analyst` K-003 |
 | C4 | `security-expert.md` + `devops.md` | 2,437 + 2,212 w | **done: 2,357 + 2,110 w** (one pass) | Both cuts were incident/origin provenance, not rules. `devops`'s repo-specific orientation example **deleted on its third rot** rather than refreshed a third time. **Both measured at their editorial floor** — residual 22 w each. One pre-existing MAJOR routed to `security-expert` K-005 rather than bundled |
-| C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | ~2,200 w each | after inventory | |
+| C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | 2,163 + 2,094 + 2,098 w | **done: 2,154 + 2,071 + 2,083 w** (one pass) | Five edits; class-6 residual now **zero in all three files**. One was a deliberate rule change — `qa-engineer`'s test-report path no longer offers ", or the component's convention", which the same file twice calls non-negotiable. **All three at their editorial floor**; `qa-engineer` is the first file to land *above* the floor band, for a structural reason. Three pre-existing minors routed to `tdd-engineer` K-006 and `qa-engineer` K-005/K-006 rather than bundled |
 | C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
 
 Serialized or in review-gated pairs — never two units editing one file.
@@ -182,6 +182,13 @@ any candidate touches an **audit-enforced token** (check 8's `git add`/"delegate
 `teco`'s roster, the `CPG:` line contract) **or a grant/authority clause**. Under this rule C1
 correctly ran as two passes (18 dedup edits, one touching the commit grant) and C2 correctly ran
 as one (2 candidates, neither near a token); C3–C6 decide from their own inventories.
+
+*Clarified at C5: "**more than 5 candidate cuts**" means **recommended** cuts, not raw candidates
+surfaced.* A candidate that survives the finding-5 test is a **judged-and-kept**, not a cut — it
+consumed judgment but produced no edit, and the split exists to isolate *edits*. C5's sweep raised 7
+raw candidates and recommended 0, so the rule did not fire; had the count been read raw, C5 would
+have split for zero edits. State both numbers in the unit record so the margin is visibly tested
+rather than assumed.
 
 **Method warning — an n-gram scan is not a class-7 detector.** Used at C2 and it *inverts*:
 prompt duplication is paraphrase-level by construction (one author restating one rule in each
@@ -331,6 +338,44 @@ findings:***
     **scope** above rot when deciding: the decisive argument here was not staleness but that
     `devops` is **user-scoped**, making a one-repo snapshot a false anchor in every other project,
     on the one agent whose whole remit is "don't generalize from another repo."*
+
+***C5 executed 2026-08-24 (6,355 → 6,308 w over three files: `tdd-engineer.md` 2,163 → 2,154,
+−0.4%; `qa-engineer.md` 2,094 → 2,071, −1.1%; `data-scientist.md` 2,098 → 2,083, −0.7%).** Five
+edits, one pass. Gates (a)–(e) green; `cobb` §7 lint **0 blockers, 0 majors, and zero findings
+introduced by the edits** — the third consecutive unit with no MAJOR of its own making, and the
+first where the lint found nothing at all attributable to the unit. Three pre-existing minors routed
+to `tdd-engineer` K-006 and `qa-engineer` K-005/K-006. Detail in the three agents'
+`kaizen/history.md`. **One edit was a deliberate rule change, declared to the lint as such rather
+than slipped through as compression:** `qa-engineer`'s test-report path dropped ", or the component's
+convention" — a report filename *is* filename grammar, which root `AGENTS.md` fixes repo-wide and
+which that prompt already states twice is not component-negotiable. Read as a rule diff it is
+strictly narrower and the removed half was never validly exercisable; `cobb`'s re-read found it also
+resolved a second intra-file contradiction nobody had cited. **Two findings:***
+
+11. ***Class 6 empties out. Past a habit-targeted pass, the editorial floor is a pure class-7
+    floor.*** *All three C5 files measured **0 w of class-6 residual** — no dates, no authority
+    markers, no supersession trails, no provenance attributives left anywhere. That is a stronger
+    result than C3 or C4, where residual was still mixed, and it sharpens finding 9's corollary into
+    a stopping rule: **name the file's citation habit, cut it, and class 6 is done.** What remains
+    after that is only class-7 paraphrase — the judgment-bound category, where the finding-5 test
+    ("needed twice", not "said twice") decides every case and the honest answer is usually keep. A
+    unit that reports zero class-6 residual has finished the cheap half of the work permanently, not
+    just for that pass. If C6 replicates it, the doctrine's §3 table can say so outright.*
+12. ***A file's residual tracks its **organizing structure**, not just its rule count — and when the
+    named habit turns out to be a certified keep, the structure is where to look next.*** *`qa-engineer`
+    landed at **40 w**, the first file above the 22–34 w band that findings 7/9 established across
+    four files (now seven: 22, 22, 25, 29, 31, 34, 40). The cause is not leftover residue. Its
+    four-phase loop deliberately restates cross-cutting rules — environment mutation, evidence
+    discipline, convention matching — at each phase where they fire; that is finding 5's "needed
+    twice" pattern operating three times in one file. **A prompt organized as a sequence of phases
+    will always carry more legitimate restatement than one organized as principles + workflow**, so
+    calibrate an inventory against the file's shape rather than one flat band. The same unit supplies
+    the companion half: `qa-engineer`'s named habit (its doc-convention override clause) was already
+    **certified as a required keep** by `docs/reviews/doc-reference-convention.md` m17 — *"or the
+    rewritten `:28` is contradicted from 26 lines below"* — so the habit-first method returned almost
+    nothing there. Finding 9 predicted the habit would account for most of the inventory; C5 shows
+    the habit can instead account for **none** of it, and that this is diagnostic rather than a
+    failed sweep. When the habit is a keep, stop scanning for provenance and read the structure.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
