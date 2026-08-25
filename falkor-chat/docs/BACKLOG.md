@@ -4,12 +4,14 @@
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
-> delivered item; `## Delivered` below is the index into it, not a summary of it. Design lives in
-> [`DESIGN.md`](./DESIGN.md), the query library in [`QUERIES.md`](./QUERIES.md). Completed plan
+> delivered item — **a delivered item is not kept here at all, not even as an index row**
+> (root `AGENTS.md`). Design lives in [`DESIGN.md`](./DESIGN.md), whose §1 is the standing
+> decision register; the query library in [`QUERIES.md`](./QUERIES.md). Completed plan
 > documents stay where they are, marked `Status: archived` (root `AGENTS.md`); `archive/` holds
 > frozen documents from the previous convention.
 >
-> **Milestone status is authoritative here**, not in DESIGN.md or any README.
+> **Status of an *open* milestone is authoritative here.** A closed one's record is
+> `HISTORY.md`; DESIGN §12's roadmap is the shape of the work, not a status board.
 >
 > Status markers: 🔵 proposed · 🟡 in-progress · ✅ delivered (→ `HISTORY.md`) · ⚪ rejected/deferred.
 > Item IDs keep the `K-` prefix from the former `kaizen/plan.md`.
@@ -99,34 +101,15 @@ deferred M2.5 hardening track — neither is on the M5 path.
 - **Done-condition:** all six implementation stages delivered and `analyst`-gated, `qa-engineer`
   acceptance PASS (or PASS-with-parked-defects) on green baselines, DESIGN §5.1/§7 and this
   component's docs updated in the same changes ⇒ **M5 ✅**.
-## Milestone-to-green map
+## Milestones still open
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M1 — Chat core** ✅ | Reached 2026-07-06 | K-011, K-012 |
-| **M2 — GraphRAG** ✅ | Reached 2026-07-08 — embeddings + vector index @1024 + hybrid retrieval + AI agent participant with `EMITTED` provenance; QA-accepted, zero defects | K-008, K-013, K-014, K-015 |
-| **M3 — Workflows** ✅ | Reached 2026-07-21 — def model + snapshot + executor + chat linkage, proven by one conversational and one business-process flow; QA-accepted (PASS with parked, model-gated limitations) | K-020, K-021, K-022, K-023, K-024, K-025 |
-| **M3.5 — Web API Coverage** ✅ | Reached 2026-07-29 — FR-1..FR-10/AC-1..AC-6 wired into `web/`; QA-accepted (PASS with parked limitations) | K-036 |
-| **M4 — LLM provider & model configuration** ✅ | Reached 2026-08-11 — providers/models declared once in two hand-edited files, every consumer resolving through one `ModelGateway` seam, per-consumer model or role, resolved model on the run trace, the four legacy env vars replaced; QA-accepted on both landings | K-042 |
 | **M5 — Ingestion pipeline & entity fusion** 🟡 | Documents (and agent-generated text) chunked, entity/relationship-extracted, and fused against existing knowledge at three confidence tiers (auto-merge / suggested-pending / confirm-reject-reconsiderable); ingested knowledge retrievable via the existing chat-grounding path **and** as a standalone knowledge base; a connected MCP agent can write ingested content as persistent memory | **K-050** 🟡. Requirements `docs/requirements/document-ingestion.md`; plan `docs/plans/document-ingestion.md`; graph-side `docs/plans/document-ingestion-graph.md`; ML `docs/plans/document-ingestion-ml.md`; coordination `docs/plans/document-ingestion-coordination.md`. |
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
 `## Open follow-ups`.
-
-## Standing decisions
-
-- **"M2 green" = functional GraphRAG** (user, 2026-07-05) — embeddings + vector index + hybrid
-  retrieval + agent participant + `EMITTED`. Real auth and real-time push are deferred to the M2.5
-  track; rationale: "long road before production." Safe because the AI participant is a
-  **server-side responder** posting as a configured Agent, needing no per-request auth to function.
-- **The `identity` graph is authoritative (standalone)**, not an external-IdP projection (user,
-  2026-07-05; DESIGN §1.2). K-016 implements auth *per* that decision — no user input pending.
-- **The M2 model stack** (embedding model/dim, agent LLM, runtime, VRAM, upgrade path) is locked in
-  `docs/DESIGN.md` §1.3.
-- **`bootstrap_schema.sh` still defaults to `EMBEDDING_DIM=1536`** and **must** be run with
-  `EMBEDDING_DIM=1024` for any new workspace (`scripts/bootstrap_schema.sh:255-264` documents this
-  inline). `start_server.sh` already defaults to 1024.
 
 ## Open follow-ups
 
@@ -633,40 +616,6 @@ Auth + real-time. Not on the M5 path; no scheduled start.
 - **Risks/RAM:** no graph RAM; Pub/Sub is transient. Publish *after* the guarded §4 write commits, never inside it (atomicity rule).
 - **Test strategy:** integration test of publish-on-write + a WebSocket client receiving it.
 - **Related work (client-side polling alternative):** `mcp-monitor/` (`mcp-monitor/docs/requirements/mcp-monitor.md`) has shipped as a separate, polling-based watcher that detects MCP tool-result changes and launches commands — a distinct, complementary approach to K-018's server-side push. K-018 remains its own open item.
-
-## Delivered
-
-> Full write-ups — what changed, when, which gates, which baselines — are in
-> [`HISTORY.md`](./HISTORY.md), one dated entry per item. This table is the index only; a
-> delivered item's body is not kept here.
-
-| Item | Title | Delivered | M |
-|---|---|---|---|
-| **K-008** | GraphRAG retrieval core — embedding worker, vector index @1024, hybrid retrieval read path | 2026-07-08 | M2 |
-| **K-011** | M1 DoD closeout — append-path load harness, hot-read PROFILE, per-workspace RAM budget | 2026-07-06 | M1 |
-| **K-012** | Web request/response UX polish ⇒ **M1 ✅** | 2026-07-06 | M1 |
-| **K-013** | AI `Agent` participant with `EMITTED` provenance | 2026-07-08 | M2 |
-| **K-014** | Web M2 — render agent replies + reader `isMention` highlighting | 2026-07-08 | M2 |
-| **K-015** | QA acceptance pass on M2 GraphRAG — PASS, zero defects ⇒ **M2 ✅** | 2026-07-08 | M2 |
-| **K-019** | Documentation-inconsistency sweep (stale test counts, §13 embedding drift, real-time wording) | 2026-07-05 | — |
-| **K-020** | Workflow definition model in `reference` | 2026-07-09 | M3 |
-| **K-021** | Snapshot materialization into `ws:{id}` on publish | 2026-07-09 | M3 |
-| **K-022** | Run + StepRun executor core — Landing 1 (offline executor + capabilities), Landing 2 (trigger, `PRODUCED` linking, fault net) | 2026-07-12 / 2026-07-19 | M3 |
-| **K-023** | Workflow ↔ chat linkage — `TRIGGERED_BY` + `PRODUCED` (D2); closed inside K-022 Landing 2 | 2026-07-19 | M3 |
-| **K-024** | Proof flows — one conversational (`triage@v1`), one business-process (`access-request@v1`) | 2026-07-19 / 2026-07-21 | M3 |
-| **K-025** | QA acceptance pass on M3 — PASS with parked, model-gated limitations ⇒ **M3 ✅** | 2026-07-21 | M3 |
-| **K-026** | GraphRAG retrieval + generation evaluation harness — QA-accepted, PASS | 2026-08-16 | M2.5-quality |
-| **K-027** | Live triage reliability — judge-parse robustness, must-post engine contract, judge calibration, golden-set expansion (26→85), Ministral re-probe, six carried gate findings | 2026-07-24 → 2026-08-21 | M3 follow-up |
-| **K-028** | Workflow timers / scheduled wakeups — QA-accepted | 2026-08-21 | M3 follow-up |
-| **K-031** | Def/snapshot structure read surface — makes the create-only split-brain detectable | 2026-07-24 | M3 follow-up |
-| **K-034** | Create-only re-publish is additive, not a no-op — topology-conflict gate + the doc-site sweep | 2026-08-01 | M3 follow-up |
-| **K-036** | Web API Coverage — defs viewer, run cue + detail panel, structured-input resume, participants, readiness banner ⇒ **M3.5 ✅** | 2026-07-29 | M3.5 |
-| **K-037** | `FALKORCHAT_TRIGGER_DEF_KEY` grafted `triage`'s steps onto `access-request@v1` — decoupled | 2026-07-30 | M3.5 follow-up |
-| **K-039** | `@mention`→`triage@v1` completed `done` posting zero replies — implicit `post_message` dispatch fallback + CI readiness signal | 2026-07-31 | M3.5 follow-up |
-| **K-041** | MCP `send_message` never scheduled the responder/workflow trigger | 2026-08-01 | M3.5 follow-up |
-| **K-042** | LLM provider & model configuration — two config files, one `ModelGateway` seam, per-consumer model choice ⇒ **M4 ✅** | 2026-08-11 | M4 |
-| **K-046** | Root `conftest.py`'s `_falkordb_reachable()` write-mode `GRAPH.QUERY` bug | 2026-08-16 | — |
-| **K-047** | `generate_report.py` rendering/branching test coverage | 2026-08-16 | — |
 
 ## Plan docs still to author
 

@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 8
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 9
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -15,6 +15,9 @@ together), not one file per commit. §4.0 and Stage B updated.*
 agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
 verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
 stakeholder-gated.*
+*Rev 9 (2026-08-25): the corrected rule applied everywhere it reaches — 13 kaizen plans
+(17,910 → 12,016 w, −32.9%) and `falkor-chat/docs/BACKLOG.md` (8,807 → 7,997 w). Stage G's units
+G3 pass 2 and G4.*
 *Rev 8 (2026-08-25, stakeholder ruling): a delivered item does not stay in `BACKLOG.md`, not even
 as an index row — its record is `HISTORY.md`, or the design surface that owns it when it is a live
 constraint rather than a record of work. Overturns a clause of G1's own amendment; root `AGENTS.md`
@@ -857,9 +860,10 @@ not coverage:
 
 **Units.**
 
-| G1 | The two-bullet amendment to root `AGENTS.md`. Rule change ⇒ its own commit (§4.0). |
-| G2 | `docs/BACKLOG.md` (root) — apply it: milestone-map cells to one or two sentences, `## Handoff` header retired or re-pointed at M8. ✅ **executed 2026-08-25**, −723 w; header deleted. |
-| G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. ✅ **executed 2026-08-25 — not a no-op**; measured, no file edited, see below. |
+| G1 | The two-bullet amendment to root `AGENTS.md`. Rule change ⇒ its own commit (§4.0). ✅ **executed 2026-08-25**, +192 w; **amended the same day** by stakeholder ruling — see G2 pass 2. |
+| G2 | `docs/BACKLOG.md` (root) — apply it. ✅ **executed 2026-08-25 in two passes**: −723 w under the original rule, then **9,021 → 1,397 w (−84.5%)** under the corrected one. |
+| G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. ✅ **executed 2026-08-25 — not a no-op**; measured in pass 1, applied in pass 2: **17,910 → 12,016 w (−32.9%)**. |
+| G4 | `falkor-chat/docs/BACKLOG.md` — the other module carrying an item-body backlog. Filed and executed 2026-08-25 on the same go-ahead: **8,807 → 7,997 w**. |
 
 **Not in scope.** Rewriting `HISTORY.md`, `reviews/` or any `archived` document; `QUERIES.md`;
 `falkor-chat/docs/BACKLOG.md` and `DESIGN.md` (already done — `0f48b8a`/`88bb71b`/`3e2b378`).
@@ -1021,6 +1025,36 @@ parking lot, no content dropped.
 **Not reached, still.** `coder` K-002's `**Notes:**` — four stacked dated `Update` clauses on an
 item that is **open** — survives untouched, as it must. Open-item note accretion needs its own rule
 and this plan is not writing one at its close.
+
+**G4 — `falkor-chat/docs/BACKLOG.md`, same go-ahead (2026-08-25).** 8,807 → 7,997 w (**−810,
+−9.2%**), and **the small number is the finding.** This backlog had *already* been compacted on
+2026-08-21 under the then-current rule: delivered bodies reduced to a 25-row `## Delivered` index,
+the whole file reordered so the live milestone came first. It was in the best state the old rule
+allowed. What the amended rule takes is exactly the residue that rule left behind — the index
+itself (25 rows), the five delivered milestone rows, and `## Standing decisions`.
+
+- **Gate (b):** all 25 `K-` ids confirmed in `falkor-chat/docs/HISTORY.md` before removal — the
+  2026-08-21 pass had already verified body-level coverage.
+- **`## Standing decisions` routed to nothing, and that was the check worth running.** All four
+  bullets restated `DESIGN.md` — §12 item 3, §1.2 (which the bullet cited itself), §1.3, §1.3+§7.1.
+  Exactly **one** fact was uncovered anywhere: `bootstrap_schema.sh`'s `1536` default is wrong for
+  every workspace in this system and `start_server.sh` already passes `1024`. That went to
+  `falkor-chat/AGENTS.md`'s bootstrap line — the ruling's "or the design" clause, and the only
+  thing in three sections that earned it.
+- **The milestone table keeps only what is open** (M5 🟡, deferred M2.5), renamed
+  `## Milestone-to-green map` → `## Milestones still open`.
+- **Two header claims corrected:** it advertised a `## Delivered` index that no longer exists, and
+  asserted milestone status is authoritative in the backlog "not in DESIGN.md or any README" — now
+  true only of an *open* milestone.
+
+**A process failure worth recording, because the mechanism is the one this plan keeps hitting.**
+My first attempt anchored a section deletion on the literal `## Delivered`, which also appears
+**inside the header sentence** describing that section — so the cut ran from the header to the
+plan-docs section and took 8,807 w down to 583. Caught immediately by reading the result, restored
+from `HEAD`, redone with `assert s.count(anchor)==1` on every anchor and the header rewritten
+*first* so it could not shadow a later one. This is finding 18's shape in a text editor: **an
+anchor that names a section also matches every sentence that talks about the section.** Nothing was
+lost — but the safeguard was reading the output, not the method, and the method is what got fixed.
 
 ## 5. Verification strategy
 

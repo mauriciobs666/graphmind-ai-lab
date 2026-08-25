@@ -76,7 +76,9 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 | `./scripts/verify_workflows.sh [<wsId>]` | Read-only check that `reference` and `ws:<id>` agree on both seeded defs — right version, right content, exactly one start key. Exit `0` = in sync, `1` = missing/divergent (prints what and the fix command). Never re-seeds; works with no uvicorn running. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
-embedding model before creating a workspace.
+embedding model before creating a workspace — **for this system that means `EMBEDDING_DIM=1024`**
+(DESIGN §1.3), so `bootstrap_schema.sh`'s default is wrong for every new workspace here and must be
+overridden explicitly. `start_server.sh` already passes 1024.
 
 **`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
 are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without
@@ -160,7 +162,7 @@ read the code, don't look for a copy here.
 | `falkor-chat/docs/SERVER.md` | The **server process** — layering, auth/tenancy seam, REST + MCP front doors, `server/` layout, testing hazards, model-resolution seam. (DESIGN §14 redirects here.) |
 | `falkor-chat/docs/test-reports/capacity-report.md` | All capacity measurements — per-message RAM, append throughput, hot-read plans, shard packing. DESIGN §11 keeps only the design-shaping numbers. |
 | `falkor-chat/docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
-| `falkor-chat/docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing. |
+| `falkor-chat/docs/BACKLOG.md` | Forward-looking backlog: open K-numbered items and the milestones still open. A delivered item is not kept there — its record is `HISTORY.md`. |
 | `falkor-chat/docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
 | `falkor-chat/docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here and nothing is un-archived; a document that freezes stays in place with `Status: archived` (root `AGENTS.md`). |
 | `scripts/bootstrap_schema.sh` | Source of truth for executable DDL — indexes, constraints, full-text/vector. |

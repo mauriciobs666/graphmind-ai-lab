@@ -5,6 +5,41 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — BACKLOG.md: delivered work leaves the backlog entirely (doc-only)
+
+**What:** `docs/BACKLOG.md` 8,807 → 7,997 w. Three sections removed under the amended
+module-documentation convention (root `AGENTS.md`): **a delivered item is not kept in a backlog at
+all, not even as an index row** — its record is `HISTORY.md`, or the design surface that owns it
+when the fact is a live constraint on the system rather than a record of work.
+
+- **The 25-row `## Delivered` index is gone.** It was created on 2026-08-21 (entry below) as the
+  right answer under the then-current rule; the rule changed. Gate check first: all 25 `K-` ids
+  (K-008 … K-047) confirmed present in this file before removal — the 2026-08-21 pass had already
+  verified body-level coverage, and K-023's one durable fact still sits in `DESIGN.md` §6.2 /
+  `QUERIES.md` §12.6.
+- **The milestone table keeps only what is open** — M5 🟡 and the deferred M2.5 track. M1/M2/M3/
+  M3.5/M4's rows carried delivery dates and QA verdicts that this file and `DESIGN.md` §12 both
+  already hold. Renamed `## Milestone-to-green map` → `## Milestones still open`.
+- **`## Standing decisions` is gone, and nothing was routed out of it** — all four bullets restated
+  `DESIGN.md`: "M2 green = functional GraphRAG" (§12 item 3), the identity-authoritative decision
+  (§1.2, which the bullet itself cited), the M2 model stack (§1.3), and the `EMBEDDING_DIM` rule
+  (§1.3 + §7.1). The **one** fact not covered anywhere — that `bootstrap_schema.sh`'s `1536`
+  default is wrong for every workspace here and `start_server.sh` already passes `1024` — was
+  written into `falkor-chat/AGENTS.md`'s bootstrap line, where an agent actually reads it.
+- **Header corrected on two counts:** it promised a `## Delivered` index that no longer exists, and
+  claimed milestone status is authoritative in the backlog "not in DESIGN.md or any README" — now
+  true only of an *open* milestone.
+
+**Why:** stakeholder ruling, 2026-08-25 — *"completed milestone/task related information [does not
+belong] along the backlog … in the future we will not even have a file for that (i.e. it will be
+moved to the graph, similar to the team kaizen)"*. Keeping finished work out of a backlog is what
+makes that migration a move rather than a cleanup. Same pass applied `docs/BACKLOG.md` (root) and
+the 13 `claude/*/kaizen/plan.md` files; full record in
+`claude/docs/plans/prompt-waste-reduction.md`, Stage G.
+
+**Not touched:** every open item (K-016…K-018, K-029…K-050) verbatim, `## Plan docs still to
+author`, and the parking lot.
+
 ## 2026-08-25 — K-050 M5 Stage 5: document ingestion — chat-grounding integration (FR-2)
 
 **What:** The fifth of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
