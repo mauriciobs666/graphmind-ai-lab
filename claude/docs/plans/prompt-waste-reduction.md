@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 4
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 5
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -10,6 +10,11 @@ stay. §3 table and Stage B block dispositions updated accordingly.*
 *Rev 4 (2026-08-23, stakeholder ruling): commit granularity is one **complete unit** per commit
 (all files the unit touched — prompts, kaizen histories, catalogs — landing and rolling back
 together), not one file per commit. §4.0 and Stage B updated.*
+
+*Rev 5 (2026-08-25): added Stage G — living-document compaction. Stages A–F bound the register
+agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
+verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
+stakeholder-gated.*
 
 Reduce verbosity at its two roots — narrative-laden agent prompts (the register the agents
 imitate) and accretion-friendly output conventions — without losing a single behavioral rule.
@@ -24,14 +29,17 @@ substantially (est. 25–45% per heavy file) with **zero rule loss**, verified p
 
 **In scope:** the 13 agent prompts (`claude/<name>/<name>.md`), the three shared context files
 (root `AGENTS.md`, `claude/AGENTS.md`, `falkor-chat/AGENTS.md`), small output-discipline additions
-to `architect.md`/`analyst.md`, one amendment to the review-accretion convention, and a durable
-ratchet guard in the `agent-maintenance` skill.
+to `architect.md`/`analyst.md`, **two** convention amendments (review accretion, Stage E pass 3;
+living-document compaction, Stage G), and a durable ratchet guard in the `agent-maintenance` skill.
 
 **Out of scope:** frontmatter `description` fields (routing contracts — touching them cascades
 into `claude/README.md`/roster updates for no waste win); on-demand knowledge bases
 (`falkordb-quirks.md`, `review-techniques.md`, etc. — fact-dense, loaded only when needed);
 `Status: archived` documents (immutable by convention); rewriting existing falkor-chat docs
-(history — only *future* output changes).
+(history — only *future* output changes). *Scope note (2026-08-25): `falkor-chat/docs/DESIGN.md`
+and `BACKLOG.md` were rewritten anyway, outside this plan (`3e2b378`, `0f48b8a`, `88bb71b`) —
+which is what surfaced Stage G. Those two instances are done; Stage G is the rule that stops them
+recurring, and its own G2/G3 units are the remaining instances.*
 
 ## 2. Findings this plan rests on (measured 2026-08-23, this session)
 
@@ -683,6 +691,83 @@ examples (`executor2.md` / `executor2-coordination.md`) already assumed role was
   calibration): executed by `cobb` against its own skill, ahead of Stages B–E.
 - Optional (decide at execution): a soft `audit-team.sh` word-count advisory (warn >2,500 w/agent,
   never fail) as the drift tripwire.
+
+### Stage G — Living-document compaction (the closeout ratchet)
+
+**The gap.** The module-documentation convention has a rule for how a document **freezes**
+(`Status: archived`, in place) and none for one that **never can**. Stages A–F fixed the register
+agents write in and the review genre; §1 scoped component documents out as history. But a living
+document is not history — it is re-read whole every session, and nothing in the convention ever
+takes weight out of one.
+
+**Measured 2026-08-25 (finding 20's corpus-first method — `git ls-files`, then per-file counts).**
+Root `AGENTS.md`'s convention section contains **15 additive/retentive verbs and 0 subtractive
+ones**; `grep -E 'prune|compress|remove|delete|shrink|concise|brief'` over it returns **0 hits**.
+The one mechanism that ever removed content from the live tree — "move it to `archive/` when the
+milestone closes" — was itself deliberately replaced by a status token. Correct for link
+integrity; nothing replaced its compaction effect.
+
+**The axis the convention is missing** — it treats these identically:
+
+| Kind | Examples | Growth |
+|---|---|---|
+| **Read-whole (living)** | `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md`, `QUERIES.md` | Must be bounded — it can never freeze |
+| **Read-by-lookup** | `HISTORY.md`, `reviews/`, closed `plans/`, `test-reports/` | Unbounded is **correct**; `falkor-chat/docs/HISTORY.md` at 3,481 lines is healthy |
+
+**Two independent instances, same cause, different location** — which is what makes this a
+convention gap rather than an authoring lapse. Closeout is additive, so weight lands wherever the
+closeout ritual happens to write:
+
+| | `falkor-chat/docs/BACKLOG.md` | `docs/BACKLOG.md` (root) |
+|---|---|---|
+| Accretes in | item **bodies** — 1,317 of 2,025 lines (65%), ~57 lines per delivered item | milestone-map **cells** — the M7 cell is ~500 w including a "superseding the … framing above" trail |
+| Stale current-state header | `## Active` claimed M3 in progress; M3 closed 2026-07-21 | `## Handoff — teco drives M2 (2026-07-18)`; the document is at M8 |
+| Fixed | `0f48b8a` + `88bb71b` (instances only) | not touched |
+
+Note the root backlog's **item** convention is the positive precedent — a delivered item is a
+compact bullet, ~10 lines. The rule below generalizes what it already does right, and closes where
+it leaks.
+
+**The amendment (root `AGENTS.md`, module-documentation convention).** Two bullets:
+
+1. **A living document is compacted at milestone close, not only appended to.** The documents read
+   whole to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md`, `QUERIES.md` — can
+   never freeze, so they never shed weight on their own; `HISTORY.md`, `reviews/` and closed
+   `plans/` are read by lookup and may grow without bound. At milestone close, in the same pass
+   that flips that milestone's documents to `archived`, **`teco`** reduces every delivered item in
+   the module's `BACKLOG.md` to **one index row** (id, title, date, milestone) and drops from the
+   living documents each section that now describes finished work — a "currently in progress"
+   header, a plan-doc row for a document that now exists, a delivered-ticket annotation.
+   **Verify present in `HISTORY.md` before deleting**: the closeout is a move, not a discard —
+   the same history-first gate Stage B–E used on prompts.
+2. **A milestone-map row says what the milestone is and when it landed.** Gate sequences, defect
+   trails and superseded framings are `HISTORY.md`'s.
+
+**Why it lands in the convention, not in `teco.md`** (finding 21): the rule binds every agent that
+closes a milestone or edits a living document, and `teco.md` is wrong for the other five.
+
+**Blast radius — the files already obeying the old convention** (finding 20: this is the first
+move, not the last). Living documents by size: `falkor-chat/docs/QUERIES.md` 2,412 ·
+`docs/BACKLOG.md` 816 · `falkor-chat/docs/DESIGN.md` 756 · `cypher-mcp/README.md` 750 ·
+`falkor-chat/docs/BACKLOG.md` 717 · `falkor-chat/docs/SERVER.md` 500 · 13 `claude/*/kaizen/plan.md`
+(21–224). `QUERIES.md` is **not** a target: it is a section-cited reference read by lookup, and it
+carries 2 delivered-narrative markers in 2,412 lines — already clean.
+
+**Units.**
+
+| G1 | The two-bullet amendment to root `AGENTS.md`. Rule change ⇒ its own commit (§4.0). |
+| G2 | `docs/BACKLOG.md` (root) — apply it: milestone-map cells to one or two sentences, `## Handoff` header retired or re-pointed at M8. |
+| G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. |
+
+**Not in scope.** Rewriting `HISTORY.md`, `reviews/` or any `archived` document; `QUERIES.md`;
+`falkor-chat/docs/BACKLOG.md` and `DESIGN.md` (already done — `0f48b8a`/`88bb71b`/`3e2b378`).
+
+**Gates.** (a) and (b) as written — for a convention edit, gate (a)'s inventory is the corpus grep
+above, and gate (b) is the per-item `HISTORY.md` check. (c)/(d)/(e) apply only to units touching a
+prompt or skill; G1–G3 touch none, so `cobb`'s §7 lint and `audit-team.sh` are informational.
+**Precondition unmet at filing:** §4.0 requires a clean tree and the working tree carries 12
+unrelated modified files. **Stakeholder-gated like Stage E** — this changes the convention every
+agent and tool loads.
 
 ## 5. Verification strategy
 
