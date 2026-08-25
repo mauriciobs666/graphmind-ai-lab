@@ -5,6 +5,62 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — BACKLOG.md restated as forward-looking: delivered bodies to an index, five stale claims fixed
+
+**What:** `docs/BACKLOG.md` had become a second change log. 1317 of its 2025 lines (65%) were the
+bodies of already-delivered items — each ending in a "see HISTORY.md" pointer and then narrating
+the implementation anyway. K-027 alone ran 315 lines with all five sub-items closed; K-034 kept its
+full pre-implementation blast-radius table of "thirteen shipped assertions [that] are falsified"
+three weeks after the sweep that corrected all thirteen. The same accretion had pushed K-050, the
+only in-progress item, to line 1746 of 2025.
+
+**Method (mirrors the 2026-08-24 DESIGN.md v1.0 pass):** restate in the present tense, split by
+kind, verify before deleting.
+
+- **Coverage check first.** Every delivered item's `HISTORY.md` coverage was confirmed before its
+  body was removed. 19 of the 20 largest have a dedicated dated entry. **K-023 has none** — it
+  shipped inside K-022 Landing 2 — so its one durable fact, the D2 `PRODUCED`-vs-`EMITTED`
+  disambiguation, was confirmed present in `DESIGN.md` §6.2 and `QUERIES.md` §12.6, both marked
+  "locked", with the Option-B delivery note in the K-022 Landing 2 entry here.
+- **Delivered bodies → a 25-row `## Delivered` index** (item, title, date, milestone). No `K-`
+  number was lost; the only identifiers that disappear are K-001/K-002/K-003/K-005, which occurred
+  solely as incidental cross-references inside removed bodies (two pointing at other components'
+  kaizen plans).
+- **Reordered** to Active → milestone map → standing decisions → open follow-ups → deferred M2.5 →
+  Delivered → plan docs → parking lot, so the live milestone is first rather than 86% down.
+- **Header block** conformed to root `AGENTS.md` (`Status:`/`Owner:`/`Tracks:`), replacing a
+  five-generation `Prior review … Prior review …` chain that ran 46 lines before the first content.
+
+**Five stale claims corrected while reading closely:**
+
+| Site | Was | Now |
+|---|---|---|
+| `## Active` | "Milestone M3 … in progress. Remaining to M3 ✅: K-025 — unblocked, **not yet run**" | M3 closed 2026-07-21, K-025 delivered the same day. Section rewritten to M5's stage state, verified against `docs/plans/document-ingestion-coordination.md` |
+| K-033 | "K-027 is itself 🟡 in-progress; items 2–5 remain open" ⇒ K-033 might ride item 2's re-lock | K-027 closed 2026-08-21 and item 2 shipped at `_run_agent_node`, **outside** the lock — as K-033's own scepticism predicted. No bundling opportunity left |
+| M5 milestone row | `document-ingestion-graph.md` / `-ml.md` "(not yet authored)" | Both exist |
+| `EMBEDDING_DIM` note | "`start_server.sh` guidance defaults to 1536 too — fold the 1024 note into both in the K-008 gate" | `start_server.sh:92` has defaulted to 1024 since that gate closed; only `bootstrap_schema.sh:264` still defaults to 1536 |
+| Parking lot | DESIGN §13's "workflow guard expression language" listed open | `DESIGN.md:722` records it resolved and struck through. The `Entity` extraction-pipeline entry is superseded outright by K-050 and dropped |
+
+**Verified, not assumed:** the `_drive_loop` SHA lock recomputed with the DESIGN §6.2 `awk` recipe →
+`71055f756280`, intact — which is what establishes that K-027 item 2 never broke it. Every relative
+link in the rewritten file resolves.
+
+**Rotting counts replaced by the command that regenerates them** — K-033's re-lock scope
+("`BACKLOG.md` ×2, `HISTORY.md` ×2"; actually 4 and 11, and 40+ repo-wide) and the K-031 re-slug
+nit ("4 occurrences across 3 files"; actually four files).
+
+**"Recommended plan docs"** listed 16 rows under a heading reading "not yet created"; 13 existed.
+Kept the 2 that don't, renamed **before creation** `m2-auth-tenancy.md` → `auth-tenancy.md` and
+`m2-realtime.md` → `realtime-push.md`: the root `AGENTS.md` filename grammar forbids a new
+basename beginning with `m<digit>`, and neither topic *is* a milestone.
+
+**Not done, deliberately:** open items were left intact. On a close read only K-033 was
+over-argued; K-032 and K-035 are dense but every paragraph is a constraint an implementer needs,
+so cutting them would have been editing content, not compressing narrative.
+
+**Result:** 2025 → 717 lines (**-65%**). No open item's scope changed. Delivered in two commits —
+`0f48b8a` (the coverage-checked deletion) and `88bb71b` (structure + the five fixes).
+
 ## 2026-08-24 — K-050 M5 Stage 4: document ingestion — entity fusion (FR-6/7/8/9/10, OQ-1/2/3)
 
 **What:** The fourth of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
