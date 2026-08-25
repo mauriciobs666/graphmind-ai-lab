@@ -295,7 +295,9 @@ runtime (the personal-info rule, §2). Fix any FAIL before judging the rest.
 3. **Subagent-awareness** — every delegate-able agent handles the
    can't-ask-mid-run constraint: questions, blockers, and approval requests
    return as the deliverable; no "ask" phrasing that assumes an interactive
-   session.
+   session — including every approval or destructive-op gate, which needs its
+   own subagent branch stating what to return **and that the rest of the work
+   continues**.
 4. **Enforcement parity** — every prompt guardrail that claims harness
    enforcement has a live hook, and every wired hook is described in the
    prompt it guards (no silent machinery, no hopeful prose posing as
