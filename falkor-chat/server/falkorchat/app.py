@@ -38,6 +38,7 @@ from .repository import Repository
 from .services import (
     DEFAULT_SWEEP_LIMIT,
     ChannelNotFoundError,
+    MatchNotFoundError,
     SearchNotAvailableError,
     ServiceError,
     Services,
@@ -79,7 +80,9 @@ _DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ServiceError)
     async def _handle_service_error(_request, exc: ServiceError):  # noqa: ANN001
-        not_found = isinstance(exc, (ChannelNotFoundError, ThreadNotFoundError))
+        not_found = isinstance(
+            exc, (ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError)
+        )
         return JSONResponse(
             status_code=404 if not_found else 400,
             content={"error": type(exc).__name__, "detail": str(exc)},

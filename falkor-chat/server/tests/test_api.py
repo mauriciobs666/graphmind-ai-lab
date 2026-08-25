@@ -149,6 +149,94 @@ def test_ingest_document_empty_text_is_422(client):
     assert r.status_code == 422
 
 
+# ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
+
+
+def _seed_match(conn, *, status="pending"):
+    """Writes two entities + one SAME_AS edge directly via the repository —
+    match creation is a side effect of ingestion (`IngestionPipeline`), not a
+    REST-reachable write, so these tests seed state below the API layer,
+    mirroring how `test_ingest_and_get_document_round_trips_full_text` seeds
+    the actor via `Repository` before exercising the route.
+    """
+    repo = Repository(conn)
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status=status, confidence=2.0, technique="fuzzy_fulltext", created_at=100,
+    )
+
+
+def test_list_pending_matches_route(client, conn):
+    _seed_match(conn, status="pending")
+
+    r = client.get("/matches/pending")
+
+    assert r.status_code == 200
+    assert [m["matchId"] for m in r.json()] == ["m1"]
+
+
+def test_list_matches_route_filters_by_status(client, conn):
+    _seed_match(conn, status="pending")
+
+    pending = client.get("/matches", params={"status": "pending"})
+    confirmed = client.get("/matches", params={"status": "confirmed"})
+
+    assert [m["matchId"] for m in pending.json()] == ["m1"]
+    assert confirmed.json() == []
+
+
+def test_confirm_match_route(client, conn):
+    _seed_match(conn, status="pending")
+
+    r = client.post("/matches/m1/confirm")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "confirmed"
+
+
+def test_confirm_match_route_404_for_unknown_match_id(client):
+    r = client.post("/matches/nope/confirm")
+    assert r.status_code == 404
+
+
+def test_reject_match_route(client, conn):
+    _seed_match(conn, status="pending")
+
+    r = client.post("/matches/m1/reject")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+
+def test_reject_match_route_404_for_unknown_match_id(client):
+    r = client.post("/matches/nope/reject")
+    assert r.status_code == 404
+
+
+def test_recheck_match_route_reopens_a_rejected_match(client, conn):
+    _seed_match(conn, status="pending")
+    client.post("/matches/m1/reject")
+
+    r = client.post("/matches/m1/recheck")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+
+
+def test_recheck_match_route_is_a_noop_for_an_unknown_match_id(client):
+    r = client.post("/matches/nope/recheck")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
 def test_search_returns_matching_messages(client):
     cid = _new_channel(client)
     tid = _new_thread(client, cid)

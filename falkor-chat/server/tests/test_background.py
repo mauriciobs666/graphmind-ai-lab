@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from falkorchat.background import _safe_embed_chunk, _safe_extract, _safe_respond
+from falkorchat.background import _safe_embed_chunk, _safe_extract, _safe_fuse, _safe_respond
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.responder import AgentResponder
@@ -156,3 +156,46 @@ def test_safe_extract_swallows_failure_logs_error_never_raises(caplog):
     assert "c1" in error_records[0].getMessage()
     assert error_records[0].exc_info is not None
     assert "boom extracting c1" in str(error_records[0].exc_info[1])
+
+
+# ── _safe_fuse (K-050 M5 Stage 4) ─────────────────────────────────────────────
+#
+# Mirrors `_safe_extract`'s failure-isolation contract exactly, but at
+# per-ENTITY granularity — called from inside `IngestionPipeline.extract_
+# chunk`'s own loop, not scheduled per-chunk by api.py/mcp.py (see this
+# wrapper's docstring in background.py).
+
+
+class _RecordingFuser:
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def fuse_entity(self, ws, entity_id, name, type):
+        self.calls.append((ws, entity_id, name, type))
+
+
+class _FailingFuser:
+    def fuse_entity(self, ws, entity_id, name, type):
+        raise RuntimeError(f"boom fusing {entity_id}")
+
+
+def test_safe_fuse_calls_the_pipeline():
+    pipeline = _RecordingFuser()
+
+    _safe_fuse(pipeline, "test", "e1", "Acme", "Organization")
+
+    assert pipeline.calls == [("test", "e1", "Acme", "Organization")]
+
+
+def test_safe_fuse_swallows_failure_logs_error_never_raises(caplog):
+    pipeline = _FailingFuser()
+
+    with caplog.at_level(logging.ERROR):
+        _safe_fuse(pipeline, "test", "e1", "Acme", "Organization")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background fuse failed" in error_records[0].getMessage()
+    assert "e1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom fusing e1" in str(error_records[0].exc_info[1])

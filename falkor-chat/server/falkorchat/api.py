@@ -211,6 +211,48 @@ def build_router(
             raise HTTPException(status_code=404, detail="document not found")
         return doc
 
+    # ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ─────
+    # `MatchNotFoundError` maps to 404 via the generic `ServiceError` handler.
+    # Registered BEFORE `/matches/{match_id}/...`: no ambiguity here (no
+    # `/matches/search`-shaped route exists), but kept adjacent to `/matches`
+    # reads for readability, same static-then-scoped grouping as `/documents`.
+
+    @router.get("/matches/pending")
+    def list_pending_matches(
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_pending_matches(ctx, limit=limit)
+
+    @router.get("/matches")
+    def list_matches(
+        status: str | None = Query(None),
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_matches(ctx, status=status, limit=limit)
+
+    @router.post("/matches/{match_id}/confirm")
+    def confirm_match(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.confirm_match(ctx, match_id=match_id)
+
+    @router.post("/matches/{match_id}/reject")
+    def reject_match(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.reject_match(ctx, match_id=match_id)
+
+    @router.post("/matches/{match_id}/recheck")
+    def recheck_match(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.recheck_match(ctx, match_id=match_id)
+
     # ── K-036 web-api-coverage: thread-scoped reads (FR-2/FR-8, Wave 2) ──────
     # New read paths for the web UI's inline run cue + participants list; both
     # wrap GRAPH.PROFILE-verified queries (QUERIES.md §12.14, §2 "List thread

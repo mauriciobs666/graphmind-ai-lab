@@ -2090,5 +2090,258 @@ one-thread-per-(chunk × job)) is still deferred to Stage 6, same disposition as
 finding. REST is unaffected: `BackgroundTasks.add_task` is a cheap list append, not a thread spawn,
 so no equivalent amplification or failure mode exists on that transport.
 
-Stages 4–6 (fusion, chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s
-MCP/REST table; not built here.
+Stages 5–6 (chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s MCP/REST
+table; not built here.
+
+### 14.6 Entity fusion — `SAME_AS` (K-050 M5 Stage 4, FR-6/7/8/9/10)
+
+Design: `docs/plans/document-ingestion.md` §3.4 ("Concurrency note" — why the exact tier is one
+atomic query, not a processing-order guarantee) and `docs/plans/document-ingestion-graph.md`
+§1.5-§1.8 (graph-dba, the exact Cypher below, already live-verified there — this section is a
+copy-and-cite against `server/falkorchat/repository.py`, not new verification work). Every fusion
+decision — auto or suggested — is a property-bearing `SAME_AS` edge, never a physical node merge
+(FalkorDB has no APOC-style refactor procedure, and this codebase avoids destructive graph surgery
+elsewhere too):
+
+```
+(:Entity)-[:SAME_AS {
+  matchId, status, confidence, technique,
+  createdAt, decidedAt, decidedBy,
+  resuggestCount, lastResuggestedAt
+}]->(:Entity)
+```
+
+`status ∈ {pending, confirmed, rejected}`. Write direction is a convention, not a semantic claim —
+always `(newlyExtractedEntity)-[:SAME_AS]->(existingCandidateEntity)`; reads that need to be
+direction-agnostic use an undirected pattern, reads that always know the direction (because they
+wrote it) use a directed one. **Every query below matches its `SAME_AS` endpoints UNLABELED
+(`(a)`/`(b)`, never `(a:Entity)`)** — a bare label on either endpoint of a relationship-index-
+anchored query forces a full `Node By Label Scan` on this build even though the relationship-
+property scan alone is fully selective (`document-ingestion-graph.md` §1.4,
+`claude/graph-dba/falkordb-quirks.md`) — the one exception is `create_or_reopen_match`'s two
+`MATCH` clauses that resolve `a`/`b` by `entityId` in the first place (real per-node predicates,
+not a bystander label next to a relationship filter, so the trap doesn't apply there).
+
+**`create_entity_with_auto_match` — FR-8 exact tier, folded into entity creation itself**
+
+The plan-gate review's BLOCKER fix (`document-ingestion.md` §3.4): the original design ran the
+exact-tier candidate lookup, the entity `CREATE`, and the conditional auto-link as three
+independent round trips — two entities extracted around the same wall-clock time could each miss
+the other's not-yet-committed sibling, silently defeating FR-8's "no confirmation required"
+guarantee. Closed by folding all three into one atomic `GRAPH.QUERY`; FalkorDB/Redis serializes
+command execution, so two concurrent calls against the same `(nameNormalized, type)` can never
+interleave.
+
+```cypher
+// $matchId is server-minted; consumed only if a candidate is actually found.
+// Oldest-first tie-break when multiple pre-existing entities share
+// (nameNormalized, type) without ever having been fused.
+OPTIONAL MATCH (candidate:Entity {nameNormalized: $nameNormalized, type: $type})
+WITH candidate
+ORDER BY candidate.createdAt ASC
+LIMIT 1
+CREATE (e:Entity {
+  entityId: $entityId, name: $name, nameNormalized: $nameNormalized,
+  type: $type, createdAt: $createdAt
+})
+WITH e, candidate
+FOREACH (_ IN CASE WHEN candidate IS NOT NULL THEN [1] ELSE [] END |
+  CREATE (e)-[:SAME_AS {
+    matchId: $matchId, status: 'confirmed', confidence: 1.0,
+    technique: 'exact_normalized_name_type', createdAt: $createdAt,
+    decidedAt: $createdAt, decidedBy: 'system',
+    resuggestCount: 0, lastResuggestedAt: null
+  }]->(candidate)
+)
+RETURN e.entityId AS entityId,
+       candidate IS NOT NULL AS exactMatched,
+       candidate.entityId AS candidateEntityId,
+       CASE WHEN candidate IS NOT NULL THEN $matchId ELSE null END AS matchId
+```
+
+**[verified]** (`document-ingestion-graph.md` §1.8, `gdba_probe_atomic`, re-verified live against
+`repository.py`'s shipped shape during the Stage 4 code gate, `docs/reviews/document-ingestion-
+impl.md` Pass 4): a brand-new `(nameNormalized, type)` pair reports `exactMatched=false` on the
+first call (never self-matches its own `CREATE`); a second call with the same pair correctly
+reports `exactMatched=true` against the first call's entity; a third call with two eligible
+pre-existing candidates picks the **older** one. A concurrency regression test
+(`test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge`, real threads, a
+`threading.Barrier`, separate connections) proves the fix closes the race: exactly one `SAME_AS`
+edge, never zero, never duplicated. No reopen branch — a brand-new `Entity`, `CREATE`d fresh inside
+this same query, cannot structurally already carry a `SAME_AS` edge to reopen.
+
+**`find_fuzzy_candidates` — FR-9 suggested tier, a genuinely separate read**
+
+```cypher
+// $fuzzyQuery is built app-side (falkorchat.fusion._fuzzy_query), one RediSearch
+// 1-edit fuzzy term per name token: '%acme%'.
+CALL db.idx.fulltext.queryNodes('Entity', $fuzzyQuery) YIELD node AS candidate, score
+WHERE candidate.type = $type
+RETURN candidate.entityId AS entityId, candidate.name AS name,
+       candidate.type AS type, score
+ORDER BY score DESC
+LIMIT $limit
+```
+
+Unaffected by the exact tier's concurrency fix — a missed/duplicated fuzzy suggestion under
+concurrent timing still lands in the reviewed `pending` queue either way, never silently defeating
+a zero-review guarantee the way the exact tier's race did. The `type` filter is a routine
+implementation choice (avoids a fuzzy name hit surfacing a nonsensical cross-type suggestion), not
+plan-mandated. `falkorchat.fusion.find_fuzzy_candidates` builds `$fuzzyQuery` and calls this method;
+`IngestionPipeline.fuse_entity` excludes the just-created entity's own id from the results before
+classifying — **live-confirmed necessary**: a same-connection write is synchronously visible to the
+next RediSearch fulltext query on this build, so an entity's own fuzzy lookup against its own name
+can and does return itself as a hit.
+
+**`create_or_reopen_match` — the guarded find-or-create-or-reopen write (OQ-3)**
+
+Called for the suggested tier only (`status='pending'`) — the exact tier no longer calls this,
+folded into `create_entity_with_auto_match` above.
+
+```cypher
+// $newEntityId, $candidateEntityId = the two Entity.entityId values (write
+// direction new -> existing; reads elsewhere don't rely on this direction).
+// $matchId = server-minted uuid, consumed only if a fresh edge is created.
+MATCH (a:Entity {entityId: $newEntityId})
+MATCH (b:Entity {entityId: $candidateEntityId})
+OPTIONAL MATCH (a)-[existing:SAME_AS]-(b)
+WITH a, b, existing,
+     (existing IS NULL) AS isNew,
+     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen
+FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END |
+  CREATE (a)-[:SAME_AS {
+    matchId: $matchId, status: $status, confidence: $confidence,
+    technique: $technique, createdAt: $createdAt,
+    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END,
+    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END,
+    resuggestCount: 0, lastResuggestedAt: null
+  }]->(b)
+)
+FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END |
+  SET existing.status = 'pending',
+      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1,
+      existing.lastResuggestedAt = $createdAt
+)
+RETURN isNew AS created, reopen AS reopened,
+       coalesce(existing.matchId, $matchId) AS matchId,
+       coalesce(existing.status, $status)   AS status
+```
+
+**Why not a bare `MERGE (a)-[:SAME_AS]->(b)`**: `SAME_AS` is semantically symmetric, but a
+direction-fixed `MERGE` only matches an edge written in *that* direction — a suggestion already
+written as `(b)-[:SAME_AS]->(a)` on an earlier, opposite-order ingestion would be invisible to it
+and get duplicated. The `OPTIONAL MATCH ... undirected` lookup sidesteps that by construction.
+
+**[verified]** (`document-ingestion-graph.md` §1.6, `gdba_probe_ingestion2`): call 1 on a fresh
+pair → `created=true`; call 2 (same pair) → `created=false, reopened=false` (idempotent no-op);
+manually reject, then re-derive the same pair → `created=false, reopened=true`, `resuggestCount`
+bumps on the **original** `matchId` (no duplicate edge); querying from the reversed argument order
+finds the same edge.
+
+**`confirm_match` / `reject_match` / `recheck_match` — FR-10, OQ-3's manual reopen**
+
+```cypher
+// confirm_match(match_id, decided_by, decided_at)
+MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b)
+SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy
+RETURN r.matchId AS matchId, r.status AS status,
+       a.entityId AS entityA, b.entityId AS entityB
+```
+
+```cypher
+// reject_match(match_id, decided_by, decided_at) — never deletes the edge, the
+// rejected record is what makes OQ-3 answerable with no second mechanism.
+MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b)
+SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy
+RETURN r.matchId AS matchId, r.status AS status,
+       a.entityId AS entityA, b.entityId AS entityB
+```
+
+```cypher
+// recheck_match(match_id, at) — rejected -> pending only; a no-op otherwise
+// (including "no such matchId" — the WHERE guard can't tell the two apart,
+// and both are equally "nothing to transition" to the caller).
+MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b)
+WHERE r.status = 'rejected'
+SET r.status = 'pending',
+    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1,
+    r.lastResuggestedAt = $at
+RETURN r.matchId AS matchId, r.status AS status,
+       a.entityId AS entityA, b.entityId AS entityB
+```
+
+`decidedBy` is a real `User`/`Agent` id on this path, never `'system'` — an audit trail can always
+tell an automatic decision (`create_entity_with_auto_match`) from a human/agent one.
+
+**`list_pending_matches` / `list_matches` — OQ-2's review surface**
+
+```cypher
+// list_pending_matches(limit) — directed, matches the canonical write direction.
+MATCH (a)-[r:SAME_AS {status: 'pending'}]->(b)
+RETURN r.matchId AS matchId,
+       a.entityId AS entityA, a.name AS nameA,
+       b.entityId AS entityB, b.name AS nameB,
+       r.confidence AS confidence, r.technique AS technique, r.createdAt AS createdAt
+ORDER BY r.createdAt
+LIMIT $limit
+```
+
+`list_matches(status=None, limit)` is the plan-gate review's MAJOR-finding fix — the auto-merged
+tier (`status='confirmed', decidedBy='system'`) had no discovery surface at all before this.
+**Two separate query strings, not a `WHERE $status IS NULL OR r.status = $status` null-guard** —
+live-verified that idiom silently discards the `SAME_AS.status` index even when `$status` is bound
+to a real value (`document-ingestion-graph.md` §1.7, `claude/graph-dba/falkordb-quirks.md`):
+
+```cypher
+// list_matches(status=<value>, limit) — filtered branch, same shape as
+// list_pending_matches with status parameterized instead of a literal.
+MATCH (a)-[r:SAME_AS {status: $status}]->(b)
+RETURN r.matchId AS matchId,
+       a.entityId AS entityA, a.name AS nameA,
+       b.entityId AS entityB, b.name AS nameB,
+       r.status AS status, r.confidence AS confidence, r.technique AS technique,
+       r.createdAt AS createdAt
+ORDER BY r.createdAt
+LIMIT $limit
+```
+
+```cypher
+// list_matches(status=None, limit) — unfiltered branch. A full scan is
+// genuinely unavoidable here (no relationship-type-only scan operator exists
+// on this build) — reasonable for an infrequent admin/audit call, not a hot
+// path; $limit bounds the result size, not the scan cost.
+MATCH (a)-[r:SAME_AS]->(b)
+RETURN r.matchId AS matchId,
+       a.entityId AS entityA, a.name AS nameA,
+       b.entityId AS entityB, b.name AS nameB,
+       r.status AS status, r.confidence AS confidence, r.technique AS technique,
+       r.createdAt AS createdAt
+ORDER BY r.createdAt
+LIMIT $limit
+```
+
+**DDL — `SAME_AS` relationship-scoped indexes + constraint (index-before-constraint)**
+```cypher
+CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.matchId)
+CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.status)
+GRAPH.CONSTRAINT CREATE <graph> UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId
+```
+Relationship-property indexing is a proven, first-class capability on this build — live-verified
+(`document-ingestion-graph.md` §1.1): `db.indexes()` reports `RELATIONSHIP`-scoped indexes exactly
+like node ones, going `PENDING → OPERATIONAL` the same way, and a property-filtered `SAME_AS` query
+profiles as `Edge By Index Scan`. No new `Entity`-side DDL for this stage — `Entity.name`
+(fulltext) and `Entity.nameNormalized` (RANGE) already landed in Stage 3 (§14.5), dormant until
+this stage's reads.
+
+`Repository.create_entity_with_auto_match`/`find_fuzzy_candidates`/`create_or_reopen_match`/
+`confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/`list_matches`
+(`server/falkorchat/repository.py`); `falkorchat.fusion.find_fuzzy_candidates`/`classify_fuzzy`
+(new module); `falkorchat.ingestion.IngestionPipeline.fuse_entity`; `background._safe_fuse`
+(per-ENTITY failure isolation, one level finer than `_safe_extract`'s per-chunk isolation — called
+inline from `extract_chunk`'s own loop, never scheduled separately by `api.py`/`mcp.py`, since a
+fuzzy lookup can only run once the entity it's for already exists). MCP tools `list_pending_matches`/
+`list_matches`/`confirm_match`/`reject_match`/`recheck_match`, mirrored as REST routes
+`GET /matches/pending`, `GET /matches?status=&limit=`, `POST /matches/{id}/confirm`,
+`POST /matches/{id}/reject`, `POST /matches/{id}/recheck` (`docs/plans/document-ingestion.md` §3.5).
+
+Stage 6 (batch hardening) is the rest of `document-ingestion.md`'s MCP/REST table; not built here.

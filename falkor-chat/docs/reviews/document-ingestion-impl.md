@@ -662,3 +662,220 @@ present, confirmed by direct re-execution of my own reproductions and by mutatio
 new regression tests against the pre-fix behavior. No blockers, no majors, no new issues. The two
 open questions above that were about *whether/when* to fix are resolved (both landed now); the third
 (`modelconfig.KINDS`'s stale docstring) remains open, unchanged, not urgent.
+
+---
+
+## Pass 4 (2026-08-24) — Stage 4 diff-scoped code gate
+
+**Scope.** Diff-scoped code gate against the (then-)uncommitted working-tree changes implementing
+Stage 4 (Fusion, FR-6/7/8/9/10, OQ-1/2/3) of `docs/plans/document-ingestion.md`. A **new** diff,
+layered on top of Stages 1-3's already-gated changes — not a re-review of Pass 1-3's findings.
+Baseline: the locked plan (§4 Stage 4, §3.4 "Concurrency note", §5 test-strategy table's AC-1..AC-4/
+AC-7/AC-8 rows plus the "Additional, non-AC-mapped test coverage" section) and
+`docs/plans/document-ingestion-graph.md` §1.5-§1.8 (final `SAME_AS` schema, exact Cypher for
+`create_or_reopen_match`/`confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/
+`list_matches`/`create_entity_with_auto_match`, including the MAJOR-finding two-query-string
+`list_matches` fix and the live-verified atomic-ordering proof). Files reviewed: new
+`server/falkorchat/fusion.py`; modified `server/falkorchat/{repository.py, ingestion.py,
+background.py, services.py, mcp.py, api.py, app.py}`; `scripts/bootstrap_schema.sh`; new
+`server/tests/test_fusion.py`; extended `server/tests/{test_repository.py, test_ingestion.py,
+test_background.py, test_services.py, test_api.py, test_mcp.py}`. Per the brief, `docs/HISTORY.md`,
+`docs/DESIGN.md`, `docs/SERVER.md`, `docs/test-reports/capacity-report.md`, and the two `claude/`
+agent-doc files were unrelated concurrent work in the shared tree and are explicitly out of scope —
+not reviewed, not commented on below. Every claim below (Cypher fidelity, the self-match-filter
+necessity, the mutation-test spot-check, the test-count arithmetic, the concurrency regression test,
+the shipped-Cypher quirk-shape check) was independently verified in this session — code read line by
+line against both plan documents, the full offline suite and `./scripts/test_queries.sh` re-run
+myself, the concurrency test re-run 5x, one mutation planted/observed/reverted live, and one live
+FalkorDB probe run to settle a factual question the brief posed rather than assumed — not inherited
+from `coder`'s self-report.
+
+**CPG:** considered, not relevant — this diff is net-new/modified application code in a fast-moving
+stage of an active feature; reading the files directly (as this pass did, against two authoritative,
+live-verified design documents) is more precise here than a CPG built at an earlier commit would be,
+and no freshness claim for `cpg_falkorchat` was supplied in the brief to rely on instead.
+
+**Verdict: approve with suggestions.** No blockers, no majors. Cypher fidelity is essentially
+byte-identical to the graph note's live-verified shapes across all seven new repository methods —
+correct unlabeled-endpoint discipline everywhere a `SAME_AS`-anchored query needs it, correct
+`list_matches` two-branch (not null-guarded) structure, correct atomic ordering in
+`create_entity_with_auto_match`. The self-match filter in `fuse_entity` is not just plausible but
+live-confirmed necessary and correctly placed. The concurrency regression test is genuine (real
+threads, a barrier, separate connections) and passed 5/5 independent re-runs. The mutation-testing
+and test-count claims both check out under independent verification. Two MINOR findings, both
+documentation/test-altitude gaps rather than correctness defects.
+
+### Findings
+
+**MINOR — no `docs/QUERIES.md` section for Stage 4's seven new repository methods, even though the
+diff's own code comments reference one that doesn't exist.**
+
+Every stage so far has added its Cypher to `docs/QUERIES.md` as the module's own "canonical query
+library, verified against the live instance" (`falkor-chat/AGENTS.md`'s Key Documents table) —
+Stage 1 got §14.1/§14.2, Stage 2 got §14.3/§14.4, Stage 3 got §14.5 (confirmed via `grep -n "^### 14\."
+docs/QUERIES.md`). This diff's own section-marker comments (`repository.py:1196`, `services.py`,
+`api.py`, `bootstrap_schema.sh`) all say `# ── §14.6 Entity fusion — SAME_AS …` — the code is written
+as if `docs/QUERIES.md` §14.6 already exists, but `git diff --stat -- docs/QUERIES.md` is empty: no
+such section was ever added. Every one of the seven new Cypher blocks (`create_entity_with_auto_match`,
+`find_fuzzy_candidates`, `create_or_reopen_match`, `confirm_match`, `reject_match`, `recheck_match`,
+`list_pending_matches`, `list_matches`) currently exists only in `repository.py` and in the graph note
+— not in the document this codebase's own convention designates as the source of truth for verified
+queries, and not reachable from a `§14.6` citation anyone follows off the code comments themselves.
+Not a correctness defect (the Cypher is verified correct against the graph note either way, confirmed
+above), but a real conformance gap against an established, three-stages-running convention, and a
+dangling internal cross-reference. **Suggested fix:** add `docs/QUERIES.md` §14.6, mirroring §14.5's
+shape — the seven query blocks plus a short "verified against the live instance" note, sourced
+directly from `document-ingestion-graph.md` §1.6-§1.8 (already exact-shape-verified, so this is a
+copy-and-cite job, not new verification work).
+
+**MINOR — AC-8's specific test-strategy shape (two full `ingest_document` calls / background-
+completion-aware) isn't demonstrated end-to-end; the underlying mechanism is thoroughly proven at a
+lower altitude instead.**
+
+Plan §5's test-strategy table specifies AC-8 as: *"`ingest_documents([doc_a, doc_b])` where both
+mention the same entity; assert both processed and a `SAME_AS` edge links their extracted entities,
+not just doc_a's — service integration, background-completion-aware (poll `Document.status` or run
+the pipeline synchronously in the test)."* There is no batch `ingest_documents` entry point in this
+codebase (confirmed: `grep -rn "def ingest_document" falkorchat/*.py` finds only the singular,
+per-document `ingest_document` in `services.py`/`api.py`/`mcp.py`) — so the plan's literal scenario
+name doesn't map onto a real call, and "two documents" in practice means two sequential/independent
+`ingest_document`/`extract_chunk` calls sharing a workspace graph. That said, no test in this diff
+exercises the *pipeline-level* two-call scenario the AC row is actually testing for — the cross-
+document linking behavior is instead proven only at the repository primitive's own altitude:
+`test_create_entity_with_auto_match_links_an_existing_candidate` (`test_repository.py:966`, two
+sequential calls, same `(nameNormalized, type)`, asserts the link) and the concurrent variant
+(`test_repository.py:1038`, two REAL concurrent calls). Both are genuine and sufficient to prove the
+*mechanism* is correct — including under the exact race condition AC-8's own footnote calls out — but
+neither goes through `IngestionPipeline.extract_chunk` twice (once per "document"), so nothing in this
+diff demonstrates the *pipeline* wiring correctly produces a cross-document `SAME_AS` edge the way a
+reader of the plan's test-strategy row would expect to find proven. **Suggested fix:** add one test —
+either at `test_ingestion.py`'s altitude (call `pipeline.extract_chunk` twice with different
+`document_id`s but an entity of the same normalized name/type, assert the `SpyRepo` recorded a link
+call spanning both) or a real repository-backed integration test — closing the gap between what the
+plan's AC-8 row names and what's actually exercised. Low severity: the primitive this would exercise
+is already proven correct and race-safe; this is about closing an explicit, named test-strategy row's
+literal shape, not about an unverified behavior.
+
+### Verified claims (evidence, not trust)
+
+- **Cypher fidelity — essentially byte-identical to `document-ingestion-graph.md` §1.6-§1.8 across
+  all seven new methods.** Read `repository.py:1196-1497` line by line against the graph note's
+  Cypher blocks: `create_entity_with_auto_match` (§1.8) matches the `OPTIONAL MATCH ... ORDER BY
+  createdAt ASC LIMIT 1 ... CREATE ... FOREACH (CASE WHEN candidate IS NOT NULL ...)` shape exactly,
+  including the no-reopen-branch simplification and the exact property set on the auto-created
+  `SAME_AS` edge; `create_or_reopen_match` (§1.6) matches the guarded double-`FOREACH` shape exactly,
+  including the id-anchored `MATCH (a:Entity {entityId: ...})`/`MATCH (b:Entity {entityId: ...})`
+  labels (correct here — real per-node predicates, not the §1.4 bystander-label trap) alongside the
+  unlabeled undirected `OPTIONAL MATCH (a)-[existing:SAME_AS]-(b)` lookup; `confirm_match`/
+  `reject_match`/`recheck_match`/`list_pending_matches` (§1.7) all use bare `(a)-[r:SAME_AS {...}]-
+  (b)`/`(a)-[r:SAME_AS {...}]->(b)`, never a bare-labeled endpoint, matching §1.4's planner-trap note
+  exactly; `list_matches` (§1.7's post-review MAJOR fix) is genuinely **two separate query strings**
+  branched in Python (`repository.py:1466-1489`), not a `WHERE $status IS NULL OR r.status = $status`
+  null-guard — confirmed by reading the actual `if status is not None: ... else: ...` branch, not
+  inferring it from a docstring claim. `find_fuzzy_candidates` (§2.3) matches the
+  `db.idx.fulltext.queryNodes` + post-`YIELD` `WHERE candidate.type = $type` shape exactly. All eight
+  Cypher strings are fully parameterized — no interpolation anywhere in the diff.
+- **`bootstrap_schema.sh`'s new DDL matches §1.5/§5 exactly, index-before-constraint.** Two new
+  relationship-scoped `CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.matchId | r.status)` lines land before
+  the `UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId` constraint later in the same function
+  (`scripts/bootstrap_schema.sh:115-123` vs. `:214-215`), same ordering discipline every other
+  identity in this script already follows.
+- **The self-match filter in `fuse_entity` is live-confirmed necessary, not just plausible.** Ran a
+  direct probe against a live, properly-bootstrapped `ws:test` (`CREATE INDEX`/fulltext index applied
+  first — the same fulltext lookup against an unindexed graph silently returns nothing, which is *not*
+  the shipped condition since `bootstrap_schema.sh` always runs before real traffic): created one
+  entity via `create_entity_with_auto_match`, then immediately called `find_fuzzy_candidates` against
+  its own exact name. Result: the just-created entity **was** returned as the (only) fuzzy hit, score
+  2.0 — confirming a same-connection write is synchronously visible to the next RediSearch fulltext
+  query on this build, and that `fuse_entity`'s exclusion filter
+  (`ingestion.py:186-189`: `[c for c in fusion.find_fuzzy_candidates(...) if c["entityId"] != entity_id]`)
+  is load-bearing, not defensive-only. **Placement is correct**: the filter runs on `candidates`
+  *before* `fusion.classify_fuzzy(candidates)` is called (`ingestion.py:189-190`) — filtering after
+  would risk `classify_fuzzy` seeing a self-only candidate list and returning `'suggested'` when the
+  correct classification (after removing the self-hit) is `'none'`; filtering before, as shipped,
+  means `classify_fuzzy` only ever sees genuinely-other candidates. Also confirmed by direct test read:
+  `test_extract_chunk_excludes_the_just_created_entity_from_its_own_fuzzy_candidates`
+  (`test_ingestion.py:315-330`) scripts exactly this scenario (a `SpyRepo` fuzzy result containing only
+  the entity's own id) and asserts `repo.reopen_calls == []`.
+- **The atomic ordering guarantee holds — re-verified by independent re-execution, not just reading.**
+  Re-ran `test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge`
+  (`test_repository.py:1038-1085`) 5 times independently (real `threading.Thread`s, a
+  `threading.Barrier(2)` forcing both to fire together, separate `db.connect()` connections per
+  thread) — passed 5/5, `entity_count == 2`, exactly one `confirmed` `SAME_AS` edge each time, no
+  errors from either thread. This is a genuine regression test for the plan-gate BLOCKER, not a
+  sequential-calls-dressed-as-concurrent shape.
+- **`_safe_fuse`'s inline-not-scheduled granularity is a reasoned, correctly-argued deviation, not an
+  oversight.** Confirmed both sides of the claim: `background.py`'s own docstring
+  (`background.py:77-99`) states the rationale (a fuzzy lookup can only run once the entity exists,
+  and `api.py`/`mcp.py` schedule per-*chunk*, before any entity is known) and `grep -n "_safe_fuse"
+  api.py mcp.py` returns nothing — `_safe_fuse` is called exactly once, from inside
+  `IngestionPipeline.extract_chunk`'s own per-entity loop (`ingestion.py:135-141`), never scheduled
+  separately by either transport's per-chunk loop the way `_safe_extract`/`_safe_embed_chunk` are.
+  This gives per-ENTITY failure isolation, one level finer than `_safe_extract`'s per-chunk isolation,
+  matching the plan file-list note's own framing of this as "the implementer's call on granularity."
+- **The shipped, non-test Cypher has no instance of the undirected + inline-relationship-property-
+  filter quirk shape `coder` reported to `kaizen_team`.** Grepped every `SAME_AS`-touching query in
+  `repository.py` for an undirected pattern (`-[...]-`  with no arrow) carrying an inline property
+  filter on the relationship variable itself. The only undirected pattern in the shipped code is
+  `create_or_reopen_match`'s `OPTIONAL MATCH (a)-[existing:SAME_AS]-(b)` (`repository.py:1320`) —
+  genuinely undirected, but the relationship variable carries **no** inline property filter (no
+  `{status: ...}` or similar on `existing`); every query that *does* filter inline on a `SAME_AS`
+  property (`{matchId: $matchId}`, `{status: 'pending'}`, `{status: $status}`) is directed (`->`),
+  never undirected. So the exact dangerous shape doesn't appear in shipped code — confirmed, not
+  assumed.
+- **Mutation-testing spot-check (FR-8 type-filter) — reproduced independently.** Mutated
+  `create_entity_with_auto_match`'s candidate `OPTIONAL MATCH` to drop `type: $type` from the pattern
+  (leaving only `nameNormalized`), ran `test_create_entity_with_auto_match_requires_matching_type_too`
+  alone — failed exactly as `coder` reported (`assert True is False` on `exactMatched is False`),
+  then reverted the file and re-ran the same test to confirm it passes again on the restored code
+  (`git diff --stat -- server/falkorchat/repository.py` showed zero changes after restore, confirming
+  no residue). One mutation is the brief's stated minimum; this one exercises the exact-tier's second
+  join key, the same shape `coder`'s report claims to have covered.
+- **Test-count arithmetic checks out exactly, independently recomputed.** Re-ran the full offline
+  suite: `1711 passed, 3 deselected` (matches `coder`'s claim exactly). Independently counted new
+  `def test_` lines per file via `git diff`: `test_repository.py` +23, `test_ingestion.py` +7,
+  `test_background.py` +2, `test_services.py` +10, `test_api.py` +8, `test_mcp.py` +5, plus the new
+  `test_fusion.py`'s 7 — **sums to 62**, matching the "7 files summing to 62" claim exactly. The
+  reported **net** of +61 (not +62) reconciles too: `test_ingestion.py` also **removes** one test,
+  `test_extract_chunk_never_looks_up_or_reuses_an_existing_entity` (the Stage-3 "no fusion, ever"
+  degenerate-case guard, correctly superseded now that Stage 4 does look up/reuse via fusion) — 62
+  added, 1 removed, net +61, and the baseline this stage started from was Pass 3's own
+  independently-confirmed `1650 passed, 3 deselected` (not the brief's illustrative "1640"), so
+  1650+61 = 1711 ties out exactly. No arithmetic issue once the correct baseline is used.
+- **`./scripts/test_queries.sh`: 320/320, unchanged** (no new query shape entered that suite —
+  consistent with Stage 2/3's own precedent that this suite doesn't grow for repository-layer-only
+  Cypher additions). Both this run and the earlier full-suite `pytest` run wiped `reference` at
+  teardown, per this codebase's known hazard (`falkor-chat/AGENTS.md`); re-seeded
+  (`bootstrap_schema.sh acme` → `seed_demo.sh acme` → `seed_workflows.sh acme` →
+  `verify_workflows.sh acme`) after each, confirmed back in sync both times.
+
+### What's solid (beyond the verified claims above)
+
+- **Layering and wiring are clean and symmetric.** `services.py`'s five new passthroughs
+  (`confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/`list_matches`) are
+  correctly thin, `MatchNotFoundError` is correctly wired into `app.py`'s 404 set, and both
+  `api.py`/`mcp.py` expose the identical five-operation surface with matching test coverage on both
+  transports (`test_api.py`/`test_mcp.py` both seed via the repository directly, correctly noting
+  match creation isn't itself a REST/MCP-reachable write).
+- **`recheck_match`'s can't-distinguish-unknown-from-not-rejected posture is honestly propagated
+  end-to-end**, not smoothed over at a higher layer — `Repository.recheck_match` returns `None` for
+  both cases, `Services.recheck_match` documents and preserves that (does not raise), and both
+  `api.py`/`mcp.py` return the `None` un-wrapped rather than inventing a distinction the underlying
+  read cannot make.
+- **`fusion.py`'s pure-logic split (`find_fuzzy_candidates`/`classify_fuzzy`) is genuinely unit-
+  testable and tested as such** — `test_fusion.py` never touches a live graph, exercising only
+  query-string construction and the two-way classification, with the real Cypher fidelity proven
+  separately in `test_repository.py`. Clean separation, no duplicated coverage.
+- **Failure isolation is real, not just claimed** — `test_extract_chunk_one_entitys_fusion_failure_
+  does_not_block_siblings` (`test_ingestion.py:364-385`) proves one entity's fuzzy-lookup exception
+  doesn't cost sibling entities or the chunk's relationship writes, and `test_safe_fuse_swallows_
+  failure_logs_error_never_raises` mirrors `_safe_extract`'s own regression-test shape exactly.
+
+### Open questions
+
+- **`docs/QUERIES.md` §14.6 (first MINOR finding)** — worth landing before this stage is considered
+  fully documented, given three prior stages all did it and the code's own comments already assume
+  it exists.
+- **AC-8's pipeline-altitude test (second MINOR finding)** — coordinator's call on whether to add the
+  missing two-call `extract_chunk` test now or accept the repository-level proof as sufficient
+  coverage for this AC row; the underlying mechanism is not in doubt either way.

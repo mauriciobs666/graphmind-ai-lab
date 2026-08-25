@@ -201,6 +201,16 @@ class DocumentTooLargeError(ServiceError):
     """
 
 
+class MatchNotFoundError(ServiceError):
+    """Raised when `confirm_match`/`reject_match` is given a `match_id` with
+    no `SAME_AS` edge (K-050 M5 Stage 4, FR-10).
+
+    `recheck_match` does NOT raise this — its repository read cannot
+    distinguish "no such matchId" from "exists but isn't `rejected`," and
+    both are equally a no-op there (`Repository.recheck_match` docstring).
+    """
+
+
 class EmptyDocumentError(ServiceError):
     """Raised when `ingest_document`'s text is empty or whitespace-only.
 
@@ -1077,6 +1087,57 @@ class Services:
         return self._repo.search_chunks(
             ctx.ws, q_vec=q_vec, k=limit, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
         )
+
+    # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
+    # FR-8 (auto-merge)/FR-9 (suggested) are written as a side effect of
+    # `IngestionPipeline.extract_chunk` directly against `repo` (plan §2.2's
+    # "background components write via repo, not through Services" posture,
+    # `ingestion.py`'s own docstring) — nothing here triggers fusion itself.
+    # These five thin passthroughs are the FR-10 confirm/reject/recheck +
+    # OQ-2 review-discovery surface (plan §3.5).
+
+    def confirm_match(self, ctx: CallContext, *, match_id: str) -> dict[str, Any]:
+        """FR-10 — confirm a `pending` (or previously `rejected`) suggestion.
+        `decidedBy` is stamped from the calling actor, never `'system'`."""
+        result = self._repo.confirm_match(
+            ctx.ws, match_id=match_id, decided_by=ctx.actor, decided_at=self._clock(),
+        )
+        if result is None:
+            raise MatchNotFoundError(match_id)
+        return result
+
+    def reject_match(self, ctx: CallContext, *, match_id: str) -> dict[str, Any]:
+        """FR-10 — reject a suggestion. Never deletes the `SAME_AS` edge (OQ-3)."""
+        result = self._repo.reject_match(
+            ctx.ws, match_id=match_id, decided_by=ctx.actor, decided_at=self._clock(),
+        )
+        if result is None:
+            raise MatchNotFoundError(match_id)
+        return result
+
+    def recheck_match(self, ctx: CallContext, *, match_id: str) -> dict[str, Any] | None:
+        """OQ-3's manual reopen — flips a `rejected` match back to `pending`.
+
+        Returns `None` on a no-op (no such `matchId`, or it isn't currently
+        `rejected`) rather than raising — mirrors `Repository.recheck_match`'s
+        own inability to distinguish the two cases; both are equally
+        "nothing to do" from the caller's perspective.
+        """
+        return self._repo.recheck_match(ctx.ws, match_id=match_id, at=self._clock())
+
+    def list_pending_matches(
+        self, ctx: CallContext, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """OQ-2's dedicated review surface — `status='pending'` matches only."""
+        return self._repo.list_pending_matches(ctx.ws, limit=limit)
+
+    def list_matches(
+        self, ctx: CallContext, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Status-filterable (or unfiltered) match listing — the plan-gate
+        review's MAJOR-finding fix, the only way to discover the auto-merged
+        (`status='confirmed', decidedBy='system'`) tier (plan §3.5)."""
+        return self._repo.list_matches(ctx.ws, status=status, limit=limit)
 
     # ── §11 Workflow definitions & snapshots (M3 Slice 1) ────────────────────────
     #

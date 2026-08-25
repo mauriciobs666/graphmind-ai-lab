@@ -944,6 +944,421 @@ def test_create_entity_relationship_is_never_deduplicated(repo, conn):
     assert rows == [[2]]
 
 
+# ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4) ──────────────────────────
+
+
+def test_create_entity_with_auto_match_no_prior_candidate(repo, conn):
+    result = repo.create_entity_with_auto_match(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100, match_id="m1",
+    )
+
+    assert result == {
+        "entityId": "e1", "exactMatched": False,
+        "candidateEntityId": None, "matchId": None,
+    }
+    [[count]] = _probe(conn, "MATCH (:Entity {entityId:'e1'}) RETURN count(*)")
+    assert count == 1
+    [[edges]] = _probe(conn, "MATCH ()-[r:SAME_AS]->() RETURN count(r)")
+    assert edges == 0
+
+
+def test_create_entity_with_auto_match_links_an_existing_candidate(repo, conn):
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100, match_id="m0",
+    )
+
+    result = repo.create_entity_with_auto_match(
+        "test", entity_id="e2", name="Acme Inc", name_normalized="acme",
+        type="Organization", created_at=200, match_id="m1",
+    )
+
+    assert result == {
+        "entityId": "e2", "exactMatched": True,
+        "candidateEntityId": "e1", "matchId": "m1",
+    }
+    rows = _probe(
+        conn,
+        "MATCH (:Entity {entityId:'e2'})-[r:SAME_AS {matchId:'m1'}]"
+        "->(:Entity {entityId:'e1'}) "
+        "RETURN r.status, r.confidence, r.technique, r.decidedBy, r.decidedAt, "
+        "       r.resuggestCount, r.lastResuggestedAt",
+    )
+    assert rows == [["confirmed", 1.0, "exact_normalized_name_type", "system", 200, 0, None]]
+
+
+def test_create_entity_with_auto_match_never_self_matches_on_the_first_call(repo, conn):
+    # If the query's own CREATE were somehow visible to its own preceding
+    # MATCH, a brand-new (nameNormalized, type) pair would incorrectly report
+    # exactMatched=True against itself. Sharpest possible check: zero prior
+    # entities of this (nameNormalized, type) exist at all.
+    result = repo.create_entity_with_auto_match(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100, match_id="m1",
+    )
+
+    assert result["exactMatched"] is False
+    [[edges]] = _probe(conn, "MATCH ()-[r:SAME_AS]->() RETURN count(r)")
+    assert edges == 0
+
+
+def test_create_entity_with_auto_match_picks_the_oldest_candidate_on_a_tie(repo, conn):
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=300, match_id="m0",
+    )
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e2", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100, match_id="m1",
+    )  # e2 is OLDER than e1 despite being created second (createdAt=100 < 300)
+
+    result = repo.create_entity_with_auto_match(
+        "test", entity_id="e3", name="Acme", name_normalized="acme",
+        type="Organization", created_at=500, match_id="m2",
+    )
+
+    assert result["candidateEntityId"] == "e2"  # the older of the two, not e1
+
+
+def test_create_entity_with_auto_match_requires_matching_type_too(repo, conn):
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100, match_id="m0",
+    )
+
+    result = repo.create_entity_with_auto_match(
+        "test", entity_id="e2", name="Acme", name_normalized="acme",
+        type="Product", created_at=200, match_id="m1",
+    )
+
+    assert result["exactMatched"] is False  # same normalized name, different type
+
+
+def test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge(repo, conn):
+    """The plan-gate review's BLOCKER regression test (`document-ingestion.md`
+    §3.4/§5's "Exact-tier auto-merge race"): two entities sharing the same
+    `(nameNormalized, type)`, created via two REAL concurrent
+    `create_entity_with_auto_match` calls on separate connections/threads,
+    must produce exactly one `SAME_AS{status:'confirmed'}` edge — never zero
+    (both calls missing each other's not-yet-committed sibling) and never
+    duplicated.
+    """
+    import threading
+
+    from falkorchat import db
+
+    barrier = threading.Barrier(2)
+    errors: list[Exception] = []
+
+    def _create(entity_id, created_at, match_id):
+        try:
+            barrier.wait(timeout=5)  # force both threads to fire together
+            thread_repo = Repository(db.connect())
+            thread_repo.create_entity_with_auto_match(
+                "test", entity_id=entity_id, name="Acme", name_normalized="acme",
+                type="Organization", created_at=created_at, match_id=match_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - surfaced via `errors` below
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_create, args=("e1", 100, "m1"))
+    t2 = threading.Thread(target=_create, args=("e2", 200, "m2"))
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert errors == []
+    [[entity_count]] = _probe(conn, "MATCH (n:Entity {nameNormalized:'acme'}) RETURN count(n)")
+    assert entity_count == 2
+    # Unlabeled, directed endpoints — per `document-ingestion-graph.md` §1.4's
+    # planner-trap note (never `(a:Entity)` on a SAME_AS-anchored query) and
+    # §1.5 (the canonical write direction is `new -> candidate`); only two
+    # entities exist in this test, so any confirmed SAME_AS edge is the one
+    # between them.
+    [[edge_count]] = _probe(
+        conn, "MATCH ()-[r:SAME_AS {status:'confirmed'}]->() RETURN count(r)",
+    )
+    assert edge_count == 1  # never zero (the race), never duplicated
+
+
+def test_find_fuzzy_candidates_matches_a_typo_and_filters_by_type(repo, conn):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme Corporation", name_normalized="acme corporation",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Corporation", name_normalized="acme corporation",
+        type="Product", created_at=100,
+    )  # same name, wrong type -> must NOT come back
+
+    results = repo.find_fuzzy_candidates(
+        "test", fuzzy_query="%Acmee%", type="Organization", limit=5,
+    )
+
+    assert [r["entityId"] for r in results] == ["e1"]
+
+
+def test_find_fuzzy_candidates_no_match_returns_empty(repo):
+    results = repo.find_fuzzy_candidates(
+        "test", fuzzy_query="%zzzznomatch%", type="Organization", limit=5,
+    )
+    assert results == []
+
+
+def test_create_or_reopen_match_creates_a_pending_edge(repo, conn):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+
+    result = repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status="pending", confidence=2.5, technique="fuzzy_fulltext", created_at=100,
+    )
+
+    assert result == {"created": True, "reopened": False, "matchId": "m1", "status": "pending"}
+    rows = _probe(
+        conn,
+        "MATCH (:Entity{entityId:'e1'})-[r:SAME_AS {matchId:'m1'}]->(:Entity{entityId:'e2'}) "
+        "RETURN r.status, r.confidence, r.technique, r.decidedBy, r.decidedAt",
+    )
+    assert rows == [["pending", 2.5, "fuzzy_fulltext", None, None]]
+
+
+def test_create_or_reopen_match_is_idempotent_for_the_same_pair(repo):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status="pending", confidence=2.5, technique="fuzzy_fulltext", created_at=100,
+    )
+
+    result = repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m2",
+        status="pending", confidence=3.0, technique="fuzzy_fulltext", created_at=200,
+    )
+
+    assert result == {"created": False, "reopened": False, "matchId": "m1", "status": "pending"}
+
+
+def test_create_or_reopen_match_finds_the_pair_regardless_of_argument_order(repo):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status="pending", confidence=2.5, technique="fuzzy_fulltext", created_at=100,
+    )
+
+    # swapped argument order (candidate discovered "first" this time)
+    result = repo.create_or_reopen_match(
+        "test", new_entity_id="e2", candidate_entity_id="e1", match_id="m2",
+        status="pending", confidence=3.0, technique="fuzzy_fulltext", created_at=200,
+    )
+
+    assert result == {"created": False, "reopened": False, "matchId": "m1", "status": "pending"}
+
+
+def test_create_or_reopen_match_reopens_a_rejected_edge(repo, conn):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status="pending", confidence=2.5, technique="fuzzy_fulltext", created_at=100,
+    )
+    repo.reject_match("test", match_id="m1", decided_by="u1", decided_at=150)
+
+    result = repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m2",
+        status="pending", confidence=3.0, technique="fuzzy_fulltext", created_at=200,
+    )
+
+    assert result == {"created": False, "reopened": True, "matchId": "m1", "status": "pending"}
+    rows = _probe(
+        conn,
+        "MATCH ()-[r:SAME_AS {matchId:'m1'}]->() "
+        "RETURN r.status, r.resuggestCount, r.lastResuggestedAt",
+    )
+    assert rows == [["pending", 1, 200]]
+    [[count]] = _probe(conn, "MATCH ()-[r:SAME_AS]->() RETURN count(r)")
+    assert count == 1  # no duplicate edge
+
+
+def _seeded_match(repo, *, status="pending"):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status=status, confidence=2.5, technique="fuzzy_fulltext", created_at=100,
+    )
+
+
+def test_confirm_match_flips_status_and_stamps_audit_fields(repo, conn):
+    _seeded_match(repo)
+
+    result = repo.confirm_match("test", match_id="m1", decided_by="u1", decided_at=500)
+
+    assert result == {"matchId": "m1", "status": "confirmed", "entityA": "e1", "entityB": "e2"}
+    rows = _probe(
+        conn, "MATCH ()-[r:SAME_AS {matchId:'m1'}]->() RETURN r.decidedBy, r.decidedAt",
+    )
+    assert rows == [["u1", 500]]
+
+
+def test_confirm_match_returns_none_for_unknown_match_id(repo):
+    assert repo.confirm_match("test", match_id="nope", decided_by="u1", decided_at=500) is None
+
+
+def test_reject_match_flips_status_and_stamps_audit_fields(repo, conn):
+    _seeded_match(repo)
+
+    result = repo.reject_match("test", match_id="m1", decided_by="u1", decided_at=500)
+
+    assert result == {"matchId": "m1", "status": "rejected", "entityA": "e1", "entityB": "e2"}
+    rows = _probe(conn, "MATCH ()-[r:SAME_AS {matchId:'m1'}]->() RETURN r.status")
+    assert rows == [["rejected"]]
+
+
+def test_reject_match_returns_none_for_unknown_match_id(repo):
+    assert repo.reject_match("test", match_id="nope", decided_by="u1", decided_at=500) is None
+
+
+def test_recheck_match_flips_a_rejected_edge_back_to_pending(repo, conn):
+    _seeded_match(repo)
+    repo.reject_match("test", match_id="m1", decided_by="u1", decided_at=200)
+
+    result = repo.recheck_match("test", match_id="m1", at=300)
+
+    assert result == {"matchId": "m1", "status": "pending", "entityA": "e1", "entityB": "e2"}
+    rows = _probe(
+        conn,
+        "MATCH ()-[r:SAME_AS {matchId:'m1'}]->() "
+        "RETURN r.status, r.resuggestCount, r.lastResuggestedAt",
+    )
+    assert rows == [["pending", 1, 300]]
+
+
+def test_recheck_match_is_a_noop_for_a_pending_match(repo):
+    _seeded_match(repo, status="pending")
+
+    assert repo.recheck_match("test", match_id="m1", at=300) is None
+
+
+def test_recheck_match_is_a_noop_for_an_unknown_match_id(repo):
+    assert repo.recheck_match("test", match_id="nope", at=300) is None
+
+
+def test_list_pending_matches_returns_only_pending_oldest_first(repo):
+    repo.create_entity(
+        "test", entity_id="e1", name="A", name_normalized="a",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="A2", name_normalized="a2",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e3", name="B", name_normalized="b",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m2",
+        status="pending", confidence=1.0, technique="fuzzy_fulltext", created_at=200,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e3", match_id="m1",
+        status="pending", confidence=1.0, technique="fuzzy_fulltext", created_at=100,
+    )
+    # a confirmed edge must never show up in the pending-only listing
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e4", name="A", name_normalized="a",
+        type="Organization", created_at=300, match_id="m3",
+    )
+
+    rows = repo.list_pending_matches("test", limit=50)
+
+    assert [r["matchId"] for r in rows] == ["m1", "m2"]  # oldest first
+
+
+def test_list_matches_filtered_by_status(repo):
+    _seeded_match(repo)  # m1, pending
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e3", name="Acme", name_normalized="acme",
+        type="Organization", created_at=300, match_id="m4",
+    )  # auto-confirms against e1 (oldest 'acme'/Organization entity)
+
+    pending = repo.list_matches("test", status="pending", limit=50)
+    confirmed = repo.list_matches("test", status="confirmed", limit=50)
+
+    assert [r["matchId"] for r in pending] == ["m1"]
+    assert [r["matchId"] for r in confirmed] == ["m4"]
+
+
+def test_list_matches_unfiltered_includes_every_status(repo):
+    _seeded_match(repo)  # m1, pending
+    repo.reject_match("test", match_id="m1", decided_by="u1", decided_at=200)
+    repo.create_entity_with_auto_match(
+        "test", entity_id="e3", name="Acme", name_normalized="acme",
+        type="Organization", created_at=300, match_id="m4",
+    )  # auto-confirms
+
+    rows = repo.list_matches("test", limit=50)
+
+    assert {r["matchId"] for r in rows} == {"m1", "m4"}
+    statuses = {r["matchId"]: r["status"] for r in rows}
+    assert statuses == {"m1": "rejected", "m4": "confirmed"}
+
+
+def test_list_matches_respects_limit(repo):
+    repo.create_entity(
+        "test", entity_id="e1", name="A", name_normalized="a",
+        type="Organization", created_at=100,
+    )
+    for i in range(3):
+        repo.create_entity(
+            "test", entity_id=f"cand{i}", name=f"A{i}", name_normalized=f"a{i}",
+            type="Organization", created_at=100,
+        )
+        repo.create_or_reopen_match(
+            "test", new_entity_id="e1", candidate_entity_id=f"cand{i}",
+            match_id=f"m{i}", status="pending", confidence=1.0,
+            technique="fuzzy_fulltext", created_at=100 + i,
+        )
+
+    rows = repo.list_matches("test", status="pending", limit=2)
+
+    assert len(rows) == 2
+
+
 # ── §5 Full-text search ────────────────────────────────────────────────────────
 
 

@@ -66,6 +66,8 @@ def test_tool_discovery_lists_all_tools(repo):
         "send_message", "read_messages", "create_thread",
         "search_messages", "create_channel", "list_channels", "list_threads",
         "ingest_document", "get_document", "search_documents",
+        "list_pending_matches", "list_matches", "confirm_match",
+        "reject_match", "recheck_match",
     }
 
 
@@ -254,6 +256,84 @@ def test_get_document_missing_returns_none(repo):
         mcp_mod.mcp.call_tool("get_document", {"document_id": "nope"})
     ))
     assert got is None
+
+
+# ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
+
+
+def _seed_match(repo, *, status="pending"):
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.create_entity(
+        "test", entity_id="e2", name="Acme Co", name_normalized="acme co",
+        type="Organization", created_at=100,
+    )
+    repo.create_or_reopen_match(
+        "test", new_entity_id="e1", candidate_entity_id="e2", match_id="m1",
+        status=status, confidence=2.0, technique="fuzzy_fulltext", created_at=100,
+    )
+
+
+def test_list_pending_matches_tool(repo):
+    _seed_match(repo, status="pending")
+    _configure(repo)
+
+    rows = _unwrap(asyncio.run(mcp_mod.mcp.call_tool("list_pending_matches", {})))
+
+    assert [m["matchId"] for m in rows] == ["m1"]
+
+
+def test_list_matches_tool_filters_by_status(repo):
+    _seed_match(repo, status="pending")
+    _configure(repo)
+
+    pending = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("list_matches", {"status": "pending"})
+    ))
+    confirmed = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("list_matches", {"status": "confirmed"})
+    ))
+
+    assert [m["matchId"] for m in pending] == ["m1"]
+    assert confirmed == []
+
+
+def test_confirm_match_tool(repo):
+    _seed_match(repo, status="pending")
+    _configure(repo)
+
+    result = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("confirm_match", {"match_id": "m1"})
+    ))
+
+    assert result["status"] == "confirmed"
+
+
+def test_confirm_match_tool_errors_for_unknown_match_id(repo):
+    _configure(repo)
+
+    with pytest.raises(Exception):
+        asyncio.run(mcp_mod.mcp.call_tool("confirm_match", {"match_id": "nope"}))
+
+
+def test_reject_then_recheck_match_tool_round_trips(repo):
+    _seed_match(repo, status="pending")
+    _configure(repo)
+
+    async def scenario():
+        rejected = _unwrap(await mcp_mod.mcp.call_tool(
+            "reject_match", {"match_id": "m1"}
+        ))
+        rechecked = _unwrap(await mcp_mod.mcp.call_tool(
+            "recheck_match", {"match_id": "m1"}
+        ))
+        return rejected, rechecked
+
+    rejected, rechecked = asyncio.run(scenario())
+    assert rejected["status"] == "rejected"
+    assert rechecked["status"] == "pending"
 
 
 # ── K-050 M5 Stage 2: chunk embedding + search_documents ────────────────────────

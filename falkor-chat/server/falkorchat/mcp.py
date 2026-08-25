@@ -311,3 +311,47 @@ def search_documents(query: str, limit: int = 20) -> list[dict[str, Any]]:
     """
     ctx = _get_context()
     return _svc().search_documents(ctx, query=query, limit=limit)
+
+
+# ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ────────
+
+
+@mcp.tool()
+def list_pending_matches(limit: int = 50) -> list[dict[str, Any]]:
+    """List `SAME_AS` suggestions awaiting confirm/reject (OQ-2's review
+    surface) — oldest first, each carrying both entities' id + name."""
+    ctx = _get_context()
+    return _svc().list_pending_matches(ctx, limit=limit)
+
+
+@mcp.tool()
+def list_matches(status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    """List `SAME_AS` matches, optionally filtered by `status` (`pending` /
+    `confirmed` / `rejected`) — with no filter, includes the auto-merged tier
+    (`status='confirmed', decidedBy='system'`), otherwise undiscoverable."""
+    ctx = _get_context()
+    return _svc().list_matches(ctx, status=status, limit=limit)
+
+
+@mcp.tool()
+def confirm_match(match_id: str) -> dict[str, Any]:
+    """Confirm a `SAME_AS` suggestion (FR-10) — the two entities are "the
+    same," recorded as an edge, never physically merged."""
+    ctx = _get_context()
+    return _svc().confirm_match(ctx, match_id=match_id)
+
+
+@mcp.tool()
+def reject_match(match_id: str) -> dict[str, Any]:
+    """Reject a `SAME_AS` suggestion (FR-10) — the edge stays as a `rejected`
+    record, reversible via `recheck_match` or automatic re-derivation (OQ-3)."""
+    ctx = _get_context()
+    return _svc().reject_match(ctx, match_id=match_id)
+
+
+@mcp.tool()
+def recheck_match(match_id: str) -> dict[str, Any] | None:
+    """Manually reopen a `rejected` `SAME_AS` match back to `pending` (OQ-3).
+    A no-op (returns `None`) if `match_id` is unknown or not `rejected`."""
+    ctx = _get_context()
+    return _svc().recheck_match(ctx, match_id=match_id)

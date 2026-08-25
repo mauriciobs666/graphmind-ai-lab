@@ -74,6 +74,32 @@ def _safe_extract(
         _log.exception("background extract failed (chunkId=%s)", chunk_id)
 
 
+def _safe_fuse(
+    ingestion_pipeline: Any, ws: str, entity_id: str, name: str, type: str
+) -> None:
+    """Fuse one newly-created entity out-of-band, swallowing+logging any
+    failure (K-050 M5 Stage 4 — FR-9 suggested-tier isolation).
+
+    Unlike every other `_safe_*` wrapper in this module, this one is called
+    **inline, from inside `IngestionPipeline.extract_chunk`'s own per-entity
+    loop** (`ingestion.py`), not scheduled as a separate background task by
+    `api.py`/`mcp.py` — the fuzzy-tier lookup/write for one entity can only
+    run once that entity exists (`create_entity_with_auto_match` already
+    ran), and `api.py`/`mcp.py` schedule per-CHUNK, before any entity is
+    known. Granularity here is per-ENTITY, one level finer than
+    `_safe_extract`'s per-chunk isolation: a fusion failure for one entity
+    (a RediSearch syntax error, a transient connection hiccup) must not
+    corrupt the `Document`, and — same failure-isolation discipline as every
+    other wrapper here — must not block sibling entities or that chunk's
+    relationship writes, which `extract_chunk`'s loop continues past this
+    call regardless of outcome.
+    """
+    try:
+        ingestion_pipeline.fuse_entity(ws, entity_id, name, type)
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background fuse failed (entityId=%s)", entity_id)
+
+
 def _safe_respond(responder: Any, ctx: CallContext, posted: dict[str, Any]) -> None:
     """Fire the AI responder out-of-band, swallowing+logging any failure.
 

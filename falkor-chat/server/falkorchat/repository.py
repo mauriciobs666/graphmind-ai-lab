@@ -1193,6 +1193,308 @@ class Repository:
             },
         )
 
+    # ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4, FR-6/7/8/9/10) ──────────
+    #
+    # Every `SAME_AS`-anchored query below matches its endpoints UNLABELED
+    # (`(a)`/`(b)`, never `(a:Entity)`) — a bare label on either endpoint of a
+    # relationship-index-anchored query forces a full `Node By Label Scan` on
+    # this build even though the relationship-property scan alone is fully
+    # selective (`document-ingestion-graph.md` §1.4, `claude/graph-dba/
+    # falkordb-quirks.md`). `SAME_AS` only ever connects `Entity` nodes by
+    # construction, so omitting the label costs nothing semantically.
+
+    def create_entity_with_auto_match(
+        self, ws: str, *, entity_id: str, name: str, name_normalized: str,
+        type: str, created_at: int, match_id: str,
+    ) -> dict[str, Any]:
+        """FR-8 exact-tier auto-merge, folded into entity creation itself —
+        the plan-gate review BLOCKER fix (`document-ingestion.md` §3.4
+        "Concurrency note", `document-ingestion-graph.md` §1.8).
+
+        One atomic `GRAPH.QUERY` that (1) looks up the oldest pre-existing
+        `Entity` sharing `(nameNormalized, type)` — the same semantics
+        `find_exact_candidate` originally described standalone (§2.3) —
+        (2) creates the new `Entity` node, and (3), only if a candidate was
+        found, creates a `SAME_AS{status:'confirmed', decidedBy:'system',
+        confidence:1.0}` edge from the new entity to it. All three in one
+        round trip, so no concurrent `GRAPH.QUERY` against the same
+        `(nameNormalized, type)` can ever observe a state between "candidate
+        checked" and "entity created + linked" (FalkorDB/Redis serializes
+        command execution — this is the same guarantee `create_or_reopen_match`
+        below already relies on for its own read-then-write, applied one hop
+        earlier). Live-verified ordering (graph note §1.8): the candidate
+        `MATCH` binds strictly before the new entity's `CREATE`, so the new
+        entity can never appear as its own candidate.
+
+        No reopen branch — a brand-new `Entity`, `CREATE`d fresh inside this
+        same query, cannot structurally already have a `SAME_AS` edge to
+        reopen (graph note §1.8's confirmed simplification).
+
+        Returns `{entityId, exactMatched, candidateEntityId, matchId}` —
+        `candidateEntityId`/`matchId` are `None` when `exactMatched` is
+        False. `match_id` is server-minted by the caller and consumed only
+        if a candidate is actually found.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (candidate:Entity {nameNormalized: $nameNormalized, type: $type}) "
+            "WITH candidate "
+            "ORDER BY candidate.createdAt ASC "
+            "LIMIT 1 "
+            "CREATE (e:Entity {"
+            "  entityId: $entityId, name: $name, nameNormalized: $nameNormalized, "
+            "  type: $type, createdAt: $createdAt"
+            "}) "
+            "WITH e, candidate "
+            "FOREACH (_ IN CASE WHEN candidate IS NOT NULL THEN [1] ELSE [] END | "
+            "  CREATE (e)-[:SAME_AS {"
+            "    matchId: $matchId, status: 'confirmed', confidence: 1.0, "
+            "    technique: 'exact_normalized_name_type', createdAt: $createdAt, "
+            "    decidedAt: $createdAt, decidedBy: 'system', "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(candidate) "
+            ") "
+            "RETURN e.entityId AS entityId, "
+            "       candidate IS NOT NULL AS exactMatched, "
+            "       candidate.entityId AS candidateEntityId, "
+            "       CASE WHEN candidate IS NOT NULL THEN $matchId ELSE null END AS matchId",
+            {
+                "entityId": entity_id, "name": name, "nameNormalized": name_normalized,
+                "type": type, "createdAt": created_at, "matchId": match_id,
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "entityId": row[0], "exactMatched": row[1],
+            "candidateEntityId": row[2], "matchId": row[3],
+        }
+
+    def find_fuzzy_candidates(
+        self, ws: str, *, fuzzy_query: str, type: str, limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """FR-9 suggested-tier candidate lookup — RediSearch fuzzy full-text
+        against `Entity.name`, `type`-filtered (`document-ingestion-graph.md`
+        §2.3). `fuzzy_query` is built app-side by `fusion.find_fuzzy_candidates`
+        (one `%token%` 1-edit fuzzy term per name token) — this method issues
+        the query verbatim, no further construction here (Cypher stays only
+        in this module). Ranked by score, highest first.
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.fulltext.queryNodes('Entity', $fuzzyQuery) "
+            "YIELD node AS candidate, score "
+            "WHERE candidate.type = $type "
+            "RETURN candidate.entityId AS entityId, candidate.name AS name, "
+            "candidate.type AS type, score "
+            "ORDER BY score DESC "
+            "LIMIT $limit",
+            {"fuzzyQuery": fuzzy_query, "type": type, "limit": limit},
+        )
+        return [
+            {"entityId": row[0], "name": row[1], "type": row[2], "score": row[3]}
+            for row in res.result_set
+        ]
+
+    def create_or_reopen_match(
+        self, ws: str, *, new_entity_id: str, candidate_entity_id: str,
+        match_id: str, status: str, confidence: float, technique: str,
+        created_at: int,
+    ) -> dict[str, Any]:
+        """FR-9 suggested tier (and any future non-atomic tier's) find-or-
+        create-or-reopen write — OQ-3's "reuse by pair, reopen if rejected"
+        contract (`document-ingestion-graph.md` §1.6).
+
+        Write direction is a convention, not a semantic claim (always
+        `new -> candidate`, graph note §1.5); the `OPTIONAL MATCH` lookup is
+        undirected, so a suggestion already written in the opposite discovery
+        order on an earlier ingestion is still found, never duplicated. Not a
+        bare `MERGE` — see the graph note §1.6 for why a direction-fixed
+        `MERGE` would miss that opposite-order case.
+
+        Returns `{created, reopened, matchId, status}`. `matchId`/`confidence`/
+        `technique`/`created_at` are consumed only when a fresh edge is
+        actually created; a reopened edge keeps its **original** `matchId`
+        and bumps `resuggestCount`/`lastResuggestedAt` instead.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a:Entity {entityId: $newEntityId}) "
+            "MATCH (b:Entity {entityId: $candidateEntityId}) "
+            "OPTIONAL MATCH (a)-[existing:SAME_AS]-(b) "
+            "WITH a, b, existing, "
+            "     (existing IS NULL) AS isNew, "
+            "     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen "
+            "FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | "
+            "  CREATE (a)-[:SAME_AS {"
+            "    matchId: $matchId, status: $status, confidence: $confidence, "
+            "    technique: $technique, createdAt: $createdAt, "
+            "    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END, "
+            "    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END, "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(b) "
+            ") "
+            "FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | "
+            "  SET existing.status = 'pending', "
+            "      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, "
+            "      existing.lastResuggestedAt = $createdAt "
+            ") "
+            "RETURN isNew AS created, reopen AS reopened, "
+            "       coalesce(existing.matchId, $matchId) AS matchId, "
+            "       coalesce(existing.status, $status)   AS status",
+            {
+                "newEntityId": new_entity_id, "candidateEntityId": candidate_entity_id,
+                "matchId": match_id, "status": status, "confidence": confidence,
+                "technique": technique, "createdAt": created_at,
+            },
+        )
+        row = res.result_set[0]
+        return {"created": row[0], "reopened": row[1], "matchId": row[2], "status": row[3]}
+
+    def confirm_match(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-10 — flip a `pending`/`rejected` `SAME_AS` edge to `confirmed`,
+        stamping the audit fields (`document-ingestion-graph.md` §1.7).
+        `decided_by` is a real `User`/`Agent` id here, never `'system'` — this
+        path is only ever reached by a human/agent decision.
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` if no
+        `SAME_AS` edge has this `matchId` (caller's job to turn that into a
+        404-shaped error).
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def reject_match(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-10 — flip a `SAME_AS` edge to `rejected`, stamping the audit
+        fields (`document-ingestion-graph.md` §1.7). Never deletes the edge —
+        the `rejected` record is what makes OQ-3 (automatic re-open on
+        corroboration, or `recheck_match` on demand) answerable with no
+        second mechanism.
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` if no
+        `SAME_AS` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def recheck_match(self, ws: str, *, match_id: str, at: int) -> dict[str, Any] | None:
+        """OQ-3's manual reopen path — flips a `rejected` `SAME_AS` edge back
+        to `pending` and bumps `resuggestCount`/`lastResuggestedAt`
+        (`document-ingestion-graph.md` §1.7). A no-op for any other current
+        status (including "no such matchId") — the `WHERE r.status =
+        'rejected'` guard means both cases return zero rows indistinguishably;
+        the caller cannot and does not need to tell them apart (recheck is
+        idempotent either way: nothing to transition either time).
+
+        Returns `{matchId, status, entityA, entityB}`, or `None` on the no-op.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b) "
+            "WHERE r.status = 'rejected' "
+            "SET r.status = 'pending', "
+            "    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1, "
+            "    r.lastResuggestedAt = $at "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.entityId AS entityA, b.entityId AS entityB",
+            {"matchId": match_id, "at": at},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "entityA": row[2], "entityB": row[3]}
+
+    def list_pending_matches(self, ws: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """OQ-2's review surface — `status='pending'` `SAME_AS` edges, oldest
+        first (`document-ingestion-graph.md` §1.7). Directed (matches the
+        canonical write direction, §1.5) — no undirected-doubling risk.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (a)-[r:SAME_AS {status: 'pending'}]->(b) "
+            "RETURN r.matchId AS matchId, "
+            "       a.entityId AS entityA, a.name AS nameA, "
+            "       b.entityId AS entityB, b.name AS nameB, "
+            "       r.confidence AS confidence, r.technique AS technique, "
+            "       r.createdAt AS createdAt "
+            "ORDER BY r.createdAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "matchId": row[0], "entityA": row[1], "nameA": row[2],
+                "entityB": row[3], "nameB": row[4], "confidence": row[5],
+                "technique": row[6], "createdAt": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    def list_matches(
+        self, ws: str, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """The plan-gate review's MAJOR-finding fix — status-filterable (or
+        unfiltered) `SAME_AS` listing, closing the auto-merge tier's missing
+        discovery surface (`document-ingestion-graph.md` §1.7).
+
+        **Two separate query strings, not one `WHERE $status IS NULL OR
+        r.status = $status` null-guard** — live-verified that idiom silently
+        discards the `SAME_AS.status` index even when `$status` is bound to a
+        real value (graph note §1.7, `claude/graph-dba/falkordb-quirks.md`).
+        The unfiltered branch is a genuinely unavoidable full scan on this
+        build (no relationship-type-only scan operator exists) — `limit`
+        bounds the *result* size, not the *scan* cost; reasonable for an
+        infrequent admin/audit call, not a hot path.
+        """
+        if status is not None:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SAME_AS {status: $status}]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.entityId AS entityA, a.name AS nameA, "
+                "       b.entityId AS entityB, b.name AS nameB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"status": status, "limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SAME_AS]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.entityId AS entityA, a.name AS nameA, "
+                "       b.entityId AS entityB, b.name AS nameB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "matchId": row[0], "entityA": row[1], "nameA": row[2],
+                "entityB": row[3], "nameB": row[4], "status": row[5],
+                "confidence": row[6], "technique": row[7], "createdAt": row[8],
+            }
+            for row in res.result_set
+        ]
+
     def get_message(self, ws: str, *, msg_id: str) -> dict[str, Any] | None:
         """Fetch a single message with author + quoted-id, or None. QUERIES.md §4."""
         res = self._graph(ws).ro_query(

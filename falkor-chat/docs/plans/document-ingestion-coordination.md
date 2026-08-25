@@ -44,6 +44,9 @@ design, confirmed by the stakeholder 2026-08-22).
 | U16 | `coder` | `aa3b282bce11b9f3b` (resumed) | accepted | fix U15's 2 MAJORs (cap/stub-repair ordering; MCP schedule try/except + doc the doubled fan-out) | `analyst` (U17) → **approve** | 357k tok / 43 tools |
 | U17 | `analyst` | `a451eafaf56d89c64` (resumed) | accepted | Pass 3 re-gate of U16's fixes | code re-gate → **approve** | 194k tok / 31 tools |
 | U18 | `data-scientist` | `a454015041210268b` | accepted | `docs/reviews/document-ingestion-ml.md` — checkpoint | advisory, non-blocking — no gate (verified by teco) | 228k tok / 149 tools |
+| U19 | `coder` | `a7d65e37255f8b2ca` | accepted | Stage 4: fusion (FR-6/7/8/9/10, OQ-1/2/3) | `analyst` (U20, Pass 4) → **approve w/ suggestions** | 359k tok / 171 tools |
+| U20 | `analyst` | `a40241fa3792bc3cf` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 4 | code gate → **approve w/ suggestions** | 151k tok / 70 tools |
+| U21 | `coder` | `a7d65e37255f8b2ca` (resumed) | accepted | fix U20's 2 MINORs (QUERIES.md §14.6; AC-8 pipeline-altitude test) | (verified by teco) | 399k tok / 26 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -302,6 +305,34 @@ design-phase commit.
   concrete, cheap follow-ups recommended (widen stub-repair to a same-call substring/containment
   match; flag the type-inconsistency rate to whoever tunes Stage 4's exact-match tier) — both
   explicitly scoped as Stage 4 design-time considerations, not built here, not blocking.
+
+- **U19-U21 (Stage 4: fusion) verified independently, not just on report.** Read the diffs directly
+  against `document-ingestion.md` §4/§3.4 and `document-ingestion-graph.md` §1.5-§1.8 rather than
+  trusting `coder`'s summary: `create_entity_with_auto_match`, `create_or_reopen_match`,
+  `confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/`list_matches` all match the
+  graph note's exact, live-verified Cypher (unlabeled `SAME_AS` endpoints throughout, `list_matches`'
+  two-query-string fix, not a null-guard). Ran the default `pytest -q` suite myself (1711 passed on
+  first delivery, matching the claim) and read the concurrency regression test (real threads +
+  `threading.Barrier` + separate connections, not sequential calls dressed up as concurrent) and the
+  `kaizen_team` entry it produced (a genuine new FalkorDB quirk: an undirected relationship pattern
+  with an inline property filter silently degrades to directed — confirmed genuinely filed, correctly
+  attributed). Dispatched `analyst` for the mandatory diff-scoped re-gate (Pass 4, U20, distinct from
+  the design-phase plan gate) rather than accepting on `coder`'s word alone — independently
+  re-verified Cypher fidelity, the self-match-filter necessity (live-probed, not assumed), the
+  concurrency test (re-run 5×), one mutation-test spot-check, and the test-count arithmetic itself.
+  Verdict: **approve with suggestions** — two MINORs (no `docs/QUERIES.md` §14.6 despite the diff's
+  own code comments already citing it; AC-8's named pipeline-altitude test-strategy scenario not
+  literally exercised, only proven at the repository-primitive altitude). Both routed back to the
+  same `coder` agent (U21) rather than accepted as deferred follow-ups, since documentation is part
+  of done and AC-8 is a named Stage 4 "Done" criterion. Re-verified U21's fix directly: read the new
+  `docs/QUERIES.md` §14.6 section end-to-end (matches shipped `repository.py` exactly), read the new
+  `test_ac8_two_documents_mentioning_the_same_entity_fuse_via_extract_chunk` test (correctly avoids
+  the undirected+property-filter quirk via a directed, unlabeled probe), re-ran the full suite myself
+  (1712 passed — the one new test, exactly as claimed), and confirmed a second, narrower kaizen entry
+  (`REFINES` the first: the quirk trigger is any relationship-property predicate — inline or `WHERE`
+  — on an undirected pattern, not just inline maps) was filed as a plain new node, not an
+  unauthorized edge-write shape. **Stage 4 is done: implementation + diff-scoped gate + fix, all
+  independently verified. Committing.**
 
 ## Design phase — ✅ complete, committed `30366f4`
 

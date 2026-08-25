@@ -5,6 +5,89 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-24 — K-050 M5 Stage 4: document ingestion — entity fusion (FR-6/7/8/9/10, OQ-1/2/3)
+
+**What:** The fourth of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
+"Stage 4 — Fusion"), following Stage 3's advisory checkpoint (a real-content extraction-quality
+review, `docs/reviews/document-ingestion-ml.md` — no design change, but confirmed a real 30%
+type-inconsistency rate across repeat entity mentions worth knowing about here). New
+`falkorchat.fusion` module: `find_fuzzy_candidates` (RediSearch fuzzy full-text against `Entity.name`,
+type-filtered) and `classify_fuzzy` (`'suggested'`/`'none'`, no calibrated threshold in v1 — ML note
+§4.3) — the FR-9 suggested tier only. The FR-8 exact tier is **not** a separate lookup: the
+plan-gate review's BLOCKER (a three-round-trip check-then-act race that could silently defeat
+FR-8's zero-review guarantee under real concurrency) is closed by folding the candidate lookup, the
+new `Entity`'s `CREATE`, and its conditional auto-link into one atomic `GRAPH.QUERY`,
+`repository.create_entity_with_auto_match` — live-verified ordering (`document-ingestion-graph.md`
+§1.8): the candidate `MATCH` binds strictly before the new entity's own `CREATE`, so a call can
+never self-match. New `create_or_reopen_match` (the FR-9/OQ-3 find-or-create-or-reopen write, an
+undirected lookup + guarded double-`FOREACH`, never a fixed-direction `MERGE`) plus the FR-10 audit
+surface — `confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/`list_matches` — the
+last closing the plan-gate review's own MAJOR finding (a `WHERE $status IS NULL OR r.status =
+$status` null-guard silently drops the `SAME_AS.status` index on this build even when bound to a
+real value; fixed as two separate query strings instead). `IngestionPipeline.extract_chunk` now
+creates every entity via `create_entity_with_auto_match`; when it reports no exact match, a new
+`fuse_entity` method runs the fuzzy tier, isolated per-entity via new `background._safe_fuse`
+(inline from the per-entity loop, not scheduled as a separate background task — the fuzzy lookup can
+only run once the entity exists, one level finer-grained than `_safe_extract`'s per-chunk isolation).
+Every `SAME_AS`-anchored query matches its endpoints unlabeled (`(a)`/`(b)`, never `(a:Entity)`) per
+the graph note's live-verified planner trap — a bare label forces a full label scan even though the
+relationship-property scan alone is fully selective. `services.py`/`mcp.py`/`api.py` wire the five
+match-lifecycle operations as MCP tools + REST routes (`GET /matches/pending`, `GET /matches`,
+`POST /matches/{id}/{confirm,reject,recheck}`). `bootstrap_schema.sh` gains the `SAME_AS.matchId`/
+`SAME_AS.status` relationship-scoped indexes and a `UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1
+matchId` constraint, index-before-constraint as always. `docs/QUERIES.md` §14.6 documents all eight
+Cypher shapes.
+
+**Diff-gate findings (Pass 4, `docs/reviews/document-ingestion-impl.md`):** verdict approve with
+suggestions, no blockers/majors. Two MINORs, both fixed before this lands: **(1)** `docs/QUERIES.md`
+had no §14.6 even though the diff's own code comments already cited one — added, mirroring §14.5's
+shape, copy-and-cited from the graph note (no new verification needed, the Cypher was already
+exact-shape-verified). **(2)** AC-8's named test-strategy scenario (two documents fusing the same
+entity, pipeline-level) wasn't literally exercised — the underlying mechanism was already proven at
+the repository-primitive altitude (including a real-concurrency variant), but nothing drove
+`IngestionPipeline.extract_chunk` twice to prove the pipeline wiring itself. Added
+`test_ac8_two_documents_mentioning_the_same_entity_fuse_via_extract_chunk` (`test_ingestion.py`, the
+file's one deliberate live-FalkorDB-backed exception).
+
+**A genuine FalkorDB quirk found and filed (`kaizen_team`, two entries, second `REFINES` the
+first):** an **undirected** relationship pattern carrying a relationship-property predicate — either
+inline (`MATCH (a{...})-[r:TYPE{prop:val}]-(b{...})`) or a separate `WHERE r.prop = val` clause —
+silently behaves as if directed on this build, missing the edge when it's actually stored in the
+opposite direction from the pattern's node order. Found while writing the concurrency regression
+test (a test-authoring bug, not a shipped-code bug — confirmed no shipped Cypher in this diff has
+the trigger shape), reproduced deterministically (30/30 and 15/15 runs), and independently
+re-verified by `analyst` during the Pass 4 gate and by `teco` during integration.
+
+**Why:** Stage 4 turns Stage 3's deliberately-degenerate "every mention is a fresh node" population
+into fused knowledge — conflicting facts survive (never merged edges, AC-1), auto-merge needs no
+confirmation (AC-2), suggested matches are listable and confirm/reject-able (AC-3/AC-4), rejection
+is reversible both automatically (re-derivation reopens a `rejected` edge) and on demand
+(`recheck_match`, AC-7), and a batch of documents fuses against each other as well as existing
+knowledge (AC-8) — all provable now.
+
+**Tests:** `tests/test_fusion.py` (+7 new — `find_fuzzy_candidates`/`classify_fuzzy` unit tests);
+`tests/test_repository.py` (+23 — all seven new methods, including the exact-tier's ordering
+guarantee via black-box behavior across three sequential calls, and the concurrency regression test
+via two REAL concurrent calls on separate connections with a `threading.Barrier`);
+`tests/test_ingestion.py` (+8 — fusion wiring off `exactMatched`, self-match filtering, and the AC-8
+pipeline-level test); `tests/test_background.py` (+2 — `_safe_fuse` isolation); `tests/test_services.py`
+(+10), `tests/test_api.py` (+8), `tests/test_mcp.py` (+5) — the five match-lifecycle operations'
+service/REST/MCP contracts. Suite: offline `pytest -q` 1650→1712 passed (+62 added, 1 removed net),
+3 deselected unchanged; `./scripts/test_queries.sh` 320/320 unchanged (no new entries — same
+precedent Stages 2-3 set: the new shapes are covered by the pytest integration suite instead); the
+suite's teardown wipe of `reference` was re-seeded and verified in sync both after the initial
+delivery and after the diff-gate fixes.
+
+Mutation-tested: reverted `create_entity_with_auto_match` to the historical three-round-trip shape
+— the concurrency regression test failed 15/15 as expected, reverted back; dropped the `type` filter
+from the exact-tier candidate lookup — the matching-type test failed as expected; made
+`classify_fuzzy` always return `'none'` — both the unit test and the ingestion-level fuzzy-write test
+failed as expected. All three reapplied/confirmed passing.
+
+**Scope boundary:** Stage 4 only — no chat-grounding change (Stage 5, `test_provenance.py`
+untouched), no batch hardening or QA acceptance pass (Stage 6). `document-ingestion.md`/`-graph.md`/
+`-ml.md`/`BACKLOG.md` untouched (locked design/tracking documents).
+
 ## 2026-08-24 — Milestone status reconciled across four documents (M4 number collision)
 
 **What:** Fixing the one stale line flagged at the close of the `DESIGN.md` v1.0 pass surfaced a

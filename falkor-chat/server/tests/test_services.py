@@ -26,6 +26,7 @@ from falkorchat.services import (
     DocumentTooLargeError,
     EmptyDocumentError,
     InvalidSearchQueryError,
+    MatchNotFoundError,
     MemberIdCollisionError,
     SearchNotAvailableError,
     Services,
@@ -83,6 +84,7 @@ class FakeRepo:
         self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
         self.post_success_result = _UNSET  # override to script read_recent_post_success (§12.15)
         self.documents: dict[str, dict] = {}  # documentId -> created_document (K-050)
+        self.matches: dict[str, dict] = {}  # matchId -> match state (K-050 M5 Stage 4)
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -213,6 +215,72 @@ class FakeRepo:
     def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
         self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
         return self.since_rows
+
+    # ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4) ──────────────────────────
+    # matchId -> {"status", "entityA", "entityB", ...} — seed via `self.matches`
+    # directly in a test, mirroring `self.documents`'s dict-of-state idiom above.
+
+    def confirm_match(self, ws, *, match_id, decided_by, decided_at):
+        self.calls.append(("confirm_match", ws, match_id, decided_by, decided_at))
+        match = self.matches.get(match_id)
+        if match is None:
+            return None
+        match["status"] = "confirmed"
+        match["decidedBy"] = decided_by
+        match["decidedAt"] = decided_at
+        return {
+            "matchId": match_id, "status": "confirmed",
+            "entityA": match["entityA"], "entityB": match["entityB"],
+        }
+
+    def reject_match(self, ws, *, match_id, decided_by, decided_at):
+        self.calls.append(("reject_match", ws, match_id, decided_by, decided_at))
+        match = self.matches.get(match_id)
+        if match is None:
+            return None
+        match["status"] = "rejected"
+        match["decidedBy"] = decided_by
+        match["decidedAt"] = decided_at
+        return {
+            "matchId": match_id, "status": "rejected",
+            "entityA": match["entityA"], "entityB": match["entityB"],
+        }
+
+    def recheck_match(self, ws, *, match_id, at):
+        self.calls.append(("recheck_match", ws, match_id, at))
+        match = self.matches.get(match_id)
+        if match is None or match["status"] != "rejected":
+            return None
+        match["status"] = "pending"
+        return {
+            "matchId": match_id, "status": "pending",
+            "entityA": match["entityA"], "entityB": match["entityB"],
+        }
+
+    def _match_row(self, match_id):
+        m = self.matches[match_id]
+        return {
+            "matchId": match_id, "entityA": m["entityA"], "nameA": m.get("nameA", ""),
+            "entityB": m["entityB"], "nameB": m.get("nameB", ""),
+            "status": m["status"], "confidence": m.get("confidence", 1.0),
+            "technique": m.get("technique", "exact"), "createdAt": m.get("createdAt", 0),
+        }
+
+    def list_pending_matches(self, ws, *, limit=50):
+        self.calls.append(("list_pending_matches", ws, limit))
+        rows = [
+            self._match_row(mid) for mid, m in self.matches.items()
+            if m["status"] == "pending"
+        ]
+        return rows[:limit]
+
+    def list_matches(self, ws, *, status=None, limit=50):
+        self.calls.append(("list_matches", ws, status, limit))
+        rows = [
+            self._match_row(mid) for mid, m in self.matches.items()
+            if status is None or m["status"] == status
+        ]
+        return rows[:limit]
 
     # ── §11 workflow defs (reference) + snapshots (workspace) ────────────────────
 
@@ -588,6 +656,117 @@ def test_search_documents_raises_when_no_models_wired():
         svc.search_documents(CTX, query="hello")
 
     assert repo.calls == []  # never reaches search_chunks
+
+
+# ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ─────────────
+
+
+def _seed_service_match(repo, *, match_id="m1", status="pending"):
+    repo.matches[match_id] = {
+        "status": status, "entityA": "e1", "entityB": "e2",
+        "nameA": "Acme", "nameB": "Acme Co", "confidence": 2.0,
+        "technique": "fuzzy_fulltext", "createdAt": 100,
+    }
+
+
+def test_confirm_match_stamps_the_calling_actor_never_system():
+    repo = FakeRepo()
+    _seed_service_match(repo)
+    svc = make_service(repo, now=555)
+
+    result = svc.confirm_match(CTX, match_id="m1")
+
+    assert result["status"] == "confirmed"
+    assert repo.calls[-1] == ("confirm_match", "test", "m1", CTX.actor, 555)
+
+
+def test_confirm_match_raises_not_found_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(MatchNotFoundError):
+        svc.confirm_match(CTX, match_id="nope")
+
+
+def test_reject_match_stamps_the_calling_actor():
+    repo = FakeRepo()
+    _seed_service_match(repo)
+    svc = make_service(repo, now=555)
+
+    result = svc.reject_match(CTX, match_id="m1")
+
+    assert result["status"] == "rejected"
+    assert repo.calls[-1] == ("reject_match", "test", "m1", CTX.actor, 555)
+
+
+def test_reject_match_raises_not_found_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(MatchNotFoundError):
+        svc.reject_match(CTX, match_id="nope")
+
+
+def test_recheck_match_flips_a_rejected_match_back_to_pending():
+    repo = FakeRepo()
+    _seed_service_match(repo, status="rejected")
+    svc = make_service(repo, now=999)
+
+    result = svc.recheck_match(CTX, match_id="m1")
+
+    assert result == {"matchId": "m1", "status": "pending", "entityA": "e1", "entityB": "e2"}
+
+
+def test_recheck_match_returns_none_instead_of_raising_for_a_pending_match():
+    # Mirrors the repository's own inability to distinguish "unknown matchId"
+    # from "exists but isn't rejected" — the service does not raise either way.
+    repo = FakeRepo()
+    _seed_service_match(repo, status="pending")
+    svc = make_service(repo)
+
+    assert svc.recheck_match(CTX, match_id="m1") is None
+
+
+def test_recheck_match_returns_none_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.recheck_match(CTX, match_id="nope") is None
+
+
+def test_list_pending_matches_passes_through_the_repository_rows():
+    repo = FakeRepo()
+    _seed_service_match(repo, match_id="m1", status="pending")
+    _seed_service_match(repo, match_id="m2", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_pending_matches(CTX, limit=10)
+
+    assert [r["matchId"] for r in rows] == ["m1"]
+    assert repo.calls[-1] == ("list_pending_matches", "test", 10)
+
+
+def test_list_matches_passes_status_and_limit_through():
+    repo = FakeRepo()
+    _seed_service_match(repo, match_id="m1", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_matches(CTX, status="confirmed", limit=25)
+
+    assert [r["matchId"] for r in rows] == ["m1"]
+    assert repo.calls[-1] == ("list_matches", "test", "confirmed", 25)
+
+
+def test_list_matches_with_no_status_lists_every_tier():
+    repo = FakeRepo()
+    _seed_service_match(repo, match_id="m1", status="pending")
+    _seed_service_match(repo, match_id="m2", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_matches(CTX)
+
+    assert {r["matchId"] for r in rows} == {"m1", "m2"}
+    assert repo.calls[-1] == ("list_matches", "test", None, 50)
 
 
 # ── post_message: dispatch + validation ─────────────────────────────────────────

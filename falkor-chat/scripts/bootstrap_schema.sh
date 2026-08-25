@@ -112,6 +112,18 @@ bootstrap_workspace() {
   echo "[index] Entity.nameNormalized"
   gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.nameNormalized)"
 
+  # K-050 M5 Stage 4 (FR-6/7/8/9/10): the SAME_AS fusion edge — relationship-
+  # scoped index-before-constraint, same ordering rule as every node identity
+  # above (`document-ingestion-graph.md` §1.1/§1.5). Every SAME_AS-anchored
+  # query matches its endpoints UNLABELED ((a)/(b), never (a:Entity)) — a bare
+  # label on either endpoint forces a full Node By Label Scan even though the
+  # relationship-property scan alone is fully selective (graph note §1.4).
+  echo "[index] SAME_AS.matchId"
+  gquery "$g" "CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.matchId)"
+
+  echo "[index] SAME_AS.status"
+  gquery "$g" "CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.status)"
+
   # Materialized snapshot steps land in the workspace graph too (K-021), so the
   # same Step identity DDL as the reference graph applies here.
   # Step.key: display/traversal anchor only, no constraint (§7.1).
@@ -198,6 +210,9 @@ bootstrap_workspace() {
 
   echo "[constraint] Entity unique {entityId}"
   gconstraint "$g" UNIQUE NODE Entity PROPERTIES 1 entityId
+
+  echo "[constraint] SAME_AS unique {matchId}"
+  gconstraint "$g" UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId
 
   echo "[constraint] Step unique {stepUid}"
   gconstraint "$g" UNIQUE NODE Step PROPERTIES 1 stepUid
