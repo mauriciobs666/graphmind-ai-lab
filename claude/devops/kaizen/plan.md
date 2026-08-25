@@ -12,12 +12,6 @@
 | K-003 | 2026-07-02 | low | 🔵 | Revisit persona vs. role framing once the agent has run a few real tasks |
 | K-004 | 2026-07-02 | low | 🔵 | Guard hook is single-machine (absolute path + machine deps) — make it relocatable / tunable |
 
-> ✅ **K-001 — Enforce the destructive-op guardrail deterministically** — DONE 2026-07-02.
-> Implemented as a subagent-scoped `PreToolUse` hook (`devops/hooks/guard-destructive-ops.sh`,
-> wired in `devops.md` frontmatter), returning `permissionDecision: "ask"`. Kept it **in-repo** via
-> the frontmatter `hooks:` field (not `settings.json`) — the original trade-off note is resolved:
-> subagent frontmatter hooks are supported and scoped to this agent. See history 2026-07-02.
-
 ### K-004 — Make the guard hook relocatable
 - **Status:** 🔵 proposed
 - **Priority:** low
@@ -63,11 +57,3 @@
 - A behavioral eval in the cobb/TESTING.md harness style — e.g. assert the agent (a) reads the
   project's README/docs before proposing infra changes, and (b) refuses to `docker volume rm` a
   shared data volume without confirmation.
-- ⚪ **Keep the graphmind-ai-lab example in the prompt lightweight** — **resolved by deletion,
-  2026-08-24 (C4).** The item's own remedy (refresh it when the repo's infra changes materially) was
-  applied twice, on 2026-07-09 and 2026-07-11, and the block rotted a third time anyway — in a
-  *different* slot each time, so repairing the fact that broke last time never protected the ones
-  that broke next. Deleted outright rather than refreshed a third time; this agent is user-scoped, so
-  a memorized snapshot of one repo was a false anchor in every other project, on the one agent whose
-  whole remit is "don't generalize from another repo." The item's own closing sentence had it right —
-  the authoritative detail lives in the repo's `AGENTS.md`, which orientation reads anyway.

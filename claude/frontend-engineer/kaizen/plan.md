@@ -10,7 +10,6 @@
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-09 | medium | 🔵 | First real-run shakedown on a UI task in this repo |
 | K-002 | 2026-07-09 | low | 🔵 | Visual verification tooling (screenshots/browser automation) |
-| K-003 | 2026-08-24 | low | ✅ | Conventions precedence unstated — `:17`/`:77` say project scope, `:56` says the same folder; fix with `tdd-engineer` K-006 and `coder` K-004 |
 
 ### K-001 — First real-run shakedown
 - **Status:** 🔵 proposed
@@ -25,13 +24,6 @@
 - **Rationale:** "verify in the running UI" currently relies on dev-server output and console checks; real screenshot/browser-drive tooling (Playwright, a browser MCP server) would make visual claims evidence-backed.
 - **Proposed change:** once the lab standardizes a browser-automation tool, wire it into the prompt's verification step (and consider an `mcpServers` frontmatter entry).
 - **Notes:** keep it optional — Streamlit apps may only need `streamlit run` + manual checks.
-
-### K-003 — Conventions precedence is unstated: project norm or local neighbour?
-- **Status:** ✅ **closed 2026-08-25** — all three instances fixed in one commit with a byte-identical sentence, enforced by `audit-team.sh` check 10 (fails at some-but-not-all). See `history.md`.
-- **Priority:** low
-- **Rationale:** Three statements, two scopes. `:17` *"Discover conventions; don't import your favorites"* and `:77` *"The project's stack and idiom win over your favorite library"* are **project**-scope. `:56` *"your code should be indistinguishable from a good existing file **in the same folder**"* is **local**-scope. They agree in a consistent codebase and diverge in exactly the case worth a rule — a folder that deviates from the project norm. Found by `cobb`'s §7 lint during C6 (`claude/docs/plans/prompt-waste-reduction.md`).
-- **Proposed change:** name the tiebreak once, e.g. *"…where a folder deviates locally from the project norm, match the folder — a mixed-style file is worse than either style."*
-- **Notes:** Third instance of one family. **`tdd-engineer` K-006** is the strongest (two co-equal imperatives in one bullet); **`coder` K-004** is the third. **Fix all three together or none** — divergent convention-precedence rules across implementers that split work by task shape is an `agent-maintenance` §4 check-5 boundary-reciprocity problem. Deliberately not bundled into C6: it is a rule change, and §4.0's rollback contract keeps those out of a compression commit.
 
 ## Parking lot / ideas
 - **Judged and kept, do not re-litigate (2026-08-24, C6 lint).**

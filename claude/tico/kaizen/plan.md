@@ -9,65 +9,10 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-09 | high | 🔵 | Live e2e spin: a real `claude --agent tico` interview on a genuine feature request |
-| K-002 | 2026-07-09 | — | ⚪ | ~~SendMessage continuation for interview rounds~~ — moot once tico converses natively as the main-session agent |
 | K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
-| K-008 | 2026-08-11 | — | ✅ | **Closed 2026-08-24** — both incidents decided by the stakeholder: commit scope via shape (a), `Agent`-routing via shape (b) with offer rights. See `kaizen/history.md`. |
-| K-009 | 2026-08-23 | — | ✅ | Commit-frequency recurrence — stakeholder chose document-level batching; encoded in `tico.md`. See `kaizen/history.md`. |
-
-### K-008 — Stakeholder pushback on tico's write-scope and `Agent`-routing guardrails
-- **Status:** 🔵 proposed, **held for stakeholder decision**
-- **Rationale:** on 2026-07-31, in the same session as the `version`/`defVersion` manual fix, the
-  stakeholder hit tico's boundaries twice doing something that felt entirely reasonable to them:
-  (1) asked tico to "call the architect" to route a QA finding as a design question — declined,
-  since routing a design decision to `architect` isn't one of tico's three sanctioned `Agent` uses
-  (Explore, an offered manual-verification pass, an offered demo); (2) had tico file the finding
-  as a one-off `docs/BACKLOG.md` entry (human-approved outside tico's normal directories), then
-  asked tico to commit it too — declined, since the git-commit allowance is scoped to the *same*
-  two directories (`docs/requirements/`, `docs/manuals/`), not to whatever `Write`/`Edit` the
-  harness happened to let through that session. Stakeholder's reply to the second decline: "we
-  need to relax these rules."
-- **Two shapes on the table, neither self-evidently right (from tico's own inbox entry, not
-  decided here):**
-  (a) the commit allowance could track whatever the Write/Edit guard already let through *this
-  session* (a human-approved one-off `BACKLOG.md` edit becomes committable), rather than being
-  pinned to the two directories regardless of what was actually written — risk: this starts to
-  look like `git add -A`'s blast radius by another route.
-  (b) routing an already-written, fully-formed finding to a named next-agent could be a fourth
-  sanctioned `Agent` use, distinct from tico *designing* a solution — risk: tico drifts toward
-  being a delegation hub instead of a stakeholder-facing writer.
-- **Why cobb didn't just pick one:** this is a scope-of-authority question the 2026-07-30
-  "tico/teco commit rights, deliberately not extended further" stakeholder decision
-  (`claude/AGENTS.md` "Git-commit authority") didn't settle — that decision was about *other
-  agents* not getting commit rights, not about *widening tico's own*. Recorded here per the
-  distillation SOP's instruction to flag rather than guess on a genuine judgment call.
-- **Incident 2 CLOSED, 2026-08-24 (stakeholder decision):** shape **(a)** chosen — the commit
-  allowance now tracks what the `Write`/`Edit` guard actually let through, not the two directories.
-  `tico.md` Guardrails gained clause (c): a file tico itself wrote **in the current session** that
-  the guard let through, including a human-approved one-off (the `docs/BACKLOG.md` case). The
-  blast-radius risk noted above is bounded three ways — tico's own write, this session only,
-  explicit path — so it reaches no file tico didn't write and no earlier session. Also propagated
-  to `claude/AGENTS.md` and `claude/README.md`; see `kaizen/history.md`, 2026-08-24 entry. **Note
-  this overturns cobb's 2026-07-30 declination below on the write-scope==commit-scope invariant** —
-  the stakeholder's reasoning is that a human approving the write at the escalation prompt already
-  supplies the review that invariant stood in for.
-- **Incident 1 CLOSED, 2026-08-24 (stakeholder decision):** shape **(b)** chosen, at the wider of
-  the two variants offered — routing an already-written, fully-formed artifact to a named next
-  agent is now a **fourth sanctioned `Agent` use**, and tico may **offer** it proactively rather
-  than only execute an explicit request. Targets: `architect`, `analyst`, `qa-engineer` — *not*
-  any named specialist. The "delegation hub" risk noted above is bounded in the prompt itself:
-  only already-written work may be routed, and **"routing is not coordinating"** is stated
-  explicitly, with sequencing/gating/chaining named as `teco`'s and a duty to point at `teco`
-  rather than grow into it. See `kaizen/history.md`, 2026-08-24 entry.
-- **K-008 is fully closed** — both incidents decided the same day.
-- **Related resolution, 2026-08-21 (does not close this item):** a narrower, related instance —
-  tico lacking commit authority over a Mode-3 verification-pass specialist's own returned
-  artifact — was put to the stakeholder and decided: tico's commit grant now also covers that one
-  case, mirroring `teco`'s integrator authority (`kaizen/history.md`, 2026-08-21 entry). Neither of
-  *this* item's two open incidents (routing a QA finding to `architect`; committing an arbitrary
-  `docs/BACKLOG.md` entry) was decided by that ruling — both remain open here.
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
@@ -75,11 +20,6 @@
 - **Rationale:** the live-interview design is unexercised; same validate-by-running discipline as teco's K-001.
 - **Proposed change:** launch `claude --agent tico` on a genuinely vague feature request (e.g. in `falkor-chat/`) and run the interview to "Ready for design". Verify: `initialPrompt` kicks off correctly, the doc is updated *during* the conversation (not batched), the guard hook passes conforming writes silently, one-thread-at-a-time pacing holds, and the readback/explicit-confirmation gate fires before the status flip.
 - **Notes:** also worth one delegated invocation to see the subagent fallback degrade gracefully.
-
-### K-002 — SendMessage continuation for rounds
-- **Status:** ⚪ rejected 2026-07-09
-- **Rationale (original):** make re-invoked interview rounds cheaper by continuing the spawned agent.
-- **Why rejected:** the interactive redesign removed the rounds protocol from the primary path — as the main-session agent tico converses natively. The subagent fallback keeps doc-as-state and needs no continuation machinery.
 
 ### K-003 — Requirements→plan traceability
 - **Status:** 🔵 proposed
@@ -116,24 +56,3 @@
 - A `docs/requirements/` template file vs the inline template (only if the inline one drifts across features).
 - Non-functional requirements section (performance, security) — add when a feature actually needs one rather than padding every doc.
 - Project-scoped `agent` setting to make tico the default session agent in a requirements-heavy phase — only if launching via `--agent` proves to be friction.
-- **Proposal declined 2026-07-30 (cobb review):** widening tico's commit authority to cover
-  artifacts produced by agents it summons under Mode 3 (analyst/qa-engineer verification
-  passes), so tico becomes "an orchestrator like teco." Declined — breaks the
-  write-scope==commit-scope invariant every commit-capable agent holds, conflicts with
-  `audit-team.sh`'s single-orchestrator assumption and the team's "tico is not a delegation
-  target" framing, and isn't backstopped by any hook. tico was right to hold the line and not
-  self-waive its guardrail even under stakeholder pressure. Full reasoning in
-  `claude/cobb/kaizen/history.md` (2026-07-30 entry).
-  **RESOLVED 2026-07-30 — closed by explicit stakeholder decision, do not re-open.** The
-  stakeholder ruled directly (not via cobb's recommendation, and not the softer
-  session-scoped-summoned-only variant either): "I dont want the subagents to proliferate
-  commits, tico (you) and teco are special and have coordination rights." So: `analyst`/
-  `qa-engineer`/every other specialist stays **without** commit authority, permanently, not
-  pending a recurrence — and `teco`'s own commit authority (previously undocumented — it had
-  quietly used `Bash` to commit four uncommitted deliverables this same day with no guardrail
-  text backing it) is now formally documented in `teco.md`, scoped to its integrator role, and
-  backstopped by a new `audit-team.sh` check 8 that fails if any agent other than `tico`/`teco`
-  ever claims the same authority. Full implementation in `claude/teco/kaizen/history.md`
-  (2026-07-30 entry) and `claude/cobb/kaizen/history.md` (2026-07-30 entry). This question is
-  closed — if uncommitted-deliverable friction recurs, the fix is routing through `tico`/`teco`
-  (both now empowered for exactly this), never a third agent gaining commit rights.

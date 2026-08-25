@@ -9,11 +9,8 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-01 | med | 🔵 | Ship a reusable test-plan + test-report markdown template pair (as skill or in-repo doc) so structure is consistent across runs |
-| K-002 | 2026-07-01 | med | ✅ | Define the `docs/test-plans/` + `docs/test-reports/` convention explicitly in `falkor-chat/AGENTS.md` (currently inferred by the agent) — done 2026-07-11 via the docs-unification pass (see history) |
 | K-003 | 2026-07-01 | low | 🔵 | Consider a handoff protocol: qa-engineer files defects → coder/tdd-engineer fix → qa-engineer re-runs (regression loop) |
 | K-004 | 2026-07-01 | low | 🔵 | Capture a first-run smoke-eval as a repeatable check; document the "new subagent isn't routable until a new session" registry-reload gotcha where users will see it |
-| K-005 | 2026-08-24 | low | ✅ | Phase 2's lead-in still offers component-negotiable doc *naming* — the one place negotiability no longer survives. Re-point it at structure and IDs. |
-| K-006 | 2026-08-24 | low | ✅ | Phase 3 bullet 2 is one ~60-word compound sentence carrying four separable rules; `tdd-engineer` step 3 carries identical content as labeled sub-bullets. |
 
 ### K-001 — Reusable plan/report templates
 - **Status:** 🔵 proposed
@@ -21,12 +18,6 @@
 - **Rationale:** the prompt describes the plan/report structure prose-only; a concrete template (skill or doc) would make output consistent and speed each run.
 - **Proposed change:** author a small `qa-templates` skill (or a `docs/_templates/` pair) with the test-plan and test-report skeletons the agent fills in.
 - **Notes:** keep it lean; progressive-disclosure skill is the natural home if it grows.
-
-### K-002 — Pin the artifact-location convention in component docs
-- **Status:** ✅ done 2026-07-11 — the repo-wide docs unification defined the module documentation convention (active `docs/test-plans/`+`docs/test-reports/` vs. frozen `docs/archive/`) in the root `AGENTS.md` and the `falkor-chat/AGENTS.md` key-docs table; the agent's PLAN bullet was updated to match (see history 2026-07-11). **Superseded in part, 2026-07-27:** the active-vs-`archive/` *move* half of that convention is gone (D4 — a frozen document stays put and gets `Status: archived`), and the convention now also fixes a repo-wide filename grammar the agent may not renegotiate per component. Still done; the current statement is the root `AGENTS.md` bullet.
-- **Priority:** medium
-- **Rationale:** the agent currently *detects* where to write plans/reports. Writing the convention into `falkor-chat/AGENTS.md` (and other components as they gain QA needs) removes ambiguity and drift.
-- **Proposed change:** add a short "Test plans & reports live in `docs/test-plans/` and `docs/test-reports/`, kebab-case per feature" note to the relevant component `AGENTS.md`.
 
 ### K-003 — Defect → fix → re-run handoff
 - **Status:** 🔵 proposed
@@ -39,35 +30,6 @@
 - **Priority:** low
 - **Rationale:** the first-spin (2026-07-01) confirmed the agent works but had to be **proxy-run** because a freshly-created subagent isn't in the session's registry until a new session starts. Users will hit this; it belongs in the deploy/testing notes, not tribal memory.
 - **Proposed change:** add a one-line "restart the session to route to a newly added agent" note to `claude/README.md` deployment section (or `cobb/TESTING.md`), and keep the M1 pass as a lightweight smoke reference.
-
-### K-005 — Phase 2's lead-in is the last invitation to component-negotiable doc naming
-- **Status:** 🔵 proposed
-- **Priority:** low
-- **Rationale:** C5 removed ", or the component's convention" from phase 4's test-report path,
-  because a report filename **is** filename grammar — repo-wide per root `AGENTS.md`, and stated as
-  non-negotiable twice in this prompt already. That leaves phase 4 absolute and phase 2 negotiable-
-  with-exception. Phase 2's exception clause is correct and m17-certified (see the judged-and-kept
-  note below) and must stay; the problem is the *lead-in* above it — "matching the project's naming
-  conventions (discover them — don't impose)" — which is the first thing a skimming agent reads and
-  now points at the one dimension that is no longer negotiable at all.
-- **Proposed change:** re-point the lead-in at **structure and IDs** (test-item structure, the
-  component's backlog-ID form, how it references specs) rather than *naming*. That is where genuine
-  component negotiability still lives, and it leaves the exception clause doing its job unaided.
-- **Provenance:** `cobb` §7 lint during C5 of `claude/docs/plans/prompt-waste-reduction.md`.
-  Pre-existing; not bundled into C5 because it is a rule change.
-
-### K-006 — Phase 3 bullet 2 packs four rules into one sentence
-- **Status:** 🔵 proposed
-- **Priority:** low
-- **Rationale:** "Run the existing suite and scripts" is a single ~60-word compound sentence
-  carrying four separable rules: establish a green baseline first; never pile onto a red baseline;
-  never pile onto an un-runnable one; and report/propose/ask, with the delegated-subagent fallback.
-  `tdd-engineer`'s Workflow step 3 carries the same content as three labeled sub-bullets
-  (greenfield / already red / can't run here) and is markedly more followable.
-- **Proposed change:** mirror that structure. Purely structural — no rule added, none removed, and
-  no net word cost either way.
-- **Provenance:** `cobb` §7 lint during C5. Pre-existing; a restructure, not a compression, so not
-  bundled into that commit.
 
 ## Parking lot / ideas
 

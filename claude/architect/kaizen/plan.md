@@ -8,11 +8,6 @@
 
 *(no active items)*
 
-> **K-002 — end-to-end handoff validation — ✅ done 2026-07-09** (moved to history.md). Validated
-> live in the teco K-001 run: the M3 slice-1 plan (`falkor-chat/docs/archive/plans/m3-workflow-engine.md`)
-> was executed cold by isolated-context implementers (graph-dba + tdd-engineer) with no
-> re-investigation; one plan gap logged (missing `start_key` contract). Template unchanged.
-
 ## Parking lot / ideas
 - **Live-probe seam check (parked, 2026-08-09 — ex-inbox entry 4).** Before scheduling a plan step that runs a live probe/experiment, check the target actually has a graph/tenancy/environment seam that makes the probe isolated (e.g. a throwaway `ws:<probe>` workspace) — surfaced designing K-031 (falkor-chat's `publish_def` writes to a hardcoded `reference` graph with no per-workspace override; `materialize_snapshot`'s shared query constant against a throwaway `ws:` graph was the workaround). Judged narrow/single-occurrence, not promoted to Guardrails — revisit if a second instance turns up.
 - A short self-review checklist before delivering a plan (every step concrete & file-specific, alternatives recorded, risks listed, handoff summary present) — and, since 2026-07-27, the canonical header block present and its `Status:`/`Owner:`/`Tracks:` filled.

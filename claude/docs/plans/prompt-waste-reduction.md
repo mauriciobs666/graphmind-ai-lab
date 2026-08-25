@@ -988,6 +988,40 @@ change what the number means:
 Each plan file's own status legend already reads *"✅ done (then moved to `history.md`)"* — so G3
 found no missing convention, only an unfollowed one, which is the weaker and more common failure.
 
+**G3 pass 2 — applied, on the same stakeholder go-ahead as `falkor-chat` (2026-08-25).**
+**17,910 → 12,016 w across the 13 files (−5,894, −32.9%.)** The −13% pass-1 estimate was low by a
+factor of two and a half, and the reason is a measurement lesson: pass 1 counted **bullet-shaped
+and table-shaped** closed items and missed the two heaviest forms entirely — `teco`'s thirteen
+closed items sitting as a ~1,000 w run of blockquotes each of which literally says *"(moved to
+`history.md`)"* while never having moved, and `cobb`'s four multi-paragraph closed parking-lot
+blocks. **An item's residue is not proportional to its markup.**
+
+| | Before | After | |
+|---|---|---|---|
+| `teco` | 2,204 | 1,115 | −49% |
+| `cobb` | 3,987 | 2,870 | −28% |
+| `tico` | 2,322 | 1,306 | −44% |
+| `tdd-engineer` | 628 | 238 | −62% |
+| **13 files** | **17,910** | **12,016** | **−32.9%** |
+
+**What stayed, and it is the same distinction the root backlog drew.** A **⚪ deferred** item with a
+live revisit trigger is forward-looking and stays — `tdd-engineer` K-003 and `graph-dba` K-001/K-002
+each say *"revisit if…"*, exactly like `docs/BACKLOG.md`'s C-323/C-409. A **⚪ rejected** item with
+no trigger is a closed decision and goes (`tico` K-002). I deleted `tdd-engineer` K-003 on the first
+attempt and restored it on that test. Also kept: every *"judged and kept, do not re-litigate"* block
+— those exist to stop a future sweep from redoing an analysis, which is forward-looking work
+prevention, not a record of finished work; and `analyst` K-001's ✅ sub-bullets, which are progress
+inside a still-open item.
+
+**One structural fix, outside the rule but in the same file.** `cobb`'s plan had two
+`## Parking lot / ideas` headers and three open items (`K-015`, `K-017`, `K-019`) as table rows
+orphaned below the item sections rather than in the Active table. Merged into one table and one
+parking lot, no content dropped.
+
+**Not reached, still.** `coder` K-002's `**Notes:**` — four stacked dated `Update` clauses on an
+item that is **open** — survives untouched, as it must. Open-item note accretion needs its own rule
+and this plan is not writing one at its close.
+
 ## 5. Verification strategy
 
 - Per-unit: the four gates in §4 (rule inventory, history-first, cobb §7 lint, audit script).

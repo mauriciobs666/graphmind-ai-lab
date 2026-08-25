@@ -11,35 +11,7 @@
 | K-001 | 2026-08-20 | high | 🔵 | First-run shakedown: a real code-security review (with a CPG-backed component), a real agent/prompt-safety review, and — separately, with explicit human sign-off — a first supervised local exploitation attempt to validate the FR-10 approval loop end to end. |
 | K-002 | 2026-08-20 | medium | 🔵 | The `guard-exploitation-approval.sh` pattern catalog (tool names + network-client/local-marker check) is a best-effort backstop, not exhaustive — revisit it after the first few real exploitation-shaped invocations to see what it missed or over-flagged, same "grows via ad hoc addition" convention as `guard-destructive-ops.sh`'s `pipeline.sh --reset` case. |
 | K-003 | 2026-08-20 | low | 🔵 | If a second offensive-security-shaped agent is ever added to this team, extract `guard-exploitation-approval.sh`'s logic into a shared `scripts/guard-exploitation.sh` core (mirroring the 2026-07-11 doc-write-guard consolidation) rather than duplicating it — not before, one consumer doesn't earn the indirection yet. |
-| K-005 | 2026-08-24 | high | ✅ | FR-10's approval ritual has **no subagent path**, and the gap is widest exactly where the harness backstop is absent (`WebFetch`). See below — surfaced by the C4 prompt-waste lint, deliberately not bundled into it. |
 | K-004 | 2026-08-20 | medium | 🔵 | Extend `guard-exploitation-approval.sh`'s `matcher` (or add a second hook) to also watch `WebFetch` calls, not just `Bash` — the prompt-level FR-10 ritual now explicitly covers `WebFetch` (2026-08-20 fix pass on `analyst`'s review), but the harness backstop still doesn't. Needs a pattern for "does this WebFetch URL look like a live local/dev target with an exploitation-shaped query string" — genuinely harder to pattern-match reliably than a Bash command, so scope it carefully rather than rushing a noisy first cut. |
-
-### K-005 — FR-10's approval ritual is unperformable as a delegated subagent
-- **Status:** ✅ **closed 2026-08-25** — shipped with two corrections to the wording proposed below: the `WebFetch`-specific justification was dropped (false for Bash, and it built the permissive carve-out), and "as your deliverable, and stop" became "as a blocked item, alongside whatever else you established" (the original would have discarded completed lenses, contradicting `:20`). See `history.md`.
-- **Priority:** high — this is a safety gate with an open failure direction, not a polish item.
-- **Rationale:** The prompt's FR-10 bullet says "stop and state plainly: the target, the technique,
-  and the blast radius — then wait for the human's confirmation." For **Bash** that "wait" is
-  mechanically real: `guard-exploitation-approval.sh` raises a `PreToolUse` permission `ask` that
-  reaches a human even from an isolated subagent. For **`WebFetch`** there is no hook (K-004 is the
-  item to build one), and the prompt's own second paragraph establishes that a subagent cannot
-  converse mid-run. So on the one branch the prompt itself calls "*the only control there is*," the
-  prescribed action cannot be performed, and the failure direction is **open** rather than closed: an
-  agent that narrates target/technique/blast-radius in its reasoning, meets no objection because
-  nobody is listening, and proceeds. `devops.md` — the sibling agent with the same approval-gate
-  shape — already states the missing sentence for its own gate ("stop and return to the caller with
-  the specific question and the blast radius, rather than guessing"); this prompt lacks the
-  equivalent.
-- **Proposed change:** after "then wait for the human's confirmation," add:
-  > **Running as a delegated subagent you cannot wait** — there is no live human turn, and no hook
-  > watches `WebFetch`: do **not** issue the call. Return the target, the technique, and the blast
-  > radius as your deliverable, and stop.
-- **Provenance:** surfaced by `cobb`'s §7 lint during C4 of `claude/docs/plans/prompt-waste-reduction.md`
-  (the C4 edit reworded this bullet's neighbour, which is how it came to light). **Pre-existing, not
-  introduced by C4.** Deliberately *not* folded into the C4 commit: it is a rule **addition**, and
-  bundling it would make that commit non-revertible as a pure waste-reduction change, against §4.0's
-  rollback contract.
-- **Note:** K-004 (a `WebFetch` hook) and this item are complements, not substitutes — K-004 closes
-  the backstop, this closes the prompt-level rule. This one is cheaper and should not wait on it.
 
 ## Parking lot / ideas
 
