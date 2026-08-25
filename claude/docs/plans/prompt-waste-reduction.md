@@ -540,9 +540,14 @@ rather than scattering across `architect.md`, `analyst.md`, and rule 5:
    `data-scientist`, `graph-dba`.)*
 4. **Resolve which branch a re-review lands in** — rule 5's `## Pass N` clause sits in the **No**
    branch, but the canonical later pass (analyst reviews → owner fixes → analyst re-reviews) is a
-   document that has been *executed against*, which the **Yes** branch routes to `<slug>2.md`. The
-   convention does not currently answer; pick one. *(Raised by `cobb`'s gate-(c) lint at Stage D
-   as F6 — not fixable inside any agent prompt, and cheapest to settle while rule 5 is open.)*
+   document that has been *executed against*, which the **Yes** branch routes to `<slug>2.md`.
+   ~~The convention does not currently answer; pick one.~~ **Premise corrected at execution
+   (2026-08-25):** the convention *was* answered once, in practice — `docs/reviews/kaizen-inbox-distillation.md`
+   and `…2.md` are a genuine ordinal-successor review pair, `active`, correctly cross-linked with
+   `Extends:`/`Extended by:`, and not a family member inheriting a "2" from its topic. So this is
+   not a gap being filled but a **precedent being overridden** for same-role later passes, and it
+   is recorded as such. *(Raised by `cobb`'s gate-(c) lint at Stage D as F6 — not fixable inside
+   any agent prompt, and cheapest to settle while rule 5 is open.)*
 
 **Stage E runs as three units, not one** (set at execution, 2026-08-25): **pass 1** = the class-5/6
 sweep across all three files; **pass 2** = `claude/AGENTS.md`'s "Git-commit authority" section
@@ -626,6 +631,48 @@ findings:**
     previously scoped by sentence boundary needs an explicit non-reach clause** ("that case alone …
     and it does not narrow the others"). This is C1's regression site hit the same way twice: scope
     moving during a rewrite that removed no rule.*
+
+***Stage E pass 3 executed 2026-08-25 — the four-part collision-rule-5 amendment, and the stage's
+only addition. Root `AGENTS.md` 1,808 → 1,885 w (+77).*** *Gates (a)–(e) green; `audit-team.sh`
+PASS. `cobb` §7 lint **0 blockers, 2 majors, 3 minors, 2 nits — all fixed in-commit**. Zero dates,
+authority markers, or history pointers entered the file, so finding 14 survives Stage E's addition
+as it survived Stage D's. **This unit closes Stage E.***
+
+*Part 4's ruling: **a `reviews/` document revises in place regardless of the selector's answer.** The
+ordinal successor exists to freeze a document that *directs* work; a re-review's value is pass 1 and
+pass 2 read together. **This overrides a live precedent rather than filling a gap** (see the
+corrected premise above), and `docs/reviews/kaizen-inbox-distillation{,2}.md` is **not retrofitted**
+— it followed the convention as it then stood, per the same no-retrofit logic that governs pre-M8
+kaizen entries and `archived` documents. No grandfather clause was added to `AGENTS.md`: that would
+be class-6 supersession, undoing Stage E pass 1 to describe one file.*
+
+*The load-bearing fix was not in the amendment at all. **Rule 5's trigger said "the same kind and
+topic" while rule 1's primary key is `(component, kind, topic-slug, role)`** — role was missing, so
+`reviews/x-ml.md` and `reviews/x-impl.md` literally matched "a second document of the same kind and
+topic." Latent before, that produced only a wrong-but-separate file; part 4 would have converted it
+into an instruction to **append**, which is §2's 2,455-line incident exactly. Corrected to "the same
+kind, topic, **and role**" — two words, and it makes part 4 self-scoping. The Yes branch's own
+examples (`executor2.md` / `executor2-coordination.md`) already assumed role was held fixed.*
+
+20. ***For a convention edit, inventory the instances before writing the rule.*** *Both of this
+    unit's majors were found by reading the repo's document tree — `git ls-files | grep reviews/`
+    was the entire method — and neither was visible in the diff, the prompts, or the plan. **A
+    convention amendment's blast radius is the set of files already obeying the old convention**,
+    and gates (a)–(e) do not look there: they read the edited artifact, its history, and the audit
+    script. Note this is the exact inverse of finding 14's advice for a *prompt* sweep ("a sweep
+    that opens with a provenance grep is re-running a search whose answer is known to be empty") —
+    **for a convention edit the corpus grep is the first move, not the wasted one**, because the
+    question is what already complies rather than what residue remains.*
+21. ***The case for relocating a cross-cutting rule is drift-resistance, not token economy, and the
+    naive arithmetic says the opposite.*** *Per-instance the relocation looks obviously cheap: part
+    2 (~45 w × 3 reviewing agents) plus part 3 (~10 w × 6 revising agents) ≈ 195 w across nine
+    prompt-instances versus ~55 w here. But **per session** it inverts — root `AGENTS.md` loads in
+    every session in every tool, while `analyst.md` loads only when `analyst` runs, so nine prompt
+    copies are often the cheaper choice on tokens. The decisive argument is finding 15's and it is
+    about correctness: **a rule binding six agents that lives in one prompt is simply wrong for the
+    other five, and a rule copied nine times drifts nine ways.** State this wherever a relocation is
+    justified — a future reader applying "lean context" naively will reach the opposite conclusion
+    and try to push these rules back into prompts.*
 
 ### Stage F — Ratchet guard (make it stick)
 

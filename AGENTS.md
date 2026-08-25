@@ -126,11 +126,17 @@ and OpenCode artifacts).
     topic slug is never reused for a different topic. (4) The same
     basename in two directories is safe **because every citation carries a directory** — rules
     2 and 4 are a matched pair: adopt both or neither. (5) For a second document of the same
-    kind and topic, the selector is one question — **has the earlier document been approved,
-    gated, or executed against?** **No** → revise it in place (bump the optional `Version:` and
-    add a dated revision note; a review gets a dated `## Pass N` section). **Yes** → it stays
+    kind, topic, **and role**, the selector is one question — **has the earlier document been
+    approved, gated, or executed against?** **No** → revise it in place (bump the optional
+    `Version:` and add a dated revision note — **one dated line, not a narrative**; a review gets
+    a dated `## Pass N` section). **Yes** → it stays
     intact and you write a successor with the **ordinal on the slug** (`executor2.md`,
-    `executor2-coordination.md`), *even while the earlier one is still `active`*. Two pointer
+    `executor2-coordination.md`), *even while the earlier one is still `active`*. **A `reviews/`
+    document is the exception:** it revises in place regardless of the selector's answer — a
+    re-review's value is pass 1 and pass 2 read together. **A later `## Pass N` is compact
+    by rule:** the verdict and genuinely new findings in full, while a finding already reported
+    gets **one disposition line** — fixed / not fixed / superseded, plus the evidence you
+    rechecked — never re-argued prose. Two pointer
     pairs, never mixed: a successor that **replaces** carries `Supersedes:` and the earlier
     document gains `Superseded by:` and flips to `superseded`; a successor that **adds to** an
     earlier document that stays authoritative carries `Extends:` and the earlier one gains
