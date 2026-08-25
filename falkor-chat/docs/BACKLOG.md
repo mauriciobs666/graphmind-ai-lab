@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-050
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-051
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -18,94 +18,16 @@
 
 ## Active
 
-**M5 — Ingestion pipeline & entity fusion** 🟡, the only item under construction, is **K-050**
-below. Its six implementation stages run out of `docs/plans/document-ingestion.md`, tracked in
-`docs/plans/document-ingestion-coordination.md`: Stages 1–4 (chunking, chunk embeddings +
-standalone search, extraction, fusion) are delivered and `analyst`-gated; **Stage 5**
-(chat-grounding integration, FR-2) is delivered with its gate in flight; **Stage 6** (the
-deferred hardening set — thread fan-out, batching/pooling) is the last one open. M5 reaches ✅ on
-a `qa-engineer` acceptance pass over the whole pipeline.
+Nothing currently active — **M5 (ingestion pipeline & entity fusion) closed 2026-08-25**
+(`docs/HISTORY.md`). Next milestone not yet started.
 
 Everything else open is a follow-up filed out of a closed milestone (`## Open follow-ups`) or the
-deferred M2.5 hardening track — neither is on the M5 path.
+deferred M2.5 hardening track.
 
-### K-050 — Ingestion pipeline & entity fusion: chunk, extract, fuse, and serve as both chat grounding and a standalone knowledge base (🟡 in-progress — requirements `docs/requirements/document-ingestion.md`, plan `docs/plans/document-ingestion.md`, 2026-08-22)
-
-> **Why it exists.** Today falkor-chat's GraphRAG has exactly one knowledge source: chat messages,
-> embedded as they're posted. There is no path for ingesting knowledge from outside the chat itself,
-> even though the schema has carried a dormant, never-populated shape for exactly this
-> (`Document`-`[:HAS_CHUNK]`->`Chunk`-`[:ABOUT]`->`Entity`, plus a `Chunk.embedding` vector index,
-> bootstrapped since M2 — `docs/DESIGN.md` §5.1/§7.1, `docs/QUERIES.md:472`). K-050 finally
-> populates that scaffolding: documents (and agent-generated text, treated identically) are chunked,
-> entities/relationships are extracted from chunk text into real graph nodes/edges, and each
-> extracted entity is fused against what the graph already knows at one of three confidence tiers —
-> auto-merge, suggested-pending, or confirm/reject (with rejection reversible) — while conflicting
-> facts from different sources are always kept side by side with their own provenance, never
-> silently overwritten.
-- **Scope (FR-1..FR-14/AC-1..AC-10, plan §4 six stages).** Chunking (FR-13, a deterministic
-  size/overlap/boundary splitter — no LLM); extraction (FR-7a, LLM-based entity/relationship
-  extraction into `Entity` nodes + a new `RELATES_TO` fact edge, predicate carried as an opaque
-  property rather than an open-ended relationship-type vocabulary); fusion (FR-6/FR-8/FR-9/FR-10 —
-  a recommended `MatchSuggestion` node per candidate pair, mirroring the `WorkflowRun.status`
-  index-anchored pattern, rather than ever physically merging `Entity` nodes — FalkorDB has no
-  APOC-style node-merge procedure, and physical merge would also make FR-6's "keep both conflicting
-  facts" a separate mechanism instead of a structural guarantee); a new MCP/REST write+read surface
-  (FR-5: `ingest_document`/`ingest_documents`/`get_document`/`search_documents`/
-  `list_pending_matches`/`confirm_match`/`reject_match`/`recheck_match`); bulk ingestion (FR-11) and
-  full-source retention (FR-12, `Document.text` verbatim); and chat-grounding integration (FR-2 —
-  extending the existing `AgentResponder`/`EMITTED`-provenance retrieval path to also seed from
-  `Chunk` vectors, app-layer fan-out+merge, per the requirements doc's own decision log) alongside a
-  standalone `Chunk`-only search capability (FR-3), deliberately **not** unified into one search
-  index (FR-14 — the requirements doc explicitly does not require that).
-- **OQ-1/OQ-2/OQ-3 (requirements doc, explicitly left open there for design):** OQ-2 (where a
-  pending match surfaces) resolved to a **dedicated review surface** (`list_pending_matches`, MCP +
-  REST), not a chat post — a pending fusion decision has no natural channel/thread anchor and FR-14
-  already keeps ingested-content concerns separate from chat. OQ-3 (re-evaluating a rejected match)
-  resolved to **two** paths — automatic reopen to `pending` (never straight to `confirmed`) when a
-  later ingestion independently re-derives the same candidate pair, plus an explicit
-  `recheck_match` tool for an on-demand human/agent-forced recheck. OQ-1 (what "very-high
-  confidence" means) gets a **recommended default** (exact normalized-name+type match, zero
-  ML-confidence numbers, chosen because this pipeline has no calibration data yet — unlike the K-027
-  guard judge, which was calibrated against a golden set before being trusted) — flagged to
-  `data-scientist` to confirm or replace, not locked here.
-- **Two design axes delegated, not decided in the main plan (plan §0):**
-  1. **`docs/plans/document-ingestion-ml.md` (`data-scientist`)** — the extraction
-     technique/prompt/schema (FR-7a) and whether the OQ-1 default above is defensible for v1 or
-     needs semantic (embedding) matching to catch non-lexical synonyms fuzzy string matching can't.
-  2. **`docs/plans/document-ingestion-graph.md` (`graph-dba`)** — final schema for `MatchSuggestion`
-     (node vs. edge-property, indexes/constraints, RAM), the exact `Document`/`Chunk`/`Entity`/
-     `RELATES_TO` Cypher, the `Entity.name` full-text index DDL, and generalizing the `EMITTED`
-     provenance write/read (today `Message`→`Message` only, `QUERIES.md` §10.1) to also target
-     `Chunk` for FR-2.
-- **Owner chain:** `tico` (requirements ✅) → `architect` (plan ✅) + `graph-dba`/`data-scientist`
-  (the two notes above) → `analyst` (plan gate) → implementers per stage (plan §4: chunking/write
-  path → chunk embeddings/standalone search → extraction → fusion → chat-grounding integration →
-  batch hardening) → `analyst` re-gate → `qa-engineer`
-  (`docs/test-plans/document-ingestion.md` + `-report.md`). Coordinated by `teco`
-  (`docs/plans/document-ingestion-coordination.md`, not yet authored).
-- **Risks/RAM (rule 6):** `Chunk.embedding`'s vector index is the dominant new RAM line (same
-  empirical ~12.4 KB/vector-at-1024-dim shape as `Message.embedding`, `docs/DESIGN.md` §11) — no new
-  DDL needed (the index already exists, bootstrapped since M2), but ingestion is a materially new,
-  corpus-size-driven growth axis the existing per-workspace RAM budget did not account for. The
-  recommended fusion default deliberately adds **no** second vector index (`Entity.embedding`) —
-  reuses the existing `Message.text`-style RediSearch full-text mechanism instead — to avoid
-  doubling that growth axis; if data-scientist's note argues for semantic matching instead, that
-  RAM trade-off must be made visibly, not silently. Per-chunk extraction is capped (recommended 20
-  entities/relationships per chunk) to bound both LLM output and graph growth, mirroring the
-  existing `docs/DESIGN.md` §5.4 entity-fan-out mitigation.
-- **Test strategy:** full AC-1..AC-10 → test-altitude map in plan §5, plus chunking boundary-rule
-  unit tests, extraction-parser robustness tests (reusing the K-027-proven fence-tolerant JSON
-  parser rather than a bare `json.loads`), background-job failure isolation
-  (`Document.status` reflects a failed/partial pipeline rather than silently sticking at
-  `'processing'`), and `graph-dba`'s `test_queries.sh` baseline raise for every new Cypher shape.
-- **Done-condition:** all six implementation stages delivered and `analyst`-gated, `qa-engineer`
-  acceptance PASS (or PASS-with-parked-defects) on green baselines, DESIGN §5.1/§7 and this
-  component's docs updated in the same changes ⇒ **M5 ✅**.
 ## Milestones still open
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M5 — Ingestion pipeline & entity fusion** 🟡 | Documents (and agent-generated text) chunked, entity/relationship-extracted, and fused against existing knowledge at three confidence tiers (auto-merge / suggested-pending / confirm-reject-reconsiderable); ingested knowledge retrievable via the existing chat-grounding path **and** as a standalone knowledge base; a connected MCP agent can write ingested content as persistent memory | **K-050** 🟡. Requirements `docs/requirements/document-ingestion.md`; plan `docs/plans/document-ingestion.md`; graph-side `docs/plans/document-ingestion-graph.md`; ML `docs/plans/document-ingestion-ml.md`; coordination `docs/plans/document-ingestion-coordination.md`. |
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
@@ -578,6 +500,30 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** an isolated-container repro proving the crash and capturing logs (no `--rm`);
   once root-caused, a regression test proving the chosen guard rejects the offending shape before it
   ever reaches a graph write.
+
+### K-051 — `Document.status` never reaches a terminal state (🔵 proposed — filed out of K-050/M5's `qa-engineer` acceptance pass, 2026-08-25)
+
+> **Why it exists.** No code path anywhere in `server/falkorchat/*.py` ever writes
+> `Document.status = 'ready'` or `'failed'` — confirmed by grep. A document whose
+> extraction/fusion/embedding is fully complete (verified via a direct graph read) still reports
+> `status: "processing"` forever. This directly contradicts the plan's own Stage 1/Stage 3 "Done"
+> text and §5's AC-8 test-strategy row, which name `Document.status` as the caller's one completion
+> signal. It fell through the cracks because every offline test completes extraction synchronously
+> in-test, never polling status — the acceptance pass was the first to drive the real async pipeline
+> and notice the signal is dead. Parked, not blocking, in the acceptance verdict
+> (`docs/test-reports/document-ingestion-report.md`).
+- **Owner:** **`tdd-engineer`** (bug fix, clear behavior contract — write the terminal-state
+  transition and a reproduction test first).
+- **Scope:** decide and implement when/where `'ready'` and `'failed'` get written — after all of a
+  document's chunks finish embedding **and** extraction/fusion (both `_safe_embed_chunk` and
+  `_safe_extract` paths need to report completion back up, likely via a per-document completion
+  counter or a check-remaining-work query); `'failed'` when a background step's isolation catches a
+  real failure rather than silently logging it.
+- **Risks/RAM:** none — no new node/index; a status-field write path only.
+- **Test strategy:** an integration test that ingests a document, drives its background processing
+  to completion (mirroring how the Stage 6a AC-8 batch test does this), and polls `get_document`
+  until `status` leaves `'processing'`; a separate test forcing a background failure and asserting
+  `status: 'failed'`.
 
 ## Deferred — M2.5 hardening track
 
