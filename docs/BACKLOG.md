@@ -7,49 +7,20 @@
 > Item IDs use the `C-` prefix (distinct from falkor-chat's `K-`); the hundreds digit tracks the
 > milestone (C-2xx = M2, C-3xx = M3).
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done · ⚪ deferred
-> Last reviewed: 2026-08-21.
-
-## Handoff — `teco` drives M2 (2026-07-18)
-
-`teco` coordinates M2 from here. This section is the cold-start brief; everything below is the detail.
-
-**Read first (entry points):**
-1. [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) — WHAT/WHY; M2 = FR-9…FR-14, AC-6…AC-8.
-2. This backlog — the C-201…C-208 units, ownership, and sequencing.
-3. [`../skills/joern-cpg/references/cpg-model.md`](../skills/joern-cpg/SKILL.md) — the **single** CPG
-   schema/label/property contract the recipes cite (FR-14); do not duplicate it.
-4. [`../skills/agent-standards`](../skills/README.md) — cobb's skill-authoring/lint standards the new
-   skill must pass.
-
-**Already decided — do not re-litigate:**
-- **Shape:** one `cpg-analysis` skill = lean `SKILL.md` core + four bundled recipes (not four sibling skills).
-- **Ownership:** `graph-dba` builds/owns the skill (Cypher over a loaded FalkorDB graph); `cobb`
-  vets it against skill standards; `teco` coordinates. `analyst` is the independent reviewer of the
-  graph-dba deliverable (producer ≠ reviewer, per the team's review-gate convention).
-- **Scope:** all four recipes are in (impact, RCA, code-review, test-gap). `qa-engineer` is a named
-  consumer. Runtime coverage is **excluded** — test-gap is structural reachability only.
-- **Naming:** `cpg-test-gap`, not `cpg-test-coverage`.
-
-**Open items to route during planning (don't block C-201…C-204):**
-- **OQ2** — component structure/naming (a `code-graph/` dir vs. living as the `joern` agent + skills) → `architect`.
-- **OQ3** — Joern Python + JS/TS frontend coverage adequacy → design-time verification.
-
-**Done-condition reminders (per repo `AGENTS.md`):** skill source + `skills/README.md` + agent-description
-wiring + this backlog→`HISTORY.md` land in the **same** change (C-208); the skill is **live-verified**
-against a real loaded CPG before M2 is called ✅, not just authored.
+> Last reviewed: 2026-08-25.
 
 ## Milestone map
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified | `joern` agent + `joern-cpg` skill — delivered 2026-07-17, commit `b2b9a6e` (see [`HISTORY.md`](./HISTORY.md)) |
-| **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher, cobb-vetted, catalogs updated — delivered 2026-07-19 | **C-201 → C-208** |
-| **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cypher__query(graph, cypher)` (`cypher-mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line; wired for Claude Code, skill + agents + requirements reconciled, CPG rebuilt, AC-1…AC-4 acceptance-tested — delivered 2026-07-25. DEF-1 / **C-313** closed the same day by stakeholder ruling **D5** (AC-3 reconciled, no code change) | **C-301 → C-307** |
-| **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery, freshness is knowable via `:CpgBuildInfo`, and a spot-checked transcript shows `CPG:` evidence either way — extends, does not override, M2/M3. Implementation (C-401…C-407) complete; both gates closed — U5 `analyst` diff-gate (approve), U6 `qa-engineer` acceptance pass (FAIL, DEF-1/2/3), U7+U7-fix `cobb` wording fix, U8 `analyst` re-gate (approve w/ suggestions), U9 `qa-engineer` live re-pass (PASS, DEF-4 minor residual — see Follow-ups) | **C-401 → C-407** |
-| **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, two enforced write shapes) and is piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer, `history.md` is unchanged, `cobb`'s distillation workflow runs against the graph. Implementation (C-501…C-505) complete; all gates closed — U3 plan gate (`analyst`, 3 passes, needs changes → needs changes → approve), U4/U6 code re-gates (`analyst`, both approve with suggestions, fixed at U4-fix/U6-fix), U7 acceptance (`qa-engineer`, PASS, 8/8 ACs, no defects) | **C-501 → C-506** |
-| **M6 — MCP tool rename** ✅ | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated `cpg/mcp/` → `cypher-mcp/`; every active reference repo-wide updated, genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched; AC-1…AC-6 acceptance-tested. Plan gate (`analyst`, `docs/reviews/cpg-mcp-rename.md`) — 2 passes: needs changes → approve with suggestions. Implementation: commits `e00b9f6` (step 1), `59a03c4` (step 2, includes U4-fix), `acecb34` (step 3a), `cd4142f` (step 3b). Acceptance (`qa-engineer`, `docs/test-reports/cpg-mcp-rename-report.md`) — **PASS**, AC-1…AC-6 all hold, regression floor 84 passed/7 deselected unchanged; one low-severity defect D-1 found and fixed in this same unit (mcp-monitor source-comment path citations). | **C-601 → C-605** |
-| **M7 — Generic Cypher MCP, team-wide rollout** ✅ | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph (`author`-partitioned), FR-7's one-query team-wide surface and FR-8a's `sessionId` field delivered, FR-12/AC-9 delivered as written (no `inbox.md` for a new agent) — the interim ad hoc per-agent-graph rollout (`ccf9c8b`, 2026-08-20) reconciled onto this design; closing acceptance (`Q2`, `docs/test-reports/generic-cypher-mcp2-report.md`) — **PASS with noted open items**, delivered 2026-08-20. Per FR-13's incremental-delivery framing, three items are deliberately not fully closed: the inbox-header retarget half of every `C-<agent>` unit was **dropped entirely by stakeholder decision** (not deferred — every `inbox.md` stays frozen, header included); `teco`'s and `analyst`'s per-agent migrations each carry one known data-fidelity defect on a single entry, pending a separate stakeholder approval for the `cobb` curator-clear fix; `G1` correspondingly leaves `kaizen_teco`/`kaizen_analyst` live pending that same fix. `Q2`'s own new finding, D-1 (`claude/cobb/cobb.md` stale wording), fixed same-day. **2026-08-21 close-out:** all three items resolved, superseding the "not fully closed" framing above — `kaizen_team` was independently confirmed completely empty (every entry any agent ever wrote there, including the two flagged data-fidelity defects, had by then already been distilled and cleared through routine team distillation passes, mooting the planned curator-clear fix); `G1`'s last 2 of 12 `kaizen_<agent>` keys (`kaizen_analyst`, `kaizen_teco`) retired by `graph-dba`; and, going beyond this milestone's own "stays frozen" decision, the stakeholder separately directed that all 12 `kaizen/inbox.md` files be deleted outright (git history retains each one) — see `claude/cobb/kaizen/history.md`, 2026-08-21 entry, for the full verification trail. The coordination doc itself (`docs/plans/generic-cypher-mcp2-coordination.md`) stays `archived` and unedited per the doc-lifecycle convention (a header-pointer-only exception); this BACKLOG row is the current record. | `C-701 → C-721` |
-| **M8 — Kaizen agent/learning-note ontology** ✅ | `:KaizenEntry`'s plain `author` string property (M5/M7) is replaced, for entries created from this point on, by a real `:Agent {agentId}` identity node connected via a locked `(:Agent)-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge, plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge `cobb` tags during distillation — names/directions matched exactly to `falkor-chat`'s own `PRODUCED`/`MENTIONS` precedent. Historical (pre-M8) entries are unretrofitted, unchanged, and still read/cleared via the old `author`-filtered path. `cypher-mcp/server.py`'s `authorize_write()` grew from 2 to 6 recognized write shapes to support this, closing a real cross-clause smuggling gap (a self-attributed decoy write chained with an unrelated malicious clause) across two `analyst` review rounds. Closing acceptance (`qa-engineer`, `docs/test-reports/kaizen-agent-ontology.md`) — **PASS**, live dry-run confirms the closure and the full distillation cycle; two non-regression findings recorded (stale-container MCP staleness, a review-fixture grammar note) — delivered 2026-08-22. | `C-801 → C-808` |
+| **M1 — Producer pipeline** ✅ | CPG builds from source and loads into FalkorDB, live-verified. | `joern` agent + `joern-cpg` skill — delivered 2026-07-17 |
+| **M2 — CPG consumer skill** ✅ | One `cpg-analysis` skill (FR-9…FR-14) lets `analyst`/`architect`/`qa-engineer` run impact / RCA / code-review / test-gap recipes against a loaded CPG via Cypher. | **C-201 → C-208** — delivered 2026-07-19 |
+| **M3 — CPG query access (MCP)** ✅ | The read path is a single MCP tool `mcp__cypher__query(graph, cypher)` (`cypher-mcp/`) instead of a hand-assembled `redis-cli GRAPH.QUERY` command line, wired for Claude Code. | **C-301 → C-307** — delivered 2026-07-25 |
+| **M4 — CPG agent adoption** ✅ | Six agents (`analyst`/`architect`/`qa-engineer`/`coder`/`tdd-engineer`/`frontend-engineer`) default-orient on CPG discovery and freshness is knowable via `:CpgBuildInfo` — extends, does not override, M2/M3. | **C-401 → C-407** — delivered 2026-08-16 |
+| **M5 — Generic Cypher MCP** ✅ | `mcp__cypher__query` gains write capability (an optional `agent` param, enforced write shapes), piloted end to end on `graph-dba`'s kaizen working memory: the graph replaces `inbox.md` as the raw-capture layer. | **C-501 → C-506** — delivered 2026-08-18 |
+| **M6 — MCP tool rename** ✅ | The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query` and relocated `cpg/mcp/` → `cypher-mcp/`; genuinely CPG-specific naming (`cpg-analysis`, `joern-cpg`, `cpg_<component>` graphs, top-level `cpg/`) untouched. | **C-601 → C-605** — delivered 2026-08-19 |
+| **M7 — Generic Cypher MCP, team-wide rollout** ✅ | All 12 agents' raw kaizen capture consolidated onto one shared `kaizen_team` graph, delivering FR-7's one-query team-wide surface and FR-8a's `sessionId`; the 12 per-agent `kaizen_<agent>` graphs and all 12 `kaizen/inbox.md` files are retired. | `C-701 → C-721` — delivered 2026-08-20, closed out 2026-08-21 |
+| **M8 — Kaizen agent/learning-note ontology** ✅ | `:KaizenEntry`'s plain `author` property is replaced, for entries created from this point on, by a `:Agent {agentId}` identity node on a locked `(:Agent)-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge, plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge `cobb` tags during distillation; pre-M8 entries are unretrofitted and still read via the `author` path. | `C-801 → C-808` — delivered 2026-08-22 |
 
 ### Decision — skill is the access mechanism (user, 2026-07-18)
 

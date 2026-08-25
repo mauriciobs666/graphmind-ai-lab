@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 6
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 7
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -15,6 +15,10 @@ together), not one file per commit. §4.0 and Stage B updated.*
 agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
 verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
 stakeholder-gated.*
+*Rev 7 (2026-08-25): Stage G complete. G2 −723 w on `docs/BACKLOG.md`, and gate (b) found M7 had
+no `HISTORY.md` entry at all — its backlog cell was the only record, so the entry was backfilled
+before the cell was compacted. G3 measured rather than edited: ~2,338 w of retained closed items
+across 10 kaizen plans, every narrative closure among them written by this plan's own execution.*
 *Rev 6 (2026-08-25): G1 executed — the amendment shipped with `teco` listing and the human
 applying (its guard denies the editing duty the draft assigned it). Added finding 24 and §3's
 "widen the list, not the test"; settled `SERVER.md`'s and the two READMEs' dispositions; recorded
@@ -850,8 +854,8 @@ not coverage:
 **Units.**
 
 | G1 | The two-bullet amendment to root `AGENTS.md`. Rule change ⇒ its own commit (§4.0). |
-| G2 | `docs/BACKLOG.md` (root) — apply it: milestone-map cells to one or two sentences, `## Handoff` header retired or re-pointed at M8. |
-| G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. |
+| G2 | `docs/BACKLOG.md` (root) — apply it: milestone-map cells to one or two sentences, `## Handoff` header retired or re-pointed at M8. ✅ **executed 2026-08-25**, −723 w; header deleted. |
+| G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. ✅ **executed 2026-08-25 — not a no-op**; measured, no file edited, see below. |
 
 **Not in scope.** Rewriting `HISTORY.md`, `reviews/` or any `archived` document; `QUERIES.md`;
 `falkor-chat/docs/BACKLOG.md` and `DESIGN.md` (already done — `0f48b8a`/`88bb71b`/`3e2b378`).
@@ -888,6 +892,63 @@ three changed the shipped text:
 
 Both majors are the same failure as Stage E pass 3's role gap: **a test written to admit one more
 case, admitting a class.** Now doctrine — see §3, *widen the list, not the test*.
+
+**G2 executed 2026-08-25.** `docs/BACKLOG.md` **9,021 → 8,298 w (−723, −8.0%)**;
+`docs/HISTORY.md` 7,474 → 7,883 (**+409**). Two items, exactly as scoped:
+
+- **The eight milestone-map cells** reduced to what the milestone is and when it landed. What left:
+  gate sequences (`U5`/`U6`/`U7`/`U8`/`U9`, `U3`/`U4`/`U6`/`U7`, "3 passes: needs changes → needs
+  changes → approve"), defect trails (`DEF-1…4`, `D-1`), per-step commit hashes, acceptance-report
+  paths, and M7's ~500-word cell with its "superseding the framing above" close-out. All of it is
+  in `HISTORY.md` — see gate (b) below.
+- **`## Handoff — teco drives M2 (2026-07-18)`** deleted (−1,906 chars): a cold-start brief naming
+  `teco` as driver of a milestone that closed 2026-07-19, in a document at M8. Its four
+  "already decided — do not re-litigate" bullets were each verified live outside it before deletion
+  (one skill not four siblings, `graph-dba` owns it, structural reachability not runtime coverage,
+  `cpg-test-gap`) — all four are in `docs/requirements/joern-cpg-pipeline.md`, which is their
+  authoritative home; its "done-condition reminders" restated root `AGENTS.md` verbatim.
+
+**Gate (b) turned up the finding.** Verifying each cell's content against `HISTORY.md` before
+deleting it found that **M7 had no `HISTORY.md` entry at all** — delivered 2026-08-20, closed out
+2026-08-21, and its ~500-word backlog cell was the component's *only* record, which is why that
+cell said in its own last sentence *"this BACKLOG row is the current record."* Compacting it under
+the new rule would have destroyed the record. Written first (`## 2026-08-20 — M7`, marked
+*backfilled*), then the cell compacted. **This is the diagnosis Stage G was filed on, caught
+red-handed:** closeout is additive and lands wherever the ritual happens to be writing, so the
+weight went to the living document and the lookup document stayed empty. Gate (b) exists for
+prompts; on a convention edit it turns out to be the gate that finds the missing history.
+
+**Left in place, deliberately.** `docs/BACKLOG.md` still carries closed-milestone work status the
+rule reaches — `### Sequencing — M3 (as delivered)`, `### Status at close`, the per-milestone
+`### Items` lists. That is a **list for the human**, not a unilateral sweep: the rule shipped an
+hour earlier says `teco` lists and the human applies, and deleting a further ~2,000 w of another
+milestone's record in the same commit that ships that constraint would contradict it. Note
+`### Status at close`'s second half (*"Known limits of what shipped"* — Claude-Code-only wiring,
+read-only, `EXPLAIN`-only, the truncation thresholds) is **system, not work status**, and stays
+under M2's own test.
+
+**G3 executed 2026-08-25 — not the no-op the unit predicted.** No file edited; the sweep's
+deliverable is the measurement. Across the 13 `claude/*/kaizen/plan.md` files (17,910 w), **10
+carry closed-but-retained items totalling ~2,338 w (~13%)**, concentrated in `cobb` (6 items,
+~820 w), `security-expert` (4, ~369 w) and `coder` (4, ~256 w). Three qualifications, and they
+change what the number means:
+
+1. **The rule's index-row form is already the majority practice** — most closures are a single
+   struck line with a `See history.md` pointer, which is compliant. The residue is the
+   multi-sentence `**Status:** ✅ closed <date> — <narrative>. See history.md.` shape, which
+   carries the pointer *and* restates what it points at (class 7: needed once).
+2. **Every one of those narrative closures is dated 2026-08-24 or 2026-08-25** — written by *this
+   plan's own execution*. The ratchet reasserted itself inside the compaction pass, in the files
+   the pass was closing out. Stage F's finding, second instance: the growth is legitimate content
+   in the wrong file, and nothing measured it.
+3. **One pattern the rule does not reach.** `coder` K-002's `**Notes:**` line stacks four dated
+   `Update <date>:` clauses since 2026-07-08 on an item that is **still open**. That is an open
+   item's notes accreting, not delivered work retained — outside the amendment's trigger, and the
+   larger of the two effects in that file. Filing it rather than fixing it: it needs its own rule,
+   and the plan is not going to write one at its own close.
+
+Each plan file's own status legend already reads *"✅ done (then moved to `history.md`)"* — so G3
+found no missing convention, only an unfollowed one, which is the weaker and more common failure.
 
 ## 5. Verification strategy
 

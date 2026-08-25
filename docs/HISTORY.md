@@ -58,6 +58,47 @@ same delivery; C-809…C-812 are its follow-ups. Per-document `Status: archived`
 requirements/graph-design/plan/reviews/test-plan/test-report/coordination files are handled by
 `teco` in the same close (see each document's own header).
 
+## 2026-08-20 — M7: Generic Cypher MCP, team-wide rollout (C-701…C-721) ✅
+
+*Written 2026-08-25, backfilled.* M7 delivered on 2026-08-20 and closed out on 2026-08-21 without
+ever landing an entry here — its only component-level record was its `docs/BACKLOG.md`
+milestone-map cell, which had grown to ~500 words carrying the delivery, the gate trail, and a
+"superseding the framing above" close-out. That is the accretion this backfill exists to undo
+(`claude/docs/plans/prompt-waste-reduction.md`, Stage G2): the cell is now a one-line row and this
+is the record.
+
+`mcp__cypher__query`'s write path (M5) rolled out from `graph-dba` alone to all twelve agents,
+consolidated onto one shared graph — **no new write mechanism (FR-1), zero `cypher-mcp/server.py`
+logic changes.**
+
+- **One graph, `kaizen_team`** (C-704, C-707…C-718), `author`-partitioned at this point — the
+  `:Agent`/`PRODUCED` edge shape arrived two days later at M8. Data migration by each agent
+  itself, prompt retarget by `cobb`; 10 clean, 5 correctly no-op with nothing to migrate.
+  Supersedes an interim ad hoc rollout (`ccf9c8b`, same day) that had built one graph per agent.
+- **FR-7's one-query team-wide surface and FR-8a's `sessionId` field** delivered — one query now
+  reaches every agent's raw learnings, which is the whole point of the consolidation.
+- **FR-12/AC-9 delivered as written** (C-702, C-705): a newly created agent gets no
+  `kaizen/inbox.md`, and `audit-team.sh` check 1 was narrowed to require only the plan+history
+  pair. Catalogs and server doc-strings retargeted in the same milestone (C-701, C-703).
+- **Acceptance:** interim `Q1` **PASS**; closing `Q2` **PASS with noted open items**, AC-1…AC-13
+  (two superseded) exercised live — `docs/test-plans/generic-cypher-mcp2.md` /
+  `docs/test-reports/generic-cypher-mcp2-report.md`. `Q2`'s one new defect, D-1 (stale pre-M7
+  wording in `claude/cobb/cobb.md`), fixed same-day.
+- **Close-out, 2026-08-21 — the three items `Q2` left open, all resolved.** `kaizen_team` was
+  independently confirmed **completely empty**: every entry any agent had written there was
+  already distilled and cleared through routine passes, which mooted the planned `cobb`
+  curator-clear fix for the two known single-entry data-fidelity defects (`teco`, `analyst` — a
+  byte-level escaping slip, not data loss; both entries had been promoted regardless). `G1`'s last
+  2 of 12 `kaizen_<agent>` keys (`kaizen_analyst`, `kaizen_teco`) were then retired by `graph-dba`.
+  Separately and going beyond this milestone's own "every `inbox.md` stays frozen" decision, the
+  stakeholder directed that all 12 `kaizen/inbox.md` files be **deleted outright** (`6fdc107`; git
+  history retains each in full) — each file's pre-migration content had been imported verbatim on
+  2026-08-20. Full verification trail: `claude/cobb/kaizen/history.md`, 2026-08-21 entry.
+
+Requirements `docs/requirements/generic-cypher-mcp2.md` · plan `docs/plans/generic-cypher-mcp2.md` ·
+coordination `docs/plans/generic-cypher-mcp2-coordination.md` (`archived`, unedited — this entry and
+the backlog's M7 section are the current record).
+
 ## 2026-08-19 — M6: MCP tool rename — delivery & gate closure (U1…U8) ✅
 
 The MCP server/tool is renamed `cpg`/`mcp__cpg__query` → `cypher`/`mcp__cypher__query`, relocated
