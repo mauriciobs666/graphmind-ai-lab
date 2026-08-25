@@ -1,5 +1,5 @@
 # Agent permission-escalation friction, phase 2 (`coder`) — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-23
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-24
 > **Extends:** `claude/docs/requirements/agent-permission-friction.md` (archived; phase-2 forecast)
 
 ## Intent
@@ -81,10 +81,14 @@ interruption across one otherwise-uninterrupted implementation task.
   document doesn't dictate reuse.
 - **The auto-mode-classifier-vs-`PreToolUse`-hook interaction for subagent-delegated writes**
   (former open question 3) — root-caused and documented (`skills/agent-standards/claude-code.md`,
-  2026-08-24), but not fixable within a repo-local guard script. Per `cobb`'s explicit
-  recommendation, this document's eventual fix should still ship — it puts `coder` on equal footing
-  with the five already-shipped agents, not behind them. The suggested live isolation test is a
-  candidate follow-up, not a prerequisite.
+  2026-08-24), and now **confirmed permanently unfixable, not merely undocumented**: a
+  `permissions.allow` settings-rule fix was designed, reviewed, and then empirically refuted by the
+  stakeholder's own live isolation test (2026-08-24), and the one remaining lever
+  (`defaultMode` off `auto`) was investigated and rejected on cost/blast-radius grounds, accepted by
+  the stakeholder (`claude/docs/plans/write-guard-classifier-gap-coordination.md`, archived, ledger
+  U1-U12). Per `cobb`'s explicit recommendation, this document's eventual fix should still ship — it
+  puts `coder` on equal footing with the five already-shipped agents, not behind them; none of them
+  has this gap closed either, and none ever will under the current mechanism.
 - **Bash-triggered confirmations** — no live evidence this round. If a future instance surfaces one,
   it's a new document, not a revision of this one (per phase 1's precedent scoping `coder`'s Bash
   question out entirely).
@@ -97,13 +101,22 @@ interruption across one otherwise-uninterrupted implementation task.
 - **AC-2 (safety net preserved):** Given `coder` performs a `Write`/`Edit` genuinely outside its
   remit (another specialist's documented deliverable path), when the tool call runs, then a manual
   "ask" confirmation still appears — unchanged from today.
-- **AC-3 (known limitation, not a failing condition):** For a `coder` `Write`/`Edit` that is
-  Task/`Agent`-delegated (e.g. via a `teco` session) rather than run from a top-level interactive
-  session, the guard's hook decision will be correct (explicit `"allow"` on an in-remit match), but
-  live suppression of the prompt is not guaranteed today, per the documented auto-mode-classifier gap
-  (`skills/agent-standards/claude-code.md`, 2026-08-24). This is a pre-existing condition shared with
-  all five phase-1-fixed agents, not a regression introduced by this feature — verifying or closing
-  it depends on the live isolation test `cobb` recommended, outside this document's scope.
+- **AC-3 (known limitation, permanent, not a failing condition):** For a `coder` `Write`/`Edit`
+  that is Task/`Agent`-delegated (e.g. via a `teco` session) rather than run from a top-level
+  interactive session, the guard's hook decision will be correct (explicit `"allow"` on an in-remit
+  match), but the confirmation prompt will still fire regardless — confirmed by the stakeholder's
+  own live isolation test (2026-08-24: a `permissions.allow` rule covering the target path plus
+  `analyst`'s own hook both independently said "allow" for a `Task`-delegated write, and the prompt
+  fired anyway) and by a dedicated follow-up investigation into the one remaining lever
+  (`defaultMode` off `auto`), which found the mechanism real but not worth its blast radius and
+  recommended staying on `auto` — a recommendation the stakeholder accepted
+  (`claude/docs/plans/permission-default-mode.md`, archived). **No fix is available** — not a
+  guard-script fix, not a `permissions.allow` settings-rule fix (`claude/docs/plans/
+  write-guard-classifier-gap.md`, archived), not a `defaultMode` switch — and none is expected; this
+  is now a settled, permanent, team-wide limitation, not a pending verification. It is a
+  pre-existing condition shared with all five phase-1-fixed agents, not a regression introduced by
+  this feature, and it does not block this document or `coder`'s fix from proceeding
+  (`claude/docs/plans/write-guard-classifier-gap-coordination.md`, archived, ledger of record U1-U12).
 - **AC-4 (regression check):** `coder`'s existing, unfixed friction on paths outside its remit is
   unaffected — this feature narrows *when* confirmation fires, it does not remove the safety net.
 
@@ -216,3 +229,25 @@ None currently open — see Decision log for how each was resolved or reclassifi
   cleared, drafted User stories, FR-1, Out of scope, and AC-1..4 — AC-3 explicitly documents the
   known Task/`Agent`-delegation limitation as a shared pre-existing condition, not a new regression,
   per `cobb`'s finding.
+- 2026-08-24 — Investigation into former open question 3 closed out entirely. `cobb` designed a
+  `permissions.allow` settings-rule fix (`claude/docs/plans/write-guard-classifier-gap.md`,
+  archived; reviewed by `analyst` at `claude/docs/reviews/write-guard-classifier-gap.md`, archived —
+  one "needs changes" pass, one "approve with suggestions" pass after revision). The stakeholder
+  then personally ran the live isolation test AC-3 had named as outside this document's scope: a
+  `permissions.allow` rule was added to `.claude/settings.local.json`, `analyst` was dispatched via
+  `Agent`/`Task` to write to a path the rule covered, and the stakeholder directly observed the
+  confirmation prompt fire anyway — despite both the rule and `analyst`'s own hook independently
+  saying "allow." **Result: refuted** — a `permissions.allow` rule does not close the gap for
+  Task/`Agent`-delegated writes. Stakeholder then asked `cobb` to investigate the one remaining
+  lever, switching `defaultMode` away from `auto`
+  (`claude/docs/plans/permission-default-mode.md`, archived; reviewed by `analyst` at
+  `claude/docs/reviews/permission-default-mode.md`, archived); that investigation found the
+  mechanism real but concluded its blast radius (every session, every Bash call, at any persisted
+  scope, with no narrower option) costs more than the friction it fixes, and recommended staying on
+  `auto` — the stakeholder accepted. Full chain ledgered in
+  `claude/docs/plans/write-guard-classifier-gap-coordination.md` (archived, U1-U12). **Bottom line:**
+  no fix exists — not a guard-script fix, not a settings-rule fix, not a `defaultMode` switch — for
+  the Task/`Agent`-delegated-write classifier gap; it affects `coder` exactly as much as the five
+  already-shipped phase-1 agents, and is now a settled, documented, accepted limitation team-wide,
+  not a pending question. AC-3 and the matching Out of scope bullet updated accordingly to state the
+  confirmed, permanent nature of the limitation rather than describe it as pending verification.
