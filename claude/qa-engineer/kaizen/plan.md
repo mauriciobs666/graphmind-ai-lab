@@ -12,8 +12,8 @@
 | K-002 | 2026-07-01 | med | ✅ | Define the `docs/test-plans/` + `docs/test-reports/` convention explicitly in `falkor-chat/AGENTS.md` (currently inferred by the agent) — done 2026-07-11 via the docs-unification pass (see history) |
 | K-003 | 2026-07-01 | low | 🔵 | Consider a handoff protocol: qa-engineer files defects → coder/tdd-engineer fix → qa-engineer re-runs (regression loop) |
 | K-004 | 2026-07-01 | low | 🔵 | Capture a first-run smoke-eval as a repeatable check; document the "new subagent isn't routable until a new session" registry-reload gotcha where users will see it |
-| K-005 | 2026-08-24 | low | 🔵 | Phase 2's lead-in still offers component-negotiable doc *naming* — the one place negotiability no longer survives. Re-point it at structure and IDs. |
-| K-006 | 2026-08-24 | low | 🔵 | Phase 3 bullet 2 is one ~60-word compound sentence carrying four separable rules; `tdd-engineer` step 3 carries identical content as labeled sub-bullets. |
+| K-005 | 2026-08-24 | low | ✅ | Phase 2's lead-in still offers component-negotiable doc *naming* — the one place negotiability no longer survives. Re-point it at structure and IDs. |
+| K-006 | 2026-08-24 | low | ✅ | Phase 3 bullet 2 is one ~60-word compound sentence carrying four separable rules; `tdd-engineer` step 3 carries identical content as labeled sub-bullets. |
 
 ### K-001 — Reusable plan/report templates
 - **Status:** 🔵 proposed

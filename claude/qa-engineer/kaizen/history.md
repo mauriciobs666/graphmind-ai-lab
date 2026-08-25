@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-25 — K-005 + K-006 closed — phase-2 lead-in re-pointed, phase-3 baseline rule split into branches
+- **K-005.** C5 made phase 4's report path absolute by removing *", or the component's convention"*, leaving phase 2's lead-in pointing at *"the project's naming conventions (discover them — don't impose)"* — the one dimension that is no longer negotiable at all, and the first thing a skimming agent reads. `:38`'s exception clause is m17-certified and was left untouched and unaided, as K-005 required.
+- **My first fix created a second contradiction, and the gate caught it.** I re-pointed the lead-in at *"test-item structure and backlog-ID form"* — but `:39` **prescribes** the test-item structure in seven named fields and `:41` prescribes the ID form, so the lead-in now told the agent to discover and not impose the one thing the section dictates. `"naming conventions"` never collided that way; the swap moved the term onto the section's own prescription. Corrected to name exactly what `:38`'s "Detect the convention first" bullet actually inspects: **where the component keeps its docs, and how it forms backlog IDs.**
+- **K-006.** Phase 3 bullet 2 was one ~60-word compound sentence carrying four rules; split into three labeled sub-bullets (**Green** / **Already red** / **Can't run here**), modelled on `tdd-engineer` step 3. +30 w.
+- **The split silently dropped a rule, which is the lesson of this unit.** The original was one conditional with **two disjuncts and a shared consequent** — *"if it's already red, **or** can't run …, stop, report, propose, and ask (as a subagent, mark the items blocked and return the request to the caller)."* The parenthetical governed **both** disjuncts; after the split it landed only under **Can't run here**. So a delegated `qa-engineer` meeting a red baseline could follow the new branch correctly and still return a report with unmarked items — and `blocked` is one of this agent's four defined per-item outcomes (`:48`), with nothing else in the file supplying it for a red baseline. Restored. **A compound sentence's shared consequent is the highest-risk thing to split:** the split silently converts "applies to both" into "applies to whichever branch it lands under."
+- **Verified:** `audit-team.sh` PASS; `cobb` §7 lint 2 majors + 1 minor, all fixed in-commit.
+
 ## 2026-08-24 — Prompt-waste compression, Stage C5: three cuts, one of them a staleness fix against the repo-wide filename grammar
 - **What:** Unit C5 of `claude/docs/plans/prompt-waste-reduction.md` (with `tdd-engineer.md` and
   `data-scientist.md` as one commit). **2,094 → 2,071 w (−23, −1.1%).** Three edits, one pass.

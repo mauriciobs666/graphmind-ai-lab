@@ -34,7 +34,7 @@ Before writing anything, understand the system and where it can break:
 - **Choose coverage deliberately** — happy paths, boundaries, empty/null, error and failure modes, concurrency/idempotency where relevant, and the relevant non-functional angles (performance, security, resilience) *only where they carry real risk*. Prioritize by risk × likelihood; say explicitly what you are choosing **not** to test and why.
 
 ### 2 — PLAN: write the strategy to a versioned test plan
-Write the strategy to a markdown **test plan** in the component's docs tree, matching the project's naming conventions (discover them — don't impose):
+Write the strategy to a markdown **test plan** in the component's docs tree, matching where that component already keeps its docs and how it forms backlog IDs (discover them — don't impose):
 - **Detect the convention first.** Look at how the component already stores docs/plans (e.g. `falkor-chat/docs/plans/<kebab>.md`, backlog IDs like `K-002` from `docs/BACKLOG.md`). Write test plans to a parallel `docs/test-plans/<kebab-feature>.md` (create the dir if absent), kebab-case, named for the feature under test. If a component uses a different convention, follow that — **except the filename grammar, which is repo-wide (root `AGENTS.md`) and not component-negotiable**.
 - **Structure** the plan: scope & objective · references (spec/design/code) · risk assessment · test items (each: ID, title, preconditions, steps, expected result, priority, type [functional/integration/contract/e2e/exploratory/non-functional]) · environment & data setup · entry/exit criteria · what's explicitly out of scope.
 - Open the document with the header block from root `AGENTS.md`.
@@ -44,7 +44,10 @@ Write the strategy to a markdown **test plan** in the component's docs tree, mat
 ### 3 — EXECUTE: run the plan three ways
 You author, run, and drive — pick the right instrument per test item:
 - **Author automated functional tests** where they add durable value — acceptance/contract/integration/e2e tests that exercise real seams (the REST endpoint, the MCP tool, the CLI, a cross-module workflow). Match the component's existing framework, layout, naming, and assertion style (discover them — `pytest` + the `server/tests/` layout in falkor-chat). Prefer tests that hit the genuine seam over mocks that prove nothing.
-- **Run the existing suite and scripts** — establish a green baseline *first* (e.g. `./scripts/test_queries.sh`, `pytest`), then your new tests. Never pile onto a red or un-runnable baseline: if it's already red, or can't run for environmental reasons (deps not installed, service not up, missing toolchain), stop, report the blocker plainly, propose the bootstrap step, and ask before installing or mutating the environment (as a subagent, mark the items blocked and return the request to the caller).
+- **Run the existing suite and scripts** — establish a green baseline *first* (e.g. `./scripts/test_queries.sh`, `pytest`), then your new tests. Never pile onto a red or un-runnable baseline:
+  - **Green** — proceed to your new tests.
+  - **Already red** — stop and report the failures plainly; results layered on them are unattributable. As a subagent, mark the affected items blocked and return the failures to the caller.
+  - **Can't run here** (deps not installed, service not up, missing toolchain) — stop, report the blocker, and propose the bootstrap step. Ask before installing or mutating the environment; as a subagent you can't ask, so mark the items blocked and return the request to the caller.
 - **Drive the running app black-box** — for acceptance/exploratory items, exercise the system as a user or client would (`curl`/HTTP against the API, invoke the MCP tools, run the app scripts, inspect the store) and observe actual behavior against expected. Capture concrete evidence (request/response, exit codes, log lines, data state).
 - Record each item's outcome as you go: pass / fail / blocked / skipped, with the evidence.
 
