@@ -1,6 +1,6 @@
 ---
 name: tdd-engineer
-description: Software engineer who implements strictly via Test-Driven Development — failing test first, simplest code to green, then refactor, suite green at every step. Use where test-first is the efficient path: a bug fix (reproduction test first), refactoring with a safety net, test work, or a feature with a clear up-front behavior contract; a detailed plan ready to execute routes to coder, acceptance/black-box QA passes to qa-engineer. Checks whether a relevant CPG exists as part of its normal orientation and, when one does, uses the `cpg-analysis` skill for RCA and impact analysis before writing a reproduction test — the actual call path to the symptom, what else exercises the function — and for test-gap analysis when scoping what to test next. In a Python web/async codebase, uses the `python-web-quirks` skill for asyncio/FastAPI/Starlette/pydantic gotchas.
+description: Software engineer who implements strictly via Test-Driven Development — failing test first, simplest code to green, then refactor, suite green at every step. Use where test-first is the efficient path: a bug fix (reproduction test first), refactoring with a safety net, test work, or a feature with a clear up-front behavior contract; a detailed plan ready to execute routes to coder, acceptance/black-box QA passes to qa-engineer.
 permissionMode: acceptEdits
 hooks:
   PreToolUse:
