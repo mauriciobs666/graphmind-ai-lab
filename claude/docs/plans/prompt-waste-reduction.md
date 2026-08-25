@@ -590,6 +590,43 @@ root and `falkor-chat/AGENTS.md`**, one judged-and-kept normative `FR-10` citati
     output — not from the edit list.** Cheap, mechanical, and it is the only step that would have
     caught this.*
 
+***Stage E pass 2 executed 2026-08-25 — the deferred grant/authority block. `claude/AGENTS.md`
+1,779 → 1,668 w (−111, −6.2%); 1,973 → 1,668 across both passes (−15.5%), the largest single-file
+reduction in this plan.*** *Plus one `claude/teco/teco.md` line as a declared correction (net 0 w).
+Gates (a)–(e) green; `audit-team.sh` PASS. `cobb` §7 lint **0 blockers, 2 majors, 2 minors, 1 nit —
+all fixed in-commit**. Class-6 residual in the section: **0 w**, so `claude/AGENTS.md` as a whole now
+matches finding 14's eleven-of-eleven prompt result. Detail in `claude/cobb/kaizen/history.md` and
+`claude/teco/kaizen/history.md`. **Every finding this unit produced was a scope or meaning change in
+new prose; not one was a lost rule** — the strongest confirmation finding 1 has had. **Two
+findings:**
+
+18. ***A grant defined by contrast lives in two files, and this plan has no gate that reads the
+    second one.*** *Pass 2 deleted a class-6 supersession clause from `claude/AGENTS.md` ("extension
+    B deliberately breaks the write-scope==commit-scope identity `tico` previously held"). The C2
+    anti-trigger test, run on `tico`, correctly returned **No** — `tico.md` enumerates all three
+    cases explicitly, so `tico` cannot infer the identity. The deletion was right for `tico` and
+    wrong for the corpus: **`teco.md:129` asserted that identity as live fact**, dating to
+    `eb318d4` (2026-07-30) and falsified twice since, and the deleted sentence was the only marker
+    anywhere that it was stale. Fixed at the source rather than by restoring provenance to a
+    just-cleaned file. **Generalization: the C2 anti-trigger test must run over the whole load-set,
+    not over the one agent the sentence is about — ask "who else states this rule, and does their
+    wording still agree?"** The reciprocal statement in another agent's prompt is a required
+    update when a grant moves, not an optional one; gates (a)–(e) check the edited file and its
+    own history, and nothing checks the file that describes it from outside.*
+19. ***Folding stacked amendments into one list trades syntactic isolation for a lexical scope
+    marker — and the isolation was load-bearing.*** *The block held three dated amendments to one
+    grant, each restating the whole grant to add a case; folding them into one enumerated list is
+    the correct class-7 read and the largest readability win in Stage E. But while each extension
+    was its own **sentence**, a limit stated inside one could not reach the others **by
+    construction**. After the fold, one limit sat 30 words downstream of its "for that third case"
+    marker with a causal clause wedged between, and its subject had degraded to a bare "it" whose
+    nearest antecedents were the wrong nouns. I verified it still excluded the adjacent case and
+    **missed that it also reached a third grant** — one carrying no such limit since 2026-07-30 and
+    part of no extension. **When collapsing N stacked amendments into one list, every limit that was
+    previously scoped by sentence boundary needs an explicit non-reach clause** ("that case alone …
+    and it does not narrow the others"). This is C1's regression site hit the same way twice: scope
+    moving during a rewrite that removed no rule.*
+
 ### Stage F — Ratchet guard (make it stick)
 
 - `agent-maintenance` skill: add the promotion rule — *a kaizen entry promoted into a prompt

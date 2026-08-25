@@ -98,45 +98,34 @@ of the named agent's prompt, tools, or hooks, and raises no error.
 **Git-commit authority is prompt-level, not hook-enforced.** No `PreToolUse` hook matches `git
 commit` (the destructive-ops guards match Bash command patterns like `GRAPH.DELETE`, not
 versioning commands), so this is entirely self-discipline, backstopped only by
-`scripts/audit-team.sh` check 8. The policy has two layers, both stakeholder decisions:
+`scripts/audit-team.sh` check 8. The policy has two layers:
 
-- **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.**
-  Stakeholder decision, 2026-07-30: `tico` may commit its own doc kinds (requirements, manuals),
-  `teco` may commit any coordinated specialist's
-  already-verified deliverable by explicit path (its integrator role, deliberately wider than its
-  own Write/Edit guard) — reasoning in `claude/teco/kaizen/history.md` and
-  `claude/cobb/kaizen/history.md`. **Extended 2026-08-21:** `tico`'s grant now also covers the
-  returned artifact of a `qa-engineer`/`analyst` verification pass it itself offered under Mode 3
-  and the stakeholder accepted, once tico has confirmed the artifact fits — narrower than `teco`'s
-  grant, scoped to the one ad-hoc-orchestration case tico's own guardrails sanction
-  (`tico/kaizen/history.md`, 2026-08-21 entry). **Extended again 2026-08-24** (stakeholder
-  decision, closing one of `tico` K-008's two open incidents): `tico` may also commit **a file it
-  itself wrote in the current session that its `Write`/`Edit` guard let through** — including a
-  one-off the human approved at the guard's escalation prompt, e.g. a `docs/BACKLOG.md` entry. The
-  write-approval is what confers committability, so the grant does **not** reach a file `tico`
-  didn't write or an earlier session's writes; explicit-path staging still applies. This
-  deliberately breaks the write-scope==commit-scope identity `tico` previously held — the
-  stakeholder's reasoning being that a human who has just approved the write at an escalation
-  prompt has already supplied the review that identity was standing in for
-  (`tico/kaizen/history.md`, 2026-08-24 entry). K-008's other incident (routing a finding to
-  `architect` via `Agent`) is untouched and stays open. Both of these grants apply whether the agent is
+- **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.** `teco` may
+  commit any coordinated specialist's already-verified deliverable **by explicit path** (its
+  integrator role, deliberately wider than its own Write/Edit guard). `tico` may commit three
+  things: its own doc kinds (requirements, manuals); the returned artifact of a
+  `qa-engineer`/`analyst` verification pass it itself offered under Mode 3 and the stakeholder
+  accepted, once tico has confirmed the artifact fits; and **a file it itself wrote in the current
+  session that its `Write`/`Edit` guard let through**, including a one-off the human approved at
+  the guard's escalation prompt (e.g. a `docs/BACKLOG.md` entry). In that third case the
+  write-approval is what confers committability — a human who has just approved the write has
+  already supplied the review — so **that case alone** covers only files `tico` wrote itself this
+  session; it does not stretch to an earlier session's writes, and it does not narrow the other
+  two. Explicit-path staging applies to all three. Both agents' grants hold whether they are
   running interactively or as a delegated subagent — they're tied to the agent's role, not its
   invocation mode.
-- **Universal interactive-mode grant — every agent, added 2026-08-21.** Stakeholder ruling,
-  same day, in direct response to a live friction case (this document's own edit history, plus
-  `cobb/kaizen/history.md`, 2026-08-21): every one of the 13 agents in this directory may `git
+- **Universal interactive-mode grant — every agent.** Every agent in this directory may `git
   add`/`git commit` its **own verified work from the current session**, by explicit path only
   (never `git add -A`/`git add .`/`git commit -a`, never `git push`/`reset`/`rebase`, never amend
   history) — **but only when it is running interactively** (`claude --agent <name>`, a human
   conversing with it turn-by-turn). **The grant does not apply when the same agent is spawned as a
   delegated subagent** (via `Agent`/`Task`, isolated context, no live human turn) — there,
   committing stays the coordinating agent's (`teco`'s) integration step, after its own
-  verification, exactly as before this ruling. The distinction exists because a human directly
-  steering an interactive session *is* the real-time review the "no proliferation" rule was
-  protecting; an isolated subagent chain has no such reviewer in the loop, so nothing changes
-  there. Each agent's own Guardrails/Principles/Boundaries section states this grant in its own
-  words; `scripts/audit-team.sh` check 8 verifies every agent's file both claims it and states the
-  delegated-subagent carve-out.
+  verification. The distinction exists because a human directly steering an interactive session
+  *is* the review that routing commits through `teco` otherwise supplies; an isolated subagent
+  chain has no such reviewer in the loop. Each agent's own Guardrails/Principles/Boundaries section
+  states this grant in its own words; `scripts/audit-team.sh` check 8 verifies every agent's file
+  both claims it and states the delegated-subagent carve-out.
 
 This second layer **does not touch** the first: `tico`'s and `teco`'s broader, mode-unconditioned
 grants stand exactly as documented above, and this still isn't a delegation of *coordination* —
