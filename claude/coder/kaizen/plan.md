@@ -9,7 +9,7 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-002 | 2026-06-20 | medium | 🔵 | Validate the architect→coder handoff end-to-end and confirm the coder can execute an architect plan without re-investigating. |
-| K-003 | 2026-08-24 | low | 🔵 | `:11` and `:35` prescribe different actions for the same trigger (mid-build plan defect: stop vs. note-and-continue) |
+| K-003 | 2026-08-24 | low | ✅ | `:11` and `:35` prescribe different actions for the same trigger (mid-build plan defect: stop vs. note-and-continue) |
 | K-004 | 2026-08-24 | low | ✅ | `:12`'s conventions rule doesn't say whether project norm or local neighbour wins when a file deviates — sibling of `tdd-engineer` K-006, fix together |
 
 > Done: K-001 (2026-07-09) — efficiency-based routing boundary with `tdd-engineer`; descriptions now use objective task-shape triggers (detailed plan → coder; bug fix / safety-net refactor / test work / clear-contract feature → tdd-engineer) and cross-reference symmetrically. See history.md.
