@@ -887,8 +887,9 @@ class Services:
         `ctx.actor` is the answering Agent — the responder swaps the actor to the
         agent id so `role` derives to `assistant` here exactly like `post_message`
         (never trusted from the caller). Same §4 dispatch (`_dispatch_write`) over
-        the §10.1 EMITTED-carrying write paths; `seeds` (`[(msgId, score)]` in rank
-        order) ride inside the single GRAPH.QUERY (atomicity). `seeds=[]` is a
+        the §10.1 EMITTED-carrying write paths; `seeds` (`[(seedId, score)]` in
+        rank order — `seedId` is a `Message.msgId` or a `Chunk.chunkId`, K-050 M5
+        Stage 5) ride inside the single GRAPH.QUERY (atomicity). `seeds=[]` is a
         verified no-op — the message still commits.
         """
         wanted, role = self._validate_and_derive_role(
@@ -979,18 +980,59 @@ class Services:
         self, ctx: CallContext, *, q_vec: list[float], k: int = 10,
         limit: int = 10, channel_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """GraphRAG hybrid retrieval (QUERIES.md §6): vector ANN + scope traversal.
+        """GraphRAG hybrid retrieval (QUERIES.md §6): vector ANN + scope traversal,
+        merged with `Chunk` ANN seeds (K-050 M5 Stage 5, FR-2).
 
-        Passes the single service-layer `RAG_QUERY_TIMEOUT_MS` override on the RO
-        query (DESIGN §10). Rows come back already ordered by cosine distance ASC
-        (most similar first) — not re-sorted here. `score` is a distance, not a
-        similarity; a caller that wants similarity derives `1 - score` client-side.
-        `relatedContext` is `[]` in M2 (Entity layer dormant) and passed through.
+        Passes the single service-layer `RAG_QUERY_TIMEOUT_MS` override on both RO
+        queries (DESIGN §10). `repository.hybrid_search` (Message seeds, scope
+        traversal, Entity co-occurrence expansion) and `repository.search_chunks`
+        (Chunk seeds, shipped Stage 2 — no scope traversal, no `Entity` expansion:
+        FR-2 doesn't extend `relatedContext` to `Chunk` seeds) are both queried
+        with the same `q_vec`/`k`, then **merged app-side** by `score` ascending
+        (cosine distance — lower is better) and truncated to `limit`. There is no
+        combined-ANN Cypher shape for this (graph-dba's note is scoped to the
+        `EMITTED` generalization only, `document-ingestion-graph.md` §3) — this is
+        deliberately an application-layer merge, not a new repository query.
+        `channel_id` scopes only the `Message` pool; `Chunk` seeds have no
+        channel/thread scope to filter by (a chunk belongs to a `Document`, not a
+        `Channel`), so a channel-scoped call still searches the full `Chunk` ANN
+        index unscoped.
+
+        Each merged item is tagged `seedKind: 'Message'|'Chunk'` (neither repo
+        method returns this key) so a caller (`responder.maybe_respond`) can
+        resolve the right id generically. A `Chunk` seed's `relatedContext` is
+        set to `[]` — the same dormant-field convention already used for
+        `Message` seeds pre-extraction.
+
+        **Tie-break (undocumented until Pass 5's review NIT):** `list.sort` is
+        stable (a documented Python guarantee), and the `Message` pool is
+        concatenated before the `Chunk` pool, so two rows with an exactly-equal
+        `score` keep `Message` ahead of `Chunk` in the merged order. Relied on
+        implicitly, not tested for — a caller that needs a different tie-break
+        must sort the result itself.
+
+        **Sequential, not concurrent (Pass 5 NIT).** The two RO queries run one
+        after the other, matching this codebase's existing synchronous-call
+        convention (no other RO-query pair here is fired concurrently either) —
+        not a defect, but it roughly doubles worst-case retrieval latency versus
+        firing both in parallel. Re-measure once real ingestion volume exists
+        (mirrors the plan's own §6 RAM-posture "re-measure at scale" callout);
+        not a concern at M5's current corpus sizes.
         """
-        return self._repo.hybrid_search(
+        msg_hits = self._repo.hybrid_search(
             ctx.ws, q_vec=q_vec, k=k, limit=limit, channel_id=channel_id,
             timeout=RAG_QUERY_TIMEOUT_MS,
         )
+        chunk_hits = self._repo.search_chunks(
+            ctx.ws, q_vec=q_vec, k=k, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
+        )
+        # Message pool concatenated first — see the tie-break note above.
+        merged = (
+            [{**row, "seedKind": "Message"} for row in msg_hits]
+            + [{**row, "seedKind": "Chunk", "relatedContext": []} for row in chunk_hits]
+        )
+        merged.sort(key=lambda row: row["score"])
+        return merged[:limit]
 
     # ── reads (thin passthroughs) ───────────────────────────────────────────────
 

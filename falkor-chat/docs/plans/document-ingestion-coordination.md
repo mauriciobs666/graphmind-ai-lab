@@ -47,6 +47,10 @@ design, confirmed by the stakeholder 2026-08-22).
 | U19 | `coder` | `a7d65e37255f8b2ca` | accepted | Stage 4: fusion (FR-6/7/8/9/10, OQ-1/2/3) | `analyst` (U20, Pass 4) → **approve w/ suggestions** | 359k tok / 171 tools |
 | U20 | `analyst` | `a40241fa3792bc3cf` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 4 | code gate → **approve w/ suggestions** | 151k tok / 70 tools |
 | U21 | `coder` | `a7d65e37255f8b2ca` (resumed) | accepted | fix U20's 2 MINORs (QUERIES.md §14.6; AC-8 pipeline-altitude test) | (verified by teco) | 399k tok / 26 tools |
+| U22 | `coder` | `a230563f056d3d9de` | accepted | Stage 5: chat-grounding integration (FR-2) | `analyst` (U23, Pass 5) → **needs changes** (fixed U24) | 230k tok / 123 tools |
+| U23 | `analyst` | `a21a439e02926453a` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 5 | code gate → **needs changes** | 138k tok / 52 tools |
+| U24 | `coder` | `a230563f056d3d9de` (resumed) | accepted | fix U23's BLOCKER (tools.py `GraphragRetrieveTool` KeyError on Chunk seed) + 2 MINORs (eval-harness same pattern; AC-5 live-e2e gap) + NIT (tie-break/latency doc note) | `analyst` (Pass 5 re-gate, U25) → **approve** | 319k tok / 59 tools |
+| U25 | `analyst` | `a21a439e02926453a` (resumed) | accepted | Pass 5 re-gate of U24's fixes | code re-gate → **approve** | 178k tok / 29 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -333,6 +337,38 @@ design-phase commit.
   — on an undirected pattern, not just inline maps) was filed as a plain new node, not an
   unauthorized edge-write shape. **Stage 4 is done: implementation + diff-scoped gate + fix, all
   independently verified. Committing.**
+- **U22-U25 (Stage 5: chat-grounding integration, FR-2) verified independently.** Dispatched
+  `coder` for the generalized `EMITTED` write/read (per graph-dba's §3.1-§3.4, essentially
+  verbatim) and an app-side `Message`+`Chunk` ANN merge in `services.hybrid_search` (no
+  combined-ANN Cypher shape exists for this — a deliberate, documented implementer design
+  choice, not a spec gap). Re-verified U22 directly before gating: read every diff hunk against
+  the graph note's exact Cypher, ran the full offline suite myself (1723 passed, up from 1712),
+  and independently reproduced one of the two implementer-claimed mutation tests. Dispatched
+  `analyst` for the mandatory diff-scoped gate (Pass 5, U23) — verdict **needs changes**: a
+  genuine BLOCKER (`services.hybrid_search`'s new merged row shape broke `GraphragRetrieveTool`,
+  a shipped, workflow-granted tool at `tools.py:309-312` still doing unconditional `r["msgId"]`
+  — `KeyError` on any `Chunk`-seeded hit; independently reproduced by both me and the analyst
+  before/after the fix), plus 2 MINORs (the same fragile pattern in the eval harness;
+  AC-5's plan-specified live-marked e2e variant absent with no note) and a NIT (undocumented
+  merge tie-break/sequential-ANN-latency). Routed all four back to the same `coder` agent (U24)
+  rather than deferred — the BLOCKER is a real regression in already-shipped functionality
+  (`Chunk`s have existed since Stage 2), not a Stage 5 scope question. U24 fixed the BLOCKER
+  (id resolved generically + `documentId` surfaced, mirroring `responder.py`), resolved MINOR 1
+  (eval harness now filters to `Message`-shaped rows with a documented rationale) and MINOR 2
+  outright rather than deferring it (`test_ac5_chat_grounding_live.py`, a new `pytest.mark.live`
+  test mirroring `test_workflow_live.py`'s gating discipline), and folded in the NIT's doc note.
+  Independently re-verified U24 myself: read every changed diff, re-ran the offline suite
+  (1725 passed), **ran the new live-marked test myself** (LM Studio reachable — `1 passed in
+  5.50s`), and reproduced the BLOCKER's fix via my own mutation test (reverted the id-resolution
+  branch, confirmed the exact original `KeyError: 'msgId'` crash across all three relevant
+  tests, restored). Dispatched the same `analyst` agent for the Pass 5 re-gate (U25) rather than
+  accepting my own check as sufficient — it independently re-verified everything from scratch
+  (including running the live test itself and re-grepping every `hybrid_search`/`search_chunks`
+  call site across the codebase to confirm no other consumer was missed) and returned **approve**,
+  with one non-blocking design note (the tool's new `documentId` is an opaque uuid, no
+  `documentTitle` — reasonable for a scoped bug fix, flagged as a possible follow-up, not
+  required). **Stage 5 is done: implementation + diff-scoped gate + BLOCKER/MINOR fixes +
+  re-gate, all independently verified twice over (coordinator + analyst). Committing.**
 
 ## Design phase — ✅ complete, committed `30366f4`
 

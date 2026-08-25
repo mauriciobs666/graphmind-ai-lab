@@ -5,17 +5,32 @@ and the answer-embedding worker are all injected fakes. The responder's contract
 
   * trigger = the incoming message @mentions the agent AND is not agent-authored;
   * flow = embed trigger → hybrid_search (channel-scoped) → LLM → post as the agent
-    with the retrieved seeds as `EMITTED` provenance in rank order;
+    with the retrieved seeds as `EMITTED` provenance in rank order — seeds can be
+    `Message`- or `Chunk`-shaped (K-050 M5 Stage 5), discriminated by `seedKind`;
   * failure isolation = embedder/LLM run BEFORE the post, so any failure ⇒ no post;
   * loop guard = an `assistant`-role trigger never responds (no self-answer loop).
+
+**One deliberate exception** (bottom of the file, "AC-5 chat-grounding
+integration"): a single live-FalkorDB-backed test using the real `repo`/`conn`
+fixtures and a real `Services` instead of `FakeServices` — plan §5's AC-5 row
+names the end-to-end scenario (ingest a document, `@mention` the agent with a
+question the content answers, the answer's `EMITTED` edge resolves back to the
+source chunk/document), which unit-level coverage of the pieces (this file's
+`FakeServices`-based Chunk-seed tests above, `test_provenance.py`'s repo-level
+Chunk-seed round trip) doesn't by itself prove wired together. Only the LLM and
+embedder are mocked — everything else (ingestion, chunk embedding, message
+post, retrieval, provenance write/read) is the real stack, mirroring
+`test_ingestion.py`'s identical "one deliberate exception" precedent for AC-8.
 """
 
 from __future__ import annotations
 
 import pytest
+from conftest import TEST_EMBEDDING_DIM
 
 from falkorchat.config import CallContext
 from falkorchat.responder import AgentResponder
+from falkorchat.services import Services
 
 CTX = CallContext(ws="test", actor="u1")
 AGENT_ID = "bot1"
@@ -96,8 +111,8 @@ def _responder(services, *, embedder=None, llm=None, worker=None, k=10):
 
 def test_mention_triggers_answer_with_provenance_in_rank_order():
     seeds = [
-        {"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0},
-        {"msgId": "s2", "text": "seed two", "role": "user", "score": 0.3},
+        {"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0, "seedKind": "Message"},
+        {"msgId": "s2", "text": "seed two", "role": "user", "score": 0.3, "seedKind": "Message"},
     ]
     services = FakeServices(seeds=seeds)
     llm = StubLLM(answer="grounded reply")
@@ -133,11 +148,53 @@ def test_mention_triggers_answer_with_provenance_in_rank_order():
     assert worker.calls == [("test", out["msgId"], "grounded reply")]
 
 
+# ── Chunk-seeded provenance threading (K-050 M5 Stage 5) ───────────────────────
+
+
+def test_chunk_seeded_answer_threads_chunk_id_into_provenance():
+    """A `Chunk`-seeded hit (no `msgId` key at all) must resolve via `chunkId`,
+    not silently drop the seed or crash on a missing `msgId`.
+    """
+    seeds = [
+        {"chunkId": "ch1", "text": "chunk text", "documentId": "d1", "seq": 0,
+         "score": 0.05, "seedKind": "Chunk", "relatedContext": []},
+    ]
+    services = FakeServices(seeds=seeds)
+    responder = _responder(services)
+
+    responder.maybe_respond(
+        CTX, thread_id="t1", msg_id="m1", text="what does the doc say?",
+        role="user", channel_id="c1", mentions=[AGENT_ID],
+    )
+
+    posted = services.post_calls[0]
+    assert posted["seeds"] == [("ch1", 0.05)]
+
+
+def test_mixed_message_and_chunk_seeds_thread_correct_ids_in_rank_order():
+    seeds = [
+        {"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0,
+         "seedKind": "Message"},
+        {"chunkId": "ch1", "text": "chunk text", "documentId": "d1", "seq": 0,
+         "score": 0.2, "seedKind": "Chunk", "relatedContext": []},
+    ]
+    services = FakeServices(seeds=seeds)
+    responder = _responder(services)
+
+    responder.maybe_respond(
+        CTX, thread_id="t1", msg_id="m1", text="mixed grounding",
+        role="user", channel_id="c1", mentions=[AGENT_ID],
+    )
+
+    posted = services.post_calls[0]
+    assert posted["seeds"] == [("s1", 0.0), ("ch1", 0.2)]
+
+
 # ── loop guard: agent-authored messages never trigger ─────────────────────────
 
 
 def test_assistant_role_message_never_responds():
-    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0}])
+    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0, "seedKind": "Message"}])
     llm = StubLLM()
     responder = _responder(services, llm=llm)
 
@@ -183,7 +240,7 @@ def test_empty_mentions_no_response():
 
 
 def test_llm_failure_posts_nothing():
-    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0}])
+    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0, "seedKind": "Message"}])
     worker = SpyWorker()
     responder = _responder(services, llm=StubLLM(fail=True), worker=worker)
 
@@ -215,7 +272,7 @@ def test_embedder_failure_posts_nothing():
 
 
 def test_answer_self_embedding_does_not_re_trigger():
-    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0}])
+    services = FakeServices(seeds=[{"msgId": "s1", "text": "x", "role": "user", "score": 0.0, "seedKind": "Message"}])
     worker = SpyWorker()
     responder = _responder(services, worker=worker)
 
@@ -258,7 +315,7 @@ class RecordingGateway:
 
 
 def test_maybe_respond_resolves_embedding_then_agent_through_the_gateway_in_order():
-    seeds = [{"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0}]
+    seeds = [{"msgId": "s1", "text": "seed one", "role": "user", "score": 0.0, "seedKind": "Message"}]
     services = FakeServices(seeds=seeds)
     embedder = StubEmbedder()
     llm = StubLLM(answer="grounded reply")
@@ -297,3 +354,80 @@ def test_maybe_respond_does_not_resolve_anything_when_not_triggered():
 
     assert out is None
     assert gateway.calls == []
+
+
+# ── AC-5: chat-grounding integration (live repo, mocked LLM) ──────────────────
+#
+# See the module docstring's "one deliberate exception" note. Real `Repository`
+# (`repo`/`conn` fixtures) + real `Services`; only the LLM and embedder are
+# stubbed. `TEST_EMBEDDING_DIM`-shaped vectors, same convention as
+# `test_graphrag.py`.
+
+
+def _pad(head: list[float]) -> list[float]:
+    return (head + [0.0] * TEST_EMBEDDING_DIM)[:TEST_EMBEDDING_DIM]
+
+
+def test_ac5_document_grounded_answer_provenance_resolves_to_chunk_and_document(repo):
+    ws = "test"
+    doc_ctx = CallContext(ws=ws, actor="u1")
+
+    repo.ensure_user(ws, user_id="u1")
+    repo.ensure_agent(ws, agent_id="bot1", name="Bot")
+    services = Services(repo)
+
+    channel = services.create_channel(doc_ctx, name="c1")
+    thread = services.create_thread(
+        doc_ctx, channel_id=channel["channelId"], title="t1"
+    )
+
+    # Ingest a document whose content answers the question the trigger asks.
+    ingested = services.ingest_document(
+        doc_ctx, text="The capital of Freedonia is Fredonia City.",
+        title="Freedonia Facts",
+    )
+    chunks = services.list_document_chunks(
+        doc_ctx, document_id=ingested["documentId"]
+    )
+    assert len(chunks) == 1  # short text — one chunk, so ANN retrieval is deterministic
+    chunk_vec = _pad([1.0])
+    repo.set_chunk_embedding(
+        ws, chunk_id=chunks[0]["chunkId"], embedding=chunk_vec,
+        expected_dim=TEST_EMBEDDING_DIM,
+    )
+
+    # The triggering @mention.
+    trigger = services.post_message(
+        doc_ctx, thread_id=thread["threadId"],
+        text="What is the capital of Freedonia?", mentions=["bot1"],
+    )
+
+    embedder = StubEmbedder(vector=chunk_vec)  # same vector → the chunk is the top ANN hit
+    llm = StubLLM(answer="Fredonia City is the capital of Freedonia.")
+    worker = SpyWorker()
+    responder = AgentResponder(
+        services, embedder, llm, worker, agent_id="bot1", k=10,
+    )
+
+    trigger_ctx = CallContext(ws=ws, actor="u1")
+    posted = responder.maybe_respond(
+        trigger_ctx, thread_id=thread["threadId"], msg_id=trigger["msgId"],
+        text=trigger["text"], role="user", channel_id=channel["channelId"],
+        mentions=["bot1"],
+    )
+
+    assert posted is not None
+    assert posted["text"] == "Fredonia City is the capital of Freedonia."
+
+    prov = repo.read_provenance(ws, msg_id=posted["msgId"])
+    assert len(prov) == 1
+    row = prov[0]
+    assert row["seedKind"] == "Chunk"
+    assert row["seedId"] == chunks[0]["chunkId"]
+    assert row["documentId"] == ingested["documentId"]
+    assert row["documentTitle"] == "Freedonia Facts"
+    assert row["role"] is None
+
+    # Reverse read: the ingested chunk is discoverable as "cited by" the answer.
+    citing = repo.read_citing_answers(ws, seed_id=chunks[0]["chunkId"])
+    assert [c["answerMsgId"] for c in citing] == [posted["msgId"]]

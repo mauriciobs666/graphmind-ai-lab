@@ -89,7 +89,24 @@ def test_golden_msgids_exist_in_corpus(ws_eval: str) -> None:
 
 def _aggregate_metrics(ws: str) -> dict[str, Any]:
     """One `hybrid_search` round-trip per golden query (k=10); recall@5 is sliced
-    from the same ordered result, never a second call."""
+    from the same ordered result, never a second call.
+
+    K-050 M5 Stage 5: `services.hybrid_search` now merges `Message`- and
+    `Chunk`-shaped rows (tagged `seedKind`). The golden set's relevance
+    judgments (`relevant_msgIds`) are `Message`-only by design — `ws:eval` has
+    never had a document ingested into it, so `search_chunks` returns `[]` and
+    every merged row is `Message`-shaped in practice today. That's a fact
+    about the current fixture, not an invariant the code enforces, so this
+    filters to `Message` rows explicitly rather than assuming it: a `Chunk`
+    row can never satisfy a `Message`-id relevance judgment anyway (comparing
+    a `chunkId` against `relevant_msgIds` would only ever be a false miss, not
+    a crash — but a crash is exactly what an unguarded `r["msgId"]` would hit
+    once a document IS ingested into `ws:eval`). If the golden set is ever
+    extended to include document-grounded queries (a natural next step for
+    evaluating FR-2's own retrieval quality), it needs its own chunk-aware
+    relevance-judgment schema first — a `data-scientist` methodology call, not
+    made here.
+    """
     rows = _load_golden_set()
     cache = _load_embedding_cache()
     ctx = CallContext(ws=ws, actor=_ACTOR_ID)
@@ -104,7 +121,9 @@ def _aggregate_metrics(ws: str) -> dict[str, Any]:
         q_vec = cache[golden_id]["vector"]
 
         results = services.hybrid_search(ctx, q_vec=q_vec, k=_K, limit=_K)
-        retrieved = [r["msgId"] for r in results]
+        retrieved = [
+            r["msgId"] for r in results if r.get("seedKind", "Message") == "Message"
+        ]
 
         recall_10_scores.append(recall_at_k(retrieved, relevant, k=_K))
         recall_5_scores.append(recall_at_k(retrieved, relevant, k=_K_SMALL))

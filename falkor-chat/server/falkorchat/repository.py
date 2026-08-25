@@ -467,6 +467,15 @@ class Repository:
     # non-provenance writes. Build quirk: an EMITTED endpoint must be a bound node
     # (a map-projection cannot be a CREATE endpoint), so seeds are collected as
     # nodes and per-edge props come from map params keyed by the node's own msgId.
+    #
+    # K-050 M5 Stage 5 (`document-ingestion-graph.md` §3): `seedIds` now resolves
+    # against BOTH `Message.msgId` and `Chunk.chunkId` via a two-label
+    # `OPTIONAL MATCH` + `coalesce` pair — the same bare-id idiom already used
+    # for author/mention resolution in this same query (§3.1: no namespaced id
+    # scheme, no parallel `kind` list — both id spaces are disjoint uuid4
+    # generators). The per-edge map-param key is `coalesce(seed.msgId,
+    # seed.chunkId)` — exactly one is non-null per seed node, so `coalesce`
+    # always resolves the right key regardless of seed kind.
 
     @staticmethod
     def _seed_params(
@@ -474,8 +483,10 @@ class Repository:
     ) -> tuple[list[str], dict[str, float], dict[str, int]]:
         """Derive the three §10.1 seed params from the ranked `seeds` list.
 
-        `seeds = [(msgId, score)]` in rank order → `seed_ids` (rank = position),
-        `score_by = {msgId: score}`, `rank_by = {msgId: index}`.
+        `seeds = [(seedId, score)]` in rank order (`seedId` a `Message.msgId`
+        or `Chunk.chunkId`, generic over id space — K-050 M5 Stage 5) →
+        `seed_ids` (rank = position), `score_by = {seedId: score}`,
+        `rank_by = {seedId: index}`.
         """
         ordered = list(seeds or [])
         seed_ids = [s[0] for s in ordered]
@@ -509,8 +520,10 @@ class Repository:
             "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
             "WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
             "UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid "
-            "OPTIONAL MATCH (s:Message {msgId: sid}) "
-            "WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds "
+            "OPTIONAL MATCH (sm:Message {msgId: sid}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: sid}) "
+            "WITH t, tailRel, prev, dup, author, mems, "
+            "     collect(DISTINCT coalesce(sm, sc)) AS seeds "
             "WITH t, tailRel, prev, dup, author, mems, seeds, "
             "     (dup IS NULL AND author IS NOT NULL) AS ok "
             "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
@@ -523,7 +536,8 @@ class Repository:
             "  SET t.updatedAt = $createdAt "
             "  FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
             "  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED "
-            "    {score: $scoreBy[seed.msgId], rank: $rankBy[seed.msgId]}]->(seed)) "
+            "    {score: $scoreBy[coalesce(seed.msgId, seed.chunkId)], "
+            "     rank: $rankBy[coalesce(seed.msgId, seed.chunkId)]}]->(seed)) "
             ") "
             "RETURN ok                 AS written, "
             "       false              AS hadHead, "
@@ -564,8 +578,9 @@ class Repository:
             "OPTIONAL MATCH (ma:Agent {agentId: mid}) "
             "WITH t, h, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems "
             "UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid "
-            "OPTIONAL MATCH (s:Message {msgId: sid}) "
-            "WITH t, h, dup, author, mems, collect(DISTINCT s) AS seeds "
+            "OPTIONAL MATCH (sm:Message {msgId: sid}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: sid}) "
+            "WITH t, h, dup, author, mems, collect(DISTINCT coalesce(sm, sc)) AS seeds "
             "WITH t, h, dup, author, mems, seeds, "
             "     (h IS NULL AND dup IS NULL AND author IS NOT NULL) AS ok "
             "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
@@ -577,7 +592,8 @@ class Repository:
             "  SET t.updatedAt = $createdAt "
             "  FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem)) "
             "  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED "
-            "    {score: $scoreBy[seed.msgId], rank: $rankBy[seed.msgId]}]->(seed)) "
+            "    {score: $scoreBy[coalesce(seed.msgId, seed.chunkId)], "
+            "     rank: $rankBy[coalesce(seed.msgId, seed.chunkId)]}]->(seed)) "
             ") "
             "RETURN ok                 AS written, "
             "       h    IS NOT NULL   AS hadHead, "
@@ -595,36 +611,73 @@ class Repository:
     def read_provenance(self, ws: str, *, msg_id: str) -> list[dict[str, Any]]:
         """An answer's cited seeds, ordered by rank (forward). QUERIES.md §10.2.
 
-        Read path (`ro_query`). Anchored on the answer's `msgId` index, traverses
-        `EMITTED` outward. Rows `{seedMsgId, text, role, score, rank}`.
+        Read path (`ro_query`). Anchored on the answer's `msgId` index,
+        traverses `EMITTED` outward to a seed of EITHER kind (generalized,
+        K-050 M5 Stage 5, `document-ingestion-graph.md` §3.3). `s` is
+        deliberately **unlabeled** in the pattern — it's discovered by
+        traversal from the index-anchored `a`, not independently searched, so
+        there's no `Node By Label Scan` risk (live-verified `GRAPH.PROFILE`:
+        `Node By Index Scan | (a:Message)` → `Conditional Traverse (a)-[:EMITTED]->(s)`
+        → `Optional Conditional Traverse (d)`). The
+        `OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)` hop only ever matches
+        when `s` is a `Chunk` (a `Message` has no incoming `HAS_CHUNK` edge) —
+        this is the AC-5 "traverses back through `(:Chunk)<-[:HAS_CHUNK]-
+        (:Document)`" requirement, folded into the same read as one extra hop.
+
+        Rows `{seedKind, seedId, text, role, documentId, documentTitle, score,
+        rank}` — `seedKind` is `'Message'` or `'Chunk'`; `role` is null for a
+        `Chunk` seed; `documentId`/`documentTitle` are null for a `Message`
+        seed.
         """
         res = self._graph(ws).ro_query(
-            "MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s:Message) "
-            "RETURN s.msgId, s.text, s.role, e.score, e.rank "
+            "MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s) "
+            "OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document) "
+            "RETURN labels(s)[0]              AS seedKind, "
+            "       coalesce(s.msgId, s.chunkId) AS seedId, "
+            "       s.text                    AS text, "
+            "       s.role                    AS role, "
+            "       d.documentId              AS documentId, "
+            "       d.title                   AS documentTitle, "
+            "       e.score, e.rank "
             "ORDER BY e.rank",
             {"msgId": msg_id},
         )
         return [
             {
-                "seedMsgId": row[0], "text": row[1], "role": row[2],
-                "score": row[3], "rank": row[4],
+                "seedKind": row[0], "seedId": row[1], "text": row[2],
+                "role": row[3], "documentId": row[4], "documentTitle": row[5],
+                "score": row[6], "rank": row[7],
             }
             for row in res.result_set
         ]
 
     def read_citing_answers(
-        self, ws: str, *, seed_msg_id: str
+        self, ws: str, *, seed_id: str
     ) -> list[dict[str, Any]]:
         """Answers that cited a seed, newest-first (reverse). QUERIES.md §10.3.
 
-        Read path (`ro_query`). Anchored on the seed's `msgId` index, traverses
-        `EMITTED` inbound. Rows `{answerMsgId, role, createdAt, score, rank}`.
+        Read path (`ro_query`). Resolves `$seedId` against both
+        `Message.msgId` and `Chunk.chunkId` via the same two-label
+        `OPTIONAL MATCH` + `coalesce` idiom the write side uses (generalized,
+        K-050 M5 Stage 5, `document-ingestion-graph.md` §3.4) — bare id, not a
+        namespaced scheme, same locked-convention argument as §3.1. `a`'s
+        `Message` label costs nothing here even though `a` is the unbound
+        traversal target: `s` already supplies the index anchor (resolved one
+        step earlier by the `OPTIONAL MATCH` pair), so the planner never falls
+        back to a label scan on `a` — live-verified against 1,000 candidate
+        answers with `GRAPH.PROFILE` showing no `Node By Label Scan` at any
+        point. An answer is always a `Message`, so this row shape is
+        unchanged from before generalization: `{answerMsgId, role, createdAt,
+        score, rank}`.
         """
         res = self._graph(ws).ro_query(
-            "MATCH (a:Message)-[e:EMITTED]->(s:Message {msgId: $seedMsgId}) "
+            "OPTIONAL MATCH (sm:Message {msgId: $seedId}) "
+            "OPTIONAL MATCH (sc:Chunk {chunkId: $seedId}) "
+            "WITH coalesce(sm, sc) AS s "
+            "MATCH (a:Message)-[e:EMITTED]->(s) "
             "RETURN a.msgId, a.role, a.createdAt, e.score, e.rank "
             "ORDER BY a.createdAt DESC",
-            {"seedMsgId": seed_msg_id},
+            {"seedId": seed_id},
         )
         return [
             {

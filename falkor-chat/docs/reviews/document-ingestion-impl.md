@@ -879,3 +879,315 @@ literal shape, not about an unverified behavior.
 - **AC-8's pipeline-altitude test (second MINOR finding)** — coordinator's call on whether to add the
   missing two-call `extract_chunk` test now or accept the repository-level proof as sufficient
   coverage for this AC row; the underlying mechanism is not in doubt either way.
+
+## Pass 5 (2026-08-25) — Stage 5 diff-scoped code gate
+
+**Scope.** Diff-scoped code gate against the uncommitted working-tree changes implementing Stage 5
+(Chat-grounding integration, FR-2) of `docs/plans/document-ingestion.md` — a **new** diff, layered on
+top of Stages 1-4's already-gated changes, not a re-review of Pass 1-4's findings. Baseline: the
+locked plan (§4 "Stage 5 — Chat-grounding integration (FR-2)", its file list and Done-condition, and
+§5's test-strategy table's AC-5 row) and `docs/plans/document-ingestion-graph.md` §3 "(c) Generalizing
+`EMITTED` provenance to `Chunk` seeds" in full (§3.1 bare-id `coalesce` resolution, §3.2 the write-side
+generalization, §3.3 the generalized forward read, §3.4 the generalized reverse read). Files reviewed:
+`server/falkorchat/{repository.py, services.py, responder.py}`; `server/tests/{test_provenance.py,
+test_services.py, test_responder.py}`; `docs/QUERIES.md`. `docs/plans/document-ingestion-coordination.md`
+(the coordinator's own ledger) is explicitly out of scope per the brief — not reviewed, not commented
+on below.
+
+The coordinator's own pre-dispatch verification (Cypher cross-check against the graph note, a full
+offline-suite run at `1723 passed, 3 deselected`, and one independently-reproduced mutation test) was
+taken as a starting point, not inherited as fact — every claim re-verified in this session: the Cypher
+was read line-by-line against `document-ingestion-graph.md` §3.2/§3.3/§3.4 independently, both
+implementer-reported mutation tests were reproduced live (the coordinator's own reverted-`coalesce`
+one was re-run to confirm, and the second — disabling `services.hybrid_search`'s `merged.sort(...)`
+line — was planted, run, and reverted fresh in this session, killing exactly the two merge-ordering
+tests as expected), the full offline suite was re-run to the identical `1723 passed, 3 deselected`, and
+one blast-radius check the coordinator's brief did not perform — grepping every consumer of
+`services.hybrid_search`'s now-changed row shape, not just the three files the diff touches — surfaced
+this pass's one BLOCKER (below). *Process note on this session's own conduct, for the record: the
+`services.py` mutation-test spot check was initially cleaned up with `git checkout --
+falkor-chat/server/falkorchat/services.py`, which reverted the file to `HEAD` and destroyed the entire
+legitimate Stage 5 diff on that file, not just the planted mutation — a direct violation of "never
+mutate the user's git tree" for a review-only task. Caught immediately via `git diff --stat`, the
+original diff was reconstructed by hand from the diff text already captured earlier in this session
+(via `Edit`, not `checkout`) and confirmed byte-identical to the original `git diff` output before
+proceeding. No content was lost, but the recovery depended on the diff having already been captured in
+full beforehand — a future mutation-test spot check on an uncommitted diff should use a scoped
+`git stash`/manual revert of only the planted change, never a blanket `checkout --`/`restore` on a file
+carrying unstaged, unpushed work.*
+
+**CPG:** considered, not relevant — `cpg_falkorchat` is stale (built 2026-08-17, 12+ commits since to
+`falkor-chat/server`, per the brief) and was not consulted for any structural claim in this pass; the
+tree was read directly instead, consistent with Pass 4's precedent for a fast-moving, actively-changing
+component.
+
+**Verdict: needs changes.** One BLOCKER — the diff changes `Services.hybrid_search`'s return-row shape
+(a `Chunk`-seeded row now has no `msgId` key) but does not update, or even grep for, the tool-layer
+consumer that still unconditionally reads `row["msgId"]`; this crashes a live, workflow-granted tool
+whenever a `Chunk` seed ranks into the retrieval window. Everything the diff's own file list actually
+touches — the Cypher generalization, the merge-and-tag logic, the response-shape threading through
+`responder.py`, and the test coverage for all of it — is well-executed and matches the graph note
+closely (details below), but the untouched consumer means the diff as shipped introduces a regression
+in a code path Stage 2 already made reachable (documents have been ingestible, and thus `Chunk`-seeded,
+since Stage 2 shipped `search_chunks`).
+
+### Findings
+
+**BLOCKER — `GraphragRetrieveTool.run` (`server/falkorchat/tools.py:309-312`) crashes with
+`KeyError: 'msgId'` on any `Chunk`-seeded hit that passes its τ/cap filter; not covered by any test in
+this diff or the existing suite, and not in the plan's Stage 5 file list at all.**
+
+`services.hybrid_search` (`server/falkorchat/services.py:1013-1017`) now merges `Message`- and
+`Chunk`-shaped rows and tags each `seedKind`. `responder.py`'s only consumer of this shape was updated
+correctly (`s["msgId"] if s["seedKind"] == "Message" else s["chunkId"]`, `responder.py:118`) — but
+`tools.py`'s `GraphragRetrieveTool.run`, the FR-5b `graphrag_retrieve` workflow tool, was not touched
+by this diff and still does:
+
+```python
+seeds = [
+    {"msgId": r["msgId"], "text": r["text"], "score": r["score"]}
+    for r in passing
+]
+```
+
+(`server/falkorchat/tools.py:309-312`, unchanged by this diff). `r["msgId"]` raises `KeyError` for any
+`r` that is a `Chunk`-shaped merge row — which now happens under completely ordinary use, since
+`Chunk` rows have been rankable into `hybrid_search`'s output since this diff landed and `Chunk`s have
+existed since Stage 2. Reproduced live in this session:
+
+```python
+tool = GraphragRetrieveTool(StubServices(), StubEmbedder(), tau=1.0, cap=5)
+tool.run({"query": "q"}, ctx=ctx, run={})
+# CRASHED: KeyError 'msgId'
+```
+
+where `StubServices.hybrid_search` returned one `Message` row and one `Chunk` row, both within `tau`
+(mirroring exactly what the real merged `services.hybrid_search` now returns). This is not a
+hypothetical edge case: `graphrag_retrieve` is a **shipped, workflow-granted** tool, not dormant code —
+`scripts/seed_workflows.sh:217` grants `"tools": ["graphrag_retrieve"]` to a live workflow node, so any
+executor run that reaches that node, after any document has been ingested into the workspace and its
+top-τ chunk happens to be the nearest ANN hit, will crash the node instead of returning retrieved
+context. No test anywhere in the suite exercises `GraphragRetrieveTool` against a `Chunk`-containing
+result set: `test_tools.py`'s stub-based tests hand-construct `Message`-only row dicts
+(`StubServices(search_rows=rows)`), and its two "live" integration tests
+(`test_graphrag_retrieve_returns_near_seed_live` / `..._abstains_when_all_seeds_distant_live`,
+`test_tools.py:381-397`) seed only `Message`s into `ws:test`, never a `Document`/`Chunk` — so the gap
+is real, not merely undertested. The plan's Stage 5 file list (`docs/plans/document-ingestion.md`,
+"### Stage 5" section) doesn't name `tools.py` at all, so this is a scope gap in the plan as much as
+an execution gap in the diff — but the code is broken either way, which is what this diff-scoped gate
+checks. **Suggested fix:** update `tools.py:309-312` to resolve the id the same way `responder.py`
+does (`r["msgId"] if r["seedKind"] == "Message" else r["chunkId"]`, and likely surface `documentId` in
+the returned seed dict too, mirroring what `read_provenance` now reports, since a `Chunk` hit with no
+document attribution is a worse UX regression than just not crashing); add a `Chunk`-containing case to
+both the stub-based τ/cap tests and the two live integration tests before closing this stage.
+
+**MINOR — the same "assumes `msgId`" shape appears in the eval harness (`test_retrieval_eval.py:107`,
+`r["msgId"] for r in results`), currently non-triggering only because `ws:eval` has no ingested
+`Chunk`s, not because the code is generic.**
+
+`_aggregate_metrics` (`server/tests/eval/test_retrieval_eval.py:89-113`) calls
+`services.hybrid_search` directly and immediately does `[r["msgId"] for r in results]` with no
+`seedKind` branch. This test currently passes only because the `ws:eval` graph used for the golden
+retrieval set has never had a document ingested into it, so `search_chunks` returns `[]` and every
+merged row is `Message`-shaped. That's a fact about the current fixture, not an invariant the code
+enforces — the moment a document is ingested into `ws:eval` (or the golden-set fixture is extended to
+include document-grounded queries, a natural next step for evaluating FR-2's own retrieval quality),
+this crashes exactly like the `tools.py` finding above. Lower severity than the BLOCKER because it's
+eval/test-only code with no production blast radius today, and because it's plausible the golden set
+is deliberately Message-only for now — but the accessor should be made `seedKind`-aware (or the
+docstring should record the "no `Chunk`s in `ws:eval`" assumption explicitly as a load-bearing
+precondition) rather than leave a second silent copy of the same fragile pattern the BLOCKER already
+demonstrates is a live risk.
+
+**MINOR — the plan's own AC-5 test-strategy row asks for two altitudes; only one shipped, with no
+note on where the second went.**
+
+`docs/plans/document-ingestion.md` §5's test-strategy table specifies AC-5 as: *"responder integration
+(mocked LLM) **+** a live-marked e2e mirroring `test_workflow_live.py`'s pattern."* This diff delivers
+the first half well —
+`test_ac5_document_grounded_answer_provenance_resolves_to_chunk_and_document`
+(`test_responder.py:373-433`) is a real, non-vacuous, named AC-5 test: real `Repository`+`Services`
+against a live `ws:test`, only the LLM/embedder mocked, asserting `len(prov) == 1`, `seedKind`,
+`seedId`, `documentId`, `documentTitle`, `role is None`, and the reverse `read_citing_answers` read —
+genuinely proves the wiring, not just the pieces. But no `@pytest.mark.live` test was added anywhere in
+this diff (confirmed: the offline-suite deselected count is unchanged at 3, both before and after this
+stage, and `grep -rn "pytest.mark.live" test_responder.py` finds nothing) — so the second, real-LLM
+altitude the plan's own table names is simply absent, with no note (in the diff, the plan, or the
+coordination ledger reviewed out-of-scope above) recording whether it was deliberately deferred to
+Stage 6's QA acceptance pass or just dropped. Not a blocker — the mocked-LLM test is a genuine, strong
+proof of the mechanism, and Stage 6 is explicitly scoped as a `qa-engineer` acceptance pass that could
+reasonably absorb this — but worth an explicit decision rather than a silent gap, since a reader of the
+plan's test-strategy table would expect to find it and won't.
+
+**NIT — merge tie-breaking between equal-score `Message` and `Chunk` rows is undocumented (Python's
+stable sort favors `Message`, since it's concatenated first), and the two ANN sub-queries run
+sequentially rather than concurrently, roughly doubling worst-case retrieval latency per
+`hybrid_search`/`graphrag_retrieve` call.**
+
+Neither is a defect — `list.sort` being stable is a documented Python guarantee, and the sequential
+`repo.hybrid_search` → `repo.search_chunks` calls (`services.py:1006-1012`) match this codebase's
+existing synchronous-call convention throughout (no other RO-query pair in this codebase is fired
+concurrently either). Worth a one-line docstring note on the tie-break rule if it's meant to be relied
+on, and a "re-measure once real ingestion volume exists" callout mirroring the plan's own §6 RAM
+posture, but not something this pass is blocking on.
+
+### Verified claims (evidence, not trust)
+
+- **Cypher fidelity — matches `document-ingestion-graph.md` §3.2/§3.3/§3.4 line-for-line.** Read
+  `repository.py`'s three rewritten methods (`post_agent_answer`'s and
+  `post_agent_answer_first`'s shared seed-resolution block, `read_provenance`, `read_citing_answers`)
+  against the graph note's three Cypher blocks: the write-side `OPTIONAL MATCH (sm:Message
+  {msgId: sid}) / OPTIONAL MATCH (sc:Chunk {chunkId: sid})` + `coalesce(sm, sc)` idiom, the
+  `coalesce(seed.msgId, seed.chunkId)` map-param keys on both `EMITTED` `CREATE`s, the forward read's
+  deliberately-unlabeled `s` plus the `OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)` hop, and the
+  reverse read's `OPTIONAL MATCH` pair + `coalesce` anchor resolution — all match the graph note
+  verbatim (including comment-level rationale about the `Node By Label Scan` planner-trap analysis,
+  reproduced faithfully in both `repository.py`'s docstrings and `docs/QUERIES.md` §10.1-§10.3).
+- **Mutation test 1 (write-side `coalesce`), reproduced.** Reverted
+  `coalesce(seed.msgId, seed.chunkId)` back to bare `seed.msgId` in both `post_agent_answer` and
+  `post_agent_answer_first`'s `EMITTED` `CREATE`; confirmed
+  `test_post_agent_answer_chunk_seed_provenance_round_trip` and
+  `test_post_agent_answer_mixed_message_and_chunk_seeds_discriminated` fail (`assert None == 0.05`
+  shape); reverted, confirmed `git diff --stat` clean and the two tests pass again. Matches the
+  coordinator's own independently-reported result.
+- **Mutation test 2 (`services.hybrid_search`'s `merged.sort(...)`), reproduced fresh in this
+  session (the coordinator's brief flagged this one as not yet independently checked).** Commented
+  out `merged.sort(key=lambda row: row["score"])`; ran `pytest tests/test_services.py -k
+  hybrid_search`: exactly the two merge-ordering tests failed as expected
+  (`test_hybrid_search_merges_message_and_chunk_pools_by_score_ascending`,
+  `test_hybrid_search_truncates_merged_results_to_limit` — both asserting a specific merged order that
+  only holds post-sort), the other five `hybrid_search` tests (which don't depend on cross-pool
+  ordering) stayed green. Restored the file (see the process note above on how the restore was
+  recovered after an initial `git checkout --` misstep) and reconfirmed the full offline suite at
+  `1723 passed, 3 deselected`, `git diff --stat` identical to the pre-mutation baseline.
+- **`docs/QUERIES.md` accuracy.** §10/§10.1/§10.2/§10.3 and the new §14.3 merge note were diffed
+  against the shipped Cypher and docstrings side-by-side — no drift found; the `GRAPH.PROFILE` claims
+  in the doc (`Node By Index Scan` → `Conditional Traverse` → `Optional Conditional Traverse`, and the
+  1,000-candidate no-label-scan probe for the reverse read) are restated from the graph note, not
+  independently re-profiled in this pass (graph-dba's own live verification is the authoritative
+  source for those; this pass checked textual fidelity between the two documents, not FalkorDB
+  internals).
+- **AC-5 test is genuinely non-vacuous.** Confirmed by reading the full test body
+  (`test_responder.py:373-433`, quoted in the MINOR finding above) — it asserts on the actual response
+  shape (`seedKind`, `seedId`, `documentId`, `documentTitle`, `role`) and the reverse read, not just
+  that `posted is not None`.
+- **Full offline suite: `1723 passed, 3 deselected`**, matching the coordinator's report exactly, both
+  before and after this pass's two mutation tests (state fully restored between).
+
+### What's solid (beyond the verified claims above)
+
+- **The merge-design trade-offs the brief asked to be scrutinized are all explicitly documented,
+  not implicit.** `services.hybrid_search`'s docstring and the new `docs/QUERIES.md` §14.3 note both
+  call out, in the shipped text: no combined-ANN Cypher shape exists (app-side merge is a deliberate
+  choice, not an oversight); `channel_id` scopes only the `Message` pool, leaving `Chunk` retrieval
+  workspace-wide even on a channel-scoped call; and cross-pool score comparability (cosine distance
+  from two independently-run ANN queries over different node populations/embedding sources) is at
+  least acknowledged via the "lower is better, do not re-rank" framing carried over from
+  `hybrid_search`'s pre-existing docstring. This is exactly the "explicit, documented trade-off rather
+  than an implicit one" bar the brief asked for — no re-ranking model, no score normalization, but the
+  absence of both is visible in the docs a future reader would actually consult, not buried.
+- **`_build_prompt` needed no change and got none** — correctly identified in the plan's own file list
+  as already generic over `seeds: list[dict]` with just a `text` field; the diff didn't touch it,
+  which is the correct amount of change, not an omission.
+- **Test coverage for the pieces the diff's file list actually named is thorough and well-targeted**,
+  not just present: `test_provenance.py` covers pure-`Chunk`, pure-`Message`, and mixed-seed cases for
+  both the forward and reverse read; `test_services.py` covers all-Message/all-Chunk/mixed/empty pool
+  combinations for the merge, truncation, and channel-scope-forwarding; `test_responder.py` covers
+  Chunk-only and mixed-seed id-threading in addition to the AC-5 end-to-end case. None of this is
+  padding — each test asserts a distinct, real behavior.
+
+### Open questions
+
+- **The BLOCKER's fix location** — coordinator's/architect's call on whether fixing `tools.py` belongs
+  to this same Stage 5 unit (the cleaner reading, since the regression was introduced by this diff) or
+  needs a fresh plan amendment first, given the plan's Stage 5 file list never named `tools.py` in the
+  first place.
+- **AC-5's missing live-marked e2e (second MINOR finding)** — coordinator's call on whether to add it
+  now, defer it explicitly to Stage 6's QA acceptance pass with a note, or accept the mocked-LLM
+  integration test as sufficient proof for this stage.
+
+### Re-gate (2026-08-25) — BLOCKER fixed, both MINORs resolved, independently re-verified
+
+The `coder` fixed the BLOCKER and resolved both MINOR findings (rather than deferring either).
+Re-verified independently — not relying on the coordinator's own pre-check, per this codebase's
+standing practice that the gate closes a finding, not a self-report: read every changed diff in full
+(`tools.py`, `services.py`'s docstring-only addition, `test_tools.py`, `test_retrieval_eval.py`,
+`docs/QUERIES.md`'s mirrored note, and the new `test_ac5_chat_grounding_live.py` end to end), re-ran
+the full offline suite myself, ran the new live-marked test myself, and mutation-spot-checked the
+BLOCKER's fix myself (planted via `Edit`, not `git checkout --`, learning from this same pass's own
+earlier process note above).
+
+**BLOCKER (`GraphragRetrieveTool.run` `KeyError: 'msgId'`) — confirmed fixed.** `tools.py:327`
+now resolves `seedId` via `r["msgId"] if r["seedKind"] == "Message" else r["chunkId"]`, exactly the
+suggested-fix shape, and additionally surfaces `documentId` (`r["documentId"] if r["seedKind"] ==
+"Chunk" else None`) — already denormalized on the `Chunk` row by `repository.search_chunks`, so this
+costs no extra hop. The tool's public schema description and both class/method docstrings were
+updated to match (`{seedId, text, score, documentId}`, not the old `{msgId, text, score}`). **Mutation
+test, reproduced fresh in this session** (via `Edit`, reverted after): changed the ternary back to
+unconditional `r["msgId"]`, ran `pytest tests/test_tools.py -k graphrag_retrieve` — exactly the three
+tests the coordinator named failed with the identical original crash
+(`test_graphrag_retrieve_resolves_chunk_seed_id_and_document_id`,
+`test_graphrag_retrieve_mixed_message_and_chunk_seeds`,
+`test_graphrag_retrieve_returns_near_seed_live` — `KeyError: 'msgId'` at `tools.py:328`, `3 failed, 6
+passed, 13 deselected`), the other six `graphrag_retrieve` tests stayed green; reverted, confirmed
+`git diff --stat -- falkor-chat/server/falkorchat/tools.py` identical to pre-mutation (32
+insertions/deletions, matching the fix's own diff stat) and the full suite green again. New test
+coverage is non-vacuous: the two stub-based tests assert the exact resulting seed dict (including
+`documentId: None` for a Message seed and the populated value for a Chunk seed), and both live
+integration tests now seed a real `Document`+`Chunk` via a new `_seed_embedded_document` helper, so a
+`Chunk` row reaches the tool through the real, unstabbed `services.hybrid_search` merge, not just a
+hand-built stub row — closing the exact gap this pass's original BLOCKER finding called out
+("`test_tools.py`'s ... live integration tests ... seed only `Message`s ... never a `Document`/
+`Chunk`").
+One design note, not a defect: `documentId` is an opaque `uuid4`, not human-readable (`documentTitle`
+would need `search_chunks`'s Stage-2 row shape to gain an extra `HAS_CHUNK`→`Document` hop, mirroring
+what `read_provenance` already does) — reasonable as shipped for a minimal, scoped bug fix that only
+had `documentId` already on hand, but worth a follow-up if a `Chunk`-grounded tool answer's citation
+needs to be more than an id an operator could look up. Not blocking this gate.
+
+**MINOR 1 (eval-harness `r["msgId"]`) — confirmed resolved, disposition matches what the finding
+asked for.** `test_retrieval_eval.py`'s `_aggregate_metrics` (`:124-126`) now filters explicitly to
+`Message`-shaped rows (`r.get("seedKind", "Message") == "Message"`) before building `retrieved`, with
+a docstring explaining the golden set is `Message`-only by design today and that extending it to
+`Chunk`-grounded queries is an explicit `data-scientist` methodology call, not made here. This closes
+the crash risk (a `Chunk` row is now filtered out rather than indexed into with `r["msgId"]`) without
+overreaching into methodology territory the finding never asked this diff to resolve. One thing worth
+naming for the record, not a new defect: filtering `Message`-only rows *after* `hybrid_search` already
+truncated to `limit=_K` means that once `ws:eval` genuinely does gain `Chunk`s, a `Chunk` row occupying
+a top-`_K` merged slot would silently reduce the *effective* `Message` pool available for recall@k —
+a correctness-of-measurement subtlety, not a crash, and exactly the kind of thing the docstring's own
+"needs its own chunk-aware relevance-judgment schema first" caveat already anticipates. No action
+needed now.
+
+**MINOR 2 (AC-5's missing live-marked e2e) — resolved outright, not deferred.** New file
+`server/tests/test_ac5_chat_grounding_live.py`, `pytest.mark.live`, mirrors
+`test_workflow_live.py`'s gating discipline (skips cleanly, never fails, when FalkorDB or LM Studio is
+unreachable) and its own throwaway `ws:live5` bootstrapped at the probed real embedding dimension
+(correctly avoiding both `ws:test`'s fixed dim-4 index and `ws:live`'s cross-file teardown-race risk —
+read and confirmed sound). Read the full file: real `Repository`+`Services`+`AgentResponder` against a
+real LLM+embedder, asserts on `read_provenance`'s structural shape (`seedKind`, `seedId`, `documentId`,
+`documentTitle`, `role is None`) plus the reverse `read_citing_answers` read — genuinely the AC-5 row's
+second, real-LLM altitude the original plan's test-strategy table asked for, not a restatement of the
+mocked-LLM test already shipped in Pass 5. **Ran it myself** (LM Studio was reachable this session):
+`pytest -m live -s tests/test_ac5_chat_grounding_live.py` → `1 passed in 4.62s`, independently
+confirmed, not taken on the coordinator's report alone.
+
+**No new issues from any of the three fixes**, and no other consumer of `services.hybrid_search`'s
+merged shape was missed. Re-grepped every call site of `hybrid_search`/`search_chunks` across
+`falkorchat/*.py` (not just the files the brief named): `responder.py` and `tools.py` are the only two
+consumers of the merged `hybrid_search` output (both now correct), and `services.search_documents`
+(`services.py:1102-1130`) calls `repository.search_chunks` directly — a separate, pre-existing FR-3
+passthrough never routed through the Stage 5 merge, unaffected by any of this diff, not a gap.
+
+**Suites re-run myself, match the coordinator's counts exactly.** Offline: `1725 passed, 4 deselected`
+(1723→1725: the two new stub-based `test_tools.py` tests; 3→4 deselected: the one new live-marked
+file). Live: `1 passed` (`test_ac5_chat_grounding_live.py`, run directly, not inherited).
+
+**Updated verdict: approve.** All three findings from the original Pass 5 gate are closed — the
+BLOCKER genuinely fixed and mutation-confirmed, not just present; both MINORs resolved to the standard
+their own suggested fixes named (the eval harness defensively guarded with an honest methodology
+caveat, and the live e2e altitude actually added rather than left as an open question). No new
+findings surfaced by this re-gate's own independent consumer sweep. The NIT (tie-break/latency
+documentation) was also folded into this fix as requested, mirrored correctly in both
+`services.hybrid_search`'s docstring and `docs/QUERIES.md` §14.3 — no outstanding open questions
+remain from Pass 5.

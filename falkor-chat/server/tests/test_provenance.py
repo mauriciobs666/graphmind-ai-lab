@@ -5,8 +5,10 @@
 run against the live `ws:test` graph (conftest bootstraps schema + wipes per
 test), mirroring `test_graphrag.py`/`test_repository.py`.
 
-The `EMITTED` edge is `(answer:Message)-[:EMITTED {score, rank}]->(seed:Message)`,
-written **inside the same GRAPH.QUERY** as the answer's §4 write (atomicity).
+The `EMITTED` edge is `(answer:Message)-[:EMITTED {score, rank}]->(seed)`, seed
+either a `Message` or a `Chunk` (generalized, K-050 M5 Stage 5,
+`document-ingestion-graph.md` §3), written **inside the same GRAPH.QUERY** as the
+answer's §4 write (atomicity).
 """
 
 from __future__ import annotations
@@ -39,6 +41,18 @@ def _seed_thread(repo, *, channel_id="c1", thread_id="t1", seeds=None):
         ts += 1
 
 
+def _seed_document(repo, *, document_id="d1", title="Doc", chunk_id="ch1", text="chunk text"):
+    """Create a `Document` + one `Chunk` (K-050 M5 Stage 1 write path) to seed a
+    `Chunk`-kind EMITTED provenance test. Mirrors `test_repository.py`'s
+    Stage-1/2 `create_document` fixture shape.
+    """
+    repo.create_document(
+        WS, document_id=document_id, title=title, text=text,
+        source_format="text", ingested_by="u1", created_at=1,
+        chunks=[{"chunkId": chunk_id, "text": text, "seq": 0}],
+    )
+
+
 # ── post_agent_answer: writes the answer + EMITTED edges ──────────────────────
 
 
@@ -54,10 +68,13 @@ def test_post_agent_answer_writes_agent_message_and_provenance(repo):
     assert st is not None and st.written and st.author_found
 
     prov = repo.read_provenance(WS, msg_id="ag1")
-    assert [p["seedMsgId"] for p in prov] == ["s1", "s2", "s3"]  # ordered by rank
+    assert [p["seedId"] for p in prov] == ["s1", "s2", "s3"]  # ordered by rank
     assert [p["rank"] for p in prov] == [0, 1, 2]
     assert [p["score"] for p in prov] == [0.0, 0.006, 0.5]
     assert [p["role"] for p in prov] == ["user", "user", "user"]
+    assert [p["seedKind"] for p in prov] == ["Message", "Message", "Message"]
+    assert [p["documentId"] for p in prov] == [None, None, None]
+    assert [p["documentTitle"] for p in prov] == [None, None, None]
     assert prov[0]["text"] == "seed one"
 
 
@@ -83,7 +100,7 @@ def test_post_agent_answer_drops_unknown_seeds(repo):
         seeds=[("s1", 0.1), ("zz", 0.2), ("s2", 0.3)],  # zz unknown
     )
     prov = repo.read_provenance(WS, msg_id="ag1")
-    assert sorted(p["seedMsgId"] for p in prov) == ["s1", "s2"]  # zz dropped
+    assert sorted(p["seedId"] for p in prov) == ["s1", "s2"]  # zz dropped
 
 
 def test_post_agent_answer_empty_seeds_commits_zero_edges(repo):
@@ -155,7 +172,69 @@ def test_post_agent_answer_first_writes_head_and_provenance(repo):
     )
     assert st is not None and st.written and not st.had_head
     prov = repo.read_provenance(WS, msg_id="ag1")
-    assert [p["seedMsgId"] for p in prov] == ["s1"]
+    assert [p["seedId"] for p in prov] == ["s1"]
+
+
+# ── Chunk-seeded provenance (K-050 M5 Stage 5, AC-5) ───────────────────────────
+
+
+def test_post_agent_answer_chunk_seed_provenance_round_trip(repo):
+    """A Chunk-kind EMITTED seed: seedKind='Chunk', role null, documentId/
+    documentTitle populated via the `(:Chunk)<-[:HAS_CHUNK]-(:Document)` hop.
+    """
+    # subsequent-path write needs an existing TAIL, so seed one (uncited)
+    # message first — only the Chunk is passed as a provenance seed below.
+    _seed_thread(repo, seeds=[("s0", "unrelated trigger")])
+    _seed_document(repo, document_id="d1", title="My Doc", chunk_id="ch1", text="chunk text")
+
+    st = repo.post_agent_answer(
+        WS, thread_id="t1", msg_id="ag1", author_id="bot1",
+        text="answer", role="assistant", created_at=100,
+        seeds=[("ch1", 0.05)],
+    )
+    assert st is not None and st.written
+
+    prov = repo.read_provenance(WS, msg_id="ag1")
+    assert len(prov) == 1
+    row = prov[0]
+    assert row["seedKind"] == "Chunk"
+    assert row["seedId"] == "ch1"
+    assert row["text"] == "chunk text"
+    assert row["role"] is None
+    assert row["documentId"] == "d1"
+    assert row["documentTitle"] == "My Doc"
+    assert row["score"] == 0.05
+    assert row["rank"] == 0
+
+
+def test_post_agent_answer_mixed_message_and_chunk_seeds_discriminated(repo):
+    """One answer citing a Message seed and a Chunk seed in the same call —
+    both rows come back correctly discriminated by seedKind.
+    """
+    _seed_thread(repo, seeds=[("s1", "seed one")])
+    _seed_document(repo, document_id="d1", title="My Doc", chunk_id="ch1", text="chunk text")
+
+    repo.post_agent_answer(
+        WS, thread_id="t1", msg_id="ag1", author_id="bot1",
+        text="answer", role="assistant", created_at=100,
+        seeds=[("s1", 0.1), ("ch1", 0.2)],
+    )
+
+    prov = repo.read_provenance(WS, msg_id="ag1")
+    by_id = {row["seedId"]: row for row in prov}
+    assert set(by_id) == {"s1", "ch1"}
+
+    msg_row = by_id["s1"]
+    assert msg_row["seedKind"] == "Message"
+    assert msg_row["role"] == "user"
+    assert msg_row["documentId"] is None
+    assert msg_row["documentTitle"] is None
+
+    chunk_row = by_id["ch1"]
+    assert chunk_row["seedKind"] == "Chunk"
+    assert chunk_row["role"] is None
+    assert chunk_row["documentId"] == "d1"
+    assert chunk_row["documentTitle"] == "My Doc"
 
 
 # ── read_citing_answers: reverse (impact) read ────────────────────────────────
@@ -168,14 +247,32 @@ def test_read_citing_answers_reverse(repo):
         text="answer", role="assistant", created_at=100,
         seeds=[("s1", 0.1), ("s2", 0.2)],
     )
-    citing = repo.read_citing_answers(WS, seed_msg_id="s1")
+    citing = repo.read_citing_answers(WS, seed_id="s1")
     assert [c["answerMsgId"] for c in citing] == ["ag1"]
     assert citing[0]["role"] == "assistant"
     assert citing[0]["score"] == 0.1
     assert citing[0]["rank"] == 0
 
 
+def test_read_citing_answers_reverse_for_chunk_seed(repo):
+    """Mirror-image of the forward Chunk-seed test: the reverse read resolves
+    a Chunk-kind seed id exactly like a Message-kind one (§3.4).
+    """
+    _seed_thread(repo, seeds=[("s0", "unrelated trigger")])
+    _seed_document(repo, document_id="d1", title="My Doc", chunk_id="ch1", text="chunk text")
+    repo.post_agent_answer(
+        WS, thread_id="t1", msg_id="ag1", author_id="bot1",
+        text="answer", role="assistant", created_at=100,
+        seeds=[("ch1", 0.05)],
+    )
+    citing = repo.read_citing_answers(WS, seed_id="ch1")
+    assert [c["answerMsgId"] for c in citing] == ["ag1"]
+    assert citing[0]["role"] == "assistant"
+    assert citing[0]["score"] == 0.05
+    assert citing[0]["rank"] == 0
+
+
 def test_read_provenance_empty_for_message_without_seeds(repo):
     _seed_thread(repo, seeds=[("s1", "seed one")])
     assert repo.read_provenance(WS, msg_id="s1") == []
-    assert repo.read_citing_answers(WS, seed_msg_id="s1") == []
+    assert repo.read_citing_answers(WS, seed_id="s1") == []

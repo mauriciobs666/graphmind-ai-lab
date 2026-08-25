@@ -5,6 +5,86 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — K-050 M5 Stage 5: document ingestion — chat-grounding integration (FR-2)
+
+**What:** The fifth of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
+"Stage 5 — Chat-grounding integration"), generalizing the K-013 `EMITTED` agent-answer provenance
+edge to cite an ingested `Chunk`, not just a chat `Message`, and wiring GraphRAG retrieval to draw
+from both pools. Per graph-dba's finalized design (`docs/plans/document-ingestion-graph.md` §3,
+essentially implemented verbatim): the `EMITTED` write-side (`post_agent_answer`/
+`post_agent_answer_first`) now resolves `$seedIds` against both `Message.msgId` and `Chunk.chunkId`
+via a two-label `OPTIONAL MATCH` + `coalesce` pair — the same bare-id idiom already used for
+author/mention resolution, no namespaced id scheme, no parallel `kind` list (both id spaces are
+disjoint `uuid4` generators). `read_provenance`'s response shape changes: `{seedMsgId, text, role,
+score, rank}` → `{seedKind, seedId, text, role, documentId, documentTitle, score, rank}` — the
+`(:Chunk)<-[:HAS_CHUNK]-(:Document)` provenance hop folds into the same read, one extra `OPTIONAL
+MATCH`, `s` deliberately kept unlabeled (a plain traversal endpoint, no `Node By Label Scan` risk).
+`read_citing_answers`'s `seed_msg_id` kwarg renamed `seed_id`, same resolution idiom, row shape
+unchanged (an answer is always a `Message`). `Services.hybrid_search` now merges `repository.
+hybrid_search`'s `Message` ANN pool with `repository.search_chunks`'s `Chunk` ANN pool (both
+unchanged, called with the same `q_vec`/`k`) **app-side** — no combined-ANN Cypher shape exists for
+this, graph-dba's note is scoped to the `EMITTED` generalization only, so the merge (sort by cosine
+distance ascending, truncate to `limit`, tag each row `seedKind`) is a deliberate, documented
+implementer design choice. `channel_id` scopes only the `Message` pool; a `Chunk` seed has no
+channel/thread to scope by. `responder.py`'s `maybe_respond` and the `graphrag_retrieve` MCP/workflow
+tool (`tools.py`) both updated to resolve a seed's id generically off `seedKind` instead of assuming
+`msgId`.
+
+**Diff-gate findings (Pass 5, `docs/reviews/document-ingestion-impl.md`):** first pass verdict
+**needs changes** — one BLOCKER: the merged `hybrid_search` row shape broke `GraphragRetrieveTool.run`
+(`tools.py`), a shipped, workflow-granted tool (the `research` node in `scripts/seed_workflows.sh`)
+still doing unconditional `r["msgId"]` — `KeyError` on any `Chunk`-seeded hit, live-reproduced, not
+covered by any existing test (its stub and live-integration tests were all `Message`-only). Fixed:
+the tool now resolves the id the same way `responder.py` does and additionally surfaces `documentId`
+for a `Chunk` hit; new stub + live test coverage seeds a real `Chunk` through the fix. Two MINORs,
+both resolved rather than deferred: **(1)** the eval harness (`test_retrieval_eval.py`) had the same
+unguarded `r["msgId"]` pattern, silently non-triggering only because `ws:eval`'s golden set has no
+ingested `Chunk`s — now explicitly filters to `Message`-shaped rows with a documented rationale.
+**(2)** the plan's AC-5 test-strategy row asks for both a mocked-LLM integration test and a
+live-marked real-LLM e2e; only the former had shipped — added `test_ac5_chat_grounding_live.py`
+(`pytest.mark.live`, mirrors `test_workflow_live.py`'s gating, its own throwaway `ws:live5`
+bootstrapped at the probed real embedding dimension). One NIT (undocumented merge tie-break + the two
+ANN sub-queries running sequentially, not a defect) also folded in as a docstring note. Re-gate:
+**approve** — all findings independently confirmed closed, one non-blocking design note (the tool's
+new `documentId` is an opaque id, not a title — reasonable for a scoped fix, flagged as a possible
+follow-up).
+
+**Why:** AC-5 — an agent's chat answer grounded in ingested content now carries provenance back to
+the source chunk/document, traversable exactly like the existing `Message`-seeded `EMITTED` edges,
+closing FR-2.
+
+**Tests:** `test_provenance.py` rewritten (not just extended, per the plan's own flag) for the new
+response shape, plus new `Chunk`-seeded and mixed-seed forward/reverse read coverage;
+`test_services.py` gets `hybrid_search` merge coverage (score-ascending ordering, truncation to
+limit, all-Message/all-Chunk/mixed pools, channel-scope-forwarded-to-Message-pool-only);
+`test_responder.py` gets Chunk-seeded/mixed-seed id-threading tests plus the named, non-vacuous AC-5
+mocked-LLM integration test; `test_tools.py` gets the BLOCKER-pinning stub and live tests;
+`test_retrieval_eval.py` gets the explicit Message-only filter; a new `test_ac5_chat_grounding_live.py`
+(live-marked, deselected by default). Suite: offline `pytest -q` 1712→1725 passed (3→4 deselected —
+the one new live-marked file); the new live test independently run twice (once by the implementer,
+once by `teco`, once again by `analyst`'s re-gate) — `1 passed` each time.
+
+Mutation-tested: reverted the write-side `coalesce(seed.msgId, seed.chunkId)` back to bare
+`seed.msgId` — the two new `Chunk`-seed provenance tests failed as expected (`teco` independently
+reproduced this one too); disabled `services.hybrid_search`'s `merged.sort(...)` — the two
+merge-ordering tests failed as expected (`analyst` independently reproduced this one during the
+gate); reverted `tools.py`'s id-resolution ternary back to unconditional `r["msgId"]` — all three
+`Chunk`-touching `graphrag_retrieve` tests failed with the original crash (reproduced independently
+by both `teco` and `analyst`). All reapplied/confirmed passing.
+
+**Process note:** the analyst's own mutation-test spot check during Pass 5 briefly used `git checkout
+--` on an uncommitted file mid-review, which would have destroyed the legitimate diff, not just the
+planted mutation — caught immediately, recovered by hand from already-captured diff text, confirmed
+byte-identical before proceeding. No work was lost, but it's a standing lesson: a mutation-test spot
+check on an *uncommitted* diff should copy the file aside (or use `Edit` to plant/revert) rather than
+`git checkout --`/`restore`, which reverts to `HEAD` and cannot distinguish "the planted mutation"
+from "everything else not yet committed." All three of this session's later mutation-test checks
+(by `teco` and by `analyst`'s own re-gate) used the safer approach.
+
+**Scope boundary:** Stage 5 only — no batch hardening or QA acceptance pass (Stage 6).
+`document-ingestion.md`/`-graph.md`/`-ml.md`/`BACKLOG.md` untouched (locked design/tracking
+documents).
+
 ## 2026-08-25 — BACKLOG.md restated as forward-looking: delivered bodies to an index, five stale claims fixed
 
 **What:** `docs/BACKLOG.md` had become a second change log. 1317 of its 2025 lines (65%) were the

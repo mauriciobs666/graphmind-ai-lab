@@ -710,29 +710,38 @@ uses the epoch base `(0, '')`. A pre-K-007 cursor has no `lastReadMsgId` — the
 
 ---
 
-## 10. Agent answer provenance — `EMITTED` (K-013)
+## 10. Agent answer provenance — `EMITTED` (K-013, generalized K-050 M5 Stage 5)
 
 The server-side AI responder posts its answer **as the `Agent`** (role derived `assistant`, K-007)
-via the §4 write path, and records the retrieval seeds (§6 hybrid search) that grounded the answer
-as **`(answer:Message)-[:EMITTED {score, rank}]->(seed:Message)`** provenance edges.
+via the §4 write path, and records the retrieval seeds (§6 hybrid search, merged with the §14.3
+`Chunk` ANN pool app-side, K-050 M5 Stage 5 FR-2) that grounded the answer as
+**`(answer:Message)-[:EMITTED {score, rank}]->(seed)`** provenance edges — `seed` is a `Message` or
+a `Chunk`.
 
-**Edge shape (locked, live-verified).**
+**Edge shape (locked, live-verified; generalized to a `Chunk` seed at K-050 M5 Stage 5).**
 
-- **Direction / endpoints:** `(:Message)-[:EMITTED]->(:Message)`, answer → seed. The answer is the
-  subject; each cited seed is the object. Same convention as `REPLY_TO` (subject message points to
-  the referenced message). The hot query — "given an agent answer, what did it cite?" — anchors on
-  the answer's `msgId` (`Node By Index Scan`) and expands `EMITTED` outward to ≤k seeds; the reverse
-  ("which answers cited this seed?") is the same edge type traversed inbound.
-- **Properties:** `score` (the §6 cosine distance of that seed at answer time; 0 = identical) and
+- **Direction / endpoints:** `(:Message)-[:EMITTED]->(:Message|:Chunk)`, answer → seed. The answer
+  is the subject; each cited seed is the object. Same convention as `REPLY_TO` (subject message
+  points to the referenced message). The hot query — "given an agent answer, what did it cite?" —
+  anchors on the answer's `msgId` (`Node By Index Scan`) and expands `EMITTED` outward to ≤k seeds;
+  the reverse ("which answers cited this seed?") is the same edge type traversed inbound.
+- **Properties:** `score` (the cosine distance of that seed at answer time; 0 = identical) and
   `rank` (0-based position in the ranked seed list). Both are point-in-time snapshots — retrieval is
   non-deterministic as the graph grows, so the score/rank at answer time is the provenance value.
-- **No index / no constraint.** Endpoints are `Message` nodes already carrying the `msgId` range
-  index + uniqueness constraint; the provenance read anchors there. FalkorDB traverses the typed
-  `EMITTED` edge from the anchored answer via its adjacency matrix — no relationship-property index
-  is needed. Uniqueness is guaranteed structurally (see idempotency below), so no relationship
-  constraint (which would also need a supporting index) is created.
+- **No index / no constraint.** Endpoints are `Message`/`Chunk` nodes already carrying their own
+  range index + uniqueness constraint (`msgId`/`chunkId`); the provenance read anchors there.
+  FalkorDB traverses the typed `EMITTED` edge from the anchored answer via its adjacency matrix — no
+  relationship-property index is needed. Uniqueness is guaranteed structurally (see idempotency
+  below), so no relationship constraint (which would also need a supporting index) is created.
 - **`EMITTED` is a third, distinct edge type.** `MENTIONS_MEMBER`→`User`/`Agent` (participants, §4)
   and `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) are unrelated — do not conflate any of them.
+- **Seed-id resolution: bare-id `coalesce`, not a namespaced id scheme
+  (`document-ingestion-graph.md` §3.1).** `$seedIds` resolves against both `Message.msgId` and
+  `Chunk.chunkId` directly via the same two-label `OPTIONAL MATCH` + `coalesce` idiom already used
+  for author/mention resolution below — no `kind` field, no `msg:<uuid>`/`chunk:<uuid>` prefix
+  scheme. Both id spaces are disjoint server-minted `uuid4` generators (the same "astronomically
+  negligible" collision argument already accepted for `User.userId`/`Agent.agentId` sharing one
+  namespace, §2), so a bare id is enough.
 
 **Atomicity (locked):** the `EMITTED` edges are written **inside the same `GRAPH.QUERY` as the
 answer's §4 write**, inside the guarded `FOREACH`, exactly like `MENTIONS_MEMBER`. This makes
@@ -749,9 +758,10 @@ HEAD exists and the answer is always a subsequent-path write. The first-path var
 same seed block folded into the §4 first-message write; verified.*
 
 ```cypher
-// $seedIds = ranked list of seed msgIds from §6 hybrid retrieval (order = rank)
-// $scoreBy = { <seedMsgId>: <cosine distance> }  — per-seed ANN score at answer time
-// $rankBy  = { <seedMsgId>: <0-based rank> }
+// $seedIds = ranked list of seed ids (Message.msgId or Chunk.chunkId) from the merged
+//            §6/§14.3 retrieval (order = rank)
+// $scoreBy = { <seedId>: <cosine distance> }  — per-seed ANN score at answer time
+// $rankBy  = { <seedId>: <0-based rank> }
 // $mentions, $authorId (= the agentId), $msgId, $text, $role='assistant', etc. as in §4
 MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
 OPTIONAL MATCH (dup:Message {msgId: $msgId})
@@ -763,8 +773,9 @@ OPTIONAL MATCH (mu:User  {userId:  mid})
 OPTIONAL MATCH (ma:Agent {agentId: mid})
 WITH t, tailRel, prev, dup, author, collect(DISTINCT coalesce(mu, ma)) AS mems
 UNWIND (CASE WHEN $seedIds = [] THEN [null] ELSE $seedIds END) AS sid
-OPTIONAL MATCH (s:Message {msgId: sid})
-WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT s) AS seeds
+OPTIONAL MATCH (sm:Message {msgId: sid})
+OPTIONAL MATCH (sc:Chunk {chunkId: sid})
+WITH t, tailRel, prev, dup, author, mems, collect(DISTINCT coalesce(sm, sc)) AS seeds
 WITH t, tailRel, prev, dup, author, mems, seeds,
      (dup IS NULL AND author IS NOT NULL) AS ok
 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
@@ -776,8 +787,9 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   CREATE (m)-[:POSTED_BY]->(author)
   SET t.updatedAt = $createdAt
   FOREACH (mem  IN mems  | CREATE (m)-[:MENTIONS_MEMBER]->(mem))
-  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {score: $scoreBy[seed.msgId],
-                                                 rank:  $rankBy[seed.msgId]}]->(seed))
+  FOREACH (seed IN seeds | CREATE (m)-[:EMITTED {
+    score: $scoreBy[coalesce(seed.msgId, seed.chunkId)],
+    rank:  $rankBy[coalesce(seed.msgId, seed.chunkId)]}]->(seed))
 )
 RETURN ok                 AS written,
        false              AS hadHead,
@@ -786,42 +798,83 @@ RETURN ok                 AS written,
 ```
 
 *This is the §4 subsequent write with **one added block**: a second guarded `UNWIND` resolves the
-seed msgIds to bound `Message` nodes (`collect(DISTINCT s)` — dedups, drops unknown seeds like the
-mention block), and a nested `FOREACH` creates the `EMITTED` edges inside the guard. Status-row
-contract is identical to §4 (zero rows = no TAIL → retry as first-path; `dupMsg=true` = idempotent
-replay). `$seedIds = []` is a **verified no-op** — the `CASE` guard keeps the write itself alive
-(a bare `UNWIND []` would collapse the row stream before the `FOREACH`), so this same query serves
-non-provenance writes too.*
+seed ids to bound `Message`/`Chunk` nodes (`collect(DISTINCT coalesce(sm, sc))` — dedups, drops
+unknown seeds like the mention block), and a nested `FOREACH` creates the `EMITTED` edges inside the
+guard. Status-row contract is identical to §4 (zero rows = no TAIL → retry as first-path;
+`dupMsg=true` = idempotent replay). `$seedIds = []` is a **verified no-op** — the `CASE` guard keeps
+the write itself alive (a bare `UNWIND []` would collapse the row stream before the `FOREACH`), so
+this same query serves non-provenance writes too.*
 
 **Live-verified build quirks that shape this query:**
 - **A map-projection cannot be a `CREATE` endpoint** (`CREATE (m)-[:EMITTED]->(rec.node)` errors:
   *"Invalid input '.'"*). The endpoint must be a **bound node variable**, so seeds are collected as
-  nodes (`collect(DISTINCT s)`) and per-edge props are pulled from **map parameters keyed by the
-  node's own `msgId`** (`$scoreBy[seed.msgId]`, `$rankBy[seed.msgId]`) — dynamic map-param
-  indexing by a node property is verified working on this build.
+  nodes (`collect(DISTINCT coalesce(sm, sc))`) and per-edge props are pulled from **map parameters
+  keyed by `coalesce(seed.msgId, seed.chunkId)`** — exactly one of the two properties is non-null
+  per seed node, so `coalesce` always resolves the right key regardless of seed kind. Dynamic
+  map-param indexing by a node property is verified working on this build.
 - **Two sequential guarded `UNWIND`s** (mentions, then seeds) each collapse via `collect` before the
-  next expands — no row multiplication. Verified.
+  next expands — no row multiplication. Verified, including with the seed block resolving against
+  two labels (`gdba_probe_emitted`: one `Message` seed and one `Chunk` seed in a single guarded
+  write — both edges created correctly, no row multiplication, no interference with the mention
+  block's own `UNWIND`).
 
 ### 10.2 Read an answer's provenance (forward — the hot path)
 
 ```cypher
-MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s:Message)
-RETURN s.msgId, s.text, s.role, e.score, e.rank
+MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s)
+OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)
+RETURN labels(s)[0]              AS seedKind,       // 'Message' | 'Chunk'
+       coalesce(s.msgId, s.chunkId) AS seedId,
+       s.text                    AS text,
+       s.role                    AS role,           // null when seedKind = 'Chunk'
+       d.documentId              AS documentId,     // null when seedKind = 'Message'
+       d.title                   AS documentTitle,
+       e.score, e.rank
 ORDER BY e.rank
 ```
-*`GRAPH.PROFILE`: `Node By Index Scan | (a:Message)` → `Conditional Traverse (a)-[:EMITTED]->(s)` —
-index-anchored, no label scan. Ordered by `rank` (ascending = most influential seed first). Route
-via `GRAPH.RO_QUERY`.*
+*`s` is deliberately **unlabeled** in the pattern — it's discovered by traversal from the
+index-anchored `a`, not independently searched, so there's no `Node By Label Scan` risk (a plain
+traversal endpoint, the existing precedent this codebase already uses via `labels(coalesce(a,b))[0]`
+for author/mention resolution). The `OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)` only ever
+matches when `s` is a `Chunk` (a `Message` has no incoming `HAS_CHUNK` edge) — this is what satisfies
+AC-5's "traverses back through `(:Chunk)<-[:HAS_CHUNK]-(:Document)`" requirement, folded into the
+same read, one extra hop.*
+
+*`GRAPH.PROFILE` (`gdba_probe_emitted2`): `Node By Index Scan | (a:Message)` →
+`Conditional Traverse (a)-[:EMITTED]->(s)` → `Optional Conditional Traverse (d)` — clean, no label
+scan, matches the pre-generalization profile shape with one added hop. Data correctness verified: a
+`Message`-seeded row returns `seedKind:'Message'`, `role:'user'`, `documentId:null`; a `Chunk`-seeded
+row returns `seedKind:'Chunk'`, `role:null`, `documentId`/`documentTitle` correctly populated from
+the extra hop. Ordered by `rank` (ascending = most influential seed first). Route via
+`GRAPH.RO_QUERY`.*
 
 ### 10.3 Read which answers cited a seed (reverse)
 
 ```cypher
-MATCH (a:Message)-[e:EMITTED]->(s:Message {msgId: $seedMsgId})
+OPTIONAL MATCH (sm:Message {msgId: $seedId})
+OPTIONAL MATCH (sc:Chunk {chunkId: $seedId})
+WITH coalesce(sm, sc) AS s
+MATCH (a:Message)-[e:EMITTED]->(s)
 RETURN a.msgId, a.role, a.createdAt, e.score, e.rank
 ORDER BY a.createdAt DESC
 ```
-*Anchored on the seed's `msgId` index; traverses `EMITTED` inbound. Answers what a given message
-grounded — useful for "impact"/attribution views. Route via `GRAPH.RO_QUERY`.*
+*Resolves the anchor via the same two-label `coalesce` as the write (§10.1) and forward-read
+(§10.2) — bare id, not a namespaced scheme, same locked-convention argument as §10's seed-resolution
+note. An answer is always a `Message`, so the row shape (`{answerMsgId, role, createdAt, score,
+rank}`) is unchanged from before generalization.*
+
+*`GRAPH.PROFILE` (`gdba_probe_1103`), including the specific planner-trap question this needed
+checking: whether `a:Message`'s label triggers a `Node By Label Scan` here, now that `a` is the
+**unbound** endpoint (traversed *to*, not *from*) and `s` is the one resolved by the earlier
+`OPTIONAL MATCH` pair. Populated 1,000 candidate `Message` answer nodes all citing the same `Chunk`
+seed (the worst case for a label-scan risk on `a`) plus one citing a `Message` seed. Both profiled
+identically clean: `Node By Index Scan (sm:Message)` / `Node By Index Scan (sc:Chunk)` (exactly one
+produces a row per call) → `Conditional Traverse` from the resolved `s` outward to `a` → `Project` →
+`Sort` — **no `Node By Label Scan` at any point**: `s` already supplies the index anchor one step
+earlier, so `a`'s label costs nothing (the opposite shape from a genuine two-unbound-endpoint
+label-scan trap). Data correctness confirmed: the `Chunk`-seed call returned all 1,000 citing
+answers correctly ordered `createdAt DESC`; the `Message`-seed call returned exactly the one correct
+citing answer. Route via `GRAPH.RO_QUERY`.*
 
 ---
 
@@ -1949,6 +2002,18 @@ document with no extra hop. `score` is cosine distance (0 = identical) — rows 
 `Repository.set_chunk_embedding`/`Repository.search_chunks`
 (`server/falkorchat/repository.py`); `EmbeddingWorker.embed_chunk`
 (`server/falkorchat/embedding.py`).
+
+**Chat-grounding merge (K-050 M5 Stage 5, FR-2).** `Services.hybrid_search` calls this query and
+§6's `hybrid_search` with the same `$qVec`/`$k`, then merges the two ranked result lists **app-side**
+by `score` ascending and truncates to `limit` — there is no combined-ANN Cypher shape for this (the
+`EMITTED` generalization above, §10, is the only graph-side change FR-2 needed). `channel_id` scopes
+only the `Message` pool (§6); a `Chunk` seed has no channel/thread to scope by, so a channel-scoped
+call still searches the full `Chunk` ANN index unscoped. Each merged item is tagged app-side
+`seedKind: 'Message'|'Chunk'` so `AgentResponder.maybe_respond` can resolve the right id generically
+before it flows into §10.1's `$seedIds`. Tie-break: `Message` pool concatenated first, `list.sort`
+stable, so an exactly-equal score keeps `Message` ahead of `Chunk`. The two RO queries run
+sequentially (this codebase's existing convention — no other RO-query pair here fires concurrently),
+roughly doubling worst-case retrieval latency; re-measure once real ingestion volume exists.
 
 **`list_document_chunks` — internal seam, not a public query**
 

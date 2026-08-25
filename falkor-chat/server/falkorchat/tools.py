@@ -31,7 +31,9 @@ Built-ins (§4):
   * `graphrag_retrieve` (FR-5b) — embed the query via the injected `Embedder`, hit
     `services.hybrid_search`, then apply the DS-note **Q2** policy (distance cutoff τ, cap 5 /
     floor 1, **abstain** when nothing passes τ) — deliberately NOT the responder's raw-k=10
-    all-seeds anti-pattern.
+    all-seeds anti-pattern. `services.hybrid_search`'s result rows can be `Message`- or
+    `Chunk`-shaped since K-050 M5 Stage 5 (merged, tagged `seedKind`) — the returned seed's
+    id is resolved generically, the same way `responder.py` does.
   * `human_handoff` (FR-5d) — a registered capability that **signals suspend** (raises
     `HumanHandoffSignal`). Present, not exercised: no triage node grants it. The integrated
     executor (Landing 2) catches the signal to park the run pending a human.
@@ -247,6 +249,12 @@ class GraphragRetrieveTool:
     a distance cutoff τ, a cap of `cap` seeds after the cutoff, and **abstention** when
     nothing passes τ (returns a "no relevant context found" finding rather than synthesizing
     from noise). τ/cap/k are configurable (calibration seeds, not shipped constants).
+
+    K-050 M5 Stage 5 (FR-2): `services.hybrid_search` merges `Message` and `Chunk` ANN
+    pools and tags each row `seedKind`. The returned seed dict here is `{seedId, text,
+    score, documentId}` — `seedId` resolves to `msgId`/`chunkId` depending on `seedKind`
+    (mirrors `responder.py`'s resolution), `documentId` is populated for a `Chunk` seed
+    (already denormalized on the row, no extra hop) and `null` for a `Message` seed.
     """
 
     name = "graphrag_retrieve"
@@ -276,9 +284,11 @@ class GraphragRetrieveTool:
             "function": {
                 "name": self.name,
                 "description": (
-                    "Retrieve relevant messages from the workspace to ground your answer. "
-                    "Returns ranked seeds (msgId, text, score) or a 'no relevant context "
-                    "found' finding when nothing is relevant."
+                    "Retrieve relevant context from the workspace to ground your answer — "
+                    "chat messages and ingested-document chunks alike. Returns ranked seeds "
+                    "(seedId, text, score, documentId — set when the seed is a document "
+                    "chunk, null for a chat message) or a 'no relevant context found' "
+                    "finding when nothing is relevant."
                 ),
                 "parameters": {
                     "type": "object",
@@ -306,8 +316,20 @@ class GraphragRetrieveTool:
         passing = [r for r in rows if r["score"] <= self._tau][: self._cap]
         if not passing:
             return json.dumps({"seeds": [], "finding": "no relevant context found"})
+        # K-050 M5 Stage 5: `rows` can now be `Message`- or `Chunk`-shaped
+        # (`services.hybrid_search`'s app-side merge tags each item `seedKind`) —
+        # resolve the id generically, the same way `responder.py` does
+        # (`s["msgId"] if s["seedKind"] == "Message" else s["chunkId"]`), rather than
+        # assuming every row has `msgId`. `documentId` is surfaced (already denormalized
+        # on the Chunk row by `repository.search_chunks`, no extra hop needed) so a
+        # document-grounded hit still carries source attribution, not just an opaque id.
         seeds = [
-            {"msgId": r["msgId"], "text": r["text"], "score": r["score"]}
+            {
+                "seedId": r["msgId"] if r["seedKind"] == "Message" else r["chunkId"],
+                "text": r["text"],
+                "score": r["score"],
+                "documentId": r["documentId"] if r["seedKind"] == "Chunk" else None,
+            }
             for r in passing
         ]
         return json.dumps({"seeds": seeds})

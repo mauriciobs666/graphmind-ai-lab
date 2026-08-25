@@ -10,10 +10,11 @@ condition is the hard loop-guard — without it an agent answer that mentions th
 agent would trigger another answer forever.
 
 Flow: embed the trigger → `services.hybrid_search` (channel-scoped) for ranked
-seeds → build the LLM prompt from the retrieved context → call the LLM → post the
+seeds, `Message` and `Chunk` merged (K-050 M5 Stage 5, FR-2) → build the LLM
+prompt from the retrieved context → call the LLM → post the
 answer **as the agent** (`services.post_agent_answer`, role derived `assistant`)
-with the retrieved `(msgId, score)` seeds in rank order → self-embed the answer so
-it joins the retrievable corpus.
+with the retrieved `(seedId, score)` seeds in rank order → self-embed the answer
+so it joins the retrievable corpus.
 
 Failure isolation (hard): the embedder, retrieval, and LLM all run **before** the
 guarded §4/§10 write. Any failure short-circuits before anything is posted — LLM
@@ -108,9 +109,15 @@ class AgentResponder:
 
         # Post as the agent — swap the actor to the agent id so role derives to
         # `assistant` in the service (never trusted from the caller). Provenance =
-        # retrieved (msgId, score) in the retrieval's rank order (score ASC).
+        # retrieved (seedId, score) in the retrieval's rank order (score ASC).
+        # K-050 M5 Stage 5: `seeds` can now be Message- or Chunk-shaped
+        # (`services.hybrid_search`'s merge tags each item `seedKind`), so the
+        # id is resolved generically rather than assuming `msgId`.
         agent_ctx = CallContext(ws=ctx.ws, actor=self._agent_id)
-        seed_prov = [(s["msgId"], s["score"]) for s in seeds]
+        seed_prov = [
+            (s["msgId"] if s["seedKind"] == "Message" else s["chunkId"], s["score"])
+            for s in seeds
+        ]
         posted = self._services.post_agent_answer(
             agent_ctx, thread_id=thread_id, text=answer_text, seeds=seed_prov
         )

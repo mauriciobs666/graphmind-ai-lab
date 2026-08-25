@@ -84,6 +84,12 @@ class FakeRepo:
         self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
         self.post_success_result = _UNSET  # override to script read_recent_post_success (§12.15)
         self.documents: dict[str, dict] = {}  # documentId -> created_document (K-050)
+        # `hybrid_search`/`search_chunks` return `since_rows` by default (back-
+        # compat with pre-Stage-5 tests exercising just one of the two pools);
+        # set either explicitly to drive `services.hybrid_search`'s merge with
+        # independent Message/Chunk pools (K-050 M5 Stage 5).
+        self.hybrid_rows: list[dict] | None = None
+        self.chunk_rows: list[dict] | None = None
         self.matches: dict[str, dict] = {}  # matchId -> match state (K-050 M5 Stage 4)
 
     # writes / lookups used by services
@@ -168,7 +174,7 @@ class FakeRepo:
 
     def hybrid_search(self, ws, *, q_vec, k, limit, channel_id=None, timeout=None):
         self.calls.append(("hybrid_search", ws, tuple(q_vec), k, limit, channel_id, timeout))
-        return self.since_rows
+        return self.since_rows if self.hybrid_rows is None else self.hybrid_rows
 
     def ensure_user(self, ws, *, user_id, display_name=None, email=None):
         # mirrors the §2 v2 guarded ensure: an id held by an Agent is refused
@@ -214,7 +220,7 @@ class FakeRepo:
 
     def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
         self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
-        return self.since_rows
+        return self.since_rows if self.chunk_rows is None else self.chunk_rows
 
     # ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4) ──────────────────────────
     # matchId -> {"status", "entityA", "entityB", ...} — seed via `self.matches`
@@ -1090,38 +1096,130 @@ def test_search_messages_maps_syntax_error_to_service_error():
         svc.search_messages(CTX, query='hello"unbalanced')
 
 
-# ── hybrid_search (GraphRAG) ────────────────────────────────────────────────────
+# ── hybrid_search (GraphRAG, Message + Chunk merge — K-050 M5 Stage 5) ──────────
 
 
 def test_hybrid_search_applies_rag_timeout_constant():
     from falkorchat.services import RAG_QUERY_TIMEOUT_MS
 
     repo = FakeRepo()
-    repo.since_rows = [
+    repo.hybrid_rows = [
         {"msgId": "m1", "text": "cats", "role": "user", "score": 0.0, "relatedContext": []}
     ]
+    repo.chunk_rows = []
     svc = make_service(repo)
 
     hits = svc.hybrid_search(CTX, q_vec=[1.0, 0.0], k=10, limit=5)
 
-    assert hits == repo.since_rows
+    assert hits == [{**repo.hybrid_rows[0], "seedKind": "Message"}]
     call = next(c for c in repo.calls if c[0] == "hybrid_search")
     # (name, ws, q_vec, k, limit, channel_id, timeout)
     assert call[1] == "test"
     assert call[3] == 10 and call[4] == 5
     assert call[5] is None
     assert call[6] == RAG_QUERY_TIMEOUT_MS
+    # Chunk pool is queried with the same q_vec/k/timeout, no channel scope
+    chunk_call = next(c for c in repo.calls if c[0] == "search_chunks")
+    assert chunk_call == ("search_chunks", "test", (1.0, 0.0), 10, 5, RAG_QUERY_TIMEOUT_MS)
 
 
-def test_hybrid_search_forwards_channel_scope():
+def test_hybrid_search_forwards_channel_scope_to_message_pool_only():
     repo = FakeRepo()
-    repo.since_rows = []
+    repo.hybrid_rows = []
+    repo.chunk_rows = []
     svc = make_service(repo)
 
     svc.hybrid_search(CTX, q_vec=[1.0], k=3, limit=3, channel_id="c1")
 
     call = next(c for c in repo.calls if c[0] == "hybrid_search")
     assert call[5] == "c1"
+    # search_chunks has no channel_id parameter at all — the Chunk pool is
+    # never scoped, confirming the documented "unscoped even when the
+    # Message pool is channel-scoped" behavior.
+    chunk_call = next(c for c in repo.calls if c[0] == "search_chunks")
+    assert chunk_call == ("search_chunks", "test", (1.0,), 3, 3, RAG_QUERY_TIMEOUT_MS)
+
+
+def test_hybrid_search_merges_message_and_chunk_pools_by_score_ascending():
+    repo = FakeRepo()
+    repo.hybrid_rows = [
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.5, "relatedContext": []},
+        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.1, "relatedContext": []},
+    ]
+    repo.chunk_rows = [
+        {"chunkId": "c1", "text": "c1", "documentId": "d1", "seq": 0, "score": 0.3},
+    ]
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=10, limit=10)
+
+    assert [h.get("msgId") or h.get("chunkId") for h in hits] == ["m2", "c1", "m1"]
+    assert [h["score"] for h in hits] == [0.1, 0.3, 0.5]
+    assert [h["seedKind"] for h in hits] == ["Message", "Chunk", "Message"]
+    # Chunk items get the same dormant relatedContext:[] convention as Message
+    assert hits[1]["relatedContext"] == []
+
+
+def test_hybrid_search_truncates_merged_results_to_limit():
+    repo = FakeRepo()
+    repo.hybrid_rows = [
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1, "relatedContext": []},
+        {"msgId": "m2", "text": "m2", "role": "user", "score": 0.4, "relatedContext": []},
+    ]
+    repo.chunk_rows = [
+        {"chunkId": "c1", "text": "c1", "documentId": "d1", "seq": 0, "score": 0.2},
+        {"chunkId": "c2", "text": "c2", "documentId": "d1", "seq": 1, "score": 0.3},
+    ]
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=10, limit=2)
+
+    assert len(hits) == 2
+    assert [h.get("msgId") or h.get("chunkId") for h in hits] == ["m1", "c1"]
+
+
+def test_hybrid_search_fewer_than_limit_combined_results():
+    repo = FakeRepo()
+    repo.hybrid_rows = [
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.1, "relatedContext": []},
+    ]
+    repo.chunk_rows = []
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=10, limit=10)
+
+    assert len(hits) == 1
+    assert hits[0]["seedKind"] == "Message"
+
+
+def test_hybrid_search_all_chunk_results_when_message_ann_empty():
+    repo = FakeRepo()
+    repo.hybrid_rows = []
+    repo.chunk_rows = [
+        {"chunkId": "c1", "text": "c1", "documentId": "d1", "seq": 0, "score": 0.2},
+    ]
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=10, limit=10)
+
+    assert len(hits) == 1
+    assert hits[0]["seedKind"] == "Chunk"
+    assert hits[0]["chunkId"] == "c1"
+
+
+def test_hybrid_search_all_message_results_when_chunk_ann_empty():
+    repo = FakeRepo()
+    repo.hybrid_rows = [
+        {"msgId": "m1", "text": "m1", "role": "user", "score": 0.2, "relatedContext": []},
+    ]
+    repo.chunk_rows = []
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=10, limit=10)
+
+    assert len(hits) == 1
+    assert hits[0]["seedKind"] == "Message"
+    assert hits[0]["msgId"] == "m1"
 
 
 # ── post_agent_answer: agent-authored answer + EMITTED provenance (K-013) ───────

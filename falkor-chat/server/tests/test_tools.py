@@ -221,7 +221,15 @@ def test_post_message_lets_unrelated_service_errors_propagate():
 
 def _row(msg_id, score, text="ctx"):
     return {"msgId": msg_id, "text": text, "role": "user", "score": score,
-            "relatedContext": []}
+            "relatedContext": [], "seedKind": "Message"}
+
+
+def _chunk_row(chunk_id, score, text="chunk ctx", document_id="d1"):
+    """A `Chunk`-shaped merged row, mirroring `services.hybrid_search`'s own
+    tagging (K-050 M5 Stage 5) — no `msgId`/`role` key, `seedKind: 'Chunk'`.
+    """
+    return {"chunkId": chunk_id, "text": text, "documentId": document_id,
+            "seq": 0, "score": score, "relatedContext": [], "seedKind": "Chunk"}
 
 
 def test_graphrag_retrieve_embeds_then_applies_tau_cutoff_and_cap():
@@ -235,7 +243,7 @@ def test_graphrag_retrieve_embeds_then_applies_tau_cutoff_and_cap():
     assert emb.calls == ["reset password"]            # query embedded, not a raw vector
     assert svc.searched[0]["q_vec"] == [0.5, 0.5, 0.0, 0.0]
     # only seeds within τ=0.5 survive (a,b), ordering preserved; c,d cut
-    assert [s["msgId"] for s in out["seeds"]] == ["a", "b"]
+    assert [s["seedId"] for s in out["seeds"]] == ["a", "b"]
     assert "finding" not in out
 
 
@@ -261,7 +269,32 @@ def test_graphrag_retrieve_configurable_tau():
     tool = GraphragRetrieveTool(StubServices(search_rows=rows), StubEmbedder(),
                                 tau=0.8)  # looser cutoff keeps 0.7
     out = json.loads(tool.run({"query": "q"}, ctx=CTX, run={}))
-    assert [s["msgId"] for s in out["seeds"]] == ["a"]
+    assert [s["seedId"] for s in out["seeds"]] == ["a"]
+
+
+def test_graphrag_retrieve_resolves_chunk_seed_id_and_document_id():
+    """The BLOCKER regression this pins: `services.hybrid_search` can return a
+    `Chunk`-shaped row (no `msgId` key at all) — the tool must resolve
+    `seedId` via `chunkId` instead of crashing with `KeyError: 'msgId'`, and
+    surface `documentId` for it.
+    """
+    rows = [_chunk_row("ch1", 0.1, text="chunk text", document_id="d1")]
+    tool = GraphragRetrieveTool(StubServices(search_rows=rows), StubEmbedder(),
+                                tau=0.5)
+    out = json.loads(tool.run({"query": "q"}, ctx=CTX, run={}))
+    assert out["seeds"] == [
+        {"seedId": "ch1", "text": "chunk text", "score": 0.1, "documentId": "d1"}
+    ]
+
+
+def test_graphrag_retrieve_mixed_message_and_chunk_seeds():
+    rows = [_row("m1", 0.0, text="msg text"), _chunk_row("ch1", 0.1, text="chunk text")]
+    tool = GraphragRetrieveTool(StubServices(search_rows=rows), StubEmbedder(),
+                                tau=0.5)
+    out = json.loads(tool.run({"query": "q"}, ctx=CTX, run={}))
+    assert [(s["seedId"], s["documentId"]) for s in out["seeds"]] == [
+        ("m1", None), ("ch1", "d1"),
+    ]
 
 
 # ── K-042 code review Major 2 (the M-3 fix itself): resolution happens INSIDE run() ──
@@ -378,21 +411,48 @@ def _seed_embedded_thread(repo):
         ts += 1
 
 
+def _seed_embedded_document(repo, *, chunk_id, vec, document_id="d1", text="chunk text"):
+    """Ingest a `Document`+`Chunk` (K-050 M5 Stage 1/2 write path) with an
+    embedding, so `services.hybrid_search`'s real merge (Stage 5) has a
+    `Chunk` pool to draw from — requires `u1` (ensured by `_seed_embedded_thread`).
+    """
+    repo.create_document(
+        WS, document_id=document_id, title="Doc", text=text,
+        source_format="text", ingested_by="u1", created_at=1,
+        chunks=[{"chunkId": chunk_id, "text": text, "seq": 0}],
+    )
+    repo.set_chunk_embedding(
+        WS, chunk_id=chunk_id, embedding=vec, expected_dim=TEST_EMBEDDING_DIM
+    )
+
+
 def test_graphrag_retrieve_returns_near_seed_live(repo):
     _seed_embedded_thread(repo)
+    # A Chunk seed near the query too — the BLOCKER regression this pins: before
+    # the fix, a Chunk row ranking within τ crashed with KeyError('msgId') instead
+    # of resolving via `chunkId` (real `services.hybrid_search`, not a stub).
+    _seed_embedded_document(repo, chunk_id="ch1", vec=_pad([1.0, 0.0]), text="cats in a doc")
     svc = _configure_services(repo)
-    # query vector identical to m1 → distance ~0 (≤ τ); m2 is orthogonal (distance ~1)
+    # query vector identical to m1/ch1 → distance ~0 (≤ τ); m2 is orthogonal (distance ~1)
     tool = GraphragRetrieveTool(svc, StubEmbedder(_pad([1.0, 0.0])), tau=0.5)
     out = json.loads(tool.run({"query": "cats"}, ctx=CTX, run={}))
-    ids = [s["msgId"] for s in out["seeds"]]
+    ids = [s["seedId"] for s in out["seeds"]]
     assert "m1" in ids
     assert "m2" not in ids                # orthogonal seed cut by τ
+    assert "ch1" in ids                   # the Chunk seed, resolved without crashing
+    chunk_seed = next(s for s in out["seeds"] if s["seedId"] == "ch1")
+    assert chunk_seed["documentId"] == "d1"
+    msg_seed = next(s for s in out["seeds"] if s["seedId"] == "m1")
+    assert msg_seed["documentId"] is None
 
 
 def test_graphrag_retrieve_abstains_when_all_seeds_distant_live(repo):
     _seed_embedded_thread(repo)
+    # A Chunk in the workspace too, also distant — abstention must still fire
+    # correctly with a Chunk pool present, not just when it's empty.
+    _seed_embedded_document(repo, chunk_id="ch1", vec=_pad([0.0, 1.0]), text="dogs in a doc")
     svc = _configure_services(repo)
-    # a query orthogonal to BOTH seeds → every distance ~1 > τ → abstain
+    # a query orthogonal to every seed (Message AND Chunk) → abstain
     tool = GraphragRetrieveTool(svc, StubEmbedder(_pad([0.0, 0.0, 1.0])), tau=0.5)
     out = json.loads(tool.run({"query": "unrelated"}, ctx=CTX, run={}))
     assert out["seeds"] == []
