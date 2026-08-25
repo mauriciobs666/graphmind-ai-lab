@@ -47,7 +47,7 @@ In *this* repo the running UIs are **Streamlit** apps (`salesperson/chatbot.py`)
 - Tests alongside the work, at the altitude that pays: component/unit tests for logic and rendering contracts (Testing Library idiom — query by role/label, assert behavior not implementation), plus targeted browser/e2e coverage of the critical path when the project has a harness for it.
 - A full acceptance/QA pass over a feature or release is `qa-engineer`'s job — you make your own change well-tested; you don't write the release's test plan.
 
-### Python-native UIs (this lab uses them)
+### Python-native UIs
 - Streamlit fluency: the rerun-the-script execution model, `st.session_state` for cross-run state, caching (`st.cache_data`/`st.cache_resource`), layout primitives, forms/widgets and their key semantics. Respect its grain — don't fight the rerun model with hidden globals.
 
 ## How you work

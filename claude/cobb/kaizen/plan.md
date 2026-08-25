@@ -18,13 +18,31 @@
 
 ## Parking lot / ideas
 - **Two process lessons from the prompt-waste Stage B wave-2 §7 lint (2026-08-23, both minor):**
-  (F1) the plan's "cobb's own compression is linted by its pre-edit self" safeguard wasn't met as
-  written — the live-symlink deployment means the edit is production before any lint can run on a
-  pre-edit self; mitigated this time by byte-matching the edited blocks to the approved pilot
-  shapes and by the checklist living in the untouched `agent-maintenance` skill. Decide whether
-  the safeguard should be restated as "lint against the pre-edit file content (`git show HEAD:`)"
-  for C6. (F2) gate-(e) history entries pre-asserted "cobb §7 lint pass" before the lint ran
-  (true in the event) — for future units, append the `Verified:` line only after the lint returns.
+  (F1) ✅ **closed 2026-08-24 at C6** — the plan's "cobb's own compression is linted by its pre-edit
+  self" safeguard wasn't met as written at Stage B, because the live-symlink deployment makes an
+  edit production before any lint can run on a pre-edit self. C6 answers it, and **without** the
+  proposed `git show HEAD:` restatement: **propose → revert the file to HEAD → lint → re-apply.**
+  The edits go to the lint as text in the brief while the file on disk stays pre-edit, so the
+  safeguard is met exactly as §7 words it. Used for real on the one unit where it mattered
+  (`cobb.md` itself); see `history.md`, 2026-08-24. (F2) gate-(e) history entries pre-asserted
+  "cobb §7 lint pass" before the lint ran (true in the event) — for future units, append the
+  `Verified:` line only after the lint returns. **Still open**, and C6 again wrote its `Verified:`
+  lines after the lint returned rather than before, so the practice is holding by habit; the item
+  stays until it is written into the plan's gate (e) rather than remembered per unit.
+- **K-020 — residual staleness in `agent-maintenance`'s own text (opened 2026-08-24, C6 lint; low).**
+  Two items, both class-6/stale, neither urgent now that the live one is fixed:
+  1. `SKILL.md:3`'s description still says the shared graph is "`author`-partitioned". Since M8
+     (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) a **new** entry is identified by an
+     `(:Agent)-[:PRODUCED]->(:KaizenEntry)` edge; only a pre-M8 entry carries `author`. The
+     description is always-on, so this is the same class of defect as the `inbox.md` clause fixed
+     in C6 — it just isn't contradicted by anything yet. Fix when the §5 procedure is next touched.
+  2. §7 ends with a dated `Origin: 2026-07-16` block (the six-vs-seven-dimensions conversation).
+     Class-6 provenance, but in the progressively-disclosed **body**, not the always-on
+     description, and factually accurate as history. Lowest priority; delete on the next §7 edit.
+  *(The C6-activated half — `SKILL.md:3`'s "`kaizen/inbox.md` is a frozen historical relic", which
+  asserted the existence of twelve files deleted in `6fdc107` — was **fixed in C6's own commit**,
+  not deferred, because C6's `cobb.md` edits are what turned it into a live artifact↔load-set
+  contradiction. See `history.md`, 2026-08-24.)*
 - **Extend the independent-review-gate practice to `cobb.md` self-edits specifically (surfaced
   2026-08-20, `Q2`'s D-1 finding + its own fix).** `Q2`'s closing acceptance pass
   (`docs/test-reports/generic-cypher-mcp2-report.md`) found `cobb.md` had shipped a self-edit

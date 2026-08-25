@@ -67,6 +67,18 @@ a kept narrative costs words; a lost rule costs a repeated incident.
 | 6 | **Provenance/governance** | "Stakeholder decision, 2026-08-21", supersession trails, "this replaces the earlier convention…" | **Delete** (after the same verify-in-history step). Non-negotiability is expressed by stating the rule absolutely, never by citing authority or dates. Distinguish from a **normative citation** — a path the rule requires the agent to *use* (a spec like the `CPG:` forms' source, a template location) — which stays |
 | 7 | **Duplicate restatement** | Same rule stated twice in one file; cross-references that re-explain instead of pointing | One canonical statement + short cross-ref. **Test: not "is it said twice" but "is it *needed* twice"** — name the decision point that loses it and ask whether the agent stands there (C1 finding 5) |
 
+**Class 6 is discharged across this team (closed at C6, 2026-08-24 — finding 14).** All thirteen
+agent prompts measure **0 w of removable class-6 residual**; eleven were measured directly at
+C3–C6, the rest carry none by construction after Stage B. The class stays in this table because it
+governs *new* writing and any prompt this lab adds later — but for the existing team the sweep is
+**complete, not merely current**. Three certified exceptions remain, each an exception by rule:
+`cobb.md`'s `verified 2026-07-10 against …` stamp (mandated by that file's own Drift-resistance
+principle, and needed a second time in the `agent-maintenance` skill for a load-set reason the C6
+lint verified), `cobb.md`'s `pre-M8` query-shape discriminator, and `graph-dba.md`'s `(successor to
+RedisGraph)` anti-trigger. **Operationally: name a file's citation habit, cut it, and class 6 is
+done permanently. A sweep that opens with a provenance grep over an existing prompt is re-running a
+search whose answer is known to be empty — go straight to the class-7 semantic read.**
+
 **Anti-trigger vs. supersession trail — the class-1/class-6 boundary (added at C2).** A sentence
 that says *X is not a trigger* looks like a reference to a superseded rule and is often deleted as
 class 6. The test: **would the agent plausibly infer that trigger with the sentence absent?**
@@ -166,7 +178,7 @@ Both Stage B observation windows now run concurrently.*
 | C3 | `analyst.md` | 2,569 w | **done: 2,473 w** (one pass) | Evidence-traps list stayed (class 3/4 payloads); trims were provenance and restatement. **Measured at its editorial floor** — residual class-6/7 inventory across the whole file is under 25 w. Structural lever routed to `analyst` K-003 |
 | C4 | `security-expert.md` + `devops.md` | 2,437 + 2,212 w | **done: 2,357 + 2,110 w** (one pass) | Both cuts were incident/origin provenance, not rules. `devops`'s repo-specific orientation example **deleted on its third rot** rather than refreshed a third time. **Both measured at their editorial floor** — residual 22 w each. One pre-existing MAJOR routed to `security-expert` K-005 rather than bundled |
 | C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | 2,163 + 2,094 + 2,098 w | **done: 2,154 + 2,071 + 2,083 w** (one pass) | Five edits; class-6 residual now **zero in all three files**. One was a deliberate rule change — `qa-engineer`'s test-report path no longer offers ", or the component's convention", which the same file twice calls non-negotiable. **All three at their editorial floor**; `qa-engineer` is the first file to land *above* the floor band, for a structural reason. Three pre-existing minors routed to `tdd-engineer` K-006 and `qa-engineer` K-005/K-006 rather than bundled |
-| C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
+| C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | 2,006 + 1,807 + 1,604 + 1,240 w | **done: 1,976 + 1,806 + 1,600 + 1,240 w** (one pass) | Five edits, **four** of them recommended cuts — the split rule fired a second time and was discharged C4-style, by deferring half of one candidate. `cobb.md` deliberately last (§7 risk register) and the only unit linted by a **reverted-to-HEAD** copy of its own agent, which closes F1. Two edits were declared corrections, not compression: `cobb.md`'s lint bullet said **six** dimensions where its own skill says seven, and one always-on skill description asserted the existence of files deleted in `6fdc107`. `coder.md` took **zero** edits — inventoried and judged at floor. **All four at 0 w removable class-6**; four pre-existing minors routed to `coder` K-003/K-004, `frontend-engineer` K-003, `cobb` K-020 |
 
 Serialized or in review-gated pairs — never two units editing one file.
 
@@ -376,6 +388,74 @@ resolved a second intra-file contradiction nobody had cited. **Two findings:***
     nothing there. Finding 9 predicted the habit would account for most of the inventory; C5 shows
     the habit can instead account for **none** of it, and that this is diagnostic rather than a
     failed sweep. When the habit is a keep, stop scanning for provenance and read the structure.*
+
+***C6 executed 2026-08-24 (6,657 → 6,622 w over four files: `cobb.md` 2,006 → 1,976, −1.5%;
+`graph-dba.md` 1,807 → 1,806; `frontend-engineer.md` 1,604 → 1,600; `coder.md` 1,240 → 1,240,
+**zero edits**).** Five edits, one pass, plus a 6-w correction to `skills/agent-maintenance/SKILL.md`'s
+always-on frontmatter description. Gates (a)–(e) green; `cobb` §7 lint **0 blockers, 0 majors
+attributable to the C6 edits** — the fourth consecutive unit with no MAJOR of its own making. Four
+pre-existing minors routed to `coder` K-003/K-004, `frontend-engineer` K-003, `cobb` K-020. Detail in
+the four agents' `kaizen/history.md`. **This unit closes Stage C.**
+
+**Three things C6 did differently, each worth carrying forward:**
+
+- **The pre-edit-self safeguard was met literally, for the first time.** §7's risk register says
+  `cobb`'s own compression is "linted by its pre-edit self before the edit lands," which Stage B
+  could not honour — the live deployment symlink makes an edit production before any lint runs.
+  C6's sequence: **propose → `git checkout HEAD -- cobb.md` → lint (edits supplied as text in the
+  brief) → re-apply.** No `git show HEAD:` restatement needed. `cobb` **plan.md** F1 closed on this.
+- **Two edits were declared corrections rather than compression**, continuing C5's practice of
+  telling the lint which is which. `cobb.md`'s lint bullet claimed **six** §7 dimensions and
+  enumerated six; the skill says "work the **seven** dimensions below." This agent has been running
+  a seven-dimension lint from a six-dimension instruction since 2026-07-16 — including at every gate
+  (c) of this plan. On the lint's own advice the numeral was **dropped**, not incremented: a numeral
+  duplicating another artifact's list length is a drift surface that had already failed once, and
+  without it a future eighth dimension leaves the prompt incomplete rather than wrong.
+- **A MAJOR that the unit's own edits *activated* was fixed in-commit, not filed.**
+  `skills/agent-maintenance/SKILL.md:3` still said "`kaizen/inbox.md` is a frozen historical relic"
+  — and a skill's **description is always-on** (`cobb.md:42` states that rule). The moment `cobb.md`
+  stopped claiming those twelve files exist, its always-loaded skill description started
+  contradicting it. **Rule for the remaining stages: a pre-existing defect that this plan's edits
+  make *live* is in scope for this plan's commit; one that merely stays latent is not.** That line
+  is what separates it from the four minors routed out.
+
+**The split rule fired a second time, on the "grant/authority clause" branch, and was obeyed.**
+Recommended cuts came to **exactly 5** against a "more than 5" ceiling — a zero margin — and one
+candidate sat in the **same bullet** as `cobb`'s curator-`DETACH DELETE` authorization. The lint held
+that "touches" must be read from the rule's purpose: finding 1 established the risk is the **prose
+repair around the hole**, not the deletion, so proximity governs, and same-bullet is tighter than the
+same-*section* proximity that fired the rule at C4. Discharged as C4 actually discharged it — **defer,
+not split**: the stale-fact half shipped, the provenance half is held as a pre-analyzed candidate,
+and the recommended count dropped to 4. *Two independent near-misses on one unit (count at the
+ceiling, proximity at the boundary) is itself signal — read a zero margin as a reason to obey, not
+to argue.* **Two findings:**
+
+13. ***Residual tracks the number of layers that re-aim the same cross-cutting rules — not section
+    count, not word count, not rule count.*** *Finding 12 named organizing structure as the variable;
+    C6 isolates it, because it holds the confounders still. `frontend-engineer` (~39 w) and
+    `graph-dba` (~20 w) are comparable in length (1,600 / 1,806 w) and both have four top-level
+    sections, yet they sit at opposite ends of the band. The difference is what those sections **do**:
+    frontend-engineer's four layers (domain expertise → workflow → principles → boundaries) each
+    re-aim the same cross-cutting rules at a different altitude — conventions, UI states, and test
+    scope each appear three times, legitimately — while graph-dba's top layer is *reference
+    mechanism* (GraphBLAS, the pinned deployment, the Cypher subset) with no workflow counterpart, so
+    nothing restates. `coder` at 1,240 w has frontend's four-layer shape and the set's **highest
+    density** (2.7%), which rules out length. So: a "summary + workflow + principles + guardrails"
+    prompt will always run high and a "reference + workflow" prompt will always run low. **Calibrate
+    against the shape, and stop reading a high residual as a failed sweep.** Eleven-file data set:
+    20, 22, 22, 25, 29, 29, 31, 34, 34, 39, 40.*
+14. ***Class 6 is finished. §3's table can say so outright.*** *Finding 11 asked C6 to replicate C5's
+    zero-class-6 result and set the consequence in advance. It replicated: **all four C6 files measure
+    0 w of removable class-6 residual**, making it **eleven of eleven** across the whole team. Every
+    date, authority marker, supersession trail, FR-tag and `kaizen/history.md` pointer that could
+    leave a prompt has left. Three certified exceptions remain and are exceptions by rule, not by
+    oversight: `cobb.md`'s `verified 2026-07-10 against …` stamp (mandated by that file's own
+    Drift-resistance principle, and duplicated in the skill for a load-set reason the lint verified),
+    its `pre-M8` query discriminator, and `graph-dba`'s `(successor to RedisGraph)` anti-trigger.
+    **The doctrine's operational form is now: name the file's citation habit, cut it, and class 6 is
+    done permanently — everything after that is class-7 judgment, where the finding-5 test decides
+    and the honest answer is usually keep.** A future sweep that opens with a provenance grep is
+    re-running a search whose answer is known to be empty.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 

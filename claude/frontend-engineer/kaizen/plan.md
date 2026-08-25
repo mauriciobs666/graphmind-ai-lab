@@ -10,6 +10,7 @@
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-09 | medium | 🔵 | First real-run shakedown on a UI task in this repo |
 | K-002 | 2026-07-09 | low | 🔵 | Visual verification tooling (screenshots/browser automation) |
+| K-003 | 2026-08-24 | low | 🔵 | Conventions precedence unstated — `:17`/`:77` say project scope, `:56` says the same folder; fix with `tdd-engineer` K-006 and `coder` K-004 |
 
 ### K-001 — First real-run shakedown
 - **Status:** 🔵 proposed
@@ -25,6 +26,32 @@
 - **Proposed change:** once the lab standardizes a browser-automation tool, wire it into the prompt's verification step (and consider an `mcpServers` frontmatter entry).
 - **Notes:** keep it optional — Streamlit apps may only need `streamlit run` + manual checks.
 
+### K-003 — Conventions precedence is unstated: project norm or local neighbour?
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Rationale:** Three statements, two scopes. `:17` *"Discover conventions; don't import your favorites"* and `:77` *"The project's stack and idiom win over your favorite library"* are **project**-scope. `:56` *"your code should be indistinguishable from a good existing file **in the same folder**"* is **local**-scope. They agree in a consistent codebase and diverge in exactly the case worth a rule — a folder that deviates from the project norm. Found by `cobb`'s §7 lint during C6 (`claude/docs/plans/prompt-waste-reduction.md`).
+- **Proposed change:** name the tiebreak once, e.g. *"…where a folder deviates locally from the project norm, match the folder — a mixed-style file is worse than either style."*
+- **Notes:** Third instance of one family. **`tdd-engineer` K-006** is the strongest (two co-equal imperatives in one bullet); **`coder` K-004** is the third. **Fix all three together or none** — divergent convention-precedence rules across implementers that split work by task shape is an `agent-maintenance` §4 check-5 boundary-reciprocity problem. Deliberately not bundled into C6: it is a rule change, and §4.0's rollback contract keeps those out of a compression commit.
+
 ## Parking lot / ideas
+- **Judged and kept, do not re-litigate (2026-08-24, C6 lint).**
+  - **`today that's concretely `cpg_salesperson` for `salesperson/chatbot.py`` (`:18`)** and **"In *this*
+    repo the running UIs are Streamlit apps" (`:20`)** — kept under the plan's **finding 10**, whose
+    test is *scope above rot*: `devops`'s repo example was deleted because that agent is
+    **user-scoped**, making a one-repo snapshot a false anchor everywhere else. `frontend-engineer`
+    is project-scoped, so a repo fact is a true anchor, and neither line carries a standing
+    "refresh it" obligation of the kind finding 10 warns about.
+  - **"`falkor-chat/` may grow a web front-end — check its docs before assuming a stack for it"
+    (`:20`)** — reads as speculation but functions as a class-1 **anti-trigger**: without it the
+    agent's nearest precedent (salesperson) would have it assume Streamlit for falkor-chat.
+  - **"Every UI state is a requirement" (`:75`)** vs. step 3 vs. the data-fetching bullet — three
+    touches, kept. Cutting one principle bullet for ~17 w would be a structural change out of step
+    with every other agent's principles list.
+- **Watch note — `cpg_salesperson` now lives in three places that rot together (2026-08-24, C6 lint).**
+  The frontmatter `description` ("`cpg_salesperson` today"), `:18`, and the surrounding repo fact at
+  `:20`. Different readers justify it (routers read the description, the agent reads the body), so it
+  stands today — but if `salesperson/chatbot.py` ever stops being this repo's Streamlit entry point
+  it is a **three-site** update, which is precisely the shape finding 10 says becomes a deletion
+  candidate on its third rot. Recorded so the count is visible next time rather than rediscovered.
 - A perishable "framework quirks" resource file (like graph-dba's `falkordb-quirks.md`) if the lab settles on one web framework and version-specific gotchas accumulate.
 - Design-system/token conventions section if the lab adopts one.

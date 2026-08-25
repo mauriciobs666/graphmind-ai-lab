@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-24 — Prompt-waste compression, Stage C6: inventoried, **zero edits** — judged at its editorial floor
+- **What:** `coder.md` was one of C6's four files (`claude/docs/plans/prompt-waste-reduction.md`, Stage C). Full class-5/6/7 inventory run; **no edit made**, and that is the finding, not a shortfall. 1,240 w before and after. Wave 1 + the wave-2 micro-fix had already taken everything class-5/6 this file ever carried.
+- **Class-6 residual: 0 w.** Mechanically confirmed — zero hits for dates, FR/AC tags, authority markers, supersession trails, or `kaizen/history.md` pointers anywhere in the file. Nothing left to cut in the cheap category, permanently (plan finding 11).
+- **Class-7 residual: ~34 w, all of it certified keeps** under finding 5 ("needed twice", not "said twice"):
+  - **"Don't claim what you didn't run" (guardrail) vs. step 5's "Report what you actually ran and saw."** Step 5 is the report-writing *procedure* (show the output; report `passed`/`skipped`/`deselected`, since a suite can exit 0 with a chunk silently unrun); the guardrail is the absolute prohibition. Same pair `qa-engineer` certified as a keep at C5.
+  - **"Ask before destructive or environment-changing actions" (guardrail) vs. step 2's "ask before installing or mutating the environment."** Two decision points — baseline setup vs. anywhere in the build — each carrying its own subagent carve-out. Also the pair `qa-engineer` certified at C5; the carve-out duplication is a **certification requirement** (`agent-maintenance` §4 check 3), not a style choice.
+  - **The three scope statements** — "Minimal blast radius" (scope of edits) / "Don't silently exceed scope" (reporting obligation) / "don't silently diverge" (what to do when the plan is *wrong*). Three rules, not one restated.
+- **Gate (a) inventory — trivially satisfied:** no text removed, so every rule survives byte-identical.
+- **Two pre-existing defects found and routed, not bundled** (§4.0 rollback contract — both fixes are rule changes):
+  - **K-003** — `:11` and `:35` prescribe *different actions for the same trigger* (a mid-build plan defect: "stop and say so" vs. "surface as notes for the user"). `cobb`'s lint dissented from this session's initial reading that the three scope statements were cleanly distinct, and it is right: this pair is a genuine contradiction, worst when `coder` runs delegated (where "stop" means returning the unit undone with no way to ask).
+  - **K-004** — `:12`'s conventions ambiguity: "already in the codebase" (project scope) vs. "reading neighboring code" (local scope), which return different answers when a file deviates locally. Same family as `tdd-engineer` **K-006**, weaker instance — here the second clause reads as the *method* for the first rather than a competing authority, so the collision is inside `:12` alone. `:29` ("its conventions win over your defaults") runs on the project-vs-*agent* axis and does not collide.
+- **Verified:** `audit-team.sh` PASS (check 8 row intact, file untouched); `cobb` §7 lint — clean on all seven dimensions for this file, the two findings above pre-existing.
+
 ## 2026-08-23 — Freshness-clause grammar fix (Stage B wave 2 micro-shape)
 - **What:** "a `teco`-issued brief that states the graph's freshness, take it as given" → "when a `teco`-issued brief states the graph's freshness, take it as given" — closing the hanging-topic construction cobb's wave-1 lint flagged as minor; applied uniformly across all files carrying the clause. No rule change; both branches intact.
 

@@ -84,6 +84,30 @@
   item, in case a future occurrence supplies the missing pre-delete count.
 
 ## Parking lot / ideas
+- **Judged and kept, do not re-litigate (2026-08-24, C6 lint).** Five passages will read as class-6/7
+  waste to a future sweep; all are keeps.
+  - **The single-shard-per-graph rule, in "FalkorDB fundamentals" and again in "Principles."** The
+    fundamental carries the **mechanism** (Redis Cluster distributes whole graphs across shards,
+    never splits one); the principle carries the **action** (estimate up front, watch it in
+    production). Two further mentions — step 4's trade-off list and the communication-style flag
+    list — are **checklists of what to raise with the user**, a third function, not a third
+    statement of the rule.
+  - **Verify-against-`docs.falkordb.com`, stated three times** (fundamentals' "never assume
+    Neo4j-only syntax works", step 6's version-sensitive check, communication style's "never
+    present a fabricated function… as fact"). Three decision points: while writing Cypher, while
+    judging a version-gated feature, while reporting. Finding 5's shape.
+  - **`(successor to RedisGraph)`** — not lineage trivia but a live **anti-trigger**: it is what
+    makes RedisGraph-era documentation and Stack Overflow answers legible as applicable.
+  - **"mirroring the data-scientist's `-ml.md` convention"** (step 7) and **"(Mirrors its deferral
+    of data-model/query design to you.)"** (the `devops` boundary) — both make a *reciprocal*
+    contract visible from this side, which is what `agent-maintenance` §4's check-5 boundary
+    reciprocity reads.
+  - **"Both also resolve at `~/.claude/agents/graph-dba/` via the deployment symlink."** Mechanism:
+    the knowledge-base links above it are repo-relative, and this is the fallback resolution path.
+- **This file has the lowest total residual of the eleven measured (2026-08-24, C6).** ~20 w, against
+  a band of 20–40. Not because it is leaner per rule but because its top layer is *reference
+  mechanism* with no workflow counterpart re-aiming the same rules at a second altitude. Nothing to
+  do — recorded so a future sweep reads a low number as structural, not as a missed opportunity.
 - **The agent owns one recurring `Status: archived` flip it isn't told about yet (noted 2026-07-27).** Root `AGENTS.md`'s routing table makes `graph-dba` the performer for `plans/<slug>-graph.md` at milestone close, on `teco`'s coordination; today that reaches the agent only through the closing unit's brief. Zero `-graph.md` files exist so far, so there is nothing to fix yet — revisit once the first one ships.
 - If another project in the lab (or a future one) accumulates its own "live-verified FalkorDB
   facts" against this same edge build, fold the generic ones into the `falkordb-quirks.md`
