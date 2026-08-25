@@ -826,6 +826,46 @@ agent and tool loads.
   this document; (3) spot behavioral probe — one representative dispatch per compressed heavy
   agent (e.g. a small architect plan, an analyst review of a small diff) checked for the *rules*
   still firing (CPG line present, verdict scale, finding format), not for output style.
+
+### Acceptance record (measured 2026-08-25, baseline `c160c50` — the commit before Stage A)
+
+**(1) `audit-team.sh` PASS**, with the two new advisory `NOTE`s from check 9 and check 10 green.
+
+**(2) Corpus.** Prompt bodies (frontmatter stripped) plus the three shared context files:
+
+| | Before | After | Δ | |
+|---|---|---|---|---|
+| 13 agent prompts | 30,459 | 29,285 | **−1,174** | −3.9% |
+| 3 shared context files | 5,560 | 5,348 | **−212** | −3.8% |
+| **Corpus** | **36,019** | **34,633** | **−1,386** | **−3.8%** |
+
+Largest movers: `teco` −585 (−10.0%), `claude/AGENTS.md` −180 (−9.7%), `devops` −156, `architect`
+−151 (−9.3%). **Three files ended *above* baseline and all three are honest:** `tico` +129 (K-008's
+two grant extensions — rules, landing after C2 compressed it), `falkor-chat/AGENTS.md` +33 (grew
++61 from other work between baseline and Stage E, which then removed 28), `coder` +12 (this plan
+added two rules to it and cut none — C6 measured it at floor and made zero edits).
+
+**The headline number understates the compression, and the gap is the plan working as designed.**
+Roughly **+375 w of deliberate rule additions** shipped *inside* this plan (Stage D +92, Stage E
+pass 3 +77, the conventions-precedence family +75, `security-expert` K-005 +50, `qa-engineer`
+K-006 +30, `coder` K-003 +26, `teco` +25) plus ~129 w from outside it. Gross removal is therefore
+**≈1,890 w (−5.2%)**, and the net is what a corpus looks like when a waste-reduction pass and a
+correctness pass run over the same files: §1's "zero rule loss" invariant held, and seven genuine
+rules were *added* because the sweeps surfaced them.
+
+**Against §1's original estimate (25–45% per heavy file): not met, and correctly so.** Findings 4,
+7 and 16 retired that band in stages — it was calibrated on narrative density the files stopped
+carrying after Stage B, and the only two files that ever saw a true first sweep (`claude/AGENTS.md`
+−9.7%, root `AGENTS.md`'s pre-amendment −8.8%) landed an order of magnitude above the Stage C
+rate. §7's rule governs: *a file above target with every rule intact passes; the band moves, not
+the file.*
+
+**(3) Behavioral probe — NOT DONE. This is the plan's one outstanding acceptance item.** Only C1
+pass 1's window was ever formally closed (two-round synthetic probe, 2026-08-24). Every other
+unit's observation window is *open but not overdue* — §6 gives 3 real dispatches or ~1 week, and
+the oldest unit is two days old. §5's own third bullet says to re-measure output density on the
+first post-Stage-E feature family rather than immediately, so this closes on real usage, not on a
+scheduled sweep. **Until it does, every unit here is `delivered`, not `closed`.**
 - Style change in *deliverables* is expected to lag prompt change (the register also lives in
   AGENTS.md and the docs the agents read) — re-measure output density (words/sentence, restatement
   count) on the first post-Stage-E feature family, not immediately.
