@@ -13,6 +13,7 @@ once here instead of drifting between two copies.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from .config import CallContext
@@ -72,6 +73,50 @@ def _safe_extract(
         )
     except Exception:  # noqa: BLE001 — background isolation: log, never propagate
         _log.exception("background extract failed (chunkId=%s)", chunk_id)
+
+
+def _schedule_chunk_processing(
+    schedule: Callable[..., None],
+    ws: str,
+    document_id: str,
+    chunks: list[dict[str, Any]],
+    *,
+    embed_worker: Any | None,
+    ingestion_pipeline: Any | None,
+) -> None:
+    """Schedule the per-chunk embed+extract background jobs for one ingested
+    document (K-050 M5 Stage 6a).
+
+    Factored out of `api.py`'s and `mcp.py`'s `ingest_document` handlers
+    (previously duplicated inline, one copy per transport) so the batch path
+    (`ingest_documents`, both transports) doesn't triple it into a third
+    copy — every caller now shares this one loop.
+
+    `schedule` is either transport's own scheduling primitive: REST passes
+    `starlette.BackgroundTasks.add_task`, MCP passes its own `_schedule`
+    module seam (itself swappable in tests for synchronous execution,
+    `mcp._default_schedule`'s docstring) — both match the `(fn, *args) ->
+    None` shape every `_safe_*` function above expects, so this helper stays
+    transport-agnostic.
+
+    `embed_worker`/`ingestion_pipeline` are each independently optional,
+    mirroring `ingest_document`'s existing posture exactly: neither wired is
+    a no-op, either wired schedules only that job per chunk, both wired
+    schedules both jobs per chunk, independently (neither blocks the other,
+    same as before this was factored out).
+    """
+    for chunk in chunks:
+        if embed_worker is not None:
+            schedule(
+                _safe_embed_chunk, embed_worker, ws, chunk["chunkId"], chunk["text"]
+            )
+        # K-050 M5 Stage 3: extraction is scheduled independently of embedding
+        # for the same chunk — neither blocks the other.
+        if ingestion_pipeline is not None:
+            schedule(
+                _safe_extract, ingestion_pipeline, ws,
+                chunk["chunkId"], document_id, chunk["text"],
+            )
 
 
 def _safe_fuse(

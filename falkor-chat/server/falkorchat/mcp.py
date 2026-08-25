@@ -18,10 +18,9 @@ from mcp.server.fastmcp import FastMCP
 from . import config
 from .background import (
     _safe_embed,
-    _safe_embed_chunk,
-    _safe_extract,
     _safe_respond,
     _safe_run_workflow,
+    _schedule_chunk_processing,
 )
 from .config import CallContext
 from .services import Services
@@ -79,6 +78,30 @@ def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
     half the real number; a bounded thread pool (batching each transport's
     fan-out instead of one-thread-per-(chunk × job)) is deferred to Stage 6,
     the same disposition Pass 2's original finding already had.
+
+    **The fan-out compounds by up to `MAX_BATCH_SIZE` (20x) as of K-050 M5
+    Stage 6a** (`docs/reviews/document-ingestion-impl.md` Pass 6 MAJOR):
+    `mcp.ingest_documents` calls `background._schedule_chunk_processing`
+    once per successfully-ingested item in a plain sequential loop over the
+    batch, so at the plan's own stated bounds (`MAX_BATCH_SIZE = 20`,
+    `MAX_DOCUMENT_CHARS = 500_000` ÷ ~850 effective chars/chunk ≈ 588
+    chunks/document) a single `ingest_documents` MCP call can now spawn on
+    the order of **~23,000 raw OS threads** (588 chunks × 2 jobs × 20
+    documents), sequentially and synchronously, inside the one tool handler,
+    before it returns — roughly 20x Stage 3's already-flagged ~1,000-1,200/
+    call number above. Still accepted for M1's lab-scale posture (same
+    reasoning as Stage 3's own doubling: REST is unaffected — cheap list
+    appends, bounded execution via anyio's worker-pool limiter later — and
+    every per-thread failure is already isolated by the try/except below),
+    but explicitly NOT re-mitigated here: `MAX_BATCH_SIZE = 20` bounds the
+    multiplier (it cannot grow further without either raising that cap or a
+    caller issuing more `ingest_documents` calls, which is no worse than the
+    pre-batch world of one `ingest_document` call per document) but does
+    nothing to shrink the per-call number itself. A bounded thread pool
+    (batching each transport's fan-out instead of one-thread-per-(chunk ×
+    job) — the same fix Stage 3 deferred, now 20x more overdue) remains the
+    real fix, deferred again pending a coordinator scope decision on whether
+    it belongs in this feature or a standalone follow-up K-item.
 
     **Thread-creation failures are caught here, not propagated (Pass 3 MAJOR
     2 fix (a)).** If OS thread creation itself fails
@@ -276,20 +299,46 @@ def ingest_document(
         source_label=source_label,
     )
     if _embed_worker is not None or _ingestion_pipeline is not None:
-        for chunk in _svc().list_document_chunks(ctx, document_id=receipt["documentId"]):
-            if _embed_worker is not None:
-                _schedule(
-                    _safe_embed_chunk, _embed_worker, ctx.ws,
-                    chunk["chunkId"], chunk["text"],
-                )
-            # K-050 M5 Stage 3: extraction is scheduled independently of
-            # embedding for the same chunk — neither blocks the other.
-            if _ingestion_pipeline is not None:
-                _schedule(
-                    _safe_extract, _ingestion_pipeline, ctx.ws,
-                    chunk["chunkId"], receipt["documentId"], chunk["text"],
-                )
+        chunks = _svc().list_document_chunks(ctx, document_id=receipt["documentId"])
+        _schedule_chunk_processing(
+            _schedule, ctx.ws, receipt["documentId"], chunks,
+            embed_worker=_embed_worker, ingestion_pipeline=_ingestion_pipeline,
+        )
     return receipt
+
+
+@mcp.tool()
+def ingest_documents(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Bulk-ingest multiple documents in one call (FR-11, K-050 M5 Stage 6a).
+
+    Each entry in `items` takes the same fields as `ingest_document`'s own
+    parameters: `text` (required), `title`, `source_format` (defaults
+    `"text"`), `source_label` (all optional except `text`). Returns **one
+    receipt per item**, in the same order as `items` — a per-item failure
+    (empty text, oversized text, unknown actor) does not abort the batch; it
+    comes back as that item's own `{"status": "error", "error": ...,
+    "errorType": ...}` receipt instead (`Services.ingest_documents`
+    docstring has the full reasoning). Chunk embedding/extraction is
+    scheduled the same as `ingest_document`, per chunk, for every
+    successfully-ingested item in the batch — never for an item that errored.
+    Cross-document fusion (AC-8) happens naturally once each item's
+    independent background extraction runs; no batch-local fusion logic is
+    needed (plan §3.6).
+    """
+    ctx = _get_context()
+    receipts = _svc().ingest_documents(ctx, documents=items)
+    if _embed_worker is not None or _ingestion_pipeline is not None:
+        for receipt in receipts:
+            if receipt.get("status") != "processing":
+                continue  # this item errored — nothing to schedule for it
+            chunks = _svc().list_document_chunks(
+                ctx, document_id=receipt["documentId"]
+            )
+            _schedule_chunk_processing(
+                _schedule, ctx.ws, receipt["documentId"], chunks,
+                embed_worker=_embed_worker, ingestion_pipeline=_ingestion_pipeline,
+            )
+    return receipts
 
 
 @mcp.tool()

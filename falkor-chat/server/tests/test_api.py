@@ -149,6 +149,51 @@ def test_ingest_document_empty_text_is_422(client):
     assert r.status_code == 422
 
 
+# ── K-050 M5 Stage 6a: bulk ingestion (FR-11) ────────────────────────────────────
+
+
+def test_ingest_documents_batch_returns_one_receipt_per_item(client):
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [
+            {"text": "first document", "title": "First"},
+            {"text": "second document", "title": "Second"},
+        ]},
+    )
+    assert r.status_code == 201
+    receipts = r.json()
+    assert len(receipts) == 2
+    assert all(rec["status"] == "processing" for rec in receipts)
+    ids = [rec["documentId"] for rec in receipts]
+    assert len(set(ids)) == 2
+
+    got0 = client.get(f"/documents/{ids[0]}").json()
+    got1 = client.get(f"/documents/{ids[1]}").json()
+    assert got0["text"] == "first document"
+    assert got1["text"] == "second document"
+
+
+def test_ingest_documents_batch_empty_list_is_422(client):
+    r = client.post("/documents/batch", json={"documents": []})
+    assert r.status_code == 422
+
+
+def test_ingest_documents_batch_over_max_size_is_422(client):
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [{"text": "x"} for _ in range(21)]},
+    )
+    assert r.status_code == 422
+
+
+def test_ingest_documents_batch_route_not_shadowed_by_document_id_route(client):
+    # Registration-order regression guard, same reasoning as `/documents/search`
+    # below: `/documents/batch` must resolve to the batch route, not
+    # `/documents/{document_id}` treating "batch" as an id.
+    r = client.post("/documents/batch", json={"documents": [{"text": "hi"}]})
+    assert r.status_code == 201
+
+
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
 
 
@@ -620,6 +665,71 @@ def test_default_app_ingest_document_has_no_extraction_wiring(client):
     # No ingestion_pipeline configured → ingest still succeeds, no crash.
     r = client.post("/documents", json={"text": "hello"})
     assert r.status_code == 201
+
+
+# ── K-050 M5 Stage 6a: batch scheduling shares the same helper ──────────────────
+
+
+def test_batch_ingest_schedules_every_chunk_of_every_document_for_embedding(wired):
+    client, worker, _ = wired
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [
+            {"text": "First doc, one paragraph."},
+            {"text": "Second doc.\n\nWith two paragraphs."},
+        ]},
+    )
+    assert r.status_code == 201
+    receipts = r.json()
+    total_chunks = sum(rec["chunkCount"] for rec in receipts)
+
+    assert len(worker.chunk_calls) == total_chunks
+    assert {ws for ws, _cid, _text in worker.chunk_calls} == {"test"}
+
+
+def test_batch_ingest_schedules_extraction_and_embedding_independently_per_item(
+    wired_ingestion,
+):
+    client, worker, pipeline = wired_ingestion
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [
+            {"text": "First doc."}, {"text": "Second doc."},
+        ]},
+    )
+    receipts = r.json()
+    total_chunks = sum(rec["chunkCount"] for rec in receipts)
+
+    assert len(worker.chunk_calls) == total_chunks
+    assert len(pipeline.calls) == total_chunks
+    # every scheduled extraction is attributed to its own document, not the batch
+    doc_ids = {rec["documentId"] for rec in receipts}
+    assert {document_id for _ws, _cid, document_id, _text in pipeline.calls} == doc_ids
+
+
+def test_batch_ingest_does_not_schedule_anything_for_a_failed_item(wired_ingestion):
+    client, worker, pipeline = wired_ingestion
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [{"text": "good document"}, {"text": "   "}]},
+    )
+    assert r.status_code == 201
+    receipts = r.json()
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+
+    # only the good document's chunk(s) were scheduled
+    assert len(worker.chunk_calls) == receipts[0]["chunkCount"]
+    assert len(pipeline.calls) == receipts[0]["chunkCount"]
+
+
+def test_default_app_batch_ingest_has_no_wiring(client):
+    # No embed_worker/ingestion_pipeline configured → batch still succeeds.
+    r = client.post(
+        "/documents/batch", json={"documents": [{"text": "hello"}, {"text": "world"}]}
+    )
+    assert r.status_code == 201
+    assert len(r.json()) == 2
 
 
 class _StubQueryEmbedder:

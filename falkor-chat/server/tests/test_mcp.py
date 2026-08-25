@@ -65,7 +65,7 @@ def test_tool_discovery_lists_all_tools(repo):
     assert {t.name for t in tools} == {
         "send_message", "read_messages", "create_thread",
         "search_messages", "create_channel", "list_channels", "list_threads",
-        "ingest_document", "get_document", "search_documents",
+        "ingest_document", "ingest_documents", "get_document", "search_documents",
         "list_pending_matches", "list_matches", "confirm_match",
         "reject_match", "recheck_match",
     }
@@ -494,6 +494,133 @@ def test_ingest_document_with_no_ingestion_pipeline_schedules_nothing(repo):
         "ingest_document", {"text": "hello"}
     )))
     assert posted["status"] == "processing"  # succeeds; nothing to assert-not-crash on
+
+
+# ── K-050 M5 Stage 6a: bulk ingestion (FR-11) ────────────────────────────────────
+
+
+def test_ingest_documents_tool_returns_one_receipt_per_item(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        receipts = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_documents",
+            {"items": [
+                {"text": "first document", "title": "First"},
+                {"text": "second document", "title": "Second"},
+            ]},
+        ))
+        got0 = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": receipts[0]["documentId"]}
+        ))
+        got1 = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": receipts[1]["documentId"]}
+        ))
+        return receipts, got0, got1
+
+    receipts, got0, got1 = asyncio.run(scenario())
+    assert len(receipts) == 2
+    assert all(rec["status"] == "processing" for rec in receipts)
+    assert got0["text"] == "first document"
+    assert got1["text"] == "second document"
+
+
+def test_ingest_documents_tool_isolates_a_per_item_failure(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_documents",
+        {"items": [{"text": "good document"}, {"text": "   "}]},
+    )))
+
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+    assert receipts[1]["errorType"] == "EmptyDocumentError"
+
+
+def test_ingest_documents_tool_isolates_a_malformed_item_missing_text(repo):
+    # Pass 6 review BLOCKER regression: MCP's `items: list[dict]` has no
+    # schema layer (unlike REST's `IngestDocumentIn`), so a missing "text"
+    # key used to raise a bare KeyError that aborted the whole batch call —
+    # driven here through the REAL mcp.call_tool path (not a direct
+    # Services call), asserting the tool returns receipts rather than
+    # raising a ToolError, and that the good sibling ahead of the malformed
+    # item still succeeds with its own receipt intact.
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_documents",
+        {"items": [
+            {"text": "good document one, has enough content."},
+            {"title": "oops no text key"},
+            {"text": "good document two."},
+        ]},
+    )))
+
+    assert len(receipts) == 3
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+    assert receipts[1]["errorType"] == "MalformedItemError"
+    assert receipts[2]["status"] == "processing"
+    # the two good documents are independently retrievable — not just
+    # "not crashed," genuinely still written and returned correctly
+    assert receipts[0]["documentId"] != receipts[2]["documentId"]
+
+
+def test_ingest_documents_tool_schedules_every_chunk_of_every_item_for_embedding(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingChunkWorker()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo, embed_worker=worker)
+        receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_documents",
+            {"items": [
+                {"text": "First para.\n\nSecond, longer paragraph."},
+                {"text": "Another document entirely."},
+            ]},
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    total_chunks = sum(rec["chunkCount"] for rec in receipts)
+    assert len(worker.calls) == total_chunks
+    assert {ws for ws, _cid, _text in worker.calls} == {"test"}
+
+
+def test_ingest_documents_tool_does_not_schedule_for_a_failed_item(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    worker = RecordingChunkWorker()
+    pipeline = RecordingIngestionPipeline()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo, embed_worker=worker, ingestion_pipeline=pipeline)
+        receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_documents",
+            {"items": [{"text": "good document"}, {"text": "   "}]},
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+    assert len(worker.calls) == receipts[0]["chunkCount"]
+    assert len(pipeline.calls) == receipts[0]["chunkCount"]
+
+
+def test_ingest_documents_tool_with_no_wiring_schedules_nothing(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)  # no embed_worker/ingestion_pipeline
+
+    receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_documents", {"items": [{"text": "hello"}]}
+    )))
+    assert receipts[0]["status"] == "processing"  # succeeds, nothing to crash on
 
 
 class _StubQueryEmbedder:

@@ -2031,11 +2031,12 @@ deliberately: that receipt stays at the documented `{documentId, chunkCount, sta
 Always traversed from an already-anchored `Document`, never independently scanned — no new index
 needed, same posture as `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
 
-### 14.4 MCP / REST surface (Stages 1-2 slice of plan §3.5)
+### 14.4 MCP / REST surface (Stages 1-2 slice of plan §3.5, bulk row added Stage 6a)
 
 | MCP tool | REST | Service method |
 |---|---|---|
 | `ingest_document(text, title=None, source_format="text", source_label=None)` | `POST /documents` | `services.ingest_document` |
+| `ingest_documents(items: list[dict])` | `POST /documents/batch` | `services.ingest_documents` |
 | `get_document(document_id)` | `GET /documents/{id}` | `services.get_document` |
 | `search_documents(query, limit=20)` | `GET /documents/search?q=` | `services.search_documents` |
 
@@ -2052,6 +2053,45 @@ when no `ModelGateway` is wired into this deployment — a configuration gap, no
 `GET /documents/search` is registered **before** `GET /documents/{document_id}` in `api.py` —
 Starlette matches routes in registration order, and the dynamic path would otherwise swallow the
 literal `search` segment as a `document_id`.
+
+**`ingest_documents` (FR-11 bulk ingestion, K-050 M5 Stage 6a, plan §3.6).** Loops
+`services.ingest_document` per item and returns **one receipt per item**, in the same order as
+the input — no new Cypher, no batch-aware fusion logic: each item is written through the exact
+same §14.1 `create_document` write path, and cross-document fusion (AC-8) falls out naturally
+once each item's independent background extraction runs, because §1.5/§1.7's fuzzy/exact-match
+lookups always read the graph's *current* state (including sibling documents from the same
+batch, once their entities land), never a batch-local view. Capped at `MAX_BATCH_SIZE = 20`
+(`BatchTooLargeError`, maps to REST 400) — enforced in the service, not only at the REST
+`IngestDocumentsIn` pydantic boundary, mirroring `MAX_DOCUMENT_CHARS`'s posture above. **Per-item
+failure isolation:** one bad item (empty text, oversized text, unknown actor) does not abort the
+batch — it comes back as that item's own `{"status": "error", "error": ..., "errorType": ...}`
+receipt, and chunk embedding/extraction is scheduled only for the items that actually succeeded
+(`services.py`'s `ingest_documents` docstring has the full reasoning). `POST /documents/batch` is
+registered **before** `GET /documents/{document_id}` in `api.py`, same static-before-dynamic
+reason as `/documents/search` above. **A malformed item** (missing/non-string `text`, or a
+non-dict entry — only reachable via MCP, since `IngestDocumentIn` guarantees `text: str` at the
+REST boundary) is isolated the same way, not a bare `KeyError`/`TypeError` escaping the batch
+(Pass 6 review BLOCKER fix) — it comes back as `{"status": "error", "errorType":
+"MalformedItemError", ...}`.
+
+`ingest_document`'s and `ingest_documents`' identical per-chunk embed+extract scheduling block —
+previously duplicated inline between `api.py` and `mcp.py` — is now one shared helper,
+`background._schedule_chunk_processing(schedule, ws, document_id, chunks, *, embed_worker,
+ingestion_pipeline)`, parameterized over each transport's own scheduling primitive
+(`BackgroundTasks.add_task` for REST, `mcp._schedule` for MCP) so a third call site (the batch
+routes above) didn't triple the duplication.
+
+**MCP thread fan-out compounds by up to 20x on the batch path (Pass 6 review MAJOR).** REST's
+`BackgroundTasks` scheduling is unaffected (cheap, bounded via anyio's worker-pool limiter), but
+MCP's `ingest_documents` calls the shared helper once per successfully-ingested item in a plain
+sequential loop, so `_default_schedule`'s already-flagged per-document fan-out (`mcp.py`'s own
+docstring, Stage 3: ~1,000-1,200 raw OS threads for a max-size document) now multiplies by up to
+`MAX_BATCH_SIZE = 20` — **~23,000 threads** for a max-size batch, sequentially, synchronously,
+inside one tool call, before it returns. `MAX_BATCH_SIZE` bounds the multiplier but does not
+shrink the per-call number; every per-thread failure is still isolated (`_default_schedule`'s
+try/except). Not re-mitigated in Stage 6a beyond this documentation — a bounded thread pool is the
+real fix, deferred (see `mcp.py`'s `_default_schedule` docstring for the full reasoning) pending a
+coordinator scope decision.
 
 ### 14.5 Entities & `RELATES_TO` (K-050 M5 Stage 3, FR-7a)
 

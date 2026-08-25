@@ -1191,3 +1191,328 @@ findings surfaced by this re-gate's own independent consumer sweep. The NIT (tie
 documentation) was also folded into this fix as requested, mirrored correctly in both
 `services.hybrid_search`'s docstring and `docs/QUERIES.md` §14.3 — no outstanding open questions
 remain from Pass 5.
+
+---
+
+## Pass 6 (2026-08-25) — Stage 6a diff-scoped code gate
+
+**Scope.** Diff-scoped code gate against the uncommitted working-tree changes implementing Stage 6a
+(FR-11 bulk `ingest_documents`) of `docs/plans/document-ingestion.md` — the sixth and final staged
+slice of K-050. Baseline: the locked plan §3.5 (MCP/REST write surface table, actor attribution,
+`MAX_BATCH_SIZE`/`MAX_DOCUMENT_CHARS` compounding note) and §3.6 ("loops the single-document path per
+item, returning one receipt per item... no special batch-aware fusion logic is needed"), plus the
+existing singular `ingest_document` implementation as the style/convention baseline. Files reviewed:
+`server/falkorchat/{services,mcp,api,schemas,background}.py`, `server/tests/{test_services,test_api,
+test_mcp,test_ingestion}.py`, `docs/QUERIES.md` §14.4. `docs/plans/document-ingestion-coordination.md`'s
+own diff (ledger rows) is the coordinator's own artifact, out of scope for this code gate.
+`docs/HISTORY.md`/`BACKLOG.md` are untouched by this diff (`git diff --stat` empty for both) — noted
+as a finding below, not assumed out of scope. Every claim below (Cypher/behavior fidelity, the two
+mutation-test claims, the manuals grep, the malformed-item reproduction) was independently executed in
+this session, not inherited from `coder`'s or the coordinator's report.
+
+**CPG:** considered, not relevant — `cpg_falkorchat` is stale (built 2026-08-17T00:40:42Z, 13 commits
+behind including all of Stages 1-5, per the brief's own freshness note) and this is a small,
+self-contained diff over freshly-read current files; read the files directly instead, as directed.
+
+**Verdict: needs changes.** One BLOCKER — the per-item error-isolation design (§3.6's own stated
+guarantee, restated in `Services.ingest_documents`'s docstring) does not actually hold for a malformed
+item on the MCP transport, the one transport the diff's own reasoning says needs the service-level
+guard. One MAJOR — the already-escalating MCP per-chunk thread fan-out (tracked across Pass 2/Pass 3)
+now compounds by up to 20x with no new mitigation or documentation, in the stage literally named
+"batch hardening." One MINOR — no `docs/HISTORY.md` entry, breaking the precedent every one of the
+five prior stages of this exact feature set. Everything else — §3.6 conformance, the shared-helper
+refactor/backport, the AC-8-at-batch-altitude test, `MAX_BATCH_SIZE` enforcement, route/schema
+conventions, both claimed mutation tests, and the manuals-grep claim — verified clean.
+
+### Findings
+
+**BLOCKER — a malformed batch item (missing/wrong-shaped `text`) raises an uncaught exception that
+aborts the whole batch, contradicting the design's own explicit "one bad document does NOT abort the
+whole batch" guarantee — and does so specifically on the MCP transport the guard was built for.**
+
+`Services.ingest_documents` (`services.py:1154-1164`) does:
+
+```python
+for doc in documents:
+    try:
+        receipt = self.ingest_document(
+            ctx, text=doc["text"], title=doc.get("title"), ...
+        )
+    except ServiceError as exc:
+        receipt = {"status": "error", "error": str(exc), "errorType": type(exc).__name__}
+    receipts.append(receipt)
+```
+
+`doc["text"]` is evaluated **before** the `try` can catch anything from `ingest_document` itself — a
+missing `"text"` key raises a bare `KeyError`, not a `ServiceError`, so it is not caught by the
+`except ServiceError` clause and propagates straight out of `ingest_documents`, aborting the loop
+mid-batch. Reproduced directly (no repo files modified — a pure in-process call against
+`Services(FakeRepo())`):
+
+```
+svc.ingest_documents(CTX, documents=[
+    {"text": "good document one, has enough content to make a chunk."},
+    {"title": "oops no text key"},
+    {"text": "good document two."},
+])
+→ KeyError: 'text'
+```
+
+The REST transport is protected — `IngestDocumentsIn.documents: list[IngestDocumentIn]` (pydantic)
+guarantees every item has a `text: str` field before `Services.ingest_documents` is ever called, so
+this is unreachable via `POST /documents/batch`. But the **MCP** tool
+(`mcp.py`'s `ingest_documents(items: list[dict[str, Any]])`) takes raw dicts with zero schema
+validation — exactly the transport `Services.ingest_documents`'s own docstring and `BatchTooLargeError`'s
+docstring both cite as the reason service-level enforcement exists ("an MCP caller has no schema layer
+at all"). Confirmed the exception genuinely reaches an MCP caller, not just the bare `Services` call:
+read `mcp.server.fastmcp.tools.base.Tool.run` — any exception the tool function raises (other than
+`UrlElicitationRequiredError`) is caught by a generic `except Exception` and re-raised as `ToolError`,
+so `mcp.call_tool("ingest_documents", ...)` itself raises rather than returning per-item receipts.
+
+The consequence is worse than a clean rejection: `doc0` in the reproduction above (a genuinely valid
+item, listed *before* the malformed one) is already written to the graph — `Services.ingest_document`
+completed and returned before the loop moved to `doc1` — but its receipt is never appended, since the
+exception aborts the function before `return receipts` is reached. The caller gets a bare `ToolError:
+'text'` with no indication a `Document` was created, and no id to look it up by. This is a strictly
+worse outcome than Pass 1's original empty-document finding (a discoverable, if stuck, `Document`) —
+here the write is undiscoverable from the response at all. No test in any of the four touched test
+files (`test_services.py`, `test_api.py`, `test_mcp.py`, `test_ingestion.py`) exercises a
+missing-key/wrong-shaped item — every isolation test uses a `ServiceError`-raising shape
+(`EmptyDocumentError`, `DocumentTooLargeError`, `UnknownActorError`), confirmed by grep.
+
+**Suggested fix:** validate each item's shape before dispatching to `ingest_document` (e.g.
+`if not isinstance(doc, dict) or not isinstance(doc.get("text"), str): receipt = {"status": "error",
+"errorType": "MalformedItem", ...}; continue` ahead of the existing `try`), or widen the `except`
+clause to catch the shape-access errors too (`except (ServiceError, KeyError, TypeError,
+AttributeError)`) and report a distinct `errorType`. Either way, add a regression test that drives it
+through the **actual MCP `call_tool` path** (not just a direct `Services` call) — `mcp.py`'s
+`_configure`/`_unwrap` test harness already used by the sibling isolation tests in `test_mcp.py` is the
+natural place — asserting the batch still returns one receipt per item (the good ones `"processing"`,
+the malformed one `"status": "error"`) rather than raising.
+
+**MAJOR — the per-chunk MCP thread fan-out, already escalated once (Pass 2 → Pass 3, ~500 → ~1,000-
+1,200 threads/call), now compounds by up to 20x with no new mitigation and no documentation update, in
+the one stage whose own name is "batch hardening."**
+
+`_schedule_chunk_processing` (factored out, verified byte-identical to the pre-existing per-document
+scheduling logic — see "Verified claims" below) is invoked once per successfully-ingested item inside
+`mcp.py`'s `ingest_documents` tool, in a plain sequential loop over the batch. At the plan's own stated
+bounds (`MAX_BATCH_SIZE = 20`, `MAX_DOCUMENT_CHARS = 500_000` ÷ ~850 effective chars/chunk ≈ 588
+chunks/document), a single `ingest_documents` MCP call can now spawn on the order of **~23,000 raw OS
+threads** (588 chunks × 2 jobs × 20 documents), sequentially, synchronously, inside the tool handler,
+before it returns — roughly 20x Pass 3's already-flagged ~1,000-1,200/call number, and squarely the
+exact compounding the plan's own §3.5 "Bounds" note named and explicitly deferred to real-usage
+revisit ("20 documents... 12,000 background extraction LLM calls from a single MCP/REST call... revisit
+if real usage makes the compounded fan-out a practical problem"). Stage 6a is that revisit point by the
+coordination doc's own framing (the overall Stage 6 heading is literally "batch hardening"), and no
+mitigation landed: `_default_schedule`'s existing per-thread try/except (from U16, Pass 3's fix) still
+catches an individual thread-start failure, but nothing bounds or pools the fan-out itself, and neither
+`services.ingest_documents`'s docstring (which is thorough about error-isolation but silent on resource
+fan-out) nor the new `docs/QUERIES.md` §14.4 batch section mentions the multiplier at all — a regression
+from Pass 3's own fix, which *did* update both the docstring and `QUERIES.md` with the exact number
+when it doubled. Not calling this a BLOCKER — REST's `BackgroundTasks` path is unaffected (cheap list
+appends, bounded execution via anyio's worker-pool limiter later), the per-thread failure mode is
+already isolated since U16, and 6a's own ledger scope (`document-ingestion-coordination.md` §Stage 6)
+never explicitly asked this unit to build the pooling/batching redesign — but the number crossing from
+"thousands" to "tens of thousands" per call, unmentioned anywhere, in the stage whose stated purpose is
+hardening this exact concern, is worth a decision rather than a silent pass-through to Stage 6c's QA
+acceptance. **Suggested improvement**, cheapest first: (a) at minimum, add the new order-of-magnitude
+number to `_schedule_chunk_processing`'s or `mcp.ingest_documents`'s docstring and `QUERIES.md` §14.4,
+mirroring Pass 3's own precedent, so the "accepted for M1 lab-scale" framing isn't silently reasoning
+about a stale number a third time; (b) better — this is the natural point to build the bounded-pool
+fix three passes have now deferred here, if the coordinator judges Stage 6a's scope should absorb it
+rather than push it to a follow-up K-item.
+
+**MINOR — no `docs/HISTORY.md` entry for Stage 6a, breaking this exact feature's own five-stage
+precedent.** `git diff --stat -- docs/HISTORY.md` is empty. Every one of Stages 1-5 of this same K-050
+effort added its own dated `HISTORY.md` entry as part of the stage's own diff (confirmed via
+`docs/HISTORY.md`'s existing `## 2026-08-2X — K-050 M5 Stage N: ...` entries for Stages 3-5, and this
+review's own Pass 1-5 records listing "`docs/HISTORY.md`'s new Stage N entry" among files reviewed each
+time) — root `AGENTS.md`'s own convention states `HISTORY.md` gets "an entry for every delivered
+change." Cheap to add before this lands; not blocking on its own, but should land alongside the
+BLOCKER/MAJOR fixes above rather than separately.
+
+### Verified claims (evidence, not trust)
+
+- **§3.6 conformance — genuinely just a loop over the existing single-document path, no batch-aware
+  fusion shortcut.** `Services.ingest_documents` (`services.py:1140-1164`) calls
+  `self.ingest_document(...)` per item unconditionally — no new Cypher, no batch-scoped lookup, no
+  shared state threaded across items beyond the accumulating `receipts` list. `grep -n "SAME_AS\|fus"
+  services.py` inside the new method's body: zero hits. Confirmed against the new
+  `test_batch_ingest_two_documents_mentioning_the_same_entity_fuse` test (below) that fusion genuinely
+  happens through the *ordinary*, already-verified `create_entity_with_auto_match` path once each
+  item's own background extraction runs — nothing new was built for it, matching the plan's own
+  stated rationale verbatim.
+- **Receipt-per-item contract — one receipt per input document, in order, confirmed both in isolation
+  and end to end.** `test_ingest_documents_returns_one_receipt_per_item_in_order`
+  (`test_services.py`) and the REST/MCP mirrors assert `len(results) == len(documents)` with each
+  item's own `title`/`documentId` traceable back to its input position — read directly, not inferred
+  from the docstring's claim.
+- **`MAX_BATCH_SIZE` enforced below the schema layer, matching the `MAX_DOCUMENT_CHARS` precedent
+  exactly.** `Services.ingest_documents` raises `BatchTooLargeError` itself
+  (`services.py:1149-1153`) before any item is processed, independent of
+  `IngestDocumentsIn.documents = Field(..., max_length=MAX_BATCH_SIZE)`'s REST-boundary check — the
+  same "both transports bound by the identical constant, imported from `schemas.py`" shape
+  `MAX_DOCUMENT_CHARS`/`DocumentTooLargeError` already established, confirmed by reading both call
+  sites side by side. `test_ingest_documents_rejects_batch_over_max_size` (service layer, asserts
+  `repo.documents == {}` — rejected before any write) and `test_ingest_documents_batch_over_max_size_is_422`
+  (REST) both real, non-vacuous tests.
+- **`_schedule_chunk_processing` factor-out and backport are behavior-preserving — confirmed by
+  reading the removed/added code side by side, not just trusting the refactor's own docstring.** The
+  code deleted from `api.py`'s and `mcp.py`'s singular `ingest_document` handlers
+  (the `for chunk in ...: if embed_worker is not None: ...; if ingestion_pipeline is not None: ...`
+  blocks) is reproduced verbatim inside `background._schedule_chunk_processing`
+  (`background.py:78-121`) — same conditionals, same argument order, same
+  `_safe_embed_chunk`/`_safe_extract` calls, same "K-050 M5 Stage 3" doc-comment carried over. Both
+  transports' `ingest_document` handlers now call the shared helper with their own `schedule`
+  primitive (`background.add_task` for REST, `mcp._schedule` for MCP) passed as a plain callable
+  parameter — genuinely transport-agnostic, not a leaky abstraction. **Mutation-tested myself** (not
+  trusting the report): reverted `for doc in documents:` to `for doc in documents[:1]:` in
+  `services.py` — `11 failed, 11 passed` (the exact count `coder` claimed), spanning all four test
+  files (`test_services.py`, `test_api.py`, `test_mcp.py`, `test_ingestion.py`'s new batch-fusion
+  test); reverted `for chunk in chunks:` to `for chunk in chunks[:0]:` in `background.py`'s
+  `_schedule_chunk_processing` — `11 failed, 1736 passed` (again the exact claimed count), spanning
+  both transports' singular *and* batch scheduling tests (confirming the backport genuinely shares one
+  code path, not two independently-passing copies). Both mutations reverted via `sed` back to the
+  original line, `git diff --stat` confirmed identical to the pre-mutation diff afterward, full suite
+  back to `1747 passed, 4 deselected`.
+- **The new AC-8-at-batch-altitude test genuinely exercises the real bulk API and asserts real fusion.**
+  `test_batch_ingest_two_documents_mentioning_the_same_entity_fuse`
+  (`test_ingestion.py:502-556`) calls `Services.ingest_documents` directly (not `extract_chunk` again),
+  asserts the receipt-per-item contract and per-item `Document.status` independently, then completes
+  each item's extraction synchronously via `IngestionPipeline.extract_chunk` (no scheduler wired, same
+  posture as every other `IngestionPipeline` test in the file) and asserts `entity_count == 2` /
+  `edge_count == 1` via `MATCH ()-[r:SAME_AS {status:'confirmed'}]->() RETURN count(r)` — a genuinely
+  confirmed fusion edge, not a weaker "some relationship exists" check. This is the batch-API-surface
+  proof the coordination doc's own Stage 6a scope note asked for, distinct from the pre-existing
+  pipeline-altitude AC-8 test.
+- **Route/schema conventions fit.** `POST /documents/batch` is registered before `GET
+  /documents/{document_id}` (`api.py:163,193,234`) — though, read closely, this specific pair can never
+  actually collide (different HTTP methods: `POST` vs `GET`), so the comment's stated rationale is
+  slightly over-stated versus the real risk, but the practice itself is harmless and consistent with
+  the existing `/documents/search` precedent it mirrors. `IngestDocumentsIn`'s `min_length=1`/
+  `max_length=MAX_BATCH_SIZE` correctly reject an empty or oversized batch at 422
+  (`test_ingest_documents_batch_empty_list_is_422`,
+  `test_ingest_documents_batch_over_max_size_is_422`, both read and confirmed non-vacuous).
+- **`docs/QUERIES.md` §14.4's new content is accurate against the shipped code**, read side by side —
+  the `MAX_BATCH_SIZE`/`BatchTooLargeError`→400 claim, the per-item isolation description, and the
+  shared-helper signature all match; the one gap (no fan-out multiplier disclosed) is the MAJOR finding
+  above, not an inaccuracy.
+- **The manuals claim holds.** `grep -rln "ingest_document" docs/manuals/` returns nothing — no
+  existing manual documents the singular tool either, confirmed rather than accepted on `coder`'s word.
+- **No injection-shaped risk, no meaningful error-message leak.** Batch items thread through the exact
+  same parameterized `create_document` Cypher the singular path already uses (no new query shape); the
+  per-item error receipt's `"error": str(exc)` surfaces only the same generic, non-sensitive messages
+  (`EmptyDocumentError`, `DocumentTooLargeError`, `UnknownActorError`) the singular path already
+  returns to REST/MCP callers today — nothing new is exposed by batching them.
+- **Scope discipline is otherwise clean.** `git diff --stat` matches the brief's file list exactly (5
+  server modules + 4 test files + 1 doc); `document-ingestion.md`/`-graph.md`/`-ml.md`/`BACKLOG.md` are
+  untouched (confirmed via empty `git diff --stat`), matching the diff's own implicit scope claim.
+- **Suites re-run myself, match the coordinator's counts exactly.** Offline: `1747 passed, 4
+  deselected` (both before and after the two mutation-test round trips, confirming clean restoration).
+
+### What's solid (beyond the verified claims above)
+
+- The `Services.ingest_documents` docstring is unusually thorough about the *design decision* it's
+  making (per-item isolation, batch-size-boundary all-or-nothing vs. item-level partial-success) —
+  exactly the kind of explicit, documented trade-off this review family has repeatedly asked for, even
+  though the BLOCKER finding shows the implementation doesn't fully deliver on it yet.
+- Layering discipline is native: `services.py` owns the one new invariant (`BatchTooLargeError`,
+  per-item isolation), `api.py`/`mcp.py` stay thin adapters differing only in scheduling primitive, the
+  shared `background._schedule_chunk_processing` helper is a clean, non-leaky abstraction — the exact
+  Stage 1-5 precedent this stage extends, not a new pattern.
+- Test volume for the parts that *are* covered is thorough, not padding: separate tests for in-order
+  receipts, defaults mirroring the singular path, three distinct isolated-failure shapes
+  (`EmptyDocumentError`/`DocumentTooLargeError`/`UnknownActorError`), at-the-limit and over-the-limit
+  batch sizing, empty-batch handling, and scheduling-skipped-for-failed-items — across all four
+  transports/layers, not just one.
+
+### Open questions
+
+- **The BLOCKER's fix location** — same shape of question Pass 5 asked about `tools.py`: this is a
+  narrow, mechanical fix (item-shape validation ahead of the existing per-item `try`) squarely inside
+  Stage 6a's own file list, so resuming the same `coder` agent seems like the natural routing, not a
+  fresh unit.
+- **The MAJOR's disposition** — coordinator's call on whether the cheap doc-update mitigation (a)
+  should land now alongside the BLOCKER fix, or whether the fuller pooling/batching redesign (b) is
+  worth pulling into Stage 6a's own scope now that "batch hardening" is literally what this stage is
+  for, versus deferring it once more to a dedicated follow-up K-item with an explicit note (rather than
+  a fourth silent slide).
+
+### Re-gate (2026-08-25) — BLOCKER fixed and independently re-verified, MAJOR's documentation-only disposition accepted, MINOR closed
+
+Re-verified independently — not relying on `coder`'s report or the coordinator's own pre-check, per
+this codebase's standing practice that the gate closes a finding, not a self-report. Read every
+changed diff in full (`services.py`, `mcp.py`, `docs/QUERIES.md`, `docs/HISTORY.md`, all four touched
+test files), mutation-tested the BLOCKER's fix myself against my own original repro (not `coder`'s
+description of it), and re-ran the full suite myself.
+
+**BLOCKER (malformed-item isolation) — confirmed fixed.** `Services.ingest_documents`
+(`services.py:1169-1183`) now checks `not isinstance(doc, dict) or not isinstance(doc.get("text"),
+str)` **before** dispatching to `ingest_document`, converting a malformed item into its own
+`{"status": "error", "errorType": "MalformedItemError", ...}` receipt instead of letting a bare
+`doc["text"]` raise; the `except` clause is also widened to `(ServiceError, KeyError, TypeError,
+AttributeError)` as defense in depth. **Mutation-tested against my own exact Pass 6 repro** (not
+trusting the report): reverted the block to the precise pre-fix shape (bare `doc["text"]` access, `except
+ServiceError` only — done via a scripted Python text-replace, not `git checkout`, to avoid touching
+any other line in the diff), ran the four new regression tests
+(`test_services.py::test_ingest_documents_isolates_a_malformed_item_missing_text_key`,
+`::test_ingest_documents_isolates_a_non_string_text_item`, `::test_ingest_documents_isolates_a_non_dict_item`,
+`test_mcp.py::test_ingest_documents_tool_isolates_a_malformed_item_missing_text`) — **all four failed**
+against the mutant, one with a live `TypeError: string indices must be integers, not 'str'` propagating
+out of the real `mcp.call_tool(...)` boundary (the same class of uncaught-exception failure my original
+`KeyError` repro demonstrated, confirming the fix's boundary-level claim, not just the service-level
+one) — then restored the exact pre-mutation text via a second scripted replace and confirmed the full
+offline suite green again (**1751 passed, 4 deselected**, matching the coordinator's count exactly,
+before and after the mutation round trip). The new `test_mcp.py` test genuinely exercises the real MCP
+tool-dispatch path (`mcp_mod.mcp.call_tool("ingest_documents", ...)`, the same harness the sibling
+isolation tests already use) rather than a direct `Services` call — closing exactly the gap the BLOCKER
+finding named (verified via FastMCP's `Tool.run`, which wraps any propagated exception in `ToolError`
+regardless of which layer raises it, so this is a genuine end-to-end regression guard, not a narrower
+proxy for one). No other file changed beyond `services.py`, `mcp.py` (docstring only, see below),
+`docs/QUERIES.md`, `docs/HISTORY.md`, and the two test files — `api.py`/`background.py`/`schemas.py`
+are byte-identical to Pass 6's own diff (confirmed via `git diff`), so the fix stayed scoped, no
+drive-by changes.
+
+**MAJOR (thread fan-out compounding) — documentation-only disposition accepted, not blocking.**
+`mcp.py`'s `_default_schedule` docstring now states the compounded ~23,000-thread number and its exact
+derivation (588 chunks × 2 jobs × 20 documents) verbatim, matching what this pass's own finding
+computed; `docs/QUERIES.md` §14.4 gained a mirrored paragraph. No scheduling redesign landed. Judged
+acceptable at this gate, for reasons distinct from a rubber stamp: (1) unlike Stage 3's doubling (which
+this review's Pass 3 escalated specifically because it introduced a *new, previously-absent*
+uncaught-exception failure mode), Stage 6a's compounding introduces no new qualitative failure mode —
+every per-thread failure was already isolated by U16's try/except fix, confirmed unchanged in this
+diff; (2) the multiplier is hard-bounded by `MAX_BATCH_SIZE = 20`, not unbounded growth — an operator
+can lower that constant if the resource ceiling becomes a real deployment concern, unlike an open-ended
+risk; (3) REST is structurally unaffected; (4) the coordinator's own stated reasoning — that the fuller
+fix touches shared `_default_schedule`/`_schedule` machinery also used by `send_message`, making it a
+cross-cutting scheduling rework rather than a Stage-6a-scoped fix — is accurate (confirmed by reading
+`_default_schedule`'s call sites: it's the one seam every MCP background job in this codebase
+schedules through, not something `ingest_documents` privately owns); (5) the disposition mirrors direct
+precedent — Pass 3's own re-gate accepted "documented, not reduced" as sufficient once the qualitative
+gap was separately closed, which is the same shape of outcome here. Not treating this as fully closed,
+though: the compounding has now been named and deferred across three consecutive passes (Pass 2, Pass
+3, this one) with the actual fix never landing — worth an explicit coordinator decision on whether it
+becomes a scoped follow-up K-item with its own tracked deadline, rather than remaining an
+always-technically-non-blocking note that could keep sliding indefinitely. That's a scope/prioritization
+call, not a gate-blocking code defect, so it doesn't hold this verdict.
+
+**MINOR (missing `docs/HISTORY.md` entry) — confirmed closed.** Read the new
+`## 2026-08-25 — K-050 M5 Stage 6a: document ingestion — bulk ingestion (FR-11)` entry end to end:
+matches the Stage 3/5 entries' format (What/Diff-gate findings structure), accurately restates the
+build and all three Pass 6 findings/fixes against what's actually shipped (spot-checked the entry's
+own description of the BLOCKER against the real diff — matches), and is dated correctly.
+
+**Suites re-run myself, match the coordinator's count exactly.** Offline: `1751 passed, 4 deselected`
+(1747→1751: the four new malformed-item regression tests), both before and after this pass's own
+mutation-test round trip (confirming clean restoration, no residual drift).
+
+**Updated verdict: approve.** The BLOCKER is genuinely fixed and mutation-confirmed against this
+review's own original reproduction, at the real MCP tool-call boundary, not just the bare `Services`
+layer. The MAJOR's lighter, documentation-only disposition is judged adequate for the reasons above —
+a real but bounded, well-isolated, honestly-quantified trade-off, not a silently-growing risk — with an
+explicit non-blocking recommendation that the coordinator convert the three-passes-deferred pooling
+redesign into a tracked follow-up rather than a fourth open-ended slide. The MINOR is closed. No new
+issues surfaced by this re-gate's own independent mutation test or file-scope check. **Stage 6a is
+done: implementation + diff-scoped gate + BLOCKER/MAJOR/MINOR fixes + re-gate, all independently
+verified.** Clears the way for `qa-engineer`'s Stage 6c acceptance pass over AC-1..AC-10 to close M5.

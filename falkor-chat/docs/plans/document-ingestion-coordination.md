@@ -51,6 +51,10 @@ design, confirmed by the stakeholder 2026-08-22).
 | U23 | `analyst` | `a21a439e02926453a` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 5 | code gate → **needs changes** | 138k tok / 52 tools |
 | U24 | `coder` | `a230563f056d3d9de` (resumed) | accepted | fix U23's BLOCKER (tools.py `GraphragRetrieveTool` KeyError on Chunk seed) + 2 MINORs (eval-harness same pattern; AC-5 live-e2e gap) + NIT (tie-break/latency doc note) | `analyst` (Pass 5 re-gate, U25) → **approve** | 319k tok / 59 tools |
 | U25 | `analyst` | `a21a439e02926453a` (resumed) | accepted | Pass 5 re-gate of U24's fixes | code re-gate → **approve** | 178k tok / 29 tools |
+| U26 | `coder` | `aa1d16116dbc910fe` | delivered | Stage 6a: `ingest_documents` (MCP+REST+service), shared `_schedule_chunk_processing`, batch AC-8 test, QUERIES.md §14.4 | `analyst` (Pass 6) → — | 193k tok / 108 tools |
+| U27 | `analyst` | `a1eaeac5da1a10786` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 6 | code gate → **needs changes** (1 BLOCKER, 1 MAJOR, 1 MINOR) | 153k tok / 55 tools |
+| U28 | `coder` | `aa1d16116dbc910fe` (resumed) | delivered | fix Pass 6 BLOCKER (malformed-item isolation) + MAJOR (fan-out doc note) + MINOR (HISTORY.md) | `analyst` (Pass 6 re-gate) → — | 228k tok / 136 tools |
+| U29 | `analyst` | `a1eaeac5da1a10786` (resumed) | queued | Pass 6 re-gate of U28's fixes | code re-gate → — | — |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -378,18 +382,33 @@ and fixed, Pass 2 **approve**. Committed as one design-phase change: `30366f4` (
 ML note, review, `BACKLOG.md` K-050/M5 entries, `claude/graph-dba/falkordb-quirks.md` additions,
 this coordination doc).
 
-## Plan — implementation phase (not yet dispatched)
+## Plan — implementation phase
 
 1. ~~**U1-U8 — design phase**~~ ✅ complete, see above.
-2. **Implementation** — sized to the plan's own 6-stage step table (`document-ingestion.md` §4):
-   Stage 1 (chunking + Document/Chunk write path), Stage 2 (chunk embeddings + standalone search),
-   Stage 3 (extraction), **checkpoint** (advisory `data-scientist` qualitative review of real
-   extraction output, non-blocking), Stage 4 (fusion — the atomic `create_entity_with_auto_match` +
-   fuzzy/suggested tier + audit surface), Stage 5 (chat-grounding integration, touches
-   `test_provenance.py`), Stage 6 (batch hardening + QA acceptance). Likely one unit per stage or a
-   small adjacent-stage cluster, per the step-table sizing rule — not yet dispatched, pending a
-   stakeholder decision on how much to build now (see report to user).
-3. **Diff-scoped re-gate** — `analyst`, after implementation (a second, code-level gate distinct
-   from the design-phase plan gate above).
-4. **QA acceptance pass** — `qa-engineer`, against AC-1..AC-10 (`docs/test-plans/document-ingestion.md`
-   + `-report.md`).
+2. ~~**Stages 1-5**~~ ✅ complete, diff-gated, committed — see the ledger (U9-U25) and "Notes from
+   delivered units" above.
+3. **Stage 6 — in progress.** `teco`'s pre-dispatch orientation (2026-08-25) found a real scope gap,
+   not just a test gap: **FR-11 bulk `ingest_documents` was never implemented in Stages 1-5** —
+   `grep -rn "def ingest_documents" server/falkorchat/*.py` returns nothing, and neither `mcp.py`
+   nor `api.py` register a plural/bulk route; only the singular `ingest_document` (Stage 1) exists.
+   Plan §3.6 already specifies the design ("loops the single-document path per item, returning one
+   receipt per item... no special batch-aware fusion logic is needed"), so this is implementation
+   against an already-gated spec, not a design question. Stage 6 is therefore split:
+   - **6a (U26, `coder`)** — implement `ingest_documents` (MCP tool + REST route + service method),
+     looping `services.ingest_document` per item exactly per §3.6, mirroring the existing
+     `ingest_document` background-scheduling block in both `api.py` and `mcp.py` (currently
+     duplicated inline in each — factor into a shared helper rather than tripling the duplication).
+     Confirm batch semantics under a real multi-document fixture with cross-document entity overlap
+     (the AC-8 scenario, this time through the actual bulk endpoint — `test_ac8_...` in
+     `test_ingestion.py` already proves the *fusion* wiring at pipeline altitude via direct
+     `extract_chunk` calls, but not the batch API surface itself, background scheduling, or
+     `Document.status` per item in a batch).
+   - **6b (`analyst`)** — diff-scoped re-gate (Pass 6), same pattern as Stages 1-5.
+   - **6c (`qa-engineer`)** — full acceptance pass against AC-1..AC-10, versioned test plan + report
+     (`docs/test-plans/document-ingestion.md` + `-report.md`), mirroring the K-015/K-025/K-036
+     pattern. Gates M5 ✅.
+   - **CPG freshness (checked 2026-08-25):** `cpg_falkorchat`, built `2026-08-17T00:40:42Z`,
+     scratch-copy (no `sourceCommit`) — **stale**: 13 commits have touched `falkor-chat/server`
+     since build, including all of Stages 1-5 of this very feature. Flagged to 6a/6b rather than
+     trusted silently; `coder`/`analyst` should read the actual files, not lean on `cpg-analysis`
+     for structural claims about the new ingestion code.

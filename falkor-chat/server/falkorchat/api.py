@@ -14,10 +14,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 
 from .background import (
     _safe_embed,
-    _safe_embed_chunk,
-    _safe_extract,
     _safe_respond,
     _safe_run_workflow,
+    _schedule_chunk_processing,
 )
 from .config import CallContext
 from .config import get_context as _resolve_context
@@ -27,6 +26,7 @@ from .schemas import (
     CreateChannelIn,
     CreateThreadIn,
     IngestDocumentIn,
+    IngestDocumentsIn,
     PostMessageIn,
     PublishWorkflowDefIn,
     StartWorkflowRunIn,
@@ -177,20 +177,47 @@ def build_router(
             chunks = services.list_document_chunks(
                 ctx, document_id=receipt["documentId"]
             )
-            for chunk in chunks:
-                if embed_worker is not None:
-                    background.add_task(
-                        _safe_embed_chunk, embed_worker, ctx.ws,
-                        chunk["chunkId"], chunk["text"],
-                    )
-                # K-050 M5 Stage 3: extraction is scheduled independently of
-                # embedding for the same chunk — neither blocks the other.
-                if ingestion_pipeline is not None:
-                    background.add_task(
-                        _safe_extract, ingestion_pipeline, ctx.ws,
-                        chunk["chunkId"], receipt["documentId"], chunk["text"],
-                    )
+            _schedule_chunk_processing(
+                background.add_task, ctx.ws, receipt["documentId"], chunks,
+                embed_worker=embed_worker, ingestion_pipeline=ingestion_pipeline,
+            )
         return receipt
+
+    # K-050 M5 Stage 6a (FR-11): bulk variant of the route above — loops the
+    # same `Services.ingest_document` path per item (`Services.ingest_documents`
+    # docstring), one receipt per item, an item's failure isolated to its own
+    # receipt rather than aborting the batch. Registered BEFORE
+    # `/documents/{document_id}` for the same static-before-dynamic reason as
+    # `/documents/search` below — `/documents/batch` would otherwise be
+    # swallowed by `{document_id}` treating "batch" as an id.
+    @router.post("/documents/batch", status_code=201)
+    def ingest_documents(
+        body: IngestDocumentsIn, background: BackgroundTasks,
+        ctx: CallContext = Depends(get_context),
+    ):
+        receipts = services.ingest_documents(
+            ctx,
+            documents=[
+                {
+                    "text": item.text, "title": item.title,
+                    "source_format": item.sourceFormat,
+                    "source_label": item.sourceLabel,
+                }
+                for item in body.documents
+            ],
+        )
+        if embed_worker is not None or ingestion_pipeline is not None:
+            for receipt in receipts:
+                if receipt.get("status") != "processing":
+                    continue  # this item errored — nothing to schedule for it
+                chunks = services.list_document_chunks(
+                    ctx, document_id=receipt["documentId"]
+                )
+                _schedule_chunk_processing(
+                    background.add_task, ctx.ws, receipt["documentId"], chunks,
+                    embed_worker=embed_worker, ingestion_pipeline=ingestion_pipeline,
+                )
+        return receipts
 
     # Registered BEFORE `/documents/{document_id}`: Starlette matches routes in
     # registration order, and `{document_id}` would otherwise swallow a literal

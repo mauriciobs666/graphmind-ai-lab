@@ -17,11 +17,12 @@ from falkorchat import config
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.repository import DocumentWriteStatus, MessageWriteStatus
-from falkorchat.schemas import MAX_DIFF_PREVIEW
+from falkorchat.schemas import MAX_BATCH_SIZE, MAX_DIFF_PREVIEW
 from falkorchat.services import (
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
     RAG_QUERY_TIMEOUT_MS,
+    BatchTooLargeError,
     ChannelNotFoundError,
     DocumentTooLargeError,
     EmptyDocumentError,
@@ -564,6 +565,183 @@ def test_ingest_document_known_agent_actor_source_kind_agent():
     result = svc.ingest_document(ctx, text="hello")
 
     assert repo.documents[result["documentId"]]["sourceKind"] == "agent"
+
+
+# ── ingest_documents (K-050 M5 Stage 6a, FR-11 bulk ingestion) ──────────────────
+
+
+def test_ingest_documents_returns_one_receipt_per_item_in_order():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "first document", "title": "First"},
+            {"text": "second document", "title": "Second"},
+        ],
+    )
+
+    assert len(results) == 2
+    assert all(r["status"] == "processing" for r in results)
+    ids = [r["documentId"] for r in results]
+    assert len(set(ids)) == 2  # distinct documents, not one item overwriting another
+    assert repo.documents[ids[0]]["title"] == "First"
+    assert repo.documents[ids[1]]["title"] == "Second"
+
+
+def test_ingest_documents_defaults_mirror_ingest_document():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    [result] = svc.ingest_documents(CTX, documents=[{"text": "x"}])
+
+    doc = repo.documents[result["documentId"]]
+    assert doc["title"] == ""
+    assert doc["sourceFormat"] == "text"
+
+
+def test_ingest_documents_isolates_a_per_item_failure_into_its_own_receipt():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "good document one"},
+            {"text": "   "},  # whitespace-only — rejected
+            {"text": "good document two"},
+        ],
+    )
+
+    assert len(results) == 3
+    assert results[0]["status"] == "processing"
+    assert results[1]["status"] == "error"
+    assert results[1]["errorType"] == "EmptyDocumentError"
+    assert "error" in results[1]
+    assert results[2]["status"] == "processing"
+    # the two good documents were still written, distinct from each other
+    good_ids = {results[0]["documentId"], results[2]["documentId"]}
+    assert len(good_ids) == 2
+    assert good_ids <= set(repo.documents)
+
+
+def test_ingest_documents_isolates_a_malformed_item_missing_text_key():
+    # Pass 6 review BLOCKER: a missing "text" key used to raise a bare
+    # KeyError BEFORE the per-item try could catch it, aborting the whole
+    # batch (and losing the receipt of any already-ingested sibling ahead of
+    # it, even though its Document was already written).
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "good document one"},
+            {"title": "no text key at all"},
+            {"text": "good document two"},
+        ],
+    )
+
+    assert len(results) == 3
+    assert results[0]["status"] == "processing"
+    assert results[1]["status"] == "error"
+    assert results[1]["errorType"] == "MalformedItemError"
+    assert results[2]["status"] == "processing"
+    good_ids = {results[0]["documentId"], results[2]["documentId"]}
+    assert len(good_ids) == 2
+    assert good_ids <= set(repo.documents)
+
+
+def test_ingest_documents_isolates_a_non_string_text_item():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX, documents=[{"text": "good document"}, {"text": 12345}],
+    )
+
+    assert results[0]["status"] == "processing"
+    assert results[1]["status"] == "error"
+    assert results[1]["errorType"] == "MalformedItemError"
+
+
+def test_ingest_documents_isolates_a_non_dict_item():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX, documents=[{"text": "good document"}, "not a dict"],
+    )
+
+    assert results[0]["status"] == "processing"
+    assert results[1]["status"] == "error"
+    assert results[1]["errorType"] == "MalformedItemError"
+
+
+def test_ingest_documents_isolates_an_oversized_item_failure():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX, documents=[{"text": "x" * 500_001}, {"text": "fine"}],
+    )
+
+    assert results[0]["status"] == "error"
+    assert results[0]["errorType"] == "DocumentTooLargeError"
+    assert results[1]["status"] == "processing"
+
+
+def test_ingest_documents_isolates_an_unknown_actor_failure():
+    repo = FakeRepo()  # "u1" not registered as a User or Agent
+    svc = make_service(repo)
+
+    [result] = svc.ingest_documents(CTX, documents=[{"text": "hello"}])
+
+    assert result["status"] == "error"
+    assert result["errorType"] == "UnknownActorError"
+    assert repo.documents == {}
+
+
+def test_ingest_documents_rejects_batch_over_max_size():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    with pytest.raises(BatchTooLargeError):
+        svc.ingest_documents(
+            CTX, documents=[{"text": "x"} for _ in range(MAX_BATCH_SIZE + 1)],
+        )
+
+    assert repo.documents == {}  # nothing written — rejected before any item runs
+
+
+def test_ingest_documents_at_exactly_the_batch_limit_is_accepted():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX, documents=[{"text": "x"} for _ in range(MAX_BATCH_SIZE)],
+    )
+
+    assert len(results) == MAX_BATCH_SIZE
+    assert all(r["status"] == "processing" for r in results)
+
+
+def test_ingest_documents_empty_batch_returns_empty_list():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    assert svc.ingest_documents(CTX, documents=[]) == []
 
 
 def test_get_document_passes_through():

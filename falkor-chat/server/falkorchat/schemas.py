@@ -53,6 +53,12 @@ class PostMessageIn(BaseModel):
 # identical cap, not just the REST boundary below.
 MAX_DOCUMENT_CHARS = 500_000
 MAX_SOURCE_FORMAT_LEN = 50
+# FR-11 bulk ingestion (K-050 M5 Stage 6a) — plan §3.5's suggested, implementer-
+# tunable bound (`document-ingestion.md` §3.5 "Bounds"). Declared here for the
+# same leaf-module reason as `MAX_DOCUMENT_CHARS` above: `services.py` imports
+# it so an MCP caller (no pydantic layer) is bound by the identical cap, not
+# just the REST `IngestDocumentsIn` boundary below.
+MAX_BATCH_SIZE = 20
 
 
 class IngestDocumentIn(BaseModel):
@@ -60,6 +66,18 @@ class IngestDocumentIn(BaseModel):
     title: str | None = Field(None, max_length=MAX_NAME_LEN)
     sourceFormat: str = Field("text", min_length=1, max_length=MAX_SOURCE_FORMAT_LEN)
     sourceLabel: str | None = Field(None, max_length=MAX_NAME_LEN)
+
+
+class IngestDocumentsIn(BaseModel):
+    """FR-11 bulk ingestion (K-050 M5 Stage 6a) — a list of `IngestDocumentIn`-
+    shaped bodies, one receipt per item (`Services.ingest_documents`, plan
+    §3.6). `min_length=1` rejects an empty batch at the REST boundary (an
+    empty `POST /documents/batch` call has no meaningful receipt to return);
+    `max_length=MAX_BATCH_SIZE` mirrors the same cap `Services.ingest_documents`
+    enforces for the MCP caller that skips this pydantic layer entirely.
+    """
+
+    documents: list[IngestDocumentIn] = Field(min_length=1, max_length=MAX_BATCH_SIZE)
 
 
 # ── §11 Workflow definition publish (M3 Slice 1) ────────────────────────────────

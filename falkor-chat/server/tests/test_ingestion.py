@@ -28,8 +28,10 @@ from __future__ import annotations
 import json
 
 from falkorchat import db, ingestion as ingestion_mod
+from falkorchat.config import CallContext
 from falkorchat.extraction import ExtractionResult, normalize_name
 from falkorchat.ingestion import IngestionPipeline
+from falkorchat.services import Services
 
 
 class _ReplyLLM:
@@ -494,3 +496,66 @@ def test_ac8_two_documents_mentioning_the_same_entity_fuse_via_extract_chunk(rep
 
     assert entity_count == 2  # one Entity per "document"
     assert edge_count == 1    # doc-a's entity and doc-b's entity are fused, not two islands
+
+
+# ── AC-8 cross-document fusion via the real bulk `ingest_documents` API ─────
+# (K-050 M5 Stage 6a)
+#
+# The test above proves IngestionPipeline's fusion wiring via two direct
+# extract_chunk calls scripted as "documents"; this one instead drives the
+# actual bulk API surface (`Services.ingest_documents`) so the receipt-per-
+# item contract and per-item `Document.status` are exercised too, not just
+# the pipeline-internal fusion mechanism. Background extraction has no
+# scheduler here (no embed_worker/ingestion_pipeline wired into `Services`,
+# same as every other `IngestionPipeline` test in this file) — completed
+# synchronously after the batch call returns, mirroring what `api.py`'s/
+# `mcp.py`'s scheduling block would eventually run per chunk, matching the
+# module docstring's "background-completion-aware" test strategy.
+
+
+def test_batch_ingest_two_documents_mentioning_the_same_entity_fuse(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = Services(repo)
+    ctx = CallContext(ws="test", actor="u1")
+
+    receipts = svc.ingest_documents(
+        ctx,
+        documents=[
+            {"text": "Acme is a company."},
+            {"text": "Acme again, elsewhere."},
+        ],
+    )
+
+    # Receipt-per-item contract (plan §3.6): one receipt per document, both
+    # succeeded, each minted its own distinct documentId.
+    assert len(receipts) == 2
+    assert all(r["status"] == "processing" for r in receipts)
+    doc_ids = [r["documentId"] for r in receipts]
+    assert len(set(doc_ids)) == 2
+
+    # Document.status is tracked independently per item, not shared/corrupted
+    # by processing them together in one batch call.
+    for doc_id in doc_ids:
+        doc = svc.get_document(ctx, document_id=doc_id)
+        assert doc["status"] == "processing"
+
+    # Complete each batch item's background extraction synchronously (stub
+    # LLM reply, same as the pipeline-altitude test above — no live LLM or
+    # background thread needed for a deterministic assertion).
+    reply = _reply([{"name": "Acme", "type": "Organization"}], [])
+    pipeline = IngestionPipeline(repo, _ReplyLLM(reply))
+    for doc_id in doc_ids:
+        for chunk in svc.list_document_chunks(ctx, document_id=doc_id):
+            pipeline.extract_chunk(
+                "test", chunk_id=chunk["chunkId"], document_id=doc_id,
+                text=chunk["text"],
+            )
+
+    g = db.workspace_graph(conn, "test")
+    [[entity_count]] = g.ro_query("MATCH (n:Entity) RETURN count(n)").result_set
+    [[edge_count]] = g.ro_query(
+        "MATCH ()-[r:SAME_AS {status:'confirmed'}]->() RETURN count(r)"
+    ).result_set
+
+    assert entity_count == 2  # one Entity per batch item
+    assert edge_count == 1    # the two batch items' entities are fused, not two islands

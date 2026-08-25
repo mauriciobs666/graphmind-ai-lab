@@ -61,6 +61,7 @@ from .repository import WorkflowRunNotWaitingError as WorkflowRunNotWaitingError
 # `MAX_CONFIG_LEN`, is the only shape that doesn't deadlock.)
 from .schemas import (
     DEFAULT_SWEEP_LIMIT,
+    MAX_BATCH_SIZE,
     MAX_CONFIG_LEN,
     MAX_DIFF_PREVIEW,
     MAX_DOCUMENT_CHARS,
@@ -222,6 +223,17 @@ class EmptyDocumentError(ServiceError):
     `Document` with zero `Chunk`s, permanently stuck at `status:'processing'`
     since nothing downstream can ever advance a chunkless document
     (`docs/reviews/document-ingestion-impl.md` MAJOR finding).
+    """
+
+
+class BatchTooLargeError(ServiceError):
+    """Raised when `ingest_documents`'s batch exceeds `MAX_BATCH_SIZE` (plan
+    §3.5/§3.6, K-050 M5 Stage 6a).
+
+    Same posture as `DocumentTooLargeError`: enforced in the service, not
+    only at the REST pydantic boundary (`IngestDocumentsIn.documents =
+    Field(max_length=MAX_BATCH_SIZE)`) — an MCP caller has no schema layer,
+    so this is the one place both transports are bound by the same cap.
     """
 
 
@@ -1087,6 +1099,97 @@ class Services:
             "documentId": document_id, "chunkCount": len(chunks),
             "status": "processing",
         }
+
+    def ingest_documents(
+        self, ctx: CallContext, *, documents: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Bulk-ingest FR-11 (plan §3.6, K-050 M5 Stage 6a).
+
+        Loops `ingest_document` per item and returns **one receipt per
+        item**, in the same order as `documents` — no special "batch-aware"
+        fusion logic is needed here, because fusion always checks the
+        graph's *current* state (including sibling documents from the same
+        batch, once their entities land), never a batch-local view; AC-8's
+        cross-document fusion happens naturally once each item's independent
+        background extraction runs (plan §3.6, exactly as designed).
+
+        Each item in `documents` takes the same keyword shape as
+        `ingest_document`'s own parameters: `text` (required), `title`,
+        `source_format` (defaults `"text"`), `source_label` — all optional
+        except `text`.
+
+        **Per-item error handling (implementer's call, plan §3.6 leaves this
+        open):** one bad document does NOT abort the whole batch. Each item
+        is ingested independently and a failure — `EmptyDocumentError`,
+        `DocumentTooLargeError`, `UnknownActorError`, or any other
+        `ServiceError` `ingest_document` raises — is caught and turned into
+        that item's own receipt (`{"status": "error", "error": ...,
+        "errorType": ...}`) rather than propagating and losing every
+        already-processed sibling ahead of it in the list. Reasoning: a batch
+        submitted via FR-11 is typically several independently-authored
+        documents (e.g. a folder of files) with no reason to be all-or-
+        nothing — a caller ingesting 20 documents should not lose 19 good
+        ones because item 5 was empty. This mirrors the failure-isolation
+        posture already used throughout this codebase for independent units
+        of work (`background._safe_*`'s per-chunk/per-entity isolation), just
+        applied synchronously here since batch ingestion (unlike embed/
+        extract) has no background component of its own — the receipts are
+        returned directly, not scheduled.
+
+        **A malformed item (missing/non-string `text`, or a non-dict entry)
+        is isolated the same way, not just a `ServiceError` (Pass 6 review
+        BLOCKER fix).** The REST transport can't reach this — `IngestDocumentIn`
+        guarantees `text: str` before `Services.ingest_documents` is ever
+        called — but the MCP tool (`mcp.ingest_documents(items:
+        list[dict[str, Any]])`) accepts raw dicts with zero schema
+        validation, exactly the transport this whole method's error-isolation
+        guarantee exists for. `doc["text"]` used to be evaluated *before* the
+        `try` could catch anything, so a missing key raised a bare `KeyError`
+        that aborted the entire batch — including losing the receipt (though
+        not the write) of every already-ingested sibling ahead of it. Each
+        item's shape is now validated explicitly before dispatch, and the
+        `except` clause is widened to `(ServiceError, KeyError, TypeError,
+        AttributeError)` as defense in depth for any other shape-access
+        failure that isn't the explicit check's exact shape (e.g. a
+        non-string `title`/`source_format`/`source_label`).
+
+        The batch itself is capped at `MAX_BATCH_SIZE` (`BatchTooLargeError`)
+        — enforced here, not only at the REST `IngestDocumentsIn` pydantic
+        boundary, so an MCP caller (no schema layer at all) is bound the same
+        way, mirroring `MAX_DOCUMENT_CHARS`/`DocumentTooLargeError`'s exact
+        posture above. This check runs before any item is processed, so a
+        batch that is too large writes nothing at all (all-or-nothing at the
+        batch-size boundary, independent of the item-level all-or-nothing
+        posture above).
+        """
+        if len(documents) > MAX_BATCH_SIZE:
+            raise BatchTooLargeError(
+                f"batch contains {len(documents)} documents, "
+                f"exceeding the {MAX_BATCH_SIZE} limit"
+            )
+        receipts: list[dict[str, Any]] = []
+        for doc in documents:
+            try:
+                if not isinstance(doc, dict) or not isinstance(doc.get("text"), str):
+                    receipt = {
+                        "status": "error",
+                        "error": "each batch item must be a dict with a string "
+                                 "'text' key",
+                        "errorType": "MalformedItemError",
+                    }
+                else:
+                    receipt = self.ingest_document(
+                        ctx, text=doc["text"], title=doc.get("title"),
+                        source_format=doc.get("source_format", "text"),
+                        source_label=doc.get("source_label"),
+                    )
+            except (ServiceError, KeyError, TypeError, AttributeError) as exc:
+                receipt = {
+                    "status": "error", "error": str(exc),
+                    "errorType": type(exc).__name__,
+                }
+            receipts.append(receipt)
+        return receipts
 
     def get_document(self, ctx: CallContext, *, document_id: str) -> dict[str, Any] | None:
         return self._repo.get_document(ctx.ws, document_id=document_id)

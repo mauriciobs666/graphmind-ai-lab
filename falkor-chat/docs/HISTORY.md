@@ -5,6 +5,59 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — K-050 M5 Stage 6a: document ingestion — bulk ingestion (FR-11)
+
+**What:** The sixth and final staged slice of the ingestion pipeline (`docs/plans/
+document-ingestion.md`, "Stage 6 — Batch hardening + QA acceptance"), implementing `ingest_documents`
+(FR-11 bulk ingestion) at all three layers — a real scope gap `teco` found while orienting for Stage
+6: `ingest_documents` was never built in Stages 1-5, only the singular `ingest_document`. Per plan
+§3.6 (already gated, not a design question): `Services.ingest_documents(ctx, *, documents:
+list[dict]) -> list[dict]` loops `Services.ingest_document` per item, returning **one receipt per
+item** — no batch-aware fusion logic, since fusion always reads the graph's *current* state
+(including sibling documents from the same batch, once their entities land), never a batch-local
+view; AC-8's cross-document fusion falls out naturally once each item's independent background
+extraction runs. MCP: `ingest_documents(items: list[dict])`. REST: `POST /documents/batch`
+(`IngestDocumentsIn`, `schemas.py`). Capped at `MAX_BATCH_SIZE = 20` (`BatchTooLargeError`, maps to
+400) — enforced in the service, not only the REST pydantic boundary, mirroring `MAX_DOCUMENT_CHARS`'s
+posture. **Per-item failure isolation** (implementer's call, plan left this open): one bad document
+does not abort the batch — it comes back as that item's own `{"status": "error", "error": ...,
+"errorType": ...}` receipt, and chunk embedding/extraction is scheduled only for items that actually
+succeeded. The per-chunk embed+extract scheduling block — previously duplicated inline between
+`api.py` and `mcp.py` — is now one shared helper, `background._schedule_chunk_processing`,
+parameterized over each transport's own scheduling primitive; backported to both existing singular
+call sites too (verified behavior-preserving, not just refactored on faith). New tests across
+`test_services.py`, `test_api.py`, `test_mcp.py`, and a batch-altitude AC-8 test in
+`test_ingestion.py` (`test_batch_ingest_two_documents_mentioning_the_same_entity_fuse` — drives the
+real `Services.ingest_documents` call, not just `extract_chunk` again, then completes extraction
+synchronously and asserts a confirmed cross-document `SAME_AS` edge). `docs/QUERIES.md` §14.4 gained
+the `ingest_documents` row, batch-semantics paragraph, and shared-helper note.
+
+**Diff-gate fixes (Pass 6, `docs/reviews/document-ingestion-impl.md`):** `analyst`'s diff-scoped code
+gate found one BLOCKER, one MAJOR, one MINOR — none in the shipped stage design itself (§3.6
+conformance, the shared-helper refactor/backport, the AC-8-at-batch-altitude test, `MAX_BATCH_SIZE`
+enforcement, and route/schema conventions all verified clean). **BLOCKER** — `doc["text"]` was
+evaluated before the per-item `try`, so a malformed batch item (missing/wrong-shaped `text`) raised a
+bare `KeyError` that aborted the *entire* `ingest_documents` call — directly contradicting the
+method's own per-item-isolation guarantee, and reachable specifically via the MCP tool (REST is
+protected by `IngestDocumentIn`'s pydantic validation; MCP's `items: list[dict]` has no schema layer
+at all, exactly the transport the guarantee exists for). Worse than a clean rejection: an
+already-ingested sibling item ahead of the malformed one in the list had its `Document` written but
+its receipt never returned, since the exception aborted the loop before `return receipts`. Fixed:
+each item's shape (`isinstance(doc, dict)` and `isinstance(doc.get("text"), str)`) is validated
+explicitly before dispatch, turned into a `{"status": "error", "errorType": "MalformedItemError"}`
+receipt rather than raising; the `except` clause is also widened to `(ServiceError, KeyError,
+TypeError, AttributeError)` as defense in depth. **MAJOR** — the MCP per-chunk thread fan-out
+(already escalated Pass 2 → Pass 3, ~500 → ~1,000-1,200 threads/call) now compounds by up to
+`MAX_BATCH_SIZE` (20x, ~23,000 threads for a max-size batch) with no new mitigation or documentation,
+in the stage literally named "batch hardening." Not re-mitigated with a scheduling redesign this pass
+(judged out of scope for a documentation-flagged MAJOR — REST is unaffected, per-thread failures are
+already isolated, and the fuller bounded-pool fix has been deferred three passes running pending a
+coordinator scope decision on whether it belongs in this feature or a standalone follow-up); the
+compounded number and its reasoning are now documented explicitly in `mcp.py`'s `_default_schedule`
+docstring and `docs/QUERIES.md` §14.4, mirroring Pass 3's own precedent for the un-compounded number.
+**MINOR** — this entry itself; Stage 6a's diff had no `docs/HISTORY.md` entry, breaking the exact
+precedent every one of Stages 1-5 set.
+
 ## 2026-08-25 — BACKLOG.md: delivered work leaves the backlog entirely (doc-only)
 
 **What:** `docs/BACKLOG.md` 8,807 → 7,997 w. Three sections removed under the amended
