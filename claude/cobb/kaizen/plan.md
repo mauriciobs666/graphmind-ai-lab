@@ -35,9 +35,9 @@
   safeguard is met exactly as §7 words it. Used for real on the one unit where it mattered
   (`cobb.md` itself); see `history.md`, 2026-08-24. (F2) gate-(e) history entries pre-asserted
   "cobb §7 lint pass" before the lint ran (true in the event) — for future units, append the
-  `Verified:` line only after the lint returns. **Still open**, and C6 again wrote its `Verified:`
-  lines after the lint returned rather than before, so the practice is holding by habit; the item
-  stays until it is written into the plan's gate (e) rather than remembered per unit.
+  `Verified:` line only after the lint returns. ✅ **closed 2026-08-25** — written into the plan's
+  gate (e) itself, so it is a gate condition rather than a per-unit habit. It had held by habit
+  through C6 and Stages D–E; the item existed precisely because "holding by habit" is not a gate.
 - **K-020 — residual staleness in `agent-maintenance`'s own text (opened 2026-08-24, C6 lint; low).**
   Two items, both class-6/stale, neither urgent now that the live one is fixed:
   1. `SKILL.md:3`'s description still says the shared graph is "`author`-partitioned". Since M8

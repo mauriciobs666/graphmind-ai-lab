@@ -137,7 +137,10 @@ across every file in the unit — map from the grep output, never from the edit 
 **(d)** `./claude/scripts/audit-team.sh` green.
 **(e)** the dated `kaizen/history.md` compression entry (standing maintenance rule) **carries the
 gate-(a) inventory mapping and the list of moved clauses** — persisted where a later incident
-investigation will look, not left in session context.
+investigation will look, not left in session context. **Write the entry's `Verified:` line only
+after the lint has returned**, never in advance of it: at Stage B two entries pre-asserted "cobb §7
+lint pass" before the lint ran — true in the event, but a gate record written before its gate is not
+evidence (`cobb` F2, closed here).
 
 ### Stage A — Pilot: `architect.md` (1,738 w → ~1,250)
 
@@ -689,8 +692,22 @@ examples (`executor2.md` / `executor2-coordination.md`) already assumed role was
   `kaizen/history.md`* — and prompt-waste as a §7 lint dimension, so prompts don't regrow the
   same weight. **Pulled forward, 2026-08-23** (stakeholder-directed, right after the pilot
   calibration): executed by `cobb` against its own skill, ahead of Stages B–E.
-- Optional (decide at execution): a soft `audit-team.sh` word-count advisory (warn >2,500 w/agent,
-  never fail) as the drift tripwire.
+- ~~Optional (decide at execution):~~ **Decided and executed 2026-08-25** — `audit-team.sh` check 9,
+  a soft prompt-weight advisory: `NOTE` per agent whose **prompt body** (frontmatter stripped,
+  matching every figure in this document) exceeds `AUDIT_WORD_LIMIT` (default 2,500), plus an `INFO`
+  corpus total. **It cannot fail, by construction** — `note()` never touches `$fail`, and the header
+  comment says why: §7 already rules that a file above target with every rule intact **passes**, so a
+  tripwire that could fail would pressure someone to cut a rule to reach a number — the one outcome
+  this plan exists to prevent. Current state: **2 NOTEs** (`teco` 5,261 w, `tico` 3,663 w), corpus
+  29,037 w across 13 agents, mean 2,233 w; `RESULT: PASS`, exit 0.
+- **What decided it — the ratchet was already running, undetected.** `tico.md` was compressed at C2
+  on 2026-08-24 (−124 w) and two K-008 commits **the same day** took it from 3,371 → 3,663 w: **+292
+  w against a −124 w cut, inside 24 hours.** A grep of those additions for class-6 markers returns
+  **zero**, so the doctrine held and Stage F's promotion rule did its job — that growth is rules from
+  K-008's closure, not narrative creeping back. **The finding is not that the ratchet reasserted
+  itself; it is that nobody could have known either way.** Nothing measured the corpus between C2 and
+  this check. An advisory that flags the two heaviest files for a human read is exactly the right
+  instrument for a signal that is *sometimes* legitimate — which is why it warns and never gates.
 
 ### Stage G — Living-document compaction (the closeout ratchet)
 

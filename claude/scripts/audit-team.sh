@@ -48,6 +48,13 @@
 #      and teco are special and have coordination rights" — restricted broad,
 #      mode-unconditioned commit authority to tico/teco only (still true;
 #      documented in claude/AGENTS.md's "Git-commit authority" section).
+#   9. prompt-weight advisory (NOTE, never FAIL) — the drift tripwire for the
+#      prompt-waste doctrine (claude/docs/plans/prompt-waste-reduction.md
+#      Stage F). Prints a NOTE per agent whose prompt body exceeds
+#      AUDIT_WORD_LIMIT (default 2500) and an INFO corpus total. Deliberately
+#      cannot fail: a rule-dense prompt above the line is a pass, and a
+#      tripwire that could fail would pressure someone to cut a rule to hit a
+#      number — the one outcome that effort exists to prevent.
 #      Superseded in part, 2026-08-21: every agent may now additionally
 #      commit its own verified work specifically when running interactively
 #      — this check is the deterministic backstop so a future prompt edit
@@ -69,8 +76,10 @@ AGENTS_HOME="${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}"
 ORCHESTRATOR="teco"
 
 fail=0
+notes=0
 pass()    { printf 'PASS  %s\n' "$1"; }
 failmsg() { printf 'FAIL  %s\n' "$1"; fail=1; }
+note()    { printf 'NOTE  %s\n' "$1"; notes=$((notes+1)); }
 
 agents=()
 for d in "$CL"/*/; do
@@ -205,9 +214,35 @@ for a in "${agents[@]}"; do
   fi
 done
 
+# 9. prompt-weight advisory — ADVISORY ONLY, never fails, by design.
+#    The drift tripwire for the prompt-waste doctrine: a prompt that has
+#    regrown past the threshold gets a human read, not a broken build.
+#    It must never gate, because a rule-dense prompt legitimately above the
+#    line is a pass (the plan's §7: "a file above target with every rule
+#    intact passes — the band moves, not the file"), and a tripwire that can
+#    fail would pressure someone to cut a rule to reach a number, which is
+#    the one outcome the whole effort is built to prevent.
+#    Counts the prompt BODY (frontmatter stripped), matching how every
+#    figure in claude/docs/plans/prompt-waste-reduction.md was measured.
+#    Threshold override: AUDIT_WORD_LIMIT=<n>.
+echo
+limit="${AUDIT_WORD_LIMIT:-2500}"
+total=0
+for a in "${agents[@]}"; do
+  w=$(awk 'NR>1 && /^---$/{p=1;next} p' "$CL/$a/$a.md" | wc -w)
+  total=$((total+w))
+  if [ "$w" -gt "$limit" ]; then
+    note "$a: prompt body is ${w}w, above the ${limit}w advisory threshold — re-read it against the promotion rule (agent-maintenance §5: a promoted kaizen entry lands as rule + <=1-clause why, nothing else). Advisory only; a rule-dense prompt above the line is a pass."
+  fi
+done
+[ "$notes" -eq 0 ] && pass "prompt weight: all ${#agents[@]} prompt bodies at or under ${limit}w"
+printf 'INFO  prompt corpus: %sw across %s agents (mean %sw)\n' \
+  "$total" "${#agents[@]}" "$((total / ${#agents[@]}))"
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "RESULT: PASS — deterministic checks clean. The judgment checklist (agent-maintenance skill §4) still applies."
+  [ "$notes" -gt 0 ] && echo "        ($notes advisory NOTE(s) above — informational, not failures.)"
 else
   echo "RESULT: FAIL — fix the items above, then re-run."
 fi
