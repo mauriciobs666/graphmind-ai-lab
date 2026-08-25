@@ -17,6 +17,15 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 
 ## Parking lot / ideas
+- **`skills/agent-maintenance/SKILL.md:568` still asserts, in the present tense, that the 12
+  pre-consolidation agents "each **carry** a frozen `kaizen/inbox.md`."** No such file exists
+  (`6fdc107`, 2026-08-21), and the same document contradicts it at `:592` ("no `inbox.md` file
+  exists any more for any agent"). C6 already fixed the **always-on** half of this (`:3`, the
+  frontmatter description); `:568` is body-only, reached through progressive disclosure, so it was
+  latent then and stays latent now — Stage E pass 1 did not make it live, and per C6's rule that
+  keeps it out of a compression commit. Route it into the next `agent-maintenance` edit regardless:
+  it is the **last present-tense inbox assertion left in the corpus**, and `claude/AGENTS.md:3` now
+  states the opposite absolutely. Raised by the Stage E pass-1 §7 lint, 2026-08-25.
 - **Two process lessons from the prompt-waste Stage B wave-2 §7 lint (2026-08-23, both minor):**
   (F1) ✅ **closed 2026-08-24 at C6** — the plan's "cobb's own compression is linted by its pre-edit
   self" safeguard wasn't met as written at Stage B, because the live-symlink deployment makes an

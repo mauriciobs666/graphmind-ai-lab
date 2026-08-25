@@ -121,6 +121,8 @@ agent session *before* any commit. Therefore:
 
 Each unit's gates (all, every unit): **(a)** rule inventory — before editing, list every
 class-1/2 clause in the old file; after, map each to its surviving location; unmapped ⇒ restore.
+**On a unit touching more than one file, derive the "after" half by re-grepping every moved token
+across every file in the unit — map from the grep output, never from the edit list** (finding 17).
 **(b)** history-first — every class-5/6 clause removed is confirmed present in
 `kaizen/history.md` *before* the prompt edit is committed (append if missing).
 **(c)** `cobb`'s single-artifact prompt-quality lint (`agent-maintenance` skill §7) on the result.
@@ -541,6 +543,52 @@ rather than scattering across `architect.md`, `analyst.md`, and rule 5:
    document that has been *executed against*, which the **Yes** branch routes to `<slug>2.md`. The
    convention does not currently answer; pick one. *(Raised by `cobb`'s gate-(c) lint at Stage D
    as F6 — not fixable inside any agent prompt, and cheapest to settle while rule 5 is open.)*
+
+**Stage E runs as three units, not one** (set at execution, 2026-08-25): **pass 1** = the class-5/6
+sweep across all three files; **pass 2** = `claude/AGENTS.md`'s "Git-commit authority" section
+alone; **pass 3** = the four-part rule-5 amendment above. Pass 2 is split out because the section is
+a **grant/authority clause**, the split rule's named branch, and it is the largest single class-6
+concentration in the stage. Pass 3 is split out because it is a *rule change*: §4.0 makes the commit
+the rollback unit, and a rule addition bundled into a compression commit cannot be reverted
+independently of the compression.
+
+***Stage E pass 1 executed 2026-08-25 (5,779 → 5,382 w over three files: root `AGENTS.md`
+1,983 → 1,808, −8.8%; `claude/AGENTS.md` 1,973 → 1,779, −9.8%; `falkor-chat/AGENTS.md`
+1,823 → 1,795, −1.5%).** Gates (a)–(e) green; `audit-team.sh` PASS before and after (checks 5 and 5b
+both read these files). `cobb` §7 lint **0 blockers, 4 majors, 3 minors, 3 nits — all majors and
+minors fixed in-commit**, ending the four-unit streak of units with no MAJOR of their own making.
+Detail in `claude/cobb/kaizen/history.md`. Three declared rule-shaped removals (milestone status out
+of root per finding 10; the `:KaizenEntry` schema out of root, a class-7 edit riding in a class-5/6
+pass because it was tangled in the same bullet as the migration narrative; the `no inbox.md`
+anti-trigger out of root per finding 15) and three declared corrections. Class-6 residual: **0 w in
+root and `falkor-chat/AGENTS.md`**, one judged-and-kept normative `FR-10` citation in
+`claude/AGENTS.md`. **Two findings:**
+
+16. ***Finding 7's "single digits" floor is scoped to post-Stage-B files, and nothing in this plan
+    said so.*** *Pass 1 returned −8.8% and −9.7% on the two files it swept properly — two to twenty
+    times C3–C6's rate, from the identical doctrine. The variable is not size, structure, or rule
+    count (findings 7/9/12/13's whole progression); it is simply **whether the file has ever been
+    swept**. Stage B emptied the shared boilerplate from thirteen prompts before Stage C measured
+    any of them, so every Stage C number is a **second**-pass number, and finding 7 generalized from
+    a sample where that was invisible because it was universal. §1's retired 25–45% estimate was
+    never wrong for a first sweep — it was wrong about which files were still getting one.
+    **Operationally: ask "has this file been swept before?" before calibrating an inventory, and
+    expect the original band on anything that answers no.** The corollary matters more than the
+    number: `falkor-chat/AGENTS.md` returned −1.5% in the same unit under the same doctrine, because
+    it is a **fact-dense reference file** whose class-6 load was genuinely small — so first-sweep
+    status raises the ceiling, it does not set the floor.*
+17. ***On a multi-file unit, gate (a)'s mapping must be re-derived from the files, never from
+    intent.*** *Pass 1's one gate-level failure: I reported a rule as removed from root `AGENTS.md`
+    when the edit had landed in `claude/AGENTS.md` instead — leaving the rule, and its `FR-` tag, in
+    the always-loaded file and deleting it from the maintenance bullet where a maintainer actually
+    stands. The state I brought to the gate was the **exact inverse** of the state I described. It
+    survived my own review because a two-file rule reads as one decision ("move it to the narrower
+    file") and I checked that the decision was right rather than that it had been executed. Finding
+    1 makes gate (a) the safety net for this entire method, so a mapping that misreports which file
+    a rule left is not a safety net. **Add to gate (a) for any unit touching more than one file:
+    after editing, re-grep every moved token across every file in the unit, and map from the grep
+    output — not from the edit list.** Cheap, mechanical, and it is the only step that would have
+    caught this.*
 
 ### Stage F — Ratchet guard (make it stick)
 

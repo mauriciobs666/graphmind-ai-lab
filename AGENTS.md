@@ -12,9 +12,7 @@ and OpenCode artifacts).
 - `falkor-chat/` — Hybrid chat system (humans + AI) where **FalkorDB is the single store for
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
-  query library are locked and live-verified. **M0–M4 delivered** (engine, chat core + MCP,
-  GraphRAG, workflow engine, LLM provider/model configuration); **M5 — document ingestion &
-  entity fusion — is in progress**. Milestone status is authoritative in
+  query library are locked and live-verified. Milestone status is authoritative in
   `falkor-chat/docs/BACKLOG.md`. See `falkor-chat/README.md` and `falkor-chat/AGENTS.md`.
 - `opencode/` — Personal OpenCode configuration: custom agents and OpenCode-only skills.
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
@@ -24,30 +22,23 @@ and OpenCode artifacts).
   - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
-  FalkorDB. The MCP server that used to live under `cpg/mcp/` is now the top-level `cypher-mcp/`
-  component (below) — it is a generic Cypher-query tool, not CPG-specific, so it moved out.
+  FalkorDB. The MCP server is **not** here — it is the top-level `cypher-mcp/` (below), a generic
+  Cypher-query tool rather than a CPG-specific one.
 - `cypher-mcp/` — the **`cypher` MCP server** (stdio, Python) exposing the single read-only tool
   `mcp__cypher__query(graph, cypher)` over FalkorDB — generic (not limited to `cpg_*` graphs). It
   **runs containerized** — the launch surface is `cypher-mcp/docker-run.sh`, whose image tag is a
-  **content hash of the build inputs**, so a stale image is unrepresentable rather than merely
-  unlikely; `cypher-mcp/build.sh` is the supported build step. The container reaches FalkorDB over
+  **content hash of the build inputs**, so a stale image is unrepresentable;
+  `cypher-mcp/build.sh` is the supported build step. The container reaches FalkorDB over
   the host's published port via `--add-host=host.docker.internal:host-gateway`, so it does **not**
   touch the shared `falkordb-dev` container. The **host venv is retained** (`setup.sh`/`run.sh`)
   as the fast test loop and the fallback. See `cypher-mcp/README.md`. The repo-root `.mcp.json`
-  that wires it is the repo's **first MCP wiring, and it is Claude-Code-only** — OpenCode and Kiro
-  configure MCP through their own files and neither is wired (backlog C-310).
+  that wires it is **Claude-Code-only** — OpenCode and Kiro configure MCP through their own files
+  and neither is wired (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history; the 12 agents that existed at the 2026-08-20 migration also carry a now-permanently-frozen
-  learnings inbox, never created for an agent since) — every agent's raw capture writes directly
-  into one shared `kaizen_team` FalkorDB graph, a pattern piloted on
-  `graph-dba` as its own graph, migrated team-wide onto one graph per agent 2026-08-20, then
-  consolidated the same day onto this single shared graph (`docs/plans/generic-cypher-mcp2.md`).
-  An entry created from M8 onward (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) is linked by
-  a `(:Agent)-[:PRODUCED]->(:KaizenEntry)` edge to a real `:Agent` node identifying its producer
-  (plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge onto another agent); a pre-M8 entry
-  keeps its plain `author` property and no edges, unretrofitted; `cobb` distills the shared graph).
-  See `claude/README.md` (human catalog)
-  and `claude/AGENTS.md` (agent context; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
+  history). Every agent's raw capture writes directly into one shared `kaizen_team` FalkorDB
+  graph, so one query reaches every agent's raw learnings; `cobb` distills it. See
+  `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context — including the
+  `:KaizenEntry` graph shape; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
 - `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
   server as a client, restricted to `send_message`/`read_messages`, for a live demo of
   Kiro-to-falkor-chat MCP connectivity; plus a broader, still-Draft multi-agent Kiro vision in
@@ -94,9 +85,8 @@ and OpenCode artifacts).
   OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
-  `kaizen/{plan,history}.md` (no `inbox.md` is created for a new agent — FR-12/AC-9), the relevant
-  catalog (`claude/README.md` for agents, `skills/README.md` for skills), and `claude/AGENTS.md` in
-  the same change.
+  `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents,
+  `skills/README.md` for skills), and `claude/AGENTS.md` in the same change.
 - **Module documentation convention** — all of a module's documentation lives under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
   change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
@@ -113,9 +103,7 @@ and OpenCode artifacts).
     user's point of view); when a manual does document one feature end-to-end, it reuses that
     feature's slug per the family rule below.
   - **A document that freezes does not move.** It gets `Status: archived` in its own header
-    block and stays exactly where it is. The status marker replaces the old "move it to
-    `archive/` when the milestone closes" rule — and with it the inbound-link repair that move
-    required.
+    block and stays exactly where it is.
   - **The existing `archive/` trees are read-only history of the previous convention.** Nothing
     is ever moved into them again, and nothing is un-archived.
   - **Citing another document:** write a **backticked path from the repo root** —
@@ -167,13 +155,12 @@ and OpenCode artifacts).
     `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
     stakeholder confirmation) · `active` (the producing agent, at creation; amendable in place
     until the document has been approved, gated, or executed against) · `superseded` (whoever
-    writes the successor) · `archived` (**`teco`, at milestone close** — since 2026-08-21,
-    stakeholder decision, `teco` performs the mechanical flips itself: its write guard
-    auto-allows an `Edit` on a `docs/**.md` file whose old/new strings differ only in the
-    canonical `Status:` field flipping to `archived`, so a close no longer costs one delegated
-    agent spawn per one-token edit). For any `archived` flip that is **more than** that
-    mechanical one-token edit — bundled with other changes, disputed, or needing judgment about
-    what freezes — the flip still routes to the by-kind owner:
+    writes the successor) · `archived` (**`teco`, at milestone close** — `teco` performs the
+    mechanical flips itself: its write guard auto-allows an `Edit` on a `docs/**.md` file whose
+    old/new strings differ only in the canonical `Status:` field flipping to `archived`). For any
+    `archived` flip that is **more than** that mechanical one-token edit — bundled with other
+    changes, disputed, or needing judgment about what freezes — the flip still routes to the
+    by-kind owner:
     `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
     `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
     `reviews/*` → `analyst` · `requirements/*` and `manuals/*` → `tico` · `test-plans/*` and

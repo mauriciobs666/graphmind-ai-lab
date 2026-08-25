@@ -95,19 +95,19 @@ embedding consumer resolves through `falkorchat.modelconfig.ModelGateway` — th
 `FALKORCHAT_OPENCODE_CONFIG` (providers only; no product default, `scripts/start_server.sh` sets
 the dev convenience default) and falkor-chat's own overlay, `FALKORCHAT_MODEL_CONFIG` (per-kind
 defaults/timeouts, per-model settings; defaults to the shipped `config/models.json`). The four
-legacy per-provider/per-model env vars K-042 replaced are gone —
-`config.assert_no_legacy_model_env()` (see `config.LEGACY_MODEL_ENV_VARS`) refuses to start if
-any is still set. **Landing 2** adds: a ref with no `/` resolves as a **role** to an ordered
-fallback chain; a per-workspace override is a **hard cap** that wins over every consumer's own
-choice, reaching all four kinds including the `guard` judge; and publishing a workflow def that
-names an unresolvable model or role now fails at publish time (400) instead of first use. See
-`docs/plans/llm-provider-config.md` §4/§7 for the design, `falkor-chat/docs/SERVER.md` §1.8 for the
-shipped seam, and `config/opencode.example.json` / `config/models.json` for the shipped shapes.
+legacy per-provider/per-model env vars are gone — `config.assert_no_legacy_model_env()` (see
+`config.LEGACY_MODEL_ENV_VARS`) refuses to start if any is still set. Also: a ref with no `/`
+resolves as a **role** to an ordered fallback chain; a per-workspace override is a **hard cap**
+that wins over every consumer's own choice, reaching all four kinds including the `guard` judge;
+and publishing a workflow def that names an unresolvable model or role fails at publish time
+(400) instead of first use. See `falkor-chat/docs/plans/llm-provider-config.md` §4/§7 for the
+design, `falkor-chat/docs/SERVER.md` §1.8 for the shipped seam, and
+`config/opencode.example.json` / `config/models.json` for the shipped shapes.
 
 **`node` is not on `PATH` on the usual dev box (WSL2).** The web unit tests are bare-`node`
 scripts (`node web/tests/run-select.test.js`), so find a working interpreter before assuming the
 suite is unrunnable: a Playwright-bundled Node binary, or the Windows `node.exe` reachable from
-WSL, both work. Two independent agent sessions each burned turns rediscovering this.
+WSL, both work.
 
 ### Probing shared graph state without mutating it
 
@@ -157,12 +157,12 @@ read the code, don't look for a copy here.
 | File | Contents |
 |---|---|
 | `falkor-chat/docs/DESIGN.md` | The **graph** blueprint — topology, data model, indexes, capacity, ops, roadmap. The *why*; queries live in QUERIES.md, DDL in `bootstrap_schema.sh`. Stops at the graph. |
-| `falkor-chat/docs/SERVER.md` | The **server process** — layering, auth/tenancy seam, REST + MCP front doors, `server/` layout, testing hazards, model-resolution seam. (Was `DESIGN.md` §14–§15 until 2026-08-24; DESIGN §14 holds the redirect table.) |
+| `falkor-chat/docs/SERVER.md` | The **server process** — layering, auth/tenancy seam, REST + MCP front doors, `server/` layout, testing hazards, model-resolution seam. (DESIGN §14 redirects here.) |
 | `falkor-chat/docs/test-reports/capacity-report.md` | All capacity measurements — per-message RAM, append throughput, hot-read plans, shard packing. DESIGN §11 keeps only the design-shaping numbers. |
 | `falkor-chat/docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
 | `falkor-chat/docs/BACKLOG.md` | Forward-looking backlog: K-numbered items, milestone map, sequencing. |
 | `falkor-chat/docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
-| `falkor-chat/docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here any more and nothing is un-archived; a document that freezes now stays in place and gets `Status: archived` in its header (root `AGENTS.md`). |
+| `falkor-chat/docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here and nothing is un-archived; a document that freezes stays in place with `Status: archived` (root `AGENTS.md`). |
 | `scripts/bootstrap_schema.sh` | Source of truth for executable DDL — indexes, constraints, full-text/vector. |
 | `claude/graph-dba/falkordb-quirks.md` | General FalkorDB engine/dialect facts for this lab's pinned build — not project-specific. |
 | `falkor-chat/docs/archive/plans/m1-chat-mcp.md` | K-002 plan: MCP transport + mentions + read-cursors. |
