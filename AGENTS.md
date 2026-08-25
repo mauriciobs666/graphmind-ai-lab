@@ -12,8 +12,10 @@ and OpenCode artifacts).
 - `falkor-chat/` — Hybrid chat system (humans + AI) where **FalkorDB is the single store for
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
-  query library are locked and live-verified; M0 complete. See `falkor-chat/README.md` and
-  `falkor-chat/AGENTS.md`.
+  query library are locked and live-verified. **M0–M4 delivered** (engine, chat core + MCP,
+  GraphRAG, workflow engine, LLM provider/model configuration); **M5 — document ingestion &
+  entity fusion — is in progress**. Milestone status is authoritative in
+  `falkor-chat/docs/BACKLOG.md`. See `falkor-chat/README.md` and `falkor-chat/AGENTS.md`.
 - `opencode/` — Personal OpenCode configuration: custom agents and OpenCode-only skills.
   - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
   - `skills/` — OpenCode-authored `SKILL.md` packages (`comparison-driver`, `python-coding`,
@@ -71,7 +73,7 @@ and OpenCode artifacts).
 | Component | Entry doc(s) |
 |---|---|
 | `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
-| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` · `falkor-chat/docs/QUERIES.md` |
+| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |

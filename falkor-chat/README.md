@@ -201,10 +201,12 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 | Milestone | Status | Scope |
 |---|---|---|
 | **M0** — Engine up | ✅ | FalkorDB running, live-probed, design locked, schema + queries verified |
-| **M1** — Chat core | ✅ | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process. DoD closed: append path load-tested + hot reads `GRAPH.PROFILE`d (§11.1), web request/response de-staled (K-012). Hardening/real-time (auth, push) deferred to M2.5. See [DESIGN.md §14–§15](docs/DESIGN.md#14-m1-application-architecture-clientserver) |
+| **M1** — Chat core | ✅ | FastAPI REST server (router → service → repository over `falkordb-py`) **+ MCP (Streamable-HTTP) agent front door** on the same service layer; single hardcoded tenant; users, channels, threads, thread-scoped append, @mentions, read-cursors, full-text search, and a minimal static web UI — all on one process. DoD closed: append path load-tested + hot reads `GRAPH.PROFILE`d ([capacity-report.md](docs/test-reports/capacity-report.md)), web request/response de-staled. Hardening/real-time (auth, push) deferred to M2.5. See [SERVER.md](docs/SERVER.md) |
 | **M2** — GraphRAG | ✅ | Every message embedded out-of-band (async worker → LM Studio, 1024-dim); in-graph vector index @1024 + hybrid retrieval (`hybrid_search`, cosine-ASC); AI `Agent` participant — `@mention` triggers a retrieval-grounded LLM answer posted as the agent (`role:"assistant"`) with an `EMITTED` provenance edge; web renders assistant replies + reader `isMention`. QA-accepted (K-015, PASS). Served via `start_server.sh` (gated on `FALKORCHAT_ENABLE_AGENT`, `EMBEDDING_DIM=1024`). Auth + real-time deferred to M2.5 |
-| **M3** — Workflows | — | Def → snapshot → run/step executor, chat linkage |
-| **M4** — Scale & ops | — | Redis Cluster, replicas, ACL/TLS, memory budgeting |
+| **M3** — Workflows | ✅ | Def → snapshot → run/step executor, chat linkage; a conversational (`triage@v1`) and an LLM-free business-process (`access-request@v1`) flow as proof; QA-accepted 2026-07-21 |
+| **M4** — LLM provider & model config | ✅ | Two hand-edited config files, one internal resolution seam (`ModelGateway`), per-consumer model choice, roles + ordered fallback chains, per-workspace override as a hard cap, publish-time model validation, resolved-model trace on `StepRun`. Delivered 2026-08-11 — see [SERVER.md §1.8](docs/SERVER.md) |
+| **M5** — Ingestion & entity fusion | 🟡 | Document → chunk → extract → fuse, served as both chat grounding and a standalone knowledge base. In progress (K-050) |
+| *Unscheduled* | — | Scale & ops: Redis Cluster, replicas, Sentinel, ACL/TLS, backup/restore drill, shard packing |
 
 ---
 
@@ -284,4 +286,4 @@ cd server && .venv/bin/python -m pytest -q      # needs FalkorDB up
 Agents connect to MCP at `http://localhost:8000/mcp` (`type: streamable-http`; the trailing-slash
 spelling `/mcp/` works too). The endpoint is unauthenticated in M1 — bind to localhost / a trusted
 network only. Tools: `send_message`, `read_messages`, `create_thread`, `create_channel`,
-`list_channels`, `list_threads`, `search_messages` (see [DESIGN.md §15](docs/DESIGN.md#15-mcp-transport-k-002--the-agent-front-door)).
+`list_channels`, `list_threads`, `search_messages` (see [SERVER.md §2](docs/SERVER.md#2-mcp-transport--the-agent-front-door)).

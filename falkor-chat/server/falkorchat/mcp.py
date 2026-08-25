@@ -63,7 +63,7 @@ def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
     new OS thread per call with no ceiling. A burst of concurrent
     `send_message` calls therefore spawns unboundedly, unlike REST's
     throttled threadpool — accepted for M1's lab-scale, unauthenticated,
-    single-tenant posture (`docs/DESIGN.md` §15.3), not because the two are
+    single-tenant posture (`docs/SERVER.md` §2.3), not because the two are
     equivalent (`docs/reviews/mcp-background-scheduling-impl.md` Minor 1).
     Overridable as `mcp._schedule` — tests swap it for an inline call to
     assert deterministically instead of racing a background thread.

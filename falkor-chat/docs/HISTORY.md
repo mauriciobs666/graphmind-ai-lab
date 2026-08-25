@@ -5,6 +5,185 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-24 — Milestone status reconciled across four documents (M4 number collision)
+
+**What:** Fixing the one stale line flagged at the close of the `DESIGN.md` v1.0 pass surfaced a
+wider disagreement: **four documents held four different accounts of where the project is.**
+`docs/BACKLOG.md` is authoritative and was already correct; the other three are now reconciled to
+it.
+
+| Document | Said | Now |
+|---|---|---|
+| root `AGENTS.md` | "M0 complete" | M0–M4 delivered, M5 in progress, + pointer to BACKLOG as authoritative |
+| `falkor-chat/README.md` roadmap | M3 `—`, M4 = "Scale & ops" `—` | M3 ✅, M4 ✅ (LLM provider/model config), M5 🟡, scale & ops → *Unscheduled* |
+| `docs/DESIGN.md` §12 | M3 unmarked, M4 = "Scale & ops" | same reconciliation + a note that BACKLOG owns status |
+| `docs/BACKLOG.md` | M0–M4 ✅, M5 🟡 — **correct** | unchanged |
+
+**The substantive finding — `M4` named two different things.** `DESIGN.md` §12 and `README.md`
+both still used **M4 = "Scale & ops"** (Redis Cluster, replicas, Sentinel, ACL/TLS), the original
+roadmap's fifth entry. But `BACKLOG.md` reassigned **M4 = "LLM provider & model configuration"**,
+delivered 2026-08-11 (K-042). So "M4" resolved to either shipped work or unstarted work depending
+on which document a reader opened — the failure mode being an agent or a person reading
+`DESIGN.md` §12, concluding M4 is unstarted infrastructure work, and planning against it.
+Scale & ops has **no milestone number today**; it is now listed as *Unscheduled* in both places,
+with `DESIGN.md` §12 saying explicitly that it was the old M4 before the number was reassigned, so
+the next reader who finds an "M4 — Scale & ops" citation in a historical document can resolve it.
+
+**Also:** `DESIGN.md` §12 gained a closing note that **milestone status is authoritative in
+`BACKLOG.md`, not in a roadmap list** — the four-way drift is exactly what an un-owned status
+marker produces. M3/M4's roadmap entries were also filled in with what actually shipped (both proof
+flows for M3; the resolution seam, roles/fallback chains, workspace hard cap, publish-time
+validation and resolved-model trace for M4) rather than left as the pre-delivery one-liners.
+
+**Why this was worth doing beyond the one line asked for:** the requested fix was root `AGENTS.md`'s
+"M0 complete". Correcting it required establishing what *is* complete, which is what exposed the
+collision. Fixing the one line while `README.md` and `DESIGN.md` §12 still disagreed would have
+left the repo inconsistent on the same fact, immediately after a session spent making `DESIGN.md`
+accurate.
+
+**Verified:** milestone facts read from `docs/BACKLOG.md`'s four `### — Milestone Mn —` rows and
+confirmed against `HISTORY.md`'s dated close entries (M2 2026-07-08, M3 2026-07-21 "MILESTONE M3
+✅", M4 2026-08-11 "closes M4", M5/K-050 Stage 3 of 6 in progress as of this date). No
+`BACKLOG.md` edit was needed.
+
+## 2026-08-24 — `DESIGN.md` v1.0: §1–§4 pass completes the restructure; two stale claims corrected
+
+**What:** Final slice of the same session's documentation restructure (two entries below) — the
+§1–§4 pass that the v0.5 entry had explicitly left open. Documentation-only, plus two factual
+corrections.
+
+- **§1.2 register de-ticketed.** Five delivered-ticket tags removed from the "Rationale /
+  consequence" column (K-007 ×3, K-010). The one that stayed is now bolded as the live pointer it
+  is: the identity-source-of-truth row steers the **open K-016** auth work.
+- **Every `K-` number left in `DESIGN.md` now points at open work** — K-016/K-017/K-018 (M2.5,
+  deferred), K-029 (the unenforced `decision`-step residual), K-033 (the `maxSteps` exact-cap
+  proposal). That is the contract the v0.4 header note stated; as of this entry the document
+  actually keeps it, end to end.
+- **Correction — §1.3 was headed "M2 stack (decided 2026-07-04, pending implementation)."** The
+  stack is not pending: M2 shipped and §12 of the same document records it as `✅ ... QA-accepted,
+  M2 done`. Retitled **"Model stack (shipped)"** and the preamble rewritten to lead with what an
+  operator needs — changing a model is a config-file edit + restart, never a code or env change —
+  with `EMBEDDING_DIM` called out as the deliberate exception and why.
+- **Correction — §2's supernode rule prescribed a pattern the design rejects.** Item 5 read *"we
+  avoid it with a linked-list + **time-bucket** pattern"*, but §1.2 carries `**No DayBucket**
+  *(rejected alternative)*` and §5.2 describes only the thread-scoped `NEXT` list. Two sections of
+  one document disagreed about a load-bearing topology choice. Now states the thread-scoped
+  linked-list pattern and names the time-bucket alternative as rejected, pointing at §1.2.
+- **§2's live-verified blockquote** rewritten from provenance-first ("now pinned to…, originally
+  probed on edge/main, re-verified 2026-07-09 via…") to finding-first: the four probed behaviours
+  are the point, and the silent cross-graph-edge failure — no error, `MATCH` returns 0 rows — now
+  reads as the trap it is rather than a clause in a build-history sentence.
+- **§3's topology box realigned.** Pre-existing defect, unrelated to this pass: the borders were
+  71 chars against 73-char content rows, so the box did not close. Borders widened to 73.
+
+**Why:** the §1–§4 slice was judged lowest-yield when the restructure was scoped, and on
+line-count it was. It was not lowest-yield on correctness: a register that a reader is told is
+**authoritative** was carrying a stale milestone claim and a topology prescription contradicted
+elsewhere in the same file. Reading closely enough to strip ticket noise is what surfaced both.
+
+**Sizes:** `DESIGN.md` 748 → 752 lines. Slightly *up* — the two corrections and the reworked §1.3
+preamble cost more than the removed ticket tags saved. Cumulative for the whole restructure:
+1,298 → 752 (−42%), with `SERVER.md` (500) and `docs/test-reports/capacity-report.md` (118) split out.
+
+**Verified:** `grep -o 'K-[0-9]\{3\}' docs/DESIGN.md | sort -u` returns exactly the five open
+items. §3's box measures a single width (73) across all 21 rows. Every replacement ran through an
+asserted single-hit list, so no edit applied silently or twice.
+
+**Adjacent staleness, not fixed (needs a decision):** root `AGENTS.md` still describes
+`falkor-chat/` as *"Design and query library are locked and live-verified; **M0 complete**"* — four
+milestones behind, since M4/K-042 delivered 2026-08-11. Out of scope for a `DESIGN.md` pass and
+left for the owner.
+
+## 2026-08-24 — Doc restructure: `SERVER.md` split out, capacity → test-report, `DESIGN.md` v0.5
+
+**What:** Second and larger documentation-only pass, continuing the same session's v0.4 header +
+§5–§9 work (entry below). No technical content changed anywhere.
+
+- **New `docs/SERVER.md` (500 lines).** `DESIGN.md` §14 (M1 application architecture) and §15 (MCP
+  transport) moved out whole and renumbered §1/§2 — subsections map straight across (§14.7 → §1.7,
+  §15.3 → §2.3). DESIGN.md was serving two readers: "how is the graph modelled and why" and "how is
+  the server built and what bites you". It now stops at the graph.
+- **`DESIGN.md` §14 is now the redirect table.** ~80 live citations across the repo point at
+  `DESIGN.md` §14.x/§15.x, most of them inside **historical** records — `HISTORY.md`, `docs/reviews/*`,
+  closed plans, and the agents' own `kaizen/history.md` files. Those were deliberately **not**
+  rewritten: a dated record should say what was true when it was written. The 13-row redirect table
+  resolves every one of them with a single lookup.
+- **New `docs/test-reports/capacity-report.md` (119 lines).** `DESIGN.md` §11/§11.1/§11.2 —
+  per-message RAM breakdown, the M1 append-path load test, the hot-read `GRAPH.PROFILE` closeout,
+  and the RAM-budget/shard-packing tables — are measurements, i.e. test-report content, not design.
+  DESIGN §11 keeps only the three numbers the design turns on (~12.4 KB/message at 1024 dims,
+  ~614 msg/s write-serialised ceiling, vector dim fixed at workspace creation) plus the two rules
+  that follow from them (`INFO memory` deltas not `GRAPH.MEMORY USAGE`; dim choice is the biggest
+  lever). §11 still exists, so citations to it still land.
+- **§10–§13 de-ticketed** to match §5–§9. §13's resolved guard-expression question collapsed from
+  a 12-line two-layer amendment narrative to two lines pointing at §6.1; the three genuinely open
+  questions kept. §12's roadmap prose de-ticketed, with the still-open M2.5 items (**K-016**,
+  **K-017**, **K-018**) now bolded as the live pointers they are.
+- **Live citations repaired** (`falkor-chat/AGENTS.md` ×2 + its Key-documents table, `README.md`
+  ×3, `server/falkorchat/mcp.py:66`, root `AGENTS.md` component-docs row). AGENTS.md's Key-documents
+  table gained rows for `SERVER.md` and `capacity-report.md`.
+
+**Why:** DESIGN.md was 1,298 lines carrying four document genres — a decision register, the graph
+design, empirical measurements, and a server runbook. Length was never the real problem; genre
+mixing and accreted ticket annotation were. Splitting by reader and by kind is what actually
+reduces load.
+
+**Sizes:** `DESIGN.md` 1,298 → 752 lines (−42%). New: `SERVER.md` 500, `capacity-report.md` 119.
+Total across the three is up slightly (headers, scope statements, the redirect table) — the win is
+that each file now answers one question for one reader.
+
+**Verified:** Zero dangling `§14.x`/`§15.x` references remain in `DESIGN.md` outside the redirect
+table. Every replacement was applied through an asserted exact-match list (single-hit or reported),
+so nothing was silently skipped; residual-marker sweeps for `K-0NN` / `Landing N` / finding IDs
+return empty in both `SERVER.md` and `capacity-report.md`. `DESIGN.md`'s remaining `K-` references
+are the three open items (**K-016/K-017/K-018** M2.5, **K-029**, **K-033**) plus §1–§4, which has
+not had the pass — stated in the header's revision note rather than left implicit.
+
+**Not done (deliberate):** **§1–§4 of `DESIGN.md`** (the decision register, engine constraints,
+topology, cross-graph split) still carry delivered-ticket annotations — K-007/K-008/K-010/K-013/
+K-034/K-042. §1.2's register is the doc's strongest section and its "Detailed in" column already
+enforces no-re-explanation, so this is the lowest-yield remaining slice.
+
+## 2026-08-24 — `DESIGN.md` v0.4: conforming header + §5–§9 restated in present tense
+
+**What:** Documentation-only pass on `docs/DESIGN.md`, no technical content changed.
+(1) **Header block now follows the root `AGENTS.md` convention** — a single bolded-label line
+(`Status: active` / `Owner: architect` / `Tracks: —` / `Version: 0.4`) immediately under the H1,
+replacing the stale free-form `Status: Draft v0.3` + `Date: 2026-06-06` +
+`Owner: the repo maintainer` triple, which
+had not been touched since before M2 while the body documented work through K-042. A new
+"How to read this document" note states the doc's contract: it describes the system **as it is
+now**, *when*-and-*which-ticket* lives in `HISTORY.md`, unbuilt work lives in `BACKLOG.md`, and a
+`K-` number appears in DESIGN **only** when it points at work not yet done.
+(2) **§5–§9 rewritten to that contract.** 34 delivered-ticket citations removed (K-007, K-013,
+K-020, K-022, K-024, K-025, K-027, K-028, K-031, K-034); the two open ones kept and now meaningful
+(**K-029** the unenforced `decision`-step residual, **K-033** the `maxSteps` exact-cap proposal).
+Superseded-wording narration collapsed into plain present-tense statements — "supersedes the old
+'expression' wording", "Two corrections to earlier wording", "the old claim was falsified",
+"documented — not changed", "corrected for K-028", "(shipped)". §6.3's "Handoff note for K-025"
+deleted outright as a verbatim duplicate of §6.1's `wait` bullet plus §6.2's timer paragraph.
+§7.1's stale `test_queries.sh (256/256)` count dropped rather than re-stated (QUERIES.md is at
+282/282 and is the place that tracks it).
+
+**Why:** DESIGN.md had accreted one ticket citation every ~15 lines, so a reader reconstructed the
+current design by mentally replaying a change log that `HISTORY.md` already holds in full. The
+rationale prose — §5.2's traversal-cost argument, §6.2's ctx-CAS/silent-wrong-branch argument and
+its R-1 residual, the `_drive_loop` SHA lock — is the doc's highest-value content and was kept
+intact; only the *when* and the *by-which-ticket* were removed.
+
+**Verified:** All section/subsection numbers unchanged (§5.1–5.4, §6.1–6.3, §7.1–7.3, §8, §9), so
+every inbound citation still resolves — `AGENTS.md` cites DESIGN §5.3/§9/§6/§10/§14.7, and QUERIES
+/plans/reviews cite the same numbers. A backticked-identifier diff over the rewritten range shows
+zero symbols lost. §5–§9 went 470 → 450 lines (4,453 → 4,172 words).
+
+**Not done (deliberate):** §1–§4 and §10–§15 have not had the pass. The three larger structural
+moves proposed alongside this one — splitting §14–§15 (414 lines of server architecture + a QA
+runbook) into their own document, relocating §11–§11.2's capacity measurements to a new
+`docs/test-reports/capacity-report.md`, and moving §14.7's testing hazards to `test-plans/` or
+`AGENTS.md` — are **not** done and remain open proposals; the §14–§15 split in particular needs a
+naming decision against the `docs/<kind>/<slug>.md` grammar, since DESIGN/QUERIES/BACKLOG/HISTORY
+are grandfathered top-level documents.
+
 ## 2026-08-24 — K-050 M5 Stage 3: document ingestion — extraction (FR-7a)
 
 **What:** The third of 6 staged slices of the ingestion pipeline (`docs/plans/document-ingestion.md`,
