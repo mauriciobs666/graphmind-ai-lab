@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-25 — Output discipline: the finding budget (prompt-waste plan, Stage D — an *addition*)
+
+- **What:** 2,325 → 2,375 w (**+50**). Stage D is the only stage of
+  `claude/docs/plans/prompt-waste-reduction.md` that adds; the unit's joint budget with
+  `architect.md` is ≤~120 net words and it landed at +92. Two additions here:
+  - **The finding budget** (deliverable item 2, appended after the "This is fragile" example):
+    *"Keep a finding's inline body to **≤~15 lines**; a longer trace, table, or log excerpt goes to
+    a trailing `## Appendix` section, cited from the finding. Never drop evidence to fit the cap —
+    it bounds the body, not the review's rigor."*
+  - **The `-impl` prohibition**, folded into the *existing* sentence that already named the suffix
+    rather than added as a new one (+6 w): "…the bare slug is the review of the **plan**, **and
+    implementation findings never grow the plan review**." The naming convention was already
+    stated; only the prohibition was missing.
+- **Why:** The cap's motivating incident is a **2,455-line review file**. The prohibition and the
+  cap attack it from two sides — one bounds a single finding, the other stops one file absorbing a
+  second review. The never-drop guard is deliberately welded to the cap in the same breath, because
+  a budget stated alone invites meeting it by deleting evidence, which is the one failure this
+  agent must never have.
+- **Gate (a) — rule inventory, addition-shaped.** Nothing removed; every existing class-1/2 clause
+  checked for contradiction by the additions. Three pairs cleared: the cap vs. item 2's *"specific
+  enough that the owner can act without re-deriving your analysis"* (15 lines is ample for
+  evidence+why+fix, and the appendix escape plus the never-drop guard close the gap); the cap vs.
+  step 4's *"Prune ruthlessly"* (**different objects** — step 4 caps the *number* of findings, the
+  new rule caps *one finding's body*); and the cap vs. the **RCA skeleton**, which it must not
+  reach — an RCA's "Causal chain" and "Reproduction & evidence" legitimately carry long traces.
+  Placing the cap inside the *review* deliverable rather than in Guardrails is what scopes it
+  correctly; that placement is load-bearing, not incidental.
+- **Gate (b):** not applicable — nothing removed. **Gates (c)/(d):** `cobb` §7 lint; `audit-team.sh`
+  PASS.
+- **One lint correction:** I first wrote "goes to **an appendix**" — but this file's own
+  *"A complete review contains:"* enumerates exactly four sections and defines no appendix, so the
+  agent was told to write into a container the file's spec doesn't declare. → "a trailing
+  `## Appendix` section" (+4 w), which names it in place rather than paying ~10 w for a fifth
+  skeleton item.
+- **One addition the plan mandated and `cobb`'s lint sent back** — *"a later pass records a closed
+  finding as one disposition line, full prose only for new findings."* I had shipped it, arguing it
+  was safely split from Stage E's `## Pass N` convention amendment (I owned *findings*, Stage E
+  owned *section mechanics*). The split does not hold, on three grounds: Stage E's own bullet
+  **already contained "one-line disposition per prior finding" verbatim**, so both halves were
+  already written and Stage D was one gate away from shipping one rule into two always-loaded files;
+  the rule binds **three** reviewing agents (`analyst`, `data-scientist` via `reviews/<slug>-ml.md`,
+  `security-expert`), not one; and this file's established idiom for a root-owned document
+  convention is a **pointer**, not an inline restatement (`:66`, "Open the document with the header
+  block from root `AGENTS.md`"). **Reverted here, relocated to Stage E's rule-5 amendment**, which
+  now carries the disposition tokens so nothing is lost.
+- **Plan items:** none. Feeds the plan's **finding 15**.
+- **Watch (observation window open):** the verdict scale, severity ranking, the `CPG:` line, the
+  evidence-traps list and the `-impl` split are unchanged. What to watch is the cap misfiring —
+  a finding truncated to fit 15 lines with its evidence dropped rather than appendixed. That is
+  the exact failure the never-drop guard exists to prevent, so it is also the test of whether
+  pairing the guard with the cap in one breath actually works.
+
 ## 2026-08-24 — Prompt-waste compression, Stage C3 (analyst-specific pass) — file measured at its editorial floor
 
 - **What:** Five edits, one pass (per the Stage C one-pass-by-default rule), 2,510 → 2,473 w (−37, 1.5%).

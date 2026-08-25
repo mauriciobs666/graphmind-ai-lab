@@ -2,6 +2,55 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-25 — Output discipline: the once-canonical rule (prompt-waste plan, Stage D — an *addition*)
+
+- **What:** 1,429 → 1,471 w (**+42**). Stage D is the only stage of
+  `claude/docs/plans/prompt-waste-reduction.md` that adds rather than cuts; its budget is ≤~120 net
+  words across this file and `analyst.md` together, and the unit landed at +92.
+  - **The addition** (§ "Handoff to the implementer", immediately after "…the file paths,
+    signatures, and findings the implementer needs"): *"**Stand-alone means the implementer never
+    re-derives a decision — not that it appears twice.** State each once, in one canonical section;
+    cite it elsewhere: a recap table cites, it does not restate; a `-ml.md`/`-graph.md` note's
+    conclusion is quoted once, its rationale cited."*
+  - **One alignment edit** (§ "How you work" step 4): "fold its **recommendation** into the plan"
+    → "fold its **conclusion** into the plan", so step 4 and the new rule use one word for one
+    thing. Step 4 previously invited exactly the restatement the new rule forbids.
+- **Why:** The file held two rules pointing opposite ways with nothing reconciling them —
+  § Handoff's *"it must stand alone"* (which reads as "restate everything the implementer needs")
+  and Guardrails' *"Compress by pointer only what nothing else cites literally"* (which reads as
+  "don't"). The plan's §2 recorded the cost: one `graph-dba` decision restated **4× (~600 words)**
+  inside `falkor-chat/docs/plans/document-ingestion.md`. The resolution is that stand-alone is a
+  property of *derivability*, not of repetition.
+- **Gate (a) — rule inventory, addition-shaped.** Nothing was removed, so the inventory ran in the
+  reverse direction: every existing class-1/2 clause checked for **contradiction** by the addition.
+  The one pair at real risk — the new "state each once… cite it elsewhere" against Guardrails'
+  "Compress by pointer only what nothing else cites literally" — was put to `cobb` explicitly.
+  Verdict: they don't merely coexist, they **interlock in the safe direction** — the new rule
+  *manufactures* citations, and being cited is precisely what triggers the guardrail's "must stay"
+  protection. The more the new rule is obeyed, the less of the plan is pointer-compressible.
+- **Gate (b):** not applicable — nothing removed. **Gates (c)/(d):** `cobb` §7 lint (2 majors, both
+  applied below, 0 blockers); `audit-team.sh` PASS.
+- **Two corrections from the lint, both free.** (1) I first wrote "a **summary** table cites, it
+  does not restate"; the general word reaches this file's *step* table — the one artifact `:41` and
+  `:47` twice insist must stay concrete — so an agent skimming could hollow out the table the
+  implementer executes from. → "a **recap** table" (0 w, and a recap table is by definition a
+  summary of something stated elsewhere, so it cannot be misread). (2) I first wrote `-ml.md` alone,
+  specializing the plan's "a sibling note's"; but §2's motivating incident was a **`-graph.md`**
+  note, so the rule as written did not bind the case that generated it. → `-ml.md`/`-graph.md` (+1 w).
+- **One clause the plan mandated and this unit deliberately did *not* add** — *"revision history is
+  one dated line, not a 'Revision note' narrative."* **Relocated to Stage E** (root `AGENTS.md`
+  collision rule 5) and struck from the Stage D spec in the same commit, so the decision is on the
+  record rather than in session context. Two reasons: this file mentions revision notes **nowhere**,
+  so the clause would have introduced the topic solely in order to qualify it; and the rule binds
+  **six** agents that revise pre-approval documents (`architect`, `teco`, `tico`, `qa-engineer`,
+  `data-scientist`, `graph-dba`), whose single mandated home is rule 5 — not one of the six.
+- **Plan items:** none. Feeds the plan's **finding 15** (waste is created at specification time;
+  the check is "how many agents does this rule bind?").
+- **Watch (observation window open):** the `CPG:` line, the plan-document convention, and
+  "don't hand-wave" are unchanged; what to watch is the *new* rule misfiring — a plan that cites a
+  canonical section the implementer then cannot find, or a step table thinned to citations. Neither
+  appeared in review; both are the failure modes this addition could plausibly cause.
+
 ## 2026-08-23 — Freshness-clause grammar fix (Stage B wave 2 micro-shape)
 - **What:** "a `teco`-issued brief that states the graph's freshness, take it as given" → "when a `teco`-issued brief states the graph's freshness, take it as given" — closing the hanging-topic construction cobb's wave-1 lint flagged as minor; applied uniformly across all files carrying the clause. No rule change; both branches intact.
 

@@ -129,6 +129,15 @@
 > change. Counterparts still open: `analyst` K-001, `qa-engineer` K-003 (unexercised — 0 blockers).
 
 ## Parking lot / ideas
+- **A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste
+  Stage D).** The plan (`claude/docs/plans/prompt-waste-reduction.md`) specified this rule for
+  `architect.md`, but `architect` authors no delegation-summary table — the unit/step ledger in
+  `plans/<slug>-coordination.md` is **this** agent's artifact, so the rule was generalized to "a
+  recap table" there and its specific instance lands here. Not added to `teco.md` in that unit: it
+  is a rule change, and §4.0's rollback contract keeps those out of a compression commit. Worth
+  weighing on the next `teco.md` pass — a coordination ledger that restates each unit's decisions
+  rather than citing the plan section is the highest-volume instance of the duplication the whole
+  plan targets, and `teco.md` is the largest file on the team (5,377 w).
 - **Grant `SendMessage` to dispatched specialists for self-reporting (noted 2026-08-21).** Live
   during the K-028 coordination (K-015's validation vehicle): `architect` and `analyst` each
   finished a unit and could not report the result back to teco directly — `architect` stated

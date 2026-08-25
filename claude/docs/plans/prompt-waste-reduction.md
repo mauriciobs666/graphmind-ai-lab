@@ -456,29 +456,91 @@ to argue.* **Two findings:**
     done permanently — everything after that is class-7 judgment, where the finding-5 test decides
     and the honest answer is usually keep.** A future sweep that opens with a provenance grep is
     re-running a search whose answer is known to be empty.*
+15. ***Waste is created at specification time, and the check is "how many agents does this rule
+    bind?"*** *Stage D found the plan's own spec placing two cross-cutting rules into one agent's
+    prompt — the exact defect Stages A–C spent six units removing. Neither was sloppy drafting;
+    both read as obviously correct until the agents-bound count is taken (six for revision notes,
+    three for later-pass dispositions), at which point both are obviously misplaced. **The
+    doctrine's classes describe waste already in a file; this finding is about not creating it.**
+    Two corollaries, both cheap: a rule whose topic the target file never otherwise mentions is
+    almost always misplaced (the clause would introduce the topic solely to qualify it); and a rule
+    specified in two places at once is not a "split" — check the other place's literal wording
+    before defending the division, which is exactly the check I skipped and gate (c) caught.*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
 - `architect.md`: resolve the §"stand alone" vs. §"compress by pointer" tension explicitly:
   *stand-alone means the implementer never re-derives a decision — state each decision **once**,
   in one canonical section; elsewhere cite the section; quote a sibling note's conclusion once and
-  cite it for rationale; a delegation-summary table cites, it does not restate.* Plus: revision
-  history is one dated line, not a "Revision note" narrative.
+  cite it for rationale; a delegation-summary table cites, it does not restate.*
+  ~~Plus: revision history is one dated line, not a "Revision note" narrative.~~ **Relocated to
+  Stage E at execution (2026-08-25)** — `architect.md` mentions revision notes nowhere, so the
+  clause would have introduced the topic solely to qualify it, and rule 5 (≥5 revising agents) is
+  its only mandated home.
 - `analyst.md`: a finding is evidence + why + concrete fix in **≤~15 lines**, overflow to an
-  appendix; a later pass records a closed finding as **one disposition line**, full prose only for
-  *new* findings; implementation reviews **always** open the `-impl` file — never append to the
+  appendix; ~~a later pass records a closed finding as **one disposition line**, full prose only
+  for *new* findings;~~ **relocated to Stage E at execution (2026-08-25)** — Stage E's own bullet
+  below already specified this rule verbatim, for three reviewing agents rather than one;
+  implementation reviews **always** open the `-impl` file — never append to the
   plan review (the 2,455-line file is the incident this prevents).
 - Guard on the budgets themselves: **never drop evidence to fit a budget — appendix it**; the cap
   bounds the finding's inline body, not the review's rigor.
 - Net additions ≤~120 words across both files — measured against the same budget they impose.
 
+**Executed 2026-08-25 — done: `architect.md` 1,429 → 1,471 w (+42), `analyst.md` 2,325 → 2,375 w
+(+50). Net +92 against the ≤~120 budget**, with the tilde doing no work. Three additions shipped
+(architect's once-canonical rule; analyst's ≤~15-line finding cap with its appendix escape and
+never-drop guard; the `-impl` never-append prohibition, folded into the existing sentence that
+already named the suffix rather than added as a new one) and two relocated to Stage E, above.
+
+- **The relocation test is finding 13 applied to an addition, and it is the stage's main result.**
+  Both relocated items are cross-cutting rules that the spec had aimed at a single agent's prompt.
+  The test that caught them: *count the agents the rule actually binds.* Revision notes bind six;
+  later-pass disposition lines bind three. A rule with N>1 users belongs in the file all N read.
+  I applied this test myself to the revision-note clause and then **failed to apply it to the
+  disposition-line clause** — `cobb`'s gate-(c) lint fired it back, with the decisive evidence
+  being that Stage E's own bullet already carried the identical rule verbatim. **Stage D was one
+  gate-(c) pass away from shipping a rule into two always-loaded files at once.**
+- **A prompt that never mentions a topic is the strongest relocation signal.** `architect.md` says
+  nothing about revision notes, so the mandated clause would have introduced the topic *solely to
+  qualify it*. That is worse than finding 13's usual shape (a layer re-aiming a rule the file
+  already carries), and it is detectable before writing a word.
+- **Additions get the same class-6 discipline as cuts, and passed.** Zero dates, authority
+  markers, or history pointers entered either file. Finding 14's "class 6 is finished" survives
+  the one stage that could have reopened it.
+- **Two placement corrections from the lint, both free.** "a summary table cites, it does not
+  restate" → "a **recap** table" (the general word reached architect's *step* table, the one
+  artifact the same file twice insists must stay concrete); and `-ml.md` → `-ml.md`/`-graph.md`,
+  because §2's motivating incident — one decision restated 4× in `document-ingestion.md` — was a
+  **`-graph.md`** note, so the rule as first written did not bind the case that generated it.
+- **One alignment edit outside the addition** (`architect.md` step 4): "fold its *recommendation*
+  into the plan" → "its *conclusion*", so step 4 and the new Handoff rule use one word for one
+  thing instead of inviting the restatement the new rule forbids.
+
 ### Stage E — Shared context files (stakeholder-gated)
 
 Same doctrine on root `AGENTS.md` (1,950 w), `claude/AGENTS.md` (1,848 w — densest narrative,
 1 em-dash/36 w), `falkor-chat/AGENTS.md` (1,762 w). Higher blast radius: these bind humans and
-every tool. Includes the one *convention* amendment (root `AGENTS.md`, collision rule 5): a
-review's later `## Pass N` section is **compact by rule** — verdict + one-line disposition per
-prior finding + new findings only. Existing frozen documents untouched.
+every tool. Existing frozen documents untouched.
+
+**The one *convention* amendment (root `AGENTS.md`, collision rule 5) — now four parts, three of
+them relocated here at Stage D's execution** (2026-08-25; each was specified as a single agent's
+prompt edit, and each turned out to bind 3–6 agents, making a one-agent prompt the wrong home —
+finding 13). Rule 5 is the only place all of them are mandated, so they land as one amendment
+rather than scattering across `architect.md`, `analyst.md`, and rule 5:
+
+1. A review's later `## Pass N` section is **compact by rule** — verdict + new findings in full.
+2. A prior finding gets **one disposition line**: the disposition (fixed / not fixed / superseded)
+   plus the evidence rechecked. *(From Stage D `analyst.md`. Binds `analyst`, `data-scientist`
+   (`reviews/<slug>-ml.md`), `security-expert` — every agent whose deliverable is a review.)*
+3. A **revision note is one dated line**, not a narrative. *(From Stage D `architect.md`. Binds
+   every agent that revises a pre-approval document — `architect`, `teco`, `tico`, `qa-engineer`,
+   `data-scientist`, `graph-dba`.)*
+4. **Resolve which branch a re-review lands in** — rule 5's `## Pass N` clause sits in the **No**
+   branch, but the canonical later pass (analyst reviews → owner fixes → analyst re-reviews) is a
+   document that has been *executed against*, which the **Yes** branch routes to `<slug>2.md`. The
+   convention does not currently answer; pick one. *(Raised by `cobb`'s gate-(c) lint at Stage D
+   as F6 — not fixable inside any agent prompt, and cheapest to settle while rule 5 is open.)*
 
 ### Stage F — Ratchet guard (make it stick)
 
