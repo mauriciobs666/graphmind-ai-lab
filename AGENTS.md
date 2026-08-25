@@ -122,6 +122,17 @@ and OpenCode artifacts).
     surface that owns it — the component's `DESIGN.md` or `README.md`, or the requirements doc for
     a scope decision. Backlogs are headed for the graph, the way team kaizen already is; keeping
     finished work out of them is what makes that move a migration rather than a cleanup.
+  - **An open item is rewritten, not appended to.** Revisiting one produces a *replacement* body:
+    fold what you learned into it so the item reads as one present-tense statement of what is true
+    now and what remains — **never a dated `Update:` clause stacked under the previous one.** After
+    three of those the current ask is the last sentence of a wall of text and the two above it are
+    false. What an update supersedes is owed nothing: a stale guess at what remained was never
+    acted on, and any real change it reported has its own `HISTORY.md` entry — verify that, then
+    drop it. What the revisit *found* is different and stays, folded in as the item's content
+    rather than as news: a decision taken, a constraint discovered, a partial precedent set,
+    evidence that moves the call. Where the fact of the revisit is itself worth recording, it is
+    **one dated line, not a narrative** — the same rule collision rule 5 applies to a document
+    revised in place, and deliberately the same words.
   - **A milestone-map row, wherever one is kept, says what the milestone is and when it landed.**
     Gate sequences, defect trails and superseded framings belong in `HISTORY.md`.
   - **The existing `archive/` trees are read-only history of the previous convention.** Nothing

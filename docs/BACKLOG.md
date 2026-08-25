@@ -27,13 +27,13 @@
   the MCP path in exactly one harness and `redis-cli GRAPH.QUERY` remains the **only** path under
   OpenCode/Kiro. Includes the `allowed-tools` portability result from S4 (an unknown entry is
   ignored, not rejected — spot-checked, not exercised by a real OpenCode invocation).
-  **Updated 2026-07-26 (C-320):** the launch command is now `cypher-mcp/docker-run.sh` rather than
-  `cypher-mcp/run.sh`. The property this item depends on is preserved exactly — the launch surface is
-  still *a single command*, and a script ports where a JSON `args` array does not; it also replaces
-  the per-host question "is there a working Python 3.12 venv there" with "is there a Docker daemon".
-  Two new obligations for this item: Docker becomes a prerequisite on any harness host (`run.sh` is
-  what ports to a Docker-less one), and **`MCP_TIMEOUT` is a Claude-Code knob** — OpenCode's and
-  Kiro's own startup budgets must be established here. Owner: `cobb` / `devops`.
+  The launch command is `cypher-mcp/docker-run.sh` (containerized at C-320). That keeps the
+  property this item depends on — the launch surface is *a single command*, and a script ports
+  where a JSON `args` array does not — while changing the per-host question from "is there a
+  working Python 3.12 venv" to "is there a Docker daemon". So this item carries two obligations
+  beyond the wiring itself: Docker is a prerequisite on any harness host (`run.sh` is what ports to
+  a Docker-less one), and **`MCP_TIMEOUT` is a Claude-Code knob** — OpenCode's and Kiro's own
+  startup budgets have to be established here. Owner: `cobb` / `devops`.
 
 - **C-507 — AC-5's append-before-delete ordering is enforced procedurally, not mechanically.** 🔵
   `cobb`'s 4-step distillation sequence (append to `history.md`/knowledge base, confirm, only then

@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 9
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 10
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -15,6 +15,8 @@ together), not one file per commit. §4.0 and Stage B updated.*
 agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
 verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
 stakeholder-gated.*
+*Rev 10 (2026-08-25, stakeholder-directed): Stage G5 — the rule for open-item note accretion,
+the gap G3 filed and left open. Finding 25; root `AGENTS.md` amended; all 8 corpus instances folded.*
 *Rev 9 (2026-08-25): the corrected rule applied everywhere it reaches — 13 kaizen plans
 (17,910 → 12,016 w, −32.9%) and `falkor-chat/docs/BACKLOG.md` (8,807 → 7,997 w). Stage G's units
 G3 pass 2 and G4.*
@@ -754,6 +756,23 @@ but not all three. **Two findings, and the first materially amends finding 15:**
     this asks what **enforces** its opposite. **The check is one grep** — for the named actor's
     guard script, read its allowlist against the paths the new duty requires — and it belongs to
     gate (c) on any edit that names an agent as the doer.*
+25. ***An append-only item cannot say that its own premise expired.*** *Appending is additive;
+    expiry is subtractive, so a dated `Update:` chain can only add a newer guess beneath an older
+    one that is now false. Measured over the corpus (8 instances, 5 files) the appends split in two,
+    and only one kind is a defect. An **amending** update changes the item's content — a dependency
+    moved (`C-310` after containerization), a third data point converged (`cobb` K-014), a partial
+    precedent was set (falkor-chat's response-model entry): fold it into the body and it reads
+    better as content than as news. A **superseding** update restates *what remains* with a newer
+    answer, which makes every earlier layer false — `coder` K-002 stacked three, leaving the live
+    ask as the last sentence of ~200 words. **The sharpest case is what a chain concealed:**
+    `qa-engineer` K-003's last append (2026-07-12) designated falkor-chat K-022→K-025 as the live
+    cycle to watch. That cycle ran on 2026-07-21, returned findings, and spawned K-027 — and the
+    item still read as waiting for something upcoming, six weeks after it had happened. Nothing
+    prompts the reader of an append chain to ask whether the top of it is still true; a reader
+    **rewriting** the body has to. This is Stage G's thesis at item granularity — **the compaction
+    is what performs the re-read** — and it is why the rule says rewrite rather than "keep it
+    short." Shipped in root `AGENTS.md`, worded to match collision rule 5's *one dated line, not a
+    narrative* so the two read as one principle.*
 
 ### Stage F — Ratchet guard (make it stick)
 
@@ -864,6 +883,7 @@ not coverage:
 | G2 | `docs/BACKLOG.md` (root) — apply it. ✅ **executed 2026-08-25 in two passes**: −723 w under the original rule, then **9,021 → 1,397 w (−84.5%)** under the corrected one. |
 | G3 | `claude/*/kaizen/plan.md` sweep — same question, 13 small files; likely a no-op, confirm rather than assume. ✅ **executed 2026-08-25 — not a no-op**; measured in pass 1, applied in pass 2: **17,910 → 12,016 w (−32.9%)**. |
 | G4 | `falkor-chat/docs/BACKLOG.md` — the other module carrying an item-body backlog. Filed and executed 2026-08-25 on the same go-ahead: **8,807 → 7,997 w**. |
+| G5 | Open-item note accretion — the pattern G3 found and no rule reached. Stakeholder-directed 2026-08-25: rule written into root `AGENTS.md`, all 8 corpus instances folded. |
 
 **Not in scope.** Rewriting `HISTORY.md`, `reviews/` or any `archived` document; `QUERIES.md`;
 `falkor-chat/docs/BACKLOG.md` and `DESIGN.md` (already done — `0f48b8a`/`88bb71b`/`3e2b378`).
@@ -1055,6 +1075,31 @@ from `HEAD`, redone with `assert s.count(anchor)==1` on every anchor and the hea
 *first* so it could not shadow a later one. This is finding 18's shape in a text editor: **an
 anchor that names a section also matches every sentence that talks about the section.** Nothing was
 lost — but the safeguard was reading the output, not the method, and the method is what got fixed.
+
+**G5 — the rule for open-item note accretion (stakeholder-directed, 2026-08-25).** G3 surfaced the
+pattern and explicitly filed it as unreached; this closes it. **Corpus first (finding 20): 8
+instances across 5 files**, found by `grep -oP '\*\*(Update[d]?|Status update)[^*]{0,60}\*\*'` over
+every `BACKLOG.md` and `kaizen/plan.md`. Reading all eight is what produced the rule's shape —
+finding 25's amending/superseding split — rather than the obvious-but-wrong "don't append."
+
+**The rule, in root `AGENTS.md` beside the delivered-item bullet:** an open item is **rewritten,
+not appended to**. A revisit produces a replacement body reading as one present-tense statement of
+what is true now and what remains. What an update *superseded* is owed nothing — a stale guess at
+what remained was never acted on, and any real change it reported has its own `HISTORY.md` entry.
+What the revisit *found* stays, folded in as content rather than as news. Where the fact of the
+revisit matters, **one dated line, not a narrative** — collision rule 5's exact words, chosen so the
+document-level and item-level rules are recognizable as one principle rather than two coincidences
+(`teco.md`/`architect.md`'s "cites, does not restate" pair is the precedent for doing this).
+
+**Applied to all eight**, and folding is not deleting — every one lost words, none lost content:
+`coder` K-002 (3 appends, ~200 w → ~110), `qa-engineer` K-003 (2 → one statement), `cobb` K-014,
+`C-310`, falkor-chat's response-model entry. Two of the folds changed what the item *says*, which
+is the rule earning its keep rather than tidying: `coder` K-002 now states plainly that the contract
+was proven **by `tdd-engineer`, not `coder`** — true across all three appends but never said in one
+place — and `qa-engineer` K-003 now records that its designated vehicle already ran unassessed
+instead of implying it is still upcoming.
+
+**Grep returns zero.** The corpus conforms as of this commit.
 
 ## 5. Verification strategy
 

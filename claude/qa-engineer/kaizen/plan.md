@@ -23,7 +23,7 @@
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** QA is most valuable in a loop with implementation. A light protocol (report format that `coder`/`tdd-engineer` consume, plus a re-run pass) closes it.
-- **Notes:** `teco` could orchestrate; verify subagent-to-subagent handoff patterns before hardwiring. **Update 2026-07-09:** the teco side is now in teco's prompt (roster entry with path-handoff conventions + defect→re-brief→re-run in its integrate-&-verify step); remains open pending a live orchestrated cycle. **Update 2026-07-12:** the designated live cycle is falkor-chat **K-022→K-025** (the first fully-gated coordinated run — see teco K-003): if the analyst impl review or the K-025 acceptance pass returns findings, drive the loop there and log how the handoff held up. teco K-002 is separately evaluating `SendMessage` continuation to make the re-run half cheaper (continue the original implementer instead of re-spawning cold).
+- **Notes:** The `teco` side is shipped — its roster entry carries the path-handoff convention and its integrate-and-verify step carries defect→re-brief→re-run. What remains is an assessment of the loop **in practice**, and the vehicle designated for it has already passed unassessed: falkor-chat K-022→K-025 ran to a QA acceptance PASS on 2026-07-21 and did return findings (K-027 was filed out of that pass), but how the handoff itself held up was never written down. Close on a deliberate look at one completed defect→fix→re-run cycle — that one retrospectively, or the next one live.
 
 ### K-004 — First-run smoke-eval + document the registry-reload gotcha
 - **Status:** 🔵 proposed

@@ -639,11 +639,11 @@ Every other plan named by a delivered item now exists; this is what is left.
   memory; one-shot instant-timeout anomaly after a long override run.
 - Per-endpoint response schemas (QA, recommended three times now): full-thread / since-reads / search each carry a
   different field subset (all documented/intentional) — a declared schema per endpoint would make the contract testable
-  and stop accretion. **Status update (K-031, 2026-07-24):** the three new §11 structure/diff routes **do** declare
-  `response_model=` (`WorkflowDefStructureOut` / `WorkflowDiffOut`, `schemas.py`) with exact-key-set contract tests; every
-  pre-existing route still does not. That is a **deliberate** non-retrofit — FastAPI's `response_model` *filters*
-  undeclared fields, so a wrong model silently drops a field the web client reads — and it leaves the repo with a **mixed
-  convention**. This entry stays open; the new routes are the worked precedent for the eventual retrofit, not the retrofit.
+  and stop accretion. **The repo is deliberately on a mixed convention today.** The three §11 structure/diff routes
+  declare `response_model=` (`WorkflowDefStructureOut` / `WorkflowDiffOut`, `schemas.py`) with exact-key-set contract
+  tests; no pre-existing route does. The non-retrofit is deliberate, not pending — FastAPI's `response_model` *filters*
+  undeclared fields, so a wrong model silently drops a field the web client reads, which makes a bulk retrofit riskier
+  than the accretion it would stop. The §11 routes are the worked precedent for an eventual per-route retrofit.
 - **Opportunistic nit — re-slug the K-031 implementation review** (recorded, **not** scheduled work).
   It is filed under the slug `k031-structure-read-impl`, while the rest of its family — the plan and
   the plan review — uses `workflow-def-structure-read`. The filename grammar's family rule (*the same
