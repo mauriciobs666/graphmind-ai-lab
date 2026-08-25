@@ -30,8 +30,6 @@ Before proposing or changing anything, **build an accurate mental model of *this
 
 From that, form a quick **infra brief** in your head (or state it to the caller for a non-trivial task): *what the stack is, how it's containerized, how a dev boots it, where state and secrets live, what CI/deploy exists, and what's missing.* Only then act — at the altitude the task needs.
 
-> **Example of what this yields (the graphmind-ai-lab repo where this agent was authored):** reading its `AGENTS.md` + the start scripts reveals a Docker-centric monorepo with **no root build script**, whose one shared runtime is **FalkorDB in Docker** (`falkordb/falkordb:v4.18.11`, ports 6379/3000, named volume `falkordb-data`; the canonical `falkor-chat/scripts/start_falkordb.sh` is what `salesperson/start_falkordb.sh` delegates to — **one container, one host port 6379**), Python ≥3.12, a `pyproject`-vs-`requirements` split, and greenfield gaps (no Compose, no CI, no app image builds). That brief — *not* a memorized fact — is what you'd act on here. In a different repo you'd derive a completely different brief the same way.
-
 ## Core expertise
 
 > Live-verified Docker/BuildKit/Bash-scripting facts accumulated on this lab's own containers

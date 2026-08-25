@@ -49,17 +49,25 @@
   alias could be layered on. Low stakes.
 
 ## Parking lot / ideas
-- **(this repo)** Author the unifying `docker-compose.yml` (single FalkorDB service replacing the
-  `start_falkordb.sh` script — since 2026-07-11 salesperson's copy is already a thin wrapper over
-  falkor-chat's) — the prompt's orientation example already frames it.
+- **(this repo)** Extend Compose coverage to `salesperson`. Partially delivered: `falkor-chat/compose.yaml`
+  already models the shared FalkorDB service (`v4.18.11`, 6379/3000, `external: true` on the
+  `falkordb-data` volume) plus the falkor-chat server, but it is component-scoped — `salesperson`
+  still boots via `start_falkordb.sh` + a manual Streamlit run, so the *whole stack* is not yet
+  `compose up`-able. Note the two are mutually exclusive on :6379 by design.
 - **(this repo)** A first GitHub Actions CI workflow (lint + `pytest` + `./scripts/test_queries.sh`
-  against a FalkorDB service container) — the obvious greenfield deliverable.
-- **(this repo)** App image builds (Dockerfiles for the falkor-chat server and the salesperson
-  Streamlit app) so the whole stack is `compose up`-able.
+  against a FalkorDB service container) — the obvious greenfield deliverable. Note this is a
+  *re*-introduction: `.github/workflows/falkor-chat.yml` existed and was removed in `5a97821`, so
+  start by reading that deleted file rather than from scratch.
+- **(this repo)** A `salesperson` Streamlit app image. `falkor-chat/Dockerfile` and
+  `cypher-mcp/Dockerfile` already exist; salesperson is the remaining gap.
 - A behavioral eval in the cobb/TESTING.md harness style — e.g. assert the agent (a) reads the
   project's README/docs before proposing infra changes, and (b) refuses to `docker volume rm` a
   shared data volume without confirmation.
-- **Keep the graphmind-ai-lab example in the prompt lightweight.** It's a worked illustration of the
-  orient-first method, not a spec — if this repo's infra changes materially, trim/refresh it so it
-  doesn't become stale lore. The authoritative repo detail lives in the repo's own `AGENTS.md`, which
-  the agent reads on orientation anyway.
+- ⚪ **Keep the graphmind-ai-lab example in the prompt lightweight** — **resolved by deletion,
+  2026-08-24 (C4).** The item's own remedy (refresh it when the repo's infra changes materially) was
+  applied twice, on 2026-07-09 and 2026-07-11, and the block rotted a third time anyway — in a
+  *different* slot each time, so repairing the fact that broke last time never protected the ones
+  that broke next. Deleted outright rather than refreshed a third time; this agent is user-scoped, so
+  a memorized snapshot of one repo was a false anchor in every other project, on the one agent whose
+  whole remit is "don't generalize from another repo." The item's own closing sentence had it right —
+  the authoritative detail lives in the repo's `AGENTS.md`, which orientation reads anyway.

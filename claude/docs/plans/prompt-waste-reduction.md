@@ -164,7 +164,7 @@ Both Stage B observation windows now run concurrently.*
 | C1 | `teco.md` | 5,987 w | **done: 5,377 w** (both passes) | Largest and most narrative-dense. **Two passes, not one** (rule: any file with a >30% projected cut): pass 1 = unambiguous class-5/6 cuts only (narratives, provenance); pass 2 = class-7 dedup (judgment-heavier), only after pass 1's observation window closes clean. Each pass is its own commit/rollback unit |
 | C2 | `tico.md` | 3,627 w | **done: 3,503 w** (one pass) | Ran as a single pass — the inventory found ~no class-7 duplication. Also un-staled Mode 3's commit rule against K-009 |
 | C3 | `analyst.md` | 2,569 w | **done: 2,473 w** (one pass) | Evidence-traps list stayed (class 3/4 payloads); trims were provenance and restatement. **Measured at its editorial floor** — residual class-6/7 inventory across the whole file is under 25 w. Structural lever routed to `analyst` K-003 |
-| C4 | `security-expert.md` + `devops.md` | 2,471 + 2,266 w | after inventory | |
+| C4 | `security-expert.md` + `devops.md` | 2,437 + 2,212 w | **done: 2,357 + 2,110 w** (one pass) | Both cuts were incident/origin provenance, not rules. `devops`'s repo-specific orientation example **deleted on its third rot** rather than refreshed a third time. **Both measured at their editorial floor** — residual 22 w each. One pre-existing MAJOR routed to `security-expert` K-005 rather than bundled |
 | C5 | `tdd-engineer.md` + `qa-engineer.md` + `data-scientist.md` | ~2,200 w each | after inventory | |
 | C6 | `cobb.md` + `graph-dba.md` + `frontend-engineer.md` + `coder.md` | ≤2,054 w each | after inventory | Lightest; may need only Stage B |
 
@@ -294,6 +294,43 @@ carry-forwards discharged. Gates (a)–(e) green; `cobb` §7 lint **0 blockers, 
    no stated criterion for which home a new lesson takes — that split, not the word count, is what
    keeps generating drift. Opened as `analyst` **K-003**, the second K-016-style item this plan has
    produced rather than absorbed.*
+
+***C4 executed 2026-08-24 (4,649 → 4,467 w over two files: `security-expert.md` 2,437 → 2,357,
+−3.3%; `devops.md` 2,212 → 2,110, −4.6%).** Six edits, one pass. Gates (a)–(e) green; `cobb` §7 lint
+**0 blockers, 0 majors on the C4 edits** — the second consecutive unit with no MAJOR of its own
+making, again with the "considered and rejected" list pre-declared. Detail in
+`claude/security-expert/kaizen/history.md` and `claude/devops/kaizen/history.md`. **The split rule
+fired for the first time and was obeyed:** the class-7 sweep produced exactly one candidate, it sat
+inside a section headed "advisory, not authority," and splitting the unit for an 11-w gain was
+disproportionate — so it was deferred, then judged a genuine finding-5 keep and recorded in
+`security-expert/kaizen/plan.md` as **judged-and-kept** rather than left as a phantom pass-2. **Two
+findings:***
+
+9. ***A post-Stage-B file's residual is dominated by its own idiosyncratic citation habit, not by
+   shared boilerplate — so an inventory's first move is to name that habit.*** *Stage B removed
+   what the files had in common; what remains is per-file and clusters tightly. Before its last cut,
+   `security-expert`'s entire residual was **FR-tags** — because it is the only agent on this team
+   built from a formal requirements doc, and therefore the only prompt with FR-numbers to leak.
+   `devops`'s was **repo-specific lore**, because it is the only user-scoped agent and the only one
+   that carried a worked example of this repo. Generic boilerplate scanning finds nothing on either.
+   Corollary for C5/C6: **identify the file's one citation habit first**, and expect it to account
+   for most of the inventory. Finding 7's data set is now four files at 22–34 w residual within a
+   ~360-w size band — the floor is not just a magnitude, it is remarkably **tight** across files of
+   similar rule count.*
+10. ***A recurring "refresh it when it goes stale" maintenance item is a deletion candidate, not a
+    maintenance item — and the tell is that it rots in a different slot each time.*** *`devops`'s
+    orientation example carried its own upkeep rule in the backlog ("if this repo's infra changes
+    materially, trim/refresh it"). That remedy was applied **twice** (2026-07-09 image tag,
+    2026-07-11 start-script consolidation) and the block rotted a **third** time anyway — with the
+    fact installed by the first repair still accurate. **Repairing the fact that broke last time
+    never protects the facts that break next.** The rot had also seeded a **stale backlog**: three
+    parking-lot items in the same file were wrong or dangling, two of them describing work already
+    delivered. Test for the shape: an always-loaded block of environment facts, plus a standing
+    instruction to keep refreshing it, is a maintenance obligation the prompt cannot discharge —
+    delete it and let the agent's own orientation step read the authoritative source. Weigh
+    **scope** above rot when deciding: the decisive argument here was not staleness but that
+    `devops` is **user-scoped**, making a one-repo snapshot a false anchor in every other project,
+    on the one agent whose whole remit is "don't generalize from another repo."*
 
 ### Stage D — Output discipline (small, surgical *additions*)
 
