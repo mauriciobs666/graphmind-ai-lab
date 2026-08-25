@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 5
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 6
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -15,6 +15,10 @@ together), not one file per commit. §4.0 and Stage B updated.*
 agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
 verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
 stakeholder-gated.*
+*Rev 6 (2026-08-25): G1 executed — the amendment shipped with `teco` listing and the human
+applying (its guard denies the editing duty the draft assigned it). Added finding 24 and §3's
+"widen the list, not the test"; settled `SERVER.md`'s and the two READMEs' dispositions; recorded
+G1's +192 w against §5.*
 
 Reduce verbosity at its two roots — narrative-laden agent prompts (the register the agents
 imitate) and accretion-friendly output conventions — without losing a single behavioral rule.
@@ -96,6 +100,17 @@ in a manual that is section-structured, or "a topic switch within a document is 
 far less often than per-topic," where the per-topic trigger has no independent source. Both calls
 occurred in the same C2 bullet, in opposite directions.
 
+**Widen the list, not the test (added at G1).** When an existing rule needs to admit one more case,
+the cheap edit is to loosen its criterion — "read by lookup" → "read by lookup *or section
+citation*", "a second document of the same kind and topic" → dropping *role*, "a section describing
+finished work" → any completed description. A criterion is a **classifier over the whole corpus**:
+loosening it to admit one file admits every file that now satisfies it, including files named on
+the other side of the very rule being amended. Three of the last four convention edits failed this
+way and each was caught only by re-running the amended test over the corpus. **The safe shape is to
+name the new case explicitly and leave the test alone** — and where the test must genuinely change,
+re-classify every instance under the new wording before shipping it (finding 20's corpus grep,
+turned on the amendment itself).
+
 Hard preservation constraints (mechanically checked, not judgment):
 
 - `audit-team.sh` check 8 greps every agent file for `` `git add`/`git commit` `` **and** the
@@ -136,7 +151,9 @@ across every file in the unit — map from the grep output, never from the edit 
 **(c)** `cobb`'s single-artifact prompt-quality lint (`agent-maintenance` skill §7) on the result.
 **For any rule the edit relies on holding across more than one file, name what reads it and what
 would notice if it stopped holding** (finding 23) — a guarantee recorded only in a `kaizen/plan.md`
-is held by nothing, since those files are not loaded at edit time.
+is held by nothing, since those files are not loaded at edit time. **If the edit names an agent as
+the doer of a new duty, read that agent's guard script's allowlist against the paths the duty
+requires** (finding 24) — a convention can assign work a hook denies, and neither side reports it.
 **(d)** `./claude/scripts/audit-team.sh` green.
 **(e)** the dated `kaizen/history.md` compression entry (standing maintenance rule) **carries the
 gate-(a) inventory mapping and the list of moved clauses** — persisted where a later incident
@@ -717,6 +734,15 @@ but not all three. **Two findings, and the first materially amends finding 15:**
     this edit relies on holding across more than one file, name what reads it and what would notice
     if it stopped holding.** A guarantee recorded only in a `kaizen/plan.md` is not held by
     anything — those files are not loaded at edit time.*
+24. ***When an amendment names an actor, check what that actor is mechanically permitted to do.***
+    *G1's draft assigned a standing editing duty to `teco` over five document kinds its own
+    `PreToolUse` guard escalates and its escalation message tells the human to deny. A convention
+    can grant a duty a hook denies, and neither side reports the contradiction: the convention
+    reads as authoritative, the hook fires only at execution time, and the failure surfaces as an
+    agent that appears to refuse its own documented job. Finding 23 asks what **reads** a claim;
+    this asks what **enforces** its opposite. **The check is one grep** — for the named actor's
+    guard script, read its allowlist against the paths the new duty requires — and it belongs to
+    gate (c) on any edit that names an agent as the doer.*
 
 ### Stage F — Ratchet guard (make it stick)
 
@@ -761,8 +787,11 @@ integrity; nothing replaced its compaction effect.
 
 | Kind | Examples | Growth |
 |---|---|---|
-| **Read-whole (living)** | `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md`, `QUERIES.md` | Must be bounded — it can never freeze |
-| **Read-by-lookup** | `HISTORY.md`, `reviews/`, closed `plans/`, `test-reports/` | Unbounded is **correct**; `falkor-chat/docs/HISTORY.md` at 3,481 lines is healthy |
+| **Read-whole (living)** | `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md` | Must be bounded — it can never freeze |
+| **Read-by-lookup** | `HISTORY.md`, `QUERIES.md`, `reviews/`, closed `plans/`, `test-reports/` | Unbounded is **correct**; `falkor-chat/docs/HISTORY.md` at 3,481 lines is healthy |
+
+*`QUERIES.md` sits on the lookup row as shipped, not the read-whole row it was drafted onto — it is
+consulted per query, never read end-to-end, and the blast-radius note below already found it clean.*
 
 **Two independent instances, same cause, different location** — which is what makes this a
 convention gap rather than an authoring lapse. Closeout is additive, so weight lands wherever the
@@ -781,15 +810,16 @@ it leaks.
 **The amendment (root `AGENTS.md`, module-documentation convention).** Two bullets:
 
 1. **A living document is compacted at milestone close, not only appended to.** The documents read
-   whole to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md`, `QUERIES.md` — can
-   never freeze, so they never shed weight on their own; `HISTORY.md`, `reviews/` and closed
-   `plans/` are read by lookup and may grow without bound. At milestone close, in the same pass
-   that flips that milestone's documents to `archived`, **`teco`** reduces every delivered item in
-   the module's `BACKLOG.md` to **one index row** (id, title, date, milestone) and drops from the
-   living documents each section that now describes finished work — a "currently in progress"
-   header, a plan-doc row for a document that now exists, a delivered-ticket annotation.
-   **Verify present in `HISTORY.md` before deleting**: the closeout is a move, not a discard —
-   the same history-first gate Stage B–E used on prompts.
+   whole to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md` — can never freeze, so
+   they never shed weight on their own; `HISTORY.md`, `QUERIES.md`, `reviews/`, closed `plans/`
+   and `test-reports/` are read by lookup and may grow without bound. At milestone close, in the
+   same pass that flips that milestone's documents to `archived`, **`teco` lists what should go** —
+   every delivered item in the module's `BACKLOG.md` reduced to **one index row** (id, title, date,
+   milestone), plus each section of a living document that tracks **work status** rather than the
+   system itself: a "currently in progress" header, a plan-doc row for a document that now exists,
+   a delivered-ticket annotation. **The human applies the list.** **Verify present in `HISTORY.md`
+   before deleting**: the closeout is a move, not a discard — the same history-first gate Stage
+   B–E used on prompts.
 2. **A milestone-map row says what the milestone is and when it landed.** Gate sequences, defect
    trails and superseded framings are `HISTORY.md`'s.
 
@@ -802,6 +832,20 @@ move, not the last). Living documents by size: `falkor-chat/docs/QUERIES.md` 2,4
 `falkor-chat/docs/BACKLOG.md` 717 · `falkor-chat/docs/SERVER.md` 500 · 13 `claude/*/kaizen/plan.md`
 (21–224). `QUERIES.md` is **not** a target: it is a section-cited reference read by lookup, and it
 carries 2 delivered-narrative markers in 2,412 lines — already clean.
+
+**Two dispositions the list left implicit, both settled at G1** — silence in a blast-radius list is
+not coverage:
+
+- `falkor-chat/docs/SERVER.md` (500 lines) **is reached** by the rule — a read-whole living
+  document — and is **not a Stage G target**. It belongs to a module whose living documents were
+  already compacted at its own milestone close (`0f48b8a`/`88bb71b`/`3e2b378`), and its tree is
+  another session's. The rule applies to it at falkor-chat's next close, by that module's own
+  closeout pass.
+- `cypher-mcp/README.md` (750 lines) and `claude/README.md` (198) are **unreached**, not merely
+  untouched. The rule's trigger is *milestone close*, and neither module has a `BACKLOG.md`, a
+  `HISTORY.md`, or a milestone cadence — so the trigger never fires for them. They are bounded by
+  nothing today, and Stage G does not change that; recording it is the point, since a reader
+  otherwise reads their absence from the target list as a clean bill of health.
 
 **Units.**
 
@@ -818,6 +862,32 @@ prompt or skill; G1–G3 touch none, so `cobb`'s §7 lint and `audit-team.sh` ar
 **Precondition unmet at filing:** §4.0 requires a clean tree and the working tree carries 12
 unrelated modified files. **Stakeholder-gated like Stage E** — this changes the convention every
 agent and tool loads.
+
+**G1 executed 2026-08-25.** Root `AGENTS.md` 1,885 → 2,077 w (**+192**). `audit-team.sh` PASS.
+Gate (c) was run despite being informational for this stage, because the Stage E pass-3 pass on
+this same file found two majors invisible in the diff; it returned **1 blocker, 2 majors**, and all
+three changed the shipped text:
+
+- **B1 (blocker) — the amendment named an actor its own hook denies.** The draft made `teco` the
+  editor. `teco`'s `PreToolUse` guard allowlists `docs/plans/`, the mechanical `Status:`→`archived`
+  flip, and `/tmp` — every target document of this rule is outside it, and the guard's escalation
+  message instructs the human to *deny* non-trivial edits. The rule could never have executed.
+  **Shipped fix: `teco` lists, the human applies** — a duty the guard already permits, since
+  producing a list writes nothing. The alternative (widen the by-kind owner table to cover
+  `BACKLOG.md`/`HISTORY.md`/`DESIGN.md`/`README.md`/`AGENTS.md` and re-scope the guard) is a
+  separate convention decision, filed rather than made inside a compaction unit.
+- **M1 — a widened test reclassified a document twelve words from the list it sits on.** The draft
+  widened the lookup test to "read by lookup *or section citation*"; `DESIGN.md` is heavily
+  section-cited (`§1`, `§5.3/§9`, `§10`, `§11`, `§14`) and would have been reclassified as
+  unbounded while still named on the read-whole row. Fix was subtractive — delete the widening.
+  `QUERIES.md`, the case the widening existed to serve, satisfies the unwidened test anyway.
+- **M2 — "each section that now only describes finished work" is broader than its own examples.**
+  All three examples are work-status artifacts; the phrase reaches any completed system
+  description, and `DESIGN.md` is on the list it applies to. Shipped: *"each section that tracks
+  **work status** rather than the system itself."*
+
+Both majors are the same failure as Stage E pass 3's role gap: **a test written to admit one more
+case, admitting a class.** Now doctrine — see §3, *widen the list, not the test*.
 
 ## 5. Verification strategy
 
@@ -838,6 +908,13 @@ agent and tool loads.
 | 13 agent prompts | 30,459 | 29,285 | **−1,174** | −3.9% |
 | 3 shared context files | 5,560 | 5,348 | **−212** | −3.8% |
 | **Corpus** | **36,019** | **34,633** | **−1,386** | **−3.8%** |
+
+**This table is measured through Stage F. Stage G moves it back up, deliberately:** G1's amendment
+adds **+192 w** to root `AGENTS.md` (1,885 → 2,077), taking that file from −65 w against baseline to
+**+127 w (+6.5%)** and the shared-file line from −212 to −20. That is the same category as `tico`'s
++129 — a rule the plan chose to add, not weight that crept back — and Stage G's own thesis is that
+one bounded rule in an always-loaded file buys back far more than 192 w across the living documents
+it governs. **The claim is unmeasured until G2 lands**; it is the number to check there.
 
 Largest movers: `teco` −585 (−10.0%), `claude/AGENTS.md` −180 (−9.7%), `devops` −156, `architect`
 −151 (−9.3%). **Three files ended *above* baseline and all three are honest:** `tico` +129 (K-008's
@@ -921,5 +998,12 @@ synthetic probe (small representative task) substitutes.
   `analyst` gate; alternatively the main session executes directly with the same §4 gates.
   *Recommendation: main session executes, `cobb` lint as the gate* — the doctrine table is the
   spec either way. Stakeholder call.
+- **Open, filed at G1: who may edit a living document.** Root `AGENTS.md`'s by-kind owner table
+  routes `plans/`, `reviews/`, `requirements/`, `manuals/`, `test-plans/` and `test-reports/` — and
+  **none of the living kinds** (`BACKLOG.md`, `HISTORY.md`, `DESIGN.md`, `README.md`, `AGENTS.md`).
+  So the compaction rule G1 shipped has no agent owner, which is why it ends at *the human applies
+  the list*. Resolving it means adding those kinds to the table **and** widening `teco`'s
+  `Write`/`Edit` guard to match — a grant change, and §4's split rule puts a grant clause in its own
+  gated pass. Deliberately not decided inside a compaction unit. **Stakeholder call.**
 - **Targets vs. safety** — word targets are estimates, not quotas: a file landing above target
   with every rule intact **passes**; a file hitting target by dropping a rule fails gate (a).

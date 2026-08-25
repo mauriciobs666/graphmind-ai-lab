@@ -104,6 +104,20 @@ and OpenCode artifacts).
     feature's slug per the family rule below.
   - **A document that freezes does not move.** It gets `Status: archived` in its own header
     block and stays exactly where it is.
+  - **A living document is compacted at milestone close, not only appended to.** A document read
+    **whole** to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md` — can never
+    freeze, so it never sheds weight on its own; one read **by lookup** — `HISTORY.md`,
+    `QUERIES.md`, `reviews/`, closed `plans/`, `test-reports/` — may grow without bound, and that
+    is correct. So at milestone close, in the same pass that flips that milestone's documents to
+    `archived`, **`teco` lists what should go** — every delivered item in the module's
+    `BACKLOG.md` reduced to one index row (id, title, date, milestone), plus each section of a
+    living document that tracks **work status** rather than the system itself: a "currently in
+    progress" header, a plan-doc row for a document that now exists, a delivered-ticket
+    annotation. **The human applies the list** — the by-kind owner table below routes none of
+    these document kinds, and `teco`'s write guard allows only the `archived` flip.
+    **Verify it is in `HISTORY.md` before deleting** — a closeout is a move, not a discard.
+  - **A milestone-map row says what the milestone is and when it landed.** Gate sequences, defect
+    trails and superseded framings belong in `HISTORY.md`.
   - **The existing `archive/` trees are read-only history of the previous convention.** Nothing
     is ever moved into them again, and nothing is un-archived.
   - **Citing another document:** write a **backticked path from the repo root** —
