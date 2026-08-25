@@ -1,6 +1,6 @@
 # Prompt & output waste reduction — agent team
 
-> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 7
+> **Status:** active · **Owner:** `claude` · **Tracks:** — · **Version:** 8
 
 *Rev 2 (2026-08-23): added live-deployment ground rules, per-unit rollback machinery, breakage
 detection/abort criteria, staggered Stage B, two-pass rule for the heaviest cut.*
@@ -15,6 +15,10 @@ together), not one file per commit. §4.0 and Stage B updated.*
 agents write in; nothing bounds the documents they write into, and the convention has 0 subtractive
 verbs. Filed, not executed: §4.0's clean-tree precondition is unmet and the amendment is
 stakeholder-gated.*
+*Rev 8 (2026-08-25, stakeholder ruling): a delivered item does not stay in `BACKLOG.md`, not even
+as an index row — its record is `HISTORY.md`, or the design surface that owns it when it is a live
+constraint rather than a record of work. Overturns a clause of G1's own amendment; root `AGENTS.md`
+and `docs/BACKLOG.md` (−84.5%) updated. See Stage G, "G2 pass 2".*
 *Rev 7 (2026-08-25): Stage G complete. G2 −723 w on `docs/BACKLOG.md`, and gate (b) found M7 had
 no `HISTORY.md` entry at all — its backlog cell was the only record, so the entry was backfilled
 before the cell was compacted. G3 measured rather than edited: ~2,338 w of retained closed items
@@ -918,14 +922,48 @@ red-handed:** closeout is additive and lands wherever the ritual happens to be w
 weight went to the living document and the lookup document stayed empty. Gate (b) exists for
 prompts; on a convention edit it turns out to be the gate that finds the missing history.
 
-**Left in place, deliberately.** `docs/BACKLOG.md` still carries closed-milestone work status the
-rule reaches — `### Sequencing — M3 (as delivered)`, `### Status at close`, the per-milestone
-`### Items` lists. That is a **list for the human**, not a unilateral sweep: the rule shipped an
-hour earlier says `teco` lists and the human applies, and deleting a further ~2,000 w of another
-milestone's record in the same commit that ships that constraint would contradict it. Note
-`### Status at close`'s second half (*"Known limits of what shipped"* — Claude-Code-only wiring,
-read-only, `EXPLAIN`-only, the truncation thresholds) is **system, not work status**, and stays
-under M2's own test.
+**G2 pass 2 — the stakeholder applied the list, and corrected the rule doing it (2026-08-25).**
+Pass 1 left the closed-milestone sections in place as a list for the human, per G1's own *"`teco`
+lists, the human applies."* The ruling on that list went further than the list did:
+
+> *"I disagree that already completed milestone/task related information is stored along the
+> backlog, in the future we will not even have a file for that (i.e. it will be moved to the graph,
+> similar to the team kaizen)"* — followed by *"this belongs to history or if very important to the
+> design."*
+
+**This overturns a clause of the rule G1 shipped**, which had delivered items *staying* in
+`BACKLOG.md` as index rows. They do not stay at all. Root `AGENTS.md` amended: `BACKLOG.md` is
+forward-looking only; a delivered item's record is `HISTORY.md`, except for a fact that is a **live
+constraint on the system** rather than a record of work, which goes to the design surface that owns
+it. The stated reason is the one that makes it non-negotiable — **backlogs are headed for the
+graph** the way team kaizen already is, and finished work sitting in the file is what would turn
+that migration into a cleanup.
+
+Applied: **`docs/BACKLOG.md` 8,298 → 1,397 w (−6,901; −84.5% from pass 1, −84.5% cumulative from
+9,021)**. `docs/HISTORY.md` 7,883 → 8,482 (+599). What survives in the backlog is eight open items,
+verbatim — C-310, C-507, C-809…C-812 (🔵) and C-323, C-409 (⚪) — plus a header stating the rule and
+one line on where the component is.
+
+**Gate (b) at item granularity, and the routing it forced.** Every delivered `C-` ID was grepped
+against `HISTORY.md`: **41 present, 46 absent.** The absent ones were covered *narratively* by
+their milestone entry but not resolvable by ID, so each milestone entry gained an **`Items
+delivered`** index line (id + one-line title) — the index row the rule prescribes, in the file that
+should hold it. Three pieces routed elsewhere rather than to history, on the ruling's "or the
+design" clause, each verified live at its destination first: `D4` (`EXPLAIN` yes, `PROFILE` no —
+`GRAPH.PROFILE` executes writes) and the truncation thresholds were already in
+`cypher-mcp/README.md` §"`EXPLAIN` yes, `PROFILE` no" and its env-var table, stated better there
+than in the backlog; `D5` in `docs/requirements/cpg-query-access.md`; the 2026-07-18
+access-mechanism decision in `docs/requirements/joern-cpg-pipeline.md`, with a précis added to
+`HISTORY.md`'s M2 entry. `C-101`'s closure — a follow-up that had never been flipped — was written
+into the M1 entry. Four `**Milestone closed.**` paragraphs asserting *"`docs/BACKLOG.md`'s M<n>
+milestone-map row flips…"* were corrected: a lookup document may hold stale narrative, but not a
+present-tense claim about a row that no longer exists.
+
+**The finding.** Pass 1's restraint was correct procedure and the wrong answer. Deferring to the
+human is what the rule requires; it does not make the *scope* I proposed right, and the list I
+handed over was drawn from a rule that was itself too weak. **A rule authored and applied by the
+same party gets tested only when someone else reads its output** — which is the argument for the
+"human applies" clause surviving the correction it just absorbed.
 
 **G3 executed 2026-08-25 — not the no-op the unit predicted.** No file edited; the sweep's
 deliverable is the measurement. Across the 13 `claude/*/kaizen/plan.md` files (17,910 w), **10

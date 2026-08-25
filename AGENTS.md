@@ -109,15 +109,21 @@ and OpenCode artifacts).
     freeze, so it never sheds weight on its own; one read **by lookup** — `HISTORY.md`,
     `QUERIES.md`, `reviews/`, closed `plans/`, `test-reports/` — may grow without bound, and that
     is correct. So at milestone close, in the same pass that flips that milestone's documents to
-    `archived`, **`teco` lists what should go** — every delivered item in the module's
-    `BACKLOG.md` reduced to one index row (id, title, date, milestone), plus each section of a
+    `archived`, **`teco` lists what should go** — every delivered item, plus each section of a
     living document that tracks **work status** rather than the system itself: a "currently in
     progress" header, a plan-doc row for a document that now exists, a delivered-ticket
     annotation. **The human applies the list** — the by-kind owner table below routes none of
     these document kinds, and `teco`'s write guard allows only the `archived` flip.
     **Verify it is in `HISTORY.md` before deleting** — a closeout is a move, not a discard.
-  - **A milestone-map row says what the milestone is and when it landed.** Gate sequences, defect
-    trails and superseded framings belong in `HISTORY.md`.
+  - **`BACKLOG.md` is forward-looking only — a delivered item does not stay in it, not even as an
+    index row.** Its record is `HISTORY.md`, which indexes every delivered item by milestone; the
+    exception is a fact that is a **live constraint on the system** rather than a record of work
+    (an interface limit, a rejected option with a reversal trigger), which belongs to the design
+    surface that owns it — the component's `DESIGN.md` or `README.md`, or the requirements doc for
+    a scope decision. Backlogs are headed for the graph, the way team kaizen already is; keeping
+    finished work out of them is what makes that move a migration rather than a cleanup.
+  - **A milestone-map row, wherever one is kept, says what the milestone is and when it landed.**
+    Gate sequences, defect trails and superseded framings belong in `HISTORY.md`.
   - **The existing `archive/` trees are read-only history of the previous convention.** Nothing
     is ever moved into them again, and nothing is un-archived.
   - **Citing another document:** write a **backticked path from the repo root** —

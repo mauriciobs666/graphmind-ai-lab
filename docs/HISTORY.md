@@ -53,8 +53,14 @@ are unretrofitted, unchanged. Full unit-by-unit detail lives in
   to a pre-rebuild image, and the review's literal attack-text needs a `WITH`-bridge to be valid
   live Cypher.
 
-**Milestone closed.** `docs/BACKLOG.md`'s M8 milestone-map row and C-801…C-808 items reflect this
-same delivery; C-809…C-812 are its follow-ups. Per-document `Status: archived` flips on the
+**Items delivered (C-801…C-808).** C-801 graph schema/write-shape design · C-802 implementation
+plan (S0…S6) · C-803 `authorize_write()` redesign, 6 write shapes · C-804 `Agent.agentId` DDL
+provisioning · C-805 13 agent prompts retargeted · C-806 distillation procedure rewrite
+(`agent-maintenance` §5) · C-807 catalog docs + wording fix · C-808 closing acceptance.
+Open follow-ups stay in `docs/BACKLOG.md`: C-809, C-810, C-811, C-812.
+
+**Milestone closed.** C-809…C-812 are its follow-ups, and are the M8 items still open in
+`docs/BACKLOG.md`. Per-document `Status: archived` flips on the
 requirements/graph-design/plan/reviews/test-plan/test-report/coordination files are handled by
 `teco` in the same close (see each document's own header).
 
@@ -132,7 +138,11 @@ references, leaving genuinely CPG-specific naming (`cpg-analysis`/`joern-cpg` sk
 - **U8** (this unit, `cobb`) — fixed D-1, flipped `docs/BACKLOG.md` C-601…C-605 to ✅, wrote this
   close-out entry.
 
-**Milestone closed.** `docs/BACKLOG.md`'s M6 milestone-map row flips in this same entry.
+**Items delivered (C-601…C-605).** C-601 relocate + rebuild `cypher-mcp/` · C-602 harness +
+agent-tool-surface wiring · C-603 `claude/` + `skills/` sweep · C-604 `docs/` + `mcp-monitor/` +
+`falkor-chat/` sweep · C-605 acceptance pass.
+
+**Milestone closed** in this same entry.
 Per-document `Status: archived` flips on the requirements/plan/review/test-plan/test-report/
 coordination files are separate closing units, routed to each document's own owner (`tico`,
 `architect`, `analyst`, `qa-engineer`, `teco`) — handled in parallel, not performed here.
@@ -181,7 +191,12 @@ runs against the graph. Full unit-by-unit detail lives in
   `qa-engineer` and `teco` (graph count 6→5, `history.md` new entry, `cpg-model.md` knowledge-base
   edit all present and correct).
 
-**Milestone closed.** `docs/BACKLOG.md`'s M5 milestone-map row flips 🟡 → ✅ in this same entry.
+**Items delivered (C-501…C-506).** C-501 MCP server write path (optional `agent` param) ·
+C-502 requirements pointer · C-503 migration + inbox freeze · C-504 repo-wide catalog/backlog docs ·
+C-505 agents' operative-prompt + distillation-workflow docs · C-506 acceptance pass.
+Open follow-up stays in `docs/BACKLOG.md`: C-507.
+
+**Milestone closed** in this same entry.
 Per-document `Status: archived` flips on the requirements/plan/graph-plan/review/test-plan/
 test-report files are separate closing units, routed to each document's own owner (`tico`,
 `architect`, `graph-dba`, `analyst`, `qa-engineer`) — handled in parallel, not performed here.
@@ -279,7 +294,14 @@ fix-and-regate round, per the U9 report's own "accept as low-severity edge case"
 observed AC-4's positive/actionable branch (a genuinely stale, populated `:CpgBuildInfo` marker) —
 both live CPGs still return zero rows as of U9.
 
-**Milestone closed.** `docs/BACKLOG.md`'s M4 milestone-map row flips 🟡 → ✅ in this same entry.
+**Items delivered (C-401…C-407).** C-401 freshness-marker mechanics (`:CpgBuildInfo`) ·
+C-402 `cpg-analysis` SKILL.md broaden + discovery mechanic · C-403 wire
+`analyst`/`architect`/`qa-engineer` (default-orientation reword) · C-404 wire `coder`/`tdd-engineer`
+as new consumers · C-405 wire `frontend-engineer` · C-406 evidence-trail convention (the `CPG:`
+line) · C-407 catalog & doc sync. Follow-up C-408 (`CPG:` shape-selection ambiguity, DEF-4) closed
+2026-08-21; C-409 stays deferred in `docs/BACKLOG.md`.
+
+**Milestone closed** in this same entry.
 Per-document `Status: archived` flips on the plan/review/requirements/test-plan/test-report files
 are separate closing units, routed to each document's own owner.
 
@@ -719,6 +741,19 @@ the graph key and the Cypher text are parameters, so nothing has to survive a sh
   filter works — and the failure is invisible in node/edge counts. That, not the missing test
   sources, is why the pre-rebuild graph was useless; a post-load check is filed as **C-312**.
 
+**Items delivered (C-301…C-307).** C-301 MCP server (`cypher-mcp/`) · C-302 harness wiring
+(`.mcp.json`) · C-303 skill surface · C-304 agent wiring & catalogs · C-305 requirements
+reconciliation · C-306 CPG rebuild, fresh baseline, live acceptance · C-307 knowledge capture into
+`skills/agent-standards/`. **Follow-ups, all closed:** C-308 bounded transitive upward call-closure
+query · C-309 `audit-team.sh` untracked-file blindness · C-311 `guard-destructive-ops.sh` blind to
+script-wrapped deletes · C-312 `FILENAME` post-load verification · C-313 DEF-1 (AC-3 reconciled by
+D5) · C-314 map-valued cells leaking client type · C-315 booleans rendering Python-style · C-316
+DEF-5 char-cap probe · C-317 DEF-4 dangling `C-308` citation · C-318 pin the server `instructions=`
+string · C-319 document `enabledMcpjsonServers` approval scoping · C-320 containerize the server ·
+C-321 both halves closed · C-322 documentation reference & naming convention. **Still open in
+`docs/BACKLOG.md`:** C-310 (OpenCode + Kiro wiring), C-323 (bulk repath — deferred, do not
+schedule).
+
 Delivers M3 (FR-1…FR-6 / AC-1…AC-4 of `docs/requirements/cpg-query-access.md`, superseding FR-9 of
 `joern-cpg-pipeline.md`) — items **C-301…C-307**, follow-ups **C-308…C-319** in
 [`BACKLOG.md`](./BACKLOG.md). Consumer skill was M2 (2026-07-19); producer pipeline M1 (2026-07-17).
@@ -752,6 +787,18 @@ query a loaded CPG in FalkorDB with Cypher (`redis-cli GRAPH.QUERY`), closing th
   `REACHING_DEF` is intraprocedural in this CPG; deep interprocedural taint routes to the
   `joern` agent's `reachableBy`.
 
+**Items delivered (C-200…C-208).** C-200 requirements pass for the two scope extensions ·
+C-201 adopt the schema contract · C-202 skill core (`SKILL.md`) · C-203 recipe: impact-analysis ·
+C-204 recipe: rca · C-205 recipe: code-review · C-206 recipe: test-gap · C-207 agent wiring ·
+C-208 catalog & doc sync.
+
+**The access-mechanism decision (user, 2026-07-18, resolving OQ1)** — one `cpg-analysis` skill, not
+four sibling skills: a lean `SKILL.md` core plus four on-demand `references/` recipes, keeping the
+CPG schema contract in one place so it cannot drift four ways. `graph-dba` owns it (it queries a
+loaded FalkorDB graph with Cypher), `cobb` vets it against skill standards, `teco` coordinates.
+Renamed `cpg-test-coverage` → `cpg-test-gap`: a static CPG has structural reachability, not runtime
+coverage. Carried in `docs/requirements/joern-cpg-pipeline.md`, which is its authoritative home.
+
 Delivers M2 (FR-9…FR-14 / AC-2…AC-8). Producer pipeline was M1 (2026-07-17).
 
 ## 2026-07-17 — M1: Producer pipeline (CPG build → FalkorDB load) ✅
@@ -771,5 +818,16 @@ Delivered as commit `b2b9a6e` and **live-load verified**.
 - **Satisfies FR-1** (extract a CPG and load it into FalkorDB) and **AC-1** (a run yields a
   queryable CPG in FalkorDB). Verified against `falkordb v4.18.11`, Joern v4.0.579, JDK 21.
 
-Consumer-side querying (letting `analyst`/`architect`/`qa-engineer` use the loaded CPG) is the next
-milestone — **M2**, tracked in [`BACKLOG.md`](./BACKLOG.md) (C-200…C-208).
+**Follow-up C-101 — loader `MAX_ARG_STRLEN` failure + masked exit code.** ✅ Closed in commit
+`e773060` on this same date, and found already-resolved on 2026-08-21 during a doc-accuracy pass —
+the backlog entry had simply never been flipped. `cpg-to-falkordb.py --load` streams every statement
+over **one persistent RESP socket** (`load_statements()`) instead of spawning a `redis-cli` per
+statement, so there is no argv at all and `MAX_ARG_STRLEN` is sidestepped by construction (a
+stronger fix than the stdin-`-x` workaround originally proposed), which also killed the
+connection-reset storm the old path caused; and the loader now `sys.exit(1 if failed else 0)`s under
+`pipeline.sh`'s `set -euo pipefail`, so a real failure count aborts loudly instead of the old masked
+exit 0. Verified end-to-end on `falkor-chat/server/falkorchat`: 453/453 statements at batch 500 —
+the exact batch size the old path died on — landing 29,447 nodes / 185,517 edges.
+
+Consumer-side querying (letting `analyst`/`architect`/`qa-engineer` use the loaded CPG) was the next
+milestone — **M2** (C-200…C-208), delivered 2026-07-19.
