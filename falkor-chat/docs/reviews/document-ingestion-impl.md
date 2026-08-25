@@ -1,6 +1,6 @@
 # Document Ingestion — Stage 1 Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-050 (M5)
 
 **Scope.** Diff-scoped code gate (distinct from the plan gate at `docs/reviews/document-ingestion.md`)
 against the uncommitted working-tree changes implementing Stage 1 (chunking + `Document`/`Chunk`

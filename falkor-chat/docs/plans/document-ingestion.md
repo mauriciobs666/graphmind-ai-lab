@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-050 (M5)
 
 Turns `docs/requirements/document-ingestion.md` (FR-1..FR-14, AC-1..AC-10, OQ-1..OQ-3) into an
 ordered, staged build. This plan resolves OQ-2 and OQ-3 as concrete design decisions and makes a

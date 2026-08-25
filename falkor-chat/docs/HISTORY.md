@@ -5,6 +5,37 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — K-050 M5 closes: ingestion pipeline & entity fusion — acceptance pass + design sync
+
+**What:** `qa-engineer` ran the milestone-closing acceptance pass over AC-1..AC-10
+(`docs/test-plans/document-ingestion.md`, `docs/test-reports/document-ingestion-report.md`) —
+**verdict PASS-with-parked-defects**. All ten ACs were live-verified against the running server
+(real REST and MCP calls over the wire, real LM Studio) rather than only re-running the offline
+suite: AC-9's byte-identical round trip, AC-6's cross-transport MCP-write/any-transport-read (a
+genuine out-of-process MCP Streamable-HTTP client), AC-10's traced extraction, AC-1's kept
+conflicting facts, AC-2/AC-3's real-LLM auto-merge and fuzzy-pending observations, AC-4's
+confirm/reject audit fields, AC-7's manual `recheck_match` path, and AC-8's real bulk `ingest_documents`
+cross-document fusion (the new Stage 6a batch-API-altitude coverage). AC-5 was verified by re-running
+its existing live-marked test. Full offline suite (1751 passed/4 deselected) and query suite
+(320/320) held as unchanged green baselines.
+
+Two Medium defects surfaced, both independently confirmed by `teco`:
+- **`Document.status` never reaches a terminal state** (`'ready'`/`'failed'` are never written by
+  any code path) — doesn't block any AC; parked as a backlog follow-up (`BACKLOG.md`), not fixed in
+  this milestone.
+- **`docs/DESIGN.md` §5.1/§7.1 were stale** against the shipped schema (missing the `RELATES_TO`/
+  `SAME_AS` edges, `Entity.nameNormalized`, and their indexes) — this one gated M5 directly, since
+  the plan's own done-condition names DESIGN §5.1/§7 sync as a closing requirement. `graph-dba`
+  fixed it (cross-checked against `bootstrap_schema.sh`/`QUERIES.md`/`repository.py`, independently
+  re-verified by `teco` against the same ground truth rather than a fresh `analyst` gate, given how
+  tightly scoped and low-risk the factual sync was).
+
+**M5 ✅ — ingestion pipeline & entity fusion is closed.** All six implementation stages
+(chunking, chunk embeddings/standalone search, extraction, fusion, chat-grounding integration,
+bulk ingestion) delivered, diff-gated, committed; QA acceptance PASS-with-parked-defects on green
+baselines; DESIGN.md synced. The full requirements/plan/graph-note/ML-note/coordination/reviews/
+test-plan/test-report document family is flipped to `Status: archived` in the same close.
+
 ## 2026-08-25 — K-050 M5 Stage 6a: document ingestion — bulk ingestion (FR-11)
 
 **What:** The sixth and final staged slice of the ingestion pipeline (`docs/plans/

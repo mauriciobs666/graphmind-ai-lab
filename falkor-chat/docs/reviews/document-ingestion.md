@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — plan-gate review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-050 (M5)
 
 **CPG:** considered, not relevant — this is a pre-implementation design-consistency review across
 three freshly-written documents for new-code work in `falkor-chat/server`, not an impact analysis

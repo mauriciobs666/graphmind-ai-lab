@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — Extraction & Matching Method Note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-050 (M5)
 
 ## 1. The question and the decision it serves
 

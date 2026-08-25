@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-050 (M5, proposed)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-050 (M5, proposed)
 
 Coordinating the design → implementation → QA flow for the ingestion pipeline & entity fusion
 feature, kicked off from `falkor-chat/docs/requirements/document-ingestion.md` (Status: Ready for
@@ -54,7 +54,9 @@ design, confirmed by the stakeholder 2026-08-22).
 | U26 | `coder` | `aa1d16116dbc910fe` | delivered | Stage 6a: `ingest_documents` (MCP+REST+service), shared `_schedule_chunk_processing`, batch AC-8 test, QUERIES.md §14.4 | `analyst` (Pass 6) → — | 193k tok / 108 tools |
 | U27 | `analyst` | `a1eaeac5da1a10786` | accepted | `docs/reviews/document-ingestion-impl.md` Pass 6 | code gate → **needs changes** (1 BLOCKER, 1 MAJOR, 1 MINOR) | 153k tok / 55 tools |
 | U28 | `coder` | `aa1d16116dbc910fe` (resumed) | delivered | fix Pass 6 BLOCKER (malformed-item isolation) + MAJOR (fan-out doc note) + MINOR (HISTORY.md) | `analyst` (Pass 6 re-gate) → — | 228k tok / 136 tools |
-| U29 | `analyst` | `a1eaeac5da1a10786` (resumed) | queued | Pass 6 re-gate of U28's fixes | code re-gate → — | — |
+| U29 | `analyst` | `a1eaeac5da1a10786` (resumed) | accepted | Pass 6 re-gate of U28's fixes | code re-gate → **approve** | 179k tok / 19 tools |
+| U30 | `qa-engineer` | `aa40c67ee2ed3ef81` | accepted | `docs/test-plans/document-ingestion.md` + `docs/test-reports/document-ingestion-report.md` | acceptance → **PASS-with-parked-defects** | 302k tok / 201 tools |
+| U31 | `graph-dba` | `a68754c1237d63fc6` | accepted | fix `docs/DESIGN.md` §5.1/§7.1 staleness (QA Defect 2 — M5 done-condition gate) | (verified by teco) → **approve** | 117k tok / 29 tools |
 
 U1 verified: plan reads through all FR-1..FR-14 with a coherent staged sequence (6 stages),
 correctly reconciles the dormant `Document`/`Chunk`/`Entity` schema, resolves OQ-2/OQ-3, proposes
@@ -407,6 +409,18 @@ this coordination doc).
    - **6c (`qa-engineer`)** — full acceptance pass against AC-1..AC-10, versioned test plan + report
      (`docs/test-plans/document-ingestion.md` + `-report.md`), mirroring the K-015/K-025/K-036
      pattern. Gates M5 ✅.
+   - **U30 verdict: PASS-with-parked-defects.** All ten ACs live-verified against the running
+     server (real REST/MCP calls, real LM Studio, not just the offline suite) — see
+     `docs/test-reports/document-ingestion-report.md`. Two Medium defects found:
+     **Defect 1** — `Document.status` never reaches a terminal state (`'ready'`/`'failed'`); no
+     code path anywhere writes either, confirmed by grep. Doesn't block any AC (QA parked it) —
+     to be filed as its own backlog follow-up once M5 closes, not fixed in this coordination.
+     **Defect 2** — `docs/DESIGN.md` §5.1/§7.1 stale against the shipped schema (missing
+     `RELATES_TO`/`SAME_AS` edges, `Entity.nameNormalized`, the `SAME_AS`/fulltext indexes) —
+     this one **is** a real gate: the plan's own stated M5 done-condition names "DESIGN §5.1/§7 ...
+     updated in the same changes ⇒ M5 ✅" explicitly. U31 (`graph-dba`) fixes it now, verified by
+     `teco` directly against `QUERIES.md`/`bootstrap_schema.sh` (low-risk factual sync, no fresh
+     `analyst` gate dispatched for it).
    - **CPG freshness (checked 2026-08-25):** `cpg_falkorchat`, built `2026-08-17T00:40:42Z`,
      scratch-copy (no `sourceCommit`) — **stale**: 13 commits have touched `falkor-chat/server`
      since build, including all of Stages 1-5 of this very feature. Flagged to 6a/6b rather than

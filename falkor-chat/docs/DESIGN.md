@@ -201,6 +201,13 @@ hot traversal needs to walk (e.g. an ontology fragment).
 (:Chunk)-[:DERIVED_FROM]->(:Message)
 (:Entity {entityId, name, type})<-[:MENTIONS]-(:Message)
 (:Chunk)-[:ABOUT]->(:Entity)
+(:Entity)-[:RELATES_TO {label, sourceChunkId, sourceDocumentId, createdAt}]->(:Entity)
+  // LLM-extracted fact; label = free-text predicate, never its own rel type; never deduplicated
+(:Entity)-[:SAME_AS {matchId, status, confidence, technique, createdAt,
+                      decidedAt, decidedBy, resuggestCount, lastResuggestedAt}]->(:Entity)
+  // fusion match; direction is a write-time convention (new→existing), not a semantic
+  // claim — SAME_AS-anchored reads that need direction-agnosticism match endpoints
+  // undirected (QUERIES.md §14.6)
 
 // Workflow ↔ chat linkage (all within ws graph)
 (:WorkflowRun)-[:TRIGGERED_BY]->(:Message)
@@ -217,6 +224,9 @@ hot traversal needs to walk (e.g. an ontology fragment).
   (`scripts/backfill_thread_ids.sh`, QUERIES.md §4.x).
 - `Thread.updatedAt` — bumped on every new message; drives "recent threads" listing
 - `Message.embedding` — inline `vecf32`; no separate node needed
+- `Entity.nameNormalized` — case-folded, whitespace-collapsed `name`, computed app-side by the
+  same normalization helper extraction stub-repair uses. Backs the FR-8 exact-tier fusion lookup
+  with a real `=` comparison, decoupled from RediSearch tokenizer/stemmer behavior (§7.1).
 
 ### 5.2 Why these choices (traversal cost)
 
@@ -544,6 +554,19 @@ composite-keyed `WorkflowDefSnapshot`:
 | `WorkflowDefSnapshot` | `key`, `version` (two indexes) | UNIQUE 2 (composite) |
 | `Step` | `key`, `stepUid` (two indexes) | UNIQUE 1 (`stepUid`); `key` index-only (§6.1) |
 
+**Relationship-scoped indexes** — same index-before-constraint ordering rule, on an edge property
+rather than a node property (`SAME_AS`, K-050):
+
+| Relationship | Indexed property | Constraint |
+|---|---|---|
+| `SAME_AS` | `matchId` | UNIQUE 1 |
+| `SAME_AS` | `status` | — (hot-filter, no constraint) |
+
+> Every `SAME_AS`-anchored query matches its endpoints **unlabeled** (`(a)`/`(b)`, never
+> `(a:Entity)`) — live-verified: a bare label on either endpoint forces a full `Node By Label Scan`
+> even though the relationship-property scan alone is fully selective
+> (`docs/plans/document-ingestion-graph.md` §1.4; `claude/graph-dba/falkordb-quirks.md`).
+
 **Hot-filter indexes (no constraint)** — support scans/ordering, not identity:
 
 | Label | Property | Serves |
@@ -552,11 +575,14 @@ composite-keyed `WorkflowDefSnapshot`:
 | `Message` | `createdAt` | time-range / keyset reads (§9) |
 | `WorkflowRun` | `status` | "all running workflows" |
 | `StepRun` | `status` | step-state filters |
+| `Entity` | `nameNormalized` | FR-8 exact-tier fusion `=` lookup; distinct real entities can share `(nameNormalized, type)` before fusion runs |
 
 > `Message.threadId` is **deliberately unindexed** (§5.1) — nav metadata, not an anchor.
 
-**Full-text index (RediSearch):** `Message.text`, via `db.idx.fulltext.createNodeIndex('Message',
-'text')` — backs §5's keyword search.
+**Full-text index (RediSearch):** `Message.text`, `Entity.name`, via
+`db.idx.fulltext.createNodeIndex('Message', 'text')` /
+`db.idx.fulltext.createNodeIndex('Entity', 'name')` — backs §5's keyword search and the FR-9
+suggested-tier fusion lookup.
 
 **Vector indexes:** `Message.embedding` and `Chunk.embedding`, created via **DDL**
 (`CREATE VECTOR INDEX … OPTIONS {dimension, similarityFunction:'cosine'}`).

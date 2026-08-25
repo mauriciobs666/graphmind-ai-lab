@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — extraction-quality qualitative review (Stage 3→4 checkpoint)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-050 (M5)
 
 Reviews real Stage 3 (`falkorchat.extraction`/`falkorchat.ingestion.IngestionPipeline`, commit
 `dbc5241`) extraction output against the checkpoint I named in `docs/plans/document-ingestion-ml.md`

@@ -1,5 +1,5 @@
 # Ingestion Pipeline & Entity Fusion — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-22
 
 ## Intent
 The stakeholder wants an **ingestion pipeline**: a new capability that takes in knowledge from

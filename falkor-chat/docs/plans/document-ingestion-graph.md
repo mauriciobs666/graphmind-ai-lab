@@ -1,6 +1,6 @@
 # Ingestion Pipeline & Entity Fusion — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** K-050 (M5)
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** K-050 (M5)
 
 Graph-side design companion to `docs/plans/document-ingestion.md` (architect) and
 `docs/plans/document-ingestion-ml.md` (data-scientist, read for the extraction/matching-method
