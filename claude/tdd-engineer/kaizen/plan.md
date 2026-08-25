@@ -8,13 +8,13 @@
 
 | ID | Added | Priority | Status | Summary |
 |-------|------------|----------|--------|---------|
-| K-006 | 2026-08-24 | low | 🔵 | "Idiomatic, clean production code" states two conventions rules with no precedence between them. See below — surfaced by the C5 prompt-waste lint, deliberately not bundled into it. |
+| K-006 | 2026-08-24 | low | ✅ | "Idiomatic, clean production code" states two conventions rules with no precedence between them. See below — surfaced by the C5 prompt-waste lint, deliberately not bundled into it. |
 
 > Done: K-001, K-002, K-004, K-005 (2026-06-05) — see history.md.
 > Deferred: K-003 (2026-06-05) — keep tools unconstrained for flexibility; see history.md.
 
 ### K-006 — The conventions bullet never says which convention wins
-- **Status:** 🔵 proposed
+- **Status:** ✅ **closed 2026-08-25** — all three instances fixed in one commit with a byte-identical sentence, enforced by `audit-team.sh` check 10 (fails at some-but-not-all). See `history.md`.
 - **Priority:** low — an ambiguity, not a gap; both readings produce reasonable code.
 - **Rationale:** The Principles bullet "**Idiomatic, clean production code**" opens with "Follow the
   language and project conventions you observe" and closes with "Match the surrounding code's

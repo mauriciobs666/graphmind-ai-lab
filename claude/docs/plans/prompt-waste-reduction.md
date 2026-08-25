@@ -134,6 +134,9 @@ across every file in the unit — map from the grep output, never from the edit 
 **(b)** history-first — every class-5/6 clause removed is confirmed present in
 `kaizen/history.md` *before* the prompt edit is committed (append if missing).
 **(c)** `cobb`'s single-artifact prompt-quality lint (`agent-maintenance` skill §7) on the result.
+**For any rule the edit relies on holding across more than one file, name what reads it and what
+would notice if it stopped holding** (finding 23) — a guarantee recorded only in a `kaizen/plan.md`
+is held by nothing, since those files are not loaded at edit time.
 **(d)** `./claude/scripts/audit-team.sh` green.
 **(e)** the dated `kaizen/history.md` compression entry (standing maintenance rule) **carries the
 gate-(a) inventory mapping and the list of moved clauses** — persisted where a later incident
@@ -684,6 +687,36 @@ examples (`executor2.md` / `executor2-coordination.md`) already assumed role was
     other five, and a rule copied nine times drifts nine ways.** State this wherever a relocation is
     justified — a future reader applying "lean context" naively will reach the opposite conclusion
     and try to push these rules back into prompts.*
+
+***Post-stage remnants cleared 2026-08-25.** Stage F above, plus the conventions-precedence family
+(`coder` K-004 / `tdd-engineer` K-006 / `frontend-engineer` K-003) — the three-instance item C5/C6
+routed out as a rule change rather than bundling into a compression commit. Fixed as one unit with a
+byte-identical sentence and a new `audit-team.sh` **check 10** that fails when it is present in some
+but not all three. **Two findings, and the first materially amends finding 15:***
+
+22. ***Finding 15's agents-bound test is necessary, not sufficient — relocation also requires that a
+    shared file already own the topic.*** *Stage D's two relocations worked because rule 5 **already
+    governed** revision notes and `## Pass N`; the amendment extended an existing rule. The
+    conventions-precedence rule binds three agents and passes finding 15's test, yet has no valid
+    shared home: no file owns "how to author code," and root `AGENTS.md` is an **actively bad** home
+    rather than merely an implausible one — its document conventions are deliberately stated as
+    absolutes (`never begins with m<digit>`, the closed role set, the closed `Status:` set), and a
+    general "a local deviation beats the project norm" principle sitting beside them hands every
+    agent a lever to justify deviating from them. **When no shared file owns the topic, relocation
+    either introduces the topic solely to qualify it — Stage D's own "strongest relocation signal",
+    run in reverse — or lands the rule beside absolutes it undermines. The correct answer there is
+    byte-identical duplication plus a mechanical identity guard, not relocation.** This also closes
+    finding 21's loop: the argument for consolidating is drift-resistance, so where consolidation is
+    unavailable the drift-resistance must be supplied another way.*
+23. ***Ask what **reads** a claim, not just whether the claim is true.*** *Three consecutive units
+    produced their major finding from outside the artifact under review: Stage E pass 2's from the
+    reciprocal sentence in another agent's prompt, pass 3's from inventorying the files already
+    obeying the convention, and this one's from asking what enforces "byte-identity is the
+    mitigation" — the answer being nothing, in a repo that had shipped the enforcement machinery
+    hours earlier. None of these is reachable by reading the diff. **Add to gate (c): for any rule
+    this edit relies on holding across more than one file, name what reads it and what would notice
+    if it stopped holding.** A guarantee recorded only in a `kaizen/plan.md` is not held by
+    anything — those files are not loaded at edit time.*
 
 ### Stage F — Ratchet guard (make it stick)
 

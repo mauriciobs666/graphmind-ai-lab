@@ -10,7 +10,7 @@
 |------|------------|----------|--------|---------|
 | K-002 | 2026-06-20 | medium | 🔵 | Validate the architect→coder handoff end-to-end and confirm the coder can execute an architect plan without re-investigating. |
 | K-003 | 2026-08-24 | low | 🔵 | `:11` and `:35` prescribe different actions for the same trigger (mid-build plan defect: stop vs. note-and-continue) |
-| K-004 | 2026-08-24 | low | 🔵 | `:12`'s conventions rule doesn't say whether project norm or local neighbour wins when a file deviates — sibling of `tdd-engineer` K-006, fix together |
+| K-004 | 2026-08-24 | low | ✅ | `:12`'s conventions rule doesn't say whether project norm or local neighbour wins when a file deviates — sibling of `tdd-engineer` K-006, fix together |
 
 > Done: K-001 (2026-07-09) — efficiency-based routing boundary with `tdd-engineer`; descriptions now use objective task-shape triggers (detailed plan → coder; bug fix / safety-net refactor / test work / clear-contract feature → tdd-engineer) and cross-reference symmetrically. See history.md.
 
@@ -29,7 +29,7 @@
 - **Notes:** Deliberately **not** bundled into C6 — it is a rule change, and §4.0's rollback contract keeps rule changes out of a compression commit.
 
 ### K-004 — `:12` doesn't say whether the project norm or the local neighbour wins
-- **Status:** 🔵 proposed
+- **Status:** ✅ **closed 2026-08-25** — all three instances fixed in one commit with a byte-identical sentence, enforced by `audit-team.sh` check 10 (fails at some-but-not-all). See `history.md`.
 - **Priority:** low
 - **Rationale:** *"Match the language, framework, structure, naming, and idioms **already in the codebase**. Discover conventions by reading **neighboring code**"* mixes a project-scope authority with a local-scope discovery heuristic. They agree in a consistent codebase and diverge in exactly the case worth having a rule for — a file that deviates locally. `:29` ("Its conventions… win over your defaults") is **not** part of the collision: it runs on the project-vs-*agent* axis, and points away from the agent's habits just as `:12` does.
 - **Proposed change:** name the tiebreak, e.g. *"…where a file deviates locally from the project norm, match the file — a mixed-style file is worse than either style."*

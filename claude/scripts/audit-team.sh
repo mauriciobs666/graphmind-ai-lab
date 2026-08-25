@@ -55,6 +55,11 @@
 #      cannot fail: a rule-dense prompt above the line is a pass, and a
 #      tripwire that could fail would pressure someone to cut a rule to hit a
 #      number — the one outcome that effort exists to prevent.
+#  10. conventions-precedence family — the local-vs-project tiebreak must be
+#      byte-identical in coder/tdd-engineer/frontend-engineer, or absent from
+#      all three. Deliberate triplication with no shared home; identity is the
+#      mitigation, this is its enforcement (coder K-004 / tdd-engineer K-006 /
+#      frontend-engineer K-003, which state "fix together or not at all").
 #      Superseded in part, 2026-08-21: every agent may now additionally
 #      commit its own verified work specifically when running interactively
 #      — this check is the deterministic backstop so a future prompt edit
@@ -238,6 +243,30 @@ done
 [ "$notes" -eq 0 ] && pass "prompt weight: all ${#agents[@]} prompt bodies at or under ${limit}w"
 printf 'INFO  prompt corpus: %sw across %s agents (mean %sw)\n' \
   "$total" "${#agents[@]}" "$((total / ${#agents[@]}))"
+
+# 10. conventions-precedence rule — one sentence, byte-identical across the three
+#     implementer prompts. A deliberate triplication: no shared file owns "how to
+#     author code" (root AGENTS.md would be an actively bad home — a general
+#     "local deviation beats the project norm" principle sitting beside its
+#     document-convention absolutes hands every agent a lever against them), so
+#     identity IS the anti-drift mitigation and this check is what enforces it.
+#     All-or-nothing by design: removing it from all three is a legitimate family
+#     decision; removing it from one is the divergence coder K-004 exists to
+#     prevent. Unlike check 9 this one DOES fail — it detects an inconsistency,
+#     not a size, so there is no "cut a rule to hit a number" hazard.
+#     Grep the leading clause, not the whole sentence, so a re-wrap can't false-fail.
+echo
+conv='Where a file or folder deviates locally from the project norm, match it, not the norm'
+conv_agents=(coder tdd-engineer frontend-engineer)
+hits=0
+for a in "${conv_agents[@]}"; do
+  grep -qF "$conv" "$CL/$a/$a.md" && hits=$((hits+1))
+done
+if [ "$hits" -eq "${#conv_agents[@]}" ] || [ "$hits" -eq 0 ]; then
+  pass "conventions-precedence rule: consistent across all ${#conv_agents[@]} implementer prompts ($hits/${#conv_agents[@]})"
+else
+  failmsg "conventions-precedence rule in only $hits/${#conv_agents[@]} implementer prompts — this family moves together (coder K-004 / tdd-engineer K-006 / frontend-engineer K-003)"
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then
