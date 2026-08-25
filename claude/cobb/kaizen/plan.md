@@ -26,6 +26,8 @@
   keeps it out of a compression commit. Route it into the next `agent-maintenance` edit regardless:
   it is the **last present-tense inbox assertion left in the corpus**, and `claude/AGENTS.md:3` now
   states the opposite absolutely. Raised by the Stage E pass-1 §7 lint, 2026-08-25.
+  ✅ **closed 2026-08-25** — the whole block deleted (template *and* preservation instruction, both
+  applying to nothing), folded into the K-020 commit since it is the same M8/inbox drift.
 - **Two process lessons from the prompt-waste Stage B wave-2 §7 lint (2026-08-23, both minor):**
   (F1) ✅ **closed 2026-08-24 at C6** — the plan's "cobb's own compression is linted by its pre-edit
   self" safeguard wasn't met as written at Stage B, because the live-symlink deployment makes an
@@ -39,7 +41,9 @@
   gate (e) itself, so it is a gate condition rather than a per-unit habit. It had held by habit
   through C6 and Stages D–E; the item existed precisely because "holding by habit" is not a gate.
 - **K-020 — residual staleness in `agent-maintenance`'s own text (opened 2026-08-24, C6 lint; low).**
-  Two items, both class-6/stale, neither urgent now that the live one is fixed:
+  ✅ **closed 2026-08-25** — both items done, plus a third the item had not named: §1/§2 were telling a
+  maintainer to seed a *new* agent with the pre-M8 `author` write shape, which §5 contradicts. See
+  `history.md`. The two original items were:
   1. `SKILL.md:3`'s description still says the shared graph is "`author`-partitioned". Since M8
      (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) a **new** entry is identified by an
      `(:Agent)-[:PRODUCED]->(:KaizenEntry)` edge; only a pre-M8 entry carries `author`. The

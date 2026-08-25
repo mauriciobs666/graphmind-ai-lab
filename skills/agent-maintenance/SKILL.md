@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph, `author`-partitioned), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and prompt-waste review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and prompt-waste review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -58,11 +58,10 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
    entry and `plan.md` with improvements you already foresee. In collections
    that run the learning-capture loop (§5 — graphmind-ai-lab's `claude/` does),
    point the new agent's Learning-capture prompt section directly at the
-   `kaizen_team` write recipe (§5) — `author: '<name>'` on every entry it
-   creates. **No `inbox.md` is seeded for a new agent** (FR-12/AC-9,
-   `docs/plans/generic-cypher-mcp2.md`) — `kaizen_team` is a shared graph,
-   already provisioned; a new agent's entries just carry a new `author`
-   value, nothing to pre-create.
+   `kaizen_team` producer-write recipe (§5) — the `:Agent`/`PRODUCED` edge
+   shape, **never** the legacy `author` string property. **No `inbox.md` is seeded for a new agent** — `kaizen_team`
+   is a shared graph, already provisioned; a new agent's entries just carry a
+   new `agentId`, nothing to pre-create.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move completed ones out of
@@ -202,8 +201,8 @@ protects whoever runs it.
 
 1. Write/edit the agent or skill source.
 2. Update its `kaizen/{plan,history}.md` (§1; agents also write into the
-   shared `kaizen_team` learnings graph, `author`-partitioned, §5 — no
-   `inbox.md` is created for a new agent).
+   shared `kaizen_team` learnings graph, §5 — no `inbox.md` is created for a
+   new agent).
 3. **If you added, renamed, or removed an agent:** update every prompt that
    **enumerates the team** in the same change — an orchestrator's roster (e.g.
    teco's "The team you coordinate"). Other agents' prompts are consumers of
@@ -565,35 +564,6 @@ distills — on request, and folded into every certification pass (§4):
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.
 
-**Inbox header shape** (historical note, not a template to seed — no agent's
-`kaizen/inbox.md` is ever created again, FR-12/AC-9). The 12 agents that
-existed at the 2026-08-20 migration each carry a frozen `kaizen/inbox.md`
-whose header note shares this shape (content below the header is preserved
-verbatim, untouched by any of this):
-
-```markdown
-# Kaizen — Learnings Inbox: {name}
-
-> This file exists only to satisfy the historical kaizen record; it holds no
-> content. `{name}`'s raw learnings capture writes directly into the shared
-> `kaizen_team` FalkorDB graph, `author`-partitioned, as `:KaizenEntry` nodes
-> (agent-maintenance skill §5), immediately queryable by any agent:
-> `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry
-> {author:'{name}'}) RETURN e.date, e.fact, e.evidence, e.context,
-> e.suggestedHome ORDER BY e.date")`. The agent only creates `:KaizenEntry`
-> nodes attributed to itself; it never promotes or clears them — the
-> maintainer (cobb) does, per the distillation procedure above.
-
-*(no entries — this file is never written to)*
-```
-
-Four of the twelve (`analyst`, `teco`, `qa-engineer`, `data-scientist` — the
-agents that had entries at migration time) additionally carried a true
-past-tense provenance sentence above this block ("its N entries were imported
-into the `kaizen_<name>` graph") that was never rewritten — the shape is
-preserved here purely as a historical reference; no `inbox.md` file exists
-any more for any agent (see the Origin note below).
-
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
 > quirks-file pattern into a team-wide capture→distill loop, at first
@@ -700,8 +670,3 @@ and a rewrite/pointer. On a review-only pass, record the notable ones in the
 artifact's `plan.md` (§1). This is a lint, not a gate — it surfaces; the author
 (or the user) decides.
 
-> Origin: 2026-07-16 — the user asked whether cobb's machinery covered six
-> LLM-judgment prompt dimensions (contradiction, ambiguity, persona, cognitive
-> load, coverage, composition); it covered only structural (§3) and inter-agent
-> (§4) drift. Promoted from cobb's dormant "self-review checklist" parking-lot
-> idea (re-flagged 2026-06-07).
