@@ -1,6 +1,6 @@
 # `defaultMode` as a lever for the Task/Agent-delegation classifier gap — Design
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** —
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** —
 > **Version:** 2 (revised 2026-08-24, folding in `claude/docs/reviews/permission-default-mode.md`'s
 > findings) · **Reviews:** `claude/docs/reviews/permission-default-mode.md` (verdict: approve with
 > suggestions → corrections folded in below)

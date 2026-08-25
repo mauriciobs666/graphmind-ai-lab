@@ -1,6 +1,6 @@
 # Write-guard classifier-bypass gap — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—)
 
 ## Goal
 Close the gap `cobb` root-caused in `agent-permission-friction2.md` open question 3: a

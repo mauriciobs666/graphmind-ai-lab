@@ -1,6 +1,6 @@
 # Write-guard auto-mode classifier gap — Design
 
-> **Status:** active · **Owner:** `cobb` · **Tracks:** —
+> **Status:** archived · **Owner:** `cobb` · **Tracks:** —
 > **Version:** 2 (revised 2026-08-24, folding in `docs/reviews/write-guard-classifier-gap.md`'s findings) · **Reviews:** `claude/docs/reviews/write-guard-classifier-gap.md` (verdict: needs changes → corrections folded in below)
 
 **Component:** `claude/` · **Owner altitude:** cobb (design only — no implementation in this unit) ·

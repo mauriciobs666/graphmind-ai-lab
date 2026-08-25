@@ -1,6 +1,6 @@
 # Write-guard auto-mode classifier gap — Design review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 **Reviewed:** `claude/docs/plans/write-guard-classifier-gap.md` (Status: active, Owner: `cobb`).
 **Baseline:** the root-cause investigation it builds on (commit `6193083`,
