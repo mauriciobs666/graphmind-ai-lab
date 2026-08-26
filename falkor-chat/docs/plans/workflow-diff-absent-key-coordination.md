@@ -1,6 +1,6 @@
 # `workflow-diff-absent-key` — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-005 (`claude/coder/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-005 (`claude/coder/kaizen/plan.md`)
 
 ## Goal
 
@@ -92,3 +92,9 @@ follow-up per the review's own recommendation — not a new unit.
   doc should verify no local uncommitted `repository.py`/`test_repository.py` diff remains
   before assuming otherwise, and decide independently whether to flip this coordination's
   own `Status:` to `archived`.
+- **Closed 2026-08-25.** Independently re-verified the note above rather than taking it on
+  trust: working tree clean (`git status --short`, nothing pending), `d41da78` confirmed to
+  contain the `_read_structure` try/except fix (`git show d41da78 -- repository.py`), and
+  all four K-005 tests re-run fresh against committed `HEAD` — 4 passed. Both fixes (docs in
+  `259757d`/`c62dffd`, code in `d41da78`) are integrated and verified. `Status` flipped to
+  `archived`.
