@@ -35,7 +35,41 @@ def _safe_embed(embed_worker: Any, ws: str, msg_id: str, text: str) -> None:
         _log.exception("background embed failed (msgId=%s)", msg_id)
 
 
-def _safe_embed_chunk(embed_worker: Any, ws: str, chunk_id: str, text: str) -> None:
+def _report_document_job(
+    worker_or_pipeline: Any, ws: str, document_id: str, chunk_id: str,
+    *, success: bool, kind: str,
+) -> None:
+    """Report one chunk-level background job's outcome back onto its owning
+    `Document` (K-051 — closes the "`Document.status` never reaches a
+    terminal state" defect).
+
+    `worker_or_pipeline.repo` is the injected repository `EmbeddingWorker`/
+    `IngestionPipeline` already carry (K-051 adds the public `.repo`
+    accessor to both) — sourced this way rather than threaded through every
+    `_schedule_chunk_processing` call site, since both objects are already
+    constructed against the very same `Repository` instance in production
+    (`app.py`). A worker/pipeline with no `.repo` at all (every pre-K-051
+    test fake in this module and in `test_api.py`/`test_mcp.py`) silently
+    skips the report instead of raising — those fakes exist to pin
+    scheduling behavior, not document-status bookkeeping, and must keep
+    working unmodified. The report call itself is guarded the same
+    failure-isolation way as the job it reports on: it must never raise into
+    the caller's scheduling mechanism either.
+    """
+    repo = getattr(worker_or_pipeline, "repo", None)
+    if repo is None:
+        return
+    try:
+        repo.report_document_job_done(ws, document_id=document_id, success=success)
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception(
+            "failed to report background %s completion (chunkId=%s)", kind, chunk_id
+        )
+
+
+def _safe_embed_chunk(
+    embed_worker: Any, ws: str, document_id: str, chunk_id: str, text: str
+) -> None:
     """Embed an ingested document's chunk out-of-band, swallowing+logging any
     failure (K-050 M5 Stage 2 — mirrors `_safe_embed` exactly).
 
@@ -43,12 +77,22 @@ def _safe_embed_chunk(embed_worker: Any, ws: str, chunk_id: str, text: str) -> N
     chunk is readable before its embedding lands, and an embedder hiccup for
     one chunk must never surface to the ingesting caller nor corrupt the
     `Document` or block sibling chunks (same failure-isolation discipline as
-    every other `_safe_*` wrapper in this module).
+    every other `_safe_*` wrapper in this module). K-051: either way, the
+    outcome is reported back onto `document_id` via `_report_document_job` —
+    this is one of the two paths (`_safe_extract` is the other) whose
+    completion `Document.status` needs to reach a terminal state.
     """
     try:
         embed_worker.embed_chunk(ws, chunk_id=chunk_id, text=text)
     except Exception:  # noqa: BLE001 — background isolation: log, never propagate
         _log.exception("background chunk embed failed (chunkId=%s)", chunk_id)
+        _report_document_job(
+            embed_worker, ws, document_id, chunk_id, success=False, kind="embed"
+        )
+        return
+    _report_document_job(
+        embed_worker, ws, document_id, chunk_id, success=True, kind="embed"
+    )
 
 
 def _safe_extract(
@@ -65,7 +109,8 @@ def _safe_extract(
     its extraction lands. An extraction failure for one chunk must never
     surface to the ingesting caller, corrupt the `Document`, or block sibling
     chunks (same failure-isolation discipline as every other `_safe_*`
-    wrapper in this module).
+    wrapper in this module). K-051: either way, the outcome is reported back
+    onto `document_id` via `_report_document_job`.
     """
     try:
         ingestion_pipeline.extract_chunk(
@@ -73,6 +118,13 @@ def _safe_extract(
         )
     except Exception:  # noqa: BLE001 — background isolation: log, never propagate
         _log.exception("background extract failed (chunkId=%s)", chunk_id)
+        _report_document_job(
+            ingestion_pipeline, ws, document_id, chunk_id, success=False, kind="extract"
+        )
+        return
+    _report_document_job(
+        ingestion_pipeline, ws, document_id, chunk_id, success=True, kind="extract"
+    )
 
 
 def _schedule_chunk_processing(
@@ -104,11 +156,41 @@ def _schedule_chunk_processing(
     a no-op, either wired schedules only that job per chunk, both wired
     schedules both jobs per chunk, independently (neither blocks the other,
     same as before this was factored out).
+
+    K-051: before scheduling anything, initializes `document_id`'s
+    outstanding-job count (`repository.start_document_progress`) to however
+    many `_safe_embed_chunk`/`_safe_extract` calls this method is about to
+    schedule (one per chunk per wired worker) — synchronously, on the
+    calling thread, strictly before any of those jobs can start running, so
+    `_report_document_job`'s later decrements never race an uninitialized
+    counter. Sourced via whichever of `embed_worker`/`ingestion_pipeline` is
+    wired (`.repo`, K-051's new accessor on both) — a no-op when neither
+    exposes one (pre-K-051 test fakes).
+
+    **Always calls `start_document_progress`, even when `total_jobs == 0`**
+    (K-051 review MINOR 2 — a document with zero chunks): `total_jobs == 0`
+    is exactly what `start_document_progress` itself treats as "nothing to
+    wait for" and flips straight to `'ready'`. Skipping the call here would
+    leave such a document parked at `'processing'` forever, safe today only
+    because `Services.ingest_document` never produces a zero-chunk document
+    (`EmptyDocumentError` two layers up) — an invariant this method no
+    longer needs to trust.
     """
+    total_jobs = (len(chunks) if embed_worker is not None else 0) + (
+        len(chunks) if ingestion_pipeline is not None else 0
+    )
+    repo = getattr(embed_worker, "repo", None) or getattr(
+        ingestion_pipeline, "repo", None
+    )
+    if repo is not None:
+        repo.start_document_progress(
+            ws, document_id=document_id, total_jobs=total_jobs
+        )
     for chunk in chunks:
         if embed_worker is not None:
             schedule(
-                _safe_embed_chunk, embed_worker, ws, chunk["chunkId"], chunk["text"]
+                _safe_embed_chunk, embed_worker, ws, document_id,
+                chunk["chunkId"], chunk["text"],
             )
         # K-050 M5 Stage 3: extraction is scheduled independently of embedding
         # for the same chunk — neither blocks the other.

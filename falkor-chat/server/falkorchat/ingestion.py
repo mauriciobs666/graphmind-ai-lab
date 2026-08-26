@@ -88,6 +88,15 @@ class IngestionPipeline:
         self._id = id_gen
         self._clock = clock
 
+    @property
+    def repo(self) -> Any:
+        """The injected repository (K-051) — lets `background._safe_extract`
+        report a chunk-extract job's completion back onto its owning
+        `Document` (`repository.report_document_job_done`) without this
+        pipeline having to know anything about document-level status
+        itself."""
+        return self._repo
+
     def extract_chunk(
         self, ws: str, *, chunk_id: str, document_id: str, text: str
     ) -> None:

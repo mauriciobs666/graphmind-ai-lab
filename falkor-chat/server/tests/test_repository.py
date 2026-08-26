@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from redis.exceptions import ResponseError
 
 from falkorchat import db
 from falkorchat.repository import MemberIdCollisionError, Repository
@@ -803,6 +804,91 @@ def test_create_document_is_non_idempotent_on_retry(repo, conn):
 
     [[count]] = _probe(conn, "MATCH (d:Document) RETURN count(d)")
     assert count == 2
+
+
+# ── §14 Document.status terminal state (K-051) ───────────────────────────────
+#
+# `start_document_progress` initializes the outstanding-job counter
+# `_schedule_chunk_processing` uses (K-051's suggested fix); `report_document_
+# job_done` decrements it and flips `Document.status` to `'ready'`/`'failed'`.
+# Pinned here at the repository/Cypher altitude — background.py's own unit
+# tests (test_background.py) and the REST-level integration tests
+# (test_api.py) exercise the full call chain these primitives sit under.
+
+
+def test_start_document_progress_then_report_all_done_reaches_ready(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=2)
+    assert repo.get_document("test", document_id="d1")["status"] == "processing"
+
+    repo.report_document_job_done("test", document_id="d1", success=True)
+    assert repo.get_document("test", document_id="d1")["status"] == "processing"
+
+    repo.report_document_job_done("test", document_id="d1", success=True)
+    assert repo.get_document("test", document_id="d1")["status"] == "ready"
+
+
+def test_report_document_job_done_one_failure_marks_failed_even_with_others_pending(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=2)
+    repo.report_document_job_done("test", document_id="d1", success=False)
+
+    assert repo.get_document("test", document_id="d1")["status"] == "failed"
+
+
+def test_report_document_job_done_late_success_does_not_revert_failed(repo):
+    """A failure's terminal write wins — a job that finishes successfully
+    after the document is already 'failed' must not flip it back to
+    'ready', even once the outstanding count reaches zero."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=2)
+    repo.report_document_job_done("test", document_id="d1", success=False)
+    repo.report_document_job_done("test", document_id="d1", success=True)
+
+    assert repo.get_document("test", document_id="d1")["status"] == "failed"
+
+
+def test_report_document_job_done_late_failure_does_not_revert_ready(repo):
+    """Symmetric guard: once every job has succeeded and the document is
+    'ready', a stray late failure report must not flip it back."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=1)
+    repo.report_document_job_done("test", document_id="d1", success=True)
+    assert repo.get_document("test", document_id="d1")["status"] == "ready"
+
+    repo.report_document_job_done("test", document_id="d1", success=False)
+    assert repo.get_document("test", document_id="d1")["status"] == "ready"
+
+
+def test_start_document_progress_zero_total_jobs_flips_straight_to_ready(repo):
+    """K-051 review MINOR 2: a document with nothing scheduled (`total_jobs
+    == 0` — e.g. zero chunks) must not park at 'processing' forever waiting
+    for a `report_document_job_done` call that will never come; there is
+    nothing outstanding, so it's 'ready' the instant progress is
+    (non-)started."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=0)
+
+    assert repo.get_document("test", document_id="d1")["status"] == "ready"
+
+
+def test_start_document_progress_zero_total_jobs_does_not_revert_an_already_failed_document(
+    repo,
+):
+    """Same first-terminal-write-wins guard applies here: a zero-total start
+    must not resurrect a document some other job already failed."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    repo.start_document_progress("test", document_id="d1", total_jobs=1)
+    repo.report_document_job_done("test", document_id="d1", success=False)
+
+    repo.start_document_progress("test", document_id="d1", total_jobs=0)
+
+    assert repo.get_document("test", document_id="d1")["status"] == "failed"
 
 
 # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
@@ -1699,6 +1785,33 @@ def test_read_structure_none_when_absent(wf_repo):
     assert wf_repo.read_snapshot_structure("test", key="ghost", version="1") is None
 
 
+def test_read_snapshot_structure_none_when_graph_key_fully_deleted(conn):
+    """K-005 reproduction (live): `test_queries.sh`'s teardown doesn't just empty
+    `reference`'s node data, it `GRAPH.DELETE`s the graph key entirely
+    (`falkor-chat/AGENTS.md` `test_queries.sh` row). A read against a
+    fully-deleted key raises FalkorDB's `ERR Invalid graph operation on empty
+    key` `ResponseError` — a different failure mode from "key exists, root node
+    absent" (`test_read_structure_none_when_absent` above), and one
+    `_read_structure` (repository.py) previously let escape uncaught, which is
+    what let it defeat `Services.diff_def_snapshot`'s both-sides-checked
+    contract (services.py:1748) — see `claude/coder/kaizen/plan.md` K-005 for
+    the full trace.
+
+    Uses a throwaway `ws:<probe>` key (not the shared `ws:test`/`reference`)
+    per `falkor-chat/AGENTS.md`'s "probing shared graph state without mutating
+    it" guidance — genuinely `GRAPH.DELETE`s it, the same op `test_queries.sh`
+    performs, so `ro_query` genuinely raises rather than being mocked.
+    """
+    probe_ws = "k005probe"
+    graph = db.workspace_graph(conn, probe_ws)
+    graph.query("RETURN 1")  # materialize the key (write-mode query side effect)
+    graph.delete()  # the exact op test_queries.sh's teardown performs
+
+    repo = Repository(conn)
+
+    assert repo.read_snapshot_structure(probe_ws, key="ghost", version="1") is None
+
+
 class _FakeRes:
     def __init__(self, rows):
         self.result_set = rows
@@ -1780,6 +1893,47 @@ def test_read_structure_tolerates_a_root_with_no_start_edge_and_no_steps():
     assert st["start_keys"] == []
     assert st["steps"] == []
     assert st["transitions"] == []
+
+
+class _RaisingFakeGraph:
+    """Raises a genuine `redis.exceptions.ResponseError` from `ro_query`, exactly
+    the shape live FalkorDB raises for a fully `GRAPH.DELETE`d graph key (K-005)
+    — not a mocked `None` return. Reused for both `_read_structure` callers
+    (`read_def_structure`'s `reference` side, `read_snapshot_structure`'s
+    `ws:{id}` side already covered live above) since both delegate to the same
+    static helper with only the `graph` handle differing.
+    """
+
+    def __init__(self, message: str):
+        self._message = message
+
+    def ro_query(self, cypher, params):
+        raise ResponseError(self._message)
+
+
+def test_read_structure_none_when_graph_key_fully_deleted():
+    # The `reference`-side path (label=WorkflowDef) — mirrors the live
+    # `read_snapshot_structure` reproduction above without touching the shared
+    # `reference` graph (AGENTS.md: `reference` has no isolatable graph seam).
+    graph = _RaisingFakeGraph("ERR Invalid graph operation on empty key")
+
+    st = Repository._read_structure(
+        graph, label="WorkflowDef", key="onboarding", version="1"
+    )
+
+    assert st is None
+
+
+def test_read_structure_reraises_response_errors_that_are_not_empty_key():
+    # The fix must not swallow every `ResponseError` — only the specific "empty
+    # key" (fully-deleted-graph) case, matching the existing `_read_or_absent`
+    # (services.py:649) and vector-index-probe (repository.py:807) precedent.
+    graph = _RaisingFakeGraph("RediSearch: Syntax error at offset 6")
+
+    with pytest.raises(ResponseError, match="Syntax error"):
+        Repository._read_structure(
+            graph, label="WorkflowDef", key="onboarding", version="1"
+        )
 
 
 def test_snapshot_structurally_matches_reference_def(wf_repo):

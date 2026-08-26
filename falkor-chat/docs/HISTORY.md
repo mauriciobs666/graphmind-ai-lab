@@ -5,6 +5,46 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — K-051: `Document.status` now reaches a terminal state
+
+**What:** `tdd-engineer` fixed `Document.status` never leaving `'processing'` — no code path
+anywhere in `server/falkorchat/*.py` ever wrote `'ready'`/`'failed'`, a defect `qa-engineer`'s
+K-050/M5 acceptance pass found live (`docs/test-reports/document-ingestion-report.md` Defect 1)
+and filed as K-051. Coordinated via
+`docs/plans/document-status-terminal-coordination.md`.
+
+**Fix:** a per-document outstanding-job counter, `Document.pendingJobs`. `create_document`
+(`repository.py`) now seeds it to `0`. `background._schedule_chunk_processing` calls the new
+`repository.start_document_progress` synchronously, before scheduling any per-chunk job, to set
+the real total (one job per chunk per wired worker — embed + extract counted independently); a
+zero-chunk document flips straight to `'ready'` in that same call rather than parking forever.
+Each of `_safe_embed_chunk`/`_safe_extract` now reports its own outcome back via a shared
+`_report_document_job` helper (same failure-isolation discipline as every other `_safe_*`
+wrapper — never raises into the scheduler) to the new `repository.report_document_job_done`,
+which decrements the counter and flips `status`: to `'failed'` the instant any single job fails
+(regardless of how many others are outstanding), or to `'ready'` once every job has succeeded
+and none has failed. Both writes guard on `status = 'processing'` so the first terminal write
+wins — a late report after a document already reached a terminal state can never flip it back.
+`EmbeddingWorker`/`IngestionPipeline` each gained a public `.repo` accessor so
+`background.py` can source the repository without threading a new parameter through every
+`_schedule_chunk_processing` call site; a worker/pipeline with no `.repo` (every pre-K-051 test
+fake) silently skips the report rather than raising.
+
+**Tests:** 19 new tests across `server/tests/test_repository.py`, `test_background.py`, and
+`test_api.py` — repository-level counter/status-transition coverage (including the zero-chunk
+edge case and late-report-after-terminal-state guards), `background.py` unit tests (including
+that `_report_document_job` swallows a raising repo, matching every sibling `_safe_*` wrapper's
+existing test convention), and two live integration tests driving the real background pipeline
+to a terminal `status` via REST. TDD discipline throughout (RED confirmed before each fix,
+mutation-tested after). Full offline suite: 1751 → 1773 passed / 4 deselected.
+
+**Review:** `analyst` gated in two passes (`docs/reviews/document-status-terminal.md`) — Pass 1
+approved with suggestions after independently reproducing the fix live against `falkordb-dev`
+(one MAJOR: `docs/QUERIES.md` §14 hadn't been kept current; two MINOR: the zero-chunk edge case
+and the untested swallow path); Pass 2 confirmed all three resolved and verdict **approve**.
+`docs/QUERIES.md` §14.1's `create_document` literal and new §14.1a now document both new
+queries.
+
 ## 2026-08-25 — K-005: `_read_structure` false-negatived a live snapshot after a fully-deleted `reference` graph key
 
 **What:** `tdd-engineer` fixed a false negative in `Repository._read_structure`

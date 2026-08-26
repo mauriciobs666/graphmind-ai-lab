@@ -501,30 +501,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   once root-caused, a regression test proving the chosen guard rejects the offending shape before it
   ever reaches a graph write.
 
-### K-051 — `Document.status` never reaches a terminal state (🔵 proposed — filed out of K-050/M5's `qa-engineer` acceptance pass, 2026-08-25)
-
-> **Why it exists.** No code path anywhere in `server/falkorchat/*.py` ever writes
-> `Document.status = 'ready'` or `'failed'` — confirmed by grep. A document whose
-> extraction/fusion/embedding is fully complete (verified via a direct graph read) still reports
-> `status: "processing"` forever. This directly contradicts the plan's own Stage 1/Stage 3 "Done"
-> text and §5's AC-8 test-strategy row, which name `Document.status` as the caller's one completion
-> signal. It fell through the cracks because every offline test completes extraction synchronously
-> in-test, never polling status — the acceptance pass was the first to drive the real async pipeline
-> and notice the signal is dead. Parked, not blocking, in the acceptance verdict
-> (`docs/test-reports/document-ingestion-report.md`).
-- **Owner:** **`tdd-engineer`** (bug fix, clear behavior contract — write the terminal-state
-  transition and a reproduction test first).
-- **Scope:** decide and implement when/where `'ready'` and `'failed'` get written — after all of a
-  document's chunks finish embedding **and** extraction/fusion (both `_safe_embed_chunk` and
-  `_safe_extract` paths need to report completion back up, likely via a per-document completion
-  counter or a check-remaining-work query); `'failed'` when a background step's isolation catches a
-  real failure rather than silently logging it.
-- **Risks/RAM:** none — no new node/index; a status-field write path only.
-- **Test strategy:** an integration test that ingests a document, drives its background processing
-  to completion (mirroring how the Stage 6a AC-8 batch test does this), and polls `get_document`
-  until `status` leaves `'processing'`; a separate test forcing a background failure and asserting
-  `status: 'failed'`.
-
 ## Deferred — M2.5 hardening track
 
 Auth + real-time. Not on the M5 path; no scheduled start.

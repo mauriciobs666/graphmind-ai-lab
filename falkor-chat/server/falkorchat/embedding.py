@@ -126,6 +126,14 @@ class EmbeddingWorker:
         # restart, so a cached miss would permanently and wrongly refuse it.
         self._index_dim_cache: dict[tuple[str, str], int] = {}
 
+    @property
+    def repo(self) -> Any:
+        """The injected repository (K-051) — lets `background._safe_embed_chunk`
+        report a chunk-embed job's completion back onto its owning `Document`
+        (`repository.report_document_job_done`) without this worker having to
+        know anything about document-level status itself."""
+        return self._repo
+
     def _index_dimension(self, ws: str, label: str) -> int | None:
         key = (ws, label)
         cached = self._index_dim_cache.get(key)

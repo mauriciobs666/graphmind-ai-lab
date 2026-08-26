@@ -8,6 +8,7 @@ context override pinning the tenant to `ws:test`.
 from __future__ import annotations
 
 import itertools
+import json
 
 import pytest
 from conftest import TEST_EMBEDDING_DIM
@@ -16,6 +17,8 @@ from fastapi.testclient import TestClient
 from falkorchat import config, db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
+from falkorchat.embedding import EmbeddingWorker
+from falkorchat.ingestion import IngestionPipeline
 from falkorchat.repository import Repository
 from falkorchat.services import DEMO_EXPECTED_DEFS, Services
 
@@ -730,6 +733,122 @@ def test_default_app_batch_ingest_has_no_wiring(client):
     )
     assert r.status_code == 201
     assert len(r.json()) == 2
+
+
+# ── K-051: Document.status reaches a terminal state ──────────────────────────
+#
+# Every fixture above (`wired`, `wired_ingestion`) wires `RecordingWorker`/
+# `RecordingIngestionPipeline` — fakes that pin *scheduling* (which chunks got
+# scheduled for which job), not document-status bookkeeping: they carry no
+# `.repo`, so `background._report_document_job` silently skips reporting on
+# them (by design — see its docstring). These two tests wire the REAL
+# `EmbeddingWorker`/`IngestionPipeline` (a stub embedder/LLM — no network)
+# against the real `ws:test` repo, so `_schedule_chunk_processing`'s progress
+# counter and `_safe_embed_chunk`/`_safe_extract`'s completion reports
+# actually fire end to end — exactly the gap `document-ingestion-report.md`
+# Defect 1 found: a document whose background processing is fully complete
+# still reported `status: "processing"` forever.
+
+
+class _StubChunkEmbedder:
+    """A fixed-length embedder — `dim` controls whether the returned vector
+    matches the worker's `expected_dim` (success) or not (a deliberate
+    `EmbeddingDimensionError`, the forced-failure test below)."""
+
+    def __init__(self, dim: int):
+        self._dim = dim
+
+    def embed(self, text):
+        return [0.0] * self._dim
+
+
+class _StubExtractionLLM:
+    """Always reports "nothing extracted" — a successful, deterministic
+    extraction with no entities/relationships, no network."""
+
+    def complete(self, messages):
+        return json.dumps({"entities": [], "relationships": []})
+
+
+@pytest.fixture()
+def wired_real_ingestion(conn):
+    """App wired with a REAL `EmbeddingWorker` + `IngestionPipeline` (stub
+    embedder/LLM, no network) against the real `ws:test` repo — the only
+    fixture in this file where `background._report_document_job` actually
+    has a `.repo` to report through. Returns `(client, repo)`."""
+    repo = Repository(conn)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    services = Services(repo)
+    worker = EmbeddingWorker(
+        repo, _StubChunkEmbedder(TEST_EMBEDDING_DIM), expected_dim=TEST_EMBEDDING_DIM,
+    )
+    pipeline = IngestionPipeline(repo, _StubExtractionLLM())
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+        embed_worker=worker,
+        ingestion_pipeline=pipeline,
+    )
+    return TestClient(app), repo
+
+
+def _poll_document_until_terminal(client, document_id, *, attempts=20):
+    """Poll `GET /documents/{id}` until `status` leaves `'processing'` (or
+    `attempts` is exhausted). Starlette's `TestClient` already runs
+    `BackgroundTasks` synchronously before a response returns (this file's
+    `wired` fixture docstring: "BackgroundTasks run before the TestClient
+    response returns"), so in practice this returns on the very first read —
+    the poll loop is what the K-051 test-strategy brief asks for regardless,
+    and keeps this test honest if that scheduling model ever changes."""
+    doc = None
+    for _ in range(attempts):
+        doc = client.get(f"/documents/{document_id}").json()
+        if doc["status"] != "processing":
+            return doc
+    return doc
+
+
+def test_ingest_document_background_completion_reaches_ready(wired_real_ingestion):
+    client, _repo = wired_real_ingestion
+
+    r = client.post("/documents", json={"text": "Acme is a company.", "title": "Doc"})
+    assert r.status_code == 201
+    document_id = r.json()["documentId"]
+
+    doc = _poll_document_until_terminal(client, document_id)
+
+    assert doc["status"] == "ready"
+
+
+def test_ingest_document_background_embed_failure_reaches_failed(conn):
+    # Only embed_worker wired, deliberately mismatched dim: the embedder
+    # returns a vector one dimension too long, so every embed job for this
+    # document raises EmbeddingDimensionError inside embed_chunk before any
+    # repo write — _safe_embed_chunk's own failure-isolation catches it, and
+    # K-051's report call must still flip Document.status to 'failed'.
+    repo = Repository(conn)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    services = Services(repo)
+    worker = EmbeddingWorker(
+        repo, _StubChunkEmbedder(TEST_EMBEDDING_DIM + 1),
+        expected_dim=TEST_EMBEDDING_DIM,
+    )
+    app = create_app(
+        services,
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+        embed_worker=worker,
+    )
+    client = TestClient(app)
+
+    r = client.post("/documents", json={"text": "Acme is a company.", "title": "Doc"})
+    assert r.status_code == 201
+    document_id = r.json()["documentId"]
+
+    doc = _poll_document_until_terminal(client, document_id)
+
+    assert doc["status"] == "failed"
 
 
 class _StubQueryEmbedder:

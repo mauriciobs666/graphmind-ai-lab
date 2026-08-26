@@ -1026,7 +1026,7 @@ class Repository:
             "    documentId: $documentId, title: $title, text: $text, "
             "    sourceFormat: $sourceFormat, "
             "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
-            "    status: 'processing', createdAt: $createdAt"
+            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt"
             "  }) "
             "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
             "  FOREACH (ch IN $chunks | "
@@ -1065,6 +1065,72 @@ class Repository:
             "sourceFormat": row[3], "sourceKind": row[4], "status": row[5],
             "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
         }
+
+    def start_document_progress(
+        self, ws: str, *, document_id: str, total_jobs: int
+    ) -> None:
+        """Initialize `document_id`'s outstanding-background-job count (K-051).
+
+        `background._schedule_chunk_processing` calls this once, synchronously,
+        right before scheduling any per-chunk embed/extract job — so
+        `report_document_job_done` always has a real count to decrement
+        against and never races the jobs themselves, which only start
+        scheduling after this returns. `total_jobs` is the number of
+        `_safe_embed_chunk`/`_safe_extract` calls about to be scheduled for
+        this document (one per chunk per wired worker).
+
+        `total_jobs <= 0` (K-051 review MINOR 2 — a zero-chunk document, or
+        any future caller that reaches this with nothing to schedule) flips
+        `status` straight to `'ready'` in the same query, guarded on
+        `status = 'processing'` — the same first-terminal-write-wins posture
+        `report_document_job_done` uses, so this can never resurrect a
+        document some other job already failed. Without this, a document
+        with nothing scheduled would park at `'processing'` forever waiting
+        for a `report_document_job_done` call that will never come — exactly
+        the defect K-051 exists to fix, just reached from the zero-work edge
+        instead of the all-work-done edge.
+        """
+        self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "SET d.pendingJobs = $totalJobs "
+            "WITH d "
+            "FOREACH (_ IN CASE WHEN $totalJobs <= 0 AND d.status = 'processing' "
+            "  THEN [1] ELSE [] END | SET d.status = 'ready')",
+            {"documentId": document_id, "totalJobs": total_jobs},
+        )
+
+    def report_document_job_done(
+        self, ws: str, *, document_id: str, success: bool
+    ) -> None:
+        """Report one background embed/extract job's outcome for `document_id`
+        (K-051 — closes the "`Document.status` never reaches a terminal
+        state" defect, `document-ingestion-report.md` Defect 1).
+
+        Decrements the outstanding-job count `start_document_progress` set,
+        then flips `Document.status`: to `'ready'` once every scheduled job
+        has reported success and none has failed, or to `'failed'` the
+        instant any single job reports failure — regardless of how many
+        others are still outstanding (one failed chunk is enough to call the
+        whole document's background processing failed, mirroring the
+        `_safe_*` wrappers' own per-job isolation one layer up). Both
+        branches guard on `d.status = 'processing'` so the first terminal
+        write wins: a late-arriving report — success after a failure, or a
+        stray failure after every other job already reported success and the
+        document reached `'ready'` — can never flip a document back out of a
+        terminal state. One `GRAPH.QUERY`, same atomic-single-round-trip
+        posture as every other counter/status write in this module.
+        """
+        self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "SET d.pendingJobs = coalesce(d.pendingJobs, 0) - 1 "
+            "WITH d "
+            "FOREACH (_ IN CASE WHEN NOT $success AND d.status = 'processing' "
+            "  THEN [1] ELSE [] END | SET d.status = 'failed') "
+            "FOREACH (_ IN CASE WHEN $success AND d.pendingJobs <= 0 "
+            "  AND d.status = 'processing' THEN [1] ELSE [] END | "
+            "  SET d.status = 'ready')",
+            {"documentId": document_id, "success": bool(success)},
+        )
 
     def list_document_chunks(
         self, ws: str, *, document_id: str
@@ -1743,13 +1809,26 @@ class Repository:
         a 1:1 mirror of QUERIES.md" rule (DESIGN §14.2), recorded from the query
         side in the **QUERIES.md §11.2 multi-`START` note** (mirrored at §11.5).
 
-        `None` when the root node is absent. Otherwise
-        `{name, kind, start_keys, steps, transitions}`.
+        `None` when the root node is absent **or when the graph key itself has
+        been fully `GRAPH.DELETE`d** (K-005) — `test_queries.sh`'s teardown does
+        the latter to `reference`, and an uncaught "empty key" `ResponseError`
+        here previously escaped both callers and `Services.diff_def_snapshot`
+        entirely, collapsing its per-side presence check to a blanket failure
+        before the other side was ever read (`claude/coder/kaizen/plan.md`
+        K-005). Same "empty key" catch already used for this exact FalkorDB
+        behaviour at `read_index_dimension` (earlier in this class) and
+        `services._read_or_absent`; any other `ResponseError` still propagates.
+        Otherwise `{name, kind, start_keys, steps, transitions}`.
         """
-        meta = graph.ro_query(
-            Repository._READ_META_CYPHER.format(label=label),
-            {"key": key, "version": version},
-        )
+        try:
+            meta = graph.ro_query(
+                Repository._READ_META_CYPHER.format(label=label),
+                {"key": key, "version": version},
+            )
+        except ResponseError as exc:
+            if "empty key" in str(exc):
+                return None
+            raise
         if not meta.result_set:
             return None
         name, kind = meta.result_set[0][0], meta.result_set[0][1]

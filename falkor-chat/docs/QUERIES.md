@@ -1930,7 +1930,7 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
     documentId: $documentId, title: $title, text: $text,
     sourceFormat: $sourceFormat,
     sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END,
-    status: 'processing', createdAt: $createdAt
+    status: 'processing', pendingJobs: 0, createdAt: $createdAt
   })
   CREATE (d)-[:INGESTED_BY]->(ingestor)
   FOREACH (ch IN $chunks |
@@ -1948,6 +1948,56 @@ known `User` actor writes 1 `Document` + 3 `Chunk` nodes, 1 `INGESTED_BY` + 3 `H
 case writes nothing (`written=false, ingestorFound=false`) — same "unknown actor ⇒ silent no-op,
 guarded by a status row" contract §4's message write paths use, so the service can distinguish it
 from a genuine fault and raise `UnknownActorError` rather than reporting false success.
+
+### 14.1a `Document.status` background-completion tracking (K-051)
+
+`create_document` (§14.1) seeds `pendingJobs: 0`, but never itself writes `'ready'`/`'failed'` —
+nothing did, before K-051 (`docs/test-reports/document-ingestion-report.md` Defect 1: a fully-
+processed document read back `status: "processing"` forever). These two queries, both on
+`repository.py`'s `Repository` (internal seam — `background._schedule_chunk_processing` and
+`background._safe_embed_chunk`/`_safe_extract` are the only callers, never a transport directly),
+are what closes that gap.
+
+**`start_document_progress` — initialize the outstanding-job counter**
+```cypher
+MATCH (d:Document {documentId: $documentId})
+SET d.pendingJobs = $totalJobs
+WITH d
+FOREACH (_ IN CASE WHEN $totalJobs <= 0 AND d.status = 'processing'
+  THEN [1] ELSE [] END | SET d.status = 'ready')
+```
+*Run from `background._schedule_chunk_processing`, synchronously, before scheduling any per-chunk
+job — `$totalJobs` is the number of `_safe_embed_chunk`/`_safe_extract` calls about to be scheduled
+(one per chunk per wired worker), so `report_document_job_done` below always has a real count to
+decrement against, never a race with the jobs themselves. `$totalJobs <= 0` (a zero-chunk document)
+flips `status` straight to `'ready'` in the same query instead of leaving it parked forever waiting
+for a completion report that will never come.*
+
+**`report_document_job_done` — one job's outcome, first-terminal-write-wins**
+```cypher
+MATCH (d:Document {documentId: $documentId})
+SET d.pendingJobs = coalesce(d.pendingJobs, 0) - 1
+WITH d
+FOREACH (_ IN CASE WHEN NOT $success AND d.status = 'processing'
+  THEN [1] ELSE [] END | SET d.status = 'failed')
+FOREACH (_ IN CASE WHEN $success AND d.pendingJobs <= 0 AND d.status = 'processing'
+  THEN [1] ELSE [] END | SET d.status = 'ready')
+```
+*Run from `background._safe_embed_chunk`/`_safe_extract` after every chunk-level embed/extract job,
+success or failure (via their shared `_report_document_job` helper) — decrements the counter, then
+flips `status` to `'failed'` the instant any single job fails (regardless of how many others are
+still outstanding — one failed chunk fails the whole document), or to `'ready'` once every scheduled
+job has succeeded and none has failed. Both `FOREACH` guards check `status = 'processing'` first, so
+the first terminal write wins: a late success after a failure, or a stray failure after the document
+already reached `'ready'`, both no-op rather than flipping status back. One `GRAPH.QUERY` per call —
+decrement + both guarded flips in the same round trip, so no read-then-write race exists across
+separate calls either.*
+
+**[verified]** (`tests/test_repository.py`, live against `falkordb-dev`): all-jobs-succeed reaches
+`'ready'` only once the counter is fully drained, not before; a single failure reaches `'failed'`
+immediately even with other jobs still outstanding; a late success after a failure does not revert
+`'failed'`; a late failure after `'ready'` does not revert it either; `total_jobs <= 0` reaches
+`'ready'` immediately and, same guard, does not resurrect an already-`'failed'` document.
 
 ### 14.2 `get_document` — read back the verbatim text + ingesting actor
 

@@ -13,7 +13,13 @@ from __future__ import annotations
 
 import logging
 
-from falkorchat.background import _safe_embed_chunk, _safe_extract, _safe_fuse, _safe_respond
+from falkorchat.background import (
+    _safe_embed_chunk,
+    _safe_extract,
+    _safe_fuse,
+    _safe_respond,
+    _schedule_chunk_processing,
+)
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.responder import AgentResponder
@@ -84,14 +90,18 @@ def test_safe_respond_swallows_an_unresolvable_model_logs_error_and_posts_nothin
 
 
 class _RecordingChunkWorker:
-    def __init__(self):
+    def __init__(self, repo=None):
         self.calls: list[tuple] = []
+        self.repo = repo
 
     def embed_chunk(self, ws, *, chunk_id, text):
         self.calls.append((ws, chunk_id, text))
 
 
 class _FailingChunkWorker:
+    def __init__(self, repo=None):
+        self.repo = repo
+
     def embed_chunk(self, ws, *, chunk_id, text):
         raise RuntimeError(f"boom embedding {chunk_id}")
 
@@ -99,7 +109,7 @@ class _FailingChunkWorker:
 def test_safe_embed_chunk_calls_the_worker():
     worker = _RecordingChunkWorker()
 
-    _safe_embed_chunk(worker, "test", "c1", "about cats")
+    _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")
 
     assert worker.calls == [("test", "c1", "about cats")]
 
@@ -108,7 +118,7 @@ def test_safe_embed_chunk_swallows_failure_logs_error_never_raises(caplog):
     worker = _FailingChunkWorker()
 
     with caplog.at_level(logging.ERROR):
-        _safe_embed_chunk(worker, "test", "c1", "about cats")  # must not raise
+        _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")  # must not raise
 
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(error_records) == 1
@@ -118,20 +128,96 @@ def test_safe_embed_chunk_swallows_failure_logs_error_never_raises(caplog):
     assert "boom embedding c1" in str(error_records[0].exc_info[1])
 
 
+# ── _safe_embed_chunk / _safe_extract report completion back onto the owning
+# Document (K-051) ────────────────────────────────────────────────────────
+#
+# `embed_worker.repo`/`ingestion_pipeline.repo` is where K-051 sources the
+# repository to call `report_document_job_done` on — a worker/pipeline with
+# no `.repo` (every fake elsewhere in this module and in test_api.py/
+# test_mcp.py that predates K-051) must keep working exactly as before,
+# silently skipping the report rather than raising.
+
+
+class _RecordingProgressRepo:
+    def __init__(self):
+        self.calls: list[tuple] = []
+        self.start_calls: list[tuple] = []
+
+    def report_document_job_done(self, ws, *, document_id, success):
+        self.calls.append((ws, document_id, success))
+
+    def start_document_progress(self, ws, *, document_id, total_jobs):
+        self.start_calls.append((ws, document_id, total_jobs))
+
+
+class _RaisingProgressRepo:
+    """`report_document_job_done` raises — pins that `_report_document_job`
+    swallows a raising repo the same way every sibling `_safe_*` wrapper
+    swallows a raising worker/pipeline (K-051 review MINOR 3)."""
+
+    def report_document_job_done(self, ws, *, document_id, success):
+        raise RuntimeError(f"boom reporting {document_id}")
+
+
+def test_safe_embed_chunk_reports_success_to_the_workers_repo():
+    progress_repo = _RecordingProgressRepo()
+    worker = _RecordingChunkWorker(repo=progress_repo)
+
+    _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")
+
+    assert progress_repo.calls == [("test", "d1", True)]
+
+
+def test_safe_embed_chunk_reports_failure_to_the_workers_repo():
+    progress_repo = _RecordingProgressRepo()
+    worker = _FailingChunkWorker(repo=progress_repo)
+
+    _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")  # must not raise
+
+    assert progress_repo.calls == [("test", "d1", False)]
+
+
+def test_safe_embed_chunk_with_no_repo_on_the_worker_does_not_raise():
+    worker = _RecordingChunkWorker()  # repo=None, the pre-K-051 default shape
+
+    _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")  # must not raise
+
+    assert worker.calls == [("test", "c1", "about cats")]
+
+
+def test_safe_embed_chunk_swallows_a_raising_repo_logs_error_never_raises(caplog):
+    worker = _RecordingChunkWorker(repo=_RaisingProgressRepo())
+
+    with caplog.at_level(logging.ERROR):
+        _safe_embed_chunk(worker, "test", "d1", "c1", "about cats")  # must not raise
+
+    assert worker.calls == [("test", "c1", "about cats")]  # the embed itself still ran
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "failed to report background embed completion" in error_records[0].getMessage()
+    assert "c1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom reporting d1" in str(error_records[0].exc_info[1])
+
+
 # ── _safe_extract (K-050 M5 Stage 3) ─────────────────────────────────────────
 #
 # Mirrors `_safe_embed_chunk`'s failure-isolation contract exactly.
 
 
 class _RecordingIngestionPipeline:
-    def __init__(self):
+    def __init__(self, repo=None):
         self.calls: list[tuple] = []
+        self.repo = repo
 
     def extract_chunk(self, ws, *, chunk_id, document_id, text):
         self.calls.append((ws, chunk_id, document_id, text))
 
 
 class _FailingIngestionPipeline:
+    def __init__(self, repo=None):
+        self.repo = repo
+
     def extract_chunk(self, ws, *, chunk_id, document_id, text):
         raise RuntimeError(f"boom extracting {chunk_id}")
 
@@ -156,6 +242,47 @@ def test_safe_extract_swallows_failure_logs_error_never_raises(caplog):
     assert "c1" in error_records[0].getMessage()
     assert error_records[0].exc_info is not None
     assert "boom extracting c1" in str(error_records[0].exc_info[1])
+
+
+def test_safe_extract_reports_success_to_the_pipelines_repo():
+    progress_repo = _RecordingProgressRepo()
+    pipeline = _RecordingIngestionPipeline(repo=progress_repo)
+
+    _safe_extract(pipeline, "test", "c1", "d1", "about cats")
+
+    assert progress_repo.calls == [("test", "d1", True)]
+
+
+def test_safe_extract_reports_failure_to_the_pipelines_repo():
+    progress_repo = _RecordingProgressRepo()
+    pipeline = _FailingIngestionPipeline(repo=progress_repo)
+
+    _safe_extract(pipeline, "test", "c1", "d1", "about cats")  # must not raise
+
+    assert progress_repo.calls == [("test", "d1", False)]
+
+
+def test_safe_extract_with_no_repo_on_the_pipeline_does_not_raise():
+    pipeline = _RecordingIngestionPipeline()  # repo=None, the pre-K-051 default shape
+
+    _safe_extract(pipeline, "test", "c1", "d1", "about cats")  # must not raise
+
+    assert pipeline.calls == [("test", "c1", "d1", "about cats")]
+
+
+def test_safe_extract_swallows_a_raising_repo_logs_error_never_raises(caplog):
+    pipeline = _RecordingIngestionPipeline(repo=_RaisingProgressRepo())
+
+    with caplog.at_level(logging.ERROR):
+        _safe_extract(pipeline, "test", "c1", "d1", "about cats")  # must not raise
+
+    assert pipeline.calls == [("test", "c1", "d1", "about cats")]  # the extract itself still ran
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "failed to report background extract completion" in error_records[0].getMessage()
+    assert "c1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom reporting d1" in str(error_records[0].exc_info[1])
 
 
 # ── _safe_fuse (K-050 M5 Stage 4) ─────────────────────────────────────────────
@@ -199,3 +326,54 @@ def test_safe_fuse_swallows_failure_logs_error_never_raises(caplog):
     assert "e1" in error_records[0].getMessage()
     assert error_records[0].exc_info is not None
     assert "boom fusing e1" in str(error_records[0].exc_info[1])
+
+
+# ── _schedule_chunk_processing initializes progress, including the
+# zero-chunk edge (K-051 review MINOR 2) ─────────────────────────────────
+
+
+def _noop_schedule(fn, *args):
+    pass
+
+
+def test_schedule_chunk_processing_initializes_progress_with_total_jobs():
+    progress_repo = _RecordingProgressRepo()
+    embed_worker = _RecordingChunkWorker(repo=progress_repo)
+    pipeline = _RecordingIngestionPipeline(repo=progress_repo)
+    chunks = [{"chunkId": "c1", "text": "a"}, {"chunkId": "c2", "text": "b"}]
+
+    _schedule_chunk_processing(
+        _noop_schedule, "test", "d1", chunks,
+        embed_worker=embed_worker, ingestion_pipeline=pipeline,
+    )
+
+    # 2 chunks * 2 wired jobs (embed + extract) each = 4 outstanding jobs.
+    assert progress_repo.start_calls == [("test", "d1", 4)]
+
+
+def test_schedule_chunk_processing_with_zero_chunks_still_initializes_progress_to_zero():
+    """K-051 review MINOR 2: a document with an empty chunk list must not be
+    silently skipped — `start_document_progress` is what flips it straight
+    to 'ready' when `total_jobs == 0`, and that only happens if this method
+    actually calls it."""
+    progress_repo = _RecordingProgressRepo()
+    embed_worker = _RecordingChunkWorker(repo=progress_repo)
+
+    _schedule_chunk_processing(
+        _noop_schedule, "test", "d1", [],
+        embed_worker=embed_worker, ingestion_pipeline=None,
+    )
+
+    assert progress_repo.start_calls == [("test", "d1", 0)]
+
+
+def test_schedule_chunk_processing_with_no_repo_on_either_worker_does_not_raise():
+    # Pre-K-051 fakes with no `.repo` at all — must keep working unmodified.
+    embed_worker = _RecordingChunkWorker()
+    pipeline = _RecordingIngestionPipeline()
+    chunks = [{"chunkId": "c1", "text": "a"}]
+
+    _schedule_chunk_processing(  # must not raise
+        _noop_schedule, "test", "d1", chunks,
+        embed_worker=embed_worker, ingestion_pipeline=pipeline,
+    )
