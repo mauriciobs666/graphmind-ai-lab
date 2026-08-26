@@ -76,3 +76,19 @@ follow-up per the review's own recommendation — not a new unit.
   first, a surgical `git add -p`/patch-based partial-file stage would be needed — not
   attempted here, treat as a live open question for whoever next touches this coordination,
   not a silent default.
+- **2026-08-25, factual update from the K-051 session's own coordinator (`teco`, not this
+  session):** option (a) above happened, but not cleanly — this code half is now
+  **committed**, as part of K-051's integration commit `d41da78`, not a standalone
+  follow-up commit. The K-051 coordinator staged only its own hunks correctly
+  (`git apply --cached`, verified) but then ran `git commit -- <paths>` including
+  `repository.py`/`test_repository.py` among the pathspecs — which re-stages a matching
+  path's full *working-tree* content before committing, not just what was in the index, so
+  this unit's already-`analyst`-accepted `_read_structure` fix + 4 tests rode along
+  unintentionally. Confirmed present and byte-identical to what U1/U2 above verified
+  (`git show d41da78 -- falkor-chat/server/falkorchat/repository.py`). No corrective git
+  surgery was attempted (destructive, and the content is legitimate). Full detail in
+  `document-status-terminal-coordination.md`'s own Close-out section. This coordination's
+  code-half row (U1) can be treated as delivered-and-integrated; whoever next touches this
+  doc should verify no local uncommitted `repository.py`/`test_repository.py` diff remains
+  before assuming otherwise, and decide independently whether to flip this coordination's
+  own `Status:` to `archived`.

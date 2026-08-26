@@ -81,3 +81,22 @@ wrinkle above), `background.py`/`embedding.py`/`ingestion.py`/`test_background.p
 in full, `QUERIES.md` §14.1/§14.1a, this coordination doc, and the review doc. `docs/HISTORY.md`
 gets a dated K-051 entry; K-051's row is removed from `docs/BACKLOG.md` in the same change.
 Offline suite independently re-verified solo, twice: 1766/4 after U1, 1773/4 after U3.
+
+**Commit-mechanics defect, caught after the fact.** The hunk isolation itself was correct — I
+staged only this unit's `repository.py`/`test_repository.py` hunks via `git apply --cached`,
+verified with `git diff --cached | grep '^@@'` before committing. But the actual `git commit -m
+"..." -- <paths>` call listed `repository.py`/`test_repository.py` among its explicit pathspecs,
+and `git commit <pathspec>` re-stages the **current working-tree** content for every matching
+path before committing — silently overriding the careful partial-hunk staging. The resulting
+commit (`d41da78`) therefore also carries the concurrent K-005 session's `_read_structure` fix +
+4 tests (confirmed via `git show HEAD -- repository.py | grep _read_structure`, unexpectedly
+present). Impact assessed as **benign, not corrective-action-worthy on the code itself**: that
+K-005 content was already independently `analyst`-reviewed and accepted per
+`workflow-diff-absent-key-coordination.md`'s own ledger, and that coordination's own notes had
+already named "K-051 lands first, re-diff and commit the remaining hunk" as one of its two
+anticipated resolution paths — this is that path, just landed inside K-051's commit rather than
+a clean follow-up commit of its own. Not corrected via `reset`/rebase (destructive, against
+standing guardrails, and the content is legitimate); flagged transparently here, in the other
+coordination's own Notes section, and to the user. Kaizen entry filed
+(`git commit -- <pathspec>` re-stages from the working tree, not the index — a durable gotcha
+for any future partial-hunk integration).
