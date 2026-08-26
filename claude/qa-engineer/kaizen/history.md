@@ -2,6 +2,55 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation (unit U5): 4 entries, all promoted to project docs/knowledge base, 0 discarded, 0 kept open, 0 `MENTIONS` tags
+- **What:** `cobb` processed all 4 outstanding `qa-engineer` entries in the shared `kaizen_team`
+  graph (agent-maintenance skill §5) — 1 legacy (`author` property, no edges) + 3 current-shape
+  (`PRODUCED` edges, post-M8). Re-derived each fact against the live system before disposing, not
+  just re-checked the citation.
+  - **`b6f3e1a2` (legacy, 2026-08-21) → promoted to `claude/qa-engineer/qa-testing-techniques.md`**
+    (new section): proving a *manual* `POST /workflow-runs/due` sweep resumed a run, not the
+    automatic periodic task racing it — fire the manual call immediately after the due moment,
+    read `runId` out of that call's own `resumed` list rather than the run's eventual state.
+    Re-verified live against `services.py`/`app.py`: the opt-in periodic sweep task
+    (`asyncio.create_task`, K-028 §3.6) and the manual endpoint still both call the same
+    `Services.sweep_due_workflow_runs`, so the race is still real.
+  - **`31797a17` (current, 2026-08-22) → promoted to `cypher-mcp/README.md`** (new paragraph after
+    the existing "session-lifetime container" note): a running (not dead) session's MCP connection
+    keeps talking to its pre-rebuild image indefinitely after `build.sh` produces a new tag — no
+    version marker in any tool response reveals the mismatch. Re-verified: `docker-run.sh` only
+    resolves/launches once per session start, and `grep -n version cypher-mcp/server.py` confirms
+    no version string appears in any response. Distinct from the README's existing "dead process,
+    not auto-reconnected" note (line ~678) — this is the *live-but-stale* case, not the *dead*
+    case.
+  - **`b3f2a1d4` (current, 2026-08-25) → promoted to `falkor-chat/docs/SERVER.md` §1.7
+    "QA/acceptance-testing gotchas"**: `start_server.sh`'s `--reload` default watches the whole
+    `falkor-chat/` tree, so any file write during a live pass (including your own
+    `docs/test-plans/`/`docs/test-reports/` writes) restarts the worker and silently kills
+    in-flight background daemon threads (ingestion extraction/embedding, `mcp.py`'s fire-and-forget
+    thread). Re-verified: `grep -n threading.Thread` across `falkorchat/*.py` confirms the daemon
+    threads exist (`mcp.py:131`, `tools.py:497`); `--reload`'s default is exactly
+    `UVICORN_ARGS="${UVICORN_ARGS:---reload}"` at `start_server.sh:104`.
+  - **`d7c9e2f6` (current, 2026-08-25) → promoted to the same SERVER.md §1.7 section, plus a
+    3-line comment directly at `start_server.sh:104`** (the point of use): `UVICORN_ARGS=""` does
+    NOT suppress `--reload` — bash `${VAR:-default}` treats an empty string the same as unset, so
+    only a genuinely non-empty override (e.g. `--timeout-keep-alive 5`) works. Re-verified the
+    exact line still reads `UVICORN_ARGS="${UVICORN_ARGS:---reload}"` — standard bash semantics,
+    not a bug, but non-obvious enough to bite a QA pass that assumes an empty override disables the
+    default.
+  - **No `MENTIONS` tags** — all four are squarely qa-engineer's own testing-domain observations
+    (a testing technique, a shared-tool infra quirk, two project-script gotchas), not substantively
+    about another agent's behavior.
+  - **No discards, no kept-open items** — every entry had a direct, concrete, still-true promotion
+    target; nothing needed a `plan.md` backlog item.
+- **Why:** `teco`-coordinated team-wide distillation pass, unit U5
+  (`claude/docs/plans/kaizen-distillation-coordination.md`).
+- **Docs touched:** `claude/qa-engineer/qa-testing-techniques.md` (new section) ·
+  `cypher-mcp/README.md` (new paragraph) · `falkor-chat/docs/SERVER.md` §1.7 (two new bullets) ·
+  `falkor-chat/scripts/start_server.sh` (3-line comment at the `UVICORN_ARGS` line).
+- **Graph:** all 4 entries cleared from `kaizen_team` (1 legacy `DETACH DELETE`; 3 current-shape
+  `PRODUCED`-edge resolutions, each the entry's last remaining edge so each cleared the whole node).
+- **Plan items:** none opened — every entry resolved to a concrete promotion this pass.
+
 ## 2026-08-25 — K-005 + K-006 closed — phase-2 lead-in re-pointed, phase-3 baseline rule split into branches
 - **K-005.** C5 made phase 4's report path absolute by removing *", or the component's convention"*, leaving phase 2's lead-in pointing at *"the project's naming conventions (discover them — don't impose)"* — the one dimension that is no longer negotiable at all, and the first thing a skimming agent reads. `:38`'s exception clause is m17-certified and was left untouched and unaided, as K-005 required.
 - **My first fix created a second contradiction, and the gate caught it.** I re-pointed the lead-in at *"test-item structure and backlog-ID form"* — but `:39` **prescribes** the test-item structure in seven named fields and `:41` prescribes the ID form, so the lead-in now told the agent to discover and not impose the one thing the section dictates. `"naming conventions"` never collided that way; the swap moved the term onto the section's own prescription. Corrected to name exactly what `:38`'s "Detect the convention first" bullet actually inspects: **where the component keeps its docs, and how it forms backlog IDs.**

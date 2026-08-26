@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation: 10 raw entries processed (2 promoted, 2 discarded as superseded, 2 discarded as low-value, 1 kept open as K-005, 3 tagged `MENTIONS`→`graph-dba`)
+- **What:** Ran `agent-maintenance` §5 over every `coder`-produced entry in `kaizen_team` — 4 legacy
+  (`author: 'coder'`) + 6 current-shape (`PRODUCED` edges), all dated 2026-08-21/24/25, from K-028
+  workflow-timers and K-050 M5 document-ingestion work. Each verified by re-deriving the fact
+  myself (source reads, live `curl`, a Python repro script, or a fresh `mcp__cypher__query` count),
+  not by re-confirming the entry's own citation.
+  1. **`c4a9d1e6…` (circular-import direction) — promoted.** Empirically re-verified with a
+     throwaway `pkg/a.py↔b.py` (fails both orders), a class-body variant (fails identically — the
+     entry's own "not a class body" framing checked out), and a function-body variant (succeeds) —
+     CPython 3.12. Added to `skills/python-web-quirks/SKILL.md` as a new section, tightened and
+     corrected from the raw entry's slightly garbled wording; frontmatter `description` updated.
+  2. **`d8f3b6a2…` (~8KB `Step.key` crashes the shared FalkorDB container) — discarded, superseded.**
+     `falkor-chat/docs/BACKLOG.md` K-049 already tracks this exact incident (opened the same day,
+     same author/context); `graph-dba/falkordb-quirks.md` already carries a **far more precise**,
+     confirmed root cause (verified 2026-08-22: SIGSEGV, exact 4096/4097-byte boundary on any
+     `UNIQUE`-constrained property, isolated-container repro, RCA doc) that supersedes this entry's
+     own "root cause NOT confirmed, ~8KB" framing entirely. Nothing left to add.
+  3. **`b7e2c9a1…` (TestClient teardown cancels tasks regardless of app lifespan) — promoted.**
+     Re-reproduced fresh with a minimal FastAPI app whose lifespan never cancels its own task —
+     `task.done()==True, task.cancelled()==True` right after the `with TestClient(app):` block
+     exits anyway (starlette 1.3.1 / fastapi 0.139.0 / anyio 4.14.1, same versions the skill file's
+     other entries already cite). Added to `skills/python-web-quirks/SKILL.md`.
+  4. **`a3f1e8c2…` (unconditional wait/human transition can never suspend) — discarded, superseded.**
+     This is the *same* defect `falkor-chat/docs/HISTORY.md`'s 2026-08-21 K-028 entry already
+     documents exhaustively under "How it got here" — the v1/v2 unconditional-fallback design was
+     caught by exactly this `coder`-authored finding during implementation, `teco` independently
+     re-verified it against live source, and v3 (the shipped, QA-accepted design) replaced it with
+     the `ctx.timerFired` marker-guard mechanism. The raw entry is the pre-fix stepping stone; the
+     project record already supersedes it in full.
+  5. **`c1e8a0a2…` (`test_queries.sh` reference-wipe false-negatives `verify_workflows.sh`'s
+     snapshot check) — kept open, opened `plan.md` K-005.** Verified TRUE by tracing actual source
+     (`services.py:1748`, `repository.py:1717`) — a real, currently-live bug: `_read_structure`'s
+     unguarded `ro_query` against a fully-`GRAPH.DELETE`d `reference` raises an "empty key"
+     `ResponseError` that `verify_workflows.sh`'s `read()` wrapper turns into a whole-diff `ABSENT`,
+     falsely reporting an intact `ws:<id>` snapshot as missing too — contradicting
+     `diff_def_snapshot`'s own docstring claim to handle this gracefully (true only when
+     `reference` exists-but-empty, not when the graph key itself is gone). Both fixes (an
+     AGENTS.md doc correction, a code fix or a BACKLOG defect) land in `falkor-chat/`, outside
+     `cobb`'s write remit — see K-005 for the full trace and the recommended `teco` routing.
+  6–8. **`7e3d1a2b…` (`count(*)` undercounts parallel edges), `7f3c2e1a…` (undirected
+     relationship-property-filter pattern silently degrades to directed), `b2d8f4a1…` (REFINES
+     `7f3c2e1a…`: the trigger is any relationship-property predicate, inline or `WHERE`, not just
+     an inline filter) — tagged `MENTIONS`→`graph-dba`, not cleared.** All three are FalkorDB
+     engine-behavior facts (not "how `coder` should behave"), none found already in
+     `graph-dba/falkordb-quirks.md`'s "Cypher dialect & query behavior" section, and none
+     independently reproducible by me — confirming a parallel-edge/write-based Cypher behavior
+     needs a live write-capable probe, which is `graph-dba`'s tool access, not a curator's. Tagged
+     `MENTIONS` per `agent-maintenance` §5 step 3's "substantively about a different agent" rule;
+     only each entry's `PRODUCED` edge was resolved this pass (`otherRemaining=1` after — the fresh
+     `MENTIONS` edge — so no `DETACH DELETE`), leaving the node live for `graph-dba`'s own future
+     distillation pass to verify/promote/clear.
+  9. **`a3f8c2e1…` (a pytest `FakeRepo` with one shared `since_rows` attribute can't test two
+     merged repo methods independently) — discarded.** Already fixed in the actual test code
+     (`self.hybrid_rows`/`self.chunk_rows`, falling back to `since_rows`) — the fix is
+     self-documenting in the fixture itself; the underlying lesson ("give each mocked behavior its
+     own controllable state") is standard test-double practice, not a durable/non-obvious
+     environment fact worth a standing knowledge-base entry.
+  10. **`b7e1d4a2…` (LM Studio reachable at `localhost:1234` in this sandboxed dev env) —
+      discarded.** Re-verified live (`curl` succeeded, same as the entry). `falkor-chat/AGENTS.md`
+      already flags the `pytest -m live` → LM Studio dependency; whether the local server happens
+      to be running right now is transient session state, not a stable environment fact, and the
+      "check reachability before assuming untestable" tip is generic testing advice not specific
+      enough to earn a standing entry.
+- **`MENTIONS` tags added:** `7e3d1a2b…`, `7f3c2e1a…`, `b2d8f4a1…` → `graph-dba` (all three
+  `mcp__cypher__query(agent='cobb')` `MERGE`s, committed before any clearing ran this pass, per the
+  ordering invariant).
+- **Cleared from `kaizen_team` this pass:** `c4a9d1e6…`, `d8f3b6a2…`, `b7e2c9a1…`, `a3f1e8c2…`
+  (legacy, unconditional `DETACH DELETE`); `a3f8c2e1…`, `b7e1d4a2…`, `c1e8a0a2…` (current-shape,
+  `otherRemaining==0` after resolving the sole `PRODUCED` edge → full `DETACH DELETE`). **Left
+  live** (current-shape, only the `PRODUCED` edge resolved): `7e3d1a2b…`, `7f3c2e1a…`, `b2d8f4a1…`.
+- **Docs touched:** `claude/coder/kaizen/{plan,history}.md` (this file + K-005) ·
+  `skills/python-web-quirks/SKILL.md` (two new sections + frontmatter `description`).
+- **Plan items:** K-005 opened (kept-open disposition, item 5 above).
+
 ## 2026-08-25 — K-003 closed — the scope guardrail now defers to plan fidelity on the one overlapping case
 - **What:** `:11` said a mid-build plan defect means *"stop and say so with a concrete proposal"*; `:35` said surface plan defects *"as notes for the user — don't just do them."* Items 2 and 3 of that list plainly mean note-and-continue, so the collision was item 1 only — but for a mid-build plan defect the two rules said halt and don't-halt. `:35` now defers: **a plan defect that blocks the current step stops the work; one that doesn't, becomes a note.** +26 w.
 - **Cited by bolded name, not "(step 1)" as K-003 proposed.** `coder.md` carries both a "What you optimize for" bullet list and a numbered "How you work" list whose step 1 is **Orient** — so "(step 1)" would have pointed at the wrong rule. An ambiguous pointer is worse than a fragile one.

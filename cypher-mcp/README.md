@@ -594,6 +594,20 @@ labelled container while any session is open**: there is no way to tell from out
 owns which container, and stopping the wrong one removes a live agent's CPG read path until that
 session restarts (stdio servers are not auto-reconnected).
 
+**A running (not dead) session silently keeps talking to a pre-rebuild image — rebuilding does not
+retroactively reach it.** `docker-run.sh` resolves and launches its container once, at that
+session's own start; a later `cypher-mcp/build.sh` produces a new content-hash tag but does nothing
+to any container already running. A long-lived session (or a subagent that inherited its parent's
+MCP connection) can therefore keep exercising old server behavior indefinitely with **no version
+marker in any tool response** to reveal the mismatch — `docker ps -a --filter label=cypher-mcp=1`
+can show several containers on different image hashes at once, all legitimately "Up." Live-verified
+2026-08-22: a session that inherited its MCP connection from a 2-day-old parent kept returning
+pre-M8 rejection wording verbatim even though both the on-disk source and the freshly built image
+already had the new authorization logic; `ps -ef`/`pstree` confirmed the parent session was still
+bound to the old image. Don't infer "the rebuild didn't take" from a live session's own tool
+output — check which image the *specific* session's container is running (`docker ps` + `pstree`),
+or just restart the session, before concluding a fix isn't live.
+
 ### The in-container test gate
 
 The host venv suite stays the primary regression signal — it is ~0.5 s and needs no Docker. The

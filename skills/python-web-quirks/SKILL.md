@@ -4,14 +4,19 @@ description: >-
   Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus two
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
-  dropping defaulted nested-model fields; urllib's HTTPError/URLError/TimeoutError taxonomy; an
+  dropping defaulted nested-model fields; pydantic Field(min_length=1) accepting whitespace-only
+  strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
   parser failing silently on a fenced completion; monkeypatch.setenv as a no-op against an
-  import-frozen constant; and a function-local deferred import re-resolving each call vs. a
-  def-time-bound default arg. Use for asyncio.create_task scheduling, background-task dispatch, a
+  import-frozen constant; a function-local deferred import re-resolving each call vs. a
+  def-time-bound default arg; a one-way circular import between two modules that fails in every
+  load order unless the deferred import is inside a function body (not a class body); and
+  starlette TestClient's teardown cancelling every still-running task regardless of whether the
+  app's own lifespan cancels it. Use for asyncio.create_task scheduling, background-task dispatch, a
   FastAPI response model using exclude_unset, an HTTP client against urllib/OpenAI-compatible
-  endpoints, an LLM-judge parser, or a pytest monkeypatch touching an env var or deferred import —
-  coder, tdd-engineer, architect, analyst in a Python codebase.
+  endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
+  circular-import fix, or a TestClient-driven lifespan/background-task test — coder, tdd-engineer,
+  architect, analyst in a Python codebase.
 allowed-tools: Read, WebFetch, WebSearch
 ---
 
@@ -104,6 +109,18 @@ was the intent.
 response shape, not just the envelope — the guard against silent field loss there is an
 exact-key-set contract assertion on the nested object, not just on the top-level one.
 
+## pydantic `Field(min_length=1)` does not reject whitespace-only strings
+
+`" "` has `len` 1, so `Field(min_length=1)` accepts it — a common false-safety assumption when a
+docstring or comment claims "the service validates non-empty input upstream" but the actual check
+is only a REST-boundary `min_length`. Two consequences worth checking together: (1) any MCP or
+other non-HTTP caller that bypasses the pydantic schema layer entirely is completely unguarded,
+not just under-guarded; (2) even the REST path itself lets whitespace-only text through, since
+`min_length` counts characters, not meaningful content. Verified against pydantic 2.x: `Field(
+min_length=1)` on a `str` field accepts `"   \n\t  "` without validation error. If empty-vs-
+whitespace-only matters, add an explicit `str.strip()` check at the service boundary (not just the
+schema boundary) — the two guards are not redundant, they cover different callers.
+
 ## `urllib` failure taxonomy: `HTTPError ⊂ URLError`, but a read timeout is a bare `TimeoutError`, not a `URLError`
 
 Verified against CPython 3.12: `issubclass(urllib.error.HTTPError, urllib.error.URLError)` →
@@ -188,3 +205,42 @@ import is a live monkeypatch seam by construction — reach for `monkeypatch.set
 *deferred import's source module* rather than restructuring the code to accept a new parameter.
 When the same value instead reaches the function as a **default argument**, the seam is closed at
 definition time and needs an explicit parameter to inject a test double.
+
+## A one-way circular import fails in *every* load order, not just the "wrong" one — and a class-body import doesn't fix it, only a function-body one does
+
+Two modules where one already imports a name from the other (`b.py: from .a import X`) cannot
+gain the reverse direction (`a.py: from .b import Y`) even when `X`/`Y` are unrelated names and
+neither module is otherwise self-referential — verified with `python3 -c "import pkg.a"` and
+`import pkg.b"` on CPython 3.12: **both** orders raise `ImportError: cannot import name '...' from
+partially initialized module`, not just the one you'd guess. Whichever module starts loading first
+pauses mid-execution at its own top-level `from .other import NAME` before the other module has
+reached the point where `NAME` is defined. Moving the reverse import into a **class body**
+(`class Foo:\n    from .other import Y`) doesn't help — a class body executes immediately at
+module-load time, so it fails identically (verified, same error). Only an import placed **inside a
+function body**, executed on first *call* rather than at module-load time, avoids the cycle
+(verified — succeeds once both modules have finished loading).
+
+**Consequence for review:** the fix for a genuine one-way circular-import need is not "move the
+import somewhere that looks deferred" — a class body doesn't count. Either (a) keep the shared name
+in whichever module is already the "source" side of the existing one-way import (mirror the
+existing direction, never invent the reverse), or (b) push the import inside a function/method body
+if it's truly only needed at call time. Surfaced in falkor-chat: `services.py` already imported
+constants from `schemas.py`; a plan that added new constants to `services.py` and had `schemas.py`
+import them back failed in this exact shape (K-028 U3b, `coder`).
+
+## `starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran
+
+Verified against starlette 1.3.1 / fastapi 0.139.0 / anyio 4.14.1: a lifespan that starts a
+background `asyncio.Task` and **deliberately never cancels it on shutdown** still shows
+`task.done() == True, task.cancelled() == True` immediately after the `with TestClient(app):`
+block exits — reproduced with a minimal FastAPI app whose lifespan has no cancellation code at all.
+`TestClient`'s anyio blocking portal tears down its event loop by cancelling every task still
+running on it, independent of the app-under-test's own shutdown logic.
+
+**Consequence for review:** a background-task-cancelled-at-shutdown test that only asserts
+`task.cancelled()`/`task.done()` **after** the `with`-block exits passes even if the app's own
+cancellation code is deleted entirely — the portal's teardown masks the bug. To actually pin
+app-level shutdown-cancellation code, assert on something only the app code itself would produce
+(e.g. that it stored the task reference on `app.state` at all — an `AttributeError` if that line
+is dropped), not the task's final `cancelled()` state. Surfaced writing the lifespan smoke test for
+falkor-chat's periodic sweep task (K-028 U3b, `coder`).

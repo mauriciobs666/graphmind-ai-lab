@@ -81,6 +81,26 @@ file that's still untracked and hash-identical to the scratch copy is proof of a
 Origin: mutation-testing `claude/tdd-engineer/hooks/guard-tdd-broad-write.sh`, a new untracked
 file in the agent-permission-friction implementation diff (U2 gate, 2026-08-21).
 
+**(d) To independently re-verify a mutation-testing claim by constructing real objects that
+exercise the mutated code path against a live system** (not just diffing static behavior), load
+the *real* package first — this populates `sys.modules` with every unmutated sibling submodule via
+its normal relative imports — then use `importlib.util.spec_from_file_location` to load *only* the
+one mutated file under the package's real dotted name (e.g. `"pkg.services"`, with `__package__`
+set correctly), `exec_module` it, and overwrite `sys.modules["pkg.services"]` with it before
+constructing any objects. `PYTHONPATH`/`sys.path.insert` does **not** reliably shadow a package
+installed via `pip install -e .` (editable install) in this environment — the editable-install
+`MetaPathFinder` is consulted before `sys.path`, so `import pkg` keeps resolving to the real
+installed copy even with a same-named mutated tree earlier on `PYTHONPATH`. This differs from (a):
+(a) loads an alternate version under a *separate* namespace to diff two versions side by side; (d)
+substitutes one module *in place*, under its real name, so objects constructed afterward actually
+run the mutated code when exercised — the right shape when the claim to verify is "this specific
+check is load-bearing," not "what changed between two revisions."
+
+Origin: `falkor-chat` K-028 workflow-timers diff re-gate — verified a mutation-testing claim
+(`services.py`'s escalation-guard value-equality check) this way: confirmed `publish_workflow_def`
+wrongly accepted a mismatched-step-key guard with the mutation in place, and correctly rejected it
+without, against a live DB connection, with zero working-tree edits.
+
 ## Re-gating a fix pass by line-number invariance
 
 When a fix pass lands on an *uncommitted* tree (so both the reviewed change and the fix pass are
@@ -189,3 +209,117 @@ Origin: reviewing `cobb`'s 39-file 2026-08-11 file-based distillation — a clai
 routed (6 to …, 1 discarded)" didn't add up to the diff's actual 8 removed headings, and the same
 reconciliation caught four more unlogged dispositions and four wrong header counts across other
 agents' inboxes.
+
+## Re-gating a state-machine guard/invariant fix: two checks a "does the mechanism work" read misses
+
+Verifying that a guard/invariant fix's own reasoning is internally sound is not the same as
+verifying it's *complete*. Two distinct, easy-to-skip checks, both surfaced re-gating the same
+fix in sequence:
+
+1. **Does the fix foreclose an existing pattern elsewhere in the same codebase?** A fix that forces
+   guaranteed forward progress on a state machine (e.g. "every wait step must carry an
+   unconditional fallback transition") can silently break a *different*, already-shipped pattern
+   that depended on the old, non-forcing behavior (a step that stays parked on an explicit
+   negative/not-yet signal). Check whether the invariant you're approving forecloses a legitimate
+   use the codebase already relies on, not just whether it closes the bug it targets.
+2. **Trace every call site of the evaluation function, not just the one the fix's own narrative
+   points at.** A fix framed entirely around "resume vs. first arrival" can still be silently wrong
+   if the guard-evaluation function also fires at a call site the framing never considered (e.g.
+   first arrival, before any suspend has happened at all). Verifying "the sort order resolves ties
+   correctly" is not the same as verifying "this guard only fires at the right evaluation site" —
+   enumerate every call site of the function under test, independent of the fix's own story about
+   which ones matter.
+
+Both gaps slipped past an earlier, otherwise-careful pass that reasoned from the fix's own framing
+rather than from the full call-site/pattern inventory — the discipline is to build that inventory
+yourself, not to trust the fix description's scope.
+
+Origin: `falkor-chat` K-028 workflow-timers, v2→v3. Check 1 caught that v2's mandatory default
+fallback arm made an explicit `{"provisioned": false}` "not yet" resume silently advance into the
+timeout branch instead of re-parking. Check 2 caught that v2's fix (Pass-1/Pass-2-approved) made
+the whole feature unreachable, because `_select_transition` fires on every visit including first
+arrival, not only on resume — a gap two prior review passes missed by reasoning from "resume vs.
+not" rather than enumerating call sites.
+
+## A "this already exists" claim is a grep away from confirmation
+
+A plan/review citing a worked example as "grounded in this repo's own history," or a fix-pass
+claiming a finding was "recorded in `<file>`," is a specific, cheaply falsifiable claim — verify it
+directly rather than accepting the narration, even when the claim reads as plausible either way.
+One grep settles it: `grep -rn -i '<the cited event/term>' <the claimed location>` either finds the
+citation or it doesn't.
+
+Origin: two independent instances. (1) A `cobb`-authored plan cited a NULL-backfill decision as
+having surfaced during a specific past investigation; `grep -rn -i backfill claude/docs/` found
+zero occurrences outside the plan doc itself, and the cited investigation was unrelated
+(hook/permission engineering, no migrations at all) — the example was plausible-sounding but
+fabricated. (2) A fix-pass plan claimed two findings were "recorded in `falkordb-quirks.md`";
+grepping the file directly at the cited line ranges confirmed both were genuinely present, not
+just asserted — the same check, run the other direction, separating a closed finding from an
+asserted-but-undone one.
+
+## An untracked plan/review doc has no re-verification baseline
+
+A plan/review doc that was never `git`-committed leaves zero recoverable "before" state for a
+diff-scoped re-verification of a claimed prior-content fix — `git log`/`git log --follow`/`git
+stash list`/`git reflog` all return nothing for a path that was never tracked. A Pass-1 finding
+that quoted specific pre-fix wording cannot be re-confirmed against the file itself once it's been
+edited in place; an implementer's counter-claim ("that section never had the problem") becomes
+unfalsifiable from the surviving artifact alone. Check `git status`/tracking state for the artifact
+under review as part of scoping a diff-based re-gate — an untracked doc needs a different
+verification strategy (e.g. asking the implementer to preserve the pre-fix text, or reviewing the
+fix pass as a fresh read rather than a diff) rather than assuming a git-based re-check is available.
+
+Origin: Pass 2 (post-implementation) diff-scoped review of `claude/docs/reviews/mid-run-
+escalation.md` — `claude/docs/plans/mid-run-escalation.md` was untracked throughout, so a Pass-1
+finding quoting exact pre-fix wording in §2.2 had no way to be re-confirmed against the post-fix
+file.
+
+## A truncate → append → truncate-again pipeline can silently discard its own repair pass
+
+A pipeline shape where a raw list is capped, a repair pass appends new synthesized items on top,
+and a *second* cap then runs over the combined list can silently discard the repair pass's own
+output — if the raw list was already near the cap, the final truncation slices off exactly the
+items the repair pass existed to add, with no error and no test coverage of the interaction.
+Reading the stated order in a docstring or comment is not enough to catch this — verify the
+interaction with a direct execution probe (run the real pipeline function against an input sized
+to sit near the cap, and check what's actually in the output) rather than reasoning about ordering
+from the code's narrative alone.
+
+Origin: `falkor-chat` extraction.py — relationships capped, then stub-repair appended synthesized
+entities, then entities capped again at `MAX_ENTITIES_PER_CHUNK`. A live probe showed a
+repair-added stub entity got sliced off by the final `entities[:CAP]`, silently dropping the
+relationship that depended on it. Fixed by capping the raw list *before* repair runs, not after.
+
+## Two checks for a multi-shape authorization/security-gate function
+
+Reviewing a function that authorizes a write (or otherwise gates an action) by checking a Cypher
+statement — or any input — against several recognized shapes in sequence: two checks beyond
+confirming each individual shape's own logic is correct.
+
+1. **Keyword-set completeness.** When a fix adds a bare-keyword allowlist/denylist scan (e.g. to
+   catch a foreign write clause chained onto an otherwise-authorized statement), cross-check its
+   keyword set against every *other* keyword-set constant already defined in the same module,
+   rather than trusting the fix author's own named attack reproductions. A fix modeled on two
+   concrete attacks can silently omit siblings from the same taxonomy that a pre-existing test
+   already existed to keep closed.
+2. **Early-match short-circuit smuggling.** A function that returns as soon as the *first*
+   recognized shape matches may never check whether the rest of a multi-clause statement smuggles a
+   second, unrelated write clause. If the shape-matching logic scans the *whole* input text for its
+   own trigger (rather than requiring the matched shape to consume the entire statement), a crafted
+   input can chain a self-authorizing clause with an unrelated one and have the whole thing
+   authorized as one.
+
+For either check, construct the adversarial input yourself (a decoy authorized clause plus a
+chained unrelated one; an attack using a keyword-taxonomy sibling the fix's own examples didn't
+cover) rather than only re-running the fix's own named test cases.
+
+Origin: `cypher-mcp`'s `authorize_write()`, Pass-2 review of `docs/plans/kaizen-agent-ontology.md`
+(M8). Check 1 caught `_FOREIGN_TRIGGER_RE` covering only `MERGE|DELETE` against the module's own
+pre-existing `_WRITE_KEYWORD_RE` covering `CREATE|MERGE|SET|DELETE|REMOVE` — silently reopening a
+chained `SET`-based tampering path (including author-reassignment) that a sibling test already
+existed specifically to keep closed. Check 2 caught that `authorize_write()` returned as soon as a
+matching-author `CREATE` was found, without checking whether the rest of the statement chained an
+unrelated `MATCH...DETACH DELETE` or a mismatched producer-write. Both fixed in the shipped code
+(`_FOREIGN_TRIGGER_RE` now covers all four keywords; `authorize_write()` now calls
+`_has_foreign_trigger_outside_strings()` after an author-claim match, before authorizing).

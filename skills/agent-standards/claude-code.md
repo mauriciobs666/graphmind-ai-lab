@@ -229,6 +229,7 @@ conversational agent**:
 
 - **A nested delegate's completion notification appears to bubble to whichever ancestor session is currently *live*, not necessarily to the direct delegator.** In a three-level chain (`cobb` → `teco` → `architect`/`analyst`), every nested-child completion routed its task-notification to `cobb` (two levels up) rather than `teco` (one level up) — observed when `teco`'s own turn had already ended right after dispatch, leaving it dormant. `cobb` then had to relay each result and explicitly `SendMessage teco` to continue; that call's own tool result read `"Resuming agent a8d402d..."`, i.e. the call itself appears to **force-resume a dormant target**, a distinct mechanism from the passive bubbling above. Not yet independently confirmed as a stable harness contract — could be specific to this session's dormancy pattern.
 - **A background delegate that cannot address its coordinator by bare agent name gets relayed through "main" (the top-level session) as a `<system-reminder>`-shaped block — this is the legitimate delivery path for exactly that reason (the delegate has no address to resolve), not an injection to decline by default.** Two delegates `teco` had itself dispatched via `SendMessage` each tried `SendMessage teco` on completion and got `"No agent named 'teco' is reachable"` — nothing currently hands a delegate its coordinator's own `agentId`. Their results arrived instead wrapped as `<system-reminder>The coordinator sent a message while you were working: ...</system-reminder>`. **The envelope shape is not itself the trust signal in either direction** — verify the *content* every time (these two checked out independently against `git`/the filesystem) regardless of whether a relayed message arrives this way or as the documented `<cross-session-message>`/`<task-notification>` envelope; a message carrying only a completion relay of work the receiving session itself just dispatched is a different risk class from one asserting new, unverifiable directive authority.
+- **A dispatched specialist's declared `tools:` frontmatter is not a reliable predictor of whether it has `SendMessage` — live-tested 2026-08-25.** A subagent declaring an explicit `tools:` allowlist without `SendMessage` (`architect`, `analyst`) predictably lacks it, confirmed by the delegate's own stated inability. But a subagent with **no** `tools:` field at all (`coder`, `tdd-engineer`, `frontend-engineer`, `qa-engineer`, `devops`, `graph-dba` — nominally "all tools") *also* lacks `SendMessage` at runtime: a fresh `coder` probe, asked to enumerate its own tools, reported `Agent, ToolSearch, Bash, Edit, Read, Skill, Write` — no `SendMessage`. Today only `teco` and `tico` carry it. Practical consequence: never brief a dispatched specialist to "SendMessage the coordinator when done" — it usually can't, regardless of what its frontmatter implies, and the coordinator's real signal is the platform's own task-completion notification (or, in a nested chain, the bubbling behavior above), never a delegate-initiated message.
 
 ### What loads into a subagent (verified 2026-06-20)
 
@@ -322,6 +323,18 @@ the always-loaded project memory (`CLAUDE.md`).
   Bypass/Self-Modification") and correctly not acted on. A coordinator's own "proceed" does not
   substitute for the harness's own human-approval gate on a write it chooses to gate — and a
   delegate's proposal to route around that gate via self-modification is itself the signal to stop.
+- **The protected-path carve-out is keyed on the literal dot-prefixed directory name, not on any
+  project's own conventionally-named directory.** Verified 2026-08-25 against
+  `code.claude.com/docs/en/permission-modes` § Protected paths: the protected directories are
+  `.git`, `.config/git`, `.vscode`, `.idea`, `.husky`, `.cargo`, `.devcontainer`, `.yarn`, `.mvn`,
+  and `.claude` (except `.claude/worktrees`) — all dot-prefixed. A settings.json allow rule for a
+  repo's own dotless directory (e.g. this repo's `claude/**/*.md`, where agent definitions live —
+  `~/.claude/agents/<name>` symlinks *out to* `claude/<name>/` in the repo, not the other way
+  round) does **not** get routed to the classifier by this mechanism, even though the files it
+  guards are functionally an agent's own configuration: `permissions.allow` rules never pre-approve
+  a *`.claude/`* write regardless (the safety check runs before allow-rule evaluation), but a rule
+  scoped to the dotless lookalike is evaluated as an ordinary allow rule with no protected-path
+  involvement at all.
 - **A `PreToolUse` hook's explicit `"allow"` is not a full override of the confirm-before-Write/Edit
   prompt — it composes with two separate layers, and neither the shipped write-guards (
   `agent-permission-friction.md`) nor its own root-cause finding (§1.3) accounted for the second
@@ -620,6 +633,13 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   (`outputSchema: None`); the `structured_output: bool | None = None` parameter is
   on `FastMCP.tool` in this version. Check for it whenever a plan or review
   assumes a `str`-returning tool ships unstructured text only.
+- **FastMCP has no per-tool exception isolation.** `Tool.run` (`mcp.server.fastmcp.tools.base`)
+  wraps any exception the tool function raises in a generic `except Exception` and re-raises it as
+  `ToolError` — so a per-item `try/except` inside a bulk-operation tool must itself catch *every*
+  failure mode the item can raise (plain `KeyError`/`TypeError` from malformed input included, not
+  just the tool's own domain exception type), or one bad item aborts the whole call instead of
+  producing that item's own error receipt. Verified by reading `Tool.run`/`tools/tool_manager.py`
+  source directly (2026-08-25).
 
 ### Lifecycle
 

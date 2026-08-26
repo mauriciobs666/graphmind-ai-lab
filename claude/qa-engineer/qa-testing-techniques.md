@@ -103,6 +103,20 @@ to the query or the environment. A single blocked write attempt during a live pa
 by itself evidence of a real authorization defect in the tool under test — retry once before
 concluding the write path is broken (`docs/test-plans/generic-cypher-mcp2.md` TP-004/AC-4).
 
+## Proving a *manual* sweep resumed a run (not the automatic periodic one): fire the manual call immediately after the due moment, and read its own response for `runId` in `resumed`
+
+When a feature runs both a manual on-demand endpoint and an automatic in-process periodic task
+over the same idempotent sweep logic (falkor-chat K-028's `POST /workflow-runs/due` vs. the
+`asyncio` periodic sweep task), a naive black-box attempt to exercise the *manual* path — sleep
+past the due time, then call the endpoint — usually loses the race: the automatic tick fires first
+and the manual call reports `checked:0, resumed:[]`, having correctly found nothing left to do. A
+run's own final state afterward is ambiguous about which sweep actually resumed it. To reliably
+attribute the resume to the manual call, fire it immediately after the due moment elapses — right
+after your own sleep, before the next automatic tick — and read `runId` out of *that call's own*
+`resumed` list, not just the run's eventual state (`docs/test-reports/…` K-028 TP-004: a
+loosely-timed first attempt showed `checked:0`; a tightly-timed retry, sleep 3.2s then immediate
+manual sweep, captured `resumed:[{runId,...}]` directly in the manual response).
+
 ## Reading a long `mcp__cypher__query` text field exactly: page it one column at a time, never several long chunks in one row
 
 A multi-column chunking query (`RETURN substring(field, 0, 260) AS p0, substring(field, 260, 260)

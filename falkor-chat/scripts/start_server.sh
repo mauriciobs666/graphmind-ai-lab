@@ -101,6 +101,10 @@ FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
 FALKORCHAT_TRIGGER_DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-triage}"
 FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v1}"
 FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S="${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S:-30}"
+# `:-` substitutes the default on unset OR empty — UVICORN_ARGS="" does NOT disable --reload.
+# Pass a genuinely non-empty override (e.g. UVICORN_ARGS="--timeout-keep-alive 5") to suppress
+# it. Reload watches this whole tree and restarts the worker (killing in-flight background
+# daemon threads) on any file write — see docs/SERVER.md §1.7 before a live QA/acceptance pass.
 UVICORN_ARGS="${UVICORN_ARGS:---reload}"
 # K-042 §4.1: the product carries no home-directory default (a default pointing into
 # one specific user's home is the "works on my box" failure mode) — this dev script

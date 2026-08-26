@@ -132,6 +132,16 @@ grants stand exactly as documented above, and this still isn't a delegation of *
 an agent running interactively still only commits what it itself verified, never another agent's
 in-flight work.
 
+**`git add` then `git commit` is not atomic against a concurrent process sharing the same working
+tree.** A staged file sits in the shared git index until the commit actually runs — a second
+agent/process that stages and commits its own files in that window can commit *both* sets
+together, bundling the first agent's file into a commit message it never approved (observed
+2026-08-21: an `analyst` review doc staged cleanly, but a concurrent `qa-engineer` pass staged and
+committed first, sweeping the review doc in under its own unrelated message). File-disjoint work
+does not avoid this — the race is on the index, not on any one path. Immediately before running
+`git commit`, re-check `git status`/`git diff --cached --name-only` to confirm only your own
+explicit path(s) are staged; if anything else has appeared, stop and reconcile before committing.
+
 ## Maintenance rules
 
 - **A stakeholder proposal for a new team member is a `tico` requirements interview, not a

@@ -2,6 +2,87 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation, U10 (team-wide pass): 1 legacy entry discarded (duplicate), 4 current-shape `MENTIONS`-only entries — 2 promoted verbatim, 2 promoted merged-and-corrected — all cleared
+
+- **What:** `cobb` ran `agent-maintenance` §5 for `graph-dba`, unit U10 (last unit) of a team-wide,
+  agent-per-agent distillation pass coordinated by `teco`
+  (`claude/docs/plans/kaizen-distillation-coordination.md`). Read both shapes: the legacy
+  `author`-property query (1 hit) and the current-shape `PRODUCED`/`MENTIONS` query (4 hits, **all
+  reached only via `MENTIONS`** — each entry's own `PRODUCED` edge had already been resolved/deleted
+  by its producing agent's own earlier unit in this same pass, leaving only the
+  `(:KaizenEntry)-[:MENTIONS]->(:Agent{agentId:'graph-dba'})` edge for this unit to pick up, per
+  this unit's brief).
+  1. **`c3e5f8a2…` (legacy, `author:'graph-dba'`, 2026-08-21) — DISCARDED as duplicate.**
+     `guard-destructive-ops.sh` not intercepting `GRAPH.DELETE kaizen_analyst`/`GRAPH.DELETE
+     kaizen_teco` from a nested `graph-dba` subagent context. Cross-checked against `cobb`'s own
+     `kaizen/plan.md`/`history.md`: this is the same episode already fully tracked there as
+     **K-018** (closed 2026-08-21, CONFIRMED via a controlled live re-test — not a `subagent_type`
+     omission, a genuine harness gap) and **K-019** (open, high priority, the systemic
+     "`PreToolUse` 'ask' hooks don't reliably fire" follow-up). This entry's own
+     `history.md` (2026-08-21, "`kaizen/inbox.md` deleted…") already logged it as "left for a
+     future K-018/K-019 pass, not re-opened here" — nothing new to capture; the durable record
+     lives entirely in `cobb`'s own kaizen, a team-wide concern not specific to `graph-dba`.
+  2. **`a3f0c1d2…` (current-shape, `MENTIONS`-tagged onto `graph-dba` by `architect`'s earlier unit
+     in this pass) — PROMOTED, verified true.** FalkorDB/Redis serializes write execution per
+     graph (one write at a time, queued) and every write query is atomic — so folding a
+     check-then-act sequence into one `GRAPH.QUERY` closes a concurrent-write race with no
+     lock/queue needed. Re-derived independently: fetched docs.falkordb.com/design/concurrency
+     live (confirms "only one write query executes at a time on a given graph," "every query that
+     modifies the graph… is atomic," "readers are never exposed to partially applied
+     modifications") and grepped falkor-chat's shipped `create_entity_with_auto_match`
+     (`repository.py:1259`, K-050 M5) confirming the pattern is real, shipped code, not a
+     hypothesis. Added to `falkordb-quirks.md` as a new **Concurrency & atomicity** section
+     (placed before "Cypher dialect & query behavior") — this is foundational modeling guidance
+     (fold check-then-act into one query), not a narrow dialect quirk, so it earned its own
+     section rather than a bullet buried in an existing one.
+  3. **`7e3d1a2b…` (current-shape, `MENTIONS`-tagged) — PROMOTED, verified live.** `count(*)`
+     under-counts parallel edges between the same node pair (returns 1 for 2 identical `REL`
+     edges); `count(r)` with a bound relationship variable correctly returns 2. Reproduced live on
+     a disposable scratch graph (module `41811`): created two identical `(a)-[:REL]->(b)` edges,
+     confirmed the 1-vs-2 split exactly as the entry claimed. Added to `falkordb-quirks.md`,
+     Cypher dialect & query behavior.
+  4. **`7f3c2e1a…` + `b2d8f4a1…` (current-shape, `MENTIONS`-tagged, a refinement pair reporting
+     the same undirected-relationship-pattern direction bug) — PROMOTED, MERGED AND CORRECTED, not
+     verbatim.** Both entries claimed an undirected pattern with a relationship-property predicate
+     (inline map filter, or the refinement's broader claim: also a separate `WHERE` clause)
+     silently degrades to directed, first-declared node as source. **First re-derivation attempt
+     did NOT reproduce either claim** on a fresh disposable scratch graph with no index on
+     `SAME_AS.status` — both declared-node orders returned the symmetric correct result (1), for
+     both the inline-filter and the `WHERE`-clause forms, contradicting the entries as literally
+     stated. Investigated further rather than discarding outright (the entries were detailed,
+     cross-checked internally, and read as careful empirical work): re-created the same setup
+     **with** `CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.status)` (matching what falkor-chat's real
+     schema plausibly carries) — the bug reproduced **exactly** as both entries described (0 vs 1
+     by declared node order), and `GRAPH.PROFILE` showed why: the predicate folds into a
+     directional `Edge By Index Scan` that only scans the direction pattern order implies. Confirmed
+     the index is the actual trigger (not the predicate alone) by re-testing with the index dropped
+     (symmetric-correct again) and with the predicate dropped but the index present
+     (symmetric-correct — the bug needs both). **Neither original entry states the index
+     precondition** — both would have shipped an overbroad claim ("any relationship-property
+     predicate triggers it") into a knowledge base other agents trust as ground truth. Added one
+     corrected, merged entry to `falkordb-quirks.md` (Cypher dialect & query behavior, right after
+     the `count(*)` entry) stating the precise index-gated trigger, the fix (two `OPTIONAL
+     MATCH`es, one per direction, `coalesce`d), and a cross-reference to the existing "Edge By
+     Index Scan folding" entries in Query tuning (same mechanism, but here the fold changes the
+     *result*, not just the plan shape).
+- **Why:** Scheduled unit of the team-wide `kaizen_team` distillation pass (`teco`-coordinated,
+  `claude/docs/plans/kaizen-distillation-coordination.md`), this agent's turn.
+- **Verified:** live re-derivation for every current-shape entry (not citation-trust) — docs fetch
+  + shipped-code grep for #2, a fresh scratch-graph repro for #3, and a full isolate-the-trigger
+  investigation for #4 that overturned the entries' own stated scope. Legacy entry #1 cross-checked
+  against `cobb`'s own kaizen files rather than re-diagnosed. Order of operations honored
+  throughout: this `history.md` entry was written and confirmed before any graph mutation below.
+- **Graph mutations (all `agent='cobb'`):** legacy curator-clear for `c3e5f8a2…`
+  (`DETACH DELETE`). For each of the 4 current-shape entries: counted remaining edges first
+  (`producedEdges=0, mentionEdges=1` for all four — the `MENTIONS` edge this unit resolves was the
+  **last** edge on each node), so each resolved via the last-edge full-node `DETACH DELETE`, not a
+  partial edge-only delete. Confirmed via `MATCH (e:KaizenEntry) WHERE e.entryId IN [...] RETURN
+  count(e)` → **0** after clearing all 5 entryIds (1 legacy + 4 current-shape).
+- **Docs touched:** `claude/graph-dba/falkordb-quirks.md` (2 new/edited sections — Concurrency &
+  atomicity, plus 2 new Cypher-dialect bullets), this `history.md` entry.
+- **Plan items:** none opened — every surviving entry resolved to promote or discard; no
+  kept-open/unverifiable case this pass.
+
 ## 2026-08-24 — Prompt-waste compression, Stage C6: one edit — the destructive-ops hook's script path dropped
 - **What:** `graph-dba.md` was one of C6's four files (`claude/docs/plans/prompt-waste-reduction.md`, Stage C). 1,807 → 1,806 w. **One edit**, step 8: `A `PreToolUse` hook (`graph-dba/hooks/guard-destructive-ops.sh`) intercepts…` → `A `PreToolUse` hook intercepts…`.
 - **Why (class 6):** the agent never reads or runs that script — the *harness* runs it, from the frontmatter `hooks:` block where the path still sits (line 10). It is implementation provenance, not a normative citation (§3's exemption covers a path the rule requires the agent to **use**). Exactly the edit C5 applied to `qa-engineer.md`; doing it here keeps the team's hook-description phrasing consistent, which `agent-maintenance` §4's enforcement-parity check reads.

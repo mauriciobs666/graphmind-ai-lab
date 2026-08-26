@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation: 3 entries — 1 prompt clause added, 2 discarded (already fully captured)
+- **What:** `cobb` read tico's entries in the shared `kaizen_team` graph — legacy `author`-shape
+  query returned zero rows (tico carries only current-shape entries); current-shape query
+  (`(:Agent {agentId:'tico'})-[:PRODUCED]->(:KaizenEntry)`) returned 3, all dated 2026-08-23,
+  all captured mid-interview on `claude/docs/requirements/agent-permission-friction2.md`.
+  - **`c8f2b6e0-3f1a-4a8e-9d2b-7a1e6c4f0e21` — discarded, already fully captured.** Fact: an
+    `analyst` `Create` on `docs/reviews/document-ingestion-impl.md` still triggered a manual
+    confirmation prompt despite matching its shipped `guard-doc-writes.sh` allowlist (which
+    statically emits an explicit `"allow"` on match). **Re-derived, not just cited:** read
+    `agent-permission-friction2.md` in full — this exact instance is its former open question 3,
+    root-caused by `cobb` (2026-08-24, commit `6193083`) as an undocumented Claude Code
+    auto-mode-classifier/`PreToolUse`-hook interaction specific to Task/`Agent`-delegated writes,
+    promoted into `skills/agent-standards/claude-code.md`, and confirmed permanently unfixable
+    after a `permissions.allow` fix (`claude/docs/plans/write-guard-classifier-gap.md`, archived)
+    was designed, reviewed, and then empirically refuted by the stakeholder's own live isolation
+    test, and a `defaultMode` switch (`claude/docs/plans/permission-default-mode.md`, archived)
+    was investigated and rejected on blast-radius grounds. Nothing left to promote — the fact is
+    already live in project docs at higher fidelity than the raw entry.
+  - **`f1a9d3c4-6b2e-4c9a-8e5f-2b7c9a1d0e34` — discarded, already fully captured.** Same
+    underlying regression, generalized to two independent guard cores (`guard-doc-writes.sh` on
+    `analyst`, `guard-broad-write.sh` on `tdd-engineer`) both prompting despite a statically
+    correct auto-allow. Same re-derivation as above — this is the second data point that escalated
+    open question 3 from an isolated anomaly to a systemic finding in the same document, resolved
+    the same way. Discarded for the same reason: no new fact to add anywhere.
+  - **`a7e4c1b8-9d3f-4e2a-b6c8-1f5a3d7e9c02` — promoted (partial), rest already resolved via
+    K-008.** Fact: tico assumed a concurrent `teco`/`cobb` session existed (by analogy to a prior
+    document that had one) without stakeholder confirmation, then pointed the stakeholder to relay
+    a finding there; corrected live ("what running teco/cobb session?" → tico admitted the `cobb`
+    half was inference). The entry's own open question — "should routing a finding to teco/cobb
+    ever be a fourth sanctioned tico `Agent` use, or does the stakeholder always hand it off
+    themselves?" — is **already settled**, just not by the literal fix the entry's evidence
+    quotes the stakeholder proposing that day ("spawn your own teco session"): the formal K-008
+    resolution shipped the next day (2026-08-24, entry below) landed on the narrower "say so and
+    point at `teco` rather than growing into it," which the Guardrails `Agent`-boundary bullet
+    already carried before this pass. **Verified live:** re-read `tico.md`'s current text — that
+    resolution was present, but the entry's *other* half — never assume a session exists without
+    confirmation — was not stated anywhere in the prompt, and is a real, generalizable rule (this
+    is the second time in the transcript tico inferred unconfirmed state and had to be corrected).
+    **Promoted:** appended one clause to the existing "Routing is not coordinating" sentence in
+    Guardrails: "...and never assume a concurrent session already exists to hand a finding to —
+    confirm with the stakeholder first." No `MENTIONS` tag added — the substance is about tico's
+    own conduct, not new information for `teco`'s discipline.
+- **Why:** unit U6 of a team-wide, agent-per-agent `kaizen_team` distillation pass coordinated by
+  `teco` (`claude/docs/plans/kaizen-distillation-coordination.md`).
+- **Verified:** re-read `agent-permission-friction2.md` in full (Problem, Out of scope AC-3,
+  Decision log) and `tico.md`'s current Guardrails text directly, not just the entries' own
+  citations.
+- **Plan items:** none opened — one entry partially promoted, two discarded as already captured.
+- **Graph:** all 3 entries' `PRODUCED` edges resolved and, since each was the sole remaining edge
+  on its node (`otherRemaining == 0` for all three — no `MENTIONS` edges on any), each node fully
+  cleared via curator `DETACH DELETE` (`agent='cobb'`), after this entry landed.
+
 ## 2026-08-24 — K-008 incident 1 closed: a fourth sanctioned `Agent` use — offering to route a finished artifact onward. **K-008 ✅ fully closed.**
 - **What:** the last open half of K-008, put to the stakeholder as two questions (may tico dispatch at all, and to which targets). Both answered toward the wider end of what was offered.
   - **May tico dispatch? Yes — and it may *offer* proactively**, not only execute an explicit request. This makes routing behave like the demo and Mode-3 verification offers: tico raises it, the stakeholder accepts, tico dispatches. The narrower "explicit request only" option was declined.

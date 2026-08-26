@@ -2,6 +2,81 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-08-25 — Distillation (unit U4, `cobb`): 6 raw `kaizen_team` entries verified, routed, cleared
+
+- **What:** `cobb` ran the `agent-maintenance` §5 distillation procedure against every `teco`-tied
+  `kaizen_team` node — the legacy `author:'teco'` read (3 entries) plus the current-shape
+  `PRODUCED`/`MENTIONS` read (3 entries), 6 total, all from 2026-08-21 through 2026-08-24. Full
+  field text paged via `size()`/`substring()` (the display truncates each cell at ~300 chars).
+  Dispositions:
+  1. **`teco-20260821-specialist-sendmessage-gap`** (legacy, 2026-08-21 — dispatched specialists
+     generally lack `SendMessage`, only `teco`/`tico` have it) → **routed to knowledge base**,
+     overriding the entry's own `suggestedHome: prompt`. Live-reverified and broadened: a fresh
+     `coder` probe (no `tools:` restriction declared, nominally "all tools") also lacks
+     `SendMessage` at runtime — the gap is team-wide, not just `architect`/`analyst`. But the
+     K-028 evidence's actual mechanism is the *already-promoted* nested-notification-bubbling fact
+     (`skills/agent-standards/claude-code.md`, entry `7994edd7…`, 2026-08-21) — a background
+     `teco`'s own turn had ended, so completions bubbled to the live ancestor instead of to
+     `teco`, independent of whether the specialist had `SendMessage`. `teco`'s real signal is
+     always the platform's completion notification, never a delegate self-report, so the tool
+     grant wouldn't change `teco`'s behavior — no `teco.md` edit. Promoted the tool-inventory fact
+     itself as a new bullet in that same knowledge-base section (live-tested 2026-08-25). No
+     `MENTIONS` tag added — the fact is cross-cutting tool-standards knowledge cobb already owns
+     and acted on directly, not a behavior gap in any one other agent's own prompt. `plan.md`
+     parking-lot item closed in place with this finding.
+  2. **`f3a2e8b1-6c4d-4a9e-8b2f-1d5e7c9a3b6f`** (legacy, 2026-08-21 — K-028: two independent
+     `analyst` plan-gate passes approved a mandatory-unconditional-fallback-arm fix that was
+     provably unreachable at runtime; only implementation/a live re-trace caught it) → **verified
+     true** (re-read `falkor-chat/docs/plans/workflow-timers-coordination.md`'s trail; the
+     `executor._drive_loop`/unconditional-guard mechanism the entry describes matches) and
+     **promoted to `teco.md`'s "Two gates, not one" guardrail** — new clause: *"Neither gate is
+     execution — a static trace, however careful, even twice independently, can approve a
+     mechanism that is provably non-functional; state-machine/order-dependent logic needs to
+     actually run (a test or the live system), not just be reviewed, before you trust it."* Not
+     previously covered — grepped `teco.md` for "static"/"non-functional"/"actually driving"
+     first; only the routing-table row existed.
+  3. **`b3e4a6a0-6c2e-4f7a-9d1a-8e5f7c2d4a11`** (legacy, 2026-08-23) **+ `c7e2a814-4f1b-4a9d-8e3c-
+     2b6f9d1a5c33`** (current-shape, 2026-08-23) — **duplicate observations of the same K-050
+     incident** (U9 coder at 284k tokens/137 tool uses, resumed via `SendMessage` for a small,
+     fully-specified fix rather than dispatched fresh) → **merged and promoted as one rule** into
+     `teco.md` step 5's "Close the loop on the same delegate": new **Exception** clause — when the
+     ledger's `Cost` column already shows the delegate carrying a very large context (~250k+
+     tokens/100+ tool uses) and the follow-up is small and self-contained, dispatch fresh instead
+     of resuming. Ties directly into the existing `Cost` ledger column (added 2026-08-21), so it's
+     checkable with no new measurement burden.
+  4. **`a1f3c9e2-6b4d-4e2a-9c1a-7d8f2b3e5a10`** (current-shape, 2026-08-23 — K-050: the
+     resume-by-`agentId` discipline was lapsed on twice for `architect`/`analyst` fixes despite
+     both being freshly in context) → **discarded**. Read against `teco.md`'s existing "Close the
+     loop on the same delegate" text: the resume-by-default rule is already stated correctly: the
+     lapse was execution discipline on a small-context delegate, not a prompt gap, and the entry
+     itself says as much ("inconsistent, not a knowledge gap"). Folded in as supporting evidence
+     for item 3's promotion (confirms resume stays the *default*; only the large-context case gets
+     the new exception) rather than a separate change.
+  5. **`e7f3a1b2-9c4d-4e6a-8f21-3d5c7b9a1e04`** (current-shape, 2026-08-24 — a `permissions.allow
+     Edit(path)` rule does not suppress the auto-mode classifier prompt for a Task/`Agent`-
+     delegated subagent write, even with a matching `PreToolUse` hook allow) → **discarded**,
+     already fully documented. Checked `claude/docs/requirements/agent-permission-friction2.md`
+     and `claude/docs/plans/write-guard-classifier-gap(-coordination).md` (both `Status: archived`)
+     — this exact finding is the closed investigation's own "Result: refuted" conclusion, with a
+     full root cause and no further action expected. This entry is an earlier, now-fully-
+     superseded data point of the same closed finding.
+- **Why:** routine distillation, batch unit U4 of the team-wide pass coordinated by `teco`
+  (`claude/docs/plans/kaizen-distillation-coordination.md`).
+- **`MENTIONS` tags added:** none. All 6 entries are substantively about `teco`'s own coordination
+  behavior (dispatch discipline, review-gate epistemics, tool-availability assumptions), not about
+  another agent's own prompt/behavior gap.
+- **Verified:** every entry's full field text paged (not acted on from a truncated read); item 1's
+  broadened claim live-tested via a fresh `coder` subagent probe; item 2's incident re-read against
+  its own coordination doc; item 5 cross-checked against the two closed, archived documents it
+  duplicates. `teco.md` edits are additive clauses inside existing guardrails/bullets — no rule
+  removed, no restructuring; `audit-team.sh` not re-run this pass (no roster/hook/tool-grant
+  change), consistent with a distillation-only unit.
+- **Plan items:** the `SendMessage`-grant parking-lot item closed in place (item 1, above); no new
+  K-items opened — items 2 and 3's promotions are direct prompt edits with no open follow-up.
+- **Docs touched:** `claude/teco/teco.md` (two guardrail clauses) · `claude/teco/kaizen/{plan,
+  history}.md` (this pass) · `skills/agent-standards/claude-code.md` (one new knowledge-base
+  bullet).
+
 ## 2026-08-25 — The ledger cites, it does not restate (prompt-waste Stage D item, routed here)
 - **What:** one sentence into the ledger paragraph at `:69` — *"**The ledger cites; it does not restate** — a row points at the plan section or deliverable path that carries a decision, never re-explains it."* +25 w. Closes the item parked here at Stage D, when the prompt-waste plan specified the rule for `architect.md` but `architect` authors no delegation-summary table — the unit ledger in `plans/<slug>-coordination.md` is **this** agent's artifact.
 - **Lexically matched to its sibling on purpose.** `architect.md:41` reads *"a recap table cites, it does not restate"*; this reads *"The ledger cites; it does not restate."* Same construction, same verb pair — which is what will let a future reader recognize them as one rule rather than two coincidences. Deliberately **not** enforced by a script: the two guard different artifacts and were not written to be byte-identical, so a check would invent a constraint in order to make it checkable (the failure mode plan finding 23 warns against). The `agent-maintenance` §4 judgment pass is the right reader.

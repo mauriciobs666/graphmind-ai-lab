@@ -252,6 +252,13 @@ teardown hazard already documented at the `AGENTS.md` "Key scripts" table:
   unrelated to the served workspaces' real dimension (1024/1536). Never point a real-embedder test
   at it: a wrong-dimension `vecf32` write is silently accepted (§2/§7.1) and then drops out of ANN
   — the write "succeeds" and retrieval finds nothing, with no error anywhere in the chain.
+- **`Services` and `WorkflowExecutor` each default to their own separately-defined `_default_clock`
+  function** (`services.py:244` vs. `executor.py:99`), with zero wiring between them — including in
+  production `app.py` wiring, which never passes `clock=` to either constructor. A test that
+  injects `Services(clock=...)` to control run-parking timestamps silently fails to control
+  `StepRun.startedAt`, since that field is stamped by the *executor's* clock, not the services
+  clock — the test must construct `WorkflowExecutor` with the identical clock callable too, or the
+  injection only half-takes.
 
 **Verifying a claimed test count safely:** `pytest --collect-only -q` reports the suite's test
 count with no FalkorDB connection and no writes — the correct way to check a plan's or review's
@@ -299,6 +306,26 @@ count with no FalkorDB connection and no writes — the correct way to check a p
   parses fine but fails to *resolve* (`ModelConfigError: ... no options.baseURL ...`). Any example
   or fixture file authored for this seam should be re-**resolved** once via `ModelGateway.resolve`,
   not just parsed, before being called documented or shipped.
+- **`start_server.sh` runs uvicorn with `--reload` by default, watching the whole `falkor-chat/`
+  tree — writing or editing ANY file there during a live acceptance pass (including your own
+  `docs/test-plans/`/`docs/test-reports/` files) restarts the worker process and silently kills
+  every in-flight background daemon thread** (the ingestion pipeline's extraction/embedding work,
+  `mcp.py`'s fire-and-forget `threading.Thread(daemon=True)` dispatch — see `background.py`). A
+  document write mid-run produces false-negative-looking failures (entities/embeddings that never
+  land) with nothing in the response indicating why. Confirmed K-050 M5: editing
+  `docs/test-plans/document-ingestion.md` mid-pass logged uvicorn's "2 changes detected" and left
+  several in-flight documents without their entities/embeddings; reproduced cleanly, then resolved
+  by disabling reload for the pass (see the `UVICORN_ARGS` gotcha immediately below). Do all
+  test-plan/test-report writes for a live pass *before* starting the server, or after it's done —
+  never interleaved.
+- **Overriding `start_server.sh`'s `UVICORN_ARGS` to suppress `--reload` needs a genuinely
+  non-empty value — `UVICORN_ARGS=""` does *not* disable it.** The script sets
+  `UVICORN_ARGS="${UVICORN_ARGS:---reload}"`; bash's `:-` substitutes the default on **unset or
+  empty**, so an explicit empty string is treated the same as never setting the variable at all.
+  Confirmed: `UVICORN_ARGS="" ./scripts/start_server.sh` still launched with `--reload` (`ps -ef`
+  showed the flag); `UVICORN_ARGS="--timeout-keep-alive 5" ./scripts/start_server.sh` launched
+  without it. For a reload-free acceptance pass, pass any real, non-empty uvicorn arg string —
+  never an empty override.
 
 ### 1.8 The model-resolution seam
 

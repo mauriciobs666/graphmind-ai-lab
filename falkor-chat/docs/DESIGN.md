@@ -460,6 +460,19 @@ residual class. The sweep writes no new `WorkflowRun` property (there is deliber
 no scheduler state of its own: dueness is derived fresh, every call, from `StepRun.startedAt` (via the `LAST_STEP_RUN` tail
 pointer above) and `Step.config`. Full argument: `docs/plans/workflow-timers.md` §8.
 
+> **Design-review note for any future automated resume caller** (the sweep is the first; a
+> future scheduler-driven actor would be another). Such a caller carries two independent risk
+> classes, easy to conflate: a **CAS race** on concurrent resumers (closed generically by the
+> ctx-write-inside-CAS discipline above) and a **re-park loop** — the automated caller landing on
+> a step whose only advance path is a guard the automation itself cannot satisfy, with no human
+> present to eventually supply what's missing. The second class has no generic mitigation; each
+> new automated caller needs its own guard-satisfiability argument. K-028's first attempt (an
+> unconditional-fallback transition) closed the re-park risk but broke `evaluate_guard`'s ordinary
+> first-arrival/"not yet" behavior, since that guard fires unconditionally whenever reached, not
+> only on a genuine resume — replaced by the `ctx.timerFired` marker-guard approach documented
+> above, which is conditional on the automated caller specifically. `docs/plans/workflow-timers.md`'s
+> v2→v3 revision note has the full trace.
+
 The engine loop: read `AT_STEP` → execute the step (LLM-native agent loop or deterministic handler) →
 evaluate outgoing `TRANSITION` guards against `ctx` (first-firing wins) → `record_step_and_advance`
 (create the `StepRun`, append `NEXT` via the tail, move `AT_STEP`) — **or** suspend to `waiting` if the
@@ -475,7 +488,11 @@ is the *why*, not a query copy.
 > anything shifts elsewhere in the file, even with the locked body untouched — by bounding the
 > extraction on the `def`/seam-comment markers instead:
 > `awk '/^    def _drive_loop/{f=1} /^    # ── seams/{f=0} f' server/falkorchat/executor.py | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba' | sha256sum | cut -c1-12`
-> (verified reproducing `71055f756280` on this commit).
+> (verified reproducing `71055f756280` on this commit). **Before extending the lock for a new
+> requirement, check whether the needed data is already written atomically elsewhere in the run's
+> history first** — K-028 needed a per-run due-time and got it from `StepRun.startedAt` (already
+> atomically written by the unmodified suspend path) instead of adding a `WorkflowRun.wakeAt`
+> write inside this lock; see the "Timer release…" paragraph above.
 
 > **What `maxSteps` actually means.** `maxSteps` is a **runaway tripwire checked *after* each
 > recorded step**, not a hard cap: a run executes at most **`maxSteps + 1`** steps before failing

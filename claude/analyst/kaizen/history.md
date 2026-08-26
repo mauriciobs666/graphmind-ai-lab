@@ -2,6 +2,120 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation (unit U1 of the team-wide pass): 20 pending entries processed
+
+`cobb` ran the agent-maintenance skill §5 procedure against every `analyst`-linked `kaizen_team`
+node — 12 legacy (`author:'analyst'`, dated 2026-08-21/22) plus 8 current-shape
+(`(:Agent{agentId:'analyst'})-[:PRODUCED]->`, dated 2026-08-22 through 2026-08-25; zero `MENTIONS`
+edges found). Full untruncated text fetched via `redis-cli --no-raw` (the MCP tool's per-cell
+truncation would have lost most of these at ~300 chars). Every surviving claim was re-derived
+against the live repo/system, not trusted from the entry's own framing — grep, live FalkorDB
+probes on a disposable graph, and direct reads of the current source. No entry was found to be
+about a different agent; no `MENTIONS` tag added. Zero kept-open — every entry resolved to a clean
+promotion or a discard this pass.
+
+**Promoted to `review-techniques.md`** (7 entries, consolidated into 6 new sections plus one new
+sub-technique (d) on the existing uncommitted-diff section, to avoid near-duplicate entries):
+  - `b4f8e21a…` — mutation-testing via in-process module substitution under the real dotted name
+    (new sub-technique (d), sibling to existing (a)–(c)).
+  - `c7d21f4a…` + `e91a4d7c…` — merged into "Re-gating a state-machine guard/invariant fix": two
+    checks (foreclosed-pattern check, call-site tracing) a "does the mechanism work" read misses.
+    The falkor-chat-specific instance (K-028 v2's unconditional-fallback defect) is fully resolved
+    and already documented in the now-archived `workflow-timers.md` v3 itself (lines 1015–1024) —
+    only the generalized review lesson was promoted, not a project-docs claim about current system
+    behavior (v3 replaced the unconditional fallback with a conditional one; the described bug no
+    longer reproduces).
+  - `b6f3a1d2…` + `e3a1f6b2…` — merged into "A 'this already exists' claim is a grep away from
+    confirmation." Both source facts are already fully resolved/documented in their own review
+    docs (`docs/reviews/mid-run-escalation.md` §"grounded in..."; `document-ingestion.md` Pass-2)
+    — only the generalized technique was promoted.
+  - `9f3d2b1a…` — "An untracked plan/review doc has no re-verification baseline," verbatim
+    disposition per its own `suggestedHome: review-techniques` tag.
+  - `9e2a9f2e…` — "A truncate → append → truncate-again pipeline can silently discard its own
+    repair pass." The falkor-chat instance (extraction.py) is already fixed and documented in the
+    code's own comments, citing this exact review pass by name (Pass 3 MAJOR 1) — only the general
+    lesson was promoted.
+  - `8b1e4f2a…` + `2f3a9b1c…` — merged into "Two checks for a multi-shape authorization/
+    security-gate function" (keyword-set completeness; early-match short-circuit smuggling). Both
+    findings are already fixed in the live `cypher-mcp/server.py` (`_FOREIGN_TRIGGER_RE` now covers
+    all four keywords; `authorize_write()` now calls `_has_foreign_trigger_outside_strings()` after
+    an author-claim match) — verified by reading the current source, not the entries' own claims.
+    Only the generalized technique was promoted, project-docs facts already fully covered by the
+    (already-processed) `docs/reviews/kaizen-agent-ontology.md` review doc itself.
+
+**Promoted to `skills/agent-standards/claude-code.md`** (2 entries):
+  - `b1e6f3a2…` — the protected-path carve-out is keyed on the literal dot-prefixed directory name
+    (`.claude`, `.git`, etc. — the exact list re-verified live, 2026-08-25, against
+    `code.claude.com/docs/en/permission-modes` § Protected paths), not on any project's own
+    conventionally-named directory (this repo's dotless `claude/`) — added alongside the existing
+    self-modification/classifier callout in § Hooks.
+  - `b6f1e6b0…` — FastMCP's `Tool.run` wraps any tool-function exception in a generic `except
+    Exception`/`ToolError`, so a per-item try/except inside a bulk tool must catch every failure
+    mode, not just its own domain exception — added to § MCP Output limits. The falkor-chat
+    instance (`Services.ingest_documents`) is already fixed and documented in the code's own
+    docstring; only the general FastMCP fact was promoted here.
+
+**Promoted to `skills/python-web-quirks/SKILL.md`** (1 entry):
+  - `e6f2b1a4…` — pydantic `Field(min_length=1)` doesn't reject whitespace-only strings (`" "` has
+    len 1); MCP callers with no schema layer are completely unguarded, not just under-guarded. The
+    falkor-chat instance (`services.ingest_document`) is already fixed (`text.strip()` check,
+    documented in the function's own docstring) — only the general pydantic fact was promoted.
+    Skill frontmatter `description` updated to name the new gotcha.
+
+**Promoted to `claude/graph-dba/falkordb-quirks.md`** (2 entries, edited directly per the
+established maintainer-edits-another-agent's-knowledge-base-file channel):
+  - `a1e6c2f8…` — `db.labels()`/`db.relationshipTypes()` asymmetry for zero-data schema elements.
+    Re-verified empirically on a fresh disposable graph (2026-08-25), independent of falkor-chat's
+    current data state — the original entry's `ws:acme` evidence is now stale (K-050 has since
+    shipped real `HAS_CHUNK`/`ABOUT`/`RELATES_TO`/`SAME_AS` edges on that workspace), but the
+    underlying FalkorDB engine behavior it described is a durable, build-specific fact, re-proven
+    from scratch.
+  - `e3b6f2a4…` — `db.idx.fulltext.queryNodes()` against a label with no fulltext index created at
+    all silently returns zero rows, no error. Re-verified empirically (2026-08-25, disposable
+    graph).
+
+**Promoted to `falkor-chat/docs/SERVER.md` §1.7 (Testing hazards)** (1 entry):
+  - `a3f5e8c2…` — `Services`/`WorkflowExecutor` each default to their own separately-defined
+    `_default_clock`, unwired even in production `app.py`; a test injecting `Services(clock=...)`
+    alone doesn't control `StepRun.startedAt`. Re-verified live: still true today (no wiring exists
+    in current `app.py`).
+
+**Promoted to `claude/AGENTS.md`** (1 entry):
+  - `a3f1c9e2…` — `git add` then `git commit` is not atomic against a concurrent process sharing
+    the working tree; a staged file can get swept into an unrelated commit during the window before
+    the commit runs, even when the two processes' own files never overlap (the race is on the
+    index, not on any one path). Added to the Git-commit-authority section as a check-before-commit
+    discipline (`git status`/`git diff --cached --name-only` immediately before `git commit`) —
+    this is a fact about the whole team's multi-agent git workflow, not analyst-specific, so it
+    landed in the shared context file rather than this agent's own prompt/knowledge base.
+
+**Discarded — already resolved/fixed and already documented, no promotable residue** (4 entries):
+  - `a3f1c2e4-6b8d…` (`CYPHER` preamble literal-binding syntax) — the underlying mechanism is
+    already documented in `falkordb-quirks.md` (the existing "CYPHER preamble needs Cypher
+    literals" bullet); the specific K-049 repro it describes is already fully written up at
+    `falkor-chat/docs/reviews/unique-constraint-oversized-value-crash-rca.md`.
+  - `a3f1c2e4-7b6d…` (sequential-mutation patch/restore/sha256sum technique) — no material
+    information beyond `review-techniques.md`'s existing (b)/(c) mutate-restore-verify-hash
+    discipline; same zero-touch pattern, different file-tracking status than either sub-case
+    already covers.
+  - `b3e2c1d4…` (falkor-chat background work is fire-and-forget) — already fully documented
+    (`falkor-chat/docs/HISTORY.md`, `QUERIES.md`) and the specific race it was used to flag is
+    already fixed at the database layer, per the resulting plan-gate decision in
+    `document-ingestion.md` (§"Concurrency note").
+  - `b7e1c9a4…` (subagent `permissionMode` inheritance — the two named exceptions are exhaustive)
+    — already present, more completely, in `skills/agent-standards/claude-code.md`'s own
+    2026-08-24 "parent-session mode inheritance" resolution callout (§ Hooks), which the entry's
+    own review target (`permission-default-mode.md`) fed into; nothing this entry adds isn't
+    already there.
+
+**Verified:** `bash claude/scripts/audit-team.sh` — PASS, all checks including the personal-
+identifier sweep; git-commit-authority check unaffected by the `claude/AGENTS.md` addition (not an
+agent-file edit, not scanned by that check). All 20 graph entries cleared (12 legacy
+`DETACH DELETE`; 8 current-shape resolved via the `PRODUCED`-edge-delete path, all with
+`otherRemaining == 0` since none carried a `MENTIONS` edge — full-node clear in every case).
+- **Plan items:** none opened — every surviving entry either promoted cleanly or was already
+  resolved elsewhere.
+
 ## 2026-08-25 — Output discipline: the finding budget (prompt-waste plan, Stage D — an *addition*)
 
 - **What:** 2,325 → 2,375 w (**+50**). Stage D is the only stage of

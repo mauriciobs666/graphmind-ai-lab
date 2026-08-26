@@ -50,6 +50,24 @@ to the general fact here.
   both match a typo'd query against an indexed exact string (verified 2026-08-22, module `41811`,
   e.g. `%Acmee%` and `%%Acmeee%%` both still matched an indexed `'Acme Corporation'`); a
   non-matching term correctly returns zero rows.
+- **`db.idx.fulltext.queryNodes(...)` against a label with NO fulltext index created at all
+  silently returns zero rows — no error, indistinguishable from "no match found"** (verified
+  2026-08-25, module `41811`, disposable graph). A probe against an un-bootstrapped
+  workspace/label looks exactly like a correctly-working-but-empty search until the index is
+  actually created; don't infer "the index exists and this is a true empty result" from a clean
+  zero-row response alone — confirm the index itself first (`CALL db.indexes()` or a bootstrap
+  script's own idempotent creation) before trusting a fulltext-search miss.
+- **`db.labels()` and `db.relationshipTypes()` are asymmetric for zero-data schema elements.** A
+  node label registers in `db.labels()` (count 0) as soon as `CREATE INDEX FOR (n:Label) ON (...)`
+  runs — it's index metadata, not data. A relationship type registers in `db.relationshipTypes()`
+  only once at least one edge of that type has actually been **created**; `CREATE INDEX` has no
+  relationship-type equivalent that pre-registers a type before any edge exists. Empirically
+  re-confirmed 2026-08-25 on a disposable graph: `db.relationshipTypes()` returns empty right after
+  `CREATE INDEX FOR (n:L) ON (n.x)`, then shows the type the instant one edge of it is `CREATE`d.
+  Consequence for schema verification: an empty `db.relationshipTypes()` result for a type that
+  *should* exist is not proof the schema/indexes are missing — it only proves no edge of that type
+  has been written yet; check `db.labels()`/`db.indexes()` for the schema side and
+  `db.relationshipTypes()` (or a direct count) for the data side, separately.
 - **Relationship-property indexes and `RELATIONSHIP`-scoped `UNIQUE` constraints are fully
   supported** (verified 2026-08-22, module `41811` — previously flagged unverified by
   `falkor-chat/docs/plans/document-ingestion.md`, now settled). `CREATE INDEX FOR ()-[r:TYPE]-()
@@ -132,6 +150,21 @@ to the general fact here.
   future MCP tool) bypasses it entirely; the guard belongs at the service/repository boundary too.
   Full write-up incl. crash log: `falkor-chat/docs/reviews/unique-constraint-oversized-value-
   crash-rca.md` (K-049).
+
+## Concurrency & atomicity
+
+- **FalkorDB/Redis serializes write execution per graph — only one write query runs at a time,
+  queued in arrival order — and every write query is itself atomic (all-or-nothing; readers never
+  see a partial write)** (verified 2026-08-25 against docs.falkordb.com/design/concurrency, and
+  live in falkor-chat's shipped `create_entity_with_auto_match`,
+  `falkor-chat/server/falkorchat/repository.py:1259`, K-050 M5). Consequence: a check-then-act
+  sequence (does a candidate already exist? if not, create + link it) is race-free **for free**
+  when folded into ONE `GRAPH.QUERY` — no external lock, queue, or CAS-retry loop needed; two
+  concurrent callers can never observe or act on the same intermediate state. Read queries do
+  **not** serialize against each other (they run in parallel for throughput), only writes do. This
+  only holds **within one `GRAPH.QUERY` call against one graph key** — splitting a check-then-act
+  across two round trips (an app-level read, then a separate write) reopens the exact race the
+  single-query fold closes.
 
 ## Cypher dialect & query behavior
 
@@ -243,6 +276,40 @@ to the general fact here.
   expecting `NULL` on empty input (it's already a defined `0.0`), and expect a `float`-vs-`int`
   JSON-serialization mismatch (`"postedCount": 1.0` instead of `1`) wherever this shape feeds a
   response model.
+
+- **`count(*)` under-counts parallel edges between the same node pair — bind the relationship
+  variable and use `count(r)` instead** (verified 2026-08-25, module `41811`, disposable graph).
+  Two identical `(a)-[:REL]->(b)` edges between the same two nodes: `MATCH (a)-[:REL]->(b) RETURN
+  count(*)` returns **1**; `MATCH (a)-[r:REL]->(b) RETURN count(r)` correctly returns **2**. Any
+  query counting relationships (audit/dedup checks, "how many edges of this type" reporting) must
+  bind and count the relationship variable, never `count(*)`, whenever parallel edges between the
+  same pair are possible in the schema (e.g. a schema that deliberately never deduplicates
+  `RELATES_TO`/`ABOUT`-style edges — falkor-chat K-050 M5).
+
+- **An undirected relationship pattern combined with a predicate on an INDEXED relationship
+  property silently degrades to directed — first-declared node treated as the edge's source —
+  and returns wrong (too-few) results, no error** (verified 2026-08-25, module `41811`, disposable
+  graph; corrects/merges two raw `kaizen_team` entries that reported the symptom without isolating
+  the actual trigger — re-derived from scratch, not assumed from their citations). Setup: edge
+  stored `(e2)-[:SAME_AS {status:'confirmed'}]->(e1)`, plus `CREATE INDEX FOR ()-[r:SAME_AS]-() ON
+  (r.status)`. `MATCH (:Entity{entityId:'e1'})-[r:SAME_AS{status:'confirmed'}]-(:Entity
+  {entityId:'e2'}) RETURN count(r)` returns **0**; swapping which node is declared first (`e2`
+  before `e1`, everything else identical) returns **1**. `PROFILE` shows why: the property
+  predicate folds into an `Edge By Index Scan | [r:SAME_AS]` that scans only the direction implied
+  by pattern order, not both. **The index is the trigger, not the property predicate alone** — the
+  identical query, same schema, with the index dropped, correctly returns **1** regardless of
+  declared node order. Reproduces identically for an inline map filter
+  (`{status:'confirmed'}` in the pattern) and for an equivalent separate `WHERE r.status =
+  'confirmed'` clause after two prior `MATCH`es bind the same nodes — both forms fold into the
+  same directional index scan. A plain undirected pattern with NO relationship-property predicate
+  is unaffected even with the index present (correctly symmetric both ways). Directed patterns are
+  unaffected in every variant (they're supposed to be direction-sensitive). **Consequence:** any
+  undirected-pattern query filtering on an indexed relationship property (a
+  `SAME_AS`/`RELATES_TO`-style edge probed from either endpoint) needs two `OPTIONAL MATCH`es, one
+  per direction, `coalesce`d — don't trust "the pattern has no arrow" to mean direction-safe once
+  that relationship property is indexed. Same index-folding mechanism as the "guarded-CAS WHERE"
+  and "two independent WHERE predicates fold into one Index Scan" entries below (Query tuning),
+  but here the fold changes the **result**, not just the plan shape.
 
 ## Query tuning
 

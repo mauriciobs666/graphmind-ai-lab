@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation: 3 current-shape entries, all discarded as already documented
+
+- **What:** `cobb` processed all 3 current-shape entries `PRODUCED` by `data-scientist` in the
+  shared `kaizen_team` graph (agent-maintenance skill §5, unit U7 of the team-wide distillation
+  pass, `claude/docs/plans/kaizen-distillation-coordination.md`). Legacy (`author`-property) read
+  returned 0 rows — nothing pre-M8 remained for this agent.
+  - **`f3b1a2c4` (2026-08-22) — discarded, already documented.** Fact: falkor-chat's
+    `llm.extract_own_line_json_object`'s "whole reply is one JSON object" branch returns before
+    `require_key` is ever consulted, so `extraction.py` cannot rely on `require_key="entities"` to
+    validate shape. **Re-verified against live code:** `server/falkorchat/llm.py:561-563`
+    (`whole = _load_json_object(text); if whole is not None: return whole`) returns before
+    `require_key` is referenced at line 578 — still true. **Already captured twice in project
+    docs**, independently: `extraction.py`'s own module docstring (lines 16-24, "ML note F1") and
+    `docs/plans/document-ingestion-ml.md` §F1/§3.2 — both state the exact same finding and its
+    consequence (`extraction.py` does its own mandatory schema validation, doesn't rely on
+    `require_key`). No third copy needed.
+  - **`b3e1b6f0` (2026-08-24) — discarded, already documented.** Fact: running falkor-chat with
+    two `ModelGateway` kinds (chat/extraction + embedding) against the same local LM Studio
+    instance under concurrent background load causes model-swap thrashing (HTTP 400 engine-startup
+    aborts, sometimes 10+ min to settle). **Re-verified:** this exact finding, with the same root
+    cause (two models competing for load slots) and the same workaround (serialize the calls), is
+    already written up in `docs/reviews/document-ingestion-ml.md` §1 (the entry's own source
+    document) and independently reproduced and recorded again in
+    `docs/test-reports/document-ingestion-report.md`'s "Environment notes" section, which
+    explicitly cross-references the prior finding as "the same class of instability". Already a
+    standing, twice-confirmed project-docs fact — no promotion needed.
+  - **`c4f2c7a1` (2026-08-24) — discarded, already documented.** Fact: the shared
+    `~/.config/opencode/opencode.json` LM Studio `baseURL` (`192.168.0.69:1234`) was unreachable
+    from this WSL2 session while `localhost:1234` answered; `FALKORCHAT_OPENCODE_CONFIG` lets a
+    scratch copy override the `baseURL` without touching the shared file. **Re-verified:** the
+    stale-LAN-IP fact and the `FALKORCHAT_OPENCODE_CONFIG` workaround are both already recorded in
+    `docs/reviews/document-ingestion-ml.md` §1 and repeated in
+    `docs/test-reports/document-ingestion-report.md`'s "Environment notes" (which explicitly notes
+    "still unfixed as of this pass" — i.e. the shared config file is deliberately never edited).
+    Considered `opencode/local-llm.md` (this lab's other LM-Studio-connectivity doc) as an
+    alternative home, but that file is scoped to OpenCode agent/provider config for Severino, not
+    falkor-chat's `ModelGateway`/environment operations — the existing falkor-chat docs are the
+    right home and already have it.
+  - **No `MENTIONS` tags added** — all three entries are squarely `data-scientist`'s own domain
+    (falkor-chat LLM extraction/ingestion ML work), not about another agent.
+  - **No plan items opened** — nothing kept open; every entry resolved to a clean discard with a
+    verified, cited existing location.
+- **Why:** Routine distillation pass — three-plus-week-old entries from the K-050 M5 document-
+  ingestion ML review work, never yet processed.
+- **Verified:** re-derived each fact directly (code read for `f3b1a2c4`; doc cross-reference for
+  the other two, confirming the *same* fact, not just a citation that still resolves) rather than
+  trusting the entries' own citations. All three `PRODUCED` edges resolved with `otherRemaining=0`
+  (no `MENTIONS` edges on any), so each node was fully `DETACH DELETE`d after this entry was
+  written.
+- **Docs touched:** `claude/data-scientist/kaizen/history.md` only — `plan.md` unchanged (nothing
+  kept open).
+
 ## 2026-08-24 — Prompt-waste compression, Stage C5: two "this lab" attributives cut from the LLM-as-judge bullet
 - **What:** Unit C5 of `claude/docs/plans/prompt-waste-reduction.md` (with `tdd-engineer.md` and
   `qa-engineer.md` as one commit). **2,098 → 2,083 w (−15, −0.7%).** Two edits, one pass.

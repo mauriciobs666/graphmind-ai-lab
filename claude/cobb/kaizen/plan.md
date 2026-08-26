@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `cobb` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-21
+> Last reviewed: 2026-08-25
 
 ## Active
 

@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-08-25 — `kaizen_team` distillation: 6 entries (3 legacy, 3 current-shape) — 2 promoted to project docs, 1 promoted to Guardrails, 1 MENTIONS-tagged to graph-dba, 2 discarded
+
+- **What:** `cobb` processed all of `architect`'s raw entries in the shared `kaizen_team` graph
+  (agent-maintenance skill §5): 3 legacy (`author:'architect'`) and 3 current-shape
+  (`(:Agent {agentId:'architect'})-[:PRODUCED]->(:KaizenEntry)`, no `MENTIONS` yet). Each
+  re-derived against live docs/source, not just its citation.
+  - **`e7c1a9d4` (legacy, 2026-08-21, automated-resume re-park-loop risk class) → promoted to
+    project docs.** The fact (distinguish a re-park-loop risk from the CAS-race risk when an
+    automated actor can trigger suspend/resume) is still true, but its evidence cited K-028 v2's
+    fix (an unconditional-fallback invariant), which `docs/plans/workflow-timers.md`'s v2→v3
+    revision note records as **not actually working** — it defeated `evaluate_guard`'s ordinary
+    first-arrival case and was replaced by the shipped `ctx.timerFired` marker-guard. Added a
+    design-review box to `falkor-chat/docs/DESIGN.md` §6.2 (after "Timer release…") stating the
+    risk-class distinction as forward guidance for any future automated resume caller, citing the
+    real v3 mechanism, not the superseded v2 one.
+  - **`a3f8c2e1-9b7d` (legacy, 2026-08-21, derive-outside-the-lock technique) → promoted to
+    project docs.** Verified still true: `_drive_loop` remains SHA-locked
+    (`71055f756280`, DESIGN.md §6.2) and the sweep still derives `dueAt` fresh from
+    `StepRun.startedAt` rather than writing a `WorkflowRun.wakeAt` inside the lock. The specific
+    outcome was already documented; the *generalizable technique* ("before extending the lock,
+    check whether the data is already written atomically elsewhere in the run's history") wasn't
+    stated anywhere — added one sentence to the SHA-lock box in DESIGN.md §6.2.
+  - **`a3f8c2e1-6b4d` (legacy, 2026-08-22, BACKLOG.md milestone rows compiled incrementally by
+    teco) → discarded, superseded.** Verified against current `docs/BACKLOG.md`: the M7 row this
+    entry cited no longer exists — the 2026-08-25 docs-convention overhaul (root `AGENTS.md`,
+    commits `1d8aed7`/`b53dc2e` etc., all dated after this entry) replaced "milestone rows
+    compiled incrementally in BACKLOG.md" with "a delivered item leaves BACKLOG.md entirely, not
+    even as an index row — its record is HISTORY.md." The entry describes a since-abolished
+    practice; root `AGENTS.md`'s current docs-convention section fully supersedes it.
+  - **`c4a7d1f0` (current-shape, 2026-08-22, reconciling a plan against a diverging delegated
+    -graph note) → promoted to Guardrails.** Verified against `docs/plans/document-ingestion.md`
+    (the MatchSuggestion→SAME_AS reconciliation it describes). Extended the existing "compress by
+    pointer" Guardrails bullet with one clause: reconciling a plan against a diverging delegated
+    `-graph.md`/`-ml.md` note means rewriting the design section in place with a revision note,
+    then sweeping every downstream reference for the old premise — a partial find-and-replace
+    leaves the plan inconsistent for the analyst gate. Judged "most sessions" because delegating
+    `-graph.md`/`-ml.md` notes and later reconciling against them is architect's own documented
+    workflow (`architect.md` §4), not a one-off.
+  - **`a3f0c1d2` (current-shape, 2026-08-22, FalkorDB/Redis serializes `GRAPH.QUERY` execution,
+    enabling atomic check-then-act) → MENTIONS-tagged to `graph-dba`, not promoted here.** Verified
+    the underlying mechanism is real (`falkor-chat/AGENTS.md` rule 4 already requires every
+    HEAD/TAIL write to be one atomic `GRAPH.QUERY`, and `docs/plans/document-ingestion.md` §3.4
+    /`docs/QUERIES.md` §"`create_entity_with_auto_match`" show the same pattern shipped for K-050's
+    fusion blocker) — but the *general* FalkorDB-engine fact (single-command serialization is
+    *why* folding check-then-act into one query closes the race, generalizing beyond HEAD/TAIL
+    writes to any read-then-decide-then-write sequence) is not yet in `claude/graph-dba/falkordb-quirks.md`
+    (checked: no `serializ`/`concurren`/`race` hits there). This is graph-dba's domain, not an
+    architect-specific practice, so tagged `MENTIONS` rather than promoted from here — see graph
+    op below. Left in the graph (PRODUCED edge resolved, node kept) for graph-dba's own
+    distillation pass to route into its knowledge base.
+  - **`8f3b1e2a` (current-shape, 2026-08-22, no-APOC entity-fusion-as-linking-edge pattern) →
+    discarded, already fully documented.** Verified: `falkor-chat/docs/DESIGN.md` §2 rule 4
+    ("No APOC, no GDS") plus §5.1/§7.1's `SAME_AS` edge model (`matchId`, `status`, `confidence`
+    — the exact "model the merge as a first-class linking edge" pattern this entry describes) are
+    both already shipped and documented; nothing left to add.
+- **Graph ops:** tagged `MENTIONS` on `a3f0c1d2` → `graph-dba` (curator write, `agent='cobb'`);
+  resolved the `PRODUCED` edge on `a3f0c1d2` and `c4a7d1f0` and `8f3b1e2a` individually (each had
+  no other edge before this pass, so `c4a7d1f0`/`8f3b1e2a` fully cleared — `a3f0c1d2` kept alive
+  by its new `MENTIONS` edge); `DETACH DELETE`d the 3 legacy entries outright.
+- **Why:** Unit U3 of `teco`'s team-wide kaizen-distillation pass
+  (`claude/docs/plans/kaizen-distillation-coordination.md`).
+- **Plan items:** none opened — every entry was either promoted directly or discarded with a
+  verified reason; nothing unresolved.
+
 ## 2026-08-25 — Output discipline: the once-canonical rule (prompt-waste plan, Stage D — an *addition*)
 
 - **What:** 1,429 → 1,471 w (**+42**). Stage D is the only stage of

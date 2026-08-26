@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-24
+> Last reviewed: 2026-08-25
 
 ## Active
 
@@ -51,20 +51,18 @@
   weighing on the next `teco.md` pass — a coordination ledger that restates each unit's decisions
   rather than citing the plan section is the highest-volume instance of the duplication the whole
   plan targets, and `teco.md` is the largest file on the team (5,377 w).
-- **Grant `SendMessage` to dispatched specialists for self-reporting (noted 2026-08-21).** Live
-  during the K-028 coordination (K-015's validation vehicle): `architect` and `analyst` each
-  finished a unit and could not report the result back to teco directly — `architect` stated
-  outright it had no `SendMessage` tool available; `analyst` said it would send one but no such
-  message ever reached teco. Both times the launching/parent session had to observe the
-  specialist's own completion and relay the result into teco by hand to keep the coordination
-  moving. Raw fact logged to `kaizen_team` (`teco-20260821-specialist-sendmessage-gap`,
-  `suggestedHome: prompt`) for `cobb` to verify/route. If adopted, the change is at least two
-  parts: (1) a `cobb` agent-standards pass adding `SendMessage` to the relevant specialists'
-  `tools:` allowlists, and (2) a protocol line in each one's own prompt — relay your result to the
-  coordinator's `agentId` when the brief names one, and only that address, not open-ended
-  messaging to arbitrary agents/sessions. Worth weighing against the fact that the current
-  "parent relays" workaround already works; this would mainly save a manual step, not unblock
-  anything. Decide when `cobb` next touches specialist tool grants, not as a standalone push.
+- **Grant `SendMessage` to dispatched specialists for self-reporting — resolved 2026-08-25, `cobb`
+  distillation, not adopted.** Live-reverified: a fresh `coder` probe (declares no `tools:`
+  restriction, nominally "all tools") also lacks `SendMessage` at runtime, so the gap is
+  team-wide, not just `architect`/`analyst`. But the K-028 evidence's real mechanism is the
+  already-documented nested-notification-bubbling behavior (a background `teco`'s own turn had
+  ended, so `architect`/`analyst` completions bubbled to the live ancestor instead of to `teco` —
+  `skills/agent-standards/claude-code.md` "Nested-delegation notification routing", entry
+  `7994edd7…`, promoted 2026-08-21) — a specialist's `SendMessage` access is orthogonal to that;
+  teco's real signal is always the platform's own completion notification, never a delegate
+  self-report, so granting the tool wouldn't change teco's behavior. Tool-inventory fact promoted
+  to the same knowledge-base section instead of a `tools:` grant. Superseded raw entry
+  `teco-20260821-specialist-sendmessage-gap` cleared from `kaizen_team`.
 - **Architect plans annotate dispatch-unit boundaries (noted 2026-08-21).** The dispatch-sizing rule (K-015) asks teco to derive unit boundaries from a step table under pressure; if `architect`'s plan template instead marked suggested dispatch clusters in the step table itself, teco's job becomes verification, and K-015 gets exercised far more easily. Cross-agent change — belongs to `architect`'s prompt/handoff contract; raise when K-015 or K-016 is worked.
 - **Cross-session addressing hygiene (noted 2026-08-21).** The 2026-08-16 misrouting incident is mitigated by a pause-and-confirm rule; a cheaper preventive convention would be: the coordination doc records its session's identity, and any inter-session `SendMessage` must echo the coordination slug — a message without a matching slug is declined without analysis. Decide from the next incident, not now.
 - **Watch the milestone-close freeze in a real close (noted 2026-07-27).** The new curation bullet is prompt-level only — nothing enforces that the `Status: archived` flips actually land, and the owners performing them (`architect`, `analyst`, `tico`, `qa-engineer`, `data-scientist`, `graph-dba`) have no matching instruction in their own prompts yet; they learn it from the brief. If a close ships with documents left `active`, the fix is either a line in each owner's prompt or the optional checker (step 7 of `docs/plans/doc-reference-convention.md`, which today gates nothing) — decide from evidence, not now.

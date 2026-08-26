@@ -2,8 +2,11 @@
 
 > Forward-looking backlog for the `graph-dba` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-18 (K-007 opened from a kept-open kaizen-graph distillation entry;
-> last full pass 2026-07-11, team-coherence certification; joern-agent merge 2026-07-28)
+> Last reviewed: 2026-08-25 (kaizen_team distillation, U10 of the team-wide pass — 1 legacy
+> discarded, 4 current-shape MENTIONS-only entries promoted (2 verbatim, 2 merged/corrected) to
+> falkordb-quirks.md, none kept open; see history.md. K-007 opened 2026-08-18 from a kept-open
+> kaizen-graph distillation entry; last full certification pass 2026-07-11; joern-agent merge
+> 2026-07-28)
 
 ## Active
 
