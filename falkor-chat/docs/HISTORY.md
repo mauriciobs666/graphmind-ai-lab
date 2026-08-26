@@ -5,6 +5,51 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-25 — K-005: `_read_structure` false-negatived a live snapshot after a fully-deleted `reference` graph key
+
+**What:** `tdd-engineer` fixed a false negative in `Repository._read_structure`
+(`server/falkorchat/repository.py`), the shared static helper both
+`read_def_structure` (`reference`) and `read_snapshot_structure` (`ws:{id}`)
+delegate to. After `./scripts/test_queries.sh` `GRAPH.DELETE`s the `reference`
+graph key entirely (not just its node data), a read against the now-nonexistent
+key raised an uncaught `redis.exceptions.ResponseError` ("empty key") — a
+different failure mode from "key exists, root node absent," which already
+returned `None` cleanly. Because `Services.diff_def_snapshot` reads `reference`
+before `ws:{id}`, the uncaught exception propagated out before the snapshot side
+was ever checked, and `verify_workflows.sh`'s outer catch collapsed the whole
+diff to the blanket `ABSENT` sentinel — misreporting an intact `ws:<id>`
+snapshot as MISSING. Root cause independently verified by `coder` during team
+kaizen distillation (`claude/coder/kaizen/plan.md` K-005); this unit
+implemented the fix (coordinated via
+`docs/plans/workflow-diff-absent-key-coordination.md`).
+
+**Fix:** `_read_structure` now catches the "empty key" `ResponseError` and
+returns `None` — matching what it already returns for an absent root node, and
+the same catch-and-return-`None` pattern already used for this exact FalkorDB
+behaviour at `read_index_dimension` and `services._read_or_absent`. Any other
+`ResponseError` still propagates. One change fixes both callers
+(`read_def_structure`, `read_snapshot_structure`) and, transitively,
+`get_workflow_def_structure`/`get_snapshot_structure`/`diff_def_snapshot`/
+`check_demo_readiness` — `diff_def_snapshot`'s own docstring already promised
+this contract ("one side missing is a first-class 200"); it just wasn't true
+for a fully-deleted key. The separate `_read_subgraph` helper (feeds
+`materialize_def` and the SHA-locked executor path) was not touched.
+
+**Tests:** `server/tests/test_repository.py` — a live reproduction
+(`test_read_snapshot_structure_none_when_graph_key_fully_deleted`, a genuine
+`GRAPH.DELETE` on a throwaway `ws:<probe>` key, not the shared `reference`
+graph) plus two fake-graph unit tests pinning `_read_structure` directly
+(`test_read_structure_none_when_graph_key_fully_deleted` for the `reference`
+side, `test_read_structure_reraises_response_errors_that_are_not_empty_key` so
+the fix doesn't swallow unrelated errors). Confirmed red-then-green and
+mutation-tested (removing the `except` reproduces the original failure).
+
+**Docs:** `falkor-chat/AGENTS.md`'s `test_queries.sh` row now names the full
+`bootstrap_schema.sh` → `seed_demo.sh` → `seed_workflows.sh` remediation
+sequence (indexes/constraints were destroyed along with `reference`'s data, not
+just the data); its `verify_workflows.sh` row notes this false-negative case
+existed and is fixed.
+
 ## 2026-08-25 — K-050 M5 closes: ingestion pipeline & entity fusion — acceptance pass + design sync
 
 **What:** `qa-engineer` ran the milestone-closing acceptance pass over AC-1..AC-10
