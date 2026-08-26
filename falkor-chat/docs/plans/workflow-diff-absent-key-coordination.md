@@ -60,6 +60,19 @@ follow-up per the review's own recommendation — not a new unit.
 ## Notes
 
 - Below the 3-unit auto-threshold, but opened anyway because U1 carries a review gate.
-- Integration commit is deferred pending a clean way to separate this unit's hunks from
-  the concurrent session's uncommitted K-051 changes to the same two files — see the
-  wrinkle above. Resolve at step 5, not before.
+- **Docs half integrated 2026-08-25, commit `259757d`** — `falkor-chat/AGENTS.md`, `falkor-chat/docs/HISTORY.md`,
+  `claude/coder/kaizen/plan.md`, plus this coordination doc and the review doc: all fully
+  isolated from the concurrent K-051 session, staged/committed by explicit path with a
+  status re-check immediately before commit.
+- **Code half (`repository.py` `_read_structure` fix + its 4 tests in
+  `test_repository.py`) is verified/accepted but still uncommitted** — both files still
+  carry the concurrent K-051 session's own unrelated, unfinished, uncommitted work mixed
+  in on disk (that session was still expanding — into `background.py`, `embedding.py`,
+  `ingestion.py`, `QUERIES.md`, `test_api.py`, `test_background.py` — as of this check),
+  so a plain `git add <path>` on either file would sweep in work this coordination never
+  reviewed. Leaving this coordination `active` (not `archived`) until that's resolved.
+  Options once the K-051 session commits or otherwise clears: (a) if K-051 lands first,
+  re-diff and commit the remaining K-005-only hunk cleanly; (b) if this needs to close
+  first, a surgical `git add -p`/patch-based partial-file stage would be needed — not
+  attempted here, treat as a live open question for whoever next touches this coordination,
+  not a silent default.
