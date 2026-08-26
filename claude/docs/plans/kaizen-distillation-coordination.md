@@ -1,6 +1,6 @@
 # Kaizen distillation — team-wide pass
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—)
 
 Routine curation pass over the shared `kaizen_team` FalkorDB graph
 (`skills/agent-maintenance/SKILL.md` §5): for every agent with raw
