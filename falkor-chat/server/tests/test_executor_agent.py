@@ -13,6 +13,8 @@ Both collaborators are injected stubs — no LLM, no network, no graph.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from falkorchat.config import CallContext
@@ -503,6 +505,69 @@ def test_a_node_with_no_thread_context_carries_an_empty_window():
     result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
 
     assert result.thread == []
+
+
+# ── K-048 — _assemble_messages must never emit two consecutive same-role turns ─
+#
+# A strict-alternation chat template (live-confirmed: LM Studio's Ministral-3B) hard-rejects
+# a message list with two consecutive `user` or `assistant` entries. `_assemble_messages`
+# unconditionally appended a trailing `user`-role CONTEXT block after the thread turns, which
+# crashes whenever the thread's last turn is also `user` — structurally guaranteed on
+# `intake`'s first call and every `research`→`answer` handoff (`research` never posts, so
+# `answer` always sees a `user`-terminated thread). See docs/plans/assemble-messages-alternation.md.
+
+def test_assemble_messages_thread_ending_in_assistant_is_unchanged():
+    # Characterization test — today's already-correct, already-alternating shape must stay
+    # byte-for-byte identical after the fix (the coalescing helper is a no-op here since no
+    # two adjacent appends ever share a role).
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {"foo": "bar"}
+    thread_msgs = [
+        {"role": "user", "text": "hi", "authorId": "u1", "displayName": "Alice"},
+        {"role": "assistant", "text": "reply", "authorId": "a1", "displayName": "Bot"},
+    ]
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
+    assert messages[-1]["content"] == f"CONTEXT:\n{context}"
+    assert messages[1]["content"] == "Alice: hi"
+    assert messages[2]["content"] == "Bot: reply"
+
+
+def test_assemble_messages_thread_ending_in_user_merges_context_into_it():
+    # The confirmed crash shape: thread's last turn is `user` (intake's first call /
+    # research→answer handoff), so the trailing CONTEXT block would land right after it —
+    # two consecutive `user` messages. Must now merge into one alternating `user` turn.
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {"foo": "bar"}
+    thread_msgs = _thread_rows(1)
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    assert [m["role"] for m in messages] == ["system", "user"]
+    context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
+    assert "Alice: turn 0" in messages[-1]["content"]
+    assert f"CONTEXT:\n{context}" in messages[-1]["content"]
+
+
+def test_assemble_messages_coalesces_consecutive_same_role_thread_turns():
+    # Sibling shape (not live-verified, but closed algorithmically by the same helper):
+    # two consecutive `user` thread turns with no assistant reply between them — reuses the
+    # existing `_thread_rows` fixture (already produces consecutive `role: "user"` rows).
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {"foo": "bar"}
+    thread_msgs = _thread_rows(2)
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    assert [m["role"] for m in messages] == ["system", "user"]
+    context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
+    merged = messages[-1]["content"]
+    assert "Alice: turn 0" in merged
+    assert "Alice: turn 1" in merged
+    assert f"CONTEXT:\n{context}" in merged
 
 
 # ── K-039 / mention-reply-delivery RCA #1 — implicit post_message fallback ────

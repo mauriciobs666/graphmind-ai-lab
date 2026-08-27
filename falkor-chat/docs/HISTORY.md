@@ -5,6 +5,49 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-26 — K-048: `_assemble_messages` no longer emits two consecutive same-role turns
+
+**What:** `tdd-engineer` closed K-048 — `WorkflowExecutor._assemble_messages`
+(`server/falkorchat/executor.py`) unconditionally appended a trailing `user`-role `CONTEXT` block
+after the role-mapped thread turns, which crashes a strict-alternation chat template
+(live-confirmed: LM Studio's Ministral-3B, HTTP 400) whenever the thread's last turn was itself
+`user`-authored — a structural, not incidental, shape: `intake`'s first call and every
+`research`→`answer` handoff (`research` never posts, so `answer` always sees a `user`-terminated
+thread) both hit it. Implemented exactly per the approved plan,
+`docs/plans/assemble-messages-alternation.md`, gated pre-implementation by
+`docs/reviews/assemble-messages-alternation.md` (`analyst`, approve with suggestions).
+
+**Fix:** a new module-level helper, `_append_turn(messages, role, content)`, placed next to the
+existing `_assistant_turn` helper — merges a turn into the previous message (joined by `"\n\n"`)
+instead of appending a new one whenever that would produce two consecutive same-role messages, and
+is a no-op whenever the sequence is already alternating. `_assemble_messages` now routes both its
+thread-turn appends and its trailing `CONTEXT` append through this helper; its signature is
+unchanged. `_assemble_messages`'s docstring was extended (not left stale) to describe the new
+coalescing invariant, per the review's suggestion 1.
+
+**Tests:** three new offline unit tests in `server/tests/test_executor_agent.py` — a
+characterization test pinning today's already-correct shape (thread ending in `assistant`, 4
+messages, zero merges — confirmed passing against unmodified code before any production change);
+the crash-shape test (thread ending in `user`, merges to 2 messages, `["system", "user"]`);
+and the sibling-shape test (two consecutive `user` thread turns, no `assistant` between them,
+merges to one coalesced `user` turn) — promoted from the plan's "recommended" to mandatory per
+the review's suggestion 2, reusing the existing `_thread_rows(n)` fixture. Mutation-tested: with
+`_append_turn`'s merge condition temporarily disabled, both the crash-shape and sibling-shape
+tests failed for the right reason (extra `"user"` entries in the role list); the characterization
+test still passed. Full offline suite after reapplying the fix: 1785 passed, 4 deselected (`-m
+live` only) — exactly the pre-change baseline (1782 passed) plus the 3 new tests, no existing
+test needed changes. SHA-lock on `_drive_loop` re-verified unchanged (`71055f756280`) before and
+after. Live regression pass reused the existing test per the plan (no new live fixture):
+`pytest -m live -s tests/test_workflow_live.py::test_triage_flow_runs_end_to_end_against_live_llm`
+— 1 passed against LM Studio's Qwen, confirming the merged-message shape still drives triage's
+intake→research→answer flow correctly.
+
+**Review:** `analyst` gated the plan pre-implementation (approve with suggestions, all three
+folded in: the docstring-drift fix, promoting the sibling-shape test to mandatory, and the third
+finding — a plan-prose cross-reference nit — had no code implication), then re-gated the
+implemented diff (Pass 2, same review doc): **approve**, no new findings, all three Pass-1
+findings independently confirmed resolved.
+
 ## 2026-08-26 — K-049: app-side guard against the FalkorDB `UNIQUE`-constraint oversized-value crash
 
 **What:** `tdd-engineer` closed K-049 — a shared-instance FalkorDB crash first found during K-028

@@ -215,6 +215,26 @@ def _describe_result(result: Any) -> str:
     return "text: " + _short(result.text or "")
 
 
+def _append_turn(messages: list[dict[str, Any]], role: str, content: str) -> None:
+    """Append a `user`/`assistant` turn, coalescing into the previous message instead of
+    appending a new one when that would produce two consecutive same-role turns (K-048): a
+    strict-alternation chat template (live-confirmed: LM Studio's Ministral-3B) hard-rejects
+    that shape with an HTTP 400 ("conversation roles must alternate user and assistant
+    roles"); a tolerant template (Qwen) accepts it today, which is exactly why this can't be
+    "obviously" broken in production. Only ever merges when the previous message's role
+    equals this turn's role — it never merges into a leading `system` message (a different
+    role, and always singular), so it is a no-op whenever the sequence is already
+    alternating. Covers both known trigger shapes with one primitive: two consecutive thread
+    turns from the same side (no reply in between — plausible, not yet live-observed) and the
+    always-`user` trailing CONTEXT block landing after a `user`-authored last turn
+    (`intake`'s first call; every `research`→`answer` handoff, since `research` never posts a
+    thread-visible turn)."""
+    if messages and messages[-1]["role"] == role:
+        messages[-1]["content"] = f"{messages[-1]['content']}\n\n{content}"
+    else:
+        messages.append({"role": role, "content": content})
+
+
 def _assistant_turn(result: Any) -> dict[str, Any]:
     """Echo the model's tool-call turn back into the message list (OpenAI shape) so the
     tool results that follow are correlated by `tool_call_id`."""
@@ -918,7 +938,13 @@ class WorkflowExecutor:
         recent thread turns as conversation messages (role-mapped, speaker-named so the
         model sees who spoke), then a compact `CONTEXT` block carrying the run's serialized
         state (the prior nodes' output). Thread turns come pre-capped by
-        `_read_thread_context`; an empty list (offline stub path) leaves only system+CONTEXT."""
+        `_read_thread_context`; an empty list (offline stub path) leaves only system+CONTEXT.
+        Every `user`/`assistant` append routes through `_append_turn` (K-048), which merges
+        into the previous message instead of adding a new one whenever that would produce two
+        consecutive same-role turns — a strict-alternation chat template hard-rejects that
+        shape. This makes the function a no-op on an already-alternating thread (e.g. one
+        ending in `assistant`) and collapses same-role runs (including the always-`user`
+        CONTEXT block landing after a `user`-authored last turn) into one coalesced turn."""
         messages: list[dict[str, Any]] = []
         system = config.get("systemPrompt", "")
         if system:
@@ -926,11 +952,9 @@ class WorkflowExecutor:
         for m in thread_msgs:
             role = "assistant" if m.get("role") == "assistant" else "user"
             speaker = m.get("displayName") or m.get("authorId") or "member"
-            messages.append(
-                {"role": role, "content": f"{speaker}: {m.get('text', '')}"}
-            )
+            _append_turn(messages, role, f"{speaker}: {m.get('text', '')}")
         context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
-        messages.append({"role": "user", "content": f"CONTEXT:\n{context}"})
+        _append_turn(messages, "user", f"CONTEXT:\n{context}")
         return messages
 
     @staticmethod
