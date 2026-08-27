@@ -5,6 +5,20 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-26 — K-045: `llm-provider-config` FR-10/AC-8 wording corrected against shipped behavior
+
+**What:** `tico` corrected the stale "the run suspends" wording in
+`docs/requirements/llm-provider-config.md`'s FR-10 and AC-8 — both described an unresolvable or
+failing use-time model as suspending the run; the actual shipped Landing 2 behavior (confirmed by
+the K-042 Landing 2 QA acceptance pass and the D-2 fix, both 2026-08-11, below) is that the run
+**fails**, with the cause recorded (`status: 'failed'`, an `error` field) — the executor's ordinary
+terminal-failure vocabulary, not a `human`/`wait`-style suspend/park. Because the source document
+is `archived` (executed against by K-042), the correction landed as a successor document,
+`docs/requirements/llm-provider-config2.md`, carrying `Supersedes:`/`Superseded by:` header
+pointers per root `AGENTS.md`'s collision rules, rather than an in-place edit. No code or behavior
+change — documentation accuracy only. Closes K-045 (`docs/BACKLOG.md`), filed out of the K-042
+close.
+
 ## 2026-08-25 — K-051: `Document.status` now reaches a terminal state
 
 **What:** `tdd-engineer` fixed `Document.status` never leaving `'processing'` — no code path
@@ -1377,6 +1391,22 @@ anchor) was substituted throughout this all-agent pipeline with independent `ana
 literal human — the ledger explicitly recommends the user personally spot-check the ~10-example
 `golden_judge_calibration.jsonl` set before fully trusting the judge–human agreement numbers above
 at face value. The QA report repeats this same recommendation. Not a blocker for this PASS verdict.
+
+## 2026-08-11 — K-044: LLM provider/model configuration admin manual authored
+
+**What:** `tico` authored `docs/manuals/llm-provider-config.md`, resolving — the same session it
+was filed — the "is an admin manual wanted?" question the K-042 Landing 2 close-out below had left
+open. Covers the two hand-edited config files (the shared `opencode.json`; falkor-chat's own
+`models.json` overlay), declaring a provider and its models, per-kind defaults and per-model
+settings, naming a model or role on a specific workflow step/guard, roles and fallback chains,
+setting a workspace override (a direct Cypher write today — no UI/REST route exists for it),
+reading which concrete model actually answered a run off its execution trace, and the system's
+failure modes. Illustrated with two Mermaid diagrams (the four-consumer resolution seam; the
+workspace → own-choice → per-kind-default precedence chain).
+
+**Bookkeeping note:** this delivery was never reflected in `docs/BACKLOG.md` (K-044 stayed listed
+as open) or given its own entry here until closed out 2026-08-26 — a lapsed bookkeeping step, not a
+re-litigated decision.
 
 ## 2026-08-11 — K-042 Landing 2: QA acceptance pass (U7) + D-2 fix — closes M4
 
