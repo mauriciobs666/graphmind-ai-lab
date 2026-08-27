@@ -84,6 +84,11 @@ class IngestDocumentsIn(BaseModel):
 # Size bounds are the RAM guard (rule 6): a def is a handful of steps/transitions
 # in the global `reference` graph; `config`/`guard` are opaque strings the caller
 # pre-serializes (the service stores them verbatim, never queries inside).
+# 200 carries ample margin below FalkorDB v4.18.11's confirmed 4096-byte
+# engine-crash boundary for a UNIQUE-constrained property (K-049,
+# docs/reviews/unique-constraint-oversized-value-crash-rca.md) — don't raise
+# this closer to 4096 without understanding that the failure mode there is a
+# full-process SIGSEGV, not a truncation.
 MAX_KEY_LEN = 200
 MAX_STEPS = 200
 MAX_TRANSITIONS = 500

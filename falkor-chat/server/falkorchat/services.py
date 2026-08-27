@@ -65,6 +65,7 @@ from .schemas import (
     MAX_CONFIG_LEN,
     MAX_DIFF_PREVIEW,
     MAX_DOCUMENT_CHARS,
+    MAX_KEY_LEN,
 )
 from .transport import ProviderCallError
 
@@ -1291,6 +1292,61 @@ class Services:
     # `CallContext`/`config.get_context` are unchanged.
 
     @staticmethod
+    def _validate_key_lengths(
+        key: str, version: str, steps: list[dict[str, Any]],
+        transitions: list[dict[str, Any]],
+    ) -> None:
+        """Reject any caller-supplied string that would land in a `UNIQUE`-
+        constrained property once it reaches `reference` — K-049,
+        `docs/plans/oversized-indexed-property-guard-graph.md` §5.1.
+
+        `pydantic` already bounds these at the REST boundary
+        (`schemas.py`'s `MAX_KEY_LEN=200` on `PublishWorkflowDefIn.key/version`,
+        `WorkflowStepIn.key`, `WorkflowTransitionIn.from_/to`), but every
+        non-REST caller (tests, scripts, a future MCP tool) reaches `Services`
+        directly and bypasses pydantic entirely — this mirrors the bound at
+        the service layer, the same pattern `MAX_CONFIG_LEN`'s ctx-merge check
+        already uses in `submit_workflow_input`/`sweep_due_workflow_runs`.
+
+        Deliberately does **not** bound a transition's `on`: it never feeds
+        `Step.stepUid`'s `MERGE` key the way `from`/`to` do, and this schema
+        has zero `RELATIONSHIP`-type constraints on `TRANSITION` — it isn't at
+        risk of the crash class this guard defends against (FalkorDB
+        v4.18.11 SIGSEGVs the whole `redis-server` process on a `CREATE`/
+        `MERGE` committing >4096 bytes into a `UNIQUE`-constrained property;
+        `docs/reviews/unique-constraint-oversized-value-crash-rca.md`).
+        Bounding it anyway would be harmless but is scope creep against a
+        guard meant to close one specific crash vector precisely; pydantic's
+        own `Field(max_length=MAX_KEY_LEN)` remains sufficient defense-in-
+        depth for that field alone.
+        """
+        if len(key) > MAX_KEY_LEN:
+            raise WorkflowDefSpecError(
+                f"key would be {len(key)} characters, over the "
+                f"{MAX_KEY_LEN}-character bound"
+            )
+        if len(version) > MAX_KEY_LEN:
+            raise WorkflowDefSpecError(
+                f"version would be {len(version)} characters, over the "
+                f"{MAX_KEY_LEN}-character bound"
+            )
+        for step in steps:
+            skey = step["key"]
+            if len(skey) > MAX_KEY_LEN:
+                raise WorkflowDefSpecError(
+                    f"step key would be {len(skey)} characters, over the "
+                    f"{MAX_KEY_LEN}-character bound"
+                )
+        for tr in transitions:
+            for endpoint in ("from", "to"):
+                val = tr[endpoint]
+                if len(val) > MAX_KEY_LEN:
+                    raise WorkflowDefSpecError(
+                        f"transition {endpoint!r} would be {len(val)} "
+                        f"characters, over the {MAX_KEY_LEN}-character bound"
+                    )
+
+    @staticmethod
     def _validate_def_spec(
         *, kind: str, steps: list[dict[str, Any]], transitions: list[dict[str, Any]],
     ) -> str:
@@ -1577,7 +1633,10 @@ class Services:
     ) -> dict[str, Any]:
         """Validate + publish a def version into the global `reference` graph. §11.1.
 
-        The spec is validated first (`_validate_def_spec`) — on any violation
+        `_validate_key_lengths` runs first (K-049 — rejects any `key`/
+        `version`/step-key/transition-endpoint that would overflow the
+        `UNIQUE`-constrained properties this write eventually touches), then
+        the spec is validated (`_validate_def_spec`) — on any violation
         nothing is written. `config`/`guard` are serialized to opaque strings.
         A step declares itself the start via `start: True` (exactly one required);
         that step's key becomes the repository `start_key`. Global write: no `ws`.
@@ -1599,6 +1658,7 @@ class Services:
         is not atomic with the repository write below — see
         `WorkflowDefConflictError`'s docstring for the residual TOCTOU shape.
         """
+        self._validate_key_lengths(key, version, steps, transitions)
         start_key = self._validate_def_spec(
             kind=kind, steps=steps, transitions=transitions
         )
@@ -1646,7 +1706,14 @@ class Services:
         Two-phase (plan F4, non-atomic across the graph boundary but retry-safe):
         read the def subgraph from the global `reference` graph, then write the
         snapshot into the workspace. Raises `WorkflowDefNotFoundError` when the
-        def version was never published — nothing is written.
+        def version was never published — nothing is written. Raises
+        `WorkflowDefSpecError` (K-049 — `_validate_key_lengths`, run right after
+        the read) when the stored subgraph itself already carries an oversized
+        `key`/`version`/step-key/transition-endpoint — a def can only reach
+        `reference` in that state by some means other than
+        `publish_workflow_def` (a hand-edited seed, a future non-REST publish
+        path, direct repository write), since that path's own guard would have
+        rejected it; this closes the gap for that case too.
 
         **Topology-immutable per `(key, version)` against the workspace snapshot
         (K-034).** A third read (`read_snapshot_structure`) checks whether `ctx.ws`
@@ -1665,6 +1732,7 @@ class Services:
                 f"workflow def {key!r} version {version!r} not found in `reference` "
                 f"— publish it before materializing"
             )
+        self._validate_key_lengths(key, version, sub["steps"], sub["transitions"])
         existing_raw = self._repo.read_snapshot_structure(ctx.ws, key=key, version=version)
         _check_no_structural_conflict(
             existing_raw=existing_raw,

@@ -368,7 +368,9 @@ def build_router(
 
     @router.post("/workflow-defs/{key}/versions/{version}/materialize", status_code=201)
     def materialize_def(
-        key: str, version: str, ctx: CallContext = Depends(get_context)
+        key: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        version: str = Path(..., min_length=1, max_length=MAX_KEY_LEN),
+        ctx: CallContext = Depends(get_context),
     ):
         return services.materialize_def(ctx, key=key, version=version)
 

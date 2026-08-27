@@ -17,7 +17,7 @@ from falkorchat import config
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.repository import DocumentWriteStatus, MessageWriteStatus
-from falkorchat.schemas import MAX_BATCH_SIZE, MAX_DIFF_PREVIEW
+from falkorchat.schemas import MAX_BATCH_SIZE, MAX_DIFF_PREVIEW, MAX_KEY_LEN
 from falkorchat.services import (
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
@@ -1733,6 +1733,112 @@ def test_publish_workflow_def_dangling_transition_to_raises_nothing_written():
     assert repo.published == []
 
 
+# ── K-049 — oversized indexed-property guard ─────────────────────────────────
+#
+# FalkorDB v4.18.11 SIGSEGVs the whole redis-server process when a CREATE/MERGE
+# commits a value >4096 bytes into a UNIQUE-constrained property
+# (docs/reviews/unique-constraint-oversized-value-crash-rca.md). pydantic
+# bounds the REST front door (MAX_KEY_LEN=200 on schemas.py's WorkflowStepIn.key
+# etc.), but every non-REST caller (tests, scripts, a future MCP tool) goes
+# through `Services` directly and bypassed that entirely until
+# `_validate_key_lengths` (docs/plans/oversized-indexed-property-guard-graph.md
+# §5) was added. These are offline service-layer tests — nothing here ever
+# writes an oversized value to a live FalkorDB; that risk was retired via the
+# RCA's disposable-container repro, never a standing test.
+
+OVERSIZED_KEY = "x" * (MAX_KEY_LEN + 1)
+# An isolated step carrying the oversized key, declared but never referenced by
+# any transition — deliberately, so the step-key-length case below can't be
+# accidentally caught by the *dangling-transition* structural check instead of
+# the length guard (both raise `WorkflowDefSpecError`, so `pytest.raises` alone
+# would pass either way; `match=` below pins the case to the length reason).
+# Not used for the transition-endpoint cases: `_validate_key_lengths` runs
+# checks in `key, version, steps, transitions` order and raises on the FIRST
+# violation, so declaring the oversized value as a step too would make the
+# step-key check fire first and mask the transition-endpoint check entirely —
+# those cases leave the oversized value out of `steps`, on purpose.
+OVERSIZED_ISOLATED_STEP = {"key": OVERSIZED_KEY, "type": "message"}
+
+
+def _spec(**overrides):
+    spec = {
+        "key": "onboarding", "version": "1", "name": "Onboarding", "kind": "process",
+        "steps": VALID_STEPS, "transitions": VALID_TRANSITIONS,
+    }
+    spec.update(overrides)
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        # `match=` pins each case to the length guard's OWN wording
+        # ("over the N-character bound"), never a bare word like "key" or
+        # "from" that a coincidentally-raised structural error (e.g. the
+        # dangling-transition check) could also satisfy — load-bearing for the
+        # mutation test: disabling the guard call must make every one of these
+        # fail, not silently pass because some other check happened to raise
+        # a `WorkflowDefSpecError` too.
+        ({"key": OVERSIZED_KEY}, r"^key would be \d+ characters, over the"),
+        ({"version": OVERSIZED_KEY}, r"^version would be \d+ characters, over the"),
+        (
+            {"steps": [*VALID_STEPS, OVERSIZED_ISOLATED_STEP]},
+            r"^step key would be \d+ characters, over the",
+        ),
+        (
+            {
+                "transitions": [
+                    {"from": OVERSIZED_KEY, "to": "done", "on": "x", "order": 0},
+                    *VALID_TRANSITIONS,
+                ],
+            },
+            r"^transition 'from' would be \d+ characters, over the",
+        ),
+        (
+            {
+                "transitions": [
+                    {"from": "start", "to": OVERSIZED_KEY, "on": "x", "order": 0},
+                    *VALID_TRANSITIONS,
+                ],
+            },
+            r"^transition 'to' would be \d+ characters, over the",
+        ),
+    ],
+    ids=["oversized-key", "oversized-version", "oversized-step-key",
+         "oversized-transition-from", "oversized-transition-to"],
+)
+def test_publish_workflow_def_oversized_value_raises_nothing_written(overrides, match):
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefSpecError, match=match):
+        svc.publish_workflow_def(CTX, **_spec(**overrides))
+
+    assert repo.published == []
+
+
+def test_publish_workflow_def_oversized_transition_on_is_not_bounded_by_this_guard():
+    # Deliberate, per the design doc (§5.1): `on` never feeds `Step.stepUid`'s
+    # MERGE key the way `from`/`to` do, and this schema has zero
+    # RELATIONSHIP-type constraints on TRANSITION — so it isn't at risk of the
+    # crash class this guard defends against. Only pydantic's own
+    # `Field(max_length=MAX_KEY_LEN)` bounds it, and only at the REST boundary.
+    # A direct (non-REST) `Services` call with an oversized `on` must NOT be
+    # rejected by `_validate_key_lengths` — proving the guard's scope stays
+    # exactly as narrow as designed, not scope-creeping onto a field that was
+    # deliberately left out.
+    repo = FakeRepo()
+    svc = make_service(repo)
+    transitions = [
+        {**VALID_TRANSITIONS[0], "on": OVERSIZED_KEY},
+        VALID_TRANSITIONS[1],
+    ]
+
+    svc.publish_workflow_def(CTX, **_spec(transitions=transitions))
+
+    assert len(repo.published) == 1
+
+
 # ── K-034 — topology-equality gate on re-publish ─────────────────────────────
 #
 # `_check_no_structural_conflict`, wired into `publish_workflow_def` right before
@@ -2096,6 +2202,26 @@ def test_materialize_def_not_found_raises_nothing_materialized():
 
     with pytest.raises(WorkflowDefNotFoundError):
         svc.materialize_def(CTX, key="ghost", version="1")
+
+    assert repo.materialized == []
+
+
+def test_materialize_def_oversized_stored_step_key_raises_nothing_materialized():
+    # K-049 §5.3: `publish_workflow_def`'s own guard cannot protect a def that
+    # reached `reference` by some OTHER means (a hand-edited seed, a future
+    # non-REST publish path, direct repository write) — simulate exactly that
+    # threat model by writing past the guard straight into `repo.defs`, the
+    # same fixture shape the K-034 tests below use for "already stored".
+    repo = FakeRepo()
+    repo.defs[("onboarding", "1")] = {
+        "name": "Onboarding", "kind": "process", "start_key": OVERSIZED_KEY,
+        "steps": [{"key": OVERSIZED_KEY, "type": "human", "config": ""}],
+        "transitions": [],
+    }
+    svc = make_service(repo)
+
+    with pytest.raises(WorkflowDefSpecError, match=r"step key would be \d+ characters"):
+        svc.materialize_def(CTX, key="onboarding", version="1")
 
     assert repo.materialized == []
 

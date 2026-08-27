@@ -20,6 +20,7 @@ from falkorchat.config import CallContext
 from falkorchat.embedding import EmbeddingWorker
 from falkorchat.ingestion import IngestionPipeline
 from falkorchat.repository import Repository
+from falkorchat.schemas import MAX_KEY_LEN
 from falkorchat.services import DEMO_EXPECTED_DEFS, Services
 
 
@@ -1016,6 +1017,26 @@ def test_materialize_missing_def_is_404(wf_client):
 
     assert r.status_code == 404
     assert r.json()["error"] == "WorkflowDefNotFoundError"
+
+
+def test_materialize_def_oversized_key_path_param_is_422(wf_client):
+    # K-049 §5.4: the materialize route's sibling (`get_workflow_def_structure`)
+    # already bounds its `Path()` params; this route didn't. `Path()` rejection
+    # happens before the request body/service layer ever runs, so no def needs
+    # to exist first — this must be a 422, never a 500 or a hang.
+    oversized = "x" * (MAX_KEY_LEN + 1)
+
+    r = wf_client.post(f"/workflow-defs/{oversized}/versions/1/materialize")
+
+    assert r.status_code == 422
+
+
+def test_materialize_def_oversized_version_path_param_is_422(wf_client):
+    oversized = "x" * (MAX_KEY_LEN + 1)
+
+    r = wf_client.post(f"/workflow-defs/onboarding/versions/{oversized}/materialize")
+
+    assert r.status_code == 422
 
 
 # ── §11 def/snapshot STRUCTURE reads + diff (K-031 observability) ───────────────
