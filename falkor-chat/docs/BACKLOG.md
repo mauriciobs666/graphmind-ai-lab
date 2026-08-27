@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-051
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-055
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -18,8 +18,19 @@
 
 ## Active
 
-Nothing currently active — **M5 (ingestion pipeline & entity fusion) closed 2026-08-25**
-(`docs/HISTORY.md`). Next milestone not yet started.
+**M6 (business entities in workflows) opened 2026-08-26** — one combined "salesperson"-style
+demo agent proving four sibling capabilities: durable cart/orders + deterministic totals
+(K-053), structured catalog lookup (K-052 — prioritized first among the four, ships the shared
+demo scaffold the other three extend), durable customer profile (K-054), and natural-language
+query generation with a structural non-mutation guarantee (K-055). Plans:
+`docs/plans/workflow-catalog-lookup.md`, `docs/plans/workflow-cart-and-totals.md`,
+`docs/plans/workflow-durable-profile.md`, `docs/plans/workflow-nl-query-generation.md`.
+**Design phase complete and gated 2026-08-27**: all four plans plus their companion
+`graph-dba`/`data-scientist`/`security-expert` notes are `analyst`-approved (`docs/reviews/
+workflow-{catalog-lookup,cart-and-totals}.md` approve; `docs/reviews/workflow-{durable-profile,
+nl-query-generation}.md` approve with suggestions, no open MAJOR/BLOCKER) —
+`docs/plans/workflow-salesperson-demo-coordination.md` has the full trail. Implementation not yet
+started; K-052 (catalog lookup) is next up, ships the shared demo scaffold the other three extend.
 
 Everything else open is a follow-up filed out of a closed milestone (`## Open follow-ups`) or the
 deferred M2.5 hardening track.
@@ -28,10 +39,40 @@ deferred M2.5 hardening track.
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
+| **M6 — Business entities in workflows** 🟡 *(in progress)* | All four sibling capabilities proven live inside the combined salesperson demo agent, golden-set/adversarial gates passed for K-055 | K-052 → K-053, K-054, K-055 |
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
 `## Open follow-ups`.
+
+## M6 items
+
+### K-052 — Structured catalog/reference lookup for workflows (🟡 in-progress — plan: `docs/plans/workflow-catalog-lookup.md`)
+
+> Fixed-shape exact-name/category/price-range lookup against a new, seed-script-only `Product`
+> catalog in `reference`. Ships the shared `salesperson` `WorkflowDef` scaffold the other three M6
+> items extend by version bump — build this one first.
+
+### K-053 — Cart, orders, and deterministic totals (🟡 in-progress — plan: `docs/plans/workflow-cart-and-totals.md`)
+
+> Durable, workspace-scoped cart/order state and an LLM-free computation for line-item totals and
+> order snapshots. Depends on `graph-dba`'s `workflow-cart-and-totals-graph.md` for the
+> `Cart`/`Order` schema; blocked on K-052 landing first (shared def version bump).
+
+### K-054 — Durable user-profile data for workflows (🟡 in-progress — plan: `docs/plans/workflow-durable-profile.md`)
+
+> Durable name/delivery-address capture, workspace-scoped, as two properties on the shared
+> `Customer` node (no separate `Profile` label — the same anchor `workflow-cart-and-totals.md`
+> uses). Depends on `graph-dba`'s `workflow-durable-profile-graph.md`; blocked on K-052.
+
+### K-055 — Natural-language query generation over structured graph data (🟡 in-progress — plan: `docs/plans/workflow-nl-query-generation.md`)
+
+> Arbitrary-phrasing question answering via a constrained query-builder DSL (never free-form
+> LLM-generated Cypher), executed exclusively through `GRAPH.RO_QUERY` as a second,
+> engine-enforced backstop. Depends on `data-scientist`'s `workflow-nl-query-generation-ml.md`
+> (golden-set metric/threshold, delivered) and a `security-expert` review of the mechanism
+> (FR-3/FR-3a adversarial test cases, in progress) before this item is considered complete.
+> Blocked on K-052.
 
 ## Open follow-ups
 

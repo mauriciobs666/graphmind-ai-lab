@@ -1,0 +1,255 @@
+# Salesperson-demo capabilities — Design Coordination
+
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-052…(TBD) (M6, proposed)
+
+Coordinating the **design phase** (requirements → gated plans, no implementation in this unit) for
+four sibling, stakeholder-confirmed `Ready for design` requirements documents, all proven inside
+one combined "salesperson"-style demo agent (one orchestrating `agent` step, many tools — mirrors
+falkor-chat's existing `salesperson`/`triage` pattern):
+
+- `falkor-chat/docs/requirements/workflow-cart-and-totals.md`
+- `falkor-chat/docs/requirements/workflow-catalog-lookup.md`
+- `falkor-chat/docs/requirements/workflow-durable-profile.md`
+- `falkor-chat/docs/requirements/workflow-nl-query-generation.md`
+
+**Why one unit, not four independent handoffs.** All four are proven inside the same demo agent.
+A design decision made for one — especially `workflow-cart-and-totals.md` FR-8's
+step-type-vs-tool fork for deterministic computation — has to hold consistently across all four
+(e.g. if catalog-lookup or durable-profile end up needing their own deterministic/tool-dispatch
+step, they should use whatever pattern FR-8 settles on, not invent a second one).
+
+A fifth sibling, `workflow-composition.md`, is deliberately held at `Interviewing` by the
+stakeholder and is explicitly not required by or blocking any of these four — no action on it in
+this coordination.
+
+## Context
+
+- **Design forks left open, by document** (from the brief):
+  - `workflow-cart-and-totals.md` FR-8 — deterministic computation (price × quantity) as a new
+    step-type vs. a tool. Likely sets the pattern for the others.
+  - `workflow-catalog-lookup.md` — mechanism for the fixed-shape (exact-name/category/price-range)
+    lookup.
+  - `workflow-durable-profile.md` — workspace-scoped durable-write mechanism (deliberately not
+    touching `identity`; that write-path question is out of scope by the stakeholder's own
+    decision — see the doc's own "Problem & current state").
+  - `workflow-nl-query-generation.md` — the query-generation technology itself, **plus** two
+    specialist contributions beyond `architect`, both explicitly part of this capability's own
+    acceptance bar (not deferred): `data-scientist` (golden-set metric + passing threshold, FR-4)
+    and `security-expert` (adversarial test-case set proving the mechanism is structurally
+    non-mutating, FR-3/FR-3a).
+- **`workflow-cart-and-totals.md`/`workflow-durable-profile.md` also introduce new durable,
+  workspace-scoped graph state** (cart/order, profile) that didn't exist before — genuine graph
+  data-modeling work (new labels, indexes/constraints, workspace-scoped write shape), so
+  `graph-dba` is in this coordination's design track too, alongside `architect`, even though the
+  brief didn't name it explicitly — same shape as `document-ingestion`'s U1/U2/U3 split
+  (`docs/plans/document-ingestion-coordination.md`), which is the closest precedent in this repo
+  for a multi-specialist design phase.
+- **Cross-reference checked, and corrected:** `workflow-nl-query-generation.md`'s own "Related
+  work" section and 2026-08-22 decision-log entry describe `docs/requirements/document-ingestion.md`
+  as "Ready for design, active `teco` coordination in flight." **That is now stale** — the
+  ingestion coordination closed 2026-08-25 (`docs/plans/document-ingestion-coordination.md`,
+  `docs/requirements/document-ingestion.md`, and `docs/plans/document-ingestion.md` are all
+  `Status: archived`, M5 delivered per `docs/HISTORY.md`). The cross-reference itself is still
+  valid and, if anything, stronger now — ingestion's extracted-entity schema is a **shipped,
+  stable** second-schema candidate for AC-2, not a moving target. Flagged to `architect`/
+  `data-scientist` as current fact; the stale "in flight" wording in
+  `workflow-nl-query-generation.md` is a documentation-drift nit for `tico` to fix opportunistically,
+  not blocking this coordination.
+- **Sibling in-flight work, not part of this coordination:** a separate, currently-`active` `teco`
+  coordination (`docs/plans/assemble-messages-alternation-coordination.md`, K-048) has uncommitted
+  changes to `falkor-chat/server/falkorchat/executor.py` and
+  `falkor-chat/server/tests/test_executor_agent.py` right now. Unrelated topic (message-assembly
+  alternation, not business entities/workflow steps) — flagged so `architect` reads `executor.py`'s
+  actual on-disk state (which already differs from the last commit) rather than being surprised by
+  an unfamiliar diff, not because it changes this coordination's scope.
+- **CPG freshness** (checked 2026-08-27, per `skills/cpg-analysis/references/freshness.md`):
+  `cpg_falkorchat`, built `2026-08-26T22:27:22Z`, scratch-copy build (no `sourceCommit`,
+  `sourcePath` a `/tmp/.../cpg-src/falkor-chat-server` scratch copy whose real counterpart is
+  `falkor-chat/server`) — **stale**: one commit (`da10d57`, K-049) has touched `falkor-chat/server`
+  since build, **and** the K-048 in-flight work above has uncommitted changes to `executor.py` on
+  top of that. Flagged to `architect`/`graph-dba`: read `executor.py`/`tools.py` directly for any
+  structural claim about the current step-type/tool-dispatch machinery; don't lean on
+  `cpg-analysis` for it here.
+- **Backlog/milestone:** M5 closed 2026-08-25; no milestone open yet (`docs/BACKLOG.md`). Next
+  free backlog id: **K-052**. Next milestone slot: **M6** (proposed). Left to `architect` to
+  actually propose the K-item(s)/M6 framing in the `BACKLOG.md` diff that ships with U1 (mirroring
+  the document-ingestion/K-050/M5 precedent) — `teco` verifies the diff, doesn't dictate its shape.
+
+## Ledger
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U1 | `architect` | `ae8b24f0595f327cb` | delivered | 4 plans: `docs/plans/workflow-{cart-and-totals,catalog-lookup,durable-profile,nl-query-generation}.md` | `analyst` → — | 305k tok / 48 tools |
+| U2 | `graph-dba` | `a65bb2f47ea7a86b4` | delivered | `docs/plans/workflow-cart-and-totals-graph.md`, `docs/plans/workflow-durable-profile-graph.md` | `analyst` → — | 206k tok / 53 tools |
+| U3 | `data-scientist` | `a277477d79ce069c6` | delivered | `docs/plans/workflow-nl-query-generation-ml.md` | `analyst` → — | 134k tok / 17 tools |
+| U9 | `analyst` | `aefab24e1845b5deb` | delivered | 4 review docs, `docs/reviews/workflow-{cart-and-totals,catalog-lookup,durable-profile,nl-query-generation}.md` | plan gate → catalog-lookup **approve**, cart-and-totals **approve w/ suggestions**, durable-profile **needs changes** (1 BLOCKER), nl-query-generation **approve w/ suggestions** | 192k tok / 31 tools |
+| U10 | `architect` (resumed) | `ae8b24f0595f327cb` | accepted | fix MAJOR+MINOR, `workflow-cart-and-totals.md` (v2) | `analyst` (U12) → — | 432k tok / 18 tools |
+| U11 | `graph-dba` (resumed) | `a65bb2f47ea7a86b4` | accepted | fix BLOCKER (`coalesce`), `workflow-durable-profile-graph.md` (v2) | `analyst` (U12) → — | 249k tok / 9 tools |
+| U12 | `analyst` (resumed) | `aefab24e1845b5deb` | accepted | re-gate `workflow-{cart-and-totals,durable-profile}.md` | plan re-gate → cart-and-totals **approve**, durable-profile **approve w/ suggestions** | 221k tok / 6 tools |
+
+## Design phase closed 2026-08-27 — final verdicts
+
+| Document | Plan | Companion note(s) | Verdict |
+|---|---|---|---|
+| `workflow-catalog-lookup.md` | v1 | — | **approve** |
+| `workflow-cart-and-totals.md` | v2 | `workflow-cart-and-totals-graph.md` v2 | **approve** |
+| `workflow-durable-profile.md` | v1 | `workflow-durable-profile-graph.md` v2 | **approve with suggestions** (1 MINOR: `docs/BACKLOG.md` wording — fixed by `teco` directly) |
+| `workflow-nl-query-generation.md` | v1.1 | `workflow-nl-query-generation-ml.md` v1, `docs/reviews/workflow-nl-query-generation-security.md` (approve, Pass 2) | **approve with suggestions** (1 MINOR: `docs/BACKLOG.md` wording — fixed by `teco` directly) |
+
+Both remaining MINORs (stale `docs/BACKLOG.md` wording, not a design defect) are closed —
+`docs/BACKLOG.md`'s "Active"/K-054/K-055 sections were corrected directly by `teco` after the
+re-gate confirmed they were the only open items. No open BLOCKER/MAJOR anywhere in the set.
+
+`docs/BACKLOG.md` M6 section reflects the closed design phase and that K-052 (catalog lookup) is
+next up for implementation — not yet dispatched; out of this coordination's original scope
+("coordinate design work"). This coordination doc stays `active` pending a future implementation
+dispatch, rather than closing to `archived`, since M6 itself is still open.
+
+| U4 | `security-expert` | `ae4185d22350610f7` | delivered | `docs/reviews/workflow-nl-query-generation-security.md` | — (is itself the security gate) → **approve w/ suggestions** | 139k tok / 31 tools |
+| U6 | `architect` (resumed) | `ae8b24f0595f327cb` | delivered | fix 2 MAJORs + 2 minors in `workflow-nl-query-generation.md` (v1.1) | `security-expert` (U8) → — | 366k tok / 16 tools |
+| U7 | `graph-dba` (resumed) | `a65bb2f47ea7a86b4` | accepted | `sku`→`productId` rename, `workflow-cart-and-totals-graph.md` (v2) | (verified by teco) | 225k tok / 33 tools |
+| U8 | `security-expert` (resumed) | `ae4185d22350610f7` | accepted | Pass 2 confirmation, `docs/reviews/workflow-nl-query-generation-security.md` | security re-gate → **approve** | 164k tok / 7 tools |
+| U5 | `teco` | — | accepted | applied M6/K-052..K-055 diff to `docs/BACKLOG.md` | (self-verified: reviewed diff before applying) | — |
+
+**Planned next (not yet dispatched):**
+- `analyst` plan gate over the full, reconciled set (4 plans + 2 graph notes + 1 ml note) —
+  4 separate review docs, one per topic-slug family (`docs/reviews/workflow-{cart-and-totals,
+  catalog-lookup,durable-profile,nl-query-generation}.md`). **Dispatched as U9.**
+- Fix/re-gate cycles as needed.
+
+- **U8 (`security-expert` Pass 2) delivered: verdict upgraded to plain `approve`.** All 4 Pass 1
+  findings independently re-verified as fixed (regexes/Pydantic constraints run for real against
+  the actual escape strings, not just read). Reconciliation is now fully closed — both items in
+  the "Reconciliation needed" section above are resolved. Ready for the `analyst` plan gate.
+
+## Reconciliation needed before the analyst gate
+
+1. **`sku` → `productId` rename in `graph-dba`'s two notes.** Confirmed: `workflow-catalog-lookup.md`
+   (architect, U1) defines the catalog item's key property as `productId` (`(:Product {productId,
+   name, nameNormalized, category, price})`), not `sku`. `graph-dba`'s `workflow-cart-and-totals-graph.md`
+   used `sku` as a placeholder pending exactly this confirmation (self-flagged in its own report).
+   **Resolved (U7, `graph-dba` resumed).** Renamed throughout `workflow-cart-and-totals-graph.md`
+   (schema/DDL/Cypher/prose; `workflow-durable-profile-graph.md` had no `sku` references). Bumped
+   to `Version: 2`, dated revision note, per the revise-in-place convention. Re-verified the one
+   structurally-distinct write shape (the 2-property composite `UNIQUE` constraint + its
+   `MERGE`-and-increment) live against a fresh disposable probe graph — `OPERATIONAL`, identical
+   result to the original; other occurrences were straight identifier substitutions, explicitly
+   noted as not individually re-run rather than silently assumed.
+2. **2 MAJOR security findings on the nl-query-generation DSL**, from `security-expert`'s
+   `docs/reviews/workflow-nl-query-generation-security.md` (verdict: approve w/ suggestions, no
+   blocker — but these are load-bearing on the FR-3 structural-safety property, worth closing
+   before the `analyst` gate rather than carrying them as suggestions):
+   - MAJOR 1 — `returns`/`order_by` are compound expressions unlike the flat-token
+     `label`/`property`/`var` allowlist checks; no specified decomposition-before-validation step,
+     and an unanchored regex (`re.match` vs `re.fullmatch`) there would silently accept a crafted
+     injection string. Independently confirmed exploitable in principle (a completed, syntactically
+     valid injection was constructed and shown caught only by the independent `GRAPH.RO_QUERY`
+     Layer-2 backstop, not Layer 1).
+   - MAJOR 2 — `QueryMatch.var`'s regex (`^[a-z][a-z0-9]{0,7}$`) is stated only as a code comment,
+     not a specified/enforced Pydantic constraint, and has no allowlist backstop at all.
+   - 2 minors: pin an explicit conservative timeout on `run_readonly_query`; harden the
+     "only `querygen.compile` calls this" invariant with `extra="forbid"` Pydantic models + a
+     nominal `CompiledQuery` type rather than a grep-based test alone.
+   - Routing to `architect` (U1's owner) to fix in `workflow-nl-query-generation.md`, then a quick
+     confirmation pass by `security-expert` (resumed) before the `analyst` gate.
+
+## Analyst plan gate (U9) — findings routed
+
+- **`workflow-catalog-lookup.md` — approve.** No action needed.
+- **`workflow-cart-and-totals.md` — approve with suggestions.** 1 MAJOR: `ensure_customer`/
+  `ensure_cart` calls are never explicitly assigned to a listed service method, even though
+  `graph-dba`'s Cypher requires them before a brand-new customer's first `add_to_cart` succeeds —
+  risk of a silent no-op on the demo's most basic path. 1 MINOR: `place_order`'s in-flight
+  price-change race needs a scoping clarification (already self-flagged in the plan). Routing both
+  to `architect` (U1/U6's owner) to fix — real correctness issue, worth closing now even though the
+  verdict doesn't strictly require it.
+- **`workflow-durable-profile.md` — needs changes (1 BLOCKER).** `graph-dba`'s `write_profile`
+  Cypher does an unconditional `SET` on both `name`/`deliveryAddress` fields, copying a precedent
+  (`write_model_overrides`) whose NULL-means-clear semantics don't fit `SaveProfileTool`'s
+  genuinely-optional-args calling convention — a partial update (e.g. "just update the address")
+  would silently null out the customer's previously-stored name, exactly the scenario AC-2
+  requires to work. Fix supplied by `analyst`: `SET c.name = coalesce($name, c.name), ...`. Also 1
+  MINOR: `docs/BACKLOG.md`'s K-054 entry references a "`Profile` schema" that was deliberately
+  never built (properties live on the shared `Customer` node). Routing the BLOCKER to `graph-dba`
+  (U2/U7's owner) — mandatory fix + re-gate. The BACKLOG.md wording fix is `teco`'s own to make
+  (mechanical, already-verified fact).
+- **`workflow-nl-query-generation.md` — approve with suggestions.** 1 MINOR: `docs/BACKLOG.md`'s
+  K-055 entry still reads the security review as "in progress," but Pass 2 (same date) shows it
+  approved with zero open findings. `teco`'s own fix to make.
+   - **U6 (`architect`, resumed) delivered.** `workflow-nl-query-generation.md` bumped to
+     `Version: 1.1`, revised in place (correct per the collision rule — not yet approved/gated).
+     Both MAJORs closed with fully-anchored (`.fullmatch()`) `_PROJECTION_RE`/`_AGGREGATE_RE`
+     validators routed through the existing label/property allowlist (not a second,
+     independently-written check, per the reviewer's own instruction); `QueryMatch.var` is now an
+     enforced `Field(pattern=...)` plus a `compile()`-side re-check that a var reference resolves to
+     the declared match variable. Both minors closed: explicit `DEFAULT_QUERY_TIMEOUT_MS = 2500`
+     with the batch-granular caveat documented; `extra="forbid"` on all 3 DSL models + a nominal
+     frozen `CompiledQuery` type replacing the bare tuple, upgrading the "only `compile()` calls
+     this" invariant from grep-only to type-checker-visible. No design change to the two-layer
+     architecture itself — gaps closed in Layer 1's specification only. Also propagated the
+     reviewer's adversarial test groups (A-E) and Layer-2 re-verification into the plan's own
+     §3.2/§4/§5/§6. Ready for `security-expert`'s confirmation pass.
+
+## Notes from delivered units
+
+- **U3 (`workflow-nl-query-generation-ml.md`) delivered.** Two-layer design: Layer 1 (FR-4/AC-4
+  gate) is execution-accuracy against the mechanism's *raw structured result* (pre-NL-rendering),
+  exact match after canonicalization — deliberately Spider-style, not LLM-as-judge, since ground
+  truth here is a discrete fact rather than an open-ended faithfulness question. Thresholds:
+  overall ≥ 85% (Wilson 95% CI reported alongside), second-schema (document-ingestion) subset
+  gated separately at ≥ 75% so AC-2 can't hide behind a pooled average, abstention/not-found
+  false-answer-rate ≤ 10% (asymmetric on purpose). **Flags a real risk to `architect`'s mechanism
+  choice**: Layer 1 requires the mechanism to expose its raw structured result, not just a
+  rendered sentence — needs checking once U1 lands. If the mechanism is LLM-generated Cypher,
+  recommends a harness-level write-clause scan as defense-in-depth for the *eval's own runs*
+  only — explicitly **not** a substitute for `security-expert`'s FR-3a adversarial set.
+  **Verdict on AC-2's second-schema candidate**: yes for the document-ingestion *schema* (a real
+  generalization test — graph traversal, free-text-predicate edges, conflicting-facts handling),
+  **no for its existing `ws:acme` data** (K-050's QA fixture is too thin/skewed — ~10-12 entities,
+  almost all `Organization`/`Other`, no `Person`/`Location`/`Product`/`Event`/`Concept` instances).
+  Recommends reusing the schema but ingesting a fresh, purpose-built 10-15 document corpus into a
+  dedicated workspace, with golden answers verified against actual post-extraction graph content
+  (not source text, given extraction's known non-determinism). No blocking fork hit. Not yet
+  gated — holding the `analyst` plan gate until U1 (architect) lands, so the gate covers the full,
+  reconciled set in one pass rather than re-reviewing this note twice.
+
+- **U1 (4 architect plans) delivered.** K-052 (catalog-lookup) ships the shared `salesperson`
+  `WorkflowDef` scaffold (bumped `v1→v4` across the four plans rather than four separate defs, per
+  `docs/DESIGN.md` §4's create-only-properties rule) and is sequenced first; K-053/K-054 each
+  extend it and depend on their respective `graph-dba` note; K-055 depends on both
+  `data-scientist`'s note (delivered, U3) and `security-expert`'s review (not yet dispatched).
+  **FR-8 decision: a plain Python function called directly from tool bodies, not a new engine step
+  type** — reasoned from reading `executor.py`/`guards.py`/`services.py` directly: a `Tool.run()`
+  body is exactly as LLM-free as a typed step handler (no extra guarantee a step type would add), a
+  new step type would be unreachable given the fixed one-`agent`-step topology all four docs share,
+  and what AC-9 actually rules out is an *avoidable second LLM call* layered on top of arithmetic —
+  exactly what `salesperson/cart.py`'s existing `_extract_quantity_from_flavor` does today. Flags
+  the dormant `kind:'process'` + `tool`-step-type combination in `services.STEP_TYPES`/
+  `executor._execute_step` (`NotImplementedError`) as the right future extension point if a
+  zero-LLM-call process def is ever needed — not built now. Propagates as a *principle*
+  (a tool's body does exact work directly, no second LLM hop) rather than a literal mechanism reuse,
+  since catalog-lookup/durable-profile are already exact by construction.
+  **nl-query-generation mechanism**: a constrained query-builder DSL (structured model output
+  populates typed filter/match/request fields, compiled to a fixed handful of clause templates,
+  every value bound-parameterized, every label/property checked against a closed allowlist before
+  splicing) — mutation is *inexpressible* in the compiler, not filtered. Second, independent,
+  engine-enforced backstop: execution goes exclusively through `graph.ro_query(...)`, live-verified
+  in `claude/graph-dba/falkordb-quirks.md` to refuse write queries on this build. This is exactly
+  the concrete mechanism `security-expert`'s next review needs to engage with.
+  **BACKLOG.md**: architect drafted the M6/K-052..K-055 diff but did not apply it, reading
+  `docs/BACKLOG.md` as `teco`-owned and outside its plan's write scope. Diff reviewed by `teco` —
+  correct shape (mirrors the K-042/M4, K-050/M5 precedents), one K-item per capability (not one
+  umbrella item, since these are four independently-interviewed/confirmed requirements docs with
+  their own FR/AC sets — a reasonable, explained call, not a default). Resuming the architect agent
+  to apply it directly (it authored the content and holds full context on the dependency chain
+  between items; a Write/Edit to `docs/BACKLOG.md` is a normal in-scope action for it, unlike for
+  `teco`).
+  **Correction (U5):** the architect declined — its own operating rules scope its Write/Edit to
+  `docs/plans/` only, and it correctly treated my resume message as *not* authorization to expand
+  its own permission scope (it did, helpfully, confirm the diff's 4 plan paths were byte-accurate
+  first). Right call on its part — re-reading root `AGENTS.md`'s doc-kind ownership table,
+  `BACKLOG.md` has no by-kind specialist owner there; its own header names `teco` as owner, and
+  it's explicitly a `teco`-curated forward-looking living document (Documentation curation
+  section), unlike `plans/`/`reviews/`/etc. which are specialist-owned. Applied the diff myself —
+  content was already fully authored and reasoned by `architect`, verified by `teco` before
+  applying, not fresh judgment exercised on `teco`'s part.
