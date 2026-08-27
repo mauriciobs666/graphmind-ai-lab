@@ -1,6 +1,7 @@
 # LLM Provider & Model Configuration — Feature Requirements
 
 > **Status:** archived · **Owner:** `tico` · **Tracks:** K-042 (M4) · **Last updated:** 2026-08-10
+> **Superseded by:** [`llm-provider-config2.md`](./llm-provider-config2.md) (FR-10/AC-8 wording correction, K-045)
 
 ## Intent
 
