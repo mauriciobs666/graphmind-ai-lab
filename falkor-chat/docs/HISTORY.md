@@ -5,6 +5,47 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-26 — K-049: app-side guard against the FalkorDB `UNIQUE`-constraint oversized-value crash
+
+**What:** `tdd-engineer` closed K-049 — a shared-instance FalkorDB crash first found during K-028
+(an oversized `Step.key` SIGSEGVed the whole `redis-server` process, not just the query). Root
+cause had already been established and `analyst`-approved on 2026-08-21
+(`docs/reviews/unique-constraint-oversized-value-crash-rca.md`): FalkorDB v4.18.11 segfaults the
+entire instance — a null-pointer dereference in `EnforceUniqueEntity` — when a `CREATE`/`MERGE`
+commits a value >4096 bytes into a property backed by a `GRAPH.CONSTRAINT ... UNIQUE` constraint.
+Independently reproduced three times total, always in disposable containers, never against
+`falkordb-dev`: the original RCA, the `analyst` gate on it, and a third confirmation by `graph-dba`
+on 2026-08-26 while finalizing the fix design (`docs/plans/oversized-indexed-property-guard-graph.md`)
+— `falkor-chat`'s coordination and backlog text had never been updated after the original RCA
+landed, so this work opened believing root cause was still unestablished; that was corrected in
+place once found (`docs/plans/oversized-indexed-property-guard-coordination.md`).
+
+**Fix:** REST is not exposed to this crash (`schemas.py`'s `MAX_KEY_LEN = 200` already bounds every
+field reaching a constrained property via `publish_workflow_def`) — the gap was every non-REST
+caller (tests, scripts, a future MCP tool) and the `materialize_def` path, neither of which had a
+service-layer length check. A new `Services._validate_key_lengths` helper (reusing `MAX_KEY_LEN`,
+mirroring the existing `MAX_CONFIG_LEN` service-layer-mirror precedent) is now called from both
+`publish_workflow_def` and `materialize_def`, raising `WorkflowDefSpecError` before any Cypher
+reaches the graph. Deliberately does not bound `transition.on` — it never feeds `Step.stepUid`'s
+`MERGE` key, so it isn't at risk of this crash class. `api.py`'s materialize route also gained the
+`Path(max_length=...)` bound its sibling route already had.
+
+**Tests:** a 5-case parametrized publish test (oversized key/version/step-key/transition-from/
+transition-to), a negative-space test proving `transition.on` is deliberately excluded, a
+`materialize_def` test planting an oversized key directly into stored `reference` data (simulating
+a corrupted/hand-edited def bypassing publish), and two REST 422 tests. Mutation-tested in two
+rounds — the first caught a real test-construction bug (two cases were passing for the wrong
+reason, via a pre-existing unrelated check) — fixed before the second, clean round. Full offline
+suite: 1782 passed, 4 deselected (`-m live` only).
+
+**Review:** `analyst` gated in three passes on the same review document — Pass 1 (2026-08-21,
+original RCA, approve with suggestions), Pass 2 (2026-08-26, scoped gate on the finalized design,
+approve with suggestions — two minor citation/audit-completeness findings, both folded into the
+implementation brief), Pass 3 (2026-08-26, diff review, **approve**, no blockers — independently
+re-ran the full suite and confirmed the exact pass count, verified the guard is unbypassable on
+both write paths). Upstream FalkorDB issue filing recommended to the user (genuine engine defect);
+not filed by any agent.
+
 ## 2026-08-26 — K-045: `llm-provider-config` FR-10/AC-8 wording corrected against shipped behavior
 
 **What:** `tico` corrected the stale "the run suspends" wording in

@@ -353,3 +353,219 @@ it as a fresh discovery. The upstream-report section (§7) is complete enough to
 None — nothing here needs a stakeholder decision. The two findings above are both self-contained,
 low-stakes fixes the next person touching this RCA (or its §6 fix pass) can apply without further
 input.
+
+## Pass 2 — 2026-08-26 (`analyst` gate, scoped to the finalization doc)
+
+**Scope.** Review of `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md`
+(`graph-dba`'s confirmation + finalization pass over this RCA) — not a re-derivation of the crash
+mechanism, which is not in question after three independent reproductions (this RCA, Pass 1 above,
+and that document's own fresh repro today). Checked: (1) the line citations that document claims to
+have corrected, against live source; (2) the newly-confirmed `api.py` `Path()`-bound gap and its
+threat-model reasoning; (3) completeness/correctness/safety of the finalized guard design (its §5);
+(4) sufficiency of its test strategy (§6). Did not re-run any container repro.
+
+`CPG: considered, not relevant — cpg_falkorchat is fresh (rebuilt today) but this is a narrow,
+concrete citation-accuracy and design-completeness check; grepping every caller of
+_validate_def_spec/materialize_snapshot/_PUBLISH_CYPHER directly was faster and no less reliable
+than a call-graph traversal, and I did it.`
+
+**Verdict: approve with suggestions.** No blockers — `tdd-engineer` should proceed against §5 as
+written. Two new minor findings, both citation-precision rather than design-soundness; neither
+should block starting the work, both are cheap to fold into the same diff.
+
+### Corrected line citations — VERIFIED, with two new precision misses of its own
+
+The three citations this document set out to fix are now correct, verified directly against live
+source: `services.py:1641` (`materialize_def`), `repository.py:2561` (`materialize_snapshot`),
+`repository.py:1721` (`_PUBLISH_CYPHER`). Also spot-checked every other citation threaded through
+its §5 design: `services.py:1294`/`:1574`/`:1602`/`:1662`/`:1678` and `api.py:369-373` — all exact.
+
+**New minor finding — two `schemas.py` field citations in §4 are themselves off by 1-2 lines.**
+"`WorkflowStepIn.key` (`:108`)" actually names `config`'s line — `key` is at `:106`.
+"`WorkflowTransitionIn.from_/to/on` (`:116-118`)" is shifted +1 — the real lines are `:115-117`
+(`:118` is `guard`). Verified directly against `server/falkorchat/schemas.py:105-119`. The
+underlying claim (`MAX_KEY_LEN` bounds these fields) is still correct — this is exactly the
+citation-accuracy defect class this document's §4 exists to fix elsewhere, just missed here; Pass 1
+above didn't check these either (it only verified the `materialize_def`/`materialize_snapshot` pair).
+Suggested fix: correct to `:106` and `:115-117` in the same diff that lands the guard.
+
+### Newly-confirmed `api.py` gap — CONFIRMED real, threat-model reasoning sound
+
+Read `api.py:369-373` directly: `materialize_def(key: str, version: str, ...)` has no `Path()`
+bound at all, unlike sibling `get_workflow_def_structure` (`:362-364`,
+`Path(..., min_length=1, max_length=MAX_KEY_LEN)` on both params) — confirmed. The document's
+threat-model claim — this can't open a *new* crash vector because `read_def_subgraph` is an
+exact-match `MATCH` (confirmed at `repository.py:1886-1894`, returns `None` → 404 on no match), so
+an oversized path param only matters if an already-oversized def is already sitting in `reference`
+(itself only reachable via the already-scoped non-REST bypass) — holds.
+
+### Guard design (§5) — complete and correct, with one gap in its own audit trail
+
+**Dict-shape compatibility across both call sites — confirmed, not previously checked by anyone.**
+Traced both callers' data shapes end-to-end: `publish_workflow_def`'s `steps`/`transitions` (built
+at `api.py:321-322` via `body.steps[].model_dump()` / `body.transitions[].model_dump(by_alias=True)`
+— transition dicts carry the wire alias `"from"`, not `from_`) and `materialize_def`'s
+`sub["steps"]`/`sub["transitions"]` (from `repository.py`'s `_READ_META_CYPHER`/
+`_READ_TRANSITIONS_CYPHER`, `:1749-1756`, `collect()`-mapped with identical keys: `key`/`type`/
+`config` for steps, `from`/`to`/`on`/`guard`/`order` for transitions). The one shared
+`_validate_key_lengths(key, version, steps, transitions)` helper §5.1 proposes is dict-key-compatible
+with both call sites as designed — a mismatch here would have silently no-op'd the guard on one path,
+so this was worth independently verifying rather than trusting the design's own say-so.
+
+**`on`-exclusion — confirmed correct, but the document's own supporting evidence for it is stale.**
+§5.1 excludes `tr["on"]` because it never feeds a `UNIQUE`-constrained property. Confirmed two ways:
+(1) `_PUBLISH_CYPHER`'s `MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to)` uses `on`
+only inside a relationship match key, and (2) `scripts/bootstrap_schema.sh` has **zero** index or
+constraint of any kind on `TRANSITION` (`grep -n TRANSITION scripts/bootstrap_schema.sh` → no
+matches) — so per the RCA's own established mechanism (§4: only constraint-enforcement crashes, a
+bare `MERGE` with no backing constraint is safe), `on` is provably safe. **But** the document's
+cited evidence for this — "`grep -n RELATIONSHIP scripts/bootstrap_schema.sh` → no matches" — is
+false today: `scripts/bootstrap_schema.sh:215` has carried
+`gconstraint "$g" UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId` since 2026-08-24 (commit
+`8d7dcfb`, K-050 document-ingestion work) — two days before this document was written. Pass 1's
+identical claim on 2026-08-21 was true *when made*; the schema changed afterward, and this document
+repeated the now-stale claim without re-running the grep it cites, in a document whose entire stated
+purpose is closing exactly this kind of staleness. The design's conclusion is still correct, for an
+unrelated reason: `matchId` is server-minted (`uuid.uuid4().hex`, confirmed at `ingestion.py:49-50`/
+`:198`) — same pattern as every ID already in the RCA's §6 item 5 / this document's §5 scope-check
+list — but `matchId` is not actually named in either list, so that list is not the exhaustive audit
+it presents itself as. Suggested fix: correct the grep claim, and add `matchId` to the "server-minted,
+safe by construction" enumeration in §5's scope check.
+
+**Ordering nit, not blocking.** §5.2 places the new length check ahead of every existing check in
+`_validate_def_spec`, including the pre-existing structural batch. The reasoning (a length bound is
+structural, not one of the "five further invariants" the docstring's own ordering rule protects) is
+sound, but that rule's load-bearing property — an older check must keep failing for its own reason —
+technically extends to this insertion too: a hypothetical fixture that is both oversized and invalid
+for an unrelated reason would now fail on length first. Low risk given `MAX_KEY_LEN=200` makes
+accidental overlap unlikely; worth `tdd-engineer` running the full existing suite once this lands and
+watching for any test asserting a *different* error message on a spec that happens to carry a long
+key.
+
+### Test strategy (§6) — sufficient
+
+Confirmed the no-live-crash property holds by construction: `WorkflowDefSpecError` is raised before
+any repository call on every path this guard covers (§5.2/§5.3 both insert the check before their
+respective write calls). Confirmed the trickiest bullet — "`materialize_def` raises
+`WorkflowDefSpecError` when the *stored* `reference` def already carries an oversized key" — is safe
+to test with a real repository fixture without crash risk: a planted key of, say, 300 characters
+(over the guard's own `MAX_KEY_LEN=200` threshold) is nowhere near the 4096-byte engine cliff, so
+this fixture cannot itself trigger the crash it exists to guard against. Confirmed
+`WorkflowDefSpecError` is handled by one global FastAPI handler (`app.py:94-98` → 400), not
+per-route, so `materialize_def` gets correct REST behavior with zero extra wiring once it raises the
+same exception type — the REST `422` case in §6's last bullet is a distinct, already-correct path
+(pydantic `Path()` validation). No gaps found.
+
+### What's solid
+
+Everything Pass 1 already covered stands, unchanged — not re-argued here. New to this pass: the
+shared-helper's dict-shape compatibility across both call sites (verified, not previously checked),
+and the `on`-exclusion mechanism (independently re-derived via the actual Cypher plus a fresh
+constraint grep, not taken on the RCA's/Pass 1's say-so). The document's own §1 is honest about what
+it didn't re-verify (the composite/write-shape rows) rather than overclaiming a full re-derivation.
+
+### Open questions
+
+None.
+
+## Pass 3 — 2026-08-26 (`analyst` gate, diff review)
+
+**Scope.** Diff-level review of `tdd-engineer`'s U2 implementation against Pass 2's finalized §5
+design (`docs/plans/oversized-indexed-property-guard-graph.md`) — working-tree diff (uncommitted),
+not a commit range, against: `server/falkorchat/services.py`, `server/falkorchat/api.py`,
+`server/falkorchat/schemas.py`, `server/tests/test_services.py`, `server/tests/test_api.py`. Not a
+re-derivation of the crash mechanism or design soundness (both closed at Pass 1/Pass 2) — verifying
+the actual code, that the guard is unconditionally on both write paths, that the new tests test what
+they claim, and that the reported suite run is real.
+
+`CPG: considered, not relevant — cpg_falkorchat was rebuilt today (fresh), but the question this pass
+needed ("is there any other caller of _PUBLISH_CYPHER/materialize_snapshot/publish_def besides the
+two guarded call sites") is answered exhaustively and faster by grep than a traversal, and I did it
+(`grep -rn "_validate_def_spec(\|materialize_snapshot(\|publish_def(\|_PUBLISH_CYPHER" falkorchat/*.py`
+— exactly two write call sites, both guarded, confirmed below).`
+
+**Verdict: approve.** No blockers, no new findings — ready to commit and close K-049.
+
+### Guard wiring — CONFIRMED, both paths, no bypass
+
+Read `services.py`'s diff directly: `_validate_key_lengths(key, version, steps, transitions)` is
+called at `services.py:1662` (top of `publish_workflow_def`, before `self._validate_def_spec(...)`
+at `:1663` and `self._repo.publish_def(...)` at `:1697`), and at `services.py:1733`
+(`materialize_def`, right after `sub = self._repo.read_def_subgraph(...)` and before
+`read_snapshot_structure`/`_check_no_structural_conflict`/`self._repo.materialize_snapshot(...)`).
+Grepped every caller of `_PUBLISH_CYPHER`/`materialize_snapshot`/`publish_def` across
+`falkorchat/*.py`: exactly two write call sites exist (`repository.py:1873` from
+`services.py:1697`, `repository.py:2581` from `services.py:1746`), both downstream of the two guard
+calls just verified — no code path reaches either write without passing through
+`_validate_key_lengths` first. Matches §5.2/§5.3 exactly, including implementer's choice of design
+option (b) (separate call, not folded into `_validate_def_spec`'s signature).
+
+### `transition.on` exclusion — CONFIRMED unchanged from Pass 2
+
+`_validate_key_lengths` checks only `key`, `version`, `step["key"]`, and `tr["from"]`/`tr["to"]` —
+`tr["on"]` is not referenced anywhere in the helper, matching §5.1. Nothing in the diff touches
+`bootstrap_schema.sh` or the `on`-exclusion's underlying mechanism, so Pass 2's confirmation stands.
+
+### New tests — verified sound, not just self-reported
+
+Traced the masking failure mode the kaizen entry describes and confirmed the *current* test file
+avoids it: the 5-case parametrized publish test (`test_services.py:1733+`) declares the oversized
+transition-`from`/`to` cases with the oversized value **only** as a transition endpoint, deliberately
+never also as a declared step key — so if `_validate_key_lengths` were removed, `_validate_def_spec`
+would instead raise `WorkflowDefSpecError` for "transition from 'xxx...' is not a declared step key"
+(the dangling-endpoint check), a message that does **not** match the test's own `match=r"^transition
+'from' would be \d+ characters, over the"` regex — so the test would correctly go red, not
+accidentally green, on a disabled guard. Same check for the isolated-step case
+(`OVERSIZED_ISOLATED_STEP`, never referenced by any transition): with the guard disabled, no other
+check in `_validate_def_spec` would fire on an unreferenced extra step, so `pytest.raises` would
+correctly fail. Independently re-derived this — did not just trust the inline comments — by reading
+`_validate_def_spec`'s actual body (`services.py:1319-1370`) alongside the test file. Confirmed the
+kaizen entry logged for this (`kaizen_team`, `tdd-engineer`, entryId `b3e2f6a1-...`, dated
+2026-08-26) exists and its stated fact matches the diff's actual fix — not fabricated after the fact.
+The `materialize_def` corrupted-data test plants an oversized key directly into `FakeRepo.defs`
+(bypassing `publish_workflow_def` entirely, matching the design's own threat model) and asserts
+`repo.materialized == []`, confirmed reachable only after `read_def_subgraph` returns non-`None` and
+before `materialize_snapshot` would otherwise run. The `on`-not-bounded negative-space test asserts a
+successful publish (`len(repo.published) == 1`) with an oversized `on` — correctly proves the guard's
+scope stays as narrow as designed rather than silently over-reaching.
+
+### Suite run — CONFIRMED independently, not accepted on report
+
+Ran `.venv/bin/python -m pytest -q` myself: **1782 passed, 4 deselected, 1 warning in 15.28s** —
+exact match to `tdd-engineer`'s reported count. As documented in `falkor-chat/AGENTS.md`, this wiped
+`reference` (`verify_workflows.sh` afterward showed both `triage@v1`/`access-request@v1` `MISSING` in
+`reference` while `ws:acme` snapshots survived) — restored via
+`bootstrap_schema.sh acme` → `seed_demo.sh acme` → `seed_workflows.sh acme`, then re-ran
+`verify_workflows.sh` and confirmed `RESULT: OK — 2 defs in sync`. `falkordb-dev` was up throughout
+and untouched by this destructive step (only its `reference` graph was affected by the test suite
+itself, a known, documented hazard — not something this review introduced beyond the expected
+consequence of running the suite).
+
+### Design-conformance check — no missed scope, nothing extra
+
+Every §5 sub-item lands: 5.1 (shared helper, `MAX_KEY_LEN` import added to `services.py`'s existing
+`.schemas` import block, `on` excluded), 5.2 (called in `publish_workflow_def` before
+`_validate_def_spec`, option (b) — a separate line, not a signature change), 5.3
+(`materialize_def`'s gap closed, `WorkflowDefSpecError` added to its docstring's documented error
+surface), 5.4 (`api.py`'s materialize route gained the matching `Path(min_length=1,
+max_length=MAX_KEY_LEN)`, byte-identical to the sibling route's pattern, no new import needed —
+`Path`/`MAX_KEY_LEN` were already imported), 5.5 (one-line comment landed at `schemas.py`'s
+`MAX_KEY_LEN` definition citing the 4096-byte boundary and this RCA). §6's test strategy is fully
+covered (four parametrized publish cases plus the `on`-exclusion negative test, the
+`materialize_def` corrupted-data case, two REST 422 tests) — nothing extra beyond what §5/§6 called
+for, no scope creep (the deliberate `on` exclusion was not second-guessed into an unnecessary bound).
+
+### What's solid
+
+Everything Pass 1/Pass 2 covered stands. New to this pass: the guard is genuinely unconditional on
+both write paths (traced, not assumed); the masking bug the mutation-testing round caught is
+genuinely fixed in the tests as they exist now, verified by independently re-deriving what
+`_validate_def_spec` would do with the guard removed, not by trusting the self-report or the inline
+comments alone; the kaizen entry's content matches the actual diff; the suite count is independently
+reproduced.
+
+### Open questions
+
+None — this closes K-049's harden phase. Recommend `teco` proceed to commit this diff and perform
+the close-out steps already noted in the coordination doc (remove K-049 from `BACKLOG.md`, add a
+`HISTORY.md` entry).

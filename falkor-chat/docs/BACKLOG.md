@@ -370,46 +370,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-044 — Decide whether an admin manual (`docs/manuals/llm-provider-config.md`) is wanted (🔵 proposed — filed out of K-042 close, 2026-08-11)
-
-> **Why it exists.** `tico` flagged, while archiving K-042's requirements document, that no
-> end-user-facing manual was written for LLM provider/model configuration — the two config files,
-> per-kind defaults, roles/fallback chains, workspace override precedence, and how to read the
-> resolved model off a run's trace are all documented at requirements/plan altitude
-> (`docs/requirements/llm-provider-config.md`, `docs/plans/llm-provider-config.md`) but not at the
-> operator-facing altitude `docs/manuals/` is for (per root `AGENTS.md`'s documentation convention).
-> This was never raised to the stakeholder as a decision point — it's an open call, not a commitment.
-- **Owner:** **`tico`** — decide whether the audience (whoever hand-edits the two config files) needs
-  a manual, or whether the existing `README.md` config section is sufficient; if yes, author
-  `docs/manuals/llm-provider-config.md` per the family-slug convention (this feature's slug already
-  spans requirements/plans/reviews/test-plans/test-reports, so a manual would join that family).
-- **Scope:** a stakeholder check-in on whether this is wanted, then (if yes) write the manual,
-  illustrated with a diagram of the precedence chain (workspace → step/agent/guard's own choice →
-  per-kind default) where a picture beats prose.
-- **Risks/RAM:** none — documentation only.
-- **Test strategy:** N/A (docs); if written, a `qa-engineer` walkthrough of the manual's steps against
-  the running system per the standard manual-verification pattern.
-
-### K-045 — FR-10's requirements text ("the run suspends") is stale against the shipped `failed`-with-cause behavior (🔵 proposed — filed out of K-042 close, 2026-08-11)
-
-> **Why it exists.** `docs/requirements/llm-provider-config.md` FR-10 reads "An unresolvable model
-> encountered at **use time** fails loudly — the run suspends…". The shipped Landing 2 behavior
-> (confirmed by U7's QA acceptance pass and D-2's fix) is that a use-time resolution/provider failure
-> fails the run with a recorded cause (`status='failed'`), not a suspend/park state — the same
-> failure vocabulary as the executor's other terminal faults, not the human/wait "suspend and wait for
-> a signal" semantics FR-10's wording evokes. `tico` flagged the drift while flipping the requirements
-> document's header to `Status: archived`, but an archived document's metadata-only edit (the one
-> kind of edit `archived` permits) cannot fix stale body text.
-- **Owner:** **`tico`** — since the source document is `archived`, this needs a deliberate choice per
-  root `AGENTS.md`'s collision rules: either a successor requirements document (new document,
-  `Supersedes:`/`Superseded by:` pointers) correcting the wording, or a deliberate un-archive (only if
-  the original owner chain agrees the fix is a trivial in-place correction rather than a substantive
-  change) — not a silent edit to the archived file.
-- **Scope:** correct FR-10's language to match the shipped `failed`-with-cause behavior; no code
-  change implied — this is a documentation-accuracy item only.
-- **Risks/RAM:** none — documentation only.
-- **Test strategy:** N/A (docs).
-
 ### K-048 — `executor._assemble_messages`'s unconditional trailing `user`-role `CONTEXT` block breaks strict-alternation chat templates (🔵 proposed — found during the K-027 item 5 Ministral re-probe, `data-scientist`, 2026-08-20)
 
 > **Why it exists.** `WorkflowExecutor._assemble_messages` (`server/falkorchat/executor.py:910-931`)
@@ -464,42 +424,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   today); a live/replay-level regression check (mirroring `docs/plans/ministral-reprobe-ml.md` §4.2's
   own repro) that the fixed shape no longer 400s against a strict-alternation template, without
   requiring a live Ministral instance to be part of the standing suite.
-
-### K-049 — An oversized value on an *indexed* graph property crashes the shared FalkorDB instance outright (🔵 proposed — found during the K-028 workflow-timers implementation, `coder`, 2026-08-21)
-
-> **Why it exists.** While building K-028's ctx-merge length-bound test (`test_workflow_timers.py`),
-> `coder`'s first attempt used a deliberately oversized **`Step.key`** — an indexed/constrained graph
-> property (`falkor-chat/AGENTS.md`'s schema convention: "every entity node has a stable
-> `{label}Id` property, a range index, and a uniqueness constraint") — to trigger the length check.
-> Publishing that def **crashed the shared dev `falkordb-dev` container outright**: the connection
-> dropped mid-request and the `--rm` container vanished entirely from `docker ps -a`, reproduced
-> **twice** across independent restarts. Root cause not established — `--rm` meant no logs survived
-> the crash instant. `coder` worked around it for K-028's own purposes by switching the trigger to
-> an oversized **ctx** value instead (opaque, unindexed, confirmed safe) — K-028 itself never writes
-> an unbounded value to an indexed property, so this is not a K-028 defect, but the underlying engine
-> behavior is real and unresolved.
-- **Why it matters beyond K-028.** This is a **shared-instance** reliability risk: the same
-  `falkordb-dev` container also hosts `cpg_falkorchat`, `kaizen_team`, and every workspace graph any
-  agent is actively using. Any future def/data with an oversized value on *any* indexed/constrained
-  property (not just `Step.key`) could reproduce this — a crash-on-write footgun with a blast radius
-  well outside whatever feature happens to trigger it.
-- **Owner:** **`graph-dba`** — root-cause (reproduce deliberately in an isolated/throwaway container,
-  not the shared dev instance; capture logs by dropping `--rm` for the repro run; identify whether
-  this is a FalkorDB engine limit, a resource-exhaustion crash, or something else) → harden (an
-  app-side length guard before any indexed-property write reaches the graph, and/or an upstream
-  FalkorDB issue filing per the existing `K-007 OQ6`-style precedent for confirmed engine anomalies).
-- **Scope sketch (to be designed, not decided here):** confirm reproducibility in isolation; bound
-  the actual failure mode (a specific length threshold? any oversized value? specific to
-  indexed/constrained properties or broader?); decide the fix layer — likely an app-side
-  `MAX_*_LEN`-style guard on every indexed/constrained-property write path (`services.py`'s existing
-  `MAX_ID_LEN`/`MAX_CONFIG_LEN` precedent), mirrored to cover step keys, def keys, and any other
-  indexed identifier, not just workflow `ctx`/`config`.
-- **Risks:** the shared dev instance itself — reproduce only in a disposable/isolated container, never
-  against `falkordb-dev` while other agents may depend on it (`kaizen_team`, `cpg_falkorchat`, live
-  workspaces).
-- **Test strategy:** an isolated-container repro proving the crash and capturing logs (no `--rm`);
-  once root-caused, a regression test proving the chosen guard rejects the offending shape before it
-  ever reaches a graph write.
 
 ## Deferred — M2.5 hardening track
 
