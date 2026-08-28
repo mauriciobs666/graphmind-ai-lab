@@ -184,7 +184,7 @@ params) plus its cheap observability signal (§4.1), live-verify against D-1's r
 as U36's own method, gate with `analyst`, then **stop — no K-053 dispatch this session** regardless
 of gate outcome (report back either way).
 
-| U37 | `tdd-engineer` (fresh) | — | queued | fix D-1: replay-history tool-use breadcrumb + observability signal, live-verified against the repro | `analyst` (U38) → — | — |
+| U37 | `tdd-engineer` (fresh) | `ab5e9e9d5e1819c78` | in-flight | fix D-1: replay-history tool-use breadcrumb + observability signal, live-verified against the repro | `analyst` (U38) → — | — |
 | U38 | `analyst` (fresh) | — | queued | diff-scoped review, U37's fix | — | — |
 
 **Correction to the report's own cross-reference:** the report calls D-1 "already flagged as a
