@@ -2840,7 +2840,13 @@ def test_lookup_product_exact_name_hit(conn, wf_repo):
 
     row = wf_repo.lookup_product(name_normalized="bluetooth speaker")
 
-    assert row == {"name": "Bluetooth Speaker", "category": "Audio", "price": 89.99}
+    # K-053 M6: `lookup_product` now also returns `productId` (additive,
+    # backward-compatible — see the method's own docstring) so
+    # `services.add_cart_item` can key the `CartItem` on it.
+    assert row == {
+        "productId": "prod2", "name": "Bluetooth Speaker",
+        "category": "Audio", "price": 89.99,
+    }
 
 
 def test_lookup_product_abstains_when_absent(conn, wf_repo):
@@ -2856,6 +2862,43 @@ def test_lookup_product_productid_constraint_blocks_duplicate(conn, wf_repo):
         db.reference_graph(conn).query(
             "CREATE (:Product {productId: 'prod1', name: 'Imposter'})"
         )
+
+
+# ── `lookup_products_by_id` (K-053 M6) ────────────────────────────────────────
+#
+# Batch current name/price resolution by `productId` — the two-graph read
+# `get_cart`/`place_order` need (`workflow-cart-and-totals-graph.md` §6). See
+# the method's own docstring for the `MATCH`-not-`OPTIONAL MATCH` rationale.
+
+def test_lookup_products_by_id_resolves_multiple_in_one_call(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.lookup_products_by_id(product_ids=["prod1", "prod2"])
+
+    assert sorted(rows, key=lambda r: r["productId"]) == [
+        {"productId": "prod1", "name": "Wireless Mouse", "price": 25.0},
+        {"productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99},
+    ]
+
+
+def test_lookup_products_by_id_missing_id_produces_no_row_for_it(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.lookup_products_by_id(product_ids=["prod1", "nonexistent-id"])
+
+    assert rows == [{"productId": "prod1", "name": "Wireless Mouse", "price": 25.0}]
+
+
+def test_lookup_products_by_id_empty_list_short_circuits_without_a_query(conn, wf_repo):
+    _seed_products(conn)
+
+    assert wf_repo.lookup_products_by_id(product_ids=[]) == []
+
+
+def test_lookup_products_by_id_no_matches_at_all_returns_empty_list(conn, wf_repo):
+    _seed_products(conn)
+
+    assert wf_repo.lookup_products_by_id(product_ids=["nope1", "nope2"]) == []
 
 
 def test_filter_products_unfiltered_lists_whole_catalog_price_ascending(conn, wf_repo):

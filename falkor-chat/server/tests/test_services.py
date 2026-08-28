@@ -34,6 +34,7 @@ from falkorchat.services import (
     ThreadNotFoundError,
     UnknownActorError,
     UnknownMemberError,
+    UnknownOrderTransitionError,
     WorkflowDefConflictError,
     WorkflowRunNotFoundError,
     _diff_structures,
@@ -96,6 +97,15 @@ class FakeRepo:
         # `products` (a flat list of {name, category, price} dicts) backs filter_products.
         self.products_by_name: dict[str, dict] = {}
         self.products: list[dict] = []
+        # §16 Cart / Order (K-053 M6) — see the methods below for the exact
+        # (simplified but faithful) semantics each mirrors from `repository.py`.
+        self.customers: set[str] = set()
+        self.customer_created_at: dict[str, int] = {}
+        self.carts: set[str] = set()
+        self.cart_created_at: dict[str, int] = {}
+        self.cart_items: dict[str, dict[str, dict]] = {}  # customerId -> {productId: line}
+        self.products_by_id: dict[str, dict] = {}  # productId -> {"name", "price"}
+        self.orders: dict[str, dict] = {}  # orderId -> order state
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -408,6 +418,124 @@ class FakeRepo:
             and (max_price is None or p["price"] <= max_price)
         ]
         return sorted(rows, key=lambda p: p["price"])[:limit]
+
+    # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
+    #
+    # Simplified but semantically faithful to `repository.py` §16 (mirrors the
+    # graph note's `[verified]` Cypher shapes): `ensure_cart`/`add_to_cart`
+    # return `None` with no `Customer`/`Cart` respectively; `place_order`
+    # raises with no `Customer` (never a silent no-op); a guarded lifecycle
+    # CAS returns `None` on a status mismatch.
+
+    def ensure_customer(self, ws, *, customer_id, now):
+        self.calls.append(("ensure_customer", customer_id, now))
+        if customer_id not in self.customers:
+            self.customers.add(customer_id)
+            self.customer_created_at[customer_id] = now
+        return {"customerId": customer_id, "createdAt": self.customer_created_at[customer_id]}
+
+    def ensure_cart(self, ws, *, customer_id, now):
+        self.calls.append(("ensure_cart", customer_id, now))
+        if customer_id not in self.customers:
+            return None
+        if customer_id not in self.carts:
+            self.carts.add(customer_id)
+            self.cart_created_at[customer_id] = now
+            self.cart_items.setdefault(customer_id, {})
+        return {"customerId": customer_id, "createdAt": self.cart_created_at[customer_id]}
+
+    def add_to_cart(self, ws, *, customer_id, product_id, qty, now):
+        self.calls.append(("add_to_cart", customer_id, product_id, qty, now))
+        if customer_id not in self.carts:
+            return None
+        items = self.cart_items.setdefault(customer_id, {})
+        line = items.get(product_id)
+        if line is None:
+            items[product_id] = {"quantity": qty, "addedAt": now, "updatedAt": now}
+        else:
+            line["quantity"] += qty
+            line["updatedAt"] = now
+        return {"productId": product_id, "quantity": items[product_id]["quantity"]}
+
+    def adjust_cart_item(self, ws, *, customer_id, product_id, qty, now):
+        self.calls.append(("adjust_cart_item", customer_id, product_id, qty, now))
+        items = self.cart_items.get(customer_id, {})
+        line = items.get(product_id)
+        if line is None:
+            return None
+        new_qty = line["quantity"] - qty
+        if new_qty > 0:
+            line["quantity"] = new_qty
+            line["updatedAt"] = now
+            return {"quantity": new_qty, "removed": False}
+        del items[product_id]
+        return {"quantity": new_qty, "removed": True}
+
+    def read_cart(self, ws, *, customer_id):
+        self.calls.append(("read_cart", customer_id))
+        items = self.cart_items.get(customer_id, {})
+        rows = [
+            {"productId": pid, "quantity": line["quantity"], "addedAt": line["addedAt"]}
+            for pid, line in items.items()
+        ]
+        return sorted(rows, key=lambda r: r["addedAt"])
+
+    def clear_cart(self, ws, *, customer_id):
+        self.calls.append(("clear_cart", customer_id))
+        self.cart_items[customer_id] = {}
+
+    def lookup_products_by_id(self, *, product_ids):
+        self.calls.append(("lookup_products_by_id", tuple(product_ids)))
+        return [
+            {"productId": pid, **self.products_by_id[pid]}
+            for pid in product_ids if pid in self.products_by_id
+        ]
+
+    def place_order(self, ws, *, customer_id, order_id, now, lines):
+        self.calls.append(("place_order", customer_id, order_id, now, lines))
+        if customer_id not in self.customers:
+            raise RuntimeError(
+                f"place_order was a no-op — customer not found ({customer_id!r})"
+            )
+        if order_id in self.orders:
+            return {"created": False, "lineCount": len(self.orders[order_id]["lines"])}
+        self.orders[order_id] = {
+            "customerId": customer_id, "status": "placed",
+            "placedAt": now, "updatedAt": now, "lines": list(lines),
+        }
+        items = self.cart_items.get(customer_id)
+        if items is not None:
+            items.clear()
+        return {"created": True, "lineCount": len(lines)}
+
+    def get_order(self, ws, *, order_id):
+        self.calls.append(("get_order", order_id))
+        order = self.orders.get(order_id)
+        if order is None:
+            return None
+        total = sum(line["lineTotal"] for line in order["lines"])
+        return {
+            "orderId": order_id, "status": order["status"], "placedAt": order["placedAt"],
+            "updatedAt": order["updatedAt"], "lines": list(order["lines"]), "total": total,
+        }
+
+    def _order_cas(self, order_id, expected, new_status, now):
+        self.calls.append(("order_cas", order_id, expected, new_status, now))
+        order = self.orders.get(order_id)
+        if order is None or order["status"] != expected:
+            return None
+        order["status"] = new_status
+        order["updatedAt"] = now
+        return {"orderId": order_id, "status": new_status}
+
+    def fulfill_order(self, ws, *, order_id, now):
+        return self._order_cas(order_id, "placed", "fulfilled", now)
+
+    def deliver_order(self, ws, *, order_id, now):
+        return self._order_cas(order_id, "fulfilled", "delivered", now)
+
+    def cancel_order(self, ws, *, order_id, now):
+        return self._order_cas(order_id, "placed", "cancelled", now)
 
 
 _UNSET = object()
@@ -3279,3 +3407,379 @@ def test_filter_products_abstains_when_nothing_matches():
     assert svc.filter_products(
         CTX, category="nonexistent", min_price=None, max_price=None, limit=20,
     ) == []
+
+
+# ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────────
+#
+# `docs/plans/workflow-cart-and-totals.md` §3.3 — the explicit `ensure_customer`/
+# `ensure_cart` ownership that closes `analyst`'s MAJOR finding. `ctx.actor`
+# ("u1") is `customerId` throughout.
+
+
+def _seed_speaker(repo):
+    repo.products_by_name["bluetooth speaker"] = {
+        "productId": "prod2", "name": "Bluetooth Speaker",
+        "category": "audio", "price": 89.99,
+    }
+    repo.products_by_id["prod2"] = {"name": "Bluetooth Speaker", "price": 89.99}
+
+
+def _seed_mouse(repo):
+    repo.products_by_name["wireless mouse"] = {
+        "productId": "prod1", "name": "Wireless Mouse",
+        "category": "accessories", "price": 25.0,
+    }
+    repo.products_by_id["prod1"] = {"name": "Wireless Mouse", "price": 25.0}
+
+
+# ── add_cart_item ───────────────────────────────────────────────────────────────
+
+def test_add_cart_item_brand_new_customer_ensures_customer_and_cart_first():
+    """Regression for `analyst`'s MAJOR finding (`docs/reviews/workflow-cart-and-
+    totals.md`): a brand-new `customerId` with no prior `Customer`/`Cart` node
+    must not silently no-op — `ensure_customer` -> `ensure_cart` -> `add_to_cart`,
+    in that order, before the item is actually persisted."""
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo, now=1000)
+
+    row = svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+
+    assert row == {
+        "productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99, "quantity": 2,
+    }
+    assert "u1" in repo.customers
+    assert "u1" in repo.carts
+    assert repo.cart_items["u1"]["prod2"]["quantity"] == 2
+    # ordering: ensure_customer, then ensure_cart, then add_to_cart — in that order
+    kinds = [c[0] for c in repo.calls]
+    assert kinds.index("ensure_customer") < kinds.index("ensure_cart") < kinds.index(
+        "add_to_cart"
+    )
+
+
+def test_add_cart_item_repeated_call_accumulates_quantity():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo, now=1000)
+
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+    row = svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=3)
+
+    assert row["quantity"] == 5
+
+
+def test_add_cart_item_unknown_product_abstains_without_writing_anything():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.add_cart_item(CTX, product_name="nonexistent gadget", quantity=1) is None
+    assert repo.customers == set()
+    assert repo.carts == set()
+
+
+def test_add_cart_item_normalizes_name_via_lookup_product():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+
+    row = svc.add_cart_item(CTX, product_name="  Bluetooth   Speaker ", quantity=1)
+
+    assert row["productId"] == "prod2"
+
+
+# ── get_cart ─────────────────────────────────────────────────────────────────────
+
+def test_get_cart_empty_for_never_touched_customer_no_ensure_calls():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_cart(CTX) == {"items": [], "total": 0.0}
+    assert repo.customers == set()  # no ensure_customer/ensure_cart side effect
+    assert repo.carts == set()
+
+
+def test_get_cart_reflects_added_items_with_live_price_and_total():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    _seed_mouse(repo)
+    svc = make_service(repo, now=1000)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+
+    cart = svc.get_cart(CTX)
+
+    assert cart["items"] == [
+        {"productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99,
+         "quantity": 2, "lineTotal": 179.98},
+        {"productId": "prod1", "name": "Wireless Mouse", "price": 25.0,
+         "quantity": 1, "lineTotal": 25.0},
+    ]
+    assert cart["total"] == pytest.approx(204.98)
+
+
+def test_get_cart_uses_current_catalog_price_not_a_stale_one():
+    """AC-3/FR-3: the cart never stores a price — a catalog price change
+    between add-to-cart and view must be reflected immediately."""
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+
+    repo.products_by_id["prod2"]["price"] = 79.99  # catalog price change
+
+    cart = svc.get_cart(CTX)
+    assert cart["items"][0]["price"] == 79.99
+    assert cart["total"] == 79.99
+
+
+def test_get_cart_drops_a_line_whose_product_vanished_from_the_catalog():
+    """Graph note §8: a `CartItem` referencing a since-deleted product isn't
+    addressed by any AC — silently excluded rather than raised on."""
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    _seed_mouse(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+
+    del repo.products_by_id["prod1"]  # "Wireless Mouse" deleted from the catalog
+
+    cart = svc.get_cart(CTX)
+    assert [item["productId"] for item in cart["items"]] == ["prod2"]
+    assert cart["total"] == 89.99
+
+
+# ── remove_cart_item ─────────────────────────────────────────────────────────────
+
+def test_remove_cart_item_partial_quantity_decrements_in_place():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=5)
+
+    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+
+    assert row == {
+        "removed": False, "productId": "prod2", "name": "Bluetooth Speaker",
+        "quantity": 3,
+    }
+    assert repo.cart_items["u1"]["prod2"]["quantity"] == 3
+
+
+def test_remove_cart_item_omitted_quantity_removes_the_whole_line():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=5)
+
+    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker")
+
+    assert row["removed"] is True
+    assert "prod2" not in repo.cart_items.get("u1", {})
+
+
+def test_remove_cart_item_no_ensure_calls_against_a_never_touched_cart():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+
+    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker")
+
+    assert row == {"removed": False, "productId": "prod2", "name": "Bluetooth Speaker"}
+    assert repo.customers == set()
+    assert repo.carts == set()
+
+
+def test_remove_cart_item_unknown_product_abstains():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.remove_cart_item(CTX, product_name="nonexistent gadget") is None
+
+
+def test_remove_cart_item_known_product_not_in_cart_is_a_noop():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    _seed_mouse(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+
+    row = svc.remove_cart_item(CTX, product_name="Wireless Mouse")
+
+    assert row == {"removed": False, "productId": "prod1", "name": "Wireless Mouse"}
+
+
+# ── clear_cart ───────────────────────────────────────────────────────────────────
+
+def test_clear_cart_removes_every_item_no_ensure_calls():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=3)
+
+    svc.clear_cart(CTX)
+
+    assert svc.get_cart(CTX) == {"items": [], "total": 0.0}
+
+
+def test_clear_cart_on_never_touched_customer_is_a_plain_noop():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    svc.clear_cart(CTX)  # must not raise
+
+    assert repo.customers == set()
+    assert repo.carts == set()
+
+
+# ── place_order ──────────────────────────────────────────────────────────────────
+
+def test_place_order_snapshots_current_prices_and_clears_the_cart():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    _seed_mouse(repo)
+    svc = make_service(repo, now=1000)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+
+    calls_before = len(repo.calls)
+    result = svc.place_order(CTX)
+
+    assert result["created"] is True
+    assert result["lineCount"] == 2
+    assert result["total"] == pytest.approx(204.98)
+    assert result["lines"] == [
+        {"productId": "prod2", "name": "Bluetooth Speaker", "unitPrice": 89.99,
+         "quantity": 2, "lineTotal": 179.98},
+        {"productId": "prod1", "name": "Wireless Mouse", "unitPrice": 25.0,
+         "quantity": 1, "lineTotal": 25.0},
+    ]
+    # cart is cleared as part of the same operation (AC-5)
+    assert svc.get_cart(CTX) == {"items": [], "total": 0.0}
+    # ensure_customer called defensively, before the read/write (§3.3)
+    assert repo.calls[calls_before][0] == "ensure_customer"
+
+
+def test_place_order_snapshot_survives_a_later_catalog_price_change_ac6():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo, now=1000)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+
+    result = svc.place_order(CTX)
+    order_id = result["orderId"]
+
+    repo.products_by_id["prod2"]["price"] = 999.0  # catalog price change, after placement
+
+    order = repo.get_order(ws="test", order_id=order_id)
+    assert order["lines"][0]["unitPrice"] == 89.99  # unchanged
+    assert order["total"] == 89.99
+
+
+def test_place_order_empty_cart_abstains():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.place_order(CTX) is None
+
+
+def test_place_order_every_line_products_vanished_is_treated_as_empty():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+
+    del repo.products_by_id["prod2"]
+
+    assert svc.place_order(CTX) is None
+
+
+def test_place_order_mints_a_fresh_order_id_each_call():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    first = svc.place_order(CTX)
+
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    second = svc.place_order(CTX)
+
+    assert first["orderId"] != second["orderId"]
+
+
+# ── get_order_status / advance_order ──────────────────────────────────────────────
+
+def test_get_order_status_returns_current_status():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    result = svc.place_order(CTX)
+
+    assert svc.get_order_status(CTX, order_id=result["orderId"]) == "placed"
+
+
+def test_get_order_status_none_for_unknown_order():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_order_status(CTX, order_id="nope") is None
+
+
+def test_advance_order_fulfill_then_deliver_lifecycle():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    order_id = svc.place_order(CTX)["orderId"]
+
+    fulfilled = svc.advance_order(CTX, order_id=order_id, transition="fulfill")
+    assert fulfilled == {"orderId": order_id, "status": "fulfilled"}
+    assert svc.get_order_status(CTX, order_id=order_id) == "fulfilled"
+
+    delivered = svc.advance_order(CTX, order_id=order_id, transition="deliver")
+    assert delivered == {"orderId": order_id, "status": "delivered"}
+    assert svc.get_order_status(CTX, order_id=order_id) == "delivered"
+
+
+def test_advance_order_cancel_before_fulfillment_succeeds():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    order_id = svc.place_order(CTX)["orderId"]
+
+    cancelled = svc.advance_order(CTX, order_id=order_id, transition="cancel")
+    assert cancelled == {"orderId": order_id, "status": "cancelled"}
+
+
+def test_advance_order_cancel_after_fulfilled_is_blocked_ac8():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    order_id = svc.place_order(CTX)["orderId"]
+    svc.advance_order(CTX, order_id=order_id, transition="fulfill")
+
+    assert svc.advance_order(CTX, order_id=order_id, transition="cancel") is None
+    assert svc.get_order_status(CTX, order_id=order_id) == "fulfilled"  # unchanged
+
+
+def test_advance_order_stale_transition_is_a_noop_returning_none():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    order_id = svc.place_order(CTX)["orderId"]
+
+    # deliver before fulfill — the guard requires 'fulfilled', order is 'placed'
+    assert svc.advance_order(CTX, order_id=order_id, transition="deliver") is None
+
+
+def test_advance_order_unknown_transition_raises():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(UnknownOrderTransitionError):
+        svc.advance_order(CTX, order_id="anything", transition="frobnicate")

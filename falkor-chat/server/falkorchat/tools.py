@@ -48,6 +48,14 @@ Built-ins (§4):
     with a JSON `{"found": false}` / `{"items": [], "finding": ...}` shape rather than a
     fabricated answer — the same idiom `graphrag_retrieve`'s "no relevant context found" already
     uses.
+  * `view_cart` / `add_to_cart` / `remove_from_cart` / `clear_cart` / `place_order` (K-053 M6,
+    `docs/plans/workflow-cart-and-totals.md` §3.3) — the `salesperson` demo's cart/order
+    capabilities, going through `services.get_cart`/`add_cart_item`/`remove_cart_item`/
+    `clear_cart`/`place_order`, which own the `ensure_customer`/`ensure_cart` write-path
+    ordering and the FR-8 pure-arithmetic call (`pricing.compute_line_total`) — no Cypher and
+    no arithmetic lives in this module. `add_to_cart`/`remove_from_cart` abstain
+    `{"found": false}` on an unknown product name, same idiom as the catalog tools;
+    `place_order` on an empty cart returns an explanatory **string**, not a zero-line order.
 
 MCP-client seam (U10 / FR-5c): `McpToolClient` lists + calls tools on an **external** MCP
 server and registers each as an `McpTool` so an MCP-exposed tool is indistinguishable from a
@@ -461,6 +469,230 @@ class FilterProductsTool:
         return json.dumps({"items": rows})
 
 
+class ViewCartTool:
+    """FR-1 (K-053 M6) — view the cart: items + a live-computed total.
+
+    Thin dispatch onto `services.get_cart` (`docs/plans/workflow-cart-and-
+    totals.md` §3.3) — prices are resolved fresh from the catalog on every
+    call (FR-3: never stale), never persisted on the cart line itself. No
+    abstention shape: an empty cart is a normal, valid answer
+    (`{"items": [], "total": 0.0}`), not a "not found" case.
+    """
+
+    name = "view_cart"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "View the customer's current cart: every line item with its "
+                    "current price and quantity, and the live total."
+                ),
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        return json.dumps(self._services.get_cart(ctx))
+
+
+class AddToCartTool:
+    """FR-1 (K-053 M6) — add a quantity of a named product to the cart.
+
+    Thin dispatch onto `services.add_cart_item`, which resolves `productName`
+    via the same catalog lookup `LookupProductFactTool` uses, then ensures
+    the `Customer`/`Cart` anchors and writes the line (plan §3.3, the MAJOR-
+    finding fix). Abstention shape mirrors `LookupProductFactTool`'s:
+    `{"found": false}` on an unknown product name, since it calls the same
+    underlying lookup. `quantity` defaults to `1` when the model omits it.
+    """
+
+    name = "add_to_cart"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Add a quantity of a named product to the customer's cart. "
+                    "Calling this again for the same product adds more of it "
+                    "(quantities accumulate, they don't replace)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "productName": {
+                            "type": "string",
+                            "description": (
+                                "The product's name, as the customer referred to it."
+                            ),
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": "How many to add. Defaults to 1 if omitted.",
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["productName"],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        row = self._services.add_cart_item(
+            ctx, product_name=arguments.get("productName", ""),
+            quantity=arguments.get("quantity") or 1,
+        )
+        if row is None:
+            return json.dumps({"found": False})
+        return json.dumps({"found": True, **row})
+
+
+class RemoveFromCartTool:
+    """FR-1 (K-053 M6) — remove a quantity of a named product from the cart,
+    or the whole line when `quantity` is omitted.
+
+    Thin dispatch onto `services.remove_cart_item` (plan §3.3). Abstention
+    shape mirrors `LookupProductFactTool`'s: `{"found": false}` on an unknown
+    product name. A known product with no matching cart line (never added,
+    or already removed) is a distinct, non-abstaining outcome —
+    `{"found": true, "removed": false, ...}` — since the *product* resolved
+    fine, there was simply nothing of it in the cart to remove.
+    """
+
+    name = "remove_from_cart"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Remove a quantity of a named product from the customer's "
+                    "cart. Omit quantity to remove the entire line for that "
+                    "product, however many are in the cart."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "productName": {
+                            "type": "string",
+                            "description": (
+                                "The product's name, as the customer referred to it."
+                            ),
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": (
+                                "How many to remove. Omit to remove the whole line."
+                            ),
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["productName"],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        row = self._services.remove_cart_item(
+            ctx, product_name=arguments.get("productName", ""),
+            quantity=arguments.get("quantity"),
+        )
+        if row is None:
+            return json.dumps({"found": False})
+        return json.dumps({"found": True, **row})
+
+
+class ClearCartTool:
+    """FR-1 (K-053 M6) — empty the cart entirely.
+
+    Thin dispatch onto `services.clear_cart`. Clearing an already-empty (or
+    never-touched) cart is a plain no-op, not an error — the returned shape
+    doesn't distinguish the two, matching the repository's own contract
+    (graph note §2.4/§2.5).
+    """
+
+    name = "clear_cart"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": "Remove every item from the customer's cart.",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        self._services.clear_cart(ctx)
+        return json.dumps({"cleared": True})
+
+
+class PlaceOrderTool:
+    """FR-4/FR-5 (K-053 M6) — place an order from the current cart.
+
+    Thin dispatch onto `services.place_order`, which resolves each line's
+    *current* price via the batch catalog lookup, computes the frozen total
+    via `pricing.compute_line_total` (FR-8 — plain Python, no LLM call), and
+    persists the snapshot (AC-5/AC-6). On an empty cart (or one whose every
+    product has since vanished from the catalog), returns an explanatory
+    **string**, not a JSON envelope — deliberately not `{"found": false}`
+    (there is no "product name" here to have not been found; the established
+    idiom doesn't fit this abstention shape, plan §3.3).
+    """
+
+    name = "place_order"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Place an order for everything currently in the customer's "
+                    "cart, at current catalog prices. Clears the cart on success."
+                ),
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        result = self._services.place_order(ctx)
+        if result is None:
+            return "The cart is empty — add an item before placing an order."
+        return json.dumps(result)
+
+
 class HumanHandoffSignal(Exception):
     """Control signal raised by `human_handoff`: suspend the run pending a human.
 
@@ -536,6 +768,11 @@ def build_builtin_registry(
         HumanHandoffTool(),
         LookupProductFactTool(services),
         FilterProductsTool(services),
+        ViewCartTool(services),
+        AddToCartTool(services),
+        RemoveFromCartTool(services),
+        ClearCartTool(services),
+        PlaceOrderTool(services),
     ])
 
 

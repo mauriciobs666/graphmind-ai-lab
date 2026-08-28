@@ -2667,17 +2667,58 @@ class Repository:
         `None` when no product matches `name_normalized` — the AC-3 abstention
         case, never a fabricated row. Anchored on the `Product.nameNormalized`
         range index (no label scan).
+
+        K-053 M6: now also returns `productId` — added (additive, backward-
+        compatible) so `services.add_cart_item` can resolve a customer-named
+        product to the `productId` a `CartItem` is keyed on (`workflow-cart-
+        and-totals-graph.md` §2). K-052's original shape never needed it (pure
+        fact lookup, no cart concept yet); the `Product` node always carried
+        the property, it just wasn't selected.
         """
         res = self._reference().ro_query(
             "MATCH (p:Product {nameNormalized: $nameNormalized}) "
-            "RETURN p.name AS name, p.category AS category, p.price AS price "
+            "RETURN p.productId AS productId, p.name AS name, "
+            "       p.category AS category, p.price AS price "
             "LIMIT 1",
             {"nameNormalized": name_normalized},
         )
         if not res.result_set:
             return None
         row = res.result_set[0]
-        return {"name": row[0], "category": row[1], "price": row[2]}
+        return {
+            "productId": row[0], "name": row[1], "category": row[2], "price": row[3],
+        }
+
+    def lookup_products_by_id(
+        self, *, product_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Batch current name/price resolution by `productId` (K-053 M6).
+
+        Graph note §6: the two-graph read `get_cart`/`place_order` need — cart
+        lines (`ws:{id}`) carry only `productId`/`quantity`, never a price
+        (FR-3: prices must never go stale on the cart line); this resolves
+        each id's *current* name/price from `reference` in one round trip.
+        `MATCH` (not `OPTIONAL MATCH`): a `productId` no longer in the catalog
+        (graph note §8 item 2 — a cart referencing a since-deleted product,
+        not addressed by any AC) simply produces no row for that id, never a
+        null-padded placeholder — callers detect a missing id by its absence
+        from the returned list. An empty `product_ids` short-circuits without
+        a query (an empty-list `UNWIND` would collapse to zero rows here too,
+        but there is no other write/read in this query for that to silently
+        drop, so it's a plain optimization, not a correctness guard).
+        """
+        if not product_ids:
+            return []
+        res = self._reference().ro_query(
+            "UNWIND $productIds AS pid "
+            "MATCH (p:Product {productId: pid}) "
+            "RETURN p.productId AS productId, p.name AS name, p.price AS price",
+            {"productIds": list(product_ids)},
+        )
+        return [
+            {"productId": row[0], "name": row[1], "price": row[2]}
+            for row in res.result_set
+        ]
 
     def filter_products(
         self, *, category: str | None, min_price: float | None,

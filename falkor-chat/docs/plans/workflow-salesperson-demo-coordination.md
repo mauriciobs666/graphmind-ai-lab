@@ -289,7 +289,8 @@ larger-model fallback) before touching any write-mutating tool, or (c) something
 chose (a) — proceed to K-053.** Dispatching U18 per the already-queued ledger below.
 
 | U18 | `coder` | `a48905847f09736a2` | delivered | `server/falkorchat/pricing.py` (new), `repository.py` §16 Cart/Order methods, `bootstrap_schema.sh` DDL (added, not originally scoped — mechanical, per graph note's own §7 DDL), 41 new tests | teco (independent re-run) → 1869 passed/4 deselected, matches | 210k tok / 128 tools |
-| U19 | `coder` (resume U18) | `a48905847f09736a2` | in-flight | K-053 cluster 2: `services.py`, `tools.py` (5 cart/order tools) | — | — |
+| U19 | `coder` (resume U18) | `a48905847f09736a2` | abandoned | transient platform failure (API timeout, user reports a power outage) mid-run; left one legitimate, incomplete, uncommitted `repository.py` diff (`lookup_product` productId extension + new `lookup_products_by_id`) — not redone, picked up by U19b | — | — |
+| U19b | `coder` (fresh, state-recovery brief) | `af09366ad8de5196e` | delivered | `services.py` §16 (add_cart_item/get_cart/remove_cart_item/clear_cart/place_order/get_order_status/advance_order), `tools.py` (5 cart/order tools), `repository.py` `lookup_products_by_id` retained + test fix, 42 new/changed tests | teco (independent re-run + ensure_customer/ensure_cart wiring spot-check) → 1910 passed/4 deselected, matches; MAJOR-finding closure confirmed in code | 242k tok / 163 tools |
 | U20 | `coder` (resume U18) | — | queued | K-053 cluster 3: `proof_defs.py` (v2 + `ORDER_FULFILLMENT_DEF`), seed/verify scripts, `QUERIES.md`/`test_queries.sh`, `AGENTS.md` | — | — |
 | U21 | `analyst` (resume) | — | queued | code review, K-053 diff | — | — |
 | U22 | `qa-engineer` (resume) | — | queued | live acceptance, K-053 (cart/order/fulfillment) | — | — |

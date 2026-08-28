@@ -22,7 +22,7 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
-from . import chunking, config, extraction, proof_defs
+from . import chunking, config, extraction, pricing, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 from .modelconfig import ModelConfigError, ModelResolutionError
@@ -235,6 +235,16 @@ class BatchTooLargeError(ServiceError):
     only at the REST pydantic boundary (`IngestDocumentsIn.documents =
     Field(max_length=MAX_BATCH_SIZE)`) — an MCP caller has no schema layer,
     so this is the one place both transports are bound by the same cap.
+    """
+
+
+class UnknownOrderTransitionError(ServiceError):
+    """Raised when `advance_order`'s `transition` isn't `fulfill`/`deliver`/`cancel`
+    (§3.4 of the owning plan's graph note — the only three guarded-CAS writes
+    `repository.py` §16 implements). A caller/def-authoring mistake, not a
+    runtime race — a *valid* transition attempted from the wrong prior status
+    is a normal, silent no-op (the repository CAS methods return `None`), not
+    this error.
     """
 
 
@@ -2582,3 +2592,237 @@ class Services:
             category=category, min_price=min_price, max_price=max_price,
             limit=limit,
         )
+
+    # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
+    #
+    # `docs/plans/workflow-cart-and-totals.md` §3.3, with the explicit
+    # `ensure_customer`/`ensure_cart` ownership that closes `analyst`'s MAJOR
+    # finding (`docs/reviews/workflow-cart-and-totals.md`): `add_cart_item` and
+    # `place_order` each call `ensure_customer` (and, for `add_cart_item`,
+    # `ensure_cart` too) before the write that would otherwise silently no-op
+    # against a brand-new customer's first cart action. `get_cart`,
+    # `remove_cart_item`, and `clear_cart` deliberately do **not** — a read or
+    # removal against a `Customer`/`Cart` that doesn't exist yet is
+    # graph-dba's own documented, legitimate "empty cart" case (graph note
+    # §2.4); calling `ensure_*` there would create nodes for a customer who
+    # has never added anything, for no benefit. `ctx.actor` is `customerId`
+    # throughout (§3.2 — the same workspace-local `Customer` anchor
+    # `workflow-durable-profile.md` reuses).
+
+    def _priced_cart_lines(
+        self, ws: str, *, customer_id: str
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """The two-graph read (graph note §6): `ws:{id}` cart lines, priced from
+        `reference` in one batch round trip via `lookup_products_by_id`.
+
+        Returns `(cart_lines, priced_lines)` — `cart_lines` is the raw
+        `read_cart` result (used by callers that need `addedAt` too);
+        `priced_lines` drops any line whose `productId` no longer resolves in
+        the catalog (a cart referencing a since-deleted product — graph note
+        §8, not addressed by any AC, so silently excluded here rather than
+        raised on) and adds `name`/`price`/`lineTotal` per line. `lineTotal`
+        is computed via `pricing.compute_line_total` on a single-item list —
+        reusing the one pure arithmetic function (FR-8) rather than
+        multiplying inline, so every price computation in this module goes
+        through the same audited path.
+        """
+        cart_lines = self._repo.read_cart(ws, customer_id=customer_id)
+        if not cart_lines:
+            return cart_lines, []
+        products = self._repo.lookup_products_by_id(
+            product_ids=[line["productId"] for line in cart_lines]
+        )
+        products_by_id = {p["productId"]: p for p in products}
+        priced: list[dict[str, Any]] = []
+        for line in cart_lines:
+            product = products_by_id.get(line["productId"])
+            if product is None:
+                continue
+            quantity = line["quantity"]
+            line_total = pricing.compute_line_total(
+                [{"price": product["price"], "quantity": quantity}]
+            )
+            priced.append({
+                "productId": line["productId"], "name": product["name"],
+                "price": product["price"], "quantity": quantity,
+                "lineTotal": line_total,
+            })
+        return cart_lines, priced
+
+    def add_cart_item(
+        self, ctx: CallContext, *, product_name: str, quantity: int,
+    ) -> dict[str, Any] | None:
+        """Resolve `product_name`, ensure the `Customer`/`Cart` anchors, add the
+        line (FR-1). `None` when `product_name` doesn't resolve (AC-3
+        abstention, mirrors `lookup_product`'s own contract) — never a
+        fabricated cart line.
+
+        `ensure_customer` → `ensure_cart` → `add_to_cart`, in that order
+        (§3.3) — closes the MAJOR finding: without this, a brand-new
+        customer's very first add would hit `add_to_cart`'s own `MATCH
+        (cart:Cart …)` and silently write nothing (graph note §2.1). Run
+        *after* the product lookup so an unknown product name costs no
+        extra writes.
+        """
+        product = self.lookup_product(ctx, name=product_name)
+        if product is None:
+            return None
+        customer_id = ctx.actor
+        now = self._clock()
+        self._repo.ensure_customer(ctx.ws, customer_id=customer_id, now=now)
+        self._repo.ensure_cart(ctx.ws, customer_id=customer_id, now=now)
+        result = self._repo.add_to_cart(
+            ctx.ws, customer_id=customer_id, product_id=product["productId"],
+            qty=quantity, now=now,
+        )
+        return {
+            "productId": product["productId"], "name": product["name"],
+            "price": product["price"], "quantity": result["quantity"],
+        }
+
+    def get_cart(self, ctx: CallContext) -> dict[str, Any]:
+        """Current cart lines with live-computed prices/total (FR-1/FR-3).
+
+        No `ensure_customer`/`ensure_cart` call (§3.3's explicit exception) —
+        an empty result for a never-touched customer is indistinguishable
+        from, and exactly as correct as, one for an emptied cart (graph note
+        §2.4). `total` is `sum` of each line's `lineTotal`.
+        """
+        _cart_lines, priced = self._priced_cart_lines(ctx.ws, customer_id=ctx.actor)
+        total = sum(line["lineTotal"] for line in priced)
+        return {"items": priced, "total": total}
+
+    def remove_cart_item(
+        self, ctx: CallContext, *, product_name: str, quantity: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Remove `quantity` of `product_name` from the cart, or the whole line
+        when `quantity` is omitted (FR-1). `None` when `product_name` doesn't
+        resolve (AC-3 abstention) — checked first, before any cart read.
+
+        No `ensure_customer`/`ensure_cart` call (§3.3's explicit exception) —
+        removing from a cart that doesn't exist is a no-op, not an error.
+        A full-line removal (`quantity=None`) reads the line's current
+        quantity first (`repository.adjust_cart_item` only decrements-or-
+        removes, it has no "delete this line outright" primitive) and
+        decrements by exactly that amount so the guarded single-query
+        decrement-to-zero (graph note §2.2) deletes it. A product with no
+        matching cart line (never added, or already removed) is a no-op the
+        caller reports as such (`"removed": False`), not an error.
+        """
+        product = self.lookup_product(ctx, name=product_name)
+        if product is None:
+            return None
+        customer_id = ctx.actor
+        product_id = product["productId"]
+        if quantity is None:
+            cart_lines = self._repo.read_cart(ctx.ws, customer_id=customer_id)
+            current = next(
+                (line for line in cart_lines if line["productId"] == product_id), None
+            )
+            if current is None:
+                return {
+                    "removed": False, "productId": product_id, "name": product["name"],
+                }
+            qty_to_remove = current["quantity"]
+        else:
+            qty_to_remove = quantity
+        result = self._repo.adjust_cart_item(
+            ctx.ws, customer_id=customer_id, product_id=product_id,
+            qty=qty_to_remove, now=self._clock(),
+        )
+        if result is None:
+            return {"removed": False, "productId": product_id, "name": product["name"]}
+        return {
+            "removed": result["removed"], "productId": product_id,
+            "name": product["name"], "quantity": result["quantity"],
+        }
+
+    def clear_cart(self, ctx: CallContext) -> None:
+        """Empty the cart entirely (FR-1). No `ensure_customer`/`ensure_cart`
+        call (§3.3's explicit exception) — clearing an already-empty (or
+        never-touched) cart is a plain no-op.
+        """
+        self._repo.clear_cart(ctx.ws, customer_id=ctx.actor)
+
+    def place_order(self, ctx: CallContext) -> dict[str, Any] | None:
+        """Snapshot the cart into an `Order`, freeze each line's current price,
+        and clear the cart (FR-4/FR-5/AC-5/AC-6). `None` on an empty cart (or
+        one whose every line's product has since vanished from the catalog,
+        graph note §8) — the tool layer turns this into an explanatory
+        string rather than creating a zero-line order.
+
+        `ensure_customer` first, defensively (§3.3) — not because any real
+        path reaches this without a prior `add_cart_item` having already
+        ensured the `Customer`, but because `repository.place_order`'s own
+        Cypher unconditionally `MATCH`es `(cust:Customer …)` and would
+        otherwise depend on an implicit call-ordering assumption (analyst's
+        MINOR-adjacent note, closed here). No `ensure_cart` call — nothing
+        below needs a `Cart` node to exist, only `CartItem`s under it, which
+        an empty/absent cart has none of either way.
+
+        Prices are resolved fresh via `lookup_products_by_id` (the two-graph
+        read, graph note §6) — never `lookup_product` in a per-line loop,
+        which is exactly the batch method's reason for existing. `orderId` is
+        minted here (`self._id()`) — the idempotency key `repository.
+        place_order`'s guarded `CREATE` keys on.
+        """
+        customer_id = ctx.actor
+        now = self._clock()
+        self._repo.ensure_customer(ctx.ws, customer_id=customer_id, now=now)
+        _cart_lines, priced = self._priced_cart_lines(ctx.ws, customer_id=customer_id)
+        if not priced:
+            return None
+        order_lines = [
+            {
+                "productId": line["productId"], "name": line["name"],
+                "unitPrice": line["price"], "quantity": line["quantity"],
+                "lineTotal": line["lineTotal"],
+            }
+            for line in priced
+        ]
+        order_id = self._id()
+        receipt = self._repo.place_order(
+            ctx.ws, customer_id=customer_id, order_id=order_id, now=now,
+            lines=order_lines,
+        )
+        total = sum(line["lineTotal"] for line in order_lines)
+        return {
+            "orderId": order_id, "created": receipt["created"],
+            "lineCount": receipt["lineCount"], "lines": order_lines, "total": total,
+        }
+
+    def get_order_status(self, ctx: CallContext, *, order_id: str) -> str | None:
+        """The `Order.status` for an already-placed order, or `None` (no such
+        order) (FR-6/FR-7). No `ensure_*` call applies — this operates on an
+        `Order` by `orderId`, never on `Customer`.
+        """
+        order = self._repo.get_order(ctx.ws, order_id=order_id)
+        return order["status"] if order is not None else None
+
+    # `transition` name -> the `repository` guarded-CAS method it drives
+    # (graph note §3.4). A plain dict, not `STEP_TYPES`-style whitelisting
+    # machinery — there are exactly three lifecycle transitions and they are
+    # never extended by a workflow author (unlike `config.tools`/`STEP_TYPES`,
+    # which a def declares).
+    _ORDER_TRANSITIONS: dict[str, str] = {
+        "fulfill": "fulfill_order", "deliver": "deliver_order", "cancel": "cancel_order",
+    }
+
+    def advance_order(
+        self, ctx: CallContext, *, order_id: str, transition: str,
+    ) -> dict[str, Any] | None:
+        """Drive one guarded-CAS lifecycle transition (FR-6/FR-7, graph note
+        §3.4) — `fulfill`/`deliver`/`cancel`. `None` when the CAS's own guard
+        doesn't match the order's current status (a stale/duplicate/out-of-
+        order attempt) — the repository write itself no-ops, this just
+        forwards that. Raises `UnknownOrderTransitionError` for any other
+        `transition` string — a caller/def-authoring mistake, not a runtime
+        race. No `ensure_*` call applies (operates on `Order` by `orderId`,
+        never on `Customer`) — used by the order-fulfillment process def's
+        `human`-step resume path (§3.4), not by any agent-step tool.
+        """
+        method_name = self._ORDER_TRANSITIONS.get(transition)
+        if method_name is None:
+            raise UnknownOrderTransitionError(transition)
+        method = getattr(self._repo, method_name)
+        return method(ctx.ws, order_id=order_id, now=self._clock())

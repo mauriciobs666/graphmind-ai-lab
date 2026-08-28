@@ -26,14 +26,19 @@ from falkorchat.config import CallContext
 from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
     DEFAULT_FILTER_LIMIT,
+    AddToCartTool,
+    ClearCartTool,
     FilterProductsTool,
     GraphragRetrieveTool,
     HumanHandoffSignal,
     HumanHandoffTool,
     LookupProductFactTool,
+    PlaceOrderTool,
     PostMessageTool,
+    RemoveFromCartTool,
     ToolRegistry,
     UnknownToolError,
+    ViewCartTool,
     build_builtin_registry,
 )
 
@@ -43,11 +48,16 @@ WS = "test"
 
 # ── stubs ────────────────────────────────────────────────────────────────────
 
+_UNSET = object()  # distinguishes "not scripted" from a scripted `None` result
+
+
 class StubServices:
     """Records `post_agent_answer` / `link_step_emission` / `hybrid_search` calls."""
 
     def __init__(self, *, search_rows=None, link_ok=True,
-                 products_by_name=None, filter_result=None):
+                 products_by_name=None, filter_result=None,
+                 add_result=_UNSET, remove_result=_UNSET,
+                 cart_result=None, order_result=_UNSET):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -59,6 +69,21 @@ class StubServices:
         self._filter_result = filter_result or []
         self.looked_up: list[str] = []
         self.filtered: list[dict] = []
+        # §16 Cart / Order (K-053 M6) — set the *_result kwargs to script a
+        # call's return value; every call is recorded so the tool's
+        # argument-mapping into the service (name/quantity keyword
+        # translation, defaulting) is checkable.
+        self._add_result = add_result
+        self._remove_result = remove_result
+        self._cart_result = cart_result if cart_result is not None else {
+            "items": [], "total": 0.0,
+        }
+        self._order_result = order_result
+        self.added: list[dict] = []
+        self.removed: list[dict] = []
+        self.cart_views: int = 0
+        self.cleared: int = 0
+        self.ordered: int = 0
 
     def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
         msg_id = f"m{next(self._msg_seq)}"
@@ -86,6 +111,25 @@ class StubServices:
              "max_price": max_price, "limit": limit}
         )
         return list(self._filter_result)
+
+    def add_cart_item(self, ctx, *, product_name, quantity):
+        self.added.append({"product_name": product_name, "quantity": quantity})
+        return None if self._add_result is _UNSET else self._add_result
+
+    def remove_cart_item(self, ctx, *, product_name, quantity=None):
+        self.removed.append({"product_name": product_name, "quantity": quantity})
+        return None if self._remove_result is _UNSET else self._remove_result
+
+    def get_cart(self, ctx):
+        self.cart_views += 1
+        return self._cart_result
+
+    def clear_cart(self, ctx):
+        self.cleared += 1
+
+    def place_order(self, ctx):
+        self.ordered += 1
+        return None if self._order_result is _UNSET else self._order_result
 
 
 class StubEmbedder:
@@ -138,15 +182,16 @@ def test_registry_jsonifies_nonstring_results():
     assert json.loads(reg.dispatch("d", {}, ctx=CTX, run={})) == {"a": 1}
 
 
-def test_build_builtin_registry_registers_all_five():
-    # K-052 M6: the salesperson-demo catalog tools are registered into this same
-    # shared registry (the AC-6 fence is per-node config.tools, not registry
-    # membership — the same "present, only offered where granted" posture
-    # human_handoff already established for triage).
+def test_build_builtin_registry_registers_all_ten():
+    # K-052/K-053 M6: the salesperson-demo catalog + cart/order tools are all
+    # registered into this same shared registry (the AC-6 fence is per-node
+    # config.tools, not registry membership — the same "present, only offered
+    # where granted" posture human_handoff already established for triage).
     reg = build_builtin_registry(StubServices(), StubEmbedder(), agent_id="assistant")
     assert set(reg.names()) == {
         "post_message", "graphrag_retrieve", "human_handoff",
         "lookup_product_fact", "filter_products",
+        "view_cart", "add_to_cart", "remove_from_cart", "clear_cart", "place_order",
     }
 
 
@@ -452,6 +497,134 @@ def test_filter_products_all_arguments_optional():
         {"category": None, "min_price": None, "max_price": None,
          "limit": DEFAULT_FILTER_LIMIT}
     ]
+
+
+# ── view_cart / add_to_cart / remove_from_cart / clear_cart / place_order ────
+# (K-053 M6, unit, stub services)
+
+def test_view_cart_returns_the_services_cart_shape():
+    cart = {"items": [{"productId": "prod2", "name": "Bluetooth Speaker",
+                        "price": 89.99, "quantity": 2, "lineTotal": 179.98}],
+            "total": 179.98}
+    svc = StubServices(cart_result=cart)
+    tool = ViewCartTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == cart
+    assert svc.cart_views == 1
+
+
+def test_add_to_cart_returns_found_row():
+    svc = StubServices(add_result={
+        "productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99,
+        "quantity": 2,
+    })
+    tool = AddToCartTool(svc)
+
+    out = json.loads(tool.run(
+        {"productName": "Bluetooth Speaker", "quantity": 2}, ctx=CTX, run={},
+    ))
+
+    assert out == {
+        "found": True, "productId": "prod2", "name": "Bluetooth Speaker",
+        "price": 89.99, "quantity": 2,
+    }
+    assert svc.added == [{"product_name": "Bluetooth Speaker", "quantity": 2}]
+
+
+def test_add_to_cart_abstains_when_product_unknown():
+    svc = StubServices()  # add_result unset -> add_cart_item returns None
+    tool = AddToCartTool(svc)
+
+    out = json.loads(tool.run(
+        {"productName": "nonexistent gadget", "quantity": 1}, ctx=CTX, run={},
+    ))
+
+    assert out == {"found": False}
+
+
+def test_add_to_cart_defaults_missing_quantity_to_one():
+    svc = StubServices(add_result={"productId": "p", "name": "X", "price": 1.0,
+                                    "quantity": 1})
+    tool = AddToCartTool(svc)
+
+    tool.run({"productName": "X"}, ctx=CTX, run={})
+
+    assert svc.added == [{"product_name": "X", "quantity": 1}]
+
+
+def test_remove_from_cart_partial_quantity():
+    svc = StubServices(remove_result={
+        "removed": False, "productId": "prod2", "name": "Bluetooth Speaker",
+        "quantity": 3,
+    })
+    tool = RemoveFromCartTool(svc)
+
+    out = json.loads(tool.run(
+        {"productName": "Bluetooth Speaker", "quantity": 2}, ctx=CTX, run={},
+    ))
+
+    assert out == {
+        "found": True, "removed": False, "productId": "prod2",
+        "name": "Bluetooth Speaker", "quantity": 3,
+    }
+    assert svc.removed == [{"product_name": "Bluetooth Speaker", "quantity": 2}]
+
+
+def test_remove_from_cart_omitted_quantity_passes_none_through():
+    svc = StubServices(remove_result={
+        "removed": True, "productId": "prod2", "name": "Bluetooth Speaker",
+    })
+    tool = RemoveFromCartTool(svc)
+
+    tool.run({"productName": "Bluetooth Speaker"}, ctx=CTX, run={})
+
+    assert svc.removed == [{"product_name": "Bluetooth Speaker", "quantity": None}]
+
+
+def test_remove_from_cart_abstains_when_product_unknown():
+    svc = StubServices()  # remove_result unset -> remove_cart_item returns None
+    tool = RemoveFromCartTool(svc)
+
+    out = json.loads(tool.run({"productName": "nonexistent gadget"}, ctx=CTX, run={}))
+
+    assert out == {"found": False}
+
+
+def test_clear_cart_calls_services_and_confirms():
+    svc = StubServices()
+    tool = ClearCartTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == {"cleared": True}
+    assert svc.cleared == 1
+
+
+def test_place_order_returns_json_receipt_on_success():
+    receipt = {"orderId": "o1", "created": True, "lineCount": 1,
+               "lines": [{"productId": "prod2", "name": "Bluetooth Speaker",
+                          "unitPrice": 89.99, "quantity": 1, "lineTotal": 89.99}],
+               "total": 89.99}
+    svc = StubServices(order_result=receipt)
+    tool = PlaceOrderTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == receipt
+    assert svc.ordered == 1
+
+
+def test_place_order_on_empty_cart_returns_an_explanatory_string_not_json():
+    svc = StubServices()  # order_result unset -> place_order returns None
+    tool = PlaceOrderTool(svc)
+
+    out = tool.run({}, ctx=CTX, run={})
+
+    assert isinstance(out, str)
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(out)
 
 
 # ── integration: post_message writes the agent message via §4 (durable artifact) ─
