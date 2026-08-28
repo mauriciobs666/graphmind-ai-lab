@@ -2,6 +2,18 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-08-28 — Broad-write guard added (prompt-friction fix, closes coder's FR-2 gap)
+- **What:** Added `hooks/guard-coder-broad-write.sh` (thin wrapper over
+  `claude/scripts/guard-broad-write.sh`, deny-list kept in lockstep with tdd-engineer's
+  `guard-tdd-broad-write.sh`) and wired it in frontmatter (`hooks:` PreToolUse `Write|Edit`,
+  plus `permissionMode: acceptEdits` matching the rest of the team).
+- **Why:** Transcript evidence from teco session `2e0c2f42` (2026-08-27/28): every hook-free
+  coder `Write`/`Edit` in an auto-mode teco orchestration hit a permission prompt (waits of 11s
+  to 5.3h), while guard-carrying agents wrote silently in the same hours. An explicit PreToolUse
+  `"allow"` is the one mode-independent prompt suppressor
+  (`claude/docs/plans/agent-permission-friction.md` §1.3); coder was the implementer that never
+  received one.
+
 ## 2026-08-25 — `kaizen_team` distillation: 10 raw entries processed (2 promoted, 2 discarded as superseded, 2 discarded as low-value, 1 kept open as K-005, 3 tagged `MENTIONS`→`graph-dba`)
 - **What:** Ran `agent-maintenance` §5 over every `coder`-produced entry in `kaizen_team` — 4 legacy
   (`author: 'coder'`) + 6 current-shape (`PRODUCED` edges), all dated 2026-08-21/24/25, from K-028
