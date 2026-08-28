@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-055
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-056
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -39,7 +39,7 @@ deferred M2.5 hardening track.
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M6 — Business entities in workflows** 🟡 *(in progress)* | All four sibling capabilities proven live inside the combined salesperson demo agent, golden-set/adversarial gates passed for K-055 | K-052 → K-053, K-054, K-055 |
+| **M6 — Business entities in workflows** 🟡 *(in progress)* | All four sibling capabilities proven live inside the combined salesperson demo agent, golden-set/adversarial gates passed for K-055 | K-052 → K-056 (fix, in progress) → K-053, K-054, K-055 |
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
@@ -73,6 +73,25 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 > (golden-set metric/threshold, delivered) and a `security-expert` review of the mechanism
 > (FR-3/FR-3a adversarial test cases, approved Pass 2) — both delivered; design phase closed.
 > Blocked on K-052.
+
+### K-056 — `salesperson` scaffold: fix live tool-call skip-and-fabricate under extended conversations (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28)
+
+> Trace-instrumented live reproduction (`docs/reviews/salesperson-tool-reliability-ml.md`)
+> confirms `qwen/qwen3-4b-2507` served via LM Studio reproducibly (2/2 independent runs) stops
+> invoking `lookup_product_fact`/`filter_products` after 2-3 successful tool-calling turns within
+> one `salesperson@v1` conversation — the model's very first LLM turn skips straight to
+> pattern-completed text, zero `tool_calls` — and fabricates catalog facts the existing
+> `requiredTools` engine guard cannot catch (it only requires `post_message`). Forcing
+> `tool_choice: "required"` on the wire was tested directly and falsified as a fix (didn't force a
+> tool call, triggered a separate runaway-repetition failure). User-directed fix pass in progress
+> before K-053/K-054/K-055 resume: (1) a tool-use breadcrumb in the replayed conversation history
+> (`workflow-salesperson-demo-coordination.md`'s U37), targeting the diagnosed mechanism directly
+> (§4.1/§4.3 of the ml note); (2) a cheap observability signal (warn when a fact-bearing answer
+> emits with no tool call this turn), generalized to whatever tools K-053/K-054/K-055 add later.
+> Not yet covered: a proper controlled eval to replace the note's n=2 anecdote with a rate
+> estimate, and the fallback decision (route this role to a larger model) if no scaffold-level fix
+> holds up under that eval — carried forward as residual scope if the fix pass doesn't fully close
+> this.
 
 ## Open follow-ups
 
