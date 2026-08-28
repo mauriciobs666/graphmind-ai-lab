@@ -2728,3 +2728,289 @@ class Repository:
             {"name": row[0], "category": row[1], "price": row[2]}
             for row in res.result_set
         ]
+
+    # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
+    #
+    # Workspace-scoped (`self._graph(ws)`), unlike the §15 catalog above — every
+    # method here is a direct transcription of a `[verified]` Cypher shape in
+    # `docs/plans/workflow-cart-and-totals-graph.md` (v2), named per-method
+    # below. `Customer`/`Cart`/`CartItem`/`Order`/`OrderLine` schema: graph note
+    # §1/§2/§3. `services.py` (a later cluster) owns `ensure_customer`/
+    # `ensure_cart` call-ordering before `add_to_cart`/`place_order` — this
+    # layer stays a thin, faithful Cypher wrapper, same division as every other
+    # section of this file.
+
+    def ensure_customer(
+        self, ws: str, *, customer_id: str, now: int
+    ) -> dict[str, Any]:
+        """Get-or-create the `Customer` anchor (idempotent). Graph note §1.3.
+
+        `ON CREATE` only, so a re-call leaves `createdAt` at the first call's
+        value — never re-applied on a `MERGE` hit. Backed by the
+        `Customer.customerId` uniqueness constraint.
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:Customer {customerId: $customerId}) "
+            "ON CREATE SET c.createdAt = $now "
+            "RETURN c.customerId AS customerId, c.createdAt AS createdAt",
+            {"customerId": customer_id, "now": now},
+        )
+        row = res.result_set[0]
+        return {"customerId": row[0], "createdAt": row[1]}
+
+    def ensure_cart(
+        self, ws: str, *, customer_id: str, now: int
+    ) -> dict[str, Any] | None:
+        """Get-or-create the `Cart` anchor under an existing `Customer`. Graph note §2.3.
+
+        Call after `ensure_customer` — this `MATCH`es the `Customer` and does
+        nothing if it is missing (zero rows; callers that need the write-or-raise
+        contract check for that explicitly, mirroring `create_thread`'s missing-
+        anchor tripwire). The `MERGE` spans the whole `(Customer)-[:HAS_CART]->
+        (Cart)` pattern, safe here because `Cart`'s matched property
+        (`customerId`) is fully specified and constraint-backed on both ends
+        (graph note §2.3 — not the K-034 changed-endpoint gotcha).
+        """
+        res = self._graph(ws).query(
+            "MATCH (cust:Customer {customerId: $customerId}) "
+            "MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId}) "
+            "ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now "
+            "RETURN cart.customerId AS customerId, cart.createdAt AS createdAt",
+            {"customerId": customer_id, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"customerId": row[0], "createdAt": row[1]}
+
+    def add_to_cart(
+        self, ws: str, *, customer_id: str, product_id: str, qty: int, now: int
+    ) -> dict[str, Any] | None:
+        """MERGE-and-increment a cart line (idempotent-by-design). Graph note §2.1.
+
+        "Add" means increment, not replace — two calls with the same
+        `product_id` sum their `qty`. Zero rows means no `Cart` exists yet for
+        `customer_id` — the caller runs `ensure_customer` + `ensure_cart` first
+        (the `ensure_user`-before-write convention, applied here).
+        """
+        res = self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId}) "
+            "MERGE (cart)-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, "
+            "                                           productId: $productId}) "
+            "ON CREATE SET item.quantity = $qty, item.addedAt = $now, item.updatedAt = $now "
+            "ON MATCH  SET item.quantity = item.quantity + $qty, item.updatedAt = $now "
+            "SET cart.updatedAt = $now "
+            "RETURN item.productId AS productId, item.quantity AS quantity",
+            {"customerId": customer_id, "productId": product_id, "qty": qty, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"productId": row[0], "quantity": row[1]}
+
+    def adjust_cart_item(
+        self, ws: str, *, customer_id: str, product_id: str, qty: int, now: int
+    ) -> dict[str, Any] | None:
+        """Guarded decrement-or-remove, single query. Graph note §2.2.
+
+        `qty` is positive — the amount to remove. Decrementing to a positive
+        remainder updates the line in place; decrementing to zero or below
+        deletes the `CartItem` node and its edge in the same call. Zero rows
+        means no such line (already removed, or never added) — a no-op the
+        caller reports as such, not an error.
+        """
+        res = self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->"
+            "(item:CartItem {customerId: $customerId, productId: $productId}) "
+            "WITH cart, item, (item.quantity - $qty) AS newQty "
+            "FOREACH (_ IN CASE WHEN newQty > 0  THEN [1] ELSE [] END | "
+            "  SET item.quantity = newQty, item.updatedAt = $now) "
+            "FOREACH (_ IN CASE WHEN newQty <= 0 THEN [1] ELSE [] END | DETACH DELETE item) "
+            "SET cart.updatedAt = $now "
+            "RETURN newQty AS quantity, (newQty <= 0) AS removed",
+            {"customerId": customer_id, "productId": product_id, "qty": qty, "now": now},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"quantity": row[0], "removed": bool(row[1])}
+
+    def read_cart(self, ws: str, *, customer_id: str) -> list[dict[str, Any]]:
+        """Current cart lines, oldest-added first (prices resolved separately —
+        catalog reads live in `reference`, `services.py`'s job). Graph note §2.4.
+
+        Zero rows is a legitimate "empty cart" (or no cart yet) — both look the
+        same by design; nothing here needs to distinguish "never touched" from
+        "emptied".
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "RETURN item.productId AS productId, item.quantity AS quantity, "
+            "       item.addedAt AS addedAt "
+            "ORDER BY item.addedAt",
+            {"customerId": customer_id},
+        )
+        return [
+            {"productId": row[0], "quantity": row[1], "addedAt": row[2]}
+            for row in res.result_set
+        ]
+
+    def clear_cart(self, ws: str, *, customer_id: str) -> None:
+        """Delete every `CartItem` under this customer's cart. Graph note §2.5.
+
+        Used standalone (FR-1) and inside `place_order` (as part of checkout,
+        via this repository's own §3.2 write). A `MATCH` against zero items is
+        a plain no-op.
+        """
+        self._graph(ws).query(
+            "MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "DETACH DELETE item",
+            {"customerId": customer_id},
+        )
+
+    def place_order(
+        self, ws: str, *, customer_id: str, order_id: str, now: int,
+        lines: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Snapshot + clear cart, one atomic query. Graph note §3.2.
+
+        `lines` is pre-resolved by the caller (current name/price from
+        `reference`, `lineTotal = unitPrice * quantity` via
+        `pricing.compute_line_total`) — no arithmetic happens in Cypher. Keyed
+        on a caller-minted `order_id` (the idempotency key): a guarded `CREATE`,
+        not a `MERGE` (mirrors `Message`'s guarded-`CREATE` idiom, DESIGN
+        §5.3/§9) — a retried call with the same `order_id` is a true no-op
+        (`created=False`), never a duplicate order. The cart's items are
+        cleared only on the call that actually creates the order (`created`),
+        so a replay never re-clears an already-emptied cart.
+
+        Raises when the `Customer` anchor is missing — the whole query no-ops
+        then (its own `MATCH (cust:Customer …)` is unconditional, graph note
+        §3.2), and a silent no-op would lose the order; mirrors
+        `create_thread`'s missing-anchor tripwire. The service layer's job
+        (`ensure_customer` first, §3.3 of the owning plan) is to make this
+        unreachable in practice — this raise is a tripwire, not the intended
+        control-flow path.
+        """
+        res = self._graph(ws).query(
+            "MATCH (cust:Customer {customerId: $customerId}) "
+            "OPTIONAL MATCH (dup:Order {orderId: $orderId}) "
+            "WITH cust, (dup IS NULL) AS created "
+            "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | "
+            "  CREATE (cust)-[:PLACED]->(:Order {orderId: $orderId, status: 'placed', "
+            "                                     placedAt: $now, updatedAt: $now}) "
+            ") "
+            "WITH cust, created "
+            "UNWIND (CASE WHEN $lines = [] THEN [null] ELSE $lines END) AS line "
+            "OPTIONAL MATCH (o:Order {orderId: $orderId}) "
+            "FOREACH (_ IN CASE WHEN created AND line IS NOT NULL THEN [1] ELSE [] END | "
+            "  CREATE (o)-[:HAS_LINE]->(:OrderLine {productId: line.productId, "
+            "                                        name: line.name, "
+            "                                        unitPrice: line.unitPrice, "
+            "                                        quantity: line.quantity, "
+            "                                        lineTotal: line.lineTotal}) "
+            ") "
+            "WITH cust, created, count(CASE WHEN line IS NOT NULL THEN 1 END) AS lineCount "
+            "OPTIONAL MATCH (cart:Cart {customerId: cust.customerId})-[:HAS_ITEM]->(item:CartItem) "
+            "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | DETACH DELETE item) "
+            "RETURN created, lineCount",
+            {
+                "customerId": customer_id, "orderId": order_id, "now": now,
+                "lines": lines,
+            },
+        )
+        if not res.result_set:
+            raise RuntimeError(
+                f"place_order was a no-op — customer not found "
+                f"(customer={customer_id!r}, order={order_id!r})"
+            )
+        row = res.result_set[0]
+        return {"created": bool(row[0]), "lineCount": row[1]}
+
+    def get_order(self, ws: str, *, order_id: str) -> dict[str, Any] | None:
+        """Status + snapshot + computed total. Graph note §3.3.
+
+        `total` is `sum(OrderLine.lineTotal)` computed on read — never stored
+        (graph note §3). `None` when no such `Order`.
+
+        Live-discovered nuance beyond the note's own verification (which only
+        exercised a 2-line order): `collect()` over a fan-out that matched zero
+        `OrderLine`s (a zero-line order — not reachable via the intended tool
+        path, §3.3 of the owning plan, but a valid direct call here) yields one
+        all-`null` placeholder entry, not `[]` — the same "constant scalar
+        beside an aggregate fan-out" shape as elsewhere in this engine, just
+        with the OPTIONAL MATCH finding nothing instead of finding one row per
+        distinct group. Filtered out client-side below rather than reshaping
+        the note's own `[verified]` Cypher.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine) "
+            "RETURN o.orderId AS orderId, o.status AS status, o.placedAt AS placedAt, "
+            "       o.updatedAt AS updatedAt, "
+            "       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice, "
+            "                 quantity: l.quantity, lineTotal: l.lineTotal}) AS lines, "
+            "       sum(l.lineTotal) AS total",
+            {"orderId": order_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        lines = [line for line in row[4] if line["productId"] is not None]
+        return {
+            "orderId": row[0], "status": row[1], "placedAt": row[2],
+            "updatedAt": row[3], "lines": lines, "total": row[5],
+        }
+
+    @staticmethod
+    def _order_status_row(res) -> dict[str, Any] | None:
+        """`{orderId, status}` for the §3.4 lifecycle CAS queries, or `None` (zero rows)."""
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"orderId": row[0], "status": row[1]}
+
+    def fulfill_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `placed → fulfilled`. Graph note §3.4.
+
+        Commits only from `status = 'placed'` — a stale/duplicate/out-of-order
+        attempt matches zero rows and writes nothing, returning `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'placed' "
+            "SET o.status = 'fulfilled', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)
+
+    def deliver_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `fulfilled → delivered`. Graph note §3.4.
+
+        Commits only from `status = 'fulfilled'`; otherwise zero rows → `None`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'fulfilled' "
+            "SET o.status = 'delivered', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)
+
+    def cancel_order(self, ws: str, *, order_id: str, now: int) -> dict[str, Any] | None:
+        """Guarded CAS `placed → cancelled`. Graph note §3.4.
+
+        Only reachable from `'placed'` — enforces AC-8 ("cannot cancel once
+        fulfilled"): an order already `fulfilled`/`delivered`/`cancelled`
+        matches zero rows and writes nothing.
+        """
+        res = self._graph(ws).query(
+            "MATCH (o:Order {orderId: $orderId}) "
+            "WHERE o.status = 'placed' "
+            "SET o.status = 'cancelled', o.updatedAt = $now "
+            "RETURN o.orderId AS orderId, o.status AS status",
+            {"orderId": order_id, "now": now},
+        )
+        return self._order_status_row(res)

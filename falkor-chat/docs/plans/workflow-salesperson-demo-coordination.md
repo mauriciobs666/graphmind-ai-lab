@@ -281,8 +281,15 @@ acceptance, AC-1..AC-5) and all of K-053/K-054/K-055 remain queued, unchanged fr
 above — resume by dispatching U17 next. **Per explicit user direction, do not resume any
 prior-session agent id going forward — every unit from here on dispatches a fresh agent**, even
 where an earlier row in this ledger predates that direction and shows a resume.
-| U18 | `coder` | — | queued | K-053 cluster 1: `pricing.py`, `repository.py` (cart/order) | — | — |
-| U19 | `coder` (resume U18) | — | queued | K-053 cluster 2: `services.py`, `tools.py` (5 cart/order tools) | — | — |
+## Session resume (2026-08-28/29) — K-056 stays open, user directs proceeding to K-053
+
+New session. Asked the user explicitly whether to (a) proceed to K-053 accepting D-1/K-056 as a
+known, disclosed, open risk, (b) pursue the ml note's remaining levers (controlled eval,
+larger-model fallback) before touching any write-mutating tool, or (c) something else. **User
+chose (a) — proceed to K-053.** Dispatching U18 per the already-queued ledger below.
+
+| U18 | `coder` | `a48905847f09736a2` | delivered | `server/falkorchat/pricing.py` (new), `repository.py` §16 Cart/Order methods, `bootstrap_schema.sh` DDL (added, not originally scoped — mechanical, per graph note's own §7 DDL), 41 new tests | teco (independent re-run) → 1869 passed/4 deselected, matches | 210k tok / 128 tools |
+| U19 | `coder` (resume U18) | `a48905847f09736a2` | in-flight | K-053 cluster 2: `services.py`, `tools.py` (5 cart/order tools) | — | — |
 | U20 | `coder` (resume U18) | — | queued | K-053 cluster 3: `proof_defs.py` (v2 + `ORDER_FULFILLMENT_DEF`), seed/verify scripts, `QUERIES.md`/`test_queries.sh`, `AGENTS.md` | — | — |
 | U21 | `analyst` (resume) | — | queued | code review, K-053 diff | — | — |
 | U22 | `qa-engineer` (resume) | — | queued | live acceptance, K-053 (cart/order/fulfillment) | — | — |

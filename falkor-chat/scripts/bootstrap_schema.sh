@@ -220,6 +220,22 @@ bootstrap_workspace() {
   echo "[index] WorkspaceConfig.workspaceConfigId"
   gquery "$g" "CREATE INDEX FOR (n:WorkspaceConfig) ON (n.workspaceConfigId)"
 
+  # ── cart / order anchors (K-053 M6, workflow-cart-and-totals-graph.md §7) ────
+  echo "[index] Customer.customerId"
+  gquery "$g" "CREATE INDEX FOR (n:Customer) ON (n.customerId)"
+
+  echo "[index] Cart.customerId"
+  gquery "$g" "CREATE INDEX FOR (n:Cart) ON (n.customerId)"
+
+  echo "[index] CartItem.customerId"
+  gquery "$g" "CREATE INDEX FOR (n:CartItem) ON (n.customerId)"
+
+  echo "[index] CartItem.productId"
+  gquery "$g" "CREATE INDEX FOR (n:CartItem) ON (n.productId)"
+
+  echo "[index] Order.orderId"
+  gquery "$g" "CREATE INDEX FOR (n:Order) ON (n.orderId)"
+
   # ── uniqueness constraints ───────────────────────────────────
   echo "[constraint] User unique {userId}"
   gconstraint "$g" UNIQUE NODE User PROPERTIES 1 userId
@@ -268,6 +284,18 @@ bootstrap_workspace() {
 
   echo "[constraint] WorkspaceConfig unique {workspaceConfigId}"
   gconstraint "$g" UNIQUE NODE WorkspaceConfig PROPERTIES 1 workspaceConfigId
+
+  echo "[constraint] Customer unique {customerId}"
+  gconstraint "$g" UNIQUE NODE Customer PROPERTIES 1 customerId
+
+  echo "[constraint] Cart unique {customerId}"
+  gconstraint "$g" UNIQUE NODE Cart PROPERTIES 1 customerId
+
+  echo "[constraint] CartItem unique {customerId, productId}"
+  gconstraint "$g" UNIQUE NODE CartItem PROPERTIES 2 customerId productId
+
+  echo "[constraint] Order unique {orderId}"
+  gconstraint "$g" UNIQUE NODE Order PROPERTIES 1 orderId
 
   # ── full-text index ─────────────────────────────────────────
   echo "[fulltext] Message.text"

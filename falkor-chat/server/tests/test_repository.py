@@ -2944,3 +2944,335 @@ def test_filter_products_empty_catalog_returns_empty(wf_repo):
     assert wf_repo.filter_products(
         category=None, min_price=None, max_price=None, limit=20,
     ) == []
+
+
+# ── §16 Cart / Order (K-053 M6) ──────────────────────────────────────────────
+#
+# Workspace-scoped (`ws:test`, via `repo`/`conn`) — no `reference` graph is
+# touched by anything in this section, so `repo`/`conn` (not `wf_repo`) is the
+# right fixture throughout. Each test wraps one `docs/plans/
+# workflow-cart-and-totals-graph.md` (v2) Cypher shape 1:1, named per test.
+
+
+def test_ensure_customer_fresh_creates_then_reensure_is_quiet_noop(repo, conn):
+    first = repo.ensure_customer("test", customer_id="cust1", now=100)
+    assert first == {"customerId": "cust1", "createdAt": 100}
+
+    second = repo.ensure_customer("test", customer_id="cust1", now=200)
+    assert second == {"customerId": "cust1", "createdAt": 100}  # createdAt unchanged
+
+    rows = _probe(conn, "MATCH (c:Customer {customerId: 'cust1'}) RETURN count(c)")
+    assert rows[0][0] == 1
+
+
+def test_ensure_cart_after_ensure_customer_creates_cart(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+
+    first = repo.ensure_cart("test", customer_id="cust1", now=100)
+    assert first == {"customerId": "cust1", "createdAt": 100}
+
+    second = repo.ensure_cart("test", customer_id="cust1", now=200)
+    assert second == {"customerId": "cust1", "createdAt": 100}  # createdAt unchanged
+
+    rows = _probe(
+        conn,
+        "MATCH (:Customer {customerId: 'cust1'})-[:HAS_CART]->(cart:Cart) "
+        "RETURN count(cart)",
+    )
+    assert rows[0][0] == 1
+
+
+def test_ensure_cart_missing_customer_is_a_noop_returning_none(repo):
+    assert repo.ensure_cart("test", customer_id="ghost", now=100) is None
+
+
+def test_add_to_cart_without_a_cart_yet_is_a_noop_returning_none(repo):
+    # Regression for `analyst`'s MAJOR finding (`docs/reviews/
+    # workflow-cart-and-totals.md`): a brand-new customerId with no prior
+    # Customer/Cart node — this repository method alone must not silently
+    # write nothing while looking like success; it must report the no-op.
+    assert repo.add_to_cart(
+        "test", customer_id="cust1", product_id="prod1", qty=2, now=100
+    ) is None
+
+
+def test_add_to_cart_merges_and_increments_not_duplicates(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+
+    first = repo.add_to_cart(
+        "test", customer_id="cust1", product_id="prod1", qty=2, now=100
+    )
+    assert first == {"productId": "prod1", "quantity": 2}
+
+    second = repo.add_to_cart(
+        "test", customer_id="cust1", product_id="prod1", qty=2, now=200
+    )
+    assert second == {"productId": "prod1", "quantity": 4}
+
+    rows = _probe(conn, "MATCH (i:CartItem {productId: 'prod1'}) RETURN count(i)")
+    assert rows[0][0] == 1
+
+
+def test_add_to_cart_second_product_added_cleanly_alongside_first(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=1, now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod2", qty=3, now=100)
+
+    cart = repo.read_cart("test", customer_id="cust1")
+    assert {(row["productId"], row["quantity"]) for row in cart} == {
+        ("prod1", 1), ("prod2", 3),
+    }
+
+
+def test_adjust_cart_item_decrement_updates_in_place(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=4, now=100)
+
+    result = repo.adjust_cart_item(
+        "test", customer_id="cust1", product_id="prod1", qty=1, now=200
+    )
+    assert result == {"quantity": 3, "removed": False}
+
+    rows = _probe(conn, "MATCH (i:CartItem {productId: 'prod1'}) RETURN i.quantity")
+    assert rows[0][0] == 3
+
+
+def test_adjust_cart_item_decrement_to_zero_deletes_node_and_edge(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=3, now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod2", qty=1, now=100)
+
+    result = repo.adjust_cart_item(
+        "test", customer_id="cust1", product_id="prod1", qty=3, now=200
+    )
+    assert result == {"quantity": 0, "removed": True}
+
+    rows = _probe(conn, "MATCH (i:CartItem {productId: 'prod1'}) RETURN count(i)")
+    assert rows[0][0] == 0
+    # the other product's line is untouched
+    rows = _probe(conn, "MATCH (i:CartItem {productId: 'prod2'}) RETURN i.quantity")
+    assert rows[0][0] == 1
+
+
+def test_adjust_cart_item_over_removal_deletes_rather_than_going_negative(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=2, now=100)
+
+    result = repo.adjust_cart_item(
+        "test", customer_id="cust1", product_id="prod1", qty=99, now=200
+    )
+    assert result == {"quantity": -97, "removed": True}
+    assert repo.read_cart("test", customer_id="cust1") == []
+
+
+def test_adjust_cart_item_no_such_line_is_a_noop_returning_none(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+
+    assert repo.adjust_cart_item(
+        "test", customer_id="cust1", product_id="never-added", qty=1, now=100
+    ) is None
+
+
+def test_read_cart_empty_when_no_cart_yet(repo):
+    assert repo.read_cart("test", customer_id="ghost") == []
+
+
+def test_read_cart_orders_by_added_at(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod2", qty=1, now=200)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=1, now=100)
+
+    cart = repo.read_cart("test", customer_id="cust1")
+    assert [row["productId"] for row in cart] == ["prod1", "prod2"]
+
+
+def test_clear_cart_deletes_all_items(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=1, now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod2", qty=1, now=100)
+
+    repo.clear_cart("test", customer_id="cust1")
+
+    assert repo.read_cart("test", customer_id="cust1") == []
+    rows = _probe(conn, "MATCH (:Cart {customerId: 'cust1'}) RETURN count(*)")
+    assert rows[0][0] == 1  # the Cart node itself survives, only its items go
+
+
+def test_clear_cart_on_empty_cart_is_a_plain_noop(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.clear_cart("test", customer_id="cust1")  # must not raise
+    assert repo.read_cart("test", customer_id="cust1") == []
+
+
+_ORDER_LINES = [
+    {"productId": "prod1", "name": "Widget", "unitPrice": 10.0, "quantity": 2,
+     "lineTotal": 20.0},
+    {"productId": "prod2", "name": "Gadget", "unitPrice": 5.0, "quantity": 3,
+     "lineTotal": 15.0},
+]
+
+
+def test_place_order_snapshots_lines_and_clears_cart(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=2, now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod2", qty=3, now=100)
+
+    result = repo.place_order(
+        "test", customer_id="cust1", order_id="order1", now=300, lines=_ORDER_LINES,
+    )
+    assert result == {"created": True, "lineCount": 2}
+
+    order = repo.get_order("test", order_id="order1")
+    assert order["orderId"] == "order1"
+    assert order["status"] == "placed"
+    assert order["total"] == 35.0
+    assert {(l["productId"], l["unitPrice"], l["quantity"], l["lineTotal"])
+            for l in order["lines"]} == {
+        ("prod1", 10.0, 2, 20.0), ("prod2", 5.0, 3, 15.0),
+    }
+    assert repo.read_cart("test", customer_id="cust1") == []
+
+
+def test_place_order_retry_with_same_order_id_is_idempotent_noop(repo, conn):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=2, now=100)
+
+    lines = [_ORDER_LINES[0]]
+    first = repo.place_order(
+        "test", customer_id="cust1", order_id="order1", now=300, lines=lines,
+    )
+    assert first == {"created": True, "lineCount": 1}
+
+    # retry: cart already cleared, but the same orderId must not duplicate
+    retry = repo.place_order(
+        "test", customer_id="cust1", order_id="order1", now=400, lines=lines,
+    )
+    assert retry == {"created": False, "lineCount": 1}
+
+    rows = _probe(conn, "MATCH (o:Order {orderId: 'order1'}) RETURN count(o)")
+    assert rows[0][0] == 1
+    rows = _probe(
+        conn, "MATCH (:Order {orderId: 'order1'})-[:HAS_LINE]->(l) RETURN count(l)"
+    )
+    assert rows[0][0] == 1
+
+
+def test_place_order_with_empty_lines_creates_a_zero_line_order(repo):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+
+    result = repo.place_order(
+        "test", customer_id="cust1", order_id="order-empty", now=300, lines=[],
+    )
+    assert result == {"created": True, "lineCount": 0}
+
+    order = repo.get_order("test", order_id="order-empty")
+    assert order["status"] == "placed"
+    assert order["lines"] == []
+    assert order["total"] == 0.0  # sum() over an empty/all-null set is 0, not null
+
+
+def test_place_order_missing_customer_raises_not_silent_noop(repo):
+    with pytest.raises(RuntimeError):
+        repo.place_order(
+            "test", customer_id="ghost", order_id="order1", now=300,
+            lines=_ORDER_LINES,
+        )
+
+
+def test_get_order_none_when_absent(repo):
+    assert repo.get_order("test", order_id="ghost") is None
+
+
+def _place_test_order(repo, *, order_id="order1"):
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.place_order(
+        "test", customer_id="cust1", order_id=order_id, now=300, lines=_ORDER_LINES,
+    )
+
+
+def test_fulfill_order_from_placed_succeeds(repo):
+    _place_test_order(repo)
+
+    result = repo.fulfill_order("test", order_id="order1", now=400)
+    assert result == {"orderId": "order1", "status": "fulfilled"}
+    assert repo.get_order("test", order_id="order1")["status"] == "fulfilled"
+
+
+def test_fulfill_order_not_placed_is_a_noop_returning_none(repo):
+    _place_test_order(repo)
+    repo.fulfill_order("test", order_id="order1", now=400)
+
+    # already fulfilled — a second fulfill attempt matches zero rows
+    assert repo.fulfill_order("test", order_id="order1", now=500) is None
+    assert repo.get_order("test", order_id="order1")["status"] == "fulfilled"
+
+
+def test_deliver_order_from_fulfilled_succeeds(repo):
+    _place_test_order(repo)
+    repo.fulfill_order("test", order_id="order1", now=400)
+
+    result = repo.deliver_order("test", order_id="order1", now=500)
+    assert result == {"orderId": "order1", "status": "delivered"}
+    assert repo.get_order("test", order_id="order1")["status"] == "delivered"
+
+
+def test_deliver_order_not_yet_fulfilled_is_a_noop_returning_none(repo):
+    _place_test_order(repo)
+
+    # still just 'placed' — deliver requires 'fulfilled' first
+    assert repo.deliver_order("test", order_id="order1", now=500) is None
+    assert repo.get_order("test", order_id="order1")["status"] == "placed"
+
+
+def test_cancel_order_from_placed_succeeds(repo):
+    _place_test_order(repo)
+
+    result = repo.cancel_order("test", order_id="order1", now=400)
+    assert result == {"orderId": "order1", "status": "cancelled"}
+    assert repo.get_order("test", order_id="order1")["status"] == "cancelled"
+
+
+def test_cancel_order_after_fulfilled_is_blocked_ac8(repo):
+    _place_test_order(repo)
+    repo.fulfill_order("test", order_id="order1", now=400)
+
+    # AC-8: cannot cancel once fulfilled — matches zero rows, nothing changes
+    assert repo.cancel_order("test", order_id="order1", now=500) is None
+    assert repo.get_order("test", order_id="order1")["status"] == "fulfilled"
+
+
+def test_order_lifecycle_end_to_end_placed_fulfilled_delivered(repo):
+    _place_test_order(repo)
+
+    assert repo.get_order("test", order_id="order1")["status"] == "placed"
+    repo.fulfill_order("test", order_id="order1", now=400)
+    assert repo.get_order("test", order_id="order1")["status"] == "fulfilled"
+    repo.deliver_order("test", order_id="order1", now=500)
+    assert repo.get_order("test", order_id="order1")["status"] == "delivered"
+
+
+def test_customer_and_cart_persist_across_repository_instances_ac3(repo):
+    """AC-3 (same-customer cross-conversation persistence), at the repository
+    layer: a second `Repository` built over a fresh connection sees the first
+    one's writes — durability is the graph, not any in-process object (the
+    same fact two separate `Thread`s/service calls will rely on at the
+    service layer, later cluster).
+    """
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    repo.ensure_cart("test", customer_id="cust1", now=100)
+    repo.add_to_cart("test", customer_id="cust1", product_id="prod1", qty=1, now=100)
+
+    repo2 = Repository(db.connect())
+    cart = repo2.read_cart("test", customer_id="cust1")
+    assert cart == [{"productId": "prod1", "quantity": 1, "addedAt": 100}]
