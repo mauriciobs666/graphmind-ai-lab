@@ -154,6 +154,15 @@ unreachable from this WSL2 box; worked around via `FALKORCHAT_OPENCODE_CONFIG`, 
 untouched) — worth a `devops` follow-up (fix the shared config or add a `start_server.sh` preflight
 check), not blocking.
 
+**User decision (2026-08-28):** given three of the answer choices explicitly, the user picked
+"investigate D-1 first, then proceed" — a bounded diagnostic pass before dispatching K-053 (U18),
+not a full program pause and not proceeding uninvestigated. Dispatched as **U36**.
+
+| U36 | `data-scientist` (fresh) | `a3b396e82d988e713` | in-flight | diagnostic, `docs/reviews/salesperson-tool-reliability-ml.md` | self → — | — |
+
+U18 (K-053, `coder`) stays `queued`, not dispatched, until U36 delivers and I've read its
+recommendation.
+
 **Correction to the report's own cross-reference:** the report calls D-1 "already flagged as a
 known open epic (K-027)" — checked, and that's stale/wrong: `docs/BACKLOG.md` shows **K-027 closed
 2026-08-21**, and it was about tool-call *parsing* precedence/robustness (bare-call vs. JSON-envelope
