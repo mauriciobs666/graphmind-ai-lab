@@ -140,7 +140,28 @@ own §"CPG" note already assessed this as new-code / non-impact-analysis work; f
 | U15-finding | — | — | — | **Real bug, live-discovered, out of U15's own scope**: `filter_products`' category match is exact/case-sensitive; a real LLM lowercased "audio" against seeded `"Audio"`, silently returning zero rows. Routed to a fresh `coder` fix, U15b, before the K-052 gates (cheaper to fix once than have both `analyst` and `qa-engineer` independently rediscover it). | — | — |
 | U15b | `coder` (fresh) | `a3d25046b87549518` | delivered | fix: `Product.categoryNormalized` (mirrors `nameNormalized` precedent, not runtime `toLower()`), `repository.filter_products` normalizes+compares against it; `GRAPH.PROFILE`-reverified still index-scan, not label-scan; 346/346 `test_queries.sh`, 1811/4 pytest, mutation-tested (3 tests correctly fail reverted) | `analyst`/`qa-engineer` (U16/U17) → — | 154k tok / 78 tools |
 | U16 | `analyst` (fresh) | `ab27291958c6b7672` | delivered | code review, K-052 diff (incl. U15b) → **new** `docs/reviews/workflow-catalog-lookup-impl.md` (not a Pass 2 in the bare-slug file — see routing note below), `Extends:`/`Extended by:` pointers added to both review docs | self → **approve with suggestions** (2 MINOR, 1 nit, no blocker) | 193k tok / 82 tools |
-| U17 | `qa-engineer` (fresh) | — | queued | live acceptance, K-052 (AC-1..AC-5) | — | — |
+| U17 | `qa-engineer` (fresh) | `a2de4430707c3bb70` | accepted | `docs/test-plans/workflow-catalog-lookup.md`, `docs/test-reports/workflow-catalog-lookup-report.md` | self → **PASS WITH DEFECTS** (D-1, see below) | 224k tok / 96 tools |
+
+**U17 delivered — K-052 all 5 ACs hold live; K-052 itself ships as-is (no code blocker).** One
+real, reproducible defect (D-1, MAJOR by user impact) found specifically by driving the live
+system: within one extended `@mention` conversation, the local model (`qwen/qwen3-4b-2507`)
+fabricates catalog facts (invented products, a wrong price) on later tool-calling turns, while the
+identical question in a fresh conversation succeeds every time. Ground-truth Cypher + graph-level
+`Message` content confirm the repository/service/tool/def layer is correct in every case —
+root-caused to live model/conversation-length behavior, not K-052's code. Also found and disclosed:
+a session-local LM Studio connectivity gotcha (shared `opencode.json`'s gateway-IP `baseURL`
+unreachable from this WSL2 box; worked around via `FALKORCHAT_OPENCODE_CONFIG`, shared file
+untouched) — worth a `devops` follow-up (fix the shared config or add a `start_server.sh` preflight
+check), not blocking.
+
+**Correction to the report's own cross-reference:** the report calls D-1 "already flagged as a
+known open epic (K-027)" — checked, and that's stale/wrong: `docs/BACKLOG.md` shows **K-027 closed
+2026-08-21**, and it was about tool-call *parsing* precedence/robustness (bare-call vs. JSON-envelope
+ambiguity), not live model reliability degrading over conversation length. No existing backlog item
+covers D-1's actual failure mode — `grep` for reliability/degrad/hallucin/fabricat/"long
+conversation" across `BACKLOG.md` returns nothing. D-1 needs its **own** new K-item, not a citation
+to K-027. Left open below as a decision for the user rather than filed unilaterally, since it
+affects whether K-053/K-054/K-055 proceed as planned or pause for investigation first.
 
 **U16 routing note, resolved by `teco`:** the analyst filed a *separate* `-impl`-role review
 document rather than a `## Pass 2` section in the bare-slug plan review, citing root `AGENTS.md`'s
