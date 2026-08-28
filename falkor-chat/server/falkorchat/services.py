@@ -22,7 +22,7 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
-from . import chunking, config, proof_defs
+from . import chunking, config, extraction, proof_defs
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 from .modelconfig import ModelConfigError, ModelResolutionError
@@ -2541,4 +2541,40 @@ class Services:
             raise ThreadNotFoundError(thread_id)
         return self._repo.find_runs_for_thread(
             ctx.ws, thread_id=thread_id, limit=limit
+        )
+
+    # ── §15 Product catalog (K-052 M6) ────────────────────────────────────────────
+    #
+    # Thin, `repository`-delegating passthroughs (plan §3.5) — no Cypher of their
+    # own. `ctx` is accepted on both for signature symmetry with every other
+    # tool-backing service method (and future auditing), not because the catalog
+    # is workspace-scoped: neither takes `ctx.ws` into the query, since `Product`
+    # lives in the global `reference` graph, not `ws:{id}`.
+
+    def lookup_product(self, ctx: CallContext, *, name: str) -> dict[str, Any] | None:
+        """Exact-name catalog fact lookup (FR-1/AC-1/AC-4). QUERIES.md §15.1.
+
+        Normalizes `name` via `extraction.normalize_name` — the same shared
+        normalization helper `Entity.nameNormalized` uses (§14.5) — before the
+        repository's exact `=` lookup, so AC-4's wording tolerance ("how much is
+        the X" vs "what's the price of the X") resolves to the same lookup once
+        the calling LLM extracts the product name argument. `None` when nothing
+        matches (AC-3 abstention).
+        """
+        return self._repo.lookup_product(
+            name_normalized=extraction.normalize_name(name)
+        )
+
+    def filter_products(
+        self, ctx: CallContext, *, category: str | None, min_price: float | None,
+        max_price: float | None, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Category/price-range catalog filter (FR-2/FR-3). QUERIES.md §15.2.
+
+        Each filter is optional; an all-omitted call lists the whole catalog,
+        bounded by `limit`. Empty list means nothing matched (AC-3 abstention).
+        """
+        return self._repo.filter_products(
+            category=category, min_price=min_price, max_price=max_price,
+            limit=limit,
         )

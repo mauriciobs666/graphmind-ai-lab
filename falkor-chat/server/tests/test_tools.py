@@ -25,9 +25,12 @@ from conftest import TEST_EMBEDDING_DIM
 from falkorchat.config import CallContext
 from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
+    DEFAULT_FILTER_LIMIT,
+    FilterProductsTool,
     GraphragRetrieveTool,
     HumanHandoffSignal,
     HumanHandoffTool,
+    LookupProductFactTool,
     PostMessageTool,
     ToolRegistry,
     UnknownToolError,
@@ -43,13 +46,19 @@ WS = "test"
 class StubServices:
     """Records `post_agent_answer` / `link_step_emission` / `hybrid_search` calls."""
 
-    def __init__(self, *, search_rows=None, link_ok=True):
+    def __init__(self, *, search_rows=None, link_ok=True,
+                 products_by_name=None, filter_result=None):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
         self.linked: list[dict] = []
         self.searched: list[dict] = []
         self._msg_seq = itertools.count(1)
+        # §15 product catalog (K-052 M6)
+        self._products_by_name = products_by_name or {}
+        self._filter_result = filter_result or []
+        self.looked_up: list[str] = []
+        self.filtered: list[dict] = []
 
     def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
         msg_id = f"m{next(self._msg_seq)}"
@@ -66,6 +75,17 @@ class StubServices:
     def hybrid_search(self, ctx, *, q_vec, k=10, channel_id=None):
         self.searched.append({"q_vec": q_vec, "k": k, "channel_id": channel_id})
         return list(self._search_rows)
+
+    def lookup_product(self, ctx, *, name):
+        self.looked_up.append(name)
+        return self._products_by_name.get(name)
+
+    def filter_products(self, ctx, *, category, min_price, max_price, limit):
+        self.filtered.append(
+            {"category": category, "min_price": min_price,
+             "max_price": max_price, "limit": limit}
+        )
+        return list(self._filter_result)
 
 
 class StubEmbedder:
@@ -118,9 +138,16 @@ def test_registry_jsonifies_nonstring_results():
     assert json.loads(reg.dispatch("d", {}, ctx=CTX, run={})) == {"a": 1}
 
 
-def test_build_builtin_registry_registers_all_three():
+def test_build_builtin_registry_registers_all_five():
+    # K-052 M6: the salesperson-demo catalog tools are registered into this same
+    # shared registry (the AC-6 fence is per-node config.tools, not registry
+    # membership — the same "present, only offered where granted" posture
+    # human_handoff already established for triage).
     reg = build_builtin_registry(StubServices(), StubEmbedder(), agent_id="assistant")
-    assert set(reg.names()) == {"post_message", "graphrag_retrieve", "human_handoff"}
+    assert set(reg.names()) == {
+        "post_message", "graphrag_retrieve", "human_handoff",
+        "lookup_product_fact", "filter_products",
+    }
 
 
 # ── post_message (unit, stub services) ───────────────────────────────────────
@@ -354,6 +381,77 @@ def test_human_handoff_dispatch_signals_suspend():
     with pytest.raises(HumanHandoffSignal) as exc:
         reg.dispatch("human_handoff", {"reason": "needs a person"}, ctx=CTX, run={})
     assert exc.value.reason == "needs a person"
+
+
+# ── lookup_product_fact / filter_products (K-052 M6, unit, stub services) ────
+
+def test_lookup_product_fact_returns_found_row():
+    svc = StubServices(products_by_name={
+        "Bluetooth Speaker": {"name": "Bluetooth Speaker", "category": "audio",
+                              "price": 89.99},
+    })
+    tool = LookupProductFactTool(svc)
+
+    out = json.loads(tool.run({"name": "Bluetooth Speaker"}, ctx=CTX, run={}))
+
+    assert out == {"found": True, "name": "Bluetooth Speaker", "category": "audio",
+                    "price": 89.99}
+    assert svc.looked_up == ["Bluetooth Speaker"]
+
+
+def test_lookup_product_fact_abstains_when_not_found():
+    svc = StubServices()
+    tool = LookupProductFactTool(svc)
+
+    out = json.loads(tool.run({"name": "nonexistent gadget"}, ctx=CTX, run={}))
+
+    assert out == {"found": False}
+
+
+def test_lookup_product_fact_defaults_missing_name_to_empty_string():
+    svc = StubServices()
+    tool = LookupProductFactTool(svc)
+    tool.run({}, ctx=CTX, run={})
+    assert svc.looked_up == [""]
+
+
+def test_filter_products_returns_items():
+    rows = [{"name": "Bluetooth Speaker", "category": "audio", "price": 89.99}]
+    svc = StubServices(filter_result=rows)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run(
+        {"category": "audio", "minPrice": 50.0, "maxPrice": 150.0}, ctx=CTX, run={},
+    ))
+
+    assert out == {"items": rows}
+    assert svc.filtered == [
+        {"category": "audio", "min_price": 50.0, "max_price": 150.0,
+         "limit": DEFAULT_FILTER_LIMIT}
+    ]
+
+
+def test_filter_products_abstains_when_nothing_matches():
+    svc = StubServices(filter_result=[])
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run({"category": "nonexistent"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching products found"}
+
+
+def test_filter_products_all_arguments_optional():
+    rows = [{"name": "Wireless Mouse", "category": "accessories", "price": 25.0}]
+    svc = StubServices(filter_result=rows)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == {"items": rows}
+    assert svc.filtered == [
+        {"category": None, "min_price": None, "max_price": None,
+         "limit": DEFAULT_FILTER_LIMIT}
+    ]
 
 
 # ── integration: post_message writes the agent message via §4 (durable artifact) ─

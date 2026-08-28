@@ -1339,6 +1339,105 @@ assert_index_scan "§13.2 read_model_overrides anchors on WorkspaceConfig index"
 # cleanup this section's fixture
 gq "$WS" 'MATCH (c:WorkspaceConfig) DETACH DELETE c' > /dev/null
 
+# ── §15: product catalog (K-052 M6) ─────────────────────────────────────────
+#
+# Global, seed-script-write-only reference catalog (docs/plans/workflow-catalog-lookup.md
+# §3.1) — lives in `reference`, looked up by property key, never scoped per workspace.
+# Canonical bodies: QUERIES.md §15.1/§15.2. Fixture: 5 products across 3 categories.
+
+echo ""
+echo "▶ §15 product catalog — lookup_product / filter_products (K-052 M6)"
+
+# NOTE: `category` is seeded Title-Case (matching seed_catalog.sh's real data,
+# e.g. "Audio") while `categoryNormalized` is its case-folded form — deliberately
+# mismatched casing so the assertions below prove the match runs against
+# categoryNormalized, not a case-sensitive compare on the raw category.
+gq "$REF" "CREATE (:Product {productId:'prod1', name:'Wireless Mouse', nameNormalized:'wireless mouse', category:'Accessories', categoryNormalized:'accessories', price:25.0})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod2', name:'Bluetooth Speaker', nameNormalized:'bluetooth speaker', category:'Audio', categoryNormalized:'audio', price:89.99})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod3', name:'4K Monitor', nameNormalized:'4k monitor', category:'Displays', categoryNormalized:'displays', price:349.0})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod4', name:'USB-C Hub', nameNormalized:'usb-c hub', category:'Accessories', categoryNormalized:'accessories', price:45.5})" > /dev/null
+gq "$REF" "CREATE (:Product {productId:'prod5', name:'Noise Cancelling Headphones', nameNormalized:'noise cancelling headphones', category:'Audio', categoryNormalized:'audio', price:199.99})" > /dev/null
+
+# Product.productId uniqueness constraint
+out=$(gq "$REF" "CREATE (:Product {productId:'prod1', name:'Imposter'})" 2>&1)
+assert_contains "§15 constraint blocks duplicate productId" "unique constraint violation" "$out"
+
+LOOKUP='MATCH (p:Product {nameNormalized: $nameNormalized}) RETURN p.name AS name, p.category AS category, p.price AS price LIMIT 1'
+
+# §15.1 lookup_product — exact-name hit
+out=$(rq "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
+assert_contains "§15.1 lookup_product exact-name hit returns Bluetooth Speaker" "Bluetooth Speaker" "$out"
+assert_contains "§15.1 lookup_product hit returns its category"                 "Audio"             "$out"
+assert_contains "§15.1 lookup_product hit returns its price"                    "89.99"             "$out"
+
+# §15.1 lookup_product — abstention (AC-3): no row for an unknown name
+out=$(rq "$REF" "CYPHER nameNormalized=\"nonexistent gadget\" $LOOKUP")
+assert_no_data_row "§15.1 lookup_product unknown name returns no row (abstention)" "$(printf 'name\ncategory\nprice')" "$out"
+
+# §15.1 PROFILE: anchors on Product.nameNormalized, no label scan
+prof=$(gp "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
+assert_index_scan "§15.1 lookup_product anchors on Product.nameNormalized index" "$prof"
+
+# $categoryNormalized is what Repository.filter_products actually binds — it normalizes
+# the caller's raw `category` argument via extraction.normalize_name (case-fold) before
+# querying, and compares against the precomputed Product.categoryNormalized property
+# rather than the raw, differently-cased Product.category (K-052 M6 live-discovered fix,
+# 2026-08-28: an LLM call passed a lowercased "audio" against seeded Title-Case "Audio"
+# and the old exact p.category = $category comparison silently returned zero rows).
+FILTER='MATCH (p:Product) WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) AND p.price >= coalesce($minPrice, -1.0) AND p.price <= coalesce($maxPrice, 1000000000.0) RETURN p.name AS name, p.category AS category, p.price AS price ORDER BY p.price ASC LIMIT $limit'
+
+# §15.2 filter_products — unfiltered lists the whole catalog, price ascending
+out=$(rq "$REF" "CYPHER categoryNormalized=null minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains "§15.2 filter_products unfiltered includes all 5 products" "Wireless Mouse"     "$out"
+assert_contains "§15.2 filter_products unfiltered includes 4K Monitor"     "4K Monitor"          "$out"
+
+# §15.2 filter_products — category filter only (fixture stores category:'Accessories',
+# categoryNormalized:'accessories' — the mismatched casing proves the match runs
+# against categoryNormalized, not a case-sensitive compare on the raw category)
+out=$(rq "$REF" "CYPHER categoryNormalized=\"accessories\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains     "§15.2 filter_products category=accessories includes Wireless Mouse" "Wireless Mouse" "$out"
+assert_contains     "§15.2 filter_products category=accessories includes USB-C Hub"      "USB-C Hub"      "$out"
+assert_not_contains "§15.2 filter_products category=accessories excludes 4K Monitor"     "4K Monitor"     "$out"
+
+# §15.2 filter_products — case-insensitive category match (K-052 M6 fix): the fixture's
+# stored category is Title-Case "Audio", but the (already-normalized) argument is
+# lowercase "audio" — proving a differently-cased category argument now matches instead
+# of silently returning zero rows.
+out=$(rq "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_contains "§15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Bluetooth Speaker)" "Bluetooth Speaker" "$out"
+assert_contains "§15.2 filter_products lowercase 'audio' argument matches Title-Case 'Audio' rows (Noise Cancelling Headphones)" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products lowercase 'audio' argument excludes non-audio rows" "4K Monitor" "$out"
+
+# §15.2 filter_products — price-range filter only (50.0..250.0 excludes prod1/prod3/prod4)
+out=$(rq "$REF" "CYPHER categoryNormalized=null minPrice=50.0 maxPrice=250.0 limit=20 $FILTER")
+assert_contains     "§15.2 filter_products price 50-250 includes Bluetooth Speaker"        "Bluetooth Speaker"           "$out"
+assert_contains     "§15.2 filter_products price 50-250 includes Noise Cancelling Headphones" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products price 50-250 excludes 4K Monitor (too expensive)"  "4K Monitor"                  "$out"
+assert_not_contains "§15.2 filter_products price 50-250 excludes Wireless Mouse (too cheap)"   "Wireless Mouse"              "$out"
+
+# §15.2 filter_products — category + price combined
+out=$(rq "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=100.0 maxPrice=null limit=20 $FILTER")
+assert_contains     "§15.2 filter_products audio+minPrice=100 includes Noise Cancelling Headphones" "Noise Cancelling Headphones" "$out"
+assert_not_contains "§15.2 filter_products audio+minPrice=100 excludes Bluetooth Speaker (below min)" "Bluetooth Speaker"          "$out"
+
+# §15.2 filter_products — abstention (AC-3): nonexistent category returns no row
+out=$(rq "$REF" "CYPHER categoryNormalized=\"nonexistent\" minPrice=null maxPrice=null limit=20 $FILTER")
+assert_no_data_row "§15.2 filter_products nonexistent category returns no row (abstention)" "$(printf 'name\ncategory\nprice')" "$out"
+
+# §15.2 PROFILE: every combination anchors on Product.price, no label scan — see
+# QUERIES.md §15.2's "Deviation from the plan's illustrative Cypher" note for why
+# (a $param IS NULL OR prop=$param null-guard would defeat the index here, same
+# live-verified quirk already documented for list_matches) — and its "case/whitespace-
+# insensitive category" note for why categoryNormalized (swapped in for the K-052 M6
+# fix) doesn't reintroduce that regression: it was never this query's scan anchor.
+prof=$(gp "$REF" "CYPHER categoryNormalized=null minPrice=null maxPrice=null limit=20 $FILTER")
+assert_index_scan "§15.2 filter_products unfiltered still anchors on Product.price index" "$prof"
+prof=$(gp "$REF" "CYPHER categoryNormalized=\"audio\" minPrice=100.0 maxPrice=null limit=20 $FILTER")
+assert_index_scan "§15.2 filter_products category+price anchors on Product.price index" "$prof"
+
+# cleanup this section's fixture
+gq "$REF" 'MATCH (p:Product) DETACH DELETE p' > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

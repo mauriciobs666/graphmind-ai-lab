@@ -59,6 +59,37 @@ bootstrap_reference() {
   echo "[index] Step.stepUid"
   gquery "$g" "CREATE INDEX FOR (n:Step) ON (n.stepUid)"
 
+  # K-052 M6: Product catalog (`docs/plans/workflow-catalog-lookup.md` §3.1) — a
+  # global, seed-script-write-only reference catalog, looked up by the salesperson
+  # demo's tools. productId is the standard {label}Id identity anchor. Index first
+  # so the UNIQUE constraint below can attach (§7.1 rule 1).
+  echo "[index] Product.productId"
+  gquery "$g" "CREATE INDEX FOR (n:Product) ON (n.productId)"
+
+  # nameNormalized backs lookup_product's exact-name `=` comparison (FR-1/AC-1/
+  # AC-4) — same tier-mechanics precedent as Entity.nameNormalized above. Range
+  # index, no constraint: two products could in principle share a normalized name
+  # in a different category.
+  echo "[index] Product.nameNormalized"
+  gquery "$g" "CREATE INDEX FOR (n:Product) ON (n.nameNormalized)"
+
+  # categoryNormalized backs filter_products' category equality predicate
+  # case-insensitively (K-049-adjacent live finding, 2026-08-28: a live LLM
+  # call lowercased a category argument and the exact-case `category` match
+  # silently returned zero rows). Same normalized-property + exact-match
+  # precedent as nameNormalized above, not a runtime toLower() — see
+  # QUERIES.md §15.2's sargability note for why. No constraint, filtering
+  # only. The raw `category` property carries no index of its own (same
+  # convention as `name`/`nameNormalized`: only the normalized property is
+  # indexed; the raw property is returned, never filtered on).
+  echo "[index] Product.categoryNormalized"
+  gquery "$g" "CREATE INDEX FOR (n:Product) ON (n.categoryNormalized)"
+
+  # Hot-filter index backing filter_products' price-range shape (FR-3) — no
+  # constraint, filtering only. This is the query's actual scan anchor.
+  echo "[index] Product.price"
+  gquery "$g" "CREATE INDEX FOR (n:Product) ON (n.price)"
+
   echo "[constraint] WorkflowDef unique {key, version}"
   gconstraint "$g" UNIQUE NODE WorkflowDef PROPERTIES 2 key version
 
@@ -67,6 +98,9 @@ bootstrap_reference() {
 
   echo "[constraint] Step unique {stepUid}"
   gconstraint "$g" UNIQUE NODE Step PROPERTIES 1 stepUid
+
+  echo "[constraint] Product unique {productId}"
+  gconstraint "$g" UNIQUE NODE Product PROPERTIES 1 productId
 }
 
 # ─────────────────────────────────────────────────────────────

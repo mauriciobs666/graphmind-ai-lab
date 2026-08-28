@@ -40,7 +40,10 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["ACCESS_REQUEST_DEF", "ACCESS_REQUEST_MAX_STEPS"]
+__all__ = [
+    "ACCESS_REQUEST_DEF", "ACCESS_REQUEST_MAX_STEPS",
+    "SALESPERSON_DEF", "SALESPERSON_MAX_STEPS",
+]
 
 
 # Declared step budget (plan §4.1 / D-H part c). The privileged-role happy path costs 8
@@ -152,3 +155,84 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
         },
     ],
 }
+
+
+# ── `salesperson` — the shared demo-agent scaffold (K-052 M6) ────────────────
+#
+# `SALESPERSON_DEF` is the single, shared "salesperson" `WorkflowDef` this document
+# names as the canonical scaffold for FOUR sibling capabilities (`docs/plans/
+# workflow-catalog-lookup.md` §2.3-§2.5, the document that owns this constant's
+# design): catalog lookup (K-052, this landing), cart/order (K-053), durable
+# profile (K-054), and NL query generation (K-055). Each sibling **bumps this
+# constant's `version`** (`v1` -> `v2` -> `v3` -> `v4`) and republishes the FULL
+# cumulative `config.tools`/`systemPrompt` — never edits `v1` in place — because a
+# def's topology is immutable per version (`docs/DESIGN.md` §4) but `config.tools`/
+# `systemPrompt` are create-only properties: a same-version republish with an
+# added tool would silently no-op and the new tool would never reach a running
+# agent (plan §2.5). Topology (one `agent` step + the `ended` decision step + the
+# one `ctx.endConversation` transition) is deliberately identical across all four
+# versions, so the K-034 409 topology-conflict path is never hit by a later
+# sibling's version bump.
+#
+# **Why exactly one conditional transition, not zero and not unconditional**
+# (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
+# to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
+# and an *unconditional* (`guard: ""`) transition always fires (`guards.
+# evaluate_guard`), which would make the `assistant` step advance every turn
+# instead of parking for the next customer message — breaking the whole
+# "wait for the customer's next message" design this demo depends on. The
+# resolution: one **conditional** transition to a terminal `decision` step,
+# guarded on a `ctx` key nothing in this demo's tool set ever sets
+# (`ctx.endConversation`). This mirrors the precedented, present-but-unexercised
+# `human_handoff` pattern above (`tools.HumanHandoffTool` — "a registered
+# capability that signals suspend... present, not exercised") — a genuine
+# forward-looking affordance (a future "the agent ends the conversation"
+# extension has somewhere to go), not dead code smuggled in to satisfy a
+# validator. See `server/tests/test_salesperson_scaffold.py` for the regression
+# guard proving this transition never fires across an ordinary multi-turn
+# conversation, plus a sanity companion proving the guard mechanism itself is real.
+SALESPERSON_DEF: dict[str, Any] = {
+    "key": "salesperson",
+    "version": "v1",
+    "name": "Salesperson",
+    "kind": "conversation",
+    "steps": [
+        {
+            "key": "assistant",
+            "type": "agent",
+            "start": True,
+            "config": {
+                "waitsForHuman": True,
+                "systemPrompt": (
+                    "You are a helpful electronics-store assistant chatting with a "
+                    "customer.\n\n"
+                    "You can answer factual questions about specific products (name, "
+                    "category, price) and list products matching a category or price "
+                    "range, using your catalog tools. Never guess a price or category "
+                    "you have not retrieved from a tool; if nothing matches, say so "
+                    "plainly rather than inventing an answer.\n\n"
+                    "Deliver every reply by calling the `post_message` tool; text you "
+                    "merely write is never seen by the customer. Never pass `mentions`; "
+                    "omit that argument entirely."
+                ),
+                "tools": ["post_message", "lookup_product_fact", "filter_products"],
+                "requiredTools": ["post_message"],
+                "maxIterations": 8,
+            },
+        },
+        {"key": "ended", "type": "decision", "config": {}},
+    ],
+    "transitions": [
+        {
+            "from": "assistant", "to": "ended", "on": "ended", "order": 0,
+            "guard": {"kind": "cmp", "path": "ctx.endConversation", "op": "truthy"},
+        },
+    ],
+}
+
+# A `WorkflowRun.maxSteps` budget (not `schemas.MAX_STEPS`, the unrelated
+# publish-time step-*count* cap). This demo runs many customer turns over one
+# long-lived run (unlike `triage`'s few-turn intake), so a larger budget than
+# `ACCESS_REQUEST_MAX_STEPS`'s 24 is appropriate — a tripwire, not an SLA
+# (`docs/DESIGN.md` §6.2).
+SALESPERSON_MAX_STEPS = 40

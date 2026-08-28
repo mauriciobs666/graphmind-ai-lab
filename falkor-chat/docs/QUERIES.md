@@ -1,8 +1,10 @@
 # falkor-chat — Canonical Query Library
 
 Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
-**282/282, 2026-07-31** (`./scripts/test_queries.sh`; 276/276 before the K-039 §12.15 gate;
-256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
+**346/346, 2026-08-28** (`./scripts/test_queries.sh`; 343/343 immediately before U15b's
+`categoryNormalized` case-insensitivity fix added 3 assertions; 320/320 immediately before the
+K-052 §15 product-catalog gate; 282/282, 2026-07-31, before that; 276/276 before the K-039 §12.15
+gate; 256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
 §12.12/§12.13 gate).
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
@@ -2500,3 +2502,138 @@ fuzzy lookup can only run once the entity it's for already exists). MCP tools `l
 `POST /matches/{id}/reject`, `POST /matches/{id}/recheck` (`docs/plans/document-ingestion.md` §3.5).
 
 Stage 6 (batch hardening) is the rest of `document-ingestion.md`'s MCP/REST table; not built here.
+
+---
+
+## 15. Product catalog — structured lookup (K-052 M6)
+
+Design: `docs/plans/workflow-catalog-lookup.md` §3.1/§3.5 (architect). A fixed-shape, seed-script-
+write-only electronics catalog in `reference` (FR-6: global, not scoped per workspace — `Product`
+is looked up by property key, never traversed from a workspace node, so it never needs
+per-workspace materialization, unlike `WorkflowDef`). Backs two fixed query shapes for the
+`salesperson` demo agent's tools: an exact-name fact lookup (FR-1) and a category/price-range
+filter (FR-2/FR-3) — not a free-text search (no full-text index is added; AC-4's wording tolerance
+is handled by the calling LLM's own argument extraction, not by fuzzy matching in the database).
+
+**Schema:** `(:Product {productId, name, nameNormalized, category, categoryNormalized, price})`.
+`nameNormalized`/`categoryNormalized` are both computed with `extraction.normalize_name`
+(`server/falkorchat/extraction.py:67-78`, "the ONE shared normalization helper" — reused, not
+reimplemented, the same tier-mechanics precedent already established for `Entity.nameNormalized`,
+§14.5) — a real `=` comparison, decoupled from RediSearch tokenizer/stemmer behavior and from any
+runtime `toLower()` call.
+
+**DDL — index-then-constraint (`scripts/bootstrap_schema.sh`'s `bootstrap_reference`)**
+```cypher
+CREATE INDEX FOR (n:Product) ON (n.productId)
+CREATE INDEX FOR (n:Product) ON (n.nameNormalized)
+CREATE INDEX FOR (n:Product) ON (n.categoryNormalized)
+CREATE INDEX FOR (n:Product) ON (n.price)
+GRAPH.CONSTRAINT CREATE reference UNIQUE NODE Product PROPERTIES 1 productId
+```
+`productId` is the standard `{label}Id` identity anchor (range index + UNIQUE constraint, index
+first — §7.1 rule 1). `nameNormalized`, `categoryNormalized`, `price` are plain range indexes with
+no constraint: two products could in principle share a normalized name in a different category (no
+constraint assumes otherwise), and categoryNormalized/price are hot-filter-only. The raw `category`
+property carries no index of its own — same convention as `name`/`nameNormalized`: only the
+normalized property is indexed/matched on; the raw property is returned in results, never filtered
+on directly.
+
+### 15.1 `lookup_product` — exact-name fact lookup (FR-1/AC-1/AC-4)
+
+```cypher
+// $nameNormalized = case-folded + whitespace-collapsed product name, computed by the
+// caller (services.lookup_product) via extraction.normalize_name — same convention as
+// $nameNormalized elsewhere in this file (§14.5's create_entity/find_fuzzy_candidates).
+MATCH (p:Product {nameNormalized: $nameNormalized})
+RETURN p.name AS name, p.category AS category, p.price AS price
+LIMIT 1
+```
+Anchors on the `Product.nameNormalized` range index — a single `Node By Index Scan`, no label
+scan. Zero rows back means "no such product" (AC-3 abstention); the service maps that to
+`{"found": false}`, never a fabricated row. `LIMIT 1` is belt-and-suspenders: `nameNormalized`
+carries no uniqueness constraint (see DDL note above), so a future data quirk that produced two
+same-named products in different categories still returns exactly one row rather than erroring.
+
+### 15.2 `filter_products` — category/price-range filter (FR-2/FR-3)
+
+```cypher
+// $categoryNormalized, $minPrice, $maxPrice are each optional (NULL when the caller
+// omits that filter) — the WHERE clause is parameterized, never string-interpolated
+// (rule 1). $limit bounds the result size (services.py's DEFAULT_FILTER_LIMIT).
+// $categoryNormalized = case-folded + whitespace-collapsed category, computed by
+// Repository.filter_products via extraction.normalize_name from the caller's raw
+// `category` — same convention as $nameNormalized (§15.1) and Entity.nameNormalized
+// (§14.5): a precomputed normalized property + exact match, not a runtime toLower().
+MATCH (p:Product)
+WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)
+  AND p.price >= coalesce($minPrice, -1.0)
+  AND p.price <= coalesce($maxPrice, 1000000000.0)
+RETURN p.name AS name, p.category AS category, p.price AS price
+ORDER BY p.price ASC
+LIMIT $limit
+```
+
+**Deviation from the plan's illustrative Cypher (§3.5), and why.** The plan's illustrative form
+wraps every predicate in a `$param IS NULL OR prop = $param` null-guard. Live-profiled on this
+build (`GRAPH.PROFILE`, throwaway probe graph, 20-row fixture) before finalizing: that shape
+degrades to a full `Node By Label Scan` in *every* call, including calls where a filter carries a
+real, selective value — the exact same live-verified quirk already documented for this codebase's
+`list_matches` (§14.6-adjacent note above, `claude/graph-dba/falkordb-quirks.md` "Query tuning" —
+"`$param IS NULL OR prop = $param` … defeats an otherwise-available index — even when `$param` is
+bound to a real, selective value"). That prior case branched into two separate query strings
+(filtered / unfiltered) as the fix — the established convention for a single optional predicate.
+`filter_products` has **three independent optional predicates**, so the same branching approach
+would require up to 8 query strings; instead:
+- `category`'s optional-equality is expressed as
+  `p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)` — a self-referential
+  coalesce that is tautologically true when `$categoryNormalized` is `NULL` (every seeded `Product`
+  always has a non-null `categoryNormalized`). This does **not** itself anchor an index scan
+  (verified — same degradation as the null-guard form when it's the only predicate), but it doesn't
+  need to, because:
+- `minPrice`/`maxPrice` use **literal numeric sentinels** via `coalesce($minPrice, -1.0)` /
+  `coalesce($maxPrice, 1000000000.0)` — effectively ±infinity for a consumer-electronics price
+  domain (no seeded product is ever priced at or below `$0`, or at/above `$1,000,000,000`). Unlike
+  the `IS NULL OR` form, a plain range comparison against a **literal** bound (even a
+  parameter-supplied one) is something the planner can still use to anchor an index scan — verified:
+  every combination of supplied/omitted `category`/`minPrice`/`maxPrice` (including the
+  fully-omitted "list everything" call) profiles as `Node By Index Scan | (p:Product)` on
+  `Product.price`, with `categoryNormalized`'s coalesce riding along as a cheap residual `Filter`
+  when supplied. This is strictly better than the plan's illustrative shape even for the "list
+  everything" case, which the plan explicitly accepted as an unavoidable full scan.
+- Result correctness confirmed identical to the null-guard form across every filter combination
+  (unfiltered; category-only; price-range-only; category+price; nonexistent category → zero rows)
+  before adopting this shape — same rows, same order, just index-anchored instead of a label scan.
+
+An all-omitted call (`$categoryNormalized`/`$minPrice`/`$maxPrice` all `NULL`) lists the whole
+catalog, bounded by `$limit` — acceptable at this catalog's demo scale (~15 rows) and, per the
+profiling above, index-anchored anyway. Zero rows back means "nothing matches" (AC-3 abstention);
+the service maps that to `{"items": [], "finding": "no matching products found"}`. Ordered by price
+ascending — a stable, predictable order for a listing shape, cheap once index-backed.
+
+**Case/whitespace-insensitive `category` (live-discovered fix, 2026-08-28).** The original shape
+compared the raw `$category` argument against `p.category` with an exact, case-sensitive `=`. A
+live LLM-driven run lowercased a category when calling the `filter_products` tool (e.g. `"audio"`
+for the seeded `"Audio"`), and the exact-case comparison silently returned zero rows — re-asking
+with correct casing worked, so the def/tool/service wiring was sound; only this comparison was
+wrong. Fix: `Repository.filter_products` normalizes the caller's raw `category` with
+`extraction.normalize_name` (same helper as `nameNormalized`, §15.1) into `$categoryNormalized`,
+compared against a new precomputed `Product.categoryNormalized` property — **not** a runtime
+`toLower(p.category) = toLower($category)` in the `WHERE` clause. Two reasons: (1) this codebase's
+existing convention for case/whitespace-insensitive lookup is a precomputed normalized property +
+exact match, already established for `Entity.nameNormalized` (§14.5) and `Product.nameNormalized`
+(§15.1) — a second, ad-hoc `toLower()` comparison would be a second, differently-implemented
+normalization tier; (2) it costs nothing extra here: `category`/`categoryNormalized` was never this
+query's scan anchor (`Product.price` is, via the literal-sentinel bounds above) — a runtime
+`toLower()` on a non-anchor residual `Filter` predicate would not have reintroduced the label-scan
+regression documented above either, but the normalized-property form is free of that risk by
+construction and stays consistent with the rest of this file. Live-`GRAPH.PROFILE`-verified after
+the change: every filter combination, including a differently-cased `category` argument, still
+anchors on `Node By Index Scan | (p:Product)` via `Product.price` — the regression this section
+already documents once was not reintroduced.
+
+**Fully implemented (K-052 M6, plan §4 steps 3-9):** `Repository.lookup_product`/
+`filter_products`, `Services.lookup_product`/`filter_products`,
+`LookupProductFactTool`/`FilterProductsTool`, seed/verify data
+(`scripts/seed_catalog.sh`/`verify_catalog.sh`), and the `salesperson@v1` demo
+`WorkflowDef` (`falkorchat.proof_defs.SALESPERSON_DEF`,
+`scripts/seed_salesperson.sh`/`verify_salesperson.sh`).

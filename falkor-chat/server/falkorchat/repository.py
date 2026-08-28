@@ -15,6 +15,7 @@ from falkordb import FalkorDB
 from redis.exceptions import ResponseError
 
 from . import config, db
+from .extraction import normalize_name
 
 
 class EmbeddingDimensionError(Exception):
@@ -2628,5 +2629,81 @@ class Repository:
         )
         return [
             {"key": row[0], "version": row[1], "name": row[2], "kind": row[3]}
+            for row in res.result_set
+        ]
+
+    # ── §15 Product catalog (K-052 M6) ────────────────────────────────────────────
+    #
+    # A global, seed-script-write-only reference catalog (`docs/plans/
+    # workflow-catalog-lookup.md` §3.1) — looked up by property key against
+    # `reference`, never scoped per workspace (unlike `WorkflowDef`, which is
+    # traversed from workspace-local runs and therefore materialized). Both
+    # methods are `ro_query` reads; canonical bodies: `docs/QUERIES.md` §15.
+
+    def lookup_product(self, *, name_normalized: str) -> dict[str, Any] | None:
+        """Exact-name catalog fact lookup (FR-1/AC-1/AC-4). QUERIES.md §15.1.
+
+        `None` when no product matches `name_normalized` — the AC-3 abstention
+        case, never a fabricated row. Anchored on the `Product.nameNormalized`
+        range index (no label scan).
+        """
+        res = self._reference().ro_query(
+            "MATCH (p:Product {nameNormalized: $nameNormalized}) "
+            "RETURN p.name AS name, p.category AS category, p.price AS price "
+            "LIMIT 1",
+            {"nameNormalized": name_normalized},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"name": row[0], "category": row[1], "price": row[2]}
+
+    def filter_products(
+        self, *, category: str | None, min_price: float | None,
+        max_price: float | None, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Category/price-range catalog filter (FR-2/FR-3). QUERIES.md §15.2.
+
+        Each filter is optional (`None` = not applied); an all-`None` call lists
+        the whole catalog, bounded by `limit`. **Deliberately not** a
+        `$param IS NULL OR prop = $param` null-guard — that idiom defeats the
+        index on this build even when a filter carries a real value (the same
+        live-verified quirk already documented for `list_matches`, §14.6 /
+        `claude/graph-dba/falkordb-quirks.md`). `minPrice`/`maxPrice` instead use
+        literal-sentinel `coalesce` bounds (`docs/QUERIES.md` §15.2's "Deviation
+        from the plan's illustrative Cypher" note has the live `GRAPH.PROFILE`
+        evidence) — every filter combination, including all-omitted, anchors on
+        the `Product.price` range index rather than a label scan.
+
+        `category` is matched case/whitespace-insensitively: the caller's raw
+        `category` is normalized here with `extraction.normalize_name` (same
+        helper, same convention as `Product.nameNormalized`/`lookup_product`)
+        and compared against the precomputed `Product.categoryNormalized`
+        property, never a runtime `toLower()` in the `WHERE` clause. A live
+        LLM-driven run lowercased a category argument (e.g. "audio" for the
+        seeded "Audio") and the prior exact-case `category` comparison silently
+        returned zero rows — this fixes that without touching the query's
+        sargability: `category`/`categoryNormalized` was never this query's
+        scan anchor (`Product.price` is, via the literal-sentinel bounds
+        above), so swapping which property the equality residual filter runs
+        against doesn't change what the planner anchors on.
+        """
+        category_normalized = (
+            normalize_name(category) if category is not None else None
+        )
+        res = self._reference().ro_query(
+            "MATCH (p:Product) "
+            "WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) "
+            "  AND p.price >= coalesce($minPrice, -1.0) "
+            "  AND p.price <= coalesce($maxPrice, 1000000000.0) "
+            "RETURN p.name AS name, p.category AS category, p.price AS price "
+            "ORDER BY p.price ASC LIMIT $limit",
+            {
+                "categoryNormalized": category_normalized, "minPrice": min_price,
+                "maxPrice": max_price, "limit": limit,
+            },
+        )
+        return [
+            {"name": row[0], "category": row[1], "price": row[2]}
             for row in res.result_set
         ]

@@ -92,6 +92,10 @@ class FakeRepo:
         self.hybrid_rows: list[dict] | None = None
         self.chunk_rows: list[dict] | None = None
         self.matches: dict[str, dict] = {}  # matchId -> match state (K-050 M5 Stage 4)
+        # §15 product catalog (K-052 M6) — keyed by nameNormalized for lookup_product;
+        # `products` (a flat list of {name, category, price} dicts) backs filter_products.
+        self.products_by_name: dict[str, dict] = {}
+        self.products: list[dict] = []
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -388,6 +392,22 @@ class FakeRepo:
     def list_thread_participants(self, ws, *, thread_id):
         self.calls.append(("list_thread_participants", ws, thread_id))
         return self.participants.get(thread_id, [])
+
+    # ── §15 product catalog (K-052 M6, reference) ─────────────────────────────
+
+    def lookup_product(self, *, name_normalized):
+        self.calls.append(("lookup_product", name_normalized))
+        return self.products_by_name.get(name_normalized)
+
+    def filter_products(self, *, category, min_price, max_price, limit=20):
+        self.calls.append(("filter_products", category, min_price, max_price, limit))
+        rows = [
+            p for p in self.products
+            if (category is None or p["category"] == category)
+            and (min_price is None or p["price"] >= min_price)
+            and (max_price is None or p["price"] <= max_price)
+        ]
+        return sorted(rows, key=lambda p: p["price"])[:limit]
 
 
 _UNSET = object()
@@ -3193,3 +3213,69 @@ def test_publish_workflow_def_required_tools_subset_of_granted_succeeds():
     assert by_key["intake"]["config"] == (
         '{"requiredTools":["post_message"],"tools":["post_message","graphrag_retrieve"]}'
     )
+
+
+# ── §15 product catalog (K-052 M6) ────────────────────────────────────────────
+
+def test_lookup_product_normalizes_name_before_repo_call():
+    repo = FakeRepo()
+    repo.products_by_name["bluetooth speaker"] = {
+        "name": "Bluetooth Speaker", "category": "audio", "price": 89.99,
+    }
+    svc = make_service(repo)
+
+    # Mixed case + irregular whitespace — extraction.normalize_name must
+    # case-fold and whitespace-collapse before the repository call, exactly the
+    # way `Entity.nameNormalized` does (§14.5).
+    row = svc.lookup_product(CTX, name="  Bluetooth   Speaker ")
+
+    assert row == {"name": "Bluetooth Speaker", "category": "audio", "price": 89.99}
+    assert repo.calls == [("lookup_product", "bluetooth speaker")]
+
+
+def test_lookup_product_abstains_when_repo_finds_nothing():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.lookup_product(CTX, name="nonexistent gadget") is None
+    assert repo.calls == [("lookup_product", "nonexistent gadget")]
+
+
+def test_filter_products_passes_arguments_through_to_repo():
+    repo = FakeRepo()
+    repo.products = [
+        {"name": "Wireless Mouse", "category": "accessories", "price": 25.0},
+        {"name": "Bluetooth Speaker", "category": "audio", "price": 89.99},
+    ]
+    svc = make_service(repo)
+
+    rows = svc.filter_products(
+        CTX, category="audio", min_price=50.0, max_price=150.0, limit=5,
+    )
+
+    assert rows == [{"name": "Bluetooth Speaker", "category": "audio", "price": 89.99}]
+    assert repo.calls == [("filter_products", "audio", 50.0, 150.0, 5)]
+
+
+def test_filter_products_all_omitted_lists_everything_up_to_default_limit():
+    repo = FakeRepo()
+    repo.products = [
+        {"name": "Wireless Mouse", "category": "accessories", "price": 25.0},
+        {"name": "Bluetooth Speaker", "category": "audio", "price": 89.99},
+    ]
+    svc = make_service(repo)
+
+    rows = svc.filter_products(
+        CTX, category=None, min_price=None, max_price=None, limit=20,
+    )
+
+    assert [r["name"] for r in rows] == ["Wireless Mouse", "Bluetooth Speaker"]
+
+
+def test_filter_products_abstains_when_nothing_matches():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.filter_products(
+        CTX, category="nonexistent", min_price=None, max_price=None, limit=20,
+    ) == []

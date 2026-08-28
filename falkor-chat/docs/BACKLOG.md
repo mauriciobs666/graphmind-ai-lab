@@ -71,7 +71,7 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 > LLM-generated Cypher), executed exclusively through `GRAPH.RO_QUERY` as a second,
 > engine-enforced backstop. Depends on `data-scientist`'s `workflow-nl-query-generation-ml.md`
 > (golden-set metric/threshold, delivered) and a `security-expert` review of the mechanism
-> (FR-3/FR-3a adversarial test cases, in progress) before this item is considered complete.
+> (FR-3/FR-3a adversarial test cases, approved Pass 2) — both delivered; design phase closed.
 > Blocked on K-052.
 
 ## Open follow-ups

@@ -2715,3 +2715,160 @@ def test_workflow_run_errors_are_exception_subclasses():
 
 def test_list_snapshots_empty_when_none(wf_repo):
     assert wf_repo.list_snapshots("test") == []
+
+
+# ── §15 Product catalog (K-052 M6) ────────────────────────────────────────────
+#
+# `Product` lives in the global `reference` graph (plan §3.1) — no repository
+# write method exists (the catalog is seed-script-only, `scripts/seed_catalog.sh`,
+# not built in this cluster), so fixtures are seeded with a raw, test-only write,
+# the same posture `_add_to_channel` already takes for an un-wrapped write. The
+# `wf_repo` fixture wipes `reference`'s node data (schema — the Product indexes +
+# UNIQUE constraint from `bootstrap_schema.sh` — survives), so each test starts
+# from an empty-but-schemaed catalog.
+
+# `category` is seeded Title-Case (matching seed_catalog.sh's real catalog, e.g.
+# "Audio") while `categoryNormalized` is its case-folded form — deliberately
+# mismatched casing so a test that queries with a differently-cased `category`
+# argument (normalized internally by `Repository.filter_products`) proves the
+# match runs against `categoryNormalized`, not a case-sensitive compare on the
+# raw `category` (K-052 M6 live-discovered fix, 2026-08-28).
+_CATALOG_FIXTURE = [
+    {"productId": "prod1", "name": "Wireless Mouse", "nameNormalized": "wireless mouse",
+     "category": "Accessories", "categoryNormalized": "accessories", "price": 25.0},
+    {"productId": "prod2", "name": "Bluetooth Speaker", "nameNormalized": "bluetooth speaker",
+     "category": "Audio", "categoryNormalized": "audio", "price": 89.99},
+    {"productId": "prod3", "name": "4K Monitor", "nameNormalized": "4k monitor",
+     "category": "Displays", "categoryNormalized": "displays", "price": 349.0},
+    {"productId": "prod4", "name": "USB-C Hub", "nameNormalized": "usb-c hub",
+     "category": "Accessories", "categoryNormalized": "accessories", "price": 45.5},
+    {"productId": "prod5", "name": "Noise Cancelling Headphones",
+     "nameNormalized": "noise cancelling headphones", "category": "Audio",
+     "categoryNormalized": "audio", "price": 199.99},
+]
+
+
+def _seed_products(conn, rows=_CATALOG_FIXTURE):
+    """Raw Product write against `reference` (test-only; no repository method
+    exists — the catalog is seed-script-write-only, QUERIES.md §15).
+    """
+    db.reference_graph(conn).query(
+        "UNWIND $rows AS row "
+        "CREATE (:Product {productId: row.productId, name: row.name, "
+        "                  nameNormalized: row.nameNormalized, "
+        "                  category: row.category, "
+        "                  categoryNormalized: row.categoryNormalized, "
+        "                  price: row.price})",
+        {"rows": rows},
+    )
+
+
+def test_lookup_product_exact_name_hit(conn, wf_repo):
+    _seed_products(conn)
+
+    row = wf_repo.lookup_product(name_normalized="bluetooth speaker")
+
+    assert row == {"name": "Bluetooth Speaker", "category": "Audio", "price": 89.99}
+
+
+def test_lookup_product_abstains_when_absent(conn, wf_repo):
+    _seed_products(conn)
+
+    assert wf_repo.lookup_product(name_normalized="nonexistent gadget") is None
+
+
+def test_lookup_product_productid_constraint_blocks_duplicate(conn, wf_repo):
+    _seed_products(conn)
+
+    with pytest.raises(ResponseError, match="unique constraint violation"):
+        db.reference_graph(conn).query(
+            "CREATE (:Product {productId: 'prod1', name: 'Imposter'})"
+        )
+
+
+def test_filter_products_unfiltered_lists_whole_catalog_price_ascending(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category=None, min_price=None, max_price=None, limit=20,
+    )
+
+    assert [r["name"] for r in rows] == [
+        "Wireless Mouse", "USB-C Hub", "Bluetooth Speaker",
+        "Noise Cancelling Headphones", "4K Monitor",
+    ]
+
+
+def test_filter_products_category_only(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category="accessories", min_price=None, max_price=None, limit=20,
+    )
+
+    assert {r["name"] for r in rows} == {"Wireless Mouse", "USB-C Hub"}
+
+
+def test_filter_products_category_is_case_and_whitespace_insensitive(conn, wf_repo):
+    """K-052 M6 live-discovered fix (2026-08-28): an LLM tool call lowercased a
+    category argument ("audio") against the seeded Title-Case "Audio" and the
+    old exact `p.category = $category` comparison silently returned zero rows.
+    `filter_products` now normalizes the caller's `category` (case-fold +
+    whitespace-collapse, `extraction.normalize_name`) and matches it against
+    `Product.categoryNormalized` instead.
+    """
+    _seed_products(conn)
+
+    for variant in ("audio", "Audio", "AUDIO", "  audio  ", "  AUDIO"):
+        rows = wf_repo.filter_products(
+            category=variant, min_price=None, max_price=None, limit=20,
+        )
+        assert {r["name"] for r in rows} == {
+            "Bluetooth Speaker", "Noise Cancelling Headphones",
+        }, f"category={variant!r} did not match the seeded 'Audio' rows"
+
+
+def test_filter_products_price_range_only(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category=None, min_price=50.0, max_price=250.0, limit=20,
+    )
+
+    assert {r["name"] for r in rows} == {"Bluetooth Speaker", "Noise Cancelling Headphones"}
+
+
+def test_filter_products_category_and_price_combined(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category="audio", min_price=100.0, max_price=None, limit=20,
+    )
+
+    assert [r["name"] for r in rows] == ["Noise Cancelling Headphones"]
+
+
+def test_filter_products_abstains_when_nothing_matches(conn, wf_repo):
+    _seed_products(conn)
+
+    assert wf_repo.filter_products(
+        category="nonexistent", min_price=None, max_price=None, limit=20,
+    ) == []
+
+
+def test_filter_products_respects_limit(conn, wf_repo):
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category=None, min_price=None, max_price=None, limit=2,
+    )
+
+    assert len(rows) == 2
+    assert [r["name"] for r in rows] == ["Wireless Mouse", "USB-C Hub"]  # cheapest 2
+
+
+def test_filter_products_empty_catalog_returns_empty(wf_repo):
+    # No _seed_products call — `reference` has no Product nodes at all.
+    assert wf_repo.filter_products(
+        category=None, min_price=None, max_price=None, limit=20,
+    ) == []

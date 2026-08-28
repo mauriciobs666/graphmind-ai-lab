@@ -105,6 +105,105 @@ next up for implementation — not yet dispatched; out of this coordination's or
 ("coordinate design work"). This coordination doc stays `active` pending a future implementation
 dispatch, rather than closing to `archived`, since M6 itself is still open.
 
+## Implementation phase (dispatched 2026-08-27)
+
+**Scope:** build K-052..K-055 per their gated plans, in strict dependency order — all four bump
+the same `SALESPERSON_DEF["version"]` + edit the same `scripts/seed_salesperson.sh` (a shared-file
+axis every plan itself calls out), so capabilities are **serialized**, not parallelized:
+K-052 (v1, scaffold) → K-053 (v2) → K-054 (v3) → K-055 (v4). Within a capability, each plan's own
+step table is split into dependent clusters per the step-table sizing rule (>3 steps / >5 files),
+dispatched as checkpoints to the **same** `coder` agent (resumed via `SendMessage`, not
+re-briefed cold) unless its recorded cost crosses the large-context threshold, in which case the
+next cluster goes to a fresh agent with a state-recovery brief. Every capability gets two gates
+after its implementation lands: `analyst` (diff-scoped static re-gate — reusing the same reviewer,
+`aefab24e1845b5deb`, that gated all four plans) and `qa-engineer` (live acceptance pass driving the
+running server — state-machine/version-bump/guard logic needs to actually run, not just be read).
+K-055 additionally gets `data-scientist` (golden-set harness verification against their own
+methodology note) and `security-expert` (live re-run of the Groups A-E adversarial set against the
+real `query_graph_data` tool, not just the static check already done at design time). A final
+combined `qa-engineer` pass proves all four capabilities live together in one `salesperson@v4`
+conversation, per M6's own closing condition.
+
+**CPG:** `cpg_falkorchat` re-checked 2026-08-27 — still built `2026-08-26T22:27:22Z`, still stale
+(2 commits since: `da10d57` K-049, `f30c378` K-048). Not relevant here regardless — every plan's
+own §"CPG" note already assessed this as new-code / non-impact-analysis work; flagged to
+`analyst`/`qa-engineer` so neither leans on it for a structural claim about `executor.py`/
+`tools.py`, same posture as the design phase.
+
+### Implementation ledger
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U13 | `coder` | `ae60aa821d81e40d7` | delivered | K-052 cluster 1: `bootstrap_schema.sh` (Product DDL), `docs/QUERIES.md` §15, `scripts/test_queries.sh` (343/343 green, incl. 22 new §15 assertions, `PROFILE`-verified index-scans) | `analyst`/`qa-engineer` (U16/U17, batched) → — | 193k tok / 64 tools |
+| U14 | `coder` (resume `ae60aa821d81e40d7`) | `ae60aa821d81e40d7` | delivered | K-052 cluster 2: `repository.py`/`services.py`/`tools.py` (lookup/filter), registry choice: extended `build_builtin_registry` (no `app.py` seam for a second builder) — 1806 passed/4 deselected, +21 net-new tests, mutation-tested | `analyst`/`qa-engineer` (batched w/ U13,U15) → — | 307k tok / 84 tools |
+| U15 | `coder` (fresh — U13/U14's agent now over the large-context threshold) | `a497f8167ced0c75f` | delivered | K-052 cluster 3: `seed_catalog.sh`, `verify_catalog.sh`, `proof_defs.py` (`SALESPERSON_DEF` v1), `seed_salesperson.sh`, `verify_salesperson.sh`, `AGENTS.md`, `test_salesperson_scaffold.py` (4 tests: publish validity, republish-no-op, `ctx.endConversation` safety regression + guard-sanity companion). **Live-proved against real LM Studio** (`qwen/qwen3-4b-2507`) on a throwaway `ws:live-salesperson`: AC-1/AC-3/AC-4 all correct, run stayed parked across 4 real turns. Mutation-tested (unconditional guard → 3/4 new tests failed as expected). 1810/4 pytest, 343/343 `test_queries.sh`. | `analyst`/`qa-engineer` (U16/U17) → — | 273k tok / 133 tools |
+| U15-finding | — | — | — | **Real bug, live-discovered, out of U15's own scope**: `filter_products`' category match is exact/case-sensitive; a real LLM lowercased "audio" against seeded `"Audio"`, silently returning zero rows. Routed to a fresh `coder` fix, U15b, before the K-052 gates (cheaper to fix once than have both `analyst` and `qa-engineer` independently rediscover it). | — | — |
+| U15b | `coder` (fresh) | `a3d25046b87549518` | delivered | fix: `Product.categoryNormalized` (mirrors `nameNormalized` precedent, not runtime `toLower()`), `repository.filter_products` normalizes+compares against it; `GRAPH.PROFILE`-reverified still index-scan, not label-scan; 346/346 `test_queries.sh`, 1811/4 pytest, mutation-tested (3 tests correctly fail reverted) | `analyst`/`qa-engineer` (U16/U17) → — | 154k tok / 78 tools |
+| U16 | `analyst` (fresh) | `ab27291958c6b7672` | delivered | code review, K-052 diff (incl. U15b) → **new** `docs/reviews/workflow-catalog-lookup-impl.md` (not a Pass 2 in the bare-slug file — see routing note below), `Extends:`/`Extended by:` pointers added to both review docs | self → **approve with suggestions** (2 MINOR, 1 nit, no blocker) | 193k tok / 82 tools |
+| U17 | `qa-engineer` (fresh) | — | queued | live acceptance, K-052 (AC-1..AC-5) | — | — |
+
+**U16 routing note, resolved by `teco`:** the analyst filed a *separate* `-impl`-role review
+document rather than a `## Pass 2` section in the bare-slug plan review, citing root `AGENTS.md`'s
+closed role set (`-impl` is a listed role) and its own reading of collision rule 5 — the
+"`reviews/` revises in place" exception applies to a second document of the *same* role, and a
+plan review (role `(none)`) vs. an implementation re-gate (role `-impl`) are different roles, not
+two passes of one. **Accepted as correct** — a more careful application of the convention than my
+own brief assumed; the family-chain example in `AGENTS.md` shows the *typical* one-review-per-topic
+case, it doesn't preclude the `-impl` role that's separately listed in the same closed set. No
+merge needed; both documents' `Extends:`/`Extended by:` header pointers are already correctly set.
+
+**U16 findings, disposition:** 1 MINOR (`docs/QUERIES.md`'s suite-count header stale at `343/343`
+vs. the actual `346/346` post-U15b) — **fixed directly by `teco`** (mechanical, single-line,
+already-verified fact, same posture as the design-phase BACKLOG.md wording fixes). 1 MINOR
+(`filter_products`'s `categoryNormalized` self-coalesce silently drops any `Product` missing that
+property from every call, including the unfiltered one — three-valued `NULL = NULL` logic; never
+manifests today since every seed/fixture sets the field, no constraint enforces it) — **not fixed,
+logged as a non-blocking follow-up** (needs a repository-layer code judgment call, not a mechanical
+edit; genuinely low-risk since nothing in this milestone writes a `Product` without the field). 1
+NIT (asymmetric service-vs-repository normalization layering between `lookup_product`/
+`filter_products`) — no action, cosmetic only. **No blocker anywhere — K-052 implementation is
+gate-clean enough to commit.**
+
+## Session-boundary pause (2026-08-28) — user requested stop-and-commit before a reboot
+
+Per explicit user instruction, stopping here rather than proceeding to U17 (qa-engineer live
+acceptance pass). **K-052's code + docs are implemented and analyst-gated (approve with
+suggestions, no blocker)** — committing this as one coherent, verified unit. U17 (qa-engineer live
+acceptance, AC-1..AC-5) and all of K-053/K-054/K-055 remain queued, unchanged from the ledger
+above — resume by dispatching U17 next. **Per explicit user direction, do not resume any
+prior-session agent id going forward — every unit from here on dispatches a fresh agent**, even
+where an earlier row in this ledger predates that direction and shows a resume.
+| U18 | `coder` | — | queued | K-053 cluster 1: `pricing.py`, `repository.py` (cart/order) | — | — |
+| U19 | `coder` (resume U18) | — | queued | K-053 cluster 2: `services.py`, `tools.py` (5 cart/order tools) | — | — |
+| U20 | `coder` (resume U18) | — | queued | K-053 cluster 3: `proof_defs.py` (v2 + `ORDER_FULFILLMENT_DEF`), seed/verify scripts, `QUERIES.md`/`test_queries.sh`, `AGENTS.md` | — | — |
+| U21 | `analyst` (resume) | — | queued | code review, K-053 diff | — | — |
+| U22 | `qa-engineer` (resume) | — | queued | live acceptance, K-053 (cart/order/fulfillment) | — | — |
+| U23 | `coder` | — | queued | K-054 cluster 1: `repository.py`, `services.py` (profile) | — | — |
+| U24 | `coder` (resume U23) | — | queued | K-054 cluster 2: `tools.py`, `proof_defs.py` (v3), seed/verify scripts, `QUERIES.md`/`test_queries.sh` | — | — |
+| U25 | `analyst` (resume) | — | queued | code review, K-054 diff | — | — |
+| U26 | `qa-engineer` (resume) | — | queued | live acceptance, K-054 (profile persistence) | — | — |
+| U27 | `coder` | — | queued | K-055 cluster 1: `querygen.py` (DSL + unit tests incl. reviewer's escape fixtures) | — | — |
+| U28 | `coder` (resume U27) | — | queued | K-055 cluster 2: `repository.py` (`run_readonly_query`), `services.py` (`run_structured_query`), `tools.py` (`QueryGraphDataTool`) | — | — |
+| U29 | `coder` (resume U27) | — | queued | K-055 cluster 3: golden-set harness + fresh corpus, per `data-scientist`'s note | — | — |
+| U30 | `coder` (resume U27) | — | queued | K-055 cluster 4: `proof_defs.py` (v4), seed/verify scripts | — | — |
+| U31 | `analyst` (resume) | — | queued | code review, K-055 diff | — | — |
+| U32 | `data-scientist` (resume `a277477d79ce069c6`) | — | queued | golden-set harness verification, thresholds report | — | — |
+| U33 | `security-expert` (resume `ae4185d22350610f7`) | — | queued | live Groups A-E re-run against real `query_graph_data` | — | — |
+| U34 | `qa-engineer` (resume) | — | queued | live acceptance, K-055 (AC-2/AC-5) | — | — |
+| U35 | `qa-engineer` (resume) | — | queued | combined e2e pass, all four capabilities in one `salesperson@v4` conversation | — | — |
+
+**Notes from U13:** one deliberate, documented deviation from the plan's illustrative
+`filter_products` Cypher — a live-verified `Node By Label Scan` regression with the plan's
+`$param IS NULL OR prop = $param` null-guard shape (same quirk already documented for
+`list_matches`, `claude/graph-dba/falkordb-quirks.md`); fixed with a `coalesce($minPrice, -1.0)`/
+`coalesce($maxPrice, 1e9)` sentinel shape instead, `PROFILE`-verified to keep every filter
+combination on an index scan. Explicitly the implementer's call per the plan's own "exact param
+names... are the implementer's to finalize" — reversible, not a scope change. Canonical Cypher now
+lives in `docs/QUERIES.md` §15. **Unrelated pre-existing drift flagged, not acted on** (out of
+this coordination's scope): `ws:qa-tico-workflows-manual`'s `triage@v1` snapshot diverges from
+`reference` (2 config differences); `ws:eval` has no `triage@v1`/`access-request@v1` materialized
+at all. Follow-up for whoever owns those workspaces.
+
 | U4 | `security-expert` | `ae4185d22350610f7` | delivered | `docs/reviews/workflow-nl-query-generation-security.md` | — (is itself the security gate) → **approve w/ suggestions** | 139k tok / 31 tools |
 | U6 | `architect` (resumed) | `ae8b24f0595f327cb` | delivered | fix 2 MAJORs + 2 minors in `workflow-nl-query-generation.md` (v1.1) | `security-expert` (U8) → — | 366k tok / 16 tools |
 | U7 | `graph-dba` (resumed) | `a65bb2f47ea7a86b4` | accepted | `sku`→`productId` rename, `workflow-cart-and-totals-graph.md` (v2) | (verified by teco) | 225k tok / 33 tools |

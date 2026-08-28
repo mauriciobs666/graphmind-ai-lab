@@ -12,10 +12,10 @@ to the model — which the executor records as the `tool_result` trace event). T
 does not trace itself: the executor's `_handle_tool_call` traces the call + the returned
 result, exactly as the other phases wired it.
 
-**Layering (AGENTS.md).** Tools are domain callables and hold **no Cypher** — `post_message`
-and `graphrag_retrieve` go THROUGH `services` (which owns the queries via `repository`). The
-`PRODUCED` emission link is `services.link_step_emission` (→ `repository.link_step_emission`,
-D2 — distinct from K-013's `EMITTED`).
+**Layering (AGENTS.md).** Tools are domain callables and hold **no Cypher** — `post_message`,
+`graphrag_retrieve`, and the catalog tools below all go THROUGH `services` (which owns the
+queries via `repository`). The `PRODUCED` emission link is `services.link_step_emission` (→
+`repository.link_step_emission`, D2 — distinct from K-013's `EMITTED`).
 
 Built-ins (§4):
   * `post_message` (FR-5a) — post into the run's thread as the workflow agent (guarded §4
@@ -37,6 +37,17 @@ Built-ins (§4):
   * `human_handoff` (FR-5d) — a registered capability that **signals suspend** (raises
     `HumanHandoffSignal`). Present, not exercised: no triage node grants it. The integrated
     executor (Landing 2) catches the signal to park the run pending a human.
+  * `lookup_product_fact` / `filter_products` (K-052 M6, `docs/plans/workflow-catalog-lookup.md`
+    §3.5) — the `salesperson` demo's two catalog-lookup capabilities, disjoint from `triage`'s
+    tool set (no def grants both `graphrag_retrieve`/`human_handoff` and the catalog tools
+    today) but registered into this same shared `ToolRegistry` — the AC-6 fence is per-node
+    `config.tools`, not registry membership, the same "present, registered, only offered where
+    granted" posture `human_handoff` already established for `triage`. `lookup_product_fact`
+    resolves one named product's category/price via `services.lookup_product`; `filter_products`
+    lists products by category and/or price range via `services.filter_products`. Both abstain
+    with a JSON `{"found": false}` / `{"items": [], "finding": ...}` shape rather than a
+    fabricated answer — the same idiom `graphrag_retrieve`'s "no relevant context found" already
+    uses.
 
 MCP-client seam (U10 / FR-5c): `McpToolClient` lists + calls tools on an **external** MCP
 server and registers each as an `McpTool` so an MCP-exposed tool is indistinguishable from a
@@ -65,6 +76,11 @@ from .services import UnknownMemberError
 DEFAULT_RETRIEVE_TAU: float = 0.5   # distance cutoff — keep seeds with score ≤ τ
 DEFAULT_RETRIEVE_CAP: int = 5       # keep at most this many after the cutoff
 DEFAULT_RETRIEVE_K: int = 10        # ANN fan-out asked of hybrid_search
+
+# K-052 M6: a demo-scale cap on `filter_products`'s result set (`workflow-catalog-
+# lookup.md` §3.5) — the real result-set cap is FalkorDB's own `RESULTSET_SIZE`
+# default of 10000, irrelevant at this catalog's size (~15 products).
+DEFAULT_FILTER_LIMIT: int = 20
 
 
 # ── the tool seam ─────────────────────────────────────────────────────────────────────
@@ -335,6 +351,116 @@ class GraphragRetrieveTool:
         return json.dumps({"seeds": seeds})
 
 
+class LookupProductFactTool:
+    """FR-1/FR-4 (K-052 M6) — exact-name catalog fact lookup: one product's category/price.
+
+    Thin dispatch onto `services.lookup_product`, which normalizes the model-supplied
+    name and does the exact `=` lookup (`docs/QUERIES.md` §15.1). Abstention shape mirrors
+    `GraphragRetrieveTool`'s "no relevant context found" idiom: `{"found": false}` when
+    nothing matches, never a fabricated row (AC-3). AC-4's wording tolerance ("how much is
+    the X" vs "what's the price of the X") is the calling model's own argument-extraction
+    job — both phrasings are expected to extract the same `name` argument.
+    """
+
+    name = "lookup_product_fact"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Look up a fact (category, price) about one specific product by name. "
+                    "Use this to answer a question about a single named product."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": (
+                                "The product's name, as the customer referred to it."
+                            ),
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        row = self._services.lookup_product(ctx, name=arguments.get("name", ""))
+        if row is None:
+            return json.dumps({"found": False})
+        return json.dumps({"found": True, **row})
+
+
+class FilterProductsTool:
+    """FR-2/FR-3 (K-052 M6) — category/price-range catalog filter: list matching products.
+
+    Thin dispatch onto `services.filter_products` (`docs/QUERIES.md` §15.2). Every filter
+    argument is optional; an all-omitted call lists the whole catalog up to
+    `DEFAULT_FILTER_LIMIT` — acceptable at this catalog's demo scale (~15 products, plan
+    §3.5). Abstention shape mirrors `LookupProductFactTool`'s: `{"items": [], "finding":
+    "no matching products found"}` when nothing matches (AC-3).
+    """
+
+    name = "filter_products"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "List products matching an optional category and/or price range. "
+                    "Omit any argument you don't need to filter by; omitting all of them "
+                    "lists the whole catalog."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Only products in this category.",
+                        },
+                        "minPrice": {
+                            "type": "number",
+                            "description": "Only products priced at or above this amount.",
+                        },
+                        "maxPrice": {
+                            "type": "number",
+                            "description": "Only products priced at or below this amount.",
+                        },
+                    },
+                    "required": [],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        rows = self._services.filter_products(
+            ctx,
+            category=arguments.get("category"),
+            min_price=arguments.get("minPrice"),
+            max_price=arguments.get("maxPrice"),
+            limit=DEFAULT_FILTER_LIMIT,
+        )
+        if not rows:
+            return json.dumps({"items": [], "finding": "no matching products found"})
+        return json.dumps({"items": rows})
+
+
 class HumanHandoffSignal(Exception):
     """Control signal raised by `human_handoff`: suspend the run pending a human.
 
@@ -387,12 +513,20 @@ def build_builtin_registry(
     tau: float = DEFAULT_RETRIEVE_TAU, cap: int = DEFAULT_RETRIEVE_CAP,
     k: int = DEFAULT_RETRIEVE_K, channel_id: str | None = None,
 ) -> ToolRegistry:
-    """Wire the three built-in capabilities into a fresh `ToolRegistry` (§4).
+    """Wire every built-in capability into a fresh `ToolRegistry` (§4, K-052 M6).
 
-    `human_handoff` is registered (present) but the triage nodes do not grant it — the
-    AC-6 fence is per-node `config.tools`, not registry membership. `embedder`/`models`
-    follow `GraphragRetrieveTool`'s own FR-4 sugar (a bare `embedder=` wraps into a
-    `StaticModelGateway`; production passes the real `models=` gateway instead).
+    One shared, process-wide registry serves every workflow def — `human_handoff`
+    was already registered (present) even though only `triage` nodes might grant
+    it, and the K-052 catalog tools (`lookup_product_fact`/`filter_products`, for
+    the disjoint `salesperson` demo) follow the identical posture: the AC-6 fence
+    is per-node `config.tools`, not registry membership, so a def that never
+    grants a given tool simply never offers it to the model — registering it here
+    costs nothing and is the only currently-wired path to a live run (there is no
+    per-def registry seam in `app.py`). K-053/K-054/K-055 register their own
+    `salesperson`-only tools here too, the same way, as their own clusters land.
+    `embedder`/`models` follow `GraphragRetrieveTool`'s own FR-4 sugar (a bare
+    `embedder=` wraps into a `StaticModelGateway`; production passes the real
+    `models=` gateway instead).
     """
     return ToolRegistry([
         PostMessageTool(services, agent_id=agent_id),
@@ -400,6 +534,8 @@ def build_builtin_registry(
             services, embedder, models=models, tau=tau, cap=cap, k=k, channel_id=channel_id
         ),
         HumanHandoffTool(),
+        LookupProductFactTool(services),
+        FilterProductsTool(services),
     ])
 
 
