@@ -2473,7 +2473,8 @@ class Services:
         }
 
     def link_step_emission(
-        self, ctx: CallContext, *, step_run_id: str, msg_id: str
+        self, ctx: CallContext, *, step_run_id: str, msg_id: str,
+        tools_used: list[str] = (),
     ) -> dict[str, Any] | None:
         """Link `StepRun -[:PRODUCED]-> Message` (D2). QUERIES.md §12.6.
 
@@ -2482,9 +2483,12 @@ class Services:
         here. `PRODUCED` is distinct from K-013's `EMITTED` (§10). `None` when an endpoint
         is missing — a diagnosable, retry-able gap, not a torn thread. The `post_message`
         node tool (`tools.py`) drives this after posting.
+
+        `tools_used` (K-056) is a pure pass-through to `repository.link_step_emission`'s
+        breadcrumb-source stamp — see that docstring.
         """
         return self._repo.link_step_emission(
-            ctx.ws, step_run_id=step_run_id, msg_id=msg_id
+            ctx.ws, step_run_id=step_run_id, msg_id=msg_id, tools_used=tools_used,
         )
 
     def get_workflow_run(

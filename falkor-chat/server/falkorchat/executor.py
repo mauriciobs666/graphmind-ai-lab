@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -138,7 +139,19 @@ class StepResult:
     never sets them. For a multi-iteration `agent` node (`_run_agent_node`), the
     **last** successful `chat()` call's values win — overwritten together each
     iteration, read once after the loop exits (`-graph.md` §1.6's "last answering
-    model wins" rule, extended to guard-free step nodes)."""
+    model wins" rule, extended to guard-free step nodes).
+
+    `toolsUsed` (K-056, `docs/reviews/salesperson-tool-reliability-ml.md` §4.3) is the
+    set of every non-`post_message` tool this node execution successfully dispatched
+    (read off `_handle_tool_call`'s `satisfied` bookkeeping, minus `post_message` —
+    delivery, not evidence). `_link_emissions` persists it onto the `Message`(s) this
+    step posted (`repository.link_step_emission`'s `toolsUsed` property) as a pure
+    audit/observability trail. It is **not** replayed back into any prompt the model
+    reads — an earlier pass fed it into a replayed-history breadcrumb in
+    `_assemble_messages`, but that was reverted (imitation risk, live-confirmed;
+    `docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1). Empty by default:
+    a non-LLM step and a node that dispatched nothing carry an empty set, same posture
+    as the three model fields above."""
 
     output: str = ""
     on: str = "done"
@@ -148,6 +161,7 @@ class StepResult:
     resolvedModel: str | None = None
     modelSource: str | None = None
     modelFallback: bool | None = None
+    toolsUsed: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -268,6 +282,28 @@ def _dumps(obj: Any) -> str:
     """Serialize a step-output envelope compactly and deterministically (stable key order,
     so a `StepRun.output` is byte-comparable across runs)."""
     return json.dumps(obj, separators=(",", ":"), sort_keys=True)
+
+
+_FACT_BEARING_RE = re.compile(r"\$\s?\d|\b\d+\.\d{2}\b")
+
+
+def _looks_fact_bearing(text: str) -> bool:
+    """K-056 (`docs/reviews/salesperson-tool-reliability-ml.md` §4.1/§5): a cheap,
+    catalog-vocabulary-free heuristic for "this answer states a specific fact a lookup
+    tool would ground" — a currency-prefixed number (`$29.99`, `$ 30`) or a two-decimal
+    price-shaped number (`29.99`). Deliberately narrow (false negatives over false
+    positives — a chatty non-fact reply must never trip the signal) and deliberately not
+    keyed to any product/catalog vocabulary, so it stays meaningful for whatever
+    fact-bearing tools K-053/K-054/K-055 add later.
+
+    Intentionally coarse on the bare two-decimal branch: it also fires on any
+    digits-dot-two-digits token with no currency context at all — e.g. "version 3.14
+    release" or "that is 100.00 dollars" both match. This only feeds
+    `_note_possible_fabrication`, an advisory `WARNING`-only log signal that never
+    raises or blocks (`docs/reviews/salesperson-tool-reliability-impl.md`, MINOR 1);
+    tighten (require the token adjacent to a currency cue) only if the log noise
+    becomes disruptive."""
+    return bool(_FACT_BEARING_RE.search(text))
 
 
 def _missing_required_tools(
@@ -500,7 +536,10 @@ class WorkflowExecutor:
 
             rec = self._record(ctx, run, current_key, to_key, result)
             self._trace_step(ctx, tracer, rec["stepRunId"], result, decision)
-            self._link_emissions(ctx, rec["stepRunId"], result.emissions)
+            self._link_emissions(
+                ctx, rec["stepRunId"], result.emissions,
+                tools_used=sorted(result.toolsUsed),
+            )
 
             if firing is not None:
                 # OUTCOME A — a guard fired: advance, then enforce the budget
@@ -778,11 +817,17 @@ class WorkflowExecutor:
                 missing = _missing_required_tools(required, satisfied, emissions)
                 if missing:
                     self._note_must_post_violation(missing, run, step, trace)
+                tools_used = frozenset(satisfied) - {"post_message"}
+                domain_tools = granted_set - {"post_message"}
+                if (domain_tools and not (satisfied & domain_tools)
+                        and _looks_fact_bearing(result.text or "")):
+                    self._note_possible_fabrication(result.text or "", run, step, trace)
                 return StepResult(output=result.text or "", on="done",
                                   trace=trace, emissions=emissions,
                                   thread=thread_msgs, resolvedModel=resolved_model,
                                   modelSource=model_source,
-                                  modelFallback=model_fallback)
+                                  modelFallback=model_fallback,
+                                  toolsUsed=tools_used)
 
             messages.append(_assistant_turn(result))
             for call in result.tool_calls:
@@ -802,10 +847,15 @@ class WorkflowExecutor:
         missing = _missing_required_tools(required, satisfied, emissions)
         if missing:
             self._note_must_post_violation(missing, run, step, trace)
+        tools_used = frozenset(satisfied) - {"post_message"}
+        domain_tools = granted_set - {"post_message"}
+        if (domain_tools and not (satisfied & domain_tools)
+                and _looks_fact_bearing(last_text)):
+            self._note_possible_fabrication(last_text, run, step, trace)
         return StepResult(output=last_text, on="done", trace=trace,
                           emissions=emissions, thread=thread_msgs,
                           resolvedModel=resolved_model, modelSource=model_source,
-                          modelFallback=model_fallback)
+                          modelFallback=model_fallback, toolsUsed=tools_used)
 
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
@@ -911,6 +961,29 @@ class WorkflowExecutor:
             f"required tool(s) never dispatched: {names}",
         ))
 
+    @staticmethod
+    def _note_possible_fabrication(
+        text: str, run: dict[str, Any], step: dict[str, Any],
+        trace: list[tuple[str, str]],
+    ) -> None:
+        """K-056 observability signal (`docs/reviews/salesperson-tool-reliability-ml.md`
+        §4.1/§5): make a *possible* fabrication visible — a fact-bearing answer this node
+        gave without dispatching any of its own granted domain tools this execution. Same
+        posture as `_note_must_post_violation`: **always** logged (never gated on debug/
+        trace-run status — the point is to catch this on a normal run, not just a debug
+        one), plus a `possible_fabrication` trace entry `_trace_step` forwards verbatim on
+        a debug run. Advisory only — never raised, never blocks the run; the model may
+        genuinely have answered from a prior turn's still-valid tool result."""
+        _log.warning(
+            "possible fabrication: run %s step %s answered with what looks like a "
+            "fact-bearing claim but dispatched none of its granted tools this turn: %s",
+            run.get("runId"), step.get("key"), _short(text),
+        )
+        trace.append((
+            "possible_fabrication",
+            f"fact-bearing answer with no granted tool dispatched: {_short(text)}",
+        ))
+
     def _read_thread_context(
         self, ctx: CallContext, run_ctx: dict[str, Any]
     ) -> list[dict[str, Any]]:
@@ -944,7 +1017,17 @@ class WorkflowExecutor:
         consecutive same-role turns — a strict-alternation chat template hard-rejects that
         shape. This makes the function a no-op on an already-alternating thread (e.g. one
         ending in `assistant`) and collapses same-role runs (including the always-`user`
-        CONTEXT block landing after a `user`-authored last turn) into one coalesced turn."""
+        CONTEXT block landing after a `user`-authored last turn) into one coalesced turn.
+
+        K-056 (`docs/reviews/salesperson-tool-reliability-ml.md` §4.1/§4.3) originally folded
+        a `[verified via <tool>]` breadcrumb into a replayed `assistant` turn here, sourced
+        from `Message.toolsUsed`. Reverted (`docs/reviews/salesperson-tool-reliability-impl.md`,
+        MAJOR 1): live verification showed it didn't reduce fabrication and the model started
+        imitating the breadcrumb's own surface text in fabricated replies with no tool ever
+        called, which then replayed into the *next* turn's history as a self-authored false
+        claim — a severity increase on the defect it was meant to mitigate. `Message.toolsUsed`
+        remains a pure audit/logging property (see `StepResult.toolsUsed`); this function never
+        reads it."""
         messages: list[dict[str, Any]] = []
         system = config.get("systemPrompt", "")
         if system:
@@ -1105,7 +1188,8 @@ class WorkflowExecutor:
             )
 
     def _link_emissions(
-        self, ctx: CallContext, step_run_id: str, msg_ids: list[str]
+        self, ctx: CallContext, step_run_id: str, msg_ids: list[str],
+        *, tools_used: list[str] = (),
     ) -> None:
         """Link `StepRun -[:PRODUCED]-> Message` for each msgId the node posted (Option B,
         K-023). Mirrors `_trace_step`: emissions are buffered during execution and drained
@@ -1113,10 +1197,15 @@ class WorkflowExecutor:
         the deliberately two-step, non-atomic second query (§3/§9) — a `None` return (a
         missing endpoint) is a diagnosable, retry-able gap that is logged, **never raised**:
         a missing audit link must not fail a run whose message already stands (the durable
-        artifact)."""
+        artifact).
+
+        `tools_used` (K-056, `StepResult.toolsUsed`) rides along to every message this
+        step posted — stamped via `repository.link_step_emission`'s `toolsUsed` property
+        as a pure audit/observability trail, never replayed back into a prompt the model
+        reads (see `StepResult.toolsUsed`'s docstring)."""
         for msg_id in msg_ids:
             linked = self._services.link_step_emission(
-                ctx, step_run_id=step_run_id, msg_id=msg_id
+                ctx, step_run_id=step_run_id, msg_id=msg_id, tools_used=tools_used,
             )
             if linked is None:
                 _log.warning(

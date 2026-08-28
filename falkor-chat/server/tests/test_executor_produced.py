@@ -164,9 +164,109 @@ def test_link_gap_does_not_fail_run(wf_repo, conn, caplog):
         clock=(lambda c=itertools.count(500): next(c)),
         id_gen=(lambda c=itertools.count(1): f"m{next(c)}"),
     )
-    services.link_step_emission = lambda ctx, *, step_run_id, msg_id: None
+    services.link_step_emission = (
+        lambda ctx, *, step_run_id, msg_id, tools_used=(): None
+    )
     ex = _executor(wf_repo, services)
 
     status = ex.run(CTX, run_id="r1")
 
     assert status == "done"          # a missing link never fails the run
+
+
+# ── K-056 — `toolsUsed` is stamped end-to-end (audit trail only) ─────────────
+#
+# `Message.toolsUsed` is a pure audit/observability property (the replayed-history
+# breadcrumb it originally fed was reverted — see `_assemble_messages`'s docstring
+# and `docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1). This drives a
+# real node that dispatches a domain tool *and* posts, through the real
+# executor→services→repository chain, and reads the resulting `Message.toolsUsed`
+# back — not just that `_link_emissions` was *called*.
+
+class FakeLookupTool:
+    name = "lookup_product_fact"
+
+    @property
+    def schema(self):
+        return {"type": "function",
+                "function": {"name": "lookup_product_fact", "parameters": {}}}
+
+    def run(self, arguments, *, ctx, run):
+        return '{"name": "Wireless Mouse Pro", "price": 29.99}'
+
+
+class LookupThenPostLLM:
+    """answer → dispatch the domain tool, then post the reply, then finish."""
+
+    def __init__(self):
+        self._turns = [
+            ChatResult(text="ready"),                       # intake: no tool → advance
+            ChatResult(text="", tool_calls=[                 # answer: look it up
+                ToolCall("c1", "lookup_product_fact", {"query": "Wireless Mouse Pro"})]),
+            ChatResult(text="", tool_calls=[                 # answer: post the reply
+                ToolCall("c2", "post_message", {"text": "It's $29.99."})]),
+            ChatResult(text="done"),                         # answer: finish
+        ]
+
+    def chat(self, messages, tools):
+        return self._turns.pop(0) if self._turns else ChatResult(text="(spent)")
+
+
+ANSWER_STEP_WITH_LOOKUP = {
+    "key": "answer", "type": "agent",
+    "config": '{"tools":["lookup_product_fact","post_message"],"systemPrompt":"Answer."}',
+}
+TRANSITIONS_WITH_LOOKUP = [
+    {"from": "intake", "to": "answer", "on": "ready", "guard": "", "order": 0}
+]
+
+
+def _seed_with_lookup(repo):
+    repo.ensure_user(WS, user_id="u1", display_name="Alice")
+    repo.ensure_agent(WS, agent_id="assistant", name="Bot")
+    repo.create_channel(WS, channel_id="c1", name="general", created_at=100)
+    repo.create_thread(WS, channel_id="c1", thread_id="t1", title="x", created_at=110)
+    repo.post_first_message(
+        WS, thread_id="t1", msg_id="trig1", author_id="u1",
+        text="what's the price of the Wireless Mouse Pro?", role="user", created_at=120,
+    )
+    repo.materialize_snapshot(
+        WS, key="two", version="1", name="Two", kind="conversation",
+        start_key="intake", steps=[INTAKE_STEP, ANSWER_STEP_WITH_LOOKUP],
+        transitions=TRANSITIONS_WITH_LOOKUP,
+    )
+    repo.start_run(
+        WS, run_id="r1", def_key="two", def_version="1", started_at=1000,
+        trigger_msg_id="trig1", ctx='{"threadId":"t1"}', trace=False, max_steps=12,
+    )
+
+
+def test_a_tool_backed_reply_is_stamped_with_the_tool_name_on_the_message(wf_repo, conn):
+    _seed_with_lookup(wf_repo)
+    services = Services(
+        wf_repo,
+        clock=(lambda c=itertools.count(500): next(c)),
+        id_gen=(lambda c=itertools.count(1): f"m{next(c)}"),
+    )
+    registry = ToolRegistry([PostMessageTool(services, agent_id="assistant"),
+                             FakeLookupTool()])
+    ids = (f"sr{n}" for n in itertools.count(1))
+    clock = itertools.count(2000)
+    ex = WorkflowExecutor(
+        services, wf_repo, llm=LookupThenPostLLM(), tool_registry=registry,
+        guard_judge=None, id_gen=lambda: next(ids), clock=lambda: next(clock),
+    )
+
+    status = ex.run(CTX, run_id="r1")
+
+    assert status == "done"
+    graph = db.workspace_graph(conn, WS)
+    res = graph.query(
+        "MATCH (r:WorkflowRun {runId: 'r1'})-[:HAS_STEP_RUN]->(sr:StepRun {stepKey:'answer'}) "
+        "MATCH (sr)-[:PRODUCED]->(m:Message) "
+        "RETURN m.text AS text, m.toolsUsed AS toolsUsed"
+    )
+    assert res.result_set, "no PRODUCED edge was created"
+    text, tools_used = res.result_set[0]
+    assert text == "It's $29.99."
+    assert tools_used == ["lookup_product_fact"]

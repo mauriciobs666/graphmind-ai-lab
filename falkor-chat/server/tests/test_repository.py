@@ -237,6 +237,40 @@ def test_post_subsequent_message_unknown_author_reports_status_nothing_written(r
     assert [m["msgId"] for m in repo.read_thread("test", thread_id="t1")] == ["m1"]
 
 
+def test_read_thread_returns_tools_used_when_stamped(repo, conn):
+    # K-056: `read_thread` must surface the `toolsUsed` audit property
+    # `link_step_emission` stamps (pure audit trail — `executor._assemble_messages`
+    # does not read it back into a replayed prompt; that path was reverted).
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="hello", role="user", created_at=120,
+    )
+    db.workspace_graph(conn, "test").query(
+        "MATCH (m:Message {msgId:'m1'}) SET m.toolsUsed = $toolsUsed",
+        {"toolsUsed": ["lookup_product_fact"]},
+    )
+
+    msgs = repo.read_thread("test", thread_id="t1")
+
+    assert msgs[0]["toolsUsed"] == ["lookup_product_fact"]
+
+
+def test_read_thread_defaults_tools_used_to_empty_list_when_absent(repo):
+    # A Message written before this change (no `toolsUsed` property at all) must
+    # degrade to `[]`, not `None` — `_assemble_messages` treats both as falsy, but the
+    # repository contract should be explicit either way.
+    _seed_thread(repo)
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="m1", author_id="u1",
+        text="hello", role="user", created_at=120,
+    )
+
+    msgs = repo.read_thread("test", thread_id="t1")
+
+    assert msgs[0]["toolsUsed"] == []
+
+
 def test_subsequent_message_appends_in_order(repo):
     _seed_thread(repo)
     repo.post_first_message(
@@ -2390,6 +2424,44 @@ def test_link_step_emission_is_idempotent(wf_repo, conn):
         "MATCH (:StepRun {stepRunId:'sr1'})-[e:PRODUCED]->(:Message) RETURN count(e)",
     )
     assert count == [[1]]  # MERGE → exactly one edge
+
+
+# ── K-056 — `link_step_emission` stamps the `toolsUsed` audit property ───────
+#
+# A durable, per-Message signal for "did the step that produced this reply actually
+# dispatch a domain tool?" — persisted here (not just traced) so it survives long
+# after the debug trace (if any) is gone. Pure audit/observability: the
+# replayed-history breadcrumb this was originally built to feed
+# (`_assemble_messages`) was reverted — see that function's docstring and
+# `docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1.
+
+def test_link_step_emission_stamps_tools_used_on_the_message(wf_repo, conn):
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    wf_repo.link_step_emission(
+        "test", step_run_id="sr1", msg_id="trig1",
+        tools_used=["lookup_product_fact"],
+    )
+
+    stamped = _probe(conn, "MATCH (m:Message {msgId:'trig1'}) RETURN m.toolsUsed")
+    assert stamped == [[["lookup_product_fact"]]]
+
+
+def test_link_step_emission_defaults_tools_used_to_empty_list(wf_repo, conn):
+    # Backward-compatible default: a caller that doesn't pass tools_used (or a node
+    # that dispatched nothing) stamps an empty list, not a missing/null property —
+    # `read_thread`'s `coalesce(m.toolsUsed, [])` would degrade fine either way, but
+    # the write path should be explicit rather than relying on that fallback.
+    _seed_run_fixtures(wf_repo)
+    _start(wf_repo)
+    _advance(wf_repo, step_run_id="sr1", to_step="research")
+
+    wf_repo.link_step_emission("test", step_run_id="sr1", msg_id="trig1")
+
+    stamped = _probe(conn, "MATCH (m:Message {msgId:'trig1'}) RETURN m.toolsUsed")
+    assert stamped == [[[]]]
 
 
 # ── §12.7 / §12.8 reads ──────────────────────────────────────────────────────

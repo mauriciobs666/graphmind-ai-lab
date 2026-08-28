@@ -74,24 +74,45 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 > (FR-3/FR-3a adversarial test cases, approved Pass 2) — both delivered; design phase closed.
 > Blocked on K-052.
 
-### K-056 — `salesperson` scaffold: fix live tool-call skip-and-fabricate under extended conversations (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28)
+### K-056 — `salesperson` scaffold: live tool-call skip-and-fabricate under extended conversations, NOT resolved by the targeted breadcrumb fix (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28)
 
 > Trace-instrumented live reproduction (`docs/reviews/salesperson-tool-reliability-ml.md`)
-> confirms `qwen/qwen3-4b-2507` served via LM Studio reproducibly (2/2 independent runs) stops
-> invoking `lookup_product_fact`/`filter_products` after 2-3 successful tool-calling turns within
-> one `salesperson@v1` conversation — the model's very first LLM turn skips straight to
+> confirms `qwen/qwen3-4b-2507` served via LM Studio reproducibly stops invoking
+> `lookup_product_fact`/`filter_products` after 2-3 successful tool-calling turns within one
+> `salesperson@v1` conversation — the model's very first LLM turn skips straight to
 > pattern-completed text, zero `tool_calls` — and fabricates catalog facts the existing
 > `requiredTools` engine guard cannot catch (it only requires `post_message`). Forcing
 > `tool_choice: "required"` on the wire was tested directly and falsified as a fix (didn't force a
-> tool call, triggered a separate runaway-repetition failure). User-directed fix pass in progress
-> before K-053/K-054/K-055 resume: (1) a tool-use breadcrumb in the replayed conversation history
-> (`workflow-salesperson-demo-coordination.md`'s U37), targeting the diagnosed mechanism directly
-> (§4.1/§4.3 of the ml note); (2) a cheap observability signal (warn when a fact-bearing answer
-> emits with no tool call this turn), generalized to whatever tools K-053/K-054/K-055 add later.
-> Not yet covered: a proper controlled eval to replace the note's n=2 anecdote with a rate
-> estimate, and the fallback decision (route this role to a larger model) if no scaffold-level fix
-> holds up under that eval — carried forward as residual scope if the fix pass doesn't fully close
-> this.
+> tool call, triggered a separate runaway-repetition failure).
+>
+> **Fix pass (U37, `tdd-engineer`) shipped two things, live-verified 2/2 independent 9-turn runs
+> against a real `ws:tdd-d1-fix` throwaway workspace:** (1) a tool-use breadcrumb folded into the
+> replayed conversation history (`executor._assemble_messages`, sourced from a new persisted
+> `Message.toolsUsed` property) — **did not resolve or measurably reduce the fabrication**; both
+> live passes collapsed at turn 3 and never recovered through turn 9, same shape as the original
+> diagnostic, including the identical fabricated `$149.99` price recurring for "Portable SSD 1TB".
+> Worse, both passes showed a new risk: the model's own posted reply text started **verbatim
+> imitating the breadcrumb's surface format** (`"Assistant: <answer> [verified via <tool>]"`)
+> **without ever calling the tool** — a customer-visible false-verification claim that then
+> replayed into the *next* turn's history as self-authored precedent. An `analyst` diff review
+> (`docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1) confirmed this is a real severity
+> increase on the defect, not neutral leftover risk, and recommended reverting the tagging path
+> specifically. **Reverted (U39, `tdd-engineer`)**: the tagging code path in `_assemble_messages`
+> is gone; `Message.toolsUsed` stays shipped as a pure audit/observability property
+> (`StepResult.toolsUsed` → `_link_emissions` → `repository.link_step_emission` → `read_thread`),
+> never fed back into anything the model reads. (2) a generalized observability signal
+> (`executor._note_possible_fabrication`, driven off each step's own `config.tools` grant set, not
+> any hardcoded tool name) — **works correctly and stays shipped**: it fired on every
+> actually-fabricating turn in both live passes and stayed silent on genuine tool-use and on
+> correct-but-unverified abstentions.
+>
+> **Still open, unresolved:** a scaffold-level mitigation for the underlying skip-and-fabricate
+> behavior — the breadcrumb candidate is now falsified *and reverted*, alongside `tool_choice`
+> forcing (two of the ml note's candidates tried, both failed live); a proper controlled eval to
+> replace n-of-few anecdotes with an actual rate estimate; and the fallback decision (route this
+> role to a larger model) the ml note named as the likely remaining lever if no scaffold-level fix
+> holds up. Per explicit user direction, no further mitigation iteration and no K-053 dispatch
+> happened this session — this item stays open for whoever picks it up next.
 
 ## Open follow-ups
 

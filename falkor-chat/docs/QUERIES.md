@@ -359,11 +359,21 @@ MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message)
 MATCH (first)-[:NEXT*0..]->(m:Message)
 MATCH (m)-[:POSTED_BY]->(author)
 RETURN m.msgId, m.text, m.role, m.createdAt,
-       author.userId, author.displayName, labels(author) AS authorType
+       author.userId, author.displayName, labels(author) AS authorType,
+       coalesce(m.toolsUsed, []) AS toolsUsed
 ORDER BY m.createdAt
 ```
 *`length(path)` is not supported in ORDER BY on this build — use `m.createdAt`
 (indexed) instead. Bounded by thread length; paginate with cursor for long threads.*
+
+*`toolsUsed` (K-056, `docs/reviews/salesperson-tool-reliability-ml.md` §4.3) is the
+tool-use breadcrumb source: `link_step_emission` (§12.6) stamps it with the producing
+step's own non-`post_message` dispatched tool names; `coalesce(…, [])` degrades a
+pre-K-056 row (no property at all) and a step that dispatched nothing to the same empty
+list. `executor._assemble_messages` reads it back to tag a tool-backed `assistant` turn
+when this thread is replayed into a later turn's prompt — the fix for the diagnosed
+skip-and-fabricate mechanism (small local model, no visible tool-use precedent by turn
+3-4 of an extended conversation).*
 
 ### Read a thread window (cursor-based pagination)
 ```cypher
@@ -1347,10 +1357,11 @@ no `AT_STEP` does not error). **Step-budget fail (§7):** the executor compares 
 ### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message` (D2)
 
 ```cypher
-// $stepRunId, $msgId — run AFTER the §4 chat write that created the message (two-step, accepted)
+// $stepRunId, $msgId, $toolsUsed — run AFTER the §4 chat write that created the message (two-step, accepted)
 MATCH (sr:StepRun {stepRunId: $stepRunId})
 MATCH (m:Message  {msgId: $msgId})
 MERGE (sr)-[:PRODUCED]->(m)
+SET m.toolsUsed = $toolsUsed
 RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId
 ```
 *Both endpoints anchor on their `UNIQUE` index (`stepRunId`, `msgId`); `MERGE` on the relationship makes
@@ -1359,6 +1370,13 @@ duplicate `PRODUCED`, verified). This is the **second** query of the deliberatel
 the message via the guarded §4 write, then link) — the message is the durable artifact; a missing link is
 a diagnosable, retry-able gap, not a torn thread (§3/§9). **Distinct from `EMITTED`** (§10) — verified a
 `PRODUCED` write adds zero `EMITTED` edges.*
+
+*`$toolsUsed` (K-056, `docs/reviews/salesperson-tool-reliability-ml.md` §4.3) is the producing step's
+own non-`post_message` dispatched tool names (`executor.StepResult.toolsUsed`, empty list when the step
+dispatched none) — the tool-use breadcrumb source `read_thread` (§4) surfaces on the next turn's replay.
+Live-verified: `SET`/round-trip of a list-of-strings property works on this build (`GRAPH.QUERY … SET
+n.toolsUsed = ['a','b'] RETURN n.toolsUsed` → `[a, b]`; `coalesce(missing, [])` → `[]`). Always set,
+even when empty — an explicit write, not a reliance on the read-side `coalesce` fallback alone.*
 
 ### 12.7 `get_run` — read a run's state
 

@@ -689,7 +689,14 @@ class Repository:
         ]
 
     def read_thread(self, ws: str, *, thread_id: str) -> list[dict[str, Any]]:
-        """Read a full thread in order. QUERIES.md §4."""
+        """Read a full thread in order. QUERIES.md §4.
+
+        K-056: `toolsUsed` (`link_step_emission`'s breadcrumb-source property, `[]` when
+        never stamped — `coalesce` covers both a pre-K-056 row with no property at all
+        and a step that dispatched nothing) rides along so `executor._assemble_messages`
+        can tag a tool-backed assistant turn when this thread is replayed into a later
+        prompt.
+        """
         res = self._graph(ws).ro_query(
             "MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message) "
             "MATCH (first)-[:NEXT*0..]->(m:Message) "
@@ -697,7 +704,8 @@ class Repository:
             "RETURN m.msgId AS msgId, m.text AS text, m.role AS role, "
             "m.createdAt AS createdAt, "
             "coalesce(author.userId, author.agentId) AS authorId, "
-            "author.displayName AS displayName, labels(author) AS authorType "
+            "author.displayName AS displayName, labels(author) AS authorType, "
+            "coalesce(m.toolsUsed, []) AS toolsUsed "
             "ORDER BY m.createdAt",
             {"threadId": thread_id},
         )
@@ -705,6 +713,7 @@ class Repository:
             {
                 "msgId": row[0], "text": row[1], "role": row[2], "createdAt": row[3],
                 "authorId": row[4], "displayName": row[5], "authorType": row[6],
+                "toolsUsed": row[7],
             }
             for row in res.result_set
         ]
@@ -2203,7 +2212,8 @@ class Repository:
         return self._status_row(res)
 
     def link_step_emission(
-        self, ws: str, *, step_run_id: str, msg_id: str
+        self, ws: str, *, step_run_id: str, msg_id: str,
+        tools_used: list[str] = (),
     ) -> dict[str, Any] | None:
         """`StepRun -[:PRODUCED]-> Message` (D2). QUERIES.md §12.6.
 
@@ -2211,13 +2221,24 @@ class Repository:
         via the guarded §4 write, then link). `MERGE` on the relationship makes the
         link idempotent (a retry re-links exactly once). Distinct from K-013's
         `EMITTED` (§10). `None` when an endpoint is missing.
+
+        K-056 (`docs/reviews/salesperson-tool-reliability-ml.md` §4.3): `tools_used`
+        (the producing step's own non-`post_message` dispatched tool names, `executor.
+        StepResult.toolsUsed`) rides the same `SET` as the `toolsUsed` `Message`
+        property — the durable source `read_thread` (§4) surfaces and
+        `_assemble_messages`'s tool-use breadcrumb reads on the *next* turn's replay.
+        Defaults to an empty list (a node that dispatched nothing still stamps `[]`,
+        never leaves the property unset — an explicit write, not a reliance on
+        `read_thread`'s `coalesce` fallback).
         """
         res = self._graph(ws).query(
             "MATCH (sr:StepRun {stepRunId: $stepRunId}) "
             "MATCH (m:Message  {msgId: $msgId}) "
             "MERGE (sr)-[:PRODUCED]->(m) "
+            "SET m.toolsUsed = $toolsUsed "
             "RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId",
-            {"stepRunId": step_run_id, "msgId": msg_id},
+            {"stepRunId": step_run_id, "msgId": msg_id,
+             "toolsUsed": list(tools_used)},
         )
         if not res.result_set:
             return None

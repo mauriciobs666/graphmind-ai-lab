@@ -5,6 +5,108 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-28 — K-056: tool-use breadcrumb + fabrication observability signal — implemented, live-verified as NOT resolving D-1, breadcrumb reverted
+
+**What:** `tdd-engineer` (U37) implemented both pieces of the user-directed K-056 fix pass
+(`docs/plans/workflow-salesperson-demo-coordination.md`'s U37, gated on
+`docs/reviews/salesperson-tool-reliability-ml.md` §4.1/§4.3/§5) — a tool-use breadcrumb folded
+into the replayed conversation history, and a cheap, generalized observability signal for a
+fact-bearing answer given with no tool dispatched. **Live verification (2/2 independent runs,
+9-turn D-1 repro sequence) shows the breadcrumb does NOT resolve or measurably reduce the
+underlying fabrication — collapse still onset at turn 3 in both passes, persisting through
+turn 9, including the exact same fabricated `$149.99` price for "Portable SSD 1TB" the ml note's
+own repro hit** — and surfaces a new, more concerning failure mode: on every fabricating turn in
+both passes, the model's own generated reply text verbatim echoed the replayed-history breadcrumb
+format (`"Assistant: <answer> [verified via <tool>]"`) **without ever calling the tool**, i.e. the
+customer-visible message now falsely claims tool verification while `Message.toolsUsed` (the real
+audit signal) is empty. The observability signal, independently, worked exactly as designed in
+both passes: it fired a WARNING on every turn that actually fabricated (turns 3/4/7/8/9, both
+passes) and stayed silent on genuine tool-use turns (1/2) and on correct-but-unverified
+abstentions (5/6, matching the ml note's own "correct abstention, not tool-verified" distinction).
+
+**Fix (mechanism, initially shipped as-is despite the negative live result — see "Reverted"
+below for the breadcrumb's final disposition):**
+- `executor.StepResult` gains `toolsUsed: frozenset[str]` — every non-`post_message` tool an
+  agent-node execution successfully dispatched (`_run_agent_node`, both the early non-tool-call
+  return and the `maxIterations`-exhaustion return).
+- `_link_emissions` threads it to `services.link_step_emission` → `repository.link_step_emission`,
+  which now also `SET`s it as a `Message.toolsUsed` list property (`docs/QUERIES.md` §12.6) —
+  always written, even empty, not left to the read-side `coalesce` fallback alone.
+- `repository.read_thread` (`docs/QUERIES.md` §4) now returns `toolsUsed`
+  (`coalesce(m.toolsUsed, [])`) alongside the existing message fields.
+- `executor._assemble_messages` originally tagged a replayed `assistant` turn with
+  `" [verified via <tool>, ...]"` when its `toolsUsed` was non-empty — **reverted, see below.**
+- New `executor._looks_fact_bearing` heuristic (a currency-prefixed or two-decimal price-shaped
+  number — catalog-vocabulary-free by design) plus `_note_possible_fabrication`, mirroring
+  `_note_must_post_violation`'s posture (always logged via `_log.warning`, never gated on a debug
+  run; a `possible_fabrication` trace entry on a debug run). Fired whenever a step's own granted
+  domain tools (`config.tools` minus `post_message`) are non-empty, none were dispatched this
+  execution, and the final text looks fact-bearing — driven entirely off the step's own tool
+  grant set, not any hardcoded tool name, so it stays meaningful once K-053/K-054/K-055 add their
+  own tools to this scaffold. Kept as-is; the bare two-decimal branch is documented as
+  intentionally coarse (advisory `WARNING`-only signal, never blocks) rather than tightened.
+
+**Reverted (U39, `tdd-engineer`, same day):** an `analyst` diff review
+(`docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1) found the breadcrumb was not a
+neutral leftover but a real severity increase on D-1 — the model imitated the breadcrumb's own
+surface text in fabricated replies with no tool ever called, and that fabricated text then
+replayed into the next turn's history as a self-authored false-verification claim. The tagging
+code path in `_assemble_messages` was removed; `StepResult.toolsUsed`, `_link_emissions`'s
+threading, `repository.link_step_emission`'s `SET`, and `read_thread`'s surfacing all stay exactly
+as shipped — `Message.toolsUsed` is now purely an audit/observability property, never fed back
+into a prompt the model reads. Three tests in `test_executor_agent.py` that pinned the breadcrumb
+text were reshaped into regression guards pinning its *absence* instead (one of four was folded
+into another, net -1 test).
+
+**Tests:** 18 new offline unit/integration tests across `server/tests/test_executor_agent.py`
+(breadcrumb tagging/omission — present, absent key, wrong-role defense; `StepResult.toolsUsed`
+population on both return paths; the fabrication-warning signal, its negative cases, and its
+exhaustion-path coverage), `server/tests/test_repository.py` (`link_step_emission` stamping
+`toolsUsed`, its default, `read_thread` surfacing it), and `server/tests/test_executor_produced.py`
+(one live-graph integration test driving a real node that dispatches a domain tool then posts,
+confirming `Message.toolsUsed` lands correctly end-to-end through executor→services→repository).
+Mutation-tested: reverted all three production files (`executor.py`/`repository.py`/`services.py`)
+via `git stash`, confirmed all 12 directly-relevant new tests failed for the right reason, restored
+and re-confirmed green. Full offline suite (as originally shipped): 1829 passed, 4 deselected (up
+from the 1811-passed baseline; +18 new tests, no existing test needed changes).
+**After the U39 revert:** 1828 passed, 4 deselected (three breadcrumb-text tests reshaped into two
+negative regression guards, net -1); mutation-tested again by temporarily re-adding the tagging
+block, confirming the reshaped tests fail for the right reason, then removing it. `./scripts/
+test_queries.sh`: 346/346 both times (no query/DDL-shape assertions added there — this is a plain
+property `SET`, dialect-verified live via `redis-cli` directly, and exercised for real by the live
+`wf_repo`/`conn` pytest fixtures, same posture the module's own testing-hazards doc takes for
+non-DDL property additions).
+
+**Live verification (`docs/reviews/salesperson-tool-reliability-ml.md` §2's own method — driving
+`services.start_workflow_run`/`WorkflowTrigger.maybe_trigger`→`resume_workflow_run` directly
+in-process, `trace=True`, bypassing the `@mention` REST path's default-off trace, no shipped code
+changed for this):** fresh throwaway `ws:tdd-d1-fix` (`bootstrap_schema.sh` → `seed_demo.sh` →
+`seed_catalog.sh` → `seed_salesperson.sh`), real LM Studio (`localhost:1234`,
+`qwen/qwen3-4b-2507`, directly reachable this session — no gateway-IP workaround needed). Ran the
+identical 9-turn D-1 sequence twice, independently (fresh thread each pass). Both passes: turns
+1-2 correct with real tool calls and a correctly-persisted breadcrumb; turn 3 onward, the model's
+first LLM iteration emits zero `tool_calls` and fabricates, exactly the pre-fix pattern, never
+recovering through turn 9. `GRAPH.DELETE ws:tdd-d1-fix` after the pass; `reference`'s catalog/def
+data (idempotent create-only) and `ws:acme` were untouched by the repro itself, but
+`./scripts/test_queries.sh`'s own teardown (run separately, for the regression check) wiped
+`reference` as documented — re-seeded (`bootstrap_schema.sh` → `seed_demo.sh acme` →
+`seed_workflows.sh acme` → `seed_catalog.sh` → `seed_salesperson.sh acme`) and re-verified in sync
+(`verify_workflows.sh acme`, `verify_salesperson.sh acme`, `verify_catalog.sh`, all OK) before
+finishing.
+
+**Disposition:** D-1 (K-056) is **not resolved** by this fix pass and is still open. The
+observability signal is real, working, generalized value and stays. The breadcrumb mechanism was
+live evidence-negative (2/2 runs: no change to the model's underlying skip-and-fabricate behavior)
+**and** was found, on review, to actively worsen the defect (the model imitating the breadcrumb's
+surface format without doing the verification it advertises, feeding a false claim into the next
+turn's replayed history) — so it was reverted rather than left in place. `Message.toolsUsed`
+survives the revert as a pure audit/logging property with independent value. Per user direction
+("stop after the defect is fixed"), no further mitigation iteration and no K-053 dispatch this
+session — routed to `analyst` (U38) for a diff-scoped review, which recommended the revert; U39
+executed it. `docs/BACKLOG.md`'s K-056 entry updated to reflect this precisely. `reference`'s
+schema/data (wiped by `test_queries.sh`'s teardown, once per verification pass) was re-seeded and
+re-verified in sync after both passes.
+
 ## 2026-08-26 — K-048: `_assemble_messages` no longer emits two consecutive same-role turns
 
 **What:** `tdd-engineer` closed K-048 — `WorkflowExecutor._assemble_messages`

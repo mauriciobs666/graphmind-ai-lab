@@ -507,6 +507,67 @@ def test_a_node_with_no_thread_context_carries_an_empty_window():
     assert result.thread == []
 
 
+# ── K-056 — StepResult.toolsUsed carries this node's own dispatched domain tools ──
+#
+# The breadcrumb (`_assemble_messages`, above) is only as good as the signal it reads:
+# `StepResult.toolsUsed` must name every non-`post_message` tool this node execution
+# actually dispatched successfully, so `_link_emissions` can persist it onto the
+# `Message`(s) this step posted (`repository.link_step_emission`).
+
+def test_step_result_carries_a_dispatched_domain_tool_as_toolsused():
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "graphrag_retrieve", {"query": "reset password"})]),
+        ChatResult(text="grounded answer"),
+    ])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA},
+                       results={"graphrag_retrieve": "seed: reset via settings"})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert result.toolsUsed == frozenset({"graphrag_retrieve"})
+
+
+def test_step_result_toolsused_is_empty_when_only_post_message_was_dispatched():
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "post_message", {"text": "here you go"})]),
+        ChatResult(text="done"),
+    ])
+    reg = StubRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+        results={"post_message": '{"posted": "m42", "threadId": "t1"}'},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert result.toolsUsed == frozenset()
+
+
+def test_step_result_toolsused_is_empty_when_no_tool_was_dispatched():
+    llm = StubChatLLM([ChatResult(text="plain answer, no tool")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(), {})
+
+    assert result.toolsUsed == frozenset()
+
+
+def test_step_result_toolsused_rides_out_on_max_iterations_exhaustion():
+    call = ToolCall("c1", "graphrag_retrieve", {"query": "loop"})
+    llm = AlwaysToolLLM(call)
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(maxIterations=2), {})
+
+    assert result.toolsUsed == frozenset({"graphrag_retrieve"})
+
+
 # ── K-048 — _assemble_messages must never emit two consecutive same-role turns ─
 #
 # A strict-alternation chat template (live-confirmed: LM Studio's Ministral-3B) hard-rejects
@@ -568,6 +629,172 @@ def test_assemble_messages_coalesces_consecutive_same_role_thread_turns():
     assert "Alice: turn 0" in merged
     assert "Alice: turn 1" in merged
     assert f"CONTEXT:\n{context}" in merged
+
+
+# ── K-056 — tool-use breadcrumb reverted (analyst review, MAJOR 1) ────────────
+#
+# An earlier pass attempted D-1's mitigation (docs/reviews/salesperson-tool-reliability-ml.md
+# §4.1/§4.3) by folding a `[verified via <tool>]` breadcrumb into a replayed assistant
+# turn backed by `Message.toolsUsed`. Live verification showed it did not reduce
+# fabrication and, worse, the model began imitating the breadcrumb's own surface text
+# in *fabricated* replies with no tool ever called — a self-authored false-verification
+# claim that then replays into the next turn's history
+# (docs/reviews/salesperson-tool-reliability-impl.md, MAJOR 1). Reverted here.
+# `Message.toolsUsed` remains a pure audit/logging property (StepResult.toolsUsed →
+# _link_emissions → repository.link_step_emission → read_thread) — never fed back into
+# anything the model reads. These tests pin that absence as a regression guard against
+# the tagging being silently reintroduced.
+
+def test_assemble_messages_does_not_tag_an_assistant_turn_even_when_toolsused_is_present():
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {}
+    thread_msgs = [
+        {"role": "user", "text": "what's the price of the Wireless Mouse Pro?",
+         "authorId": "u1", "displayName": "Alice"},
+        {"role": "assistant", "text": "It's $29.99.", "authorId": "assistant",
+         "displayName": "Bot", "toolsUsed": ["lookup_product_fact"]},
+    ]
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    assistant_turns = [m for m in messages if m["role"] == "assistant"]
+    assert len(assistant_turns) == 1
+    assert assistant_turns[0]["content"] == "Bot: It's $29.99."
+    assert "verified via" not in assistant_turns[0]["content"]
+
+
+def test_assemble_messages_ignores_toolsused_regardless_of_shape():
+    # `toolsUsed` on a thread row (empty list, or absent entirely — the pre-existing-data
+    # shape from before the property existed) never affects assembled content either way.
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {}
+    thread_msgs = [
+        {"role": "assistant", "text": "hello there!", "authorId": "assistant",
+         "displayName": "Bot", "toolsUsed": []},
+        {"role": "assistant", "text": "no key here", "authorId": "assistant",
+         "displayName": "Bot"},
+    ]
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    # consecutive same-role turns coalesce into one (K-048); both texts land in it
+    assistant_turns = [m for m in messages if m["role"] == "assistant"]
+    assert len(assistant_turns) == 1
+    assert "hello there!" in assistant_turns[0]["content"]
+    assert "no key here" in assistant_turns[0]["content"]
+    assert "verified via" not in assistant_turns[0]["content"]
+
+
+def test_assemble_messages_never_tags_a_user_turn_even_if_toolsused_is_present():
+    # Defensive: a malformed row carrying toolsUsed on a `user` turn must still never
+    # produce a tag (toolsUsed is meaningless there regardless).
+    config = {"systemPrompt": "You are the bot."}
+    run_ctx = {}
+    thread_msgs = [
+        {"role": "user", "text": "hi", "authorId": "u1", "displayName": "Alice",
+         "toolsUsed": ["should_never_apply"]},
+    ]
+
+    messages = WorkflowExecutor._assemble_messages(config, run_ctx, thread_msgs)
+
+    user_turns = [m for m in messages if m["role"] == "user"]
+    assert user_turns[0]["content"].startswith("Alice: hi")
+    assert "verified via" not in user_turns[0]["content"]
+
+
+# ── K-056 — observability: warn on a fact-bearing answer with no tool dispatched ─
+#
+# The cheap, model-independent signal (ml note §4.1/§5, generalized): when an agent-node
+# turn's final answer *looks* fact-bearing (references a price-like token) but none of
+# the step's own granted domain tools (its `config.tools`, minus the always-present
+# `post_message`) were actually dispatched this execution, warn — loudly, always (not
+# gated on `run["trace"]`), the same posture `_note_must_post_violation` already uses.
+# Driven entirely off the step's own tool grant set, never a hardcoded tool name, so it
+# stays useful once K-053/K-054/K-055 add their own tools to this scaffold.
+
+def test_warns_when_fact_bearing_answer_has_no_domain_tool_dispatched(caplog):
+    llm = StubChatLLM([ChatResult(text="It's $29.99.")])
+    reg = StubRegistry({"lookup_product_fact": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+    config = _config(tools=["lookup_product_fact"])
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {})
+
+    assert any("possible fabrication" in r.getMessage() for r in caplog.records)
+    assert any(k == "possible_fabrication" for k, _ in result.trace)
+
+
+def test_no_warning_when_the_granted_domain_tool_was_actually_dispatched(caplog):
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "lookup_product_fact", {"query": "mouse"})]),
+        ChatResult(text="It's $29.99."),
+    ])
+    reg = StubRegistry({"lookup_product_fact": RETRIEVE_SCHEMA},
+                       results={"lookup_product_fact": '{"price": 29.99}'})
+    ex = _executor(llm=llm, registry=reg)
+    config = _config(tools=["lookup_product_fact"])
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {})
+
+    assert not any("possible fabrication" in r.getMessage() for r in caplog.records)
+    assert not any(k == "possible_fabrication" for k, _ in result.trace)
+
+
+def test_no_warning_when_the_answer_does_not_look_fact_bearing(caplog):
+    llm = StubChatLLM([ChatResult(text="Sure, happy to help with anything else!")])
+    reg = StubRegistry({"lookup_product_fact": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+    config = _config(tools=["lookup_product_fact"])
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {})
+
+    assert not any("possible fabrication" in r.getMessage() for r in caplog.records)
+    assert not any(k == "possible_fabrication" for k, _ in result.trace)
+
+
+def test_no_warning_when_the_step_grants_no_domain_tools_at_all():
+    # A step with nothing but post_message granted (or no tools at all) has nothing it
+    # could have dispatched — the signal is meaningless there, not a violation.
+    llm = StubChatLLM([ChatResult(text="It's $29.99.")])
+    reg = StubRegistry(
+        {"post_message": {"type": "function",
+                          "function": {"name": "post_message", "parameters": {}}}},
+    )
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["post_message"]), {})
+
+    assert not any(k == "possible_fabrication" for k, _ in result.trace)
+
+
+def test_fabrication_warning_also_fires_on_max_iterations_exhaustion(caplog):
+    # The exhaustion path builds its own StepResult from `last_text` — the check must
+    # run there too, not only on the early non-tool-call return.
+    llm = StubChatLLM([
+        ChatResult(text="It's $29.99.",
+                   tool_calls=[ToolCall("c1", "lookup_product_fact", {"query": "x"})]),
+    ] * 2)
+    reg = StubRegistry({"lookup_product_fact": RETRIEVE_SCHEMA},
+                       results={"lookup_product_fact": "not really dispatched cleanly"})
+
+    class _NeverSatisfiesRegistry(StubRegistry):
+        def dispatch(self, name, arguments, *, ctx, run):
+            self.dispatched.append((name, arguments))
+            raise UnknownMemberError(["ghost"])
+
+    reg = _NeverSatisfiesRegistry({"lookup_product_fact": RETRIEVE_SCHEMA})
+    ex = _executor(llm=llm, registry=reg)
+    config = _config(tools=["lookup_product_fact"], maxIterations=2)
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {})
+
+    assert any("possible fabrication" in r.getMessage() for r in caplog.records)
+    assert any(k == "possible_fabrication" for k, _ in result.trace)
 
 
 # ── K-039 / mention-reply-delivery RCA #1 — implicit post_message fallback ────
