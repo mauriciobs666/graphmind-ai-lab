@@ -5,7 +5,15 @@
       "Bash(./claude/scripts/audit-team.sh)",
       "Bash(./claude/scripts/audit-team.sh *)",
       "Bash(bash claude/scripts/audit-team.sh)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Write(**/docs/test-plans/**)",
+      "Edit(**/docs/test-plans/**)",
+      "Write(**/docs/test-reports/**)",
+      "Edit(**/docs/test-reports/**)",
+      "Write(**/docs/reviews/**)",
+      "Edit(**/docs/reviews/**)",
+      "Write(**/docs/plans/**)",
+      "Edit(**/docs/plans/**)"
     ]
   }
 }
