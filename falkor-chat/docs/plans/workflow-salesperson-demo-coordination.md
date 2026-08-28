@@ -185,7 +185,25 @@ as U36's own method, gate with `analyst`, then **stop — no K-053 dispatch this
 of gate outcome (report back either way).
 
 | U37 | `tdd-engineer` (fresh) | `ab5e9e9d5e1819c78` | delivered | breadcrumb + `Message.toolsUsed` + observability signal (`executor.py`/`repository.py`/`services.py`, +18 tests); **D-1 NOT resolved** — see note below | `analyst` (U38) → — | 304k tok / 174 tools |
-| U38 | `analyst` (fresh) | `a6347053812f722e2` | in-flight | diff-scoped review, U37's diff (shipped as-is despite not fixing D-1: audit property + observability signal have independent value) | — | — |
+| U38 | `analyst` (fresh) | `a6347053812f722e2` | accepted | `docs/reviews/salesperson-tool-reliability-impl.md` | self → **approve with suggestions** (1 MAJOR, 1 MINOR) | 121k tok / 31 tools |
+| U39 | `tdd-engineer` (fresh) | `a13492d09a4d2148c` | in-flight | revert breadcrumb tagging only (MAJOR 1), keep `toolsUsed`/observability signal | teco (direct diff read) → — | — |
+
+**U38 delivered.** No blocker, but **1 MAJOR**: the breadcrumb-imitation risk (found live by U37)
+is not neutral — traced to `executor.py:1025-1030`, a fabricated reply's own `Message.toolsUsed`
+stays empty, so the fake `"[verified via <tool>]"` text is free-text only, and once posted it
+becomes part of the *next* turn's replayed history as a self-authored false-verification example —
+same instruction-vs-precedent mechanism as the underlying bug, now reinforcing a more deceptive
+pattern. Recommends reverting *only* the tagging code path, keeping `toolsUsed`/`link_step_emission`
+/`read_thread`/the observability signal (pure audit/logging, no prompt feedback, none of this risk).
+1 MINOR: `_looks_fact_bearing`'s bare two-decimal regex flags non-price numbers (e.g. "version
+3.14") — low severity, log-only. Everything else: solid (parameterized Cypher, no index needed,
+tests pin real behavior not just paths, docs candid about the negative result). Analyst explicitly
+left the revert-or-carry-as-known-risk call to "the team," not decided unilaterally — **`teco`
+decision: take the revert.** Shipping a code path that actively worsens an already-open,
+live-confirmed defect isn't a close call, and the fix is small/contained per the reviewer's own
+description. Dispatched as U39 (fresh — U37's agent was over the large-context threshold, and this
+follow-up is small/self-contained per the reviewer's precise instructions, doesn't need U37's own
+undocumented reasoning).
 
 **U37 delivered — the breadcrumb mitigation is falsified; D-1 stays open.** Live-verified 2/2
 independent 9-turn runs against a fresh `ws:tdd-d1-fix`: both collapsed at turn 3, never recovered,
