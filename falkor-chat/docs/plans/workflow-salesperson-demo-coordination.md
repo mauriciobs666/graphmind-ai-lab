@@ -184,8 +184,20 @@ params) plus its cheap observability signal (§4.1), live-verify against D-1's r
 as U36's own method, gate with `analyst`, then **stop — no K-053 dispatch this session** regardless
 of gate outcome (report back either way).
 
-| U37 | `tdd-engineer` (fresh) | `ab5e9e9d5e1819c78` | in-flight | fix D-1: replay-history tool-use breadcrumb + observability signal, live-verified against the repro | `analyst` (U38) → — | — |
-| U38 | `analyst` (fresh) | — | queued | diff-scoped review, U37's fix | — | — |
+| U37 | `tdd-engineer` (fresh) | `ab5e9e9d5e1819c78` | delivered | breadcrumb + `Message.toolsUsed` + observability signal (`executor.py`/`repository.py`/`services.py`, +18 tests); **D-1 NOT resolved** — see note below | `analyst` (U38) → — | 304k tok / 174 tools |
+| U38 | `analyst` (fresh) | `a6347053812f722e2` | in-flight | diff-scoped review, U37's diff (shipped as-is despite not fixing D-1: audit property + observability signal have independent value) | — | — |
+
+**U37 delivered — the breadcrumb mitigation is falsified; D-1 stays open.** Live-verified 2/2
+independent 9-turn runs against a fresh `ws:tdd-d1-fix`: both collapsed at turn 3, never recovered,
+same shape as the original diagnostic (including the identical fabricated $149.99). **New,
+more concerning finding**: in both passes the model's own customer-visible reply started
+**verbatim imitating the breadcrumb's surface format** (`"... [verified via <tool>]"`) **without
+ever calling the tool** — a false-verification claim layered on top of the wrong fact, not just a
+wrong fact. The observability signal (`_note_possible_fabrication`, generalized off each step's own
+tool-grant set) worked correctly in both passes. `docs/BACKLOG.md`'s K-056 item rewritten in place
+by the implementer to record this outcome (not closed). Offline: full suite 1829/4 (was 1811/4,
++18 tests), `test_queries.sh` 346/346, mutation-tested (reverted → 12 new tests failed for the
+right reason). Everything left **uncommitted** for `teco` to review/commit per convention.
 
 **Correction to the report's own cross-reference:** the report calls D-1 "already flagged as a
 known open epic (K-027)" — checked, and that's stale/wrong: `docs/BACKLOG.md` shows **K-027 closed
