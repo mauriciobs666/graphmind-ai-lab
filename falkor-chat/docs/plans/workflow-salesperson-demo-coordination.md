@@ -158,10 +158,34 @@ check), not blocking.
 "investigate D-1 first, then proceed" — a bounded diagnostic pass before dispatching K-053 (U18),
 not a full program pause and not proceeding uninvestigated. Dispatched as **U36**.
 
-| U36 | `data-scientist` (fresh) | `a3b396e82d988e713` | in-flight | diagnostic, `docs/reviews/salesperson-tool-reliability-ml.md` | self → — | — |
+| U36 | `data-scientist` (fresh) | `a3b396e82d988e713` | accepted | `docs/reviews/salesperson-tool-reliability-ml.md` | self → **proceed with K-053+, gated on a cheap mitigation** | 164k tok / 49 tools |
 
-U18 (K-053, `coder`) stays `queued`, not dispatched, until U36 delivers and I've read its
-recommendation.
+**U36 delivered — root cause resolved, no fix yet.** Two independent live repros with
+`trace=True` (bypassing the `@mention` path's default-off trace, no shipped code touched) show the
+model's very first LLM turn skips tool invocation entirely on the fabricating turns (zero
+`tool_calls`) — not bad arguments, not an overridden correct result. Mechanism: `_assemble_messages`
+replays only prior turns' *final text* into each new prompt, never the tool-call scaffolding, so by
+turn 3-4 the model's own in-context precedent looks like "this gets answered directly," which
+dominates the system prompt's explicit tool-use instruction for a 4B-class model — instruction-vs.
+-in-context-precedent robustness, not context-window pressure (collapse point is 6-8 short
+messages). `tool_choice: "required"` forcing was tested directly against the exact failing prompt
+and **falsified** — didn't force a tool call, and separately triggered a runaway-repetition
+failure. Verdict text says both "gated on" a mitigation and "not a hold" — read together as: ship a
+cheap fix, but the note's own severity call (§4.4) is what actually matters for sequencing — this
+**gets worse, not better, with more tools/turns**, and K-053/K-054's tools are write/mutating
+(cart, profile), turning a fabricated *reply* into risk of a fabricated *state-mutation narration*
+if the same skip pattern recurs on a write tool. Filed as **K-056** (`docs/BACKLOG.md`), in-progress.
+
+**User instruction (2026-08-28, mid-turn): "stop after the defect is fixed."** Overrides the
+default "proceed to K-053" reading of U36's verdict — K-053 (U18) stays `queued`, not dispatched.
+Scope for the fix pass: implement the note's targeted mitigation (§4.3 — a tool-use breadcrumb in
+the replayed history, the one candidate that targets the diagnosed mechanism directly, not sampling
+params) plus its cheap observability signal (§4.1), live-verify against D-1's repro sequence same
+as U36's own method, gate with `analyst`, then **stop — no K-053 dispatch this session** regardless
+of gate outcome (report back either way).
+
+| U37 | `tdd-engineer` (fresh) | — | queued | fix D-1: replay-history tool-use breadcrumb + observability signal, live-verified against the repro | `analyst` (U38) → — | — |
+| U38 | `analyst` (fresh) | — | queued | diff-scoped review, U37's fix | — | — |
 
 **Correction to the report's own cross-reference:** the report calls D-1 "already flagged as a
 known open epic (K-027)" — checked, and that's stale/wrong: `docs/BACKLOG.md` shows **K-027 closed
