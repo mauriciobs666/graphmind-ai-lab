@@ -186,7 +186,31 @@ of gate outcome (report back either way).
 
 | U37 | `tdd-engineer` (fresh) | `ab5e9e9d5e1819c78` | delivered | breadcrumb + `Message.toolsUsed` + observability signal (`executor.py`/`repository.py`/`services.py`, +18 tests); **D-1 NOT resolved** — see note below | `analyst` (U38) → — | 304k tok / 174 tools |
 | U38 | `analyst` (fresh) | `a6347053812f722e2` | accepted | `docs/reviews/salesperson-tool-reliability-impl.md` | self → **approve with suggestions** (1 MAJOR, 1 MINOR) | 121k tok / 31 tools |
-| U39 | `tdd-engineer` (fresh) | `a13492d09a4d2148c` | in-flight | revert breadcrumb tagging only (MAJOR 1), keep `toolsUsed`/observability signal | teco (direct diff read) → — | — |
+| U39 | `tdd-engineer` (fresh) | `a13492d09a4d2148c` | accepted | revert breadcrumb tagging only (MAJOR 1), keep `toolsUsed`/observability signal | teco (direct diff read + independent suite re-run) → clean | 123k tok / 60 tools |
+
+**U39 delivered and committed (`15a9749`).** Verified directly before committing, not just on the
+implementer's word: `grep`-confirmed no `[verified via` interpolation remains in `executor.py`
+(only in comments/docstrings recording the revert); independently re-ran the full offline suite
+(**1828 passed/4 deselected**, matches) and `./scripts/test_queries.sh` (**346/346**, matches);
+both wiped `reference`/`ws:acme` per the documented teardown hazard, re-seeded
+(`bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` → `seed_workflows.sh` →
+`seed_salesperson.sh`) and re-verified in sync (`verify_workflows.sh`/`verify_catalog.sh`/
+`verify_salesperson.sh`, all OK) before handing back. `Message.toolsUsed`/`link_step_emission`/
+`read_thread`/the observability signal all ship as designed; the model-facing breadcrumb text is
+fully gone. **K-056 stays open** — D-1 itself (the model skipping tool calls) is unresolved; only
+the newly-discovered aggravating side effect from the failed mitigation attempt is closed.
+
+## Session stop (2026-08-28) — per explicit user instruction ("stop after the defect is fixed")
+
+**D-1/K-056 is not fixed** — it remains open, with two candidate mitigations now falsified
+(`tool_choice: "required"` forcing, and the replayed-history breadcrumb) and no confirmed
+scaffold-level fix. Per the user's own instruction, stopping here rather than continuing to iterate
+on a fix or dispatching K-053. **Everything through U39 is committed** — nothing left uncommitted in
+the working tree. `docs/BACKLOG.md`'s K-056 item and `docs/HISTORY.md`'s 2026-08-28 entry are the
+durable record of exactly what was tried, what worked (the audit property, the observability
+signal), what didn't (both mitigations), and what's still open (a controlled eval; the
+larger-model-fallback decision) — read those first when this resumes. U18 (K-053, `coder`) and
+everything after it in the implementation ledger above stays `queued`, unchanged.
 
 **U38 delivered.** No blocker, but **1 MAJOR**: the breadcrumb-imitation risk (found live by U37)
 is not neutral — traced to `executor.py:1025-1030`, a fabricated reply's own `Message.toolsUsed`
