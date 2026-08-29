@@ -381,7 +381,48 @@ instruction pattern (not a full re-run of §8's baseline), before any decision t
 re-point the def at `ministral-3-3b`, re-run K-052/K-053 QA live on it, then resume K-054.
 Dispatched as **U41**.
 
-| U41 | `data-scientist` (fresh — standing direction) | `a04f15e782ecc57c7` | in-flight | scoped golden-set eval: does a follow-up instruction ever re-trigger an earlier one, `ministral-3-3b` | self → — | — |
+| U41 | `data-scientist` (fresh — standing direction) | `a04f15e782ecc57c7` | delivered | `salesperson-tool-reliability-ml.md` §9 (Ministral duplicate-instruction eval) | self → **Go — pilot `ministral-3-3b`, not blocked** | 167k tok / 67 tools (2 mid-run status-line check-ins before the real result) |
+| U42 | `data-scientist` (fresh — standing direction) | `a635e0df17c6a9d1c` | delivered | scratch handoff, merged by `teco` into `salesperson-tool-reliability-ml.md` §10 (model landscape survey), scratch file deleted after merge | self → informational, no gate | 109k tok / 19 tools |
+
+**U41 delivered — Ministral's duplicate-instruction defect is real but not blocking.** 32 fresh
+live conversations (6 conditions varying instruction similarity/spacing/tool), ground-truth
+double-checked via `TraceEvent` + Cypher: 1/32 confirmed duplicate dispatch (pooled with §8.4's
+3/10, combined estimate somewhere in the high-single-digits-to-twenties-percent range, wide CIs,
+none anywhere near certainty). **Categorically less severe than K-056**: every occurrence is
+honestly-grounded (real dispatched call, real state) and self-disclosing (the doubled quantity
+is stated plainly in the reply) — unlike K-056's silent, near-certain fabrication. Named an
+untested candidate mitigation (a dispatch-time check that a write tool's target appears in the
+current turn's own raw text) as a near-term follow-up, not a pre-pilot gate. **Verdict: Go —
+proceed with re-pointing `salesperson@v2` at `ministral-3-3b`, per the already-agreed
+contingency plan**, with the residual risk disclosed in `docs/BACKLOG.md`/`docs/HISTORY.md`
+once the re-point lands. Two of U41's mid-run notifications were stale status lines ("waiting
+for the background eval"), not real results — `teco` sent two check-ins before the actual
+finding arrived; noted as a real recurring cost of this delegate's polling pattern, not
+something to read into the finding's reliability.
+
+**U42 delivered — model landscape survey merged cleanly, no conflict materialized.** Headline:
+no published tool-calling benchmark tests K-056's exact mechanism (spontaneous skip-after-N-
+turns with only replayed plain text, no tool scaffolding) — closest analogue is a general
+multi-turn-degradation paper (Laban et al., ICLR 2026) showing even frontier models lose ~39%
+accuracy and never recover from an early misstep once conversations are split across turns,
+suggesting this is a general LLM trait, not unique to this stack. Shortlist for a future
+live-test, if wanted: `Salesforce/xLAM-2-3b-fc-r` (top priority — best multi-turn BFCL among
+small models, purpose-built agentic training, CC-BY-NC-4.0), `ibm-granite/granite-4.1-3b`
+(only Apache-2.0 candidate, thinner evidence), `microsoft/phi-4-mini` (training-lineage
+diversity), `MadeAgents/Hammer2.1-3b` (lower priority). Deprioritized: Qwen2.5 variants, further
+Gemma 3 sizes (family-wide — no native tool-call tokens), older 8B BFCL-leaderboard-toppers
+(stale-generation scores). Purely informational — no gate, no action required now.
+
+**Self-correction, logged:** U41/U42 were dispatched in parallel against the same file
+(`salesperson-tool-reliability-ml.md`) — a same-file conflict this coordination's own rules
+exist to prevent (`teco` error, not either delegate's). Caught before any edit collision
+materialized (U41 hadn't started editing yet); U42 was redirected mid-run to a scratch file,
+merged in by `teco` after U41's §9 landed, scratch file deleted post-merge. No data lost, but
+the dispatch itself should have been serialized from the start.
+
+Merged §10 in by `teco` (mechanical content merge + heading renumber `9`→`10`, `9.1-9.3`→
+`10.1-10.3`, no content change) and made one small consistency fix to the top `## Verdict`
+block (Ministral's defect status was stale relative to §9's actual "not a blocker" verdict).
 
 **D-1 (MAJOR) — first confirmed K-056 recurrence on a write-mutating tool.** Mid-conversation
 (turn 4 of one thread), the model fabricated a "successfully removed" reply for `remove_from_cart`

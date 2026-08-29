@@ -12,10 +12,13 @@ probabilistic soft-degradation a scaffold tweak can dampen (both scaffold-level 
 this note named — `tool_choice` forcing here, a replayed-history breadcrumb tried afterward —
 are independently falsified; see §8's own recap). §8 also tested three alternative local
 models and found one, `mistralai/ministral-3-3b`, with **zero** instances of this mechanism
-across 176 further turns — a same-size-class, immediately-available candidate, though it
-carries its own distinct, real defect (§8.4) that still needs closing before it ships. Read §8
-for the numbers and the recommendation this now drives; §1-§7 below are Pass 1's original
-root-cause finding, left intact as the mechanism analysis that still holds.
+across 176 further turns — a same-size-class, immediately-available candidate. It carries its
+own distinct, real (but categorically less severe, intermittent, self-disclosing) defect,
+scoped in a follow-up pass at §9: **not a blocker** — §9.5's verdict is Go, conditional on
+disclosure and a near-term mitigation pass, not on closing it to zero first. Read §8 for the
+numbers and §9 for the Ministral-specific follow-up; §1-§7 below are Pass 1's original
+root-cause finding, left intact as the mechanism analysis that still holds. §10 is a separate,
+not-yet-live-tested web survey of other small local models worth considering next.
 
 ### Pass 1 verdict (2026-08-27, historical — see §8 for the current call)
 
@@ -496,6 +499,11 @@ recommendation — the Ministral evidence already clears a much lower bar than "
 perfect," which is "does it show the specific, already-confirmed-near-certain defect blocking
 K-054/K-055 today," and the answer at n=176 is no.
 
+**§8.5's condition on piloting Ministral — closing/accepting the duplicate-instruction
+defect — is addressed by §9 below**, a scoped follow-up eval (not a re-run of this pass's own
+baseline). Verdict: not a blocker, ship conditional on a named (untested) dispatch-time
+mitigation or an explicitly accepted, disclosed low-rate risk — see §9.5.
+
 ### 8.6 Artifacts
 
 Two throwaway scripts, not part of the shipped test suite, not committed, left in this
@@ -506,3 +514,342 @@ aggregation over the driver's JSONL output). Five throwaway workspaces
 pass; `ws:acme`/`reference` were never written to, and were independently re-verified in sync
 (`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
 finishing.
+
+## 9. Ministral duplicate-instruction follow-up eval (2026-08-29)
+
+**What this section answers, and for whom.** §8.4 surfaced a real, distinct defect on
+`mistralai/ministral-3-3b` as a byproduct of the model-alternative check: a second cart
+instruction sometimes caused the model to silently re-issue an earlier, already-completed
+`add_to_cart` call — every call honest and dispatched, no fabrication, but a silently
+inflated cart line. §8.5 made piloting Ministral **conditional** on closing or explicitly
+accepting that defect first. This section is that scoped follow-up — not a re-run of §8's
+own baseline, not a re-test of the (separately, already closed) K-056 mechanism — sized to
+meaningfully narrow §8.4's n=10 estimate (Wilson 95% CI 10.8-60.3%) and to characterize the
+pattern across the axes the coordinator asked for: instruction similarity, turn spacing, and
+tool variety.
+
+### 9.1 Method
+
+Same in-process harness precedent as §2/§8 (`services.start_workflow_run`/
+`resume_workflow_run` driven directly, `WorkflowTrigger(..., trace=True)`, real
+`salesperson@v2`, real LM Studio) against a fresh throwaway `ws:eval-ministral-dup`
+(`bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` → `seed_salesperson.sh`,
+`EMBEDDING_DIM=1024`). `mistralai/ministral-3-3b` re-confirmed loaded/responsive via a direct
+`/v1/chat/completions` probe immediately before starting (U40 had confirmed it minutes
+earlier; re-checked fresh for this pass rather than assumed). Each conversation is fresh
+(new customer id → its own `Customer`/`Cart` anchor via `ctx.actor`, new thread, new run) —
+32 independent conversations across six conditions, each varying one axis against a
+minimal 2-3-turn script built around the brief's general pattern ("does a follow-up
+instruction ever cause the model to re-issue an earlier, already-completed tool call"):
+
+| Condition | n | Turns | Tests |
+|---|---|---|---|
+| `distinct-immediate` | 6 | add Wireless Mouse Pro → add Portable SSD 1TB | §8.4's exact recipe (distinct categories: Peripherals/Storage), back-to-back |
+| `same-category-immediate` | 6 | add Wireless Mouse Pro → add Mechanical Keyboard K200 | same category (both Peripherals), back-to-back |
+| `distinct-spaced` | 6 | add mouse → *"What's my cart total so far?"* → add SSD | distinct categories, one intervening read-only turn |
+| `same-category-spaced` | 6 | add mouse → intervening read-only turn → add keyboard | same category, one intervening turn |
+| `remove-retrigger` | 4 | add mouse+SSD → remove mouse → *"Actually also remove"* SSD | a second **removal** instruction re-triggering the first removal, not an add |
+| `place-order-retrigger` | 4 | add mouse → place order → add keyboard (new, post-checkout instruction) | a **different tool** (`place_order`, not cart-line writes) re-firing on an unrelated follow-up instruction |
+
+**Tool-surface scope note (the brief's point (c)):** K-053's tool surface is cart/order-only
+(`view_cart`, `add_to_cart`, `remove_from_cart`, `clear_cart`, `place_order` — no
+`save_profile`/other non-cart write tool exists yet; K-054 is unbuilt). `place_order` is the
+one write tool in reach that is mechanistically distinct from a cart-line add/remove (it
+snapshots the cart into a new `Order` and clears it, rather than adjusting a `CartItem`
+count) — used as the "different tool" condition rather than a hypothetical tool that doesn't
+exist yet.
+
+Two ground-truth signals per conversation, same discipline as §8.1 — neither trusts reply
+text:
+1. **Tool-dispatch ground truth** — the raw `TraceEvent` chain
+   (`repository.read_trace`), flattened to the ordered sequence of `tool_calls` names +
+   arguments actually dispatched across every LLM iteration of every turn in the run.
+2. **State ground truth** — `Cart`/`CartItem` read directly via Cypher
+   (`repository.read_cart`, byte-identical to §8.1's/D-1's own method) after the
+   conversation completes, plus an `Order` count (`MATCH (c:Customer)-[:PLACED]->(o:Order)`)
+   for the `place-order-retrigger` condition. A duplicate is scored **only** on this ground
+   truth (an item's actual graph quantity exceeding what was ever explicitly requested, an
+   extra `place_order` dispatch, or a non-empty post-clear cart) — never on the model's own
+   reply wording.
+
+All Wilson 95% CIs below use z=1.96, this lab's established convention.
+
+### 9.2 Result
+
+**32/32 conversations completed cleanly** (every run reached `waiting`, no crashes, no
+harness errors) — a first useful data point on its own: Ministral did not exhibit K-056's
+skip-and-fabricate mechanism, the runaway-repetition failure mode `tool_choice` forcing
+triggered on `qwen3-4b` (§4.2), or `gpt-oss-20b`'s message-spam defect (§8.4) anywhere in
+this sample, consistent with §8.4's own clean read on the *other* mechanism.
+
+**One confirmed duplicate, independently re-verified against ground-truth Cypher and the raw
+trace, not just the harness's own read** — `same-category-immediate` case #3
+(customer `cust-9-643f5a`, run `d3b401d734e147fca1e47a3d28d38d8b`). Turn 1 ("Add 1 Wireless
+Mouse Pro") correctly added one line; turn 2 ("Also add 1 Mechanical Keyboard K200")
+**correctly added the keyboard on its first tool-calling iteration, then, on its own very
+next iteration of the same turn, re-issued `add_to_cart(Wireless Mouse Pro, quantity=1)` a
+second time** — a call whose target product is not mentioned anywhere in turn 2's own text.
+Re-verified directly:
+
+```
+MATCH (cart:Cart {customerId: 'cust-9-643f5a'})-[:HAS_ITEM]->(item:CartItem)
+RETURN item.productId, item.quantity, item.addedAt ORDER BY item.addedAt
+→ wireless-mouse-pro | 2 | ...
+   mechanical-keyboard-k200 | 1 | ...
+```
+
+— the customer asked for 1 mouse, ever, across the whole conversation; the graph shows 2.
+The raw trace confirms the mechanism precisely: the re-issued call is byte-identical in
+shape to the one U40 found (`add_to_cart({"productName": "Wireless Mouse Pro", "quantity":
+1})`, fired a second time), and it happens **within the follow-up turn's own multi-iteration
+tool loop**, not as a separate later message — the model's second turn does one correct,
+newly-requested write, then spontaneously repeats an unrelated, already-completed one before
+finishing that same turn.
+
+Rates by condition (Wilson 95% CI, all wide at this n — no cell is large enough to stand
+alone):
+
+| Condition | Rate | Wilson 95% CI |
+|---|---|---|
+| `distinct-immediate` | 0/6 | 0.0-39.0% |
+| `same-category-immediate` | 1/6 | 3.0-56.4% |
+| `distinct-spaced` | 0/6 | 0.0-39.0% |
+| `same-category-spaced` | 0/6 | 0.0-39.0% |
+| `remove-retrigger` | 0/4 | 0.0-49.0% |
+| `place-order-retrigger` | 0/4 | 0.0-49.0% |
+| **pooled, add-retrigger conditions (first 4 rows, n=24)** | **1/24 (4.2%)** | **0.7-20.2%** |
+| **pooled, all 32** | **1/32 (3.1%)** | **0.6-15.7%** |
+
+**No axis in this pass shows a statistically distinguishable effect** — every per-condition
+CI overlaps every other one, including the two axes the brief specifically asked to probe:
+category-similarity (`distinct` 0/12 pooled vs. `same-category` 1/12 pooled, CIs
+0.0-24.3% vs. 1.5-35.4% — overlapping) and turn spacing (`immediate` 1/12 pooled vs.
+`spaced` 0/12 pooled, CIs 1.5-35.4% vs. 0.0-24.3% — overlapping). The one occurrence landing
+in `same-category-immediate` is consistent with chance at this n, not a confirmed pattern —
+reporting it plainly rather than reading a story into a single event. `remove-retrigger` and
+`place-order-retrigger` (0/4 each) are too small to support any claim beyond "not observed at
+this n" — worth a larger follow-up sample if the team wants more confidence specifically on
+those two, non-add mechanisms.
+
+**This does not contradict §8.4's 3/10 (30%) finding — the two studies do not measure the
+identical quantity.** §8.4's condition B was a 7-turn script (add, add, view, remove, remove,
+view, add) — several independent opportunities per conversation for this exact mechanism to
+fire; this pass's four "add" conditions are deliberately minimal 2-3-turn scripts isolating
+one add-after-add pair per conversation, to cleanly attribute a duplicate to the specific
+follow-up instruction under test. A lower per-conversation rate on a shorter script with
+fewer opportunities is the expected result of that design choice, not evidence the underlying
+per-opportunity rate dropped. Pooling loosely — §8.4's 3/10 conversation-level finding and
+this pass's 1/24 opportunity-level finding — both point at a real, non-negligible,
+non-zero rate whose overlapping CIs (10.8-60.3% and 0.7-20.2%) are statistically consistent
+with a shared true rate somewhere in the high-single-digits to twenties-percent range; this
+pass narrows the estimate's floor (ruling out "vanishingly rare") without pinning down a
+precise point value, which was the brief's own stated bar ("narrow U40's wide CI," not
+"resolve it to a point estimate").
+
+### 9.3 Severity, contrasted with K-056
+
+**Categorically less severe than `qwen3-4b`'s K-056 fabrication, on two independent
+grounds, not just a lower rate.** First, every occurrence here is **honestly grounded** — the
+tool call is real, dispatched, and the reply is generated from the resulting (if wrong) cart
+state, unlike K-056's zero-tool-call fabrication where the reply is disconnected from any
+real state entirely. Second, and more consequential for real-world risk: **the error is
+self-disclosing in the very reply the customer reads.** In the confirmed case, the assistant's
+own turn-2 reply reads *"Your cart now includes: Wireless Mouse Pro × 2 ... Mechanical
+Keyboard K200 × 1 ... Total: $149.97"* — the doubled quantity is stated plainly, not hidden,
+giving an attentive customer (or a `view_cart`/checkout-review step) a real chance to catch
+it before `place_order` freezes it into an `Order`. K-056's fabricated "successfully removed"
+replies carried **no such signal** — nothing in the reply or the engine's guards indicated
+anything was wrong. This is a materially different risk profile even before the rate
+difference: intermittent-and-visible vs. near-certain-and-silent.
+
+**It is still a real, disclosed risk worth closing, not one to wave away.** A customer who
+does not re-read their own cart summary carefully (plausible — the summary in the confirmed
+case is not visually flagged as anomalous, just longer than expected) could still complete
+checkout on an inflated order. `place_order`'s own idempotency guard (a caller-minted
+`order_id`, `repository.py:2936-2949`) does **not** cover this — each `place_order` tool call
+mints a fresh id, so it only protects against a literal retried call with the same id, not
+two independently-decided calls with different args/state; the `place-order-retrigger`
+condition here (0/4) did not surface a duplicate *order*, but the sample is small and the
+mechanism (an extra write dispatched for a state already-established earlier in the same
+run) is the same shape.
+
+### 9.4 Candidate mitigation (named, not implemented — same posture as §4.3/§8.3)
+
+**A blind cross-turn duplicate-call suppression (dedup-by-signature) is not safe and should
+not be the fix.** The naive fix — "if this exact `(tool, args)` pair was already dispatched
+earlier in this run, skip it" — would incorrectly block a customer's own legitimate later
+request to add the same product again (e.g. "add another mouse" three turns later is a real,
+intended repeat, not a bug). Ruling this out explicitly, the same way §4.2 ruled out
+`tool_choice` forcing by direct test rather than by assumption.
+
+**A more targeted candidate, suggested by this pass's own trace evidence:** the confirmed
+duplicate is, precisely, a write tool call whose resolved argument (the product name) does
+not appear anywhere in the *current* turn's own raw user text — the customer's turn-2
+message said "Mechanical Keyboard K200," never "Wireless Mouse Pro," yet the second
+iteration's tool call targeted the mouse. A **dispatch-time sanity check**, immediately
+before executing a write-mutating tool call: does the tool's own resolved target (here,
+`productName`) appear (case/normalization-insensitive, mirroring the existing
+`nameNormalized`/`categoryNormalized` precedent) in the current turn's own trigger/reply
+text? If not, hold the call (surface it to the observability signal from §8.3, or require an
+explicit confirmation round-trip) rather than silently dispatching it. This targets the
+observed mechanism directly (an uninstructed write appended onto an otherwise-correct turn)
+without needing cross-turn state tracking or risking a false-suppress on a genuine repeat
+instruction. **Untested — a candidate, not a fix.** It needs its own implementation +
+targeted eval (mutation-test: force an off-turn-text write, confirm the gate holds it) before
+it should ship, per this note's own standing discipline of never blessing an unverified
+mitigation (§4.2's `tool_choice` lesson).
+
+### 9.5 Recommendation
+
+**Go — pilot `mistralai/ministral-3-3b`, not blocked by this defect.** The duplicate-
+instruction pattern is real (independently reproduced and ground-truth-confirmed again here,
+not a one-off from §8.4 alone) and not to be dismissed, but at this combined sample
+(§8.4's n=10 + this pass's n=32) it is **intermittent** (point estimates from 3.1% to 30%
+depending on pooling, CIs overlapping and none anywhere near certainty) and **categorically
+less severe** (honestly-grounded, self-disclosing in the reply) than the K-056 fabrication
+ceiling this whole pilot exists to route around (near-deterministic, 87-100% CI, silent).
+Treating a low-double-digit-at-worst, self-disclosing state error as a hard blocker while the
+status-quo model carries a near-certain, silent fabrication risk would invert the actual risk
+ordering.
+
+**Conditional on disclosure and a near-term mitigation pass, not on closing this to zero
+first.** Recommend: (1) proceed with re-pointing `salesperson@v2` at `ministral-3-3b` per the
+already-agreed plan (K-052/K-053 QA re-run, then K-054/K-055); (2) file the §9.4 dispatch-time
+sanity-check candidate as a follow-up implementation + eval item, not a pre-pilot gate — it is
+cheap, targeted, and model-independent, but unproven; (3) disclose the residual risk
+explicitly wherever the pilot decision is recorded (`docs/BACKLOG.md`/`docs/HISTORY.md`): a
+low-but-nonzero rate of an extra, uninstructed write-tool call duplicating an earlier action
+within a follow-up turn, currently uncaught by any guard (the shipped `_note_possible_
+fabrication` signal, §8.3, does not and should not fire here — it targets ungrounded replies,
+and every reply here is grounded).
+
+**What would sharpen this further, if wanted before K-054/K-055 land:** a larger,
+combined-condition sample (n≈40-60, weighted toward the `add`-conditions where the only
+confirmed instance occurred) would tighten the pooled CI meaningfully; a live-implemented and
+eval'd version of §9.4's gate would let its own effectiveness be measured directly rather than
+argued from mechanism alone. Neither blocks the go decision above.
+
+### 9.6 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this
+session's scratchpad: `ds_ministral_dup_eval.py` (conversation-driver + ground-truth harness
+for the six conditions above; results written to a sibling
+`ministral_dup_eval_results.jsonl`). `ws:eval-ministral-dup` was `GRAPH.DELETE`d after this
+pass; `ws:acme`/`reference` were never written to, and were independently re-verified in sync
+(`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`)
+before finishing.
+
+## 10. Model landscape survey (web research, not live-tested)
+
+**What this section answers, and for whom.** §8.4 live-tested four models already
+loaded/available in this environment's LM Studio instance. The user separately asked: what
+*other* small (~2-8B) local models does the current market/literature recommend specifically
+for reliable tool/function calling — not general chat quality — that this lab hasn't tried yet?
+This is a **survey, not a live test**: nothing below is verified against this stack, this
+scaffold, or this failure mode. It exists to shortlist what a follow-up live-test unit should
+try next, not to replace §8's live evidence.
+
+**The one finding that should shape how every number below is read.** A model's published
+tool-calling benchmark score and its behavior in a long, multi-turn conversation with replayed
+history are **different questions**, and the gap between them is not a small-model quirk this
+lab happened to discover — it is a documented, general-purpose-LLM phenomenon at every scale.
+Laban et al., "LLMs Get Lost In Multi-Turn Conversation" (ICLR 2026 Outstanding Paper,
+arXiv:2505.06120), tested 15 frontier and near-frontier models (GPT-4.1, Claude 3.7 Sonnet,
+Gemini 2.5 Pro, and others) across single- vs. multi-turn task completion and found a **39%
+average accuracy drop** and **112% higher unreliability** (same task, wildly different outcomes
+run to run) purely from spreading the same instructions across a conversation instead of giving
+them all at once — with four named mechanisms: premature answers on partial context, "answer
+bloat" that compounds an early mistake instead of reconsidering, a lost-in-the-middle effect on
+turns that aren't first or last, and **no self-correction after an early misstep** ("no
+recovery"). That last mechanism — an early wrong turn, once made, is never recovered from for
+the rest of the conversation — is structurally the closest published analogue to this lab's own
+turn-4 collapse-and-never-recover finding (§8.2: 0/121 post-onset recoveries), even though the
+paper's task suite is general instruction-following, not tool-calling specifically, and its
+tested models are two to three orders of magnitude larger than `qwen3-4b`/`ministral-3b`. Read
+together with this lab's own finding, this argues the mechanism (in-context precedent + no
+recovery) may be a general LLM behavior that a 4B-class local model simply has far less headroom
+to resist — not something unique to this stack.
+
+**No benchmark or model card found in this survey tests the exact K-056 shape** — a model
+completing a real conversational turn, with only *prior turns' final text* replayed (no tool-call
+scaffolding, no explicit multi-step task framing), silently choosing prose over a tool call it
+was instructed to always use. The closest published proxy is BFCL's own "multi-turn" category
+(cited per-model below), which tests whether a model correctly chains several *dependent*
+function calls within one scripted multi-step task — a real and relevant signal (a model that
+can't track state across calls is unlikely to fare better at not skipping a call at all), but a
+**different construct**: it does not vary conversation length as a hidden lever, does not test
+whether the model reverts to un-grounded prose once it "feels" a rapport-like text exchange has
+been established, and is run with the tool schema and instructions freshly re-presented every
+step rather than diluted across many replayed plain-text turns the way `_assemble_messages`
+does here. A high BFCL multi-turn score is evidence worth weighting, not proof a model would
+avoid this lab's specific failure mode — the only way to know is to run this lab's own §8
+harness against it, exactly as done for `ministral-3-3b`/`gpt-oss-20b`.
+
+### 10.1 Candidates surveyed
+
+| Model | Params | GGUF for LM Studio | License | Tool-calling evidence found | Notes |
+|---|---|---|---|---|---|
+| **Salesforce xLAM-2-3b-fc-r** | 3B | Yes (`Salesforce/xLAM-2-3b-fc-r-gguf`, official) | **CC-BY-NC-4.0** (non-commercial) | BFCL overall 65.74%; live/AST 81.03%/88.22%; **multi-turn 55.62%** — the highest multi-turn BFCL figure found among small models in this survey [xLAM-2 GGUF card](https://huggingface.co/Salesforce/xLAM-2-3b-fc-r-gguf), [xLAM paper](https://arxiv.org/pdf/2409.03215) | Purpose-built "Large Action Model" line, specifically trained for agentic tool use (not a general chat model retrofitted). Same size class as `ministral-3-3b`. Non-commercial license is a real constraint if this ever leaves an internal/research posture — fine for this lab's current dev use, worth flagging before any productization. |
+| **Salesforce Llama-xLAM-2-8b-fc-r** | 8B | Yes (`Salesforce/Llama-xLAM-2-8b-fc-r-gguf`) | CC-BY-NC-4.0 | Same xLAM-2 lineage/training, larger backbone (Llama 3.1 8B) | Above-band alternative if the 3B variant's capacity turns out to be the limiting factor rather than its training. |
+| **IBM Granite 4.1-3b / 4.0-H-Tiny** | 3B (4.1) / 7B-with-1B-active MoE (4.0-H-Tiny) | Yes (`ibm-granite/granite-4.0-h-tiny-GGUF`, `unsloth/granite-4.1-3b-GGUF`) | **Apache-2.0** | Vendor claims "improved instruction-following and tool-calling" as a named 4.0/4.1 design goal, explicitly marketed for "function calling, simple RAG, fine-tuning on smaller GPUs" [IBM Granite 4.1 docs](https://unsloth.ai/docs/models/ibm-granite-4.1), [Granite 4.0 docs](https://unsloth.ai/docs/models/tutorials/ibm-granite-4.0) | No independent BFCL number found for this exact variant in this pass (vendor claim only, not third-party-verified) — weaker evidence than xLAM/Hammer, but the **only Apache-2.0-licensed candidate surveyed**, which matters if the non-commercial licenses above are ever a blocker. Worth a quick live smoke-test before investing in a full probe, given the thin evidence base. |
+| **Microsoft Phi-4-mini** | 3.8B | Yes (multiple community GGUFs: `bartowski`, `unsloth`, `llmware`) | MIT (per Microsoft's usual Phi release pattern — verify at adoption, not independently re-confirmed here) | Marketed explicitly for "chat with function calling and tool use" as a named use case; 128K context [LM Studio model page](https://lmstudio.ai/models/microsoft/phi-4-mini) | Differently-trained (Microsoft, not Qwen/Mistral lineage) — a genuinely distinct architecture/training-data family from every model tried in §8.4, which is exactly the kind of diversity worth probing if the hypothesis is "this is a training-recipe trait, not a scale trait" (§8.4's own framing for why Ministral beat Qwen3-4B despite being smaller). No independent BFCL figure surfaced in this pass. |
+| **Hammer2.1-3b / -7b** (MadeAgents) | 3B / 7B | Yes (`mradermacher/Hammer2.1-3b-GGUF`, `eaddario/Hammer2.1-7b-GGUF`) | **Qwen-research license** (non-commercial-leaning, restrictive — same posture concern as xLAM's CC-BY-NC) | BFCL 45.0 (3B variant) [Hammer BFCL/model card discussion](https://huggingface.co/MadeAgents/Hammer2.1-3b) | Built on Qwen2.5-Coder backbone with "function masking" specifically targeting spurious/hallucinated tool calls — thematically adjacent to K-056 (fabrication under uncertainty) but the technique targets *wrong-tool selection*, not *skip-tool-entirely-after-N-turns*; unclear a priori it transfers. |
+| **Llama-3-Groq-8B-Tool-Use** | 8B | Yes (widely mirrored: `bartowski`, `lmstudio-community`, `QuantFactory`, others) | Meta Llama 3 Community License | Reported 89.06% BFCL — cited as the highest published small-class BFCL score in one practitioner roundup [localaimaster.com roundup](https://localaimaster.com/blog/best-ollama-models-tool-calling) | **Caveat on the number itself:** this is a mid-2024 (Groq/Glaive) release scored against an earlier BFCL leaderboard generation (v1/v2-era); BFCL's own methodology has been revised since (v3/v4 add multi-turn, hallucination-avoidance categories), so this figure is not directly comparable to the BFCL-v3/v4-era numbers quoted for Qwen3-4B/xLAM-2 above — flagged as likely favorable-vintage bias, not a like-for-like "best in class" claim. |
+| **ToolACE-8B / Watt-Tool-8B** | 8B | Yes (community GGUF mirrors) | Llama-3.1 base license (research-community fine-tunes, terms generally follow the Llama 3.1 Community License) | Vendor/community claims of BFCL-v2 SOTA-for-size; no third-party number independently re-confirmed in this pass | Same caveat as Llama-3-Groq-8B-Tool-Use — BFCL-v2-era claims, not verified against current leaderboard revisions. |
+| **Qwen2.5-Instruct (3B/7B)** | 3B / 7B | Yes (widely available) | Apache-2.0 (2.5 series; note this is a **different license posture** from the Qwen3 line already tested) | BFCL: 3B ≈ 35.7%, 7B ≈ 44.7% [BFCL-derived scores via arXiv survey citations] | **Deprioritized for follow-up testing**: both scores sit well below `qwen3-4b`'s own already-measured-clean-at-turn-1-through-3 BFCL figure (~62% overall per the `llm-stats`/`pricepertoken` BFCL leaderboard mirrors), and the model already in this failure mode's own lineage (Qwen3) is a newer, better-benchmarking generation from the same vendor — no reason to expect Qwen2.5 to do *better* on K-056's mechanism than Qwen3-4B already measured to fail near-100% of the time. Named because the brief asked for it explicitly, not because it's a promising candidate. |
+| **Meta Llama 3.2 Instruct (3B/8B)** | 3B / 8B | Yes (widely available) | Meta Llama 3.2 Community License | Native pythonic/JSON tool-call format, "single, nested, parallel, and multi-turn function calling" per Meta's own release notes; anecdotal community reports cluster around ~80% task success in informal tool-calling write-ups (not a rigorous benchmark figure) [Novita blog](https://blogs.novita.ai/does-llama-3-2-support-function-calling/), [llama.cpp function-calling docs](https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md) | Weakest evidence base of the group (no BFCL figure surfaced), but the most permissively-licensed, most widely-supported baseline in this size class — worth including as a broad-compatibility comparator, not a top pick on capability evidence alone. |
+| **Google Gemma 3 family — general caveat, not a per-variant recommendation** | 1B/4B/12B/27B | Yes | Gemma license (permissive-ish, custom) | Gemma 3 **has no dedicated tool-call special tokens/training** — function calling is prompted-in, not natively trained, per Google's own developer-facing material; Google's response was a **separate, purpose-built fine-tune, FunctionGemma (270M)**, released specifically because "the number one request" from developers was native function calling that Gemma 3 itself lacks [Google FunctionGemma announcement](https://blog.google/innovation-and-ai/technology/developers-tools/functiongemma/), [Gemma function-calling walkthrough](https://www.philschmid.de/gemma-function-calling) | This corroborates and generalizes this lab's own quick sanity-check finding (`gemma-3-12b` failed even a trivial cold-context tool call, §8.4) — **it is plausibly a family-wide characteristic of Gemma 3, not a fluke of the 12B checkpoint specifically**, since the gap is architectural/training-recipe (no tool-call tokens at all) rather than a capacity threshold a smaller or larger Gemma-3 checkpoint would cross differently. Not worth probing further variants of Gemma 3 for this role; Gemma's newer generation (referenced in passing above as "Gemma 4" in one comparison piece) or the dedicated FunctionGemma line would be the vendor's own recommended path if this family is revisited — out of scope to verify further here. |
+
+### 10.2 Shortlist for a follow-up live-test unit
+
+In priority order, weighing (a) how close the available evidence gets to K-056's actual
+mechanism, (b) license cleanliness, and (c) training-lineage diversity from what's already
+failed/passed in §8.4:
+
+1. **`Salesforce/xLAM-2-3b-fc-r` (GGUF)** — top priority. Same size class as the already-clean
+   `ministral-3-3b`, but with the best multi-turn BFCL figure found (55.62%) and purpose-built
+   agentic training rather than a general chat model repurposed for tool use. The CC-BY-NC-4.0
+   license is not a blocker for this lab's current internal/dev posture but should be named
+   explicitly if this ever ships past that.
+2. **`ibm-granite/granite-4.1-3b` or `granite-4.0-h-tiny` (GGUF)** — second priority, specifically
+   *because* its evidence is thinner (vendor claim, no independently-verified BFCL number) but it
+   is the only Apache-2.0 candidate surveyed — worth a cheap smoke test (single-turn sanity check,
+   same triage this lab already did on Gemma) before committing to a full §8-style probe, purely
+   to see if a license-clean option is viable at all.
+3. **`microsoft/phi-4-mini` (GGUF)** — third priority, chosen specifically for training-lineage
+   diversity: every model tried in §8.4 so far is Qwen- or Mistral-family; Phi is a genuinely
+   different vendor/recipe, which matters if the working hypothesis (§8.4) is "this is a
+   training-recipe trait, not a parameter-count trait."
+4. **`MadeAgents/Hammer2.1-3b` (GGUF)** — fourth, lower priority given the restrictive
+   Qwen-research license and a BFCL score (45.0) below xLAM-2-3b's — include only if the team
+   wants a same-size, differently-fine-tuned Qwen2.5-Coder-lineage comparator specifically because
+   its "function masking" technique targets spurious tool-call behavior, thematically (not
+   mechanistically) adjacent to K-056.
+
+**Not recommended for follow-up testing:** Qwen2.5-Instruct (weaker BFCL than the
+already-tested, already-failing Qwen3-4B — no reason to expect improvement), any further Gemma 3
+size variant (family-wide caveat above), and the 8B-class BFCL-leaderboard-topping models
+(Llama-3-Groq-8B-Tool-Use, ToolACE-8B, Watt-Tool-8B) unless the team decides the "larger model"
+path is back on the table — their BFCL numbers are on a vintage generation of the leaderboard not
+directly comparable to the v3/v4-era figures quoted for xLAM-2/Qwen3/Ministral above, so they're
+weaker evidence than they look at first glance, and this lab's own §8.4 already found the
+one larger model it could actually load (`gpt-oss-20b`) blocked by an unrelated serving-stack
+bug rather than a capability question — an 8B live probe would need its own LM Studio
+compatibility check first, same caveat.
+
+### 10.3 Sources
+
+- Laban, Hayashi, Zhou, Neville — "LLMs Get Lost In Multi-Turn Conversation," ICLR 2026
+  Outstanding Paper, [arXiv:2505.06120](https://arxiv.org/abs/2505.06120) (fetched via
+  [secondary summary](https://beam.ai/agentic-insights/iclr-2026-llms-lose-accuracy-in-multi-turn-conversations))
+- Berkeley Function-Calling Leaderboard (BFCL) v3/v4 — [Gorilla project leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html), score mirrors via [llm-stats.com](https://llm-stats.com/benchmarks/bfcl) and [pricepertoken.com](https://pricepertoken.com/leaderboards/benchmark/bfcl-v3)
+- xLAM: Zhang et al., "xLAM: A Family of Large Action Models to Empower AI Agent Systems," [arXiv:2409.03215](https://arxiv.org/pdf/2409.03215); model cards: [xLAM-2-3b-fc-r-gguf](https://huggingface.co/Salesforce/xLAM-2-3b-fc-r-gguf), [Llama-xLAM-2-8b-fc-r-gguf](https://huggingface.co/Salesforce/Llama-xLAM-2-8b-fc-r-gguf)
+- IBM Granite 4.0/4.1 docs: [Granite 4.0 tutorial](https://unsloth.ai/docs/models/tutorials/ibm-granite-4.0), [Granite 4.1 docs](https://unsloth.ai/docs/models/ibm-granite-4.1), model card: [granite-4.1-3b-GGUF](https://huggingface.co/unsloth/granite-4.1-3b-GGUF)
+- Phi-4-mini: [LM Studio model page](https://lmstudio.ai/models/microsoft/phi-4-mini), [bartowski GGUF](https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF)
+- Hammer2.1: [MadeAgents/Hammer2.1-3b model card](https://huggingface.co/MadeAgents/Hammer2.1-3b), [Hammer paper](https://arxiv.org/html/2410.04587v2), GGUF: [mradermacher/Hammer2.1-3b-GGUF](https://huggingface.co/mradermacher/Hammer2.1-3b-GGUF)
+- Llama-3-Groq-8B-Tool-Use / ToolACE-8B / Watt-Tool-8B / Mistral-7B-v0.3 roundup:
+  [localaimaster.com, "Best Local LLMs for Tool & Function Calling (2026 Tested)"](https://localaimaster.com/blog/best-ollama-models-tool-calling)
+- Qwen2.5-Instruct BFCL figures: cited via arXiv survey papers referencing BFCL score tables
+  (e.g. [R2IF](https://arxiv.org/pdf/2604.20316), [FunReason](https://arxiv.org/pdf/2505.20192))
+- Llama 3.2 tool-calling support: [Meta/Novita blog walkthrough](https://blogs.novita.ai/does-llama-3-2-support-function-calling/), [llama.cpp function-calling docs](https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md)
+- Gemma 3 tool-calling caveat / FunctionGemma: [Google FunctionGemma announcement](https://blog.google/innovation-and-ai/technology/developers-tools/functiongemma/), [Gemma function-calling walkthrough](https://www.philschmid.de/gemma-function-calling)
