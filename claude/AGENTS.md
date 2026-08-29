@@ -9,7 +9,11 @@ This directory (`claude/`) holds custom Claude Code subagents. Each agent is a f
 Roster — behavior source is always `<name>/<name>.md`, kaizen at `<name>/kaizen/`; what each
 does and when to use it lives in the injected descriptions and [`README.md`](./README.md):
 
-`teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`) ·
+`teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`;
+since 2026-08-29 may proactively initiate a single-topic specialist consult — review-shaped or
+fast-track Q&A, across `architect`/`analyst`/`graph-dba`/`data-scientist`/`qa-engineer`/
+`security-expert`/`devops`, never implementers — announced then proceeded, not offered; see
+`tico/tico.md`) ·
 `architect` · `coder` · `tdd-engineer` · `frontend-engineer` ·
 `qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
 tooling techniques such as the WSL2 browser-automation fallback, driving an interactive TUI, and
@@ -33,7 +37,7 @@ approval every time) ·
 
 ## Hook machinery
 
-**Three shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
+**Four shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
 `hooks:` → `$HOME/.claude/agents/<name>/hooks/<script>.sh` (resolves through the deployment
 symlink):
 
@@ -72,6 +76,17 @@ symlink):
   `pipeline.sh ... --reset` — a wrapper invocation matched ad hoc because the
   script runs `GRAPH.DELETE` internally, where the literal string never reaches the guard — not
   write paths). Unlike the two cores above it is **`ask`-only, with no allow branch**.
+- **`scripts/guard-agent-dispatch.sh`** — thin-wrapped by two `Agent|Task` dispatch guards
+  (`teco`, `tico`; each passes its agent name) that escalate any `Agent` dispatch missing
+  `subagent_type` — an omitted field silently spawns a `general-purpose` delegate with none of
+  the named agent's prompt, tools, or hooks, and a later `SendMessage` resume inherits the wrong
+  identity for the rest of the thread. `ask`-only, no allow branch, same fail-open/jq→python3
+  contract as the other cores. Extracted 2026-08-29 from `teco`'s original standalone script when
+  `tico` gained the same `Agent`+`SendMessage` shape
+  (`claude/docs/requirements/tico-specialist-collaboration.md`) — `teco`'s script had anticipated
+  the trigger exactly ("extract into a shared core only if a second orchestrator-shaped agent
+  ever needs it"), though the actual shared hazard is the `Agent`+`SendMessage` combination, not
+  orchestrator status (`tico` stays single-topic per its own FR-9, never a second orchestrator).
 
 Each agent named above carries one or two
 `PreToolUse` hooks under a single frontmatter `hooks:` block — one hook per agent is the common
@@ -89,11 +104,9 @@ standalone, agent-owned script with the same mechanics/contract as the shared co
 `ask`-only, jq→python3 extraction) — extract it into a shared core only if a second
 exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003). `qa-engineer`
 carries two: its `Bash` destructive-ops guard alongside the `Write|Edit` doc-write guard above.
-`teco` also carries two: alongside its `Write|Edit` wrapper, an `Agent|Task` dispatch guard
-(`teco/hooks/guard-agent-dispatch.sh`, standalone agent-owned script, same
-fail-open/`ask`-only/jq→python3 contract as the shared cores) that escalates any `Agent` dispatch
-missing `subagent_type` — an omitted field silently spawns a `general-purpose` delegate with none
-of the named agent's prompt, tools, or hooks, and raises no error.
+`teco` and `tico` each also carry two: alongside their `Write|Edit` wrapper, an `Agent|Task`
+dispatch guard (`teco/hooks/guard-agent-dispatch.sh`, `tico/hooks/guard-tico-agent-dispatch.sh`)
+thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above.
 
 **Git-commit authority is prompt-level, not hook-enforced.** No `PreToolUse` hook matches `git
 commit` (the destructive-ops guards match Bash command patterns like `GRAPH.DELETE`, not
@@ -104,8 +117,9 @@ versioning commands), so this is entirely self-discipline, backstopped only by
   commit any coordinated specialist's already-verified deliverable **by explicit path** (its
   integrator role, deliberately wider than its own Write/Edit guard). `tico` may commit three
   things: its own doc kinds (requirements, manuals); the returned artifact of a
-  `qa-engineer`/`analyst` verification pass it itself offered under Mode 3 and the stakeholder
-  accepted, once tico has confirmed the artifact fits; and **a file it itself wrote in the current
+  `qa-engineer`/`analyst` review-shaped consult it itself called under Mode 3 (announce-then-
+  proceed since 2026-08-29, not an offer — `tico/tico.md`, "Proactive specialist consultation"),
+  once tico has confirmed the artifact fits; and **a file it itself wrote in the current
   session that its `Write`/`Edit` guard let through**, including a one-off the human approved at
   the guard's escalation prompt (e.g. a `docs/BACKLOG.md` entry). In that third case the
   write-approval is what confers committability — a human who has just approved the write has

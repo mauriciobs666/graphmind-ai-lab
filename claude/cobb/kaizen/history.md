@@ -2,6 +2,87 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-08-29 — Designed & implemented `tico`'s proactive specialist consultation; explicit partial reversal of the 2026-07-30 decline
+- **What:** designed and shipped `claude/docs/requirements/tico-specialist-collaboration.md`
+  (Ready for design, FR-1 through FR-9, AC-1 through AC-7) — `tico` may now **proactively
+  initiate** a single-topic specialist consult (announce who and why, then proceed, no
+  stakeholder acceptance wait) instead of only offering one, and may hold a **multi-turn
+  follow-up** with the same delegate via `SendMessage` instead of a single fire-and-forget round.
+  - **Frontmatter:** `tico.md` gained the `SendMessage` tool, and a second `PreToolUse` hook
+    (`Agent|Task` matcher) — `tico/hooks/guard-tico-agent-dispatch.sh`. The missing-`subagent_type`
+    hazard `teco`'s dispatch guard already existed for (a silently-spawned `general-purpose`
+    delegate whose later `SendMessage` resume inherits the wrong identity) now applies to `tico`
+    too, since it combines `Agent`+`SendMessage` for the first time — extracted `teco`'s
+    previously-standalone script into a new shared core, `claude/scripts/guard-agent-dispatch.sh`,
+    thin-wrapped by both agents' hooks. `teco`'s own script header had literally named this trigger
+    ("extract into a shared core only if a second orchestrator-shaped agent ever needs it") — the
+    actual shared hazard is the `Agent`+`SendMessage` combination, not orchestrator status; `tico`
+    is explicitly not becoming a second orchestrator (see reconciliation, below).
+  - **Prompt body:** new cross-mode "Proactive specialist consultation" section — roster
+    (`architect`/`analyst`/`graph-dba`/`data-scientist`/`qa-engineer`/`security-expert`/`devops`;
+    never `coder`/`tdd-engineer`/`frontend-engineer`), announce-then-proceed protocol, the two
+    interaction shapes (review-shaped, fast-tracked direct Q&A), the multi-turn stopping rule
+    (resolved / specialist can't progress / ~3-4 rounds, whichever first — FR-6), and
+    traceability (decision-log entry in the working requirements doc; stated to the stakeholder
+    directly when there's no decision-log-bearing document open — Mode 2 explanations and Mode 3
+    manuals, since a manual's body is end-user-facing and never the place for this). Mode 3's
+    previously-*offered* manual-verification pass (`qa-engineer`/`analyst`) is superseded into an
+    instance of this same mechanism (FR-7) — its own bullet, the Guardrails `Agent` bullet, and the
+    Bash commit-authority bullet's cross-reference were all rewritten to stop saying "offered ...
+    the stakeholder accepted." The pre-existing "offer to route a finished artifact onward"
+    mechanism (K-008 incident 1, 2026-08-24) is explicitly distinguished as a **handoff**
+    (ownership transfers) from the new **consult** (tico keeps the document, folds a colleague's
+    input back in) — different action, not a restatement of the same one under a new name. Added
+    one clause to the subagent-degradation section: a consult still applies when `tico` is
+    delegated, just reported in the returned message instead of a live turn.
+  - **Unaffected, verified by re-reading the actual text, not assumed:** `tico`'s commit-authority
+    *scope* (three cases, `claude/AGENTS.md` "Git-commit authority") — only the case-(b) framing
+    of *how* the qa-engineer/analyst artifact came to exist was reworded (announced, not offered),
+    not what may be committed. `teco.md`'s "`tico` is not a delegation target" line (about `teco`
+    not delegating *to* `tico` — this feature is `tico` calling *out*, a different direction, so
+    the line stays true and untouched). `claude/scripts/audit-team.sh`'s `ORCHESTRATOR="teco"` and
+    its roster-completeness check (check 4) — `tico` initiating its own consults doesn't add it to
+    any other agent's delegation roster or make it "the" orchestrator in that check's sense; ran
+    the script clean before and after to confirm no behavior change there.
+- **Explicit reconciliation with the 2026-07-30 decline (`claude/cobb/kaizen/history.md`,
+  "Design review: declined 'give tico commit authority over its summoned team'") — AC-6:**
+  - **Superseded, narrowly:** that review's ground 4 ("second-orchestrator coherence conflict")
+    is partially superseded. It read tico's proposed capability as one undifferentiated
+    orchestrator-like widening and declined the whole thing together with commit authority. This
+    feature narrows that: `tico` may now proactively initiate a specialist call and hold a
+    multi-turn exchange — capability it did not have on 2026-07-30 — but **only** single-topic
+    (one review, one question, one follow-up exchange; FR-9), never multi-unit work breakdown,
+    gating, or output-chaining. That boundary is what keeps this from being the orchestrator
+    widening the 2026-07-30 review actually evaluated and declined.
+  - **Stands, unchanged:** every commit-authority-specific ground (1: write-scope==commit-scope
+    invariant; 3: the live-witnessed-by-a-human justification for `tico`'s original grant; 5: no
+    hook backstops a session-scoped manifest). No commit-authority change was requested or made —
+    confirmed directly against `tico.md`'s Bash guardrail bullet and `claude/AGENTS.md`'s "Git-commit
+    authority" section, both re-read line by line before this entry was written, not inferred.
+    Ground 2 (the "teco already has broader authority" factual correction) was never in question
+    here. Ground 4's *other* citations — root/`claude/AGENTS.md` and `claude/README.md` framing,
+    `audit-team.sh`'s `ORCHESTRATOR="teco"` — were checked against the shipped design (immediately
+    above) and hold as-is; no reconciliation needed there because nothing about them changed.
+  - **No silent contradiction:** this entry is the pointer AC-6 requires: the 2026-07-30 decision
+    stays the record of what was evaluated and declined *at the time*; this entry is the record of
+    what has since been narrowly, explicitly reopened and on what terms.
+- **Why:** stakeholder-approved requirements document, delegated to `cobb` per the design-authority
+  handoff already established for `tico`-authored requirements (`claude/AGENTS.md`, "A stakeholder
+  proposal for a new team member is a `tico` requirements interview" — same pattern, feature scope
+  rather than a new agent).
+- **Verified:** `bash claude/scripts/audit-team.sh` — 0 FAIL, same 2 pre-existing advisory NOTEs
+  (`teco` 5384w, `tico` now 4344w, both over the 2500w advisory threshold — neither fails, per the
+  check's own design). Hook behavior tested directly: `guard-tico-agent-dispatch.sh` and the
+  post-extraction `teco/hooks/guard-agent-dispatch.sh` both emit the identical `ask` JSON on a
+  missing `subagent_type` and silently exit 0 on a present one or unparseable input.
+- **Docs touched:** `claude/tico/tico.md` (frontmatter + body), `claude/tico/hooks/
+  guard-tico-agent-dispatch.sh` (new), `claude/scripts/guard-agent-dispatch.sh` (new shared core),
+  `claude/teco/hooks/guard-agent-dispatch.sh` (rewritten to a thin wrapper), `claude/AGENTS.md`
+  (Hook machinery, Git-commit authority, Agents roster line), `claude/README.md` (tico's catalog
+  row, Deployment hooks paragraph), `claude/tico/kaizen/{plan,history}.md`.
+- **Plan items:** none opened here — see `tico/kaizen/plan.md` for the live e2e validation items
+  this pass seeded (unexercised design, same discipline as tico's K-001/K-004/K-006).
+
 ## 2026-08-25 — Distillation pass, unit U8: cobb's own raw entries (teco-coordinated, kaizen-distillation-coordination.md)
 - **What:** ran the §5 distillation procedure against `kaizen_team` scoped to `cobb`'s own entries — 1 legacy (`author: 'cobb'`), 1 current-shape (`PRODUCED` by `cobb`). Both processed; neither promoted verbatim.
 - **`b3e2f6a1` (legacy, 2026-08-21) — discarded.** "Only 6 of 13 `claude/` agents carry an explicit `tools:` allow-list; only `teco`'s includes `SendMessage`." Re-derived live: `grep -n "^tools:" claude/*/[a-z]*.md` returns exactly the same 6/13 split, `teco` the only one with `SendMessage` — still true. Discarded anyway: (a) it is fully restated, with the identical fact-check command and finding, in `claude/docs/plans/mid-run-escalation.md` §1.5 (now `archived` — the task it served is closed); (b) the general mechanic ("omit `tools:` → inherit all") is already in `agent-standards/claude-code.md` (lines 59, 90, 683); (c) the 6/13 enumeration itself is the anti-pattern the skill's §2 warns against — an enumerated summary fact that rots the moment any of the 7 gets a `tools:` line, not something to re-plant in `claude/AGENTS.md`.

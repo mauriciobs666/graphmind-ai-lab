@@ -2,6 +2,31 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-08-29 — Proactive specialist consultation: initiate + multi-turn, superseding the Mode-3 offer
+- **What:** designed and implemented by `cobb` from `claude/docs/requirements/
+  tico-specialist-collaboration.md` (Ready for design). Full design rationale, the exact
+  reconciliation with the 2026-07-30 decline, and every file touched are recorded in `cobb`'s own
+  kaizen (`claude/cobb/kaizen/history.md`, 2026-08-29 entry) — not restated here. In one line: `tico`
+  may now proactively call in a specialist (announce, then proceed — no acceptance wait) for a
+  review-shaped check or a fast-tracked direct question, hold a multi-turn follow-up with the
+  *same* delegate via a new `SendMessage` grant, and reports the outcome either way; Mode 3's old
+  *offered* manual-verification pass is now an instance of this same mechanism, not a separate
+  offer.
+- **Frontmatter:** gained `SendMessage`; gained a second `PreToolUse` hook
+  (`guard-tico-agent-dispatch.sh`, `Agent|Task` matcher) guarding against a missing
+  `subagent_type` now that a `SendMessage` resume can inherit a mis-dispatched delegate's wrong
+  identity.
+- **Not changed:** commit-authority scope (`claude/AGENTS.md`, "Git-commit authority") — only the
+  prose describing *how* a Mode-3 qa-engineer/analyst artifact comes to exist was reworded
+  (announced, not offered-and-accepted); what may be committed is untouched. The "offer to route a
+  finished artifact onward" mechanism (K-008 incident 1) also stands unchanged — explicitly
+  distinguished in the prompt from the new consult as a **handoff** (ownership transfers) vs. a
+  **consult** (tico keeps the document).
+- **Verified:** `bash claude/scripts/audit-team.sh` — 0 FAIL, same 2 pre-existing advisory prompt-
+  weight NOTEs as before this change (tico's now 4344w).
+- **Plan items:** three live e2e validation items opened below (K-010/K-011/K-012), same
+  validate-by-running discipline as K-001/K-004/K-006 — none of this is exercised yet.
+
 ## 2026-08-25 — `kaizen_team` distillation: 3 entries — 1 prompt clause added, 2 discarded (already fully captured)
 - **What:** `cobb` read tico's entries in the shared `kaizen_team` graph — legacy `author`-shape
   query returned zero rows (tico carries only current-shape entries); current-shape query
