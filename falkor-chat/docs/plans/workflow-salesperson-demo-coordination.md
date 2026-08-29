@@ -680,7 +680,17 @@ subject only, not the `has` predicate — real data unaffected, future-regressio
 2 nits (no incremental provenance write, `'failed'`==`'ready'` skip conditions) logged in the review
 itself, non-blocking, not chased further this session.
 
-| U29b | `tdd-engineer` (fresh) | — | queued | K-055 cluster 3b: golden-set JSONL (both datasets, ≈35-45 pairs stratified per §4's shape taxonomy, ≥3/shape/dataset), catalog half from `workflow-catalog-lookup.md`'s existing seed data, doc-ingestion half verified against U29's actual extracted graph content | `analyst` (U29b-gate) → — | — |
+| U29b | `tdd-engineer` (fresh) | `a861eba1703f2282d` | delivered | K-055 cluster 3b: `server/tests/eval/nlq_golden_set.jsonl` (39 pairs: catalog 20, knowledge_base 19) + `test_nlq_golden_set_integrity.py` (offline, DB-free, 249 generated tests). Teco-verified independently: `git status` matches claim (2 new files; two unrelated stray changes from a concurrent `tico` session — `kiro/docs/requirements/kiro-vision-followups.md` + new `falkor-chat/docs/requirements/deliverable-provenance.md` — correctly not touched or committed by this unit); per-dataset/per-shape counts re-tallied from the file directly, match claim exactly; offline suite independently re-run (**2227 passed, 4 deselected** — matches claim); spot-checked 3 pairs live against the actual graphs (a compound-filter catalog pair, a knowledge_base aggregation pair, the conflicting-facts pair) — all exact matches. **Note:** my own suite re-run re-wiped `reference` again (delegate's brief didn't carry the restore reminder — a gap in my own brief, not the delegate's fault) — restored `ws:acme` myself (bootstrap/demo/workflows/catalog/salesperson), all three verify scripts `OK` again after. Kaizen entry re: `ws:nlq-eval`'s un-fused/un-deduplicated entities (Marlowe Robotics = 9 raw nodes) confirmed present and consistent with the golden set's own count-vs-dedup-set handling. | `analyst` (U29b-gate) → — | 155k tok / 47 tools |
+
+**Brief carried a load-bearing finding teco derived by reading `querygen.py` directly (not in either
+upstream doc as stated):** `KNOWLEDGE_BASE_SCHEMA` allows only `Entity`/`Document`/`Chunk` node
+properties, no `RELATES_TO` traversal at all (plan §3.6's v1 non-goal) — so any question reachable
+only via a relationship edge (including the corpus's own conflicting-fact pair, which is
+edge-modeled, not a node property) is structurally unanswerable by the shipped mechanism. Per the ml
+note's own §6 guidance this doesn't mean dropping those golden-set categories — author them anyway,
+expect ~0%, label it a known v1 scope limit, not a defect. Also flagged: golden-set `dataset` field
+must use the actual `DATASET_REGISTRY` keys (`catalog`/`knowledge_base`), not the ml note's
+illustrative labels; `Entity` has no numeric property (aggregation there is count-only).
 | U29b-gate | `analyst` (resume) | — | queued | golden-set semantic gate (each pair checked against the corpus/catalog it's drawn from; no leakage into a workflow prompt) | self → — | — |
 | U29c | `tdd-engineer` (fresh) | — | queued | K-055 cluster 3c: golden-set harness — Layer 1 execution-accuracy scorer (canonicalization, per-shape breakdown, the two gates in §5) driven directly off `QueryGraphDataTool.run()`'s already-JSON structured result (no seam gap — U28 confirmed `run()` returns `{"items": rows}` before any NL rendering), Layer 2 rendered-answer sanity check, report generation | `analyst` (U31, batched w/ U27-U30) → — | — |
 | U30 | `coder` (resume U27) | — | queued | K-055 cluster 4: `proof_defs.py` (v4), seed/verify scripts | — | — |
