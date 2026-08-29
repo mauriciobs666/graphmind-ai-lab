@@ -1,5 +1,5 @@
 # Agent permission-escalation friction, phase 2 (`coder`) — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-24
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-08-29
 > **Extends:** `claude/docs/requirements/agent-permission-friction.md` (archived; phase-2 forecast)
 
 ## Intent
@@ -251,3 +251,23 @@ None currently open — see Decision log for how each was resolved or reclassifi
   already-shipped phase-1 agents, and is now a settled, documented, accepted limitation team-wide,
   not a pending question. AC-3 and the matching Out of scope bullet updated accordingly to state the
   confirmed, permanent nature of the limitation rather than describe it as pending verification.
+- 2026-08-29 — Stakeholder: "agent-permission-friction2.md was discussed and implemented in other
+  sessions, please check" → verified: commit `a3e06b0` ("fix(claude): coder gets the broad-write
+  guard — closes the last implementer prompt-friction gap", 2026-08-28) shipped independently of
+  this document's interview, working from its own evidence trail (`teco` session `2e0c2f42`,
+  2026-08-27/28 — every hook-free `coder` `Write`/`Edit` in an auto-mode orchestration prompted,
+  11s-5.3h waits) rather than this doc's logged instances 1-4. The shipped fix matches this
+  document's shape exactly: `claude/coder/hooks/guard-coder-broad-write.sh` (thin wrapper over the
+  shared `guard-broad-write.sh` core, deny-list kept in lockstep with `tdd-engineer`'s), plus
+  frontmatter `hooks:`/`permissionMode` on `claude/coder/coder.md` — satisfies FR-1/AC-1/AC-2/AC-4
+  as written. AC-3's known Task/`Agent`-delegation limitation is unaffected (pre-existing,
+  team-wide, no fix expected per the 2026-08-24 entry above). **Requirements superseded by a
+  delivered implementation, not by design** — this document never reached a closing readback or
+  Ready for design, so it archives directly from Interviewing with the delivered fix as the closing
+  evidence, rather than following the usual Interviewing → Ready for design → implemented path.
+  **Stale-doc note (flagged, not fixed by `tico` — outside write scope):** `claude/AGENTS.md`'s
+  hook-machinery section still describes `guard-broad-write.sh` as having "One wrapper today:
+  `tdd-engineer/hooks/guard-tdd-broad-write.sh`" — now inaccurate, since `coder`'s
+  `guard-coder-broad-write.sh` is a second wrapper over the same core. A one-line fix for whoever
+  next touches that section (`cobb`, per the maintenance-rules convention for agent/hook doc
+  updates).
