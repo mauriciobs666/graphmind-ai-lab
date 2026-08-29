@@ -339,7 +339,40 @@ count, replacing the n=2 anecdote with an actual rate estimate) and decide, on t
 a scaffold-level fix exists or this is a capability ceiling calling for a larger-model fallback for
 this role. Dispatched as **U40**. K-054 (U23/U24) stays `queued`, not dispatched.
 
-| U40 | `data-scientist` (fresh — standing direction) | `ad8bba92133fb4b50` | in-flight | controlled eval + rate estimate + scaffold-fix-vs-larger-model recommendation, per ml-note §5(2-3) | self → — | — |
+| U40 | `data-scientist` (fresh — standing direction) | `ad8bba92133fb4b50` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §8 (Pass 2, revised in place) | self → **confirmed capability ceiling for `qwen3-4b-2507`; recommend piloting `ministral-3-3b`, conditional on its own duplicate-instruction defect** | 288k tok / 149 tools |
+
+**U40 delivered — K-056 root cause fully quantified, no longer an anecdote.** Controlled eval
+(n=40 conversations/280 turns baseline): skip-and-fabricate is a **near-deterministic collapse at
+exactly the 4th user turn** (39/40, 97.5%, CI 87.1-99.6%), 0 recoveries in 121 post-onset turns
+(100% persistent), and **100% reproduction rate (15/15) on write-mutating cart conversations** —
+this is not a rare edge case, it is what happens on essentially every real conversation reaching
+turn 4. Detector (`_note_possible_fabrication`) holds up at scale: 0% false-positive, 98.1% recall,
+one confirmed blind spot (bare price-less write confirmations).
+
+**Alternative-model check (expanded mid-run per relayed user steer to include same-size models,
+not just larger), queried live from this environment's actual LM Studio instance:**
+`openai/gpt-oss-20b` (larger) is directionally clean where it ran (0 skips) but crashes on 75% of
+probe conversations on an LM-Studio-side serving-stack bug (harmony-format incompatibility) —
+**not usable as-is**, `devops` follow-up, not actionable here. `mistralai/ministral-3-3b`
+(same/smaller size class) shows **0/176 skip-and-fabricate instances** (CI 0-2.1%) — directly
+contradicts a "bigger fixes it" framing — **but has its own distinct, real defect**: silent
+duplicate re-execution of an earlier cart instruction in 3/10 (30%, CI 10.8-60.3%) write-mutating
+runs (every tool call real/dispatched, no fabrication — a different failure class the shipped
+detector correctly doesn't catch).
+
+**Recommendation:** confirmed capability ceiling for `qwen3-4b-2507` in this role — not a scaffold
+defect (both scaffold-level mitigations this lineage produced are now independently falsified).
+Pilot `ministral-3-3b` as the same-cost, immediately-available replacement, **conditional** on
+closing or explicitly accepting its own duplicate-instruction defect first (a small, scoped
+follow-up eval, not a full re-run). Alternatively, proceed on the current model accepting the
+near-certain (87-100% CI) fabrication risk, with the observability signal as an after-the-fact
+logging backstop only (does not prevent it). Decision point for the user — routed via
+`AskUserQuestion`, not decided unilaterally, since it determines what model K-054/K-055 (and
+potentially K-052/K-053 retroactively) run on.
+
+Verified by `teco`: deliverable present, `git status` clean apart from this doc + the coordination
+doc, all five throwaway eval workspaces confirmed deleted by the delegate, `ws:acme`/`reference`
+re-verified in sync per the report's own artifacts section.
 
 **D-1 (MAJOR) — first confirmed K-056 recurrence on a write-mutating tool.** Mid-conversation
 (turn 4 of one thread), the model fabricated a "successfully removed" reply for `remove_from_cart`
