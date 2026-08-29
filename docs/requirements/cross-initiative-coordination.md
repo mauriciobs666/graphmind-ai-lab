@@ -1,5 +1,5 @@
 # Cross-initiative coordination — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 ## Intent
 Multiple `teco`-led initiatives can now be in flight on this repo at the same time, each
@@ -102,6 +102,16 @@ the stakeholder mentioned the other initiative directly.
 ## Open questions
 None outstanding — pending stakeholder confirmation at readback.
 
+## Preferences (non-binding — for the architect)
+- Storage location: the stakeholder suggested co-locating the record in the same FalkorDB graph
+  already used for `kaizen_team` (possibly under a broader name reflecting that it holds
+  everything concerning the agent team, not just kaizen entries) rather than a new graph or a doc.
+  Rationale offered: both are shared, checked-on-demand state across the agent team, and the
+  graph already exists. This is a preference, not a requirement — the storage mechanism/format
+  remains an architect design decision (see Out of scope); the architect should also weigh that
+  `kaizen_team` is already live and written to by every agent's kaizen capture, so any rename has
+  a blast radius beyond this feature.
+
 ## Decision log
 2026-08-23 — Opened. Stakeholder framed the need as "our work units are getting bigger, we need
 a project manager." Clarified via options: the gap is **cross-initiative oversight** — a role
@@ -131,3 +141,9 @@ collide unnoticed) rather than expanding scope to close it now.
 2026-08-23 — Entry lifecycle: removed on completion, not kept as closed history — the record
 stays a small "what's live right now" view; the ledger itself remains the historical record of a
 finished initiative.
+2026-08-29 — Storage-location preference surfaced during readback: co-locate with `kaizen_team`
+(possibly renamed to reflect broader agent-team scope). Captured as a non-binding preference for
+the architect (see Preferences section) — storage mechanism stays an architect design decision
+per Out of scope; not treated as reopening that scope call.
+2026-08-29 — Full readback delivered and confirmed by stakeholder. Status flipped to Ready for
+design.
