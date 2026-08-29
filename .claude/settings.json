@@ -1,6 +1,7 @@
 {
   "enabledMcpjsonServers": ["cypher"],
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(./claude/scripts/audit-team.sh)",
       "Bash(./claude/scripts/audit-team.sh *)",
@@ -41,7 +42,16 @@
       "Bash(./scripts/seed_catalog.sh *)",
       "Bash(scripts/seed_catalog.sh)",
       "Bash(scripts/seed_catalog.sh *)",
-      "Edit(**)"
+      "Bash(.venv/bin/python *)",
+      "Bash(python3 -c *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -m json.tool *)",
+      "Bash(pkill -f uvicorn *)",
+      "Bash(pkill -f \"uvicorn *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Edit(**)",
+      "mcp__cypher__query"
     ]
   }
 }
