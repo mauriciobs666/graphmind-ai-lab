@@ -13,7 +13,11 @@
       "Write(**/docs/reviews/**)",
       "Edit(**/docs/reviews/**)",
       "Write(**/docs/plans/**)",
-      "Edit(**/docs/plans/**)"
+      "Edit(**/docs/plans/**)",
+      "Write(falkor-chat/server/**)",
+      "Edit(falkor-chat/server/**)",
+      "Write(falkor-chat/scripts/**)",
+      "Edit(falkor-chat/scripts/**)"
     ]
   }
 }
