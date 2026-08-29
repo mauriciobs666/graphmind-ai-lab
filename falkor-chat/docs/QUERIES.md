@@ -1,10 +1,11 @@
 # falkor-chat — Canonical Query Library
 
 Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
-**346/346, 2026-08-28** (`./scripts/test_queries.sh`; 343/343 immediately before U15b's
-`categoryNormalized` case-insensitivity fix added 3 assertions; 320/320 immediately before the
-K-052 §15 product-catalog gate; 282/282, 2026-07-31, before that; 276/276 before the K-039 §12.15
-gate; 256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
+**387/387, 2026-08-28** (`./scripts/test_queries.sh`; 346/346 immediately before the K-053 §16
+cart/order gate added 41 assertions; 343/343 immediately before U15b's `categoryNormalized`
+case-insensitivity fix added 3 assertions; 320/320 immediately before the K-052 §15
+product-catalog gate; 282/282, 2026-07-31, before that; 276/276 before the K-039 §12.15 gate;
+256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
 §12.12/§12.13 gate).
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
@@ -2655,3 +2656,255 @@ already documents once was not reintroduced.
 (`scripts/seed_catalog.sh`/`verify_catalog.sh`), and the `salesperson@v1` demo
 `WorkflowDef` (`falkorchat.proof_defs.SALESPERSON_DEF`,
 `scripts/seed_salesperson.sh`/`verify_salesperson.sh`).
+
+---
+
+## 16. Cart / Order — durable cart, deterministic totals, order lifecycle (K-053 M6)
+
+Design: `docs/plans/workflow-cart-and-totals.md` §3.2/§3.3/§3.4 (architect) and
+`docs/plans/workflow-cart-and-totals-graph.md` (graph-dba, Version 2 — every query below is
+`[verified]` there against the live pinned instance; this section transcribes, it does not
+re-derive). Workspace-scoped (`ws:{workspaceId}`), unlike §15's global catalog — a cart/order
+belongs to one customer inside one workspace, never shared across workspaces.
+
+**Schema:**
+```
+(:Customer {customerId, createdAt})
+(:Customer)-[:HAS_CART]->(:Cart {customerId, createdAt, updatedAt})
+(:Cart)-[:HAS_ITEM]->(:CartItem {customerId, productId, quantity, addedAt, updatedAt})
+(:Customer)-[:PLACED]->(:Order {orderId, status, placedAt, updatedAt})
+(:Order)-[:HAS_LINE]->(:OrderLine {productId, name, unitPrice, quantity, lineTotal})
+```
+`customerId = User.userId` (graph note §1.2) — the workspace-local `Customer` anchor is a
+distinct node from `User` (keeps `ensure_user`'s create-once contract untouched; `Customer` is
+freely mutable) but reuses the same member-id namespace. `Cart`/`CartItem` are keyed on natural
+keys (`customerId`, and the composite `(customerId, productId)`) — no synthetic `cartId`/
+`cartItemId`, mirroring the `WorkflowDefSnapshot` natural-key precedent (DESIGN §7.1). **`Cart`/
+`CartItem` carry no price** — FR-3 requires the cart's displayed price to always be the catalog's
+*current* price (`reference`), never a stored, staleable snapshot; §16.9 below is the two-graph
+read this forces. **`Order`/`OrderLine` carry a full frozen snapshot** (`name`, `unitPrice`,
+`quantity`, `lineTotal`) — AC-6's requirement, since `place_order` computes and persists it once,
+atomically, and nothing ever re-derives it from a live catalog read again. `Order.total` is
+deliberately **not stored** — computed as `sum(OrderLine.lineTotal)` on read (§16.8): per-order
+line count is tiny, so this avoids a write-time-only derived field that could drift from its own
+source lines. `status ∈ {'placed', 'fulfilled', 'delivered', 'cancelled'}` is a **property**, not
+a label, mirroring `WorkflowRun.status`/`StepRun.status` (DESIGN §1.2). `OrderLine` carries no
+independent identity/index/constraint — a pure value-object always reached via `HAS_LINE`.
+
+**DDL — index-then-constraint (`scripts/bootstrap_schema.sh`'s `bootstrap_workspace`)**
+```cypher
+CREATE INDEX FOR (n:Customer) ON (n.customerId)
+CREATE INDEX FOR (n:Cart) ON (n.customerId)
+CREATE INDEX FOR (n:CartItem) ON (n.customerId)
+CREATE INDEX FOR (n:CartItem) ON (n.productId)
+CREATE INDEX FOR (n:Order) ON (n.orderId)
+GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Customer PROPERTIES 1 customerId
+GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Cart PROPERTIES 1 customerId
+GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE CartItem PROPERTIES 2 customerId productId
+GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Order PROPERTIES 1 orderId
+```
+No index/constraint on `OrderLine` or `Order.status` — `OrderLine` has no independent lookup path
+(always reached via `HAS_LINE`), and no AC needs to scan/list orders *by* status across a
+workspace at this cardinality (orders per customer — never a supernode). A `GRAPH.PROFILE` on the
+lifecycle CAS queries (§16.9) shows a residual `Filter` above the `Node By Index Scan | (o:Order)`
+for this reason — functionally identical to a folded index scan (zero rows on a mismatch either
+way), just not folded into the scan itself (graph note §3.4).
+
+### 16.1 `ensure_customer` — get-or-create the `Customer` anchor (idempotent)
+
+```cypher
+// $customerId, $now
+MERGE (c:Customer {customerId: $customerId})
+ON CREATE SET c.createdAt = $now
+RETURN c.customerId AS customerId, c.createdAt AS createdAt
+```
+`ON CREATE` only — a re-call leaves `createdAt` at the first call's value. Backed by the
+`Customer.customerId` uniqueness constraint (every `MERGE` must be constraint-backed, rule 8).
+
+### 16.2 `ensure_cart` — get-or-create the `Cart` anchor (idempotent)
+
+```cypher
+// $customerId, $now — call after ensure_customer
+MATCH (cust:Customer {customerId: $customerId})
+MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId})
+ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now
+RETURN cart.customerId AS customerId, cart.createdAt AS createdAt
+```
+The `MERGE` spans the whole `(Customer)-[:HAS_CART]->(Cart)` pattern — safe here (not the K-034
+changed-endpoint gotcha) because `Cart`'s matched property (`customerId`) is fully specified and
+constraint-backed on both ends. Zero rows (no such `Customer`) means the caller didn't call
+`ensure_customer` first.
+
+### 16.3 `add_to_cart` — MERGE-and-increment a cart line (idempotent-by-design)
+
+```cypher
+// $customerId, $productId, $qty, $now
+MATCH (cart:Cart {customerId: $customerId})
+MERGE (cart)-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId})
+ON CREATE SET item.quantity = $qty, item.addedAt = $now, item.updatedAt = $now
+ON MATCH  SET item.quantity = item.quantity + $qty, item.updatedAt = $now
+SET cart.updatedAt = $now
+RETURN item.productId AS productId, item.quantity AS quantity
+```
+**"Add" means increment, not replace** — two calls with the same `productId` sum their `qty`,
+matching the FR-1 shopping-cart mental model. Zero rows means no `Cart` exists yet for
+`customerId` — the caller runs `ensure_customer` + `ensure_cart` first (`services.add_cart_item`'s
+own ordering; the closed MAJOR finding from `docs/reviews/workflow-cart-and-totals.md`).
+
+### 16.4 `adjust_cart_item` — guarded decrement-or-remove, single query
+
+```cypher
+// $customerId, $productId, $qty (positive = amount to remove), $now
+MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId})
+WITH cart, item, (item.quantity - $qty) AS newQty
+FOREACH (_ IN CASE WHEN newQty > 0  THEN [1] ELSE [] END | SET item.quantity = newQty, item.updatedAt = $now)
+FOREACH (_ IN CASE WHEN newQty <= 0 THEN [1] ELSE [] END | DETACH DELETE item)
+SET cart.updatedAt = $now
+RETURN newQty AS quantity, (newQty <= 0) AS removed
+```
+The same `FOREACH (_ IN CASE WHEN … THEN [1] ELSE [] END | …)` guarded-write idiom §4/§14.6 use
+for a single-query check-then-act, race-free by construction (FalkorDB serializes writes per
+graph). Decrementing to a positive remainder updates in place; decrementing to zero or below
+deletes the `CartItem` node and its edge in the same call. Zero rows means no such line (already
+removed, or never added) — a no-op the caller reports as such, not an error.
+
+### 16.5 `read_cart` — current lines, oldest-added first
+
+```cypher
+// $customerId
+MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem)
+RETURN item.productId AS productId, item.quantity AS quantity, item.addedAt AS addedAt
+ORDER BY item.addedAt
+```
+Prices are resolved separately (§16.9 — the catalog lives in `reference`, a different graph).
+Zero rows is a legitimate "empty cart" (or no cart yet) — both look the same by design; nothing
+here needs to distinguish "never touched" from "emptied."
+
+### 16.6 `clear_cart` — delete every line under a customer's cart
+
+```cypher
+// $customerId
+MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem)
+DETACH DELETE item
+```
+Used standalone (FR-1) and inside `place_order` (§16.7) as part of checkout. A `MATCH` against
+zero items is a plain no-op — no `UNWIND`-collapse risk (that quirk is about an empty **list
+parameter**, a different mechanism).
+
+### 16.7 `place_order` — snapshot + clear cart, one atomic query
+
+```cypher
+// $customerId, $orderId, $now, $lines: [{productId, name, unitPrice, quantity, lineTotal}, ...]
+MATCH (cust:Customer {customerId: $customerId})
+OPTIONAL MATCH (dup:Order {orderId: $orderId})
+WITH cust, (dup IS NULL) AS created
+FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END |
+  CREATE (cust)-[:PLACED]->(:Order {orderId: $orderId, status: 'placed',
+                                     placedAt: $now, updatedAt: $now})
+)
+WITH cust, created
+UNWIND (CASE WHEN $lines = [] THEN [null] ELSE $lines END) AS line
+OPTIONAL MATCH (o:Order {orderId: $orderId})
+FOREACH (_ IN CASE WHEN created AND line IS NOT NULL THEN [1] ELSE [] END |
+  CREATE (o)-[:HAS_LINE]->(:OrderLine {productId: line.productId, name: line.name,
+                                        unitPrice: line.unitPrice, quantity: line.quantity,
+                                        lineTotal: line.lineTotal})
+)
+WITH cust, created, count(CASE WHEN line IS NOT NULL THEN 1 END) AS lineCount
+OPTIONAL MATCH (cart:Cart {customerId: cust.customerId})-[:HAS_ITEM]->(item:CartItem)
+FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | DETACH DELETE item)
+RETURN created, lineCount
+```
+`$lines` is pre-resolved **app-side** before this query runs (`services._priced_cart_lines`): the
+current name/price per line is read from `reference` and `lineTotal = unitPrice × quantity` is
+computed via `pricing.compute_line_total` — no arithmetic happens in Cypher (FR-4/FR-8). Keyed on
+a caller-minted `orderId` (the idempotency key): a **guarded `CREATE`, not a `MERGE`** — mirrors
+`Message`'s guarded-`CREATE` idiom (§4/§9), since placing an order is a one-time durable-record
+creation event, not a find-or-update concept like `Cart`/`Customer`. A retried call with the same
+`orderId` is a true no-op (`created=false`), never a duplicate order — live-verified end to end:
+first call → `created=true, lineCount=2`, the `Order` + 2 `OrderLine`s exist with the right
+snapshotted values and the cart's `CartItem`s are gone; an immediate retry with the same `orderId`
+→ `created=false`, still exactly one `Order` and 2 `OrderLine`s. The cart's items are cleared
+**only** on the call that actually creates the order, so a replay never re-clears an
+already-emptied cart. The `Cart` node itself is left in place, empty, ready for the next shopping
+session (matches `Thread` staying in place after every message).
+
+### 16.8 `get_order` — status + snapshot + computed total
+
+```cypher
+// $orderId
+MATCH (o:Order {orderId: $orderId})
+OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine)
+RETURN o.orderId AS orderId, o.status AS status, o.placedAt AS placedAt, o.updatedAt AS updatedAt,
+       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice,
+                 quantity: l.quantity, lineTotal: l.lineTotal}) AS lines,
+       sum(l.lineTotal) AS total
+```
+A `collect()` and a `sum()` together over the same fan-out, safe here (unlike the general "constant
+scalar beside an aggregate fan-out" caveat) because `orderId` is unique by constraint — exactly one
+`o` value for the whole fan-out, never more than one row per distinct group. `total` is never
+stored (§3 above). `None` when no such `Order`. A zero-line order (not reachable via the intended
+tool path, but a valid direct repository call) yields one all-`null` placeholder entry from
+`collect()`, not `[]` — filtered client-side (`Repository.get_order`) rather than reshaping this
+`[verified]` query.
+
+### 16.9 The two-graph computation (FR-4/FR-8) — why a live cart/order total can't be one query
+
+`CartItem`/`Order` live in `ws:{workspaceId}`; the catalog (§15) lives in `reference`. There is no
+single Cypher query that can join a cart line to its current catalog price — not a missing edge,
+but a structural fact: **`GRAPH.QUERY` operates on one named graph per call**, full stop (DESIGN §2
+constraint #3, "relationships cannot cross graphs"). The mechanism is necessarily: (1) **read**
+`ws:{workspaceId}` — §16.5's `read_cart` → `[{productId, quantity}, ...]`; (2) **read** `reference`
+— `Repository.lookup_products_by_id` (§15's `Product` schema, batched `UNWIND $productIds`);
+(3) **compute** (app/tool code, not Cypher, not an LLM call) — `pricing.compute_line_total`, plain
+Python. This is exactly the shape §16.7's `place_order` already uses: the app performs steps 1–3
+*before* calling the write, then passes the finished `$lines` in. Whatever step type or tool needs
+"compute the total" cannot be a single graph traversal here — it is at minimum two
+`GRAPH.RO_QUERY` calls plus app-side arithmetic, a property of the topology, not an implementation
+shortcut.
+
+### 16.10 Order lifecycle — guarded CAS, one transition per call (FR-6/FR-7, AC-7/AC-8)
+
+Same compare-and-set idiom as `resume_run`/`suspend_run` (§12.3/§12.4): the write commits only if
+the order is currently in the expected prior state; a stale/duplicate/out-of-order transition
+attempt matches zero rows and writes nothing.
+```cypher
+// fulfill: $orderId, $now
+MATCH (o:Order {orderId: $orderId})
+WHERE o.status = 'placed'
+SET o.status = 'fulfilled', o.updatedAt = $now
+RETURN o.orderId AS orderId, o.status AS status
+```
+```cypher
+// deliver: $orderId, $now
+MATCH (o:Order {orderId: $orderId})
+WHERE o.status = 'fulfilled'
+SET o.status = 'delivered', o.updatedAt = $now
+RETURN o.orderId AS orderId, o.status AS status
+```
+```cypher
+// cancel: $orderId, $now — only reachable from 'placed', enforcing AC-8
+// ("cannot cancel once fulfilled")
+MATCH (o:Order {orderId: $orderId})
+WHERE o.status = 'placed'
+SET o.status = 'cancelled', o.updatedAt = $now
+RETURN o.orderId AS orderId, o.status AS status
+```
+Live-verified: `placed→fulfilled` succeeds; a `cancel` attempt on a `fulfilled` order returns zero
+rows and the status stays unchanged (AC-8 holds); `fulfilled→delivered` succeeds. These three
+queries drive the `order-fulfillment@v1` process def's lifecycle (`falkorchat.proof_defs.
+ORDER_FULFILLMENT_DEF`) via `services.advance_order` — called from whichever caller accepts the
+operator's fulfillment input **alongside** `submit_workflow_input`, the same "two-step, accepted"
+pairing §12.6's `link_step_emission` uses (the def's own `human`/`decision` steps have no side
+effect on `Order` — DESIGN §6.1 — so advancing the run and advancing the order are always two
+separate graph writes from one request, never one query doing both).
+
+**Fully implemented (K-053 M6, plan §4 steps 2-9):** `pricing.compute_line_total`,
+`Repository.ensure_customer`/`ensure_cart`/`add_to_cart`/`adjust_cart_item`/`read_cart`/
+`clear_cart`/`place_order`/`get_order`/`fulfill_order`/`deliver_order`/`cancel_order`,
+`Services.add_cart_item`/`get_cart`/`remove_cart_item`/`clear_cart`/`place_order`/
+`get_order_status`/`advance_order`, `ViewCartTool`/`AddToCartTool`/`RemoveFromCartTool`/
+`ClearCartTool`/`PlaceOrderTool`, the `salesperson@v2` version bump and the
+`order-fulfillment@v1` process def (`falkorchat.proof_defs.ORDER_FULFILLMENT_DEF`), and seed/
+verify data (`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, extended to publish/check
+both defs).

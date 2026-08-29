@@ -1438,6 +1438,144 @@ assert_index_scan "§15.2 filter_products category+price anchors on Product.pric
 # cleanup this section's fixture
 gq "$REF" 'MATCH (p:Product) DETACH DELETE p' > /dev/null
 
+# ── §16: cart / order (K-053 M6) ─────────────────────────────────────────────
+#
+# Workspace-scoped (ws:test), unlike §15's global catalog — a cart/order belongs to
+# one customer inside one workspace. Canonical bodies: QUERIES.md §16.1-§16.10.
+# Bootstrap already created the Customer/Cart/CartItem/Order indexes + constraints
+# on ws:test (bootstrap_schema.sh's bootstrap_workspace, folded in by K-053 cluster 1).
+
+echo ""
+echo "▶ §16 cart / order — Customer/Cart/CartItem/Order lifecycle (K-053 M6)"
+
+ENSURE_CUSTOMER='MERGE (c:Customer {customerId: $customerId}) ON CREATE SET c.createdAt = $now RETURN c.customerId AS customerId, c.createdAt AS createdAt'
+ENSURE_CART='MATCH (cust:Customer {customerId: $customerId}) MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId}) ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now RETURN cart.customerId AS customerId, cart.createdAt AS createdAt'
+ADD_TO_CART='MATCH (cart:Cart {customerId: $customerId}) MERGE (cart)-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId}) ON CREATE SET item.quantity = $qty, item.addedAt = $now, item.updatedAt = $now ON MATCH SET item.quantity = item.quantity + $qty, item.updatedAt = $now SET cart.updatedAt = $now RETURN item.productId AS productId, item.quantity AS quantity'
+ADJUST_CART_ITEM='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem {customerId: $customerId, productId: $productId}) WITH cart, item, (item.quantity - $qty) AS newQty FOREACH (_ IN CASE WHEN newQty > 0 THEN [1] ELSE [] END | SET item.quantity = newQty, item.updatedAt = $now) FOREACH (_ IN CASE WHEN newQty <= 0 THEN [1] ELSE [] END | DETACH DELETE item) SET cart.updatedAt = $now RETURN newQty AS quantity, (newQty <= 0) AS removed'
+READ_CART='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) RETURN item.productId AS productId, item.quantity AS quantity, item.addedAt AS addedAt ORDER BY item.addedAt'
+CLEAR_CART='MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem) DETACH DELETE item'
+PLACE_ORDER='MATCH (cust:Customer {customerId: $customerId}) OPTIONAL MATCH (dup:Order {orderId: $orderId}) WITH cust, (dup IS NULL) AS created FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | CREATE (cust)-[:PLACED]->(:Order {orderId: $orderId, status: "placed", placedAt: $now, updatedAt: $now})) WITH cust, created UNWIND (CASE WHEN $lines = [] THEN [null] ELSE $lines END) AS line OPTIONAL MATCH (o:Order {orderId: $orderId}) FOREACH (_ IN CASE WHEN created AND line IS NOT NULL THEN [1] ELSE [] END | CREATE (o)-[:HAS_LINE]->(:OrderLine {productId: line.productId, name: line.name, unitPrice: line.unitPrice, quantity: line.quantity, lineTotal: line.lineTotal})) WITH cust, created, count(CASE WHEN line IS NOT NULL THEN 1 END) AS lineCount OPTIONAL MATCH (cart:Cart {customerId: cust.customerId})-[:HAS_ITEM]->(item:CartItem) FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | DETACH DELETE item) RETURN created, lineCount'
+GET_ORDER='MATCH (o:Order {orderId: $orderId}) OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine) RETURN o.orderId AS orderId, o.status AS status, o.placedAt AS placedAt, o.updatedAt AS updatedAt, collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, lineTotal: l.lineTotal}) AS lines, sum(l.lineTotal) AS total'
+FULFILL='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "placed" SET o.status = "fulfilled", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+DELIVER='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "fulfilled" SET o.status = "delivered", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+CANCEL='MATCH (o:Order {orderId: $orderId}) WHERE o.status = "placed" SET o.status = "cancelled", o.updatedAt = $now RETURN o.orderId AS orderId, o.status AS status'
+
+# §16.1 ensure_customer — idempotent get-or-create
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=1000 $ENSURE_CUSTOMER")
+assert_contains "§16.1 ensure_customer first call creates with createdAt=1000" "1000" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=9999 $ENSURE_CUSTOMER")
+assert_contains "§16.1 ensure_customer second call (different now) leaves createdAt at first value" "1000" "$out"
+assert_not_contains "§16.1 ensure_customer second call did NOT re-set createdAt to 9999" "9999" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§16.1 exactly one Customer node after two ensure_customer calls" "1" "$out"
+out=$(gq "$WS" "CREATE (:Customer {customerId:'cust1'})" 2>&1)
+assert_contains "§16.1 Customer.customerId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# §16.3 add_to_cart BEFORE ensure_cart — zero rows (no Cart yet, graph note §2.1)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1000 $ADD_TO_CART")
+assert_no_data_row "§16.3 add_to_cart before ensure_cart returns zero rows (no Cart yet)" "$(printf 'productId\nquantity')" "$out"
+
+# §16.2 ensure_cart — get-or-create, requires prior ensure_customer
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" now=1000 $ENSURE_CART")
+assert_contains "§16.2 ensure_cart creates the Cart" "cust1" "$out"
+gq "$WS" "CYPHER customerId=\"cust1\" now=9999 $ENSURE_CART" > /dev/null
+out=$(gq "$WS" "MATCH (c:Cart {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§16.2 exactly one Cart node after two ensure_cart calls" "1" "$out"
+
+# §16.3 add_to_cart — MERGE-and-increment, idempotent-by-design
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1000 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart first call: quantity=2" "2" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1100 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart second call: quantity=4 (increment, not replace)" "4" "$out"
+out=$(gq "$WS" "MATCH (i:CartItem {customerId:'cust1', productId:'p1'}) RETURN count(i) AS n")
+assert_contains "§16.3 exactly one CartItem after two add_to_cart calls" "1" "$out"
+out=$(gq "$WS" "CREATE (:CartItem {customerId:'cust1', productId:'p1'})" 2>&1)
+assert_contains "§16 CartItem constraint blocks duplicate (customerId, productId)" "unique constraint violation" "$out"
+prof=$(gp "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=1 now=1200 $ADD_TO_CART")
+assert_index_scan "§16.3 add_to_cart anchors on Cart.customerId index" "$prof"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=5 now=1300 $ADD_TO_CART")
+assert_contains "§16.3 add_to_cart second product line: quantity=5" "5" "$out"
+
+# §16.5 read_cart — both lines, oldest-added first
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_CART")
+assert_contains "§16.5 read_cart includes p1" "p1" "$out"
+assert_contains "§16.5 read_cart includes p2" "p2" "$out"
+
+# §16.4 adjust_cart_item — decrement in place (5 -> 3), then decrement to zero (delete)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=2 now=1400 $ADJUST_CART_ITEM")
+assert_contains "§16.4 adjust_cart_item decrement in place: quantity=3" "3" "$out"
+assert_contains "§16.4 adjust_cart_item decrement in place: removed=false" "false" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=3 now=1500 $ADJUST_CART_ITEM")
+assert_contains "§16.4 adjust_cart_item decrement to zero: removed=true" "true" "$out"
+out=$(gq "$WS" "MATCH (i:CartItem {customerId:'cust1', productId:'p2'}) RETURN count(i) AS n")
+assert_contains "§16.4 CartItem p2 gone after decrement-to-zero (count=0)" "0" "$out"
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p2\" qty=1 now=1600 $ADJUST_CART_ITEM")
+assert_no_data_row "§16.4 adjust_cart_item on an already-removed line returns zero rows (no-op)" "$(printf 'quantity\nremoved')" "$out"
+
+# §16.6 clear_cart — remove the remaining line (p1)
+gq "$WS" "CYPHER customerId=\"cust1\" $CLEAR_CART" > /dev/null
+out=$(gq "$WS" "MATCH (cart:Cart {customerId:'cust1'})-[:HAS_ITEM]->(i:CartItem) RETURN count(i) AS n")
+assert_contains "§16.6 clear_cart empties the cart (count=0)" "0" "$out"
+
+# re-add two lines for §16.7's place_order fixture
+gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p1\" qty=2 now=1700 $ADD_TO_CART" > /dev/null
+gq "$WS" "CYPHER customerId=\"cust1\" productId=\"p3\" qty=1 now=1710 $ADD_TO_CART" > /dev/null
+
+# §16.7 place_order — snapshot + clear cart, one atomic query, idempotent replay
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" orderId=\"ord1\" now=1800 lines=[{productId:\"p1\",name:\"Widget A\",unitPrice:9.99,quantity:2,lineTotal:19.98},{productId:\"p3\",name:\"Widget C\",unitPrice:5.0,quantity:1,lineTotal:5.0}] $PLACE_ORDER")
+assert_contains "§16.7 place_order first call: created=true" "true" "$out"
+assert_contains "§16.7 place_order first call: lineCount=2" "2" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'}) RETURN o.status AS status")
+assert_contains "§16.7 Order created with status=placed" "placed" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'})-[:HAS_LINE]->(l:OrderLine) RETURN count(l) AS n")
+assert_contains "§16.7 exactly 2 OrderLines snapshotted" "2" "$out"
+out=$(gq "$WS" "MATCH (cart:Cart {customerId:'cust1'})-[:HAS_ITEM]->(i:CartItem) RETURN count(i) AS n")
+assert_contains "§16.7 cart emptied after place_order (count=0)" "0" "$out"
+
+# idempotent replay: same orderId, second call is a true no-op (no duplicate order)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" orderId=\"ord1\" now=1900 lines=[] $PLACE_ORDER")
+assert_contains "§16.7 place_order retry with same orderId: created=false (idempotent no-op)" "false" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'})-[:HAS_LINE]->(l:OrderLine) RETURN count(l) AS n")
+assert_contains "§16.7 still exactly 2 OrderLines after idempotent retry (no duplicates)" "2" "$out"
+
+# §16.8 get_order — status + snapshot + computed total (9.99*2 + 5.00*1 = 24.98)
+out=$(rq "$WS" "CYPHER orderId=\"ord1\" $GET_ORDER")
+assert_contains "§16.8 get_order returns status=placed" "placed" "$out"
+assert_contains "§16.8 get_order returns computed total=24.98" "24.98" "$out"
+
+# §16.10 order lifecycle — guarded CAS, one transition per call (AC-7/AC-8)
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2000 $FULFILL")
+assert_contains "§16.10 fulfill: placed -> fulfilled" "fulfilled" "$out"
+# AC-8: cannot cancel once fulfilled — the CAS only matches from 'placed', so this
+# is zero rows / no-op, never an error
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2100 $CANCEL")
+assert_no_data_row "§16.10 cancel after fulfill returns zero rows (AC-8: cannot cancel once fulfilled)" "$(printf 'orderId\nstatus')" "$out"
+out=$(gq "$WS" "MATCH (o:Order {orderId:'ord1'}) RETURN o.status AS status")
+assert_contains "§16.10 status unchanged (still fulfilled) after the blocked cancel" "fulfilled" "$out"
+out=$(gq "$WS" "CYPHER orderId=\"ord1\" now=2200 $DELIVER")
+assert_contains "§16.10 deliver: fulfilled -> delivered" "delivered" "$out"
+# PROFILE: anchors on Order.orderId (only index on Order — no Order.status index,
+# QUERIES.md §16 DDL note), so a residual Filter sits above the index scan rather
+# than folding into it (graph note §3.4's documented nuance) — still no label scan.
+prof=$(gp "$WS" "CYPHER orderId=\"ord1\" now=2300 $FULFILL")
+assert_index_scan "§16.10 lifecycle CAS anchors on Order.orderId index" "$prof"
+assert_contains "§16.10 PROFILE shows the residual Filter above the index scan" "Filter" "$prof"
+
+# Order.orderId / Cart.customerId uniqueness constraints (CartItem's own composite
+# constraint was checked in §16.3, above, while a colliding CartItem still existed —
+# by this point §16.6/§16.7 have cleared the cart, so there is nothing left to collide)
+out=$(gq "$WS" "CREATE (:Order {orderId:'ord1'})" 2>&1)
+assert_contains "§16 Order.orderId constraint blocks duplicate" "unique constraint violation" "$out"
+out=$(gq "$WS" "CREATE (:Cart {customerId:'cust1'})" 2>&1)
+assert_contains "§16 Cart.customerId constraint blocks duplicate" "unique constraint violation" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:CartItem) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:OrderLine) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Order) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Cart) DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

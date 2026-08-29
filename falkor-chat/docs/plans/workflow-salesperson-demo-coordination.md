@@ -291,7 +291,29 @@ chose (a) — proceed to K-053.** Dispatching U18 per the already-queued ledger 
 | U18 | `coder` | `a48905847f09736a2` | delivered | `server/falkorchat/pricing.py` (new), `repository.py` §16 Cart/Order methods, `bootstrap_schema.sh` DDL (added, not originally scoped — mechanical, per graph note's own §7 DDL), 41 new tests | teco (independent re-run) → 1869 passed/4 deselected, matches | 210k tok / 128 tools |
 | U19 | `coder` (resume U18) | `a48905847f09736a2` | abandoned | transient platform failure (API timeout, user reports a power outage) mid-run; left one legitimate, incomplete, uncommitted `repository.py` diff (`lookup_product` productId extension + new `lookup_products_by_id`) — not redone, picked up by U19b | — | — |
 | U19b | `coder` (fresh, state-recovery brief) | `af09366ad8de5196e` | delivered | `services.py` §16 (add_cart_item/get_cart/remove_cart_item/clear_cart/place_order/get_order_status/advance_order), `tools.py` (5 cart/order tools), `repository.py` `lookup_products_by_id` retained + test fix, 42 new/changed tests | teco (independent re-run + ensure_customer/ensure_cart wiring spot-check) → 1910 passed/4 deselected, matches; MAJOR-finding closure confirmed in code | 242k tok / 163 tools |
-| U20 | `coder` (resume U18) | — | queued | K-053 cluster 3: `proof_defs.py` (v2 + `ORDER_FULFILLMENT_DEF`), seed/verify scripts, `QUERIES.md`/`test_queries.sh`, `AGENTS.md` | — | — |
+| U20 | `coder` (fresh — U19b over large-context threshold) | `af5d1fb344b03b29a` | delivered | `proof_defs.py` (v2 + `ORDER_FULFILLMENT_DEF`), `seed_salesperson.sh`/`verify_salesperson.sh` (two-def), `QUERIES.md` §16, `test_queries.sh` (+41), `AGENTS.md`, `test_order_fulfillment.py` (new, 7), `test_executor_agent.py`/`test_salesperson_scaffold.py` (+2) | teco (independent re-run) → 1919 passed/4 deselected offline (matches), 387/387 `test_queries.sh` (matches), live `verify_workflows`/`verify_catalog`/`verify_salesperson acme` all OK after final restore | 331k tok / 152 tools |
+## Session stop (checkpoint, this session) — pausing for a fresh restart, K-053 implementation clusters 1-3 done and committed
+
+All three K-053 implementation clusters (U18, U19/U19b, U20) are delivered, independently
+re-verified by `teco`, and committed (`f020f90`, `bcd2dcc`, and this checkpoint commit). **Not yet
+done: U21 (`analyst` code review) and U22 (`qa-engineer` live acceptance)** — K-053 is
+implementation-complete but **not gated**, same posture K-052 was in at its own equivalent
+checkpoint. Next session should dispatch U21 next, unchanged from the ledger below.
+
+**Shared-instance note for whoever resumes.** Mid-session, `teco`'s own verification pytest runs
+(which wipe the global `reference` graph at teardown, per the documented hazard) ran concurrently
+with U20's own live-verification cycle while U20 was still mid-edit on `proof_defs.py` —
+`verify_salesperson.sh acme` briefly reported `salesperson@v1` **diverged** between `reference`
+and `ws:acme` (stale pre-bump content republished into a freshly-wiped `reference` while the
+workspace snapshot still held the original). This resolved itself without any surgical fix once
+`reference` was fully recreated fresh with U20's final, completed `proof_defs.py` (the def moved
+to `v2` anyway, obsoleting the divergent `v1` entry) — `verify_workflows.sh`/`verify_catalog.sh`/
+`verify_salesperson.sh acme` all report `OK`/in-sync as of this checkpoint. No production data was
+at risk (this is `reference`/`ws:acme`, dev/demo state, not anything with a real-user consequence)
+but it's a concrete instance of the "one agent owns a shared graph key when suites run
+concurrently" hazard the coordination rules warn about — worth remembering next time a `teco`-side
+verification run and a delegate's own live-verification cycle could overlap in time.
+
 | U21 | `analyst` (resume) | — | queued | code review, K-053 diff | — | — |
 | U22 | `qa-engineer` (resume) | — | queued | live acceptance, K-053 (cart/order/fulfillment) | — | — |
 | U23 | `coder` | — | queued | K-054 cluster 1: `repository.py`, `services.py` (profile) | — | — |

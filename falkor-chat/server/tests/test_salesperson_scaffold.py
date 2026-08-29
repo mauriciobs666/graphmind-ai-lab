@@ -92,6 +92,64 @@ _SCHEMAS = {
             },
         },
     },
+    # K-053 M6: the five cart/order tools v2 grants — never dispatched by either
+    # guard-safety test below (the def's own tools never write `ctx`), only
+    # offered. Present so `_run_agent_node`'s `[self._tools.schema(name) for
+    # name in granted]` offering loop has a schema for every v2-granted name.
+    "view_cart": {
+        "type": "function",
+        "function": {
+            "name": "view_cart",
+            "description": "View the customer's current cart.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    "add_to_cart": {
+        "type": "function",
+        "function": {
+            "name": "add_to_cart",
+            "description": "Add a quantity of a named product to the cart.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "productName": {"type": "string"},
+                    "quantity": {"type": "integer"},
+                },
+                "required": ["productName"],
+            },
+        },
+    },
+    "remove_from_cart": {
+        "type": "function",
+        "function": {
+            "name": "remove_from_cart",
+            "description": "Remove a quantity of a named product from the cart.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "productName": {"type": "string"},
+                    "quantity": {"type": "integer"},
+                },
+                "required": ["productName"],
+            },
+        },
+    },
+    "clear_cart": {
+        "type": "function",
+        "function": {
+            "name": "clear_cart",
+            "description": "Remove every item from the cart.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    "place_order": {
+        "type": "function",
+        "function": {
+            "name": "place_order",
+            "description": "Place an order for everything currently in the cart.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 }
 
 
@@ -211,6 +269,60 @@ def test_republish_of_a_byte_identical_topology_is_a_clean_no_op(wf_repo):
     second = services.publish_workflow_def(CTX, **TEST_DEF)
 
     assert second == first
+
+
+def test_v1_and_v2_coexist_in_the_same_workspace_without_conflict(wf_repo):
+    """The version-bump discipline itself (§2.5, K-053), one level up from the
+    same-version no-op above: `(key, version)` is the composite identity, so
+    `salesperson@v1` and `salesperson@v2` are two distinct `WorkflowDef`/
+    `WorkflowDefSnapshot` pairs sharing one `key`. Publishing/materializing
+    BOTH into the same workspace — the shared dev instance's real state once
+    K-053's live seed runs, since K-052's `salesperson@v1` was seeded first —
+    must not corrupt either: this is the concrete proof that a version bump
+    never hits the K-034 409 topology-conflict path, not merely an assumption
+    resting on "the topology text looks the same." `old_v1`'s topology is
+    reconstructed from the *live* `SALESPERSON_DEF` (steps/transitions/start
+    are unchanged by the v2 bump — only `config.tools`/`systemPrompt`
+    differ, §2.5's own rule) with the pre-K-053 tools/prompt substituted in.
+    """
+    services = _make_services(wf_repo, llm=None)
+    assistant_v1 = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
+    old_v1 = {
+        **SALESPERSON_DEF,
+        "version": "v1-test-old",
+        "steps": [
+            {
+                **assistant_v1,
+                "config": {
+                    **assistant_v1["config"],
+                    "tools": ["post_message", "lookup_product_fact", "filter_products"],
+                    "systemPrompt": "You are a helpful electronics-store assistant (v1).",
+                },
+            },
+            next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "ended"),
+        ],
+    }
+
+    pub_v1 = services.publish_workflow_def(CTX, **old_v1)
+    services.materialize_def(CTX, key=KEY, version="v1-test-old")
+    pub_v2 = services.publish_workflow_def(CTX, **TEST_DEF)
+    services.materialize_def(CTX, key=KEY, version=VERSION)
+
+    assert pub_v1["stepCount"] == pub_v2["stepCount"] == 2
+    assert pub_v1["transitionCount"] == pub_v2["transitionCount"] == 1
+
+    snap_v1 = services.get_snapshot(CTX, key=KEY, version="v1-test-old")
+    snap_v2 = services.get_snapshot(CTX, key=KEY, version=VERSION)
+    v1_tools = json.loads(
+        next(s for s in snap_v1["steps"] if s["key"] == "assistant")["config"]
+    )["tools"]
+    v2_tools = json.loads(
+        next(s for s in snap_v2["steps"] if s["key"] == "assistant")["config"]
+    )["tools"]
+    # neither publish corrupted the other's stored config
+    assert v1_tools == ["post_message", "lookup_product_fact", "filter_products"]
+    assert "add_to_cart" in v2_tools and "add_to_cart" not in v1_tools
+    assert len(v2_tools) == len(v1_tools) + 5
 
 
 # ── 3. the safety-critical property: ordinary conversation never ends itself ──

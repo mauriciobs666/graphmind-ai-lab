@@ -21,7 +21,7 @@ from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
 from falkorchat.llm import ChatResult, ToolCall
 from falkorchat.services import UnknownActorError, UnknownMemberError
-from falkorchat.tools import HumanHandoffSignal
+from falkorchat.tools import AddToCartTool, HumanHandoffSignal, ToolRegistry
 
 CTX = CallContext(ws="test", actor="u1")
 RUN = {"runId": "r1", "defKey": "triage", "defVersion": "1"}
@@ -1473,3 +1473,59 @@ def test_workspace_override_naming_a_role_that_falls_back_reports_workspace_and_
     assert result.modelSource == "workspace"
     assert result.modelFallback is True
     assert result.resolvedModel == "second/model-b"
+
+
+# ── AC-9 (workflow-cart-and-totals.md §3.1/§5, K-053 M6) ───────────────────────
+#
+# "No LLM/model call is made solely to perform" a cart computation. §3.1's own
+# verification method: on a debug run, dispatching a cart-mutating tool costs
+# exactly its own turn's routing llm_prompt/llm_response pair — no *extra*
+# llm_prompt is squeezed in between the tool_call and its tool_result, because
+# the arithmetic (pricing.compute_line_total, reached through services.
+# add_cart_item) never touches self._models. Uses the REAL `AddToCartTool`
+# (not a stub `Tool`), so this proves the property for the actual production
+# dispatch path — a stub tool could never demonstrate an extra LLM call either
+# way, since Tool.run()'s call signature never carries an LLM client at all.
+
+
+class FakeCartServices:
+    """The one method `AddToCartTool.run` calls — no LLM client anywhere in
+    reach, mirroring the real `Services.add_cart_item`'s LLM-free contract."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def add_cart_item(self, ctx, *, product_name, quantity):
+        self.calls.append({"product_name": product_name, "quantity": quantity})
+        return {
+            "productId": "p1", "name": product_name, "price": 9.99,
+            "quantity": quantity,
+        }
+
+
+def test_cart_tool_dispatch_emits_no_extra_llm_call_between_tool_call_and_result():
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productName": "Widget", "quantity": 2})]),
+        ChatResult(text="Added 2 Widgets to your cart."),
+    ])
+    services = FakeCartServices()
+    reg = ToolRegistry([AddToCartTool(services)])
+    ex = _executor(llm=llm, registry=reg)
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["add_to_cart"]), {})
+
+    assert result.output == "Added 2 Widgets to your cart."
+    assert services.calls == [{"product_name": "Widget", "quantity": 2}]
+
+    kinds = [k for k, _ in result.trace]
+    # exactly the two routing turns' own llm_prompt/llm_response pairs (one
+    # iteration dispatches the tool, the next produces the final text) —
+    # never more than one pair per iteration.
+    assert kinds.count("llm_prompt") == 2
+    assert kinds.count("llm_response") == 2
+    tool_call_i = kinds.index("tool_call")
+    tool_result_i = kinds.index("tool_result")
+    between = kinds[tool_call_i + 1:tool_result_i]
+    assert "llm_prompt" not in between
+    assert "llm_response" not in between

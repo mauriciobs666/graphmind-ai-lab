@@ -43,6 +43,7 @@ from typing import Any
 __all__ = [
     "ACCESS_REQUEST_DEF", "ACCESS_REQUEST_MAX_STEPS",
     "SALESPERSON_DEF", "SALESPERSON_MAX_STEPS",
+    "ORDER_FULFILLMENT_DEF", "ORDER_FULFILLMENT_MAX_STEPS",
 ]
 
 
@@ -193,7 +194,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v1",
+    "version": "v2",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -211,11 +212,25 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "range, using your catalog tools. Never guess a price or category "
                     "you have not retrieved from a tool; if nothing matches, say so "
                     "plainly rather than inventing an answer.\n\n"
+                    "You can also manage the customer's shopping cart: view it, add or "
+                    "remove items, clear it, and place an order once they are ready to "
+                    "check out. Only add or remove an item the customer actually asked "
+                    "for, using your cart tools — never assume a quantity or invent a "
+                    "cart line; if a product name does not match anything in the "
+                    "catalog, say so plainly rather than adding it anyway. Prices shown "
+                    "in the cart and in a placed order always reflect the catalog's "
+                    "current price, retrieved fresh, never a guess. When you place an "
+                    "order, confirm what was ordered and its total using only what the "
+                    "tool actually returned.\n\n"
                     "Deliver every reply by calling the `post_message` tool; text you "
                     "merely write is never seen by the customer. Never pass `mentions`; "
                     "omit that argument entirely."
                 ),
-                "tools": ["post_message", "lookup_product_fact", "filter_products"],
+                "tools": [
+                    "post_message", "lookup_product_fact", "filter_products",
+                    "view_cart", "add_to_cart", "remove_from_cart", "clear_cart",
+                    "place_order",
+                ],
                 "requiredTools": ["post_message"],
                 "maxIterations": 8,
             },
@@ -236,3 +251,103 @@ SALESPERSON_DEF: dict[str, Any] = {
 # `ACCESS_REQUEST_MAX_STEPS`'s 24 is appropriate — a tripwire, not an SLA
 # (`docs/DESIGN.md` §6.2).
 SALESPERSON_MAX_STEPS = 40
+
+
+# ── `order-fulfillment` — the FR-6/FR-9 process-kind split (K-053 M6) ────────
+#
+# `ORDER_FULFILLMENT_DEF` mirrors `ACCESS_REQUEST_DEF` exactly (`docs/plans/
+# workflow-cart-and-totals.md` §3.4): `kind:'process'`, no `agent` step, no LLM,
+# no network — every advance is a REST-shaped `submit_workflow_input` call
+# carrying the operator's decision as `ctx.action`. It advances `Order.status`
+# on the same graph nowhere in this def's own steps: `human`/`decision` steps
+# have no side effect (DESIGN §6.1) — the guarded-CAS `Order.status` write
+# (`services.advance_order`) is a separate call the caller makes alongside
+# `submit_workflow_input`, the same "two-step, accepted" pairing
+# `link_step_emission` already uses (`workflow-cart-and-totals-graph.md` §4) —
+# this def only proves the *run*-side lifecycle (FR-6/FR-7, AC-7/AC-8).
+#
+# Topology (plan §3.4):
+#   placed (start, decision) --[ctx.action == "fulfill"]--> fulfilled (human)
+#   placed                   --[ctx.action == "cancel"]-->  cancelled (decision, terminal)
+#   fulfilled                --[ctx.action == "deliver"]--> delivered (decision, terminal)
+#
+# **`placed` is `type:'decision'` but still declares `config.waitsForHuman:
+# True`** — this is load-bearing, not decorative. `_drive_loop`'s OUTCOME B
+# (park) checks only `config.get("waitsForHuman")`, never `step.type`; without
+# it, a `decision` step whose guards do not fire self-loops (advance-to-self)
+# until the step budget fails the run (`services._validate_def_spec`'s own
+# error text for a `human`/`wait` step missing this flag states the same
+# mechanism). `placed` starts with an empty `ctx` (no upstream step sets
+# `ctx.action`), so without `waitsForHuman` it would burn its whole step
+# budget and fail on the very first `start_workflow_run` call. The precedent
+# for a non-`human`/`wait` step type still declaring `config.waitsForHuman`
+# is already shipped: `SALESPERSON_DEF`'s `assistant` step (`type:'agent'`)
+# does exactly this to park between customer turns. `_run_decision_node`'s
+# envelope (`{"node": {"step": ...}}`) carries no `prompt`/`assignee`/`fields`
+# — a `decision` step parking is mechanically identical to a `human` step
+# parking, just without the richer "awaiting" envelope a client could render;
+# an acceptable trade for "no side effect, pure branch point" semantics on a
+# step nothing here treats as belonging to a specific assignee.
+#
+# `expects` is declared on **both** `placed` and `fulfilled` (D-H rule 3, the
+# same free-400-on-typo discipline `ACCESS_REQUEST_DEF`'s `approval` step
+# uses) — `Services._validate_against_parked_step`'s `expects` check reads
+# `config.get("expects")` unconditionally, independent of step type, so it
+# applies to the `decision`-typed `placed` step exactly as it would to a
+# `human` step. `fields`-based key whitelisting (the same method's `accepted`
+# computation) is `human`/`wait`-type-gated only, so `placed` falls through to
+# the permissive "any non-reserved key" fallback for key *membership* — still
+# safe, since `expects` independently rejects any `action` value outside
+# `["fulfill", "cancel"]`.
+ORDER_FULFILLMENT_DEF: dict[str, Any] = {
+    "key": "order-fulfillment",
+    "version": "v1",
+    "name": "Order fulfillment",
+    "kind": "process",
+    "steps": [
+        {
+            "key": "placed",
+            "type": "decision",
+            "start": True,
+            "config": {
+                "waitsForHuman": True,
+                "expects": {"action": ["fulfill", "cancel"]},
+            },
+        },
+        {
+            "key": "fulfilled",
+            "type": "human",
+            "config": {
+                "waitsForHuman": True,
+                "prompt": "Mark this order as delivered",
+                "fields": ["action"],
+                "expects": {"action": ["deliver"]},
+                "assignee": "operator",
+            },
+        },
+        {"key": "delivered", "type": "decision", "config": {}},
+        {"key": "cancelled", "type": "decision", "config": {}},
+    ],
+    "transitions": [
+        {
+            "from": "placed", "to": "fulfilled", "on": "fulfill", "order": 0,
+            "guard": {"kind": "cmp", "path": "ctx.action", "op": "eq", "value": "fulfill"},
+        },
+        {
+            "from": "placed", "to": "cancelled", "on": "cancel", "order": 1,
+            "guard": {"kind": "cmp", "path": "ctx.action", "op": "eq", "value": "cancel"},
+        },
+        {
+            "from": "fulfilled", "to": "delivered", "on": "deliver", "order": 0,
+            "guard": {"kind": "cmp", "path": "ctx.action", "op": "eq", "value": "deliver"},
+        },
+    ],
+}
+
+# Step budget (mirrors `ACCESS_REQUEST_MAX_STEPS`'s reasoning): every parked
+# step is recorded twice (once parking, once firing on resume) — the
+# fulfill+deliver happy path is `placed`x2 + `fulfilled`x2 + `delivered`x1 = 5;
+# the cancel-before-fulfillment path is `placed`x2 + `cancelled`x1 = 3. 16
+# leaves >3x headroom over the longer path, the same ratio
+# `ACCESS_REQUEST_MAX_STEPS` (24, ~3x over its 8-step happy path) uses.
+ORDER_FULFILLMENT_MAX_STEPS = 16
