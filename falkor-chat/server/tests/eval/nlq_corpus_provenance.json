@@ -1,0 +1,741 @@
+{
+  "workspace": "ws:nlq-eval",
+  "seededAt": "2026-08-29T23:24:08Z",
+  "documentCount": 12,
+  "documents": [
+    {
+      "slug": "marlowe-robotics-founding",
+      "title": "NLQ-EVAL-01: Marlowe Robotics Founding",
+      "documentId": "fbcf1a1f87a249f484c0a8e351ca1e93",
+      "status": "ready",
+      "sourceText": "Elena Ferro founded Marlowe Robotics in Austin, Texas in 2019. Devon Cole joined as co-founder and Chief Technology Officer three months later.",
+      "extractedEntities": [
+        {
+          "entityId": "a6e3c7aacf48440fb2dd37854cf5b148",
+          "name": "2019",
+          "type": "Other"
+        },
+        {
+          "entityId": "93b11161964b4ef886560338763f11e1",
+          "name": "Austin",
+          "type": "Location"
+        },
+        {
+          "entityId": "af855167cfcc428d83485c8de8ce5e0c",
+          "name": "Chief Technology Officer",
+          "type": "Concept"
+        },
+        {
+          "entityId": "47b5269089fb4d4fb5b10ce0411077c0",
+          "name": "Devon Cole",
+          "type": "Person"
+        },
+        {
+          "entityId": "ef4d025a392449ffa0e8f7f71841bdbf",
+          "name": "Elena Ferro",
+          "type": "Person"
+        },
+        {
+          "entityId": "fe959ac5d01c42a396efa5892d3c0af2",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "78b6eec6e10f457984e26e998521b240",
+          "name": "Texas",
+          "type": "Location"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Devon Cole",
+          "predicate": "joined",
+          "object": "Marlowe Robotics"
+        },
+        {
+          "subject": "Devon Cole",
+          "predicate": "joined as co-founder and Chief Technology Officer",
+          "object": "Marlowe Robotics"
+        },
+        {
+          "subject": "Elena Ferro",
+          "predicate": "founded",
+          "object": "Marlowe Robotics"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "established in",
+          "object": "2019"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "has position",
+          "object": "Chief Technology Officer"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "located in",
+          "object": "Austin"
+        }
+      ]
+    },
+    {
+      "slug": "atlas-7-product-launch",
+      "title": "NLQ-EVAL-02: Atlas-7 Product Launch",
+      "documentId": "bf4033b2f59e4c558d1b33f312a74905",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics launched the Atlas-7 warehouse robot on April 14, 2025. The Atlas-7 can lift pallets weighing up to 800 kilograms.",
+      "extractedEntities": [
+        {
+          "entityId": "cfe5f5edbb884d6e9f603513def0b9c2",
+          "name": "80",
+          "type": "Other"
+        },
+        {
+          "entityId": "3fe3ecd121ef4082bd43e9e2580791f9",
+          "name": "800 kilograms",
+          "type": "Concept"
+        },
+        {
+          "entityId": "d75266b695764edf9f548827b89ac34a",
+          "name": "April 14, 2025",
+          "type": "Event"
+        },
+        {
+          "entityId": "462547f310ab40499db882f265c6abe6",
+          "name": "Atlas-7",
+          "type": "Product"
+        },
+        {
+          "entityId": "4b891a390fd24dd39faef6f3e6bcc6d0",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Atlas-7",
+          "predicate": "can lift",
+          "object": "80"
+        },
+        {
+          "subject": "Atlas-7",
+          "predicate": "launched on",
+          "object": "April 14, 2025"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "launched",
+          "object": "Atlas-7"
+        }
+      ]
+    },
+    {
+      "slug": "roboworks-summit-presentation",
+      "title": "NLQ-EVAL-03: RoboWorks Summit Presentation",
+      "documentId": "1d28673ef55a4e2ca321338a22155c90",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics presented the Atlas-7 at the RoboWorks Summit 2025, held in Denver, Colorado. Devon Cole delivered the keynote demonstration.",
+      "extractedEntities": [
+        {
+          "entityId": "a213bc324aaf4be2bb5bebf1d7b61283",
+          "name": "Atlas-7",
+          "type": "Product"
+        },
+        {
+          "entityId": "5c5005b15b884d1bbf10cfa2cf83d838",
+          "name": "Colorado",
+          "type": "Location"
+        },
+        {
+          "entityId": "0bd9f44362a849cdbc782099cbaa95b6",
+          "name": "Denver",
+          "type": "Location"
+        },
+        {
+          "entityId": "101f83988a5b46da99a543619312cce3",
+          "name": "Devon Cole",
+          "type": "Person"
+        },
+        {
+          "entityId": "fd8e530793db439e90f485b76e288d0e",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "dfefab87ae544c51a3e05fc30554679c",
+          "name": "RoboWorks Summit 2025",
+          "type": "Event"
+        },
+        {
+          "entityId": "77ca6dabbe134d4393406144fd52edd2",
+          "name": "keynote demonstration",
+          "type": "Other"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Atlas-7",
+          "predicate": "demonstrated at",
+          "object": "RoboWorks Summit 2025"
+        },
+        {
+          "subject": "Devon Cole",
+          "predicate": "delivered",
+          "object": "keynote demonstration"
+        },
+        {
+          "subject": "Devon Cole",
+          "predicate": "demonstrated",
+          "object": "Atlas-7"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "presented",
+          "object": "Atlas-7"
+        },
+        {
+          "subject": "RoboWorks Summit 2025",
+          "predicate": "held in",
+          "object": "Colorado"
+        },
+        {
+          "subject": "RoboWorks Summit 2025",
+          "predicate": "held in",
+          "object": "Denver"
+        }
+      ]
+    },
+    {
+      "slug": "cascade-logistics-partnership",
+      "title": "NLQ-EVAL-04: Cascade Logistics Partnership",
+      "documentId": "fd0ce90250694febbf9a74ac245c8536",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics partnered with Cascade Logistics in June 2025 to deploy Atlas-7 robots across Cascade Logistics' Denver distribution centers. Cascade Logistics is headquartered in Denver, Colorado.",
+      "extractedEntities": [
+        {
+          "entityId": "434eff95094f44ed88db431eb36801ba",
+          "name": "Atlas-7",
+          "type": "Product"
+        },
+        {
+          "entityId": "3aefa6c720654068845eb5353bc71da7",
+          "name": "Cascade Logistics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "95513808172f4fc78bdbc366f9d86159",
+          "name": "Colorado",
+          "type": "Location"
+        },
+        {
+          "entityId": "7aaa282d77604dfb8ab504514097e161",
+          "name": "Denver",
+          "type": "Location"
+        },
+        {
+          "entityId": "3131f33b07024baab3a56918d794e259",
+          "name": "June 2025",
+          "type": "Event"
+        },
+        {
+          "entityId": "9c9f028768a9415cb16fe0a3253f5b97",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Atlas-7",
+          "predicate": "deployed in",
+          "object": "Denver"
+        },
+        {
+          "subject": "Cascade Logistics",
+          "predicate": "is headquartered in",
+          "object": "Denver"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "deployed",
+          "object": "Atlas-7"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "partnered with",
+          "object": "Cascade Logistics"
+        }
+      ]
+    },
+    {
+      "slug": "thornfield-ventures-investment",
+      "title": "NLQ-EVAL-05: Thornfield Ventures Investment",
+      "documentId": "bad1941b46844fc8a36afeb0b59ea6b7",
+      "status": "ready",
+      "sourceText": "Thornfield Ventures led a Series B funding round for Marlowe Robotics in January 2026, investing 18 million dollars.",
+      "extractedEntities": [
+        {
+          "entityId": "1e9d76a4df7d47708ff1cc9c5a40ad1b",
+          "name": "18 million dollars",
+          "type": "Product"
+        },
+        {
+          "entityId": "80c2cce82de843e7a6ff3048434f7b07",
+          "name": "January 1026",
+          "type": "Other"
+        },
+        {
+          "entityId": "bfad1aea45074a0e803600a42e5ce8ba",
+          "name": "January 2026",
+          "type": "Event"
+        },
+        {
+          "entityId": "f00d81e89de04e18874968e8fbd85e59",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "fd86ddefccd6498e86c0d16dc7a34fec",
+          "name": "Series B",
+          "type": "Event"
+        },
+        {
+          "entityId": "f312c93586f84a54a7949b915501f387",
+          "name": "Thornfield Ventures",
+          "type": "Organization"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "received funding in",
+          "object": "January 2026"
+        },
+        {
+          "subject": "Series B",
+          "predicate": "invested",
+          "object": "18 million dollars"
+        },
+        {
+          "subject": "Series B",
+          "predicate": "occurred in",
+          "object": "January 1026"
+        },
+        {
+          "subject": "Thornfield Ventures",
+          "predicate": "led",
+          "object": "Series B"
+        }
+      ]
+    },
+    {
+      "slug": "brightline-systems-acquisition",
+      "title": "NLQ-EVAL-06: Brightline Systems Acquisition",
+      "documentId": "ceb295aac0a94092be5ce5d0765df38d",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics acquired Brightline Systems, a smaller robotics-software startup based in Boulder, Colorado, in March 2026.",
+      "extractedEntities": [
+        {
+          "entityId": "36a14f97903d42feadf4bfbde03ab52a",
+          "name": "Boulder",
+          "type": "Location"
+        },
+        {
+          "entityId": "9fe671aa0c2047e9a8cce232d6b9c8f4",
+          "name": "Brightline Systems",
+          "type": "Organization"
+        },
+        {
+          "entityId": "d5b19f0c9a974e85a3bc88ef90b3cb85",
+          "name": "Colorado",
+          "type": "Location"
+        },
+        {
+          "entityId": "0a795850e05a4593985b29bf1ee56039",
+          "name": "March 2026",
+          "type": "Event"
+        },
+        {
+          "entityId": "a439df3526a84d38b5a7980b3717552f",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "af31686a25ab4e93889b27a56e011476",
+          "name": "acquisition",
+          "type": "Other"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Boulder",
+          "predicate": "is in",
+          "object": "Colorado"
+        },
+        {
+          "subject": "Brightline Systems",
+          "predicate": "is based in",
+          "object": "Boulder"
+        },
+        {
+          "subject": "March 2026",
+          "predicate": "is the time of",
+          "object": "acquisition"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "acquired",
+          "object": "Brightline Systems"
+        }
+      ]
+    },
+    {
+      "slug": "employee-count-conflict-a",
+      "title": "NLQ-EVAL-07: Marlowe Robotics Employee Count (A)",
+      "documentId": "0832036c407d4784a30e002649a98650",
+      "status": "ready",
+      "sourceText": "As of March 2026, Marlowe Robotics has 62 employees.",
+      "extractedEntities": [
+        {
+          "entityId": "d0464decca6d44b9b01037448a62f74b",
+          "name": "62",
+          "type": "Other"
+        },
+        {
+          "entityId": "c140b78aa4fc49108360471ba07ed7a9",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "has",
+          "object": "62"
+        }
+      ]
+    },
+    {
+      "slug": "employee-count-conflict-b",
+      "title": "NLQ-EVAL-08: Marlowe Robotics Employee Count (B)",
+      "documentId": "35474077b0f84679a4197df46f296d90",
+      "status": "ready",
+      "sourceText": "As of March 2026, Marlowe Robotics has 140 employees, following the Brightline Systems acquisition.",
+      "extractedEntities": [
+        {
+          "entityId": "6974fc08ed2f48e4966adae1c0d87dcd",
+          "name": "140 employees",
+          "type": "Other"
+        },
+        {
+          "entityId": "802e1d06ee9e4dafaa9568e978328b55",
+          "name": "Brightline Systems",
+          "type": "Organization"
+        },
+        {
+          "entityId": "8bd8bbdb3a9e4352ac674aa8577fa43d",
+          "name": "March 2026",
+          "type": "Event"
+        },
+        {
+          "entityId": "4e28d474fc0f4afdb4705146deed8d24",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "01fdf5d324604c459ba6b77925ebb99b",
+          "name": "Marlowe Robotics having 140 employees",
+          "type": "Other"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "March 2026",
+          "predicate": "is the date of",
+          "object": "Marlowe Robotics having 140 employees"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "acquired by",
+          "object": "Brightline Systems"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "has",
+          "object": "140 employees"
+        }
+      ]
+    },
+    {
+      "slug": "swarm-coordination-research",
+      "title": "NLQ-EVAL-09: Swarm Coordination Research",
+      "documentId": "1bbad12c8ae14e108b98219288b721bd",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics researches swarm coordination, a concept in decentralized robotics control that lets multiple Atlas-7 units navigate a warehouse without central routing.",
+      "extractedEntities": [
+        {
+          "entityId": "eff6e5f6a8d349afbfebe57e3d8862b6",
+          "name": "Atlas-7",
+          "type": "Product"
+        },
+        {
+          "entityId": "4f55bfb747b64b4ab70a0a417ccb9e42",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "640ad028e9f24c3d94243ae24be9200f",
+          "name": "swarm coordination",
+          "type": "Concept"
+        },
+        {
+          "entityId": "d93d0ec5163b496099a69238b38e4bec",
+          "name": "warehouse",
+          "type": "Location"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Atlas-7",
+          "predicate": "navigates",
+          "object": "warehouse"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "researches",
+          "object": "swarm coordination"
+        },
+        {
+          "subject": "swarm coordination",
+          "predicate": "is used in",
+          "object": "Atlas-7"
+        }
+      ]
+    },
+    {
+      "slug": "competitor-landscape",
+      "title": "NLQ-EVAL-10: Competitor Landscape",
+      "documentId": "4ca9da64dfe845979e4e6c46c4f342aa",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics competes with Vantage Automation in the warehouse-robotics market. Vantage Automation is headquartered in Seattle, Washington.",
+      "extractedEntities": [
+        {
+          "entityId": "2fe37a9318744e01b04b4bfb9a3b16b1",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "87d828f5362846d19889ac7ec9c31cce",
+          "name": "Seattle",
+          "type": "Location"
+        },
+        {
+          "entityId": "87049c7b08b944adb7a75c8d2181adf7",
+          "name": "Vantage Automation",
+          "type": "Organization"
+        },
+        {
+          "entityId": "181207bc46eb45c8a9d65baa27cfc066",
+          "name": "Washington",
+          "type": "Location"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "competes with",
+          "object": "Vantage Automation"
+        },
+        {
+          "subject": "Seattle",
+          "predicate": "is in",
+          "object": "Washington"
+        },
+        {
+          "subject": "Vantage Automation",
+          "predicate": "is headquartered in",
+          "object": "Seattle"
+        }
+      ]
+    },
+    {
+      "slug": "novagrid-software-platform",
+      "title": "NLQ-EVAL-11: NovaGrid Software Platform",
+      "documentId": "47bc1eafbf0e4607aba4fb6d957276a5",
+      "status": "ready",
+      "sourceText": "Marlowe Robotics develops NovaGrid, a fleet-management software platform that coordinates Atlas-7 robots in real time. NovaGrid was released in September 2025.",
+      "extractedEntities": [
+        {
+          "entityId": "d9f9892646854ebeb1765e761d16a2f8",
+          "name": "Atlas-7",
+          "type": "Product"
+        },
+        {
+          "entityId": "ba290ec6c93c4e00ac828f007066fd2c",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "79ef019c448e4622b78fa823385a59f4",
+          "name": "NovaGrid",
+          "type": "Product"
+        },
+        {
+          "entityId": "3627f2f0c236497fba87b014170a1134",
+          "name": "September 2025",
+          "type": "Event"
+        },
+        {
+          "entityId": "5776bd2fbc0d4ea196f061716e7632a1",
+          "name": "September than",
+          "type": "Other"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "develops",
+          "object": "NovaGrid"
+        },
+        {
+          "subject": "NovaGrid",
+          "predicate": "coordinates",
+          "object": "Atlas-7"
+        },
+        {
+          "subject": "NovaGrid",
+          "predicate": "was released in",
+          "object": "September than"
+        }
+      ]
+    },
+    {
+      "slug": "leadership-update",
+      "title": "NLQ-EVAL-12: Leadership Update",
+      "documentId": "290dd4a876a849f683ab3af391cd7446",
+      "status": "ready",
+      "sourceText": "In February 2026, Devon Cole was promoted from Chief Technology Officer to Chief Operating Officer at Marlowe Robotics. Priya Nandakumar joined Marlowe Robotics as the new Chief Technology Officer.",
+      "extractedEntities": [
+        {
+          "entityId": "46fa5cb7ccb84e77ace0d7dde95d7d65",
+          "name": "Chief Operating Officer",
+          "type": "Other"
+        },
+        {
+          "entityId": "498e4d9b4e9d4b68a27d7bc6215de2b3",
+          "name": "Chief Technology Officer",
+          "type": "Other"
+        },
+        {
+          "entityId": "5dc8b15e12be4f859ccc647d08ec61e7",
+          "name": "Devon Cole",
+          "type": "Person"
+        },
+        {
+          "entityId": "020e2155276d46468f94ae1b901c4300",
+          "name": "Marlowe Robotics",
+          "type": "Organization"
+        },
+        {
+          "entityId": "4e4e158da2a1491b9d2b03b55b124fc7",
+          "name": "Priya Nandakumar",
+          "type": "Person"
+        }
+      ],
+      "extractedRelationships": [
+        {
+          "subject": "Devon Cole",
+          "predicate": "promoted to",
+          "object": "Chief Operating Officer"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "has position",
+          "object": "Chief Operating Officer"
+        },
+        {
+          "subject": "Marlowe Robotics",
+          "predicate": "has position",
+          "object": "Chief Technology Officer"
+        },
+        {
+          "subject": "Priya Nandakumar",
+          "predicate": "joined as",
+          "object": "Chief Technology Officer"
+        }
+      ]
+    }
+  ],
+  "entityTypeDistribution": {
+    "Other": 11,
+    "Location": 11,
+    "Concept": 3,
+    "Person": 5,
+    "Organization": 17,
+    "Event": 8,
+    "Product": 7
+  },
+  "relationshipPredicateDistribution": {
+    "joined": 1,
+    "joined as co-founder and Chief Technology Officer": 1,
+    "founded": 1,
+    "established in": 1,
+    "has position": 3,
+    "located in": 1,
+    "can lift": 1,
+    "launched on": 1,
+    "launched": 1,
+    "demonstrated at": 1,
+    "delivered": 1,
+    "demonstrated": 1,
+    "presented": 1,
+    "held in": 2,
+    "deployed in": 1,
+    "is headquartered in": 2,
+    "deployed": 1,
+    "partnered with": 1,
+    "received funding in": 1,
+    "invested": 1,
+    "occurred in": 1,
+    "led": 1,
+    "is in": 2,
+    "is based in": 1,
+    "is the time of": 1,
+    "acquired": 1,
+    "has": 2,
+    "is the date of": 1,
+    "acquired by": 1,
+    "navigates": 1,
+    "researches": 1,
+    "is used in": 1,
+    "competes with": 1,
+    "develops": 1,
+    "coordinates": 1,
+    "was released in": 1,
+    "promoted to": 1,
+    "joined as": 1
+  },
+  "conflictingFactPair": {
+    "documentSlugs": [
+      "employee-count-conflict-a",
+      "employee-count-conflict-b"
+    ],
+    "docAObjects": [
+      "62"
+    ],
+    "docBObjects": [
+      "140 employees",
+      "Brightline Systems"
+    ],
+    "bothPersistedAndDiffer": true
+  },
+  "deliberateAbsentFact": {
+    "question": "How much annual revenue does Marlowe Robotics generate?",
+    "forbiddenTerms": [
+      "revenue",
+      "arr",
+      "annual recurring"
+    ],
+    "verifiedAbsentFromSourceText": true
+  }
+}
