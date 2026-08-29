@@ -314,8 +314,67 @@ but it's a concrete instance of the "one agent owns a shared graph key when suit
 concurrently" hazard the coordination rules warn about — worth remembering next time a `teco`-side
 verification run and a delegate's own live-verification cycle could overlap in time.
 
-| U21 | `analyst` (resume) | — | queued | code review, K-053 diff | — | — |
-| U22 | `qa-engineer` (resume) | — | queued | live acceptance, K-053 (cart/order/fulfillment) | — | — |
+| U21 | `analyst` (fresh — per the standing "no prior-session agentId resume" direction above) | `a02d8f0b401ac4ac1` | delivered | `docs/reviews/workflow-cart-and-totals-impl.md` | self → **approve with suggestions** (0 BLOCKER/MAJOR, 2 MINOR, 1 nit) | 222k tok / 59 tools |
+| U22 | `qa-engineer` (fresh — same standing direction) | `ab9afe8d07d36b74d` | accepted | `docs/test-plans/workflow-cart-and-totals.md`, `docs/test-reports/workflow-cart-and-totals-report.md` | self → **PASS WITH DEFECTS** (D-1 MAJOR, D-2 MINOR) | 242k tok / 104 tools |
+
+**U22 delivered — K-053's own code holds on every graph-state assertion across all 10 ACs**
+(brand-new-customer cart write, cross-conversation persistence, deterministic/repeatable totals,
+frozen order snapshot surviving a live price mutation, full order-fulfillment lifecycle incl. both
+invalid-transition guards) — live, against a fresh `ws:qa-cart-totals`, real LM Studio
+(`qwen/qwen3-4b-2507`), real `order-fulfillment@v1` (run-side REST, `Order`-side CAS via direct
+`Services.advance_order` calls per U21's flagged no-REST-route gap). Every mutating action
+cross-checked against ground-truth Cypher, not trusted from reply text. Final offline regression
+(run last, separately, per brief): 1919 passed/4 deselected, 387/387 `test_queries.sh` — both match
+the last recorded baseline exactly; `ws:acme` restored and re-verified in sync. Independently
+re-verified (teco): grepped the report's own D-1 repro steps against its ground-truth-Cypher
+methodology — consistent with the delegate's summary; deliverables present on disk as claimed;
+working tree otherwise clean apart from the two new docs + this coordination doc + U21's Extends/
+Extended-by edit to `docs/reviews/workflow-cart-and-totals.md`.
+
+**User decision (2026-08-29):** given the D-1 write-tool escalation, the user chose **"pause
+K-054, invest in K-056 first"** over proceeding as planned. Per the ml-note's own §5 remaining
+scope (items 2-3 — item 1, the generalized observability signal, already shipped in U37): dispatch
+`data-scientist` to run a proper controlled eval (repeated live conversations varying turn/tool
+count, replacing the n=2 anecdote with an actual rate estimate) and decide, on that data, whether
+a scaffold-level fix exists or this is a capability ceiling calling for a larger-model fallback for
+this role. Dispatched as **U40**. K-054 (U23/U24) stays `queued`, not dispatched.
+
+| U40 | `data-scientist` (fresh — standing direction) | `ad8bba92133fb4b50` | in-flight | controlled eval + rate estimate + scaffold-fix-vs-larger-model recommendation, per ml-note §5(2-3) | self → — | — |
+
+**D-1 (MAJOR) — first confirmed K-056 recurrence on a write-mutating tool.** Mid-conversation
+(turn 4 of one thread), the model fabricated a "successfully removed" reply for `remove_from_cart`
+with **zero tool call and zero graph change**; a retry in a fresh thread worked correctly. This is
+the same K-056 mechanism (already open, already accepted as a known risk when the user chose to
+proceed to K-053), but it is the **first instance reaching a mutating tool** rather than a
+read-only fact — exactly the escalation `data-scientist`'s ml-note (U36) warned proceeding past
+K-052 risked, and worse than previously known: a customer can now be told a cart mutation
+succeeded when it silently didn't, with no warning either party has stale state. K-054 is another
+mutating tool (`save_profile`) directly in the escalation's path. **D-2 (MINOR, new)** —
+`add_to_cart` onto a non-empty cart sometimes reports only the new line's price as "Total,"
+omitting pre-existing lines in the reply text (checkout correctness unaffected; a follow-up
+`view_cart`/`place_order` always shows the true total) — logged, not fixed, low severity.
+**Decision point for the user, per the standing pause-on-genuine-decision rule**: this changes the
+risk calculus the user's 2026-08-28 "proceed to K-053" call was made under — surfacing before any
+K-054 dispatch rather than proceeding on the prior decision's premise.
+
+**U21 delivered — K-053 code review clean, no blocker.** Both prior plan-gate findings (the
+`ensure_customer`/`ensure_cart` MAJOR, the price-change-race MINOR) independently confirmed closed
+in code, not just claimed — traced through `services.py` directly plus a call-ordering test that
+would fail on a regression. Three new findings, all non-blocking: **MINOR** — a checkout where some
+(not all) cart lines reference a since-deleted catalog product silently drops the vanished line
+with no signal in the tool response, untested (no product-deletion flow exists in this milestone,
+so **logged as a non-blocking follow-up, not fixed now** — same posture as K-052's `categoryNormalized`
+follow-up); **MINOR** — cluster-3's commit message overstates its test-count delta ("19" vs the
+actual 9 new test functions, though the before/after totals it quotes are exact) — **noted for
+`teco` to get right in the eventual `HISTORY.md` entry**, no code action; **nit** — `AddToCartTool`
+treats an explicit `quantity: 0` the same as omitted (defaults to 1) — cosmetic, no action. The
+reviewer deliberately skipped the offline pytest/`test_queries.sh` runs (both wipe `reference`) to
+avoid disturbing the live `ws:acme` state it had just re-verified in sync — independently confirmed
+`verify_salesperson.sh` in-sync and the new `Customer`/`Cart`/`CartItem`/`Order` constraints
+`OPERATIONAL` instead. **Flagged for U22:** `services.advance_order` has no REST route this
+milestone (order-fulfillment's `Order.status` lifecycle is a direct Services-layer call, not
+reachable via HTTP by an operator) — `qa-engineer` needs to drive that half of the acceptance pass
+accordingly, not assume an HTTP path exists.
 | U23 | `coder` | — | queued | K-054 cluster 1: `repository.py`, `services.py` (profile) | — | — |
 | U24 | `coder` (resume U23) | — | queued | K-054 cluster 2: `tools.py`, `proof_defs.py` (v3), seed/verify scripts, `QUERIES.md`/`test_queries.sh` | — | — |
 | U25 | `analyst` (resume) | — | queued | code review, K-054 diff | — | — |
