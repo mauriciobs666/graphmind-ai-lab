@@ -374,6 +374,15 @@ Verified by `teco`: deliverable present, `git status` clean apart from this doc 
 doc, all five throwaway eval workspaces confirmed deleted by the delegate, `ws:acme`/`reference`
 re-verified in sync per the report's own artifacts section.
 
+**User decision (2026-08-29):** given U40's recommendation, the user chose **"pilot Ministral,
+scope its defect first"** — a scoped follow-up eval targeting specifically the duplicate-
+instruction pattern (not a full re-run of §8's baseline), before any decision to re-point
+`salesperson@v2` at `mistralai/ministral-3-3b`. If that comes back clean/acceptable, the plan is:
+re-point the def at `ministral-3-3b`, re-run K-052/K-053 QA live on it, then resume K-054.
+Dispatched as **U41**.
+
+| U41 | `data-scientist` (fresh — standing direction) | `a04f15e782ecc57c7` | in-flight | scoped golden-set eval: does a follow-up instruction ever re-trigger an earlier one, `ministral-3-3b` | self → — | — |
+
 **D-1 (MAJOR) — first confirmed K-056 recurrence on a write-mutating tool.** Mid-conversation
 (turn 4 of one thread), the model fabricated a "successfully removed" reply for `remove_from_cart`
 with **zero tool call and zero graph change**; a retry in a fresh thread worked correctly. This is
