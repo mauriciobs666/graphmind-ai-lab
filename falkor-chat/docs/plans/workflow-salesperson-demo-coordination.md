@@ -628,8 +628,41 @@ correct 2-step/1-transition topology, no stray graphs). Confirmed `docs/QUERIES.
 claimed. **K-054 implementation-complete, not yet gated** — proceeding to the batched `analyst`
 (U25) + `qa-engineer` (U26) gates next, covering both clusters (U23+U24) together as one diff, same
 posture K-052/K-053 used at their equivalent checkpoint.
-| U25 | `analyst` (resume) | — | queued | code review, K-054 diff | — | — |
-| U26 | `qa-engineer` (resume) | — | queued | live acceptance, K-054 (profile persistence) | — | — |
+| U25 | `analyst` (fresh — standing direction) | `a81b4331031ba6b70` | accepted | `docs/reviews/workflow-durable-profile-impl.md` | self → **approve** (1 nit, no blocker) | 119k tok / 39 tools |
+| U26 | `qa-engineer` (fresh — standing direction) | `ae6397b0a69156ca6` | accepted | `docs/test-plans/workflow-durable-profile.md`, `docs/test-reports/workflow-durable-profile-report.md` | self → **PASS** (0 defects against K-054's own scope) | 174k tok / 102 tools |
+
+**U26 delivered — K-054's AC-1..AC-3 all hold live, including both directions of the historical
+BLOCKER axis, verified independently by `teco`, not on the delegate's word alone.** Read the report
+in full: TP-04/TP-05 ground-truth both partial-update directions against the real `Customer` node.
+Independently re-ran the offline suite (**1935 passed/4 deselected**, matches) and
+`./scripts/test_queries.sh` (**408/408**, matches); reseeded and re-verified `ws:acme` in sync
+(`verify_workflows.sh`/`verify_catalog.sh`/`verify_salesperson.sh acme` all `OK`, `salesperson@v3`
+correct topology). **Spot-checked the report's final ground-truth claim directly**: `GRAPH.QUERY
+ws:qa-durable-profile "MATCH (c:Customer {customerId:'u1'}) RETURN c.name, c.deliveryAddress,
+c.profileUpdatedAt"` → `Jane Smith` / `456 Oak Ave, Springfield` / `1788034841415` — matches the
+report's stated final state exactly. Confirmed the delegate's `kaizen_team` entry is present (an
+unrelated `@mention`-dispatch mechanics note, from this pass's own live setup work). Two
+non-blocking observations noted, neither gating: Ministral doesn't always call `get_profile` on a
+turn that doesn't itself implicate the profile (prompt-discipline note, not a persistence bug —
+the very next relevant turn checked correctly); a pre-existing, already-tracked K-052 catalog MINOR
+recurred opportunistically (`filter_products` category-mismatch), out of this pass's scope,
+correctly not re-investigated. **K-054 fully gated — analyst approve, qa-engineer PASS.**
+Committing both gates together.
+
+**U25/U26 dispatched in parallel** (same precedent as U21/U22 at K-053's equivalent checkpoint):
+`analyst` briefed to skip any suite run that wipes `reference` (`pytest` offline, `test_queries.sh`)
+to avoid colliding with `qa-engineer`'s concurrent live session against `ws:acme`/a fresh
+workspace — static review only, `verify_*.sh` (read-only) fine to use for its own before/after
+check.
+
+**U25 delivered — approve, 1 nit, no blocker.** Verified independently by `teco`: read the review
+doc in full, spot-checked its one nit (`git show 663093d ... | grep -c '^+def test_'` → **11**,
+confirmed, the commit message's "12" claim is off by one, cosmetic only) and confirmed the
+`Extended by:` pointer landed correctly on the parent plan-review doc. Findings on `config.model`
+survival and the three-altitude AC-2 test coverage read as genuinely independently re-derived
+(cites specific line numbers/query text/live `GRAPH.RO_QUERY` output), not restated from the
+coordination doc's own notes. Waiting on U26 before committing both together, same as K-053's
+equivalent gate pair.
 | U27 | `coder` | — | queued | K-055 cluster 1: `querygen.py` (DSL + unit tests incl. reviewer's escape fixtures) | — | — |
 | U28 | `coder` (resume U27) | — | queued | K-055 cluster 2: `repository.py` (`run_readonly_query`), `services.py` (`run_structured_query`), `tools.py` (`QueryGraphDataTool`) | — | — |
 | U29 | `coder` (resume U27) | — | queued | K-055 cluster 3: golden-set harness + fresh corpus, per `data-scientist`'s note | — | — |
