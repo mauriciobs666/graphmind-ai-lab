@@ -6,12 +6,7 @@
       "Bash(./claude/scripts/audit-team.sh *)",
       "Bash(bash claude/scripts/audit-team.sh)",
       "Bash(grep *)",
-      "Edit(**/docs/test-plans/**)",
-      "Edit(**/docs/test-reports/**)",
-      "Edit(**/docs/reviews/**)",
-      "Edit(**/docs/plans/**)",
-      "Edit(falkor-chat/server/**)",
-      "Edit(falkor-chat/scripts/**)"
+      "Edit(**)"
     ]
   }
 }
