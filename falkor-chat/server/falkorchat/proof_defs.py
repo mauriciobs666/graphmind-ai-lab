@@ -34,6 +34,13 @@ Invariants this def deliberately honours (see `falkor-chat/AGENTS.md`):
     never a def with no transitions at all;
   * the key is **`access-request`**, not `onboarding` — that key belongs to long-standing
     test fixtures.
+
+**A step's `config.model` is create-only, exactly like `config.tools`/`systemPrompt`**
+(`repository._PUBLISH_CYPHER`'s `Step` node is `MERGE`d on `stepUid = key:version:stepKey`
+with `ON CREATE SET st.config = s.config` — a same-version republish never touches an
+existing `Step` node's `config`, model field included). K-056's Ministral re-point (see
+`SALESPERSON_DEF` below) needed its own version bump for exactly this reason, not just an
+in-place edit of an already-published version's step config.
 """
 
 from __future__ import annotations
@@ -175,6 +182,20 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # versions, so the K-034 409 topology-conflict path is never hit by a later
 # sibling's version bump.
 #
+# **`v2.1` (K-056, this bump) is a different kind of version bump than the
+# `v1`->`v2`->`v3`->`v4` capability sequence above** — it changes neither
+# `config.tools` nor `systemPrompt` (byte-identical to `v2`), only adds
+# `config.model` to re-point the `assistant` step's LLM from the shared `agent`-
+# role default (`qwen/qwen3-4b-2507`, which K-056 confirmed silently skips tool
+# calls on ~97.5% of conversations reaching a 4th turn — `docs/reviews/
+# salesperson-tool-reliability-ml.md` §8) onto `mistralai/ministral-3-3b` (0/176
+# instances of that defect in the same eval's piloting, §9). The decimal label is
+# deliberate: it reads as "a minor re-point of v2," not a fifth capability, and
+# does not consume the `v3`/`v4` slots K-054/K-055 already own. `config.model` is
+# create-only exactly like `config.tools`/`systemPrompt` (this module's own
+# docstring, above) — a same-version edit would have silently no-op'd, so this
+# needed a real version bump even though topology and prompt/tools are unchanged.
+#
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
 # to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
@@ -194,7 +215,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v2",
+    "version": "v2.1",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -204,6 +225,15 @@ SALESPERSON_DEF: dict[str, Any] = {
             "start": True,
             "config": {
                 "waitsForHuman": True,
+                # K-056: this step's own requested model choice — resolves through
+                # `ModelGateway` at the "consumer's own requested choice" precedence
+                # rung (`docs/SERVER.md` §1.8), below a workspace hard-cap override,
+                # above the shared `step`-kind role default (still `qwen/qwen3-4b-2507`,
+                # unaffected — `triage`/`access-request` keep running on it). Checked
+                # resolvable at publish time (`services._check_models_resolvable`,
+                # FR-9): an unresolvable ref fails the publish with a 400, not silently
+                # at first use.
+                "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
                     "customer.\n\n"

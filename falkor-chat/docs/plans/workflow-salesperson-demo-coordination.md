@@ -188,6 +188,84 @@ of gate outcome (report back either way).
 | U38 | `analyst` (fresh) | `a6347053812f722e2` | accepted | `docs/reviews/salesperson-tool-reliability-impl.md` | self → **approve with suggestions** (1 MAJOR, 1 MINOR) | 121k tok / 31 tools |
 | U39 | `tdd-engineer` (fresh) | `a13492d09a4d2148c` | accepted | revert breadcrumb tagging only (MAJOR 1), keep `toolsUsed`/observability signal | teco (direct diff read + independent suite re-run) → clean | 123k tok / 60 tools |
 
+## Session resume (2026-08-29) — Ministral re-point phase dispatched
+
+New session. Reconciled against `git log`/`git status` first: HEAD (`1f3d7e7`) matches the ledger
+exactly through U41/U42, working tree clean for this coordination (only an unrelated, untracked,
+`Interviewing`-status `docs/requirements/salesperson-ui.md` from `tico`, out of scope). Per the
+pending decision left open at the prior session's end, asked the user via `AskUserQuestion`
+whether to proceed with the Ministral re-point now, hold, or something else. **User chose: proceed
+now.**
+
+Plan (per U40/U41's own §9.5 recommendation): (1) re-point `salesperson@v2` at
+`mistralai/ministral-3-3b` — (2) live-reverify K-052/K-053's ACs hold on the new model — (3) resume
+K-054 (U23/U24, already queued) → K-055. Dispatching (1) now as **U43**; (2)/(3) wait on U43.
+
+**Mechanism chosen** (read `docs/SERVER.md` §1.8 directly before dispatching, not guessed): the
+per-step `config.model` field is the correct, narrowly-scoped override — it resolves through
+`ModelGateway` at the "consumer's own requested choice" precedence rung (below the workspace hard
+cap, above the role default), checked resolvable at publish time (FR-9). This re-points
+`salesperson` only, leaving `triage`/`access-request`'s shared `agent`/`step` role defaults (still
+`qwen/qwen3-4b-2507`) untouched — deliberately narrower than editing `config/models.json`'s global
+defaults or adding a `ws:acme`-scoped `WorkspaceConfig` override, either of which would also flip
+`triage` onto an unevaluated-for-that-role model as an unplanned side effect.
+
+| U43 | `coder` | `af2b84ceb50bb2fac` | accepted | re-point `SALESPERSON_DEF`'s `assistant` step at `mistralai/ministral-3-3b` via `config.model` (create-only, needed its own version — `v2.1`), `proof_defs.py`/`seed_salesperson.sh`/`verify_salesperson.sh`/`AGENTS.md`/`test_salesperson_scaffold.py` (+2 tests, mutation-tested) | `qa-engineer` (U44, live re-run) → — | 241k tok / 110 tools |
+
+**U43 delivered and committed.** Verified independently by `teco`, not on the delegate's word alone:
+diff read directly, matches the report exactly (create-only reasoning for `config.model`, the
+`v2.1` labeling choice and its rationale, `config/models.json` deliberately left untouched since
+the validated Ministral eval ran with empty sampling params — adding an unvalidated
+`temperature: 0`-style entry would diverge from the validated condition). Independently re-ran the
+full offline suite (**1920 passed/4 deselected**, matches — the +1 over U42's 1919 baseline is the
+new regression-pin test) and `./scripts/test_queries.sh` (**387/387**, matches); reseeded
+`reference` per the documented sequence and re-verified `verify_workflows.sh`/`verify_catalog.sh`/
+`verify_salesperson.sh acme` all `OK`, `salesperson@v2.1` in sync with correct 2-step/1-transition
+topology, `triage`/`access-request` confirmed untouched (still `qwen/qwen3-4b-2507`). Confirmed the
+delegate's `kaizen_team` entry for the LM-Studio `opencode.json` baseURL gotcha is actually present.
+**Note:** my own reseed hit a malformed `bootstrap_schema.sh` invocation on my part (a stray
+`ws:EMBEDDING_DIM=1024` graph from a bad arg) — caught via `GRAPH.LIST` before verifying sync,
+`GRAPH.DELETE`d immediately; no data at risk (empty scratch graph), not the delegate's error.
+
+**U43 brief given:** goal — re-point the shared `salesperson` demo agent's LLM from
+`qwen/qwen3-4b-2507` to `mistralai/ministral-3-3b`, scoped to this def only. Read
+`docs/SERVER.md` §1.8 (the model-resolution seam) and `server/falkorchat/modelconfig.py` directly
+for the exact mechanics — don't take this brief's paraphrase as the spec. Concretely: add
+`"model": "lmstudio/mistralai/ministral-3-3b"` to `SALESPERSON_DEF`'s `assistant` step `config` in
+`server/falkorchat/proof_defs.py`; add a `config/models.json` `"models"` entry for that ref only if
+you determine one is needed (mirror the existing `qwen/qwen3-4b-2507` entry's `temperature: 0`
+precedent if an equivalent setting is warranted for Ministral — check
+`docs/reviews/salesperson-tool-reliability-ml.md` §8/§9 first for anything the eval passes already
+established about how this model was queried, but note that harness used its own scratch script,
+not necessarily the production `ModelGateway` path, so don't assume it mirrors production config
+without checking). **Verify directly, don't assume, whether `config.model` is a create-only
+property on an already-materialized version** (same class as `config.tools`/`systemPrompt`, per
+this file's own module docstring) — if so, this needs its own version bump on `SALESPERSON_DEF`
+(currently `v2`) to take effect; decide the exact version label yourself, reasoning about how to
+keep it legible against the existing `v1`→`v2`→`v3`→`v4` per-capability convention (a labeling
+choice, reversible, your call to make and document — not a fork worth stopping for). Update
+`seed_salesperson.sh`/`verify_salesperson.sh` and `falkor-chat/AGENTS.md`'s script-table entry for
+the new version if the version label changes. Live-verify: republish/re-materialize against a
+throwaway workspace (or `ws:acme` if you confirm it's safe per the shared-instance conventions
+already documented in this coordination doc), confirm LM Studio actually has
+`mistralai/ministral-3-3b` loaded and the publish-time model-resolvability check
+(`_check_models_resolvable`, FR-9) accepts it, then restore `ws:acme`/`reference` to their prior
+in-sync state and re-verify with `verify_salesperson.sh acme`. Mutation-test any new/changed test.
+Do not touch `triage`/`access-request` or `config/models.json`'s global `defaults` block — this is
+scoped to `salesperson` alone. Do not edit `docs/BACKLOG.md`/`docs/HISTORY.md` (teco-owned; will
+fold in the residual-Ministral-risk disclosure the ml-note's §9.5 recommends after verifying this
+unit). **CPG:** not relevant — this is a small, localized constant/config edit, not a
+call-graph/impact-analysis question. Standard subagent-awareness clause applies (stop-and-ask only
+for a genuine high-stakes fork; this unit's decisions are all routine/reversible per above).
+Deliverable: the code+config+doc diff, by path, plus what you verified live.
+
+**Gate note:** deliberately skipping a separate `analyst` static-review gate for this specific
+unit — the very next unit (`qa-engineer`'s live re-run of K-052/K-053's existing test plans against
+the new model) is a stronger, execution-level check for exactly this kind of change (does the live
+system still behave correctly on the new model) than a static read would add. Explicitly the
+justified skip per the standing "review is the default, not ceremony for its own sake" guardrail,
+not an oversight.
+
 **U39 delivered and committed (`15a9749`).** Verified directly before committing, not just on the
 implementer's word: `grep`-confirmed no `[verified via` interpolation remains in `executor.py`
 (only in comments/docstrings recording the revert); independently re-ran the full offline suite

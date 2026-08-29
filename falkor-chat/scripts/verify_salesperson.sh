@@ -20,7 +20,7 @@
 # right after a `pytest` / `test_queries.sh` run, before uvicorn is back up. It
 # drives the same `services.*` methods the REST `/diff` route does.
 #
-# For EACH def (default versions `salesperson@v2`, `order-fulfillment@v1` —
+# For EACH def (default versions `salesperson@v2.1`, `order-fulfillment@v1` —
 # override with FALKORCHAT_SALESPERSON_DEF_VERSION /
 # FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION, the same knobs seed_salesperson.sh
 # reads), it checks:
@@ -42,7 +42,7 @@
 #   FALKORDB_PORT                            (default: 6379)
 #   FALKORCHAT_WS_ID                         (default: acme)
 #   FALKORCHAT_SALESPERSON_DEF_KEY           (default: salesperson)
-#   FALKORCHAT_SALESPERSON_DEF_VERSION       (default: v2)
+#   FALKORCHAT_SALESPERSON_DEF_VERSION       (default: v2.1)
 #   FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY     (default: order-fulfillment)
 #   FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION (default: v1)
 
@@ -52,7 +52,7 @@ HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 SALESPERSON_DEF_KEY="${FALKORCHAT_SALESPERSON_DEF_KEY:-salesperson}"
-SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v2}"
+SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v2.1}"
 ORDER_FULFILLMENT_DEF_KEY="${FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY:-order-fulfillment}"
 ORDER_FULFILLMENT_DEF_VERSION="${FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION:-v1}"
 

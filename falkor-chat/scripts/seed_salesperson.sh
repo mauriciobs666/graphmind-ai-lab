@@ -16,7 +16,7 @@
 # `server/tests/test_order_fulfillment.py`), so the seeded defs and the tested
 # defs cannot drift.
 #
-#   salesperson@v2       — kind `conversation`, one `type:'agent'` step
+#   salesperson@v2.1      — kind `conversation`, one `type:'agent'` step
 #                           (`assistant`, start, waitsForHuman) with the
 #                           catalog-lookup tools (K-052) PLUS the five
 #                           cart/order tools (K-053: `view_cart`, `add_to_cart`,
@@ -30,6 +30,13 @@
 #                           version-bump discipline, docs/plans/
 #                           workflow-catalog-lookup.md §2.5) — so this bump
 #                           never hits the K-034 409 topology-conflict path.
+#                           `v2.1` (K-056) is a further, narrower bump on top of
+#                           that: same tools/prompt as v2, only `config.model`
+#                           added to re-point the `assistant` step at
+#                           `mistralai/ministral-3-3b` (`config.model` is
+#                           create-only too — see proof_defs.py's module
+#                           docstring — so this needed its own version, not an
+#                           in-place edit of v2).
 #   order-fulfillment@v1  — kind `process`, the LLM-FREE order-lifecycle proof
 #                           flow (K-053, docs/plans/workflow-cart-and-totals.md
 #                           §3.4): four `human`/`decision` steps, three
@@ -73,7 +80,7 @@
 #   FALKORDB_PORT                        (default: 6379)
 #   FALKORCHAT_WS_ID                     (default: acme)     — workspace id (graph key ws:<id>)
 #   FALKORCHAT_SALESPERSON_DEF_KEY       (default: salesperson)      — LOCAL to this script
-#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v2)              (K-037-style decoupling:
+#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v2.1)            (K-037-style decoupling:
 #                                        no config var reads either of these two — this
 #                                        def is never an @mention trigger target in this
 #                                        milestone, only ever started/observed directly)
@@ -89,7 +96,7 @@ HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 SALESPERSON_DEF_KEY="${FALKORCHAT_SALESPERSON_DEF_KEY:-salesperson}"
-SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v2}"
+SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v2.1}"
 ORDER_FULFILLMENT_DEF_KEY="${FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY:-order-fulfillment}"
 ORDER_FULFILLMENT_DEF_VERSION="${FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION:-v1}"
 

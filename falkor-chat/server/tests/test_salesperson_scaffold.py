@@ -251,6 +251,27 @@ def test_salesperson_def_publishes_clean_through_validate_def_spec(wf_repo):
     assert guard == {
         "kind": "cmp", "path": "ctx.endConversation", "op": "truthy",
     }
+    # K-056: the `assistant` step's own requested model choice survives the
+    # publish/materialize round trip through the graph's opaque-string storage.
+    assistant_config = json.loads(
+        next(s for s in snap["steps"] if s["key"] == "assistant")["config"]
+    )
+    assert assistant_config["model"] == "lmstudio/mistralai/ministral-3-3b"
+
+
+def test_salesperson_def_pins_ministral_model_and_version_bump():
+    """K-056 regression pin, on the shipped constant directly (no publish round
+    trip needed): the `assistant` step's `config.model` re-points the def at
+    `mistralai/ministral-3-3b` (replacing the shared `qwen/qwen3-4b-2507` `step`-
+    role default, which K-056 found silently skips tool calls on ~97.5% of
+    conversations reaching a 4th turn — `docs/reviews/
+    salesperson-tool-reliability-ml.md` §8), and the def's own `version` is bumped
+    to `v2.1` — a same-version republish would have silently no-op'd this change,
+    since `config.model` is create-only exactly like `config.tools`/`systemPrompt`
+    (`proof_defs.py`'s module docstring)."""
+    assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
+    assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
+    assert SALESPERSON_DEF["version"] == "v2.1"
 
 
 # ── 2. a same-version republish is a clean structural no-op ───────────────────
