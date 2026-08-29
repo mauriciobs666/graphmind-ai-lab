@@ -106,6 +106,10 @@ class FakeRepo:
         self.cart_items: dict[str, dict[str, dict]] = {}  # customerId -> {productId: line}
         self.products_by_id: dict[str, dict] = {}  # productId -> {"name", "price"}
         self.orders: dict[str, dict] = {}  # orderId -> order state
+        # §17 durable customer profile (K-054 M6) — customerId -> {"name",
+        # "deliveryAddress", "profileUpdatedAt"}; absent key means no
+        # `Customer` node at all (mirrors repository.get_profile's `None`).
+        self.profiles: dict[str, dict] = {}
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -536,6 +540,33 @@ class FakeRepo:
 
     def cancel_order(self, ws, *, order_id, now):
         return self._order_cas(order_id, "placed", "cancelled", now)
+
+    # ── §17 Durable customer profile (K-054 M6) ───────────────────────────────
+    #
+    # Faithful to `repository.py` §17's `coalesce()`-per-field semantics: an
+    # omitted (`None`) field on `upsert_profile` leaves the stored value
+    # unchanged, never clears it.
+
+    def get_profile(self, ws, *, customer_id):
+        self.calls.append(("get_profile", customer_id))
+        return self.profiles.get(customer_id)
+
+    def upsert_profile(self, ws, *, customer_id, name, delivery_address, now):
+        self.calls.append(("upsert_profile", customer_id, name, delivery_address, now))
+        existing = self.profiles.get(customer_id, {"name": None, "deliveryAddress": None})
+        stored = {
+            "name": name if name is not None else existing["name"],
+            "deliveryAddress": (
+                delivery_address if delivery_address is not None
+                else existing["deliveryAddress"]
+            ),
+            "profileUpdatedAt": now,
+        }
+        self.profiles[customer_id] = stored
+        return {
+            "customerId": customer_id, "name": stored["name"],
+            "deliveryAddress": stored["deliveryAddress"],
+        }
 
 
 _UNSET = object()
@@ -3783,3 +3814,72 @@ def test_advance_order_unknown_transition_raises():
 
     with pytest.raises(UnknownOrderTransitionError):
         svc.advance_order(CTX, order_id="anything", transition="frobnicate")
+
+
+# ── §17 Durable customer profile (K-054 M6) ─────────────────────────────────────
+#
+# `docs/plans/workflow-durable-profile.md` §3.2. `ctx.actor` ("u1") is
+# `customerId` throughout, same identity anchor §16's cart/order tests use.
+
+
+def test_get_profile_returns_both_fields_none_when_no_customer_yet():
+    """Plan §3.2: `get_profile` always returns a shape with both fields — not
+    a `{"found": false}` abstention shape — even for a brand-new customer."""
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_profile(CTX) == {"name": None, "deliveryAddress": None}
+
+
+def test_save_profile_full_write_then_get_profile_round_trips():
+    repo = FakeRepo()
+    svc = make_service(repo, now=1000)
+
+    result = svc.save_profile(CTX, name="Alice", delivery_address="123 Main St")
+
+    assert result == {"name": "Alice", "deliveryAddress": "123 Main St"}
+    assert svc.get_profile(CTX) == {"name": "Alice", "deliveryAddress": "123 Main St"}
+
+
+def test_profile_persists_across_a_fresh_thread_same_actor_and_ws_ac1():
+    """AC-1: a saved profile is retrievable from what stands in for "a later,
+    separate conversation" at the service layer — a fresh `CallContext`
+    carrying the same `(ws, actor)`, exercised against the same `Services`/
+    repository (durability is the repository's job; this pins that the
+    service layer never caches around it)."""
+    repo = FakeRepo()
+    svc = make_service(repo, now=1000)
+    svc.save_profile(CTX, name="Alice", delivery_address="123 Main St")
+
+    fresh_ctx = CallContext(ws="test", actor="u1")
+
+    assert svc.get_profile(fresh_ctx) == {
+        "name": "Alice", "deliveryAddress": "123 Main St",
+    }
+
+
+def test_save_profile_partial_update_omitted_name_leaves_name_unchanged_ac2():
+    """AC-2, the exact case the graph note's own BLOCKER-fix targets: a second
+    `save_profile` call that supplies only `delivery_address` must update the
+    address and leave the already-stored `name` unchanged — never null it."""
+    repo = FakeRepo()
+    svc = make_service(repo, now=1000)
+    svc.save_profile(CTX, name="Alice", delivery_address="123 Main St")
+
+    result = svc.save_profile(CTX, delivery_address="456 New Ave")
+
+    assert result == {"name": "Alice", "deliveryAddress": "456 New Ave"}
+    assert svc.get_profile(CTX) == {"name": "Alice", "deliveryAddress": "456 New Ave"}
+
+
+def test_save_profile_partial_update_omitted_address_leaves_address_unchanged():
+    """The symmetric AC-2 case: omitting `delivery_address` this time must
+    leave it unchanged while `name` updates."""
+    repo = FakeRepo()
+    svc = make_service(repo, now=1000)
+    svc.save_profile(CTX, name="Alice", delivery_address="123 Main St")
+
+    result = svc.save_profile(CTX, name="Bob")
+
+    assert result == {"name": "Bob", "deliveryAddress": "123 Main St"}
+    assert svc.get_profile(CTX) == {"name": "Bob", "deliveryAddress": "123 Main St"}

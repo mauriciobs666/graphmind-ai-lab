@@ -3055,3 +3055,68 @@ class Repository:
             {"orderId": order_id, "now": now},
         )
         return self._order_status_row(res)
+
+    # ── §17 Durable customer profile (K-054 M6) ───────────────────────────────
+    #
+    # Workspace-scoped, direct transcription of `docs/plans/
+    # workflow-durable-profile-graph.md` §3/§4 (v2) — two more nullable
+    # properties on the existing `Customer` anchor (§16 above), no new label,
+    # no new index/constraint. `upsert_profile` is self-contained: unlike
+    # `add_to_cart` (which `MATCH`es a `Cart` an earlier `ensure_cart` call must
+    # have created), `write_profile`'s own `MERGE` creates the `Customer`
+    # anchor itself when missing, so this method needs no preceding
+    # `ensure_customer` call from the service layer.
+
+    def upsert_profile(
+        self, ws: str, *, customer_id: str, name: str | None,
+        delivery_address: str | None, now: int,
+    ) -> dict[str, Any]:
+        """`MERGE` + per-field `coalesce()`-guarded `SET`, update-in-place. Graph
+        note §3 (v2, live-verified [verified], §0).
+
+        `name`/`delivery_address` are `None` when the caller didn't supply that
+        field on this call — `coalesce($field, c.field)` means "not provided,
+        leave unchanged," never "clear it" (the note's own explicit caller
+        contract). **This must never regress to an unconditional `SET`** — that
+        was v1's BLOCKER (a partial update would null the omitted field,
+        defeating AC-2); the `coalesce()` per data field is the fix.
+        `profileUpdatedAt` alone stays an unconditional `SET` — every call that
+        reaches this query touched the profile, partial or full.
+        """
+        res = self._graph(ws).query(
+            "MERGE (c:Customer {customerId: $customerId}) "
+            "ON CREATE SET c.createdAt = $now "
+            "SET c.name             = coalesce($name, c.name), "
+            "    c.deliveryAddress = coalesce($deliveryAddress, c.deliveryAddress), "
+            "    c.profileUpdatedAt = $now "
+            "RETURN c.customerId AS customerId, c.name AS name, "
+            "       c.deliveryAddress AS deliveryAddress",
+            {
+                "customerId": customer_id, "name": name,
+                "deliveryAddress": delivery_address, "now": now,
+            },
+        )
+        row = res.result_set[0]
+        return {"customerId": row[0], "name": row[1], "deliveryAddress": row[2]}
+
+    def get_profile(self, ws: str, *, customer_id: str) -> dict[str, Any] | None:
+        """The one code path for "unset". Graph note §4.
+
+        `None` (zero rows) when no `Customer` node exists at all yet for this
+        id — nobody has ever interacted with this workspace as this customer
+        (cart, order, or profile). A row with `name`/`deliveryAddress` both
+        `None` means the customer exists (e.g. from cart activity) but has
+        never given a name/address — both cases mean "ask them" to the caller;
+        the distinction is preserved here rather than collapsed, per the
+        note's own §4.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Customer {customerId: $customerId}) "
+            "RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, "
+            "       c.profileUpdatedAt AS profileUpdatedAt",
+            {"customerId": customer_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"name": row[0], "deliveryAddress": row[1], "profileUpdatedAt": row[2]}

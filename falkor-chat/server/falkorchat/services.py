@@ -2826,3 +2826,39 @@ class Services:
             raise UnknownOrderTransitionError(transition)
         method = getattr(self._repo, method_name)
         return method(ctx.ws, order_id=order_id, now=self._clock())
+
+    # ── §17 Durable customer profile (K-054 M6) ───────────────────────────────
+    #
+    # `docs/plans/workflow-durable-profile.md` §3.2. `ctx.actor` is
+    # `customerId` throughout — the same workspace-local `Customer` anchor §16
+    # already resolves `ctx.actor` to (`workflow-durable-profile-graph.md` §1).
+    # No `ensure_customer` call needed here (unlike `add_cart_item`/
+    # `place_order` above): `repository.upsert_profile`'s own `MERGE` creates
+    # the `Customer` anchor itself when missing.
+
+    def get_profile(self, ctx: CallContext) -> dict[str, Any]:
+        """Always returns a shape with both fields, defaulting absent fields to
+        `None` (plan §3.2) — **not** a `{"found": false}` abstention shape like
+        the catalog-lookup tools: "no profile yet" is the ordinary
+        first-conversation state here, not an error/abstention case.
+        """
+        profile = self._repo.get_profile(ctx.ws, customer_id=ctx.actor)
+        if profile is None:
+            return {"name": None, "deliveryAddress": None}
+        return {"name": profile["name"], "deliveryAddress": profile["deliveryAddress"]}
+
+    def save_profile(
+        self, ctx: CallContext, *, name: str | None = None,
+        delivery_address: str | None = None,
+    ) -> dict[str, Any]:
+        """Thin wrapper over `repository.upsert_profile` (plan §3.2). Both
+        `name`/`delivery_address` are optional — an omitted field (`None`)
+        leaves the stored value unchanged (AC-2), never clears it; a caller
+        must never pass `""` to mean "no value" (graph note §3's caller
+        contract).
+        """
+        result = self._repo.upsert_profile(
+            ctx.ws, customer_id=ctx.actor, name=name,
+            delivery_address=delivery_address, now=self._clock(),
+        )
+        return {"name": result["name"], "deliveryAddress": result["deliveryAddress"]}

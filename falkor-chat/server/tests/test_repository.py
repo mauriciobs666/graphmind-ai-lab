@@ -3319,3 +3319,117 @@ def test_customer_and_cart_persist_across_repository_instances_ac3(repo):
     repo2 = Repository(db.connect())
     cart = repo2.read_cart("test", customer_id="cust1")
     assert cart == [{"productId": "prod1", "quantity": 1, "addedAt": 100}]
+
+
+# ── §17 Durable customer profile (K-054 M6) ───────────────────────────────────
+
+
+def test_get_profile_none_when_no_customer_node_yet(repo):
+    assert repo.get_profile("test", customer_id="cust1") is None
+
+
+def test_upsert_profile_full_write_creates_customer_and_sets_both_fields(repo, conn):
+    result = repo.upsert_profile(
+        "test", customer_id="cust1", name="Alice",
+        delivery_address="123 Main St", now=1000,
+    )
+    assert result == {
+        "customerId": "cust1", "name": "Alice", "deliveryAddress": "123 Main St",
+    }
+    profile = repo.get_profile("test", customer_id="cust1")
+    assert profile == {
+        "name": "Alice", "deliveryAddress": "123 Main St", "profileUpdatedAt": 1000,
+    }
+    rows = _probe(conn, "MATCH (c:Customer {customerId: 'cust1'}) RETURN count(c)")
+    assert rows[0][0] == 1
+
+
+def test_upsert_profile_on_existing_cart_only_customer_adds_profile_fields(repo):
+    """A `Customer` created by cart activity (no profile fields yet) gets its
+    profile filled in by a later `upsert_profile` call — the same node, not a
+    second one (graph note §1/§2).
+    """
+    repo.ensure_customer("test", customer_id="cust1", now=100)
+    assert repo.get_profile("test", customer_id="cust1") == {
+        "name": None, "deliveryAddress": None, "profileUpdatedAt": None,
+    }
+
+    repo.upsert_profile(
+        "test", customer_id="cust1", name="Alice",
+        delivery_address="123 Main St", now=200,
+    )
+
+    assert repo.get_profile("test", customer_id="cust1") == {
+        "name": "Alice", "deliveryAddress": "123 Main St", "profileUpdatedAt": 200,
+    }
+
+
+def test_upsert_profile_partial_update_omitted_name_leaves_name_unchanged_ac2(
+    repo, conn
+):
+    """AC-2 / the graph note's own v1->v2 BLOCKER fix: a partial update that
+    omits `name` (passes `None`) must update `deliveryAddress` and leave the
+    already-stored `name` exactly as it was — never null it via an
+    unconditional `SET`.
+    """
+    repo.upsert_profile(
+        "test", customer_id="cust1", name="Alice",
+        delivery_address="123 Main St", now=1000,
+    )
+
+    result = repo.upsert_profile(
+        "test", customer_id="cust1", name=None,
+        delivery_address="456 New Ave", now=2000,
+    )
+
+    assert result == {
+        "customerId": "cust1", "name": "Alice", "deliveryAddress": "456 New Ave",
+    }
+    profile = repo.get_profile("test", customer_id="cust1")
+    assert profile == {
+        "name": "Alice", "deliveryAddress": "456 New Ave", "profileUpdatedAt": 2000,
+    }
+    rows = _probe(conn, "MATCH (c:Customer {customerId: 'cust1'}) RETURN count(c)")
+    assert rows[0][0] == 1
+
+
+def test_upsert_profile_partial_update_omitted_address_leaves_address_unchanged(
+    repo,
+):
+    """The symmetric AC-2 case: omitting `deliveryAddress` this time must leave
+    it unchanged while `name` updates.
+    """
+    repo.upsert_profile(
+        "test", customer_id="cust1", name="Alice",
+        delivery_address="123 Main St", now=1000,
+    )
+
+    result = repo.upsert_profile(
+        "test", customer_id="cust1", name="Bob",
+        delivery_address=None, now=2000,
+    )
+
+    assert result == {
+        "customerId": "cust1", "name": "Bob", "deliveryAddress": "123 Main St",
+    }
+    profile = repo.get_profile("test", customer_id="cust1")
+    assert profile["name"] == "Bob"
+    assert profile["deliveryAddress"] == "123 Main St"
+
+
+def test_profile_persists_across_repository_instances_ac1(repo):
+    """AC-1 at the repository layer: a second `Repository` built over a fresh
+    connection sees the first one's profile write — durability is the graph,
+    the same pattern `test_customer_and_cart_persist_across_repository_instances_ac3`
+    establishes for the cart.
+    """
+    repo.upsert_profile(
+        "test", customer_id="cust1", name="Alice",
+        delivery_address="123 Main St", now=1000,
+    )
+
+    repo2 = Repository(db.connect())
+    profile = repo2.get_profile("test", customer_id="cust1")
+    assert profile == {
+        "name": "Alice", "deliveryAddress": "123 Main St", "profileUpdatedAt": 1000,
+    }

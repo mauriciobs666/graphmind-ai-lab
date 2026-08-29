@@ -261,7 +261,19 @@ user's own eyes, not a coordinator's guess at intent. Surfaced in the session re
 
 **K-054 unblocked.** Both capabilities hold on `mistralai/ministral-3-3b` with no regression and no
 blocking defect — per the already-agreed plan, resuming K-054 (U23/U24, already queued/speced)
-next.
+next. **User confirmed (2026-08-29, asked via `AskUserQuestion`):** proceed to K-054 now; the
+settings.json anomaly is the user's own to handle, not blocking, `teco` leaves it untouched.
+
+**U23 brief note — carries context neither `workflow-durable-profile.md` nor its graph note has**
+(both predate K-056/the Ministral re-point): `SALESPERSON_DEF["version"]` is currently `"v2.1"`
+(K-056's re-point, just shipped, `03a3c8c`), not the plain `"v2"` both plans were written against
+— bumping to `"v3"` per the plan is still correct (next in sequence), but **the `assistant` step's
+`config.model: "lmstudio/mistralai/ministral-3-3b"` must be carried forward into `v3`'s config**,
+same as every other cumulative property (`config.tools`/`systemPrompt`) already is per the
+module's own documented convention — each version publishes a full, fresh `config`, so omitting
+`model` on `v3` would silently revert the assistant to the `step`-role default
+(`qwen/qwen3-4b-2507`), undoing U43/U44's whole point. Flagged explicitly in U24's brief (the unit
+that touches `proof_defs.py`), since U23 itself doesn't touch that file.
 
 **U44 dispatched.** Re-run K-052's (`docs/test-plans/workflow-catalog-lookup.md`) and K-053's
 (`docs/test-plans/workflow-cart-and-totals.md`) full AC lists live against the now-repointed
@@ -583,7 +595,23 @@ avoid disturbing the live `ws:acme` state it had just re-verified in sync — in
 milestone (order-fulfillment's `Order.status` lifecycle is a direct Services-layer call, not
 reachable via HTTP by an operator) — `qa-engineer` needs to drive that half of the acceptance pass
 accordingly, not assume an HTTP path exists.
-| U23 | `coder` | — | queued | K-054 cluster 1: `repository.py`, `services.py` (profile) | — | — |
+| U23 | `coder` (fresh) | `a792dfe24a7601443` | accepted | K-054 cluster 1: `repository.py`/`services.py` §17 (profile), `test_repository.py`/`test_services.py` (+12 tests) | `analyst`/`qa-engineer` (U25/U26, batched w/ U24) → — | 121k tok / 45 tools |
+
+**U23 delivered — verified independently by `teco`, not on the delegate's word alone.** Diff read
+directly: `repository.upsert_profile` is a faithful transcription of the graph note's v2
+`coalesce()`-guarded `SET` (never an unconditional one — the exact BLOCKER the graph note's own
+revision closed); `get_profile`/`save_profile` in `services.py` correctly return the
+always-populated shape (not a `{"found": false}` abstention), per plan §3.2. Independently re-ran
+the full offline suite (**1931 passed/4 deselected**, matches). **Independently re-mutation-tested
+myself** (not just trusting the report): reverted `upsert_profile`'s `coalesce()` `SET`s to an
+unconditional `SET` on a copied-aside file, re-ran `-k profile` — both AC-2 partial-update tests
+failed exactly as the delegate reported, restored, full suite green again. Confirmed the delegate's
+`kaizen_team` entry (FakeRepo doesn't catch a repository-Cypher regression, a good methodology note
+for future mutation-testing in this suite) is present. **Out-of-scope drift observed, not
+touched:** `docs/requirements/cross-initiative-coordination.md` (repo root) was modified during this
+unit's run — a separate, unrelated `tico`-authored requirements doc (dated today, well-formed,
+clearly a different concurrent interview), not something asked of this delegate and not part of
+this coordination; left completely alone.
 | U24 | `coder` (resume U23) | — | queued | K-054 cluster 2: `tools.py`, `proof_defs.py` (v3), seed/verify scripts, `QUERIES.md`/`test_queries.sh` | — | — |
 | U25 | `analyst` (resume) | — | queued | code review, K-054 diff | — | — |
 | U26 | `qa-engineer` (resume) | — | queued | live acceptance, K-054 (profile persistence) | — | — |
