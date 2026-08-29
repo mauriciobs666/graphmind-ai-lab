@@ -56,6 +56,15 @@ Built-ins (§4):
     no arithmetic lives in this module. `add_to_cart`/`remove_from_cart` abstain
     `{"found": false}` on an unknown product name, same idiom as the catalog tools;
     `place_order` on an empty cart returns an explanatory **string**, not a zero-line order.
+  * `get_profile` / `save_profile` (K-054 M6, `docs/plans/workflow-durable-profile.md` §3.2) —
+    the `salesperson` demo's durable customer-profile capabilities, going through
+    `services.get_profile`/`save_profile`, which own the `coalesce()`-guarded partial-update
+    write (`repository.upsert_profile`) — no Cypher lives in this module.
+    `get_profile` deliberately does **not** use the `{"found": false}` abstention shape: it
+    always returns `{"name", "deliveryAddress"}` with absent fields as `null` — "no profile
+    yet" is the ordinary first-conversation state here, not an error/abstention case (unlike
+    the catalog/cart tools' "unknown name" case). `save_profile`'s two arguments are both
+    optional; omitting one leaves that field's stored value unchanged, it never clears it.
 
 MCP-client seam (U10 / FR-5c): `McpToolClient` lists + calls tools on an **external** MCP
 server and registers each as an `McpTool` so an MCP-exposed tool is indistinguishable from a
@@ -693,6 +702,96 @@ class PlaceOrderTool:
         return json.dumps(result)
 
 
+class GetProfileTool:
+    """FR-1/FR-2 (K-054 M6) — read the stored customer profile, if any.
+
+    Thin dispatch onto `services.get_profile` (plan §3.2) — always returns a
+    shape with both fields, defaulting absent fields to `None`. **Not** the
+    `{"found": false}` abstention shape the catalog-lookup tools use: "no
+    profile yet" is the ordinary first-conversation state, not an
+    error/abstention case (plan §3.2).
+    """
+
+    name = "get_profile"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Look up this customer's stored name and delivery address, "
+                    "if any were saved in an earlier conversation. Missing "
+                    "fields come back as null — ask the customer for those, "
+                    "don't invent them."
+                ),
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        return json.dumps(self._services.get_profile(ctx))
+
+
+class SaveProfileTool:
+    """FR-1/FR-2/FR-3 (K-054 M6) — save (or update) the customer's name and/or
+    delivery address.
+
+    Thin dispatch onto `services.save_profile` (plan §3.2). Both arguments
+    are optional — omitting one leaves that field's stored value unchanged
+    (AC-2), it never clears it. At least one is expected but not structurally
+    enforced (plan §3.2) — a call with neither argument still round-trips
+    through the upsert (a no-op write that only bumps `profileUpdatedAt`).
+    """
+
+    name = "save_profile"
+
+    def __init__(self, services: Any) -> None:
+        self._services = services
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Save (or update) the customer's name and/or delivery "
+                    "address for future conversations. Omit whichever field "
+                    "you don't have — it leaves the previously stored value "
+                    "unchanged, it does not clear it."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "The customer's name.",
+                        },
+                        "deliveryAddress": {
+                            "type": "string",
+                            "description": "The customer's delivery address.",
+                        },
+                    },
+                    "required": [],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        result = self._services.save_profile(
+            ctx, name=arguments.get("name"),
+            delivery_address=arguments.get("deliveryAddress"),
+        )
+        return json.dumps(result)
+
+
 class HumanHandoffSignal(Exception):
     """Control signal raised by `human_handoff`: suspend the run pending a human.
 
@@ -773,6 +872,8 @@ def build_builtin_registry(
         RemoveFromCartTool(services),
         ClearCartTool(services),
         PlaceOrderTool(services),
+        GetProfileTool(services),
+        SaveProfileTool(services),
     ])
 
 

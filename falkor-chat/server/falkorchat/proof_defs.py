@@ -196,6 +196,20 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # docstring, above) — a same-version edit would have silently no-op'd, so this
 # needed a real version bump even though topology and prompt/tools are unchanged.
 #
+# **`v3` (K-054, durable customer profile) is back on the `v1`->`v2`->`v3`->`v4`
+# capability sequence** — it adds `get_profile`/`save_profile` to `config.tools`
+# and extends `systemPrompt` per `docs/plans/workflow-durable-profile.md` §3.2,
+# same cumulative-republish rule as every capability bump above. **Not
+# documented in either the architect's or graph-dba's design doc, because both
+# predate `v2.1`:** `config.model` (K-056's re-point onto
+# `lmstudio/mistralai/ministral-3-3b`, added at `v2.1`) is carried forward here
+# **unchanged** — `config.model` is create-only exactly like `config.tools`/
+# `systemPrompt` (this module's own docstring, above), so a version that
+# republishes a full, fresh `config` without repeating this line would silently
+# fall back to the shared `step`-role default (`qwen/qwen3-4b-2507`) and undo
+# the whole re-point, defeating K-056's fix. Every subsequent version (`v4`,
+# K-055) must carry it forward too, for the same reason.
+#
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
 # to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
@@ -215,7 +229,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v2.1",
+    "version": "v3",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -232,7 +246,10 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # unaffected — `triage`/`access-request` keep running on it). Checked
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
-                # at first use.
+                # at first use. Carried forward unchanged from `v2.1` into `v3`
+                # (K-054) — `config.model` is create-only, so omitting this line on a
+                # version bump would silently undo the re-point (see the `v3` note
+                # above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
@@ -252,6 +269,14 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "current price, retrieved fresh, never a guess. When you place an "
                     "order, confirm what was ordered and its total using only what the "
                     "tool actually returned.\n\n"
+                    "You can also remember the customer's name and delivery address "
+                    "across conversations. Call `get_profile` once, early in the "
+                    "conversation, to check what is already on file. Ask for whichever "
+                    "of name or delivery address `get_profile` shows as missing — only "
+                    "once per conversation, and never ask again once both are already "
+                    "known for this customer. As soon as the customer gives you a name "
+                    "or delivery address, call `save_profile` with it; you can save one "
+                    "field at a time, it never erases the other.\n\n"
                     "Deliver every reply by calling the `post_message` tool; text you "
                     "merely write is never seen by the customer. Never pass `mentions`; "
                     "omit that argument entirely."
@@ -259,7 +284,7 @@ SALESPERSON_DEF: dict[str, Any] = {
                 "tools": [
                     "post_message", "lookup_product_fact", "filter_products",
                     "view_cart", "add_to_cart", "remove_from_cart", "clear_cart",
-                    "place_order",
+                    "place_order", "get_profile", "save_profile",
                 ],
                 "requiredTools": ["post_message"],
                 "maxIterations": 8,

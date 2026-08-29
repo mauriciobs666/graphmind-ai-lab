@@ -2908,3 +2908,71 @@ separate graph writes from one request, never one query doing both).
 `order-fulfillment@v1` process def (`falkorchat.proof_defs.ORDER_FULFILLMENT_DEF`), and seed/
 verify data (`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, extended to publish/check
 both defs).
+
+## 17. Durable customer profile (K-054 M6)
+
+Design: `docs/plans/workflow-durable-profile.md` §3 (architect) and `docs/plans/
+workflow-durable-profile-graph.md` (graph-dba, Version 2 — both queries below are `[verified]`
+there against the live pinned instance, twice — v1 and the v2 `coalesce()` fix; this section
+transcribes, it does not re-derive). Workspace-scoped (`ws:{workspaceId}`), same anchor §16 uses.
+
+**Schema — two more nullable properties on the existing `Customer` node, no new label:**
+```
+(:Customer {customerId, createdAt,
+             name, deliveryAddress, profileUpdatedAt})   // name/deliveryAddress: NULLable
+```
+`name`/`deliveryAddress` are independently nullable (a customer may give one before the other).
+No new index, no new constraint — `Customer.customerId`'s existing uniqueness constraint (§16's
+DDL) already backs the `MERGE` below. **This is not a second identity mechanism** — it reuses,
+unchanged, the same `Customer` anchor §16's cart/order queries write to; both capabilities'
+writes land on one node, never two competing ones (graph note §0/§1).
+
+### 17.1 `upsert_profile` — `MERGE` + per-field `coalesce()`-guarded `SET`, update-in-place
+
+```cypher
+// $customerId, $name, $deliveryAddress, $now
+MERGE (c:Customer {customerId: $customerId})
+ON CREATE SET c.createdAt = $now
+SET c.name             = coalesce($name, c.name),
+    c.deliveryAddress = coalesce($deliveryAddress, c.deliveryAddress),
+    c.profileUpdatedAt = $now
+RETURN c.customerId AS customerId, c.name AS name, c.deliveryAddress AS deliveryAddress
+```
+**Deliberately not** the `ensure_user`/`ensure_customer` "guarded create, never updates" shape
+(§16.1) — FR-3 requires the opposite: a later-supplied name/address updates the stored profile,
+never frozen after the first write. **Also deliberately not** an unconditional `SET` (the shape
+`write_model_overrides`, §13.1, uses) — that was v1's BLOCKER, caught at plan-gate: `SaveProfileTool`'s
+arguments are genuinely optional, so a partial update (the customer only gives an updated address)
+passes `$name = NULL` meaning "not provided," and an unconditional `SET` would silently null the
+already-stored name, defeating AC-2. The fix is `coalesce($field, c.field)` per data field, so a
+`NULL` argument means "leave this field as it is," never "clear it." `profileUpdatedAt` alone stays
+an unconditional `SET` — every call that reaches this query touched the profile, partial or full.
+**`NULL` has no way to *clear* a field through this query** — nothing in FR-1..FR-4 asks for
+clearing a previously-captured value, only updating one; a caller must never pass `''` to mean "no
+value" (an empty string is a value, not "not provided").
+
+Live-verified in both partial-update directions (graph note §0/§3, `ws_cartprobe_profile_check2`,
+disposable, deleted after): full write (`name='Alice', deliveryAddress='123 Main St'`) → partial
+call with `$name=NULL, $deliveryAddress='456 New Ave'` → `name='Alice'` (**preserved**),
+`deliveryAddress='456 New Ave'` (updated) → partial call with `$name='Bob', $deliveryAddress=NULL`
+→ `name='Bob'` (updated), `deliveryAddress='456 New Ave'` (**preserved**). `count(Customer) = 1`
+throughout both partial calls — no duplicate node from either `MERGE`.
+
+### 17.2 `read_profile` — the one code path for "unset"
+
+```cypher
+// $customerId
+MATCH (c:Customer {customerId: $customerId})
+RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, c.profileUpdatedAt AS profileUpdatedAt
+```
+Zero rows ⇒ no `Customer` node at all yet for this id (nobody has ever interacted with this
+workspace as this customer — cart, order, or profile). A row with `name`/`deliveryAddress` both
+`NULL` ⇒ the customer exists (e.g. from cart activity) but has never given a name/address. Both
+cases mean "ask them" to the calling agent — the distinction is preserved here (never collapsed to
+one shape), per the note's own §4, even though nothing in this requirements doc currently needs
+"brand-new" told apart from "returning, no profile yet."
+
+**Fully implemented (K-054 M6, plan §4 steps 2-3):** `Repository.upsert_profile`/`get_profile`,
+`Services.get_profile`/`save_profile`, `GetProfileTool`/`SaveProfileTool`, the `salesperson@v3`
+version bump (`falkorchat.proof_defs.SALESPERSON_DEF`), and seed/verify data
+(`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, default version bumped to `v3`).

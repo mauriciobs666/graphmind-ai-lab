@@ -1576,6 +1576,63 @@ gq "$WS" "MATCH (n:Order) DETACH DELETE n" > /dev/null
 gq "$WS" "MATCH (n:Cart) DETACH DELETE n" > /dev/null
 gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
 
+# ── §17: durable customer profile (K-054 M6) ─────────────────────────────────
+#
+# Workspace-scoped (ws:test), same Customer anchor §16 reuses — two more
+# nullable properties, no new label/index/constraint. Canonical bodies:
+# QUERIES.md §17.1-§17.2.
+
+echo ""
+echo "▶ §17 durable customer profile — Customer.name/deliveryAddress (K-054 M6)"
+
+UPSERT_PROFILE='MERGE (c:Customer {customerId: $customerId}) ON CREATE SET c.createdAt = $now SET c.name = coalesce($name, c.name), c.deliveryAddress = coalesce($deliveryAddress, c.deliveryAddress), c.profileUpdatedAt = $now RETURN c.customerId AS customerId, c.name AS name, c.deliveryAddress AS deliveryAddress'
+READ_PROFILE='MATCH (c:Customer {customerId: $customerId}) RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, c.profileUpdatedAt AS profileUpdatedAt'
+
+# §17.2 read_profile before any Customer node exists — zero rows
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_no_data_row "§17.2 read_profile with no Customer node yet returns zero rows" "$(printf 'name\ndeliveryAddress\nprofileUpdatedAt')" "$out"
+
+# §17.1 upsert_profile — full write, creates the Customer anchor
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=\"Alice\" deliveryAddress=\"123 Main St\" now=1000 $UPSERT_PROFILE")
+assert_contains "§17.1 upsert_profile full write returns name=Alice" "Alice" "$out"
+assert_contains "§17.1 upsert_profile full write returns deliveryAddress=123 Main St" "123 Main St" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 exactly one Customer node after the full write" "1" "$out"
+prof=$(gp "$WS" "CYPHER customerId=\"cust1\" name=\"Alice\" deliveryAddress=\"123 Main St\" now=1000 $UPSERT_PROFILE")
+assert_index_scan "§17.1 upsert_profile anchors on Customer.customerId index" "$prof"
+
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read_profile after full write: name=Alice" "Alice" "$out"
+assert_contains "§17.2 read_profile after full write: deliveryAddress=123 Main St" "123 Main St" "$out"
+assert_contains "§17.2 read_profile after full write: profileUpdatedAt=1000" "1000" "$out"
+
+# §17.1 partial update #1 — omitted name (NULL) must leave it unchanged; the
+# BLOCKER case v1's unconditional SET got wrong (graph note §0/§3, AC-2)
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=null deliveryAddress=\"456 New Ave\" now=2000 $UPSERT_PROFILE")
+assert_contains "§17.1 partial update (name omitted): name=Alice (preserved)" "Alice" "$out"
+assert_contains "§17.1 partial update (name omitted): deliveryAddress=456 New Ave (updated)" "456 New Ave" "$out"
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read-back confirms name=Alice preserved" "Alice" "$out"
+assert_contains "§17.2 read-back confirms deliveryAddress=456 New Ave updated" "456 New Ave" "$out"
+assert_contains "§17.2 read-back confirms profileUpdatedAt=2000 (bumped on partial call too)" "2000" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 still exactly one Customer node after partial update #1 (no duplicate from MERGE)" "1" "$out"
+
+# §17.1 partial update #2 — the symmetric case: omitted deliveryAddress (NULL)
+# must leave it unchanged while name updates
+out=$(gq "$WS" "CYPHER customerId=\"cust1\" name=\"Bob\" deliveryAddress=null now=3000 $UPSERT_PROFILE")
+assert_contains "§17.1 partial update (address omitted): name=Bob (updated)" "Bob" "$out"
+assert_contains "§17.1 partial update (address omitted): deliveryAddress=456 New Ave (preserved)" "456 New Ave" "$out"
+out=$(rq "$WS" "CYPHER customerId=\"cust1\" $READ_PROFILE")
+assert_contains "§17.2 read-back confirms name=Bob updated" "Bob" "$out"
+assert_contains "§17.2 read-back confirms deliveryAddress=456 New Ave still preserved" "456 New Ave" "$out"
+assert_contains "§17.2 read-back confirms profileUpdatedAt=3000" "3000" "$out"
+out=$(gq "$WS" "MATCH (c:Customer {customerId:'cust1'}) RETURN count(c) AS n")
+assert_contains "§17.1 still exactly one Customer node after partial update #2" "1" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

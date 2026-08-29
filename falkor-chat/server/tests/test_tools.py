@@ -29,6 +29,7 @@ from falkorchat.tools import (
     AddToCartTool,
     ClearCartTool,
     FilterProductsTool,
+    GetProfileTool,
     GraphragRetrieveTool,
     HumanHandoffSignal,
     HumanHandoffTool,
@@ -36,6 +37,7 @@ from falkorchat.tools import (
     PlaceOrderTool,
     PostMessageTool,
     RemoveFromCartTool,
+    SaveProfileTool,
     ToolRegistry,
     UnknownToolError,
     ViewCartTool,
@@ -57,7 +59,8 @@ class StubServices:
     def __init__(self, *, search_rows=None, link_ok=True,
                  products_by_name=None, filter_result=None,
                  add_result=_UNSET, remove_result=_UNSET,
-                 cart_result=None, order_result=_UNSET):
+                 cart_result=None, order_result=_UNSET,
+                 profile_result=None):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -84,6 +87,12 @@ class StubServices:
         self.cart_views: int = 0
         self.cleared: int = 0
         self.ordered: int = 0
+        # §17 durable customer profile (K-054 M6)
+        self._profile_result = profile_result if profile_result is not None else {
+            "name": None, "deliveryAddress": None,
+        }
+        self.profile_reads: int = 0
+        self.saved_profiles: list[dict] = []
 
     def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
         msg_id = f"m{next(self._msg_seq)}"
@@ -130,6 +139,22 @@ class StubServices:
     def place_order(self, ctx):
         self.ordered += 1
         return None if self._order_result is _UNSET else self._order_result
+
+    def get_profile(self, ctx):
+        self.profile_reads += 1
+        return self._profile_result
+
+    def save_profile(self, ctx, *, name=None, delivery_address=None):
+        result = {
+            "name": name if name is not None else self._profile_result.get("name"),
+            "deliveryAddress": (
+                delivery_address if delivery_address is not None
+                else self._profile_result.get("deliveryAddress")
+            ),
+        }
+        self.saved_profiles.append({"name": name, "delivery_address": delivery_address})
+        self._profile_result = result
+        return result
 
 
 class StubEmbedder:
@@ -182,16 +207,18 @@ def test_registry_jsonifies_nonstring_results():
     assert json.loads(reg.dispatch("d", {}, ctx=CTX, run={})) == {"a": 1}
 
 
-def test_build_builtin_registry_registers_all_ten():
-    # K-052/K-053 M6: the salesperson-demo catalog + cart/order tools are all
-    # registered into this same shared registry (the AC-6 fence is per-node
-    # config.tools, not registry membership — the same "present, only offered
-    # where granted" posture human_handoff already established for triage).
+def test_build_builtin_registry_registers_all_twelve():
+    # K-052/K-053/K-054 M6: the salesperson-demo catalog + cart/order + profile
+    # tools are all registered into this same shared registry (the AC-6 fence
+    # is per-node config.tools, not registry membership — the same "present,
+    # only offered where granted" posture human_handoff already established
+    # for triage).
     reg = build_builtin_registry(StubServices(), StubEmbedder(), agent_id="assistant")
     assert set(reg.names()) == {
         "post_message", "graphrag_retrieve", "human_handoff",
         "lookup_product_fact", "filter_products",
         "view_cart", "add_to_cart", "remove_from_cart", "clear_cart", "place_order",
+        "get_profile", "save_profile",
     }
 
 
@@ -625,6 +652,60 @@ def test_place_order_on_empty_cart_returns_an_explanatory_string_not_json():
     assert isinstance(out, str)
     with pytest.raises(json.JSONDecodeError):
         json.loads(out)
+
+
+# ── get_profile / save_profile (K-054 M6, unit, stub services) ──────────────
+
+def test_get_profile_returns_both_fields_none_when_no_profile_yet():
+    svc = StubServices()  # profile_result defaults to {"name": None, "deliveryAddress": None}
+    tool = GetProfileTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == {"name": None, "deliveryAddress": None}
+    assert svc.profile_reads == 1
+
+
+def test_get_profile_returns_the_services_stored_shape():
+    svc = StubServices(profile_result={
+        "name": "Alice", "deliveryAddress": "123 Main St",
+    })
+    tool = GetProfileTool(svc)
+
+    out = json.loads(tool.run({}, ctx=CTX, run={}))
+
+    assert out == {"name": "Alice", "deliveryAddress": "123 Main St"}
+
+
+def test_save_profile_full_write_passes_both_fields_through():
+    svc = StubServices()
+    tool = SaveProfileTool(svc)
+
+    out = json.loads(tool.run(
+        {"name": "Alice", "deliveryAddress": "123 Main St"}, ctx=CTX, run={},
+    ))
+
+    assert out == {"name": "Alice", "deliveryAddress": "123 Main St"}
+    assert svc.saved_profiles == [
+        {"name": "Alice", "delivery_address": "123 Main St"},
+    ]
+
+
+def test_save_profile_omitted_field_is_passed_through_as_none_not_dropped():
+    """AC-2, at the tool layer: an omitted argument must reach `services.save_profile`
+    as `None` (its "not provided, leave unchanged" signal), not be silently
+    coerced to `""` or dropped from the call entirely."""
+    svc = StubServices(profile_result={
+        "name": "Alice", "deliveryAddress": "123 Main St",
+    })
+    tool = SaveProfileTool(svc)
+
+    out = json.loads(tool.run({"deliveryAddress": "456 New Ave"}, ctx=CTX, run={}))
+
+    assert out == {"name": "Alice", "deliveryAddress": "456 New Ave"}
+    assert svc.saved_profiles == [
+        {"name": None, "delivery_address": "456 New Ave"},
+    ]
 
 
 # ── integration: post_message writes the agent message via §4 (durable artifact) ─

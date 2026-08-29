@@ -16,27 +16,31 @@
 # `server/tests/test_order_fulfillment.py`), so the seeded defs and the tested
 # defs cannot drift.
 #
-#   salesperson@v2.1      — kind `conversation`, one `type:'agent'` step
+#   salesperson@v3         — kind `conversation`, one `type:'agent'` step
 #                           (`assistant`, start, waitsForHuman) with the
 #                           catalog-lookup tools (K-052) PLUS the five
 #                           cart/order tools (K-053: `view_cart`, `add_to_cart`,
-#                           `remove_from_cart`, `clear_cart`, `place_order`),
-#                           plus one terminal `decision` step (`ended`) reached
-#                           only via a `ctx.endConversation` truthy guard this
-#                           milestone's tools never set (see proof_defs.py's own
-#                           comment on SALESPERSON_DEF for the full mechanism).
-#                           Topology is byte-identical to v1 — only
+#                           `remove_from_cart`, `clear_cart`, `place_order`)
+#                           PLUS the two durable-profile tools (K-054:
+#                           `get_profile`, `save_profile`), plus one terminal
+#                           `decision` step (`ended`) reached only via a
+#                           `ctx.endConversation` truthy guard this milestone's
+#                           tools never set (see proof_defs.py's own comment on
+#                           SALESPERSON_DEF for the full mechanism). Topology
+#                           is byte-identical to v1 — only
 #                           `config.tools`/`systemPrompt` changed (the
 #                           version-bump discipline, docs/plans/
 #                           workflow-catalog-lookup.md §2.5) — so this bump
 #                           never hits the K-034 409 topology-conflict path.
-#                           `v2.1` (K-056) is a further, narrower bump on top of
-#                           that: same tools/prompt as v2, only `config.model`
+#                           `v2.1` (K-056) was a further, narrower bump on top
+#                           of v2: same tools/prompt as v2, only `config.model`
 #                           added to re-point the `assistant` step at
 #                           `mistralai/ministral-3-3b` (`config.model` is
 #                           create-only too — see proof_defs.py's module
 #                           docstring — so this needed its own version, not an
-#                           in-place edit of v2).
+#                           in-place edit of v2). `v3` (K-054) carries that
+#                           `config.model` line forward unchanged — omitting it
+#                           on a version bump would silently undo the re-point.
 #   order-fulfillment@v1  — kind `process`, the LLM-FREE order-lifecycle proof
 #                           flow (K-053, docs/plans/workflow-cart-and-totals.md
 #                           §3.4): four `human`/`decision` steps, three
@@ -57,10 +61,11 @@
 #                           §4) — not wired to a REST route in this milestone.
 #
 # THIS SCRIPT IS EDITED IN PLACE by each sibling capability (K-054 durable
-# profile, K-055 NL query generation bump `salesperson`'s own version further;
-# K-053 landed `order-fulfillment` alongside it) and re-run — it is the same
-# evolving artifact seed_workflows.sh itself is across K-022/K-024/etc., not a
-# new script per capability (docs/plans/workflow-catalog-lookup.md §3.4).
+# profile bumped `salesperson` to v3; K-055 NL query generation will bump it
+# further to v4; K-053 landed `order-fulfillment` alongside it) and re-run —
+# it is the same evolving artifact seed_workflows.sh itself is across
+# K-022/K-024/etc., not a new script per capability (docs/plans/
+# workflow-catalog-lookup.md §3.4).
 #
 # ⚠️ "Idempotent" means CREATE-ONLY, not update (same caveat as
 # seed_workflows.sh): a property-only edit (step config, guard text) to an
@@ -80,7 +85,7 @@
 #   FALKORDB_PORT                        (default: 6379)
 #   FALKORCHAT_WS_ID                     (default: acme)     — workspace id (graph key ws:<id>)
 #   FALKORCHAT_SALESPERSON_DEF_KEY       (default: salesperson)      — LOCAL to this script
-#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v2.1)            (K-037-style decoupling:
+#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v3)              (K-037-style decoupling:
 #                                        no config var reads either of these two — this
 #                                        def is never an @mention trigger target in this
 #                                        milestone, only ever started/observed directly)
@@ -96,7 +101,7 @@ HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 SALESPERSON_DEF_KEY="${FALKORCHAT_SALESPERSON_DEF_KEY:-salesperson}"
-SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v2.1}"
+SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v3}"
 ORDER_FULFILLMENT_DEF_KEY="${FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY:-order-fulfillment}"
 ORDER_FULFILLMENT_DEF_VERSION="${FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION:-v1}"
 

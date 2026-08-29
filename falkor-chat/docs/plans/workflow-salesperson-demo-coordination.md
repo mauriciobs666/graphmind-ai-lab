@@ -612,7 +612,22 @@ touched:** `docs/requirements/cross-initiative-coordination.md` (repo root) was 
 unit's run — a separate, unrelated `tico`-authored requirements doc (dated today, well-formed,
 clearly a different concurrent interview), not something asked of this delegate and not part of
 this coordination; left completely alone.
-| U24 | `coder` (resume U23) | — | queued | K-054 cluster 2: `tools.py`, `proof_defs.py` (v3), seed/verify scripts, `QUERIES.md`/`test_queries.sh` | — | — |
+| U24 | `coder` (resume U23) | `a792dfe24a7601443` | accepted | K-054 cluster 2: `GetProfileTool`/`SaveProfileTool` (`tools.py`), `SALESPERSON_DEF` v3 (`proof_defs.py`), `seed_salesperson.sh`/`verify_salesperson.sh`/`AGENTS.md`, `docs/QUERIES.md` §17, `test_queries.sh` (+20), `test_tools.py`/`test_salesperson_scaffold.py` | `analyst`/`qa-engineer` (U25/U26, batched w/ U23) → — | 268k tok / 137 tools |
+
+**U24 delivered — verified independently by `teco`, not on the delegate's word alone.** Diff read
+directly: the `config.model` carry-forward into `v3` is exactly as briefed, documented inline;
+`config.tools`/`systemPrompt` extended correctly; `GetProfileTool`/`SaveProfileTool` are thin,
+correct dispatches per plan §3.2. Independently re-ran the full offline suite (**1935 passed/4
+deselected**, matches) and `./scripts/test_queries.sh` (**408/408**, matches). **Independently
+re-mutation-tested the highest-risk spot myself**, not just trusting the report: removed
+`config.model`'s line from `proof_defs.py` on a copied-aside file, re-ran
+`test_salesperson_scaffold.py` — both flagged tests failed with `KeyError: 'model'` exactly as
+claimed, restored, full suite green again. Reseeded `reference` and re-verified `ws:acme` in sync
+(`verify_workflows.sh`/`verify_catalog.sh`/`verify_salesperson.sh acme` all `OK`, `salesperson@v3`
+correct 2-step/1-transition topology, no stray graphs). Confirmed `docs/QUERIES.md` §17 exists as
+claimed. **K-054 implementation-complete, not yet gated** — proceeding to the batched `analyst`
+(U25) + `qa-engineer` (U26) gates next, covering both clusters (U23+U24) together as one diff, same
+posture K-052/K-053 used at their equivalent checkpoint.
 | U25 | `analyst` (resume) | — | queued | code review, K-054 diff | — | — |
 | U26 | `qa-engineer` (resume) | — | queued | live acceptance, K-054 (profile persistence) | — | — |
 | U27 | `coder` | — | queued | K-055 cluster 1: `querygen.py` (DSL + unit tests incl. reviewer's escape fixtures) | — | — |
