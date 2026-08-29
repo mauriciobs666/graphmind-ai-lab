@@ -226,6 +226,53 @@ delegate's `kaizen_team` entry for the LM-Studio `opencode.json` baseURL gotcha 
 **Note:** my own reseed hit a malformed `bootstrap_schema.sh` invocation on my part (a stray
 `ws:EMBEDDING_DIM=1024` graph from a bad arg) — caught via `GRAPH.LIST` before verifying sync,
 `GRAPH.DELETE`d immediately; no data at risk (empty scratch graph), not the delegate's error.
+Committed (`03a3c8c`).
+
+| U44 | `qa-engineer` (fresh — standing direction) | `a433bbf8bbe3826bf` | accepted | `docs/test-plans/workflow-{catalog-lookup2,cart-and-totals2}.md`, `docs/test-reports/workflow-{catalog-lookup2,cart-and-totals2}-report.md` | self → **K-052 PASS WITH DEFECTS, K-053 PASS WITH DEFECTS** (both qwen-era D-1 mechanisms confirmed resolved) | 218k tok / 150 tools |
+
+**U44 delivered — both qwen-era K-056 D-1 findings confirmed resolved on `ministral-3-3b`, verified
+independently by `teco`, not on the delegate's word alone.** Read both new reports in full: the
+exact repro sequences from the original qwen-era reports were replayed verbatim, every claim
+cross-checked against `Message.toolsUsed` and ground-truth Cypher, not trusted from reply text. **New
+non-blocking findings** (both correctly judged non-gating, consistent with the brief): K-052 — a
+cosmetic `$`/`€` currency-symbol inconsistency (MINOR, cosmetic only, no AC impact). K-053 — (D-1)
+a cart-mutation reply-completeness gap on `remove_from_cart`/`add_to_cart` that extends the
+original report's own D-2 finding and confirms it's model-independent, exactly as predicted (write
+always correct, only the reply summary sometimes incomplete); (D-2, informational, explicitly not a
+gate per the brief) Ministral's own known duplicate-instruction defect reproduced once live on the
+real `@mention` path, exactly matching the ml-note's own characterization (honestly-grounded,
+self-disclosing) — a second independent confirmation, not new information, and correctly not
+weighed against the verdict. Independently re-ran both the offline suite (**1920 passed/4
+deselected**, matches) and `./scripts/test_queries.sh` (**387/387**, matches); reseeded and
+re-verified `ws:acme`/`reference` in sync (`verify_workflows.sh`/`verify_catalog.sh`/
+`verify_salesperson.sh acme` all `OK`, `salesperson@v2.1` correct topology, no stray graphs this
+time). Confirmed the delegate's `kaizen_team` entry (the `POST .../input` body-nesting gotcha) is
+present. `Extended by:`/parent-pointer edits on both original test plans read correctly, following
+the `llm-provider-config`/`llm-provider-config2` precedent as instructed.
+
+**Out-of-scope observation, flagged not acted on:** `git status` at this point also shows
+`.claude/settings.json` modified (repo root, outside `falkor-chat/` and outside anything asked of
+any delegate in this coordination) — `defaultMode` changed from `acceptEdits` to
+`bypassPermissions`, plus a new `ask:` allowlist for specific destructive ops (`FLUSHALL`,
+`GRAPH.DELETE`, `docker system prune`, etc.) and `docs/BACKLOG.md` edits. Not committed, not
+reverted, not otherwise acted on by `teco` — outside this coordination's scope and outside `teco`'s
+own write grant, and a permission-mode change is exactly the class of thing that needs the actual
+user's own eyes, not a coordinator's guess at intent. Surfaced in the session report.
+
+**K-054 unblocked.** Both capabilities hold on `mistralai/ministral-3-3b` with no regression and no
+blocking defect — per the already-agreed plan, resuming K-054 (U23/U24, already queued/speced)
+next.
+
+**U44 dispatched.** Re-run K-052's (`docs/test-plans/workflow-catalog-lookup.md`) and K-053's
+(`docs/test-plans/workflow-cart-and-totals.md`) full AC lists live against the now-repointed
+`salesperson@v2.1` (`mistralai/ministral-3-3b`), specifically to confirm the prior qwen-era D-1
+findings (skip-and-fabricate in both reports; the write-tool escalation on `remove_from_cart` found
+just before this pilot decision) do not reproduce, and to watch for (not gate on) Ministral's own
+known duplicate-instruction defect. Naming convention: pointed at the `llm-provider-config.md` /
+`llm-provider-config2.md` (+ matching `-report`) precedent for a second QA cycle against a changed
+underlying dependency, same test-plan content reused where unchanged, new `-report` per collision
+rule 5 (ordinal on slug) since the earlier reports are already executed-against — left the exact
+filenames to the reviewer's own judgment per that precedent.
 
 **U43 brief given:** goal — re-point the shared `salesperson` demo agent's LLM from
 `qwen/qwen3-4b-2507` to `mistralai/ministral-3-3b`, scoped to this def only. Read
