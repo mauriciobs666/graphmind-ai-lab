@@ -1,11 +1,24 @@
 {
   "enabledMcpjsonServers": ["cypher"],
   "permissions": {
-    "defaultMode": "acceptEdits",
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash",
       "Edit(**)",
       "mcp__cypher__query"
+    ],
+    "ask": [
+      "Bash(*FLUSHALL*)",
+      "Bash(*FLUSHDB*)",
+      "Bash(*GRAPH.DELETE*)",
+      "Bash(*docker system prune*)",
+      "Bash(*docker volume rm*)",
+      "Bash(*docker volume prune*)",
+      "Bash(*docker rm -f*)",
+      "Bash(*down -v*)",
+      "Bash(*down --volumes*)",
+      "Bash(*pipeline.sh*--reset*)",
+      "Edit(**/docs/BACKLOG.md)"
     ]
   }
 }
