@@ -22,6 +22,7 @@ import json
 import pytest
 from conftest import TEST_EMBEDDING_DIM
 
+from falkorchat import querygen
 from falkorchat.config import CallContext
 from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
@@ -36,6 +37,7 @@ from falkorchat.tools import (
     LookupProductFactTool,
     PlaceOrderTool,
     PostMessageTool,
+    QueryGraphDataTool,
     RemoveFromCartTool,
     SaveProfileTool,
     ToolRegistry,
@@ -60,7 +62,7 @@ class StubServices:
                  products_by_name=None, filter_result=None,
                  add_result=_UNSET, remove_result=_UNSET,
                  cart_result=None, order_result=_UNSET,
-                 profile_result=None):
+                 profile_result=None, structured_query_rows=None):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -93,6 +95,11 @@ class StubServices:
         }
         self.profile_reads: int = 0
         self.saved_profiles: list[dict] = []
+        # §18 structured natural-language query generation (K-055 M6)
+        self._structured_query_rows = (
+            [] if structured_query_rows is None else structured_query_rows
+        )
+        self.structured_query_calls: list[dict] = []
 
     def post_agent_answer(self, ctx, *, thread_id, text, mentions=None, seeds=None):
         msg_id = f"m{next(self._msg_seq)}"
@@ -156,6 +163,12 @@ class StubServices:
         self._profile_result = result
         return result
 
+    def run_structured_query(self, ctx, graph_key, compiled, *, timeout=None):
+        self.structured_query_calls.append(
+            {"graph_key": graph_key, "compiled": compiled, "timeout": timeout}
+        )
+        return list(self._structured_query_rows)
+
 
 class StubEmbedder:
     def __init__(self, vec=None):
@@ -165,6 +178,20 @@ class StubEmbedder:
     def embed(self, text):
         self.calls.append(text)
         return list(self._vec)
+
+
+class StubQueryLLM:
+    """Stub LLM returning one canned reply, recording the messages it was
+    sent — mirrors `test_extraction.py`'s `_ReplyLLM` (same seam: `.complete`
+    is what a `querygen`-filling structured-completion call uses)."""
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self.calls: list[list[dict]] = []
+
+    def complete(self, messages):
+        self.calls.append(messages)
+        return self._text
 
 
 class _FakeTool:
@@ -207,18 +234,18 @@ def test_registry_jsonifies_nonstring_results():
     assert json.loads(reg.dispatch("d", {}, ctx=CTX, run={})) == {"a": 1}
 
 
-def test_build_builtin_registry_registers_all_twelve():
-    # K-052/K-053/K-054 M6: the salesperson-demo catalog + cart/order + profile
-    # tools are all registered into this same shared registry (the AC-6 fence
-    # is per-node config.tools, not registry membership — the same "present,
-    # only offered where granted" posture human_handoff already established
-    # for triage).
+def test_build_builtin_registry_registers_all_thirteen():
+    # K-052/K-053/K-054/K-055 M6: the salesperson-demo catalog + cart/order +
+    # profile + structured-query tools are all registered into this same
+    # shared registry (the AC-6 fence is per-node config.tools, not registry
+    # membership — the same "present, only offered where granted" posture
+    # human_handoff already established for triage).
     reg = build_builtin_registry(StubServices(), StubEmbedder(), agent_id="assistant")
     assert set(reg.names()) == {
         "post_message", "graphrag_retrieve", "human_handoff",
         "lookup_product_fact", "filter_products",
         "view_cart", "add_to_cart", "remove_from_cart", "clear_cart", "place_order",
-        "get_profile", "save_profile",
+        "get_profile", "save_profile", "query_graph_data",
     }
 
 
@@ -706,6 +733,159 @@ def test_save_profile_omitted_field_is_passed_through_as_none_not_dropped():
     assert svc.saved_profiles == [
         {"name": None, "delivery_address": "456 New Ave"},
     ]
+
+
+# ── query_graph_data (K-055 M6, unit, stub services + stub LLM) ─────────────
+
+_CATALOG_FILTER_REPLY = (
+    '{"matches": [{"var": "p", "label": "Product", '
+    '"filters": [{"property": "category", "op": "=", "value": "Audio"}]}], '
+    '"returns": ["p.name", "p.price"]}'
+)
+
+
+def test_query_graph_data_unknown_dataset_abstains_without_calling_the_llm():
+    svc = StubServices()
+    llm = StubQueryLLM(_CATALOG_FILTER_REPLY)
+    tool = QueryGraphDataTool(svc, llm=llm)
+
+    out = json.loads(
+        tool.run({"question": "what audio products?", "dataset": "nope"}, ctx=CTX, run={})
+    )
+
+    assert out == {"items": [], "finding": "unknown dataset"}
+    assert llm.calls == []  # never resolves/calls the model for an unknown dataset
+
+
+def test_query_graph_data_happy_path_compiles_and_returns_items():
+    rows = [{"p.name": "Bluetooth Speaker", "p.price": 49.99}]
+    svc = StubServices(structured_query_rows=rows)
+    llm = StubQueryLLM(_CATALOG_FILTER_REPLY)
+    tool = QueryGraphDataTool(svc, llm=llm)
+
+    out = json.loads(
+        tool.run({"question": "what audio products do you have?", "dataset": "catalog"},
+                 ctx=CTX, run={})
+    )
+
+    assert out == {"items": rows}
+    # the internal structured-completion call actually happened
+    assert len(llm.calls) == 1
+    assert llm.calls[0][1] == {"role": "user", "content": "what audio products do you have?"}
+    # compiled against the resolved (reference-graph) catalog schema, default timeout
+    [call] = svc.structured_query_calls
+    assert call["graph_key"] == "reference"
+    assert call["timeout"] == querygen.DEFAULT_QUERY_TIMEOUT_MS
+    assert call["compiled"].cypher == (
+        "MATCH (p:Product) WHERE p.category = $p0 RETURN p.name, p.price LIMIT $limit"
+    )
+    assert call["compiled"].params == {"p0": "Audio", "limit": 20}
+
+
+def test_query_graph_data_workspace_scoped_dataset_resolves_graph_key_from_ctx():
+    rows = [{"e.type": "Organization"}]
+    svc = StubServices(structured_query_rows=rows)
+    reply = (
+        '{"matches": [{"var": "e", "label": "Entity", '
+        '"filters": [{"property": "nameNormalized", "op": "=", "value": "acme corp"}]}], '
+        '"returns": ["e.type"]}'
+    )
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(
+        tool.run({"question": "what type of entity is Acme Corp?", "dataset": "knowledge_base"},
+                 ctx=CTX, run={})
+    )
+
+    assert out == {"items": rows}
+    [call] = svc.structured_query_calls
+    assert call["graph_key"] == f"ws:{CTX.ws}"  # knowledge_base is workspace-scoped
+
+
+def test_query_graph_data_abstains_on_unparseable_reply():
+    svc = StubServices()
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM("sorry, I'm not sure how to answer that"))
+
+    out = json.loads(tool.run({"question": "anything", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []  # never reaches compile/execute
+
+
+def test_query_graph_data_abstains_on_pydantic_validation_failure():
+    # `extra="forbid"` rejection — a smuggled/unexpected field.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": []}], '
+        '"returns": ["p.name"], "raw_cypher": "MATCH (n) DETACH DELETE n"}'
+    )
+    svc = StubServices()
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "anything", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_abstains_on_compile_rejection_for_unregistered_label():
+    # Valid at the Pydantic layer (label is a plain str there — no per-dataset
+    # allowlist until `querygen.compile`), but not a label `CATALOG_SCHEMA`
+    # registers — `compile()`'s own ValueError must be absorbed here, never
+    # propagate as a crash.
+    reply = '{"matches": [{"var": "p", "label": "SecretInternalTable", "filters": []}], "returns": ["p.name"]}'
+    svc = StubServices()
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "anything", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_abstains_when_rows_come_back_empty():
+    svc = StubServices(structured_query_rows=[])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(_CATALOG_FILTER_REPLY))
+
+    out = json.loads(
+        tool.run({"question": "what audio products?", "dataset": "catalog"}, ctx=CTX, run={})
+    )
+
+    assert out == {"items": [], "finding": "no matching data found"}
+
+
+def test_query_graph_data_ignores_a_dataset_field_the_model_supplied_and_uses_the_arguments_one():
+    # The internal prompt never asks the model to restate `dataset`, but a
+    # tolerant parse could still see one if the model added it anyway — the
+    # tool must force the outer call's own `dataset` argument regardless.
+    reply = (
+        '{"dataset": "knowledge_base", "matches": [{"var": "p", "label": "Product", '
+        '"filters": []}], "returns": ["p.name"]}'
+    )
+    rows = [{"p.name": "Widget"}]
+    svc = StubServices(structured_query_rows=rows)
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "anything", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": rows}
+    [call] = svc.structured_query_calls
+    assert call["graph_key"] == "reference"  # catalog's graph_key, not knowledge_base's
+
+
+def test_query_graph_data_schema_description_is_generated_from_the_dataset_registry():
+    tool = QueryGraphDataTool(StubServices(), llm=StubQueryLLM(""))
+    description = tool.schema["function"]["description"]
+    for name, schema in querygen.DATASET_REGISTRY.items():
+        assert name in description
+        for label in schema.labels:
+            assert label in description
+
+
+def test_query_graph_data_offers_both_registered_datasets_in_the_enum():
+    tool = QueryGraphDataTool(StubServices(), llm=StubQueryLLM(""))
+    params = tool.schema["function"]["parameters"]
+    assert set(params["properties"]["dataset"]["enum"]) == set(querygen.DATASET_REGISTRY)
+    assert params["required"] == ["question", "dataset"]
 
 
 # ── integration: post_message writes the agent message via §4 (durable artifact) ─

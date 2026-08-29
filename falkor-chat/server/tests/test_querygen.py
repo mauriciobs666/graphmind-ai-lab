@@ -271,6 +271,27 @@ def test_compile_rejects_unregistered_label():
         qg_compile(request, CATALOG_SCHEMA)
 
 
+def test_compile_rejects_unregistered_label_for_bare_aggregate_with_no_property():
+    # `returns=["count(p)"]` has no `.property` to decompose, so the
+    # property-allowlist check never fires for this shape — the
+    # label-registration guard is the SOLE line of defense here. Pins that
+    # guard specifically, since `test_compile_rejects_unregistered_label`
+    # above (`returns=["p.name"]`) happens to also be caught by the
+    # property-allowlist check and so doesn't prove the label check alone is
+    # load-bearing.
+    match = QueryMatch.model_construct(var="p", label="NotARealLabel", filters=[])
+    request = QueryRequest.model_construct(
+        dataset="catalog",
+        matches=[match],
+        returns=["count(p)"],
+        order_by=None,
+        order_dir="ASC",
+        limit=20,
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, CATALOG_SCHEMA)
+
+
 def test_compile_rejects_unregistered_property_on_filter():
     match = QueryMatch.model_construct(
         var="p",

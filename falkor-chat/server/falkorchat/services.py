@@ -32,6 +32,7 @@ from .modelconfig import ModelConfigError, ModelResolutionError
 # repository owns them (the §2/§7 status-row contract, the §6 embedding-write
 # validation, the §11 workflow error types); they live there only to avoid an
 # import cycle.
+from .querygen import CompiledQuery
 from .repository import EmbeddingDimensionError as EmbeddingDimensionError
 from .repository import MemberIdCollisionError as MemberIdCollisionError
 from .repository import Repository
@@ -2862,3 +2863,37 @@ class Services:
             delivery_address=delivery_address, now=self._clock(),
         )
         return {"name": result["name"], "deliveryAddress": result["deliveryAddress"]}
+
+    # ── §18 Structured natural-language query generation (K-055 M6) ───────────
+    #
+    # `docs/plans/workflow-nl-query-generation.md` §3.1 step 5 / §4 step 3.
+
+    def run_structured_query(
+        self, ctx: CallContext, graph_key: str, compiled: CompiledQuery, *,
+        timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """A thin pass-through to `repository.run_readonly_query` — **no
+        additional logic here, deliberately**: the whole safety argument
+        lives in `querygen` (Layer 1, structural) + `repository` (Layer 2,
+        engine-enforced `.ro_query`), never duplicated at this layer — a
+        services-layer check here could be bypassed by a future caller that
+        reaches `repository.run_readonly_query` directly, so it isn't added.
+
+        `graph_key` is already resolved by the caller (`QueryGraphDataTool`,
+        from `querygen.DatasetSchema.graph_key`) — a workspace-scoped dataset
+        already folds `ctx.ws` into it before this call, so `ctx` is accepted
+        for interface parity with every other service method here (and for
+        any future caller that wants it) but not otherwise read.
+
+        `timeout=None` (the default) means "use
+        `repository.run_readonly_query`'s own default
+        (`querygen.DEFAULT_QUERY_TIMEOUT_MS`)" — the kwarg is forwarded only
+        when the caller actually supplied a value, so a bare
+        `run_structured_query(ctx, graph_key, compiled)` call keeps that
+        safety-margin default rather than silently forwarding a literal
+        `None` and disabling the timeout entirely (the FalkorDB client's own
+        `ro_query(..., timeout=None)` means "no bound").
+        """
+        if timeout is None:
+            return self._repo.run_readonly_query(graph_key, compiled)
+        return self._repo.run_readonly_query(graph_key, compiled, timeout=timeout)

@@ -3433,3 +3433,117 @@ def test_profile_persists_across_repository_instances_ac1(repo):
     assert profile == {
         "name": "Alice", "deliveryAddress": "123 Main St", "profileUpdatedAt": 1000,
     }
+
+
+# ── §18 run_readonly_query (K-055 M6, cluster 2) ─────────────────────────────
+#
+# `docs/plans/workflow-nl-query-generation.md` §3.1 step 5. Exercises
+# `run_readonly_query` end to end against the live `ws:test` graph — building
+# a real `CompiledQuery` via `querygen.compile` against an ad hoc
+# `DatasetSchema` naming an existing label/property (`Channel`), never against
+# the shared `reference`/catalog schema (AGENTS.md's "probing shared graph
+# state without mutating it" posture — this stays entirely inside the
+# per-test-wiped `ws:test` graph the `repo` fixture already provides). Plus
+# two static regressions (plan §5b) pinning Layer 2's own enforcement.
+
+import ast  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from falkorchat.querygen import (  # noqa: E402
+    DatasetSchema,
+    QueryFilter,
+    QueryMatch,
+    QueryRequest,
+)
+from falkorchat.querygen import compile as qg_compile  # noqa: E402
+
+_REPOSITORY_PATH = Path(__file__).resolve().parents[1] / "falkorchat" / "repository.py"
+
+
+def test_run_readonly_query_executes_a_compiled_query_and_returns_dict_rows(repo):
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    schema = DatasetSchema(
+        graph_key="ws:test", labels={"Channel": frozenset({"name", "channelId"})}
+    )
+    request = QueryRequest(
+        dataset="probe",
+        matches=[
+            QueryMatch(
+                var="c", label="Channel",
+                filters=[QueryFilter(property="channelId", op="=", value="c1")],
+            )
+        ],
+        returns=["c.name", "c.channelId"],
+    )
+    compiled = qg_compile(request, schema)
+
+    rows = repo.run_readonly_query("ws:test", compiled)
+
+    # Column names are the raw RETURN expression text FalkorDB assigns when no
+    # `AS` alias is present (`querygen.compile` never aliases, §3.1) — "c.name",
+    # not "name".
+    assert rows == [{"c.name": "general", "c.channelId": "c1"}]
+
+
+def test_run_readonly_query_returns_empty_list_for_no_match(repo):
+    schema = DatasetSchema(
+        graph_key="ws:test", labels={"Channel": frozenset({"name", "channelId"})}
+    )
+    request = QueryRequest(
+        dataset="probe",
+        matches=[
+            QueryMatch(
+                var="c", label="Channel",
+                filters=[QueryFilter(property="channelId", op="=", value="nonexistent")],
+            )
+        ],
+        returns=["c.name"],
+    )
+    compiled = qg_compile(request, schema)
+
+    assert repo.run_readonly_query("ws:test", compiled) == []
+
+
+def _load_method(name: str) -> ast.FunctionDef:
+    tree = ast.parse(_REPOSITORY_PATH.read_text(encoding="utf-8"), filename=str(_REPOSITORY_PATH))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"{name!r} not found in repository.py")
+
+
+def test_run_readonly_query_never_calls_query_or_profile():
+    """Static regression (plan §5b): `run_readonly_query`'s own body has no
+    code path that could call `.query(...)`/`.profile(...)` — only
+    `.ro_query(...)`, the engine-enforced Layer 2 backstop that holds even if
+    `querygen.compile` itself has a defect."""
+    method = _load_method("run_readonly_query")
+    forbidden = [
+        node.func.attr
+        for node in ast.walk(method)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in ("query", "profile")
+    ]
+    assert forbidden == []
+
+
+def _mentions_compiled_query(node: ast.AST) -> bool:
+    return any(isinstance(n, ast.Name) and n.id == "CompiledQuery" for n in ast.walk(node))
+
+
+def test_compiled_query_type_only_accepted_by_run_readonly_query():
+    """Static regression (plan §5b/§6): `CompiledQuery` is accepted as a
+    parameter's annotated type by exactly one method in this file —
+    `run_readonly_query` — so "only `querygen.compile`'s output ever reaches
+    this method" is a type-checker-visible constraint another method can't
+    quietly also accept."""
+    tree = ast.parse(_REPOSITORY_PATH.read_text(encoding="utf-8"), filename=str(_REPOSITORY_PATH))
+    accepting: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for arg in node.args.args + node.args.kwonlyargs:
+            if arg.annotation is not None and _mentions_compiled_query(arg.annotation):
+                accepting.append(node.name)
+    assert accepting == ["run_readonly_query"]

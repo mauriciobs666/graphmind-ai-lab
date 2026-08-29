@@ -65,6 +65,16 @@ Built-ins (§4):
     yet" is the ordinary first-conversation state here, not an error/abstention case (unlike
     the catalog/cart tools' "unknown name" case). `save_profile`'s two arguments are both
     optional; omitting one leaves that field's stored value unchanged, it never clears it.
+  * `query_graph_data` (K-055 M6, `docs/plans/workflow-nl-query-generation.md` §3.1/§3.4) —
+    the `salesperson` demo's arbitrarily-phrased structured-query capability. The model's own
+    arguments (`question`, `dataset`) are not the answer: this tool makes a second, internal,
+    non-agent-loop structured-completion LLM call whose only allowed output shape is
+    `querygen.QueryRequest`, which `querygen.compile` turns into a `CompiledQuery` run via
+    `services.run_structured_query` → `repository.run_readonly_query` (always `.ro_query`, never
+    a write — FR-3/FR-3a's structural, engine-backed non-mutation guarantee). Abstains
+    `{"items": [], "finding": "no matching data found"}` on any unparseable/schema-invalid
+    completion or empty result — same idiom as `graphrag_retrieve`/the catalog tools, never a
+    fabricated answer.
 
 MCP-client seam (U10 / FR-5c): `McpToolClient` lists + calls tools on an **external** MCP
 server and registers each as an `McpTool` so an MCP-exposed tool is indistinguishable from a
@@ -81,8 +91,12 @@ import threading
 from concurrent.futures import Future
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+
+from . import querygen
 from .config import CallContext
 from .embedding import Embedder
+from .llm import extract_own_line_json_object
 from .modelconfig import StaticModelGateway
 from .services import UnknownMemberError
 
@@ -792,6 +806,170 @@ class SaveProfileTool:
         return json.dumps(result)
 
 
+# ── query_graph_data (K-055 M6) ───────────────────────────────────────────────
+#
+# `docs/plans/workflow-nl-query-generation.md` §3.1/§3.4. FR-1/FR-2's arbitrary-
+# phrasing answer over structured graph data, structurally incapable of a
+# mutating query (FR-3/FR-3a — see `querygen`'s own module docstring for the
+# full two-layer safety argument this tool's Layer 1 half depends on).
+
+def _describe_dataset_schema(schema: querygen.DatasetSchema) -> str:
+    """One line per dataset's labels + registered properties — shared by both
+    the outer tool schema's `description` (every dataset, so the routing model
+    knows what each holds) and the internal structured-completion system
+    prompt (one resolved dataset, so the filling model knows its exact
+    allowlist). Generated from `querygen.DATASET_REGISTRY`/`DatasetSchema`
+    directly (plan §3.3) — never hand-written prose that could drift from the
+    registry."""
+    return "; ".join(
+        f"{label} (properties: {', '.join(sorted(props))})"
+        for label, props in schema.labels.items()
+    )
+
+
+def _describe_all_datasets() -> str:
+    return "\n".join(
+        f"- {name}: {_describe_dataset_schema(schema)}"
+        for name, schema in querygen.DATASET_REGISTRY.items()
+    )
+
+
+# The internal, non-agent-loop structured-completion call's system prompt
+# (§3.1 step 2) — mirrors `extraction._SYSTEM_PROMPT`'s own "reply with a
+# single JSON object and nothing else, in exactly this shape" discipline,
+# parsed the same fence-tolerant way (`llm.extract_own_line_json_object`).
+# `dataset` is deliberately NOT part of the shape the model fills: the dataset
+# was already selected by the outer tool call's own argument, so this tool
+# injects it itself rather than asking the filling model to restate (and
+# possibly contradict) it.
+_QUERY_REQUEST_INSTRUCTIONS = (
+    "You translate a natural-language question into a small, structured "
+    "query against ONE graph dataset. Reply with a single JSON object and "
+    "nothing else, in exactly this shape:\n"
+    '{{"matches": [{{"var": "<short lowercase identifier, e.g. \'p\' or \'e\'>", '
+    '"label": "<one of the labels listed below>", '
+    '"filters": [{{"property": "<one of the properties listed for that label>", '
+    '"op": "<one of = <> < <= > >=>", "value": <a string, number, or boolean>}}]}}], '
+    '"returns": ["<var>.<property>", or "count(<var>)"/"count(<var>.<property>)"/'
+    '"avg(...)"/"min(...)"/"max(...)" the same way], '
+    '"order_by": "<var>.<property>" (omit if not sorting), '
+    '"order_dir": "ASC" or "DESC" (default ASC), '
+    '"limit": <integer between 1 and 50, default 20>}}\n\n'
+    "`matches` has exactly one entry. Use ONLY the labels and properties "
+    "listed below for this dataset — never invent one. Reply with your best "
+    "single JSON object even if you are unsure; never reply with prose.\n\n"
+    "This dataset's schema:\n{dataset_schema}"
+)
+
+
+def _build_query_request_system_prompt(schema: querygen.DatasetSchema) -> str:
+    return _QUERY_REQUEST_INSTRUCTIONS.format(dataset_schema=_describe_dataset_schema(schema))
+
+
+class QueryGraphDataTool:
+    """FR-1/FR-2/FR-3 (K-055 M6) — answer an arbitrarily-phrased question
+    against structured graph data via the constrained `querygen` DSL (plan
+    §3.1/§3.4). Use this when the question isn't one of the fixed catalog
+    lookups/filters and isn't free-text-retrievable via `graphrag_retrieve`.
+
+    The model's own function-call arguments are **not** the answer — they
+    select a `dataset` and restate the `question`. This tool then makes a
+    **second, internal, non-agent-loop** structured-completion LLM call
+    (resolved through the same `ModelGateway` `step` kind `_run_agent_node`
+    already uses, `executor.py`) whose only allowed output shape is
+    `querygen.QueryRequest`, parsed via the same fence-tolerant
+    `llm.extract_own_line_json_object` helper `extraction.py` already proved
+    for a different feature — reused here, never a second,
+    independently-written parser.
+
+    Every failure short of a genuine infrastructure fault — an unparseable or
+    schema-invalid structured completion, or a `querygen.compile` rejection
+    (e.g. the model named a label/property outside the resolved dataset's
+    allowlist) — returns the same abstention shape as "no matching data
+    found," never a fabricated answer and never a crash: mirrors
+    `evaluate_guard`'s "bias to decline" posture and every other lookup
+    tool's abstention convention in this module. A genuine model-resolution
+    or provider-call failure (`ModelResolutionError`/`ProviderCallError`) is
+    **not** caught here — the same posture `GraphragRetrieveTool` already
+    has for its own embedder call: that is an infrastructure fault, not a
+    bad model answer, and this module's tools never swallow those.
+    """
+
+    name = "query_graph_data"
+
+    def __init__(self, services: Any, *, llm: Any = None, models: Any = None) -> None:
+        self._services = services
+        # Same FR-4 sugar `GraphragRetrieveTool` already uses: a directly-
+        # injected `llm=` stub wraps into a `StaticModelGateway`; production
+        # passes the real `models=` gateway instead.
+        self._models = models or StaticModelGateway(llm=llm)
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": (
+                    "Answer an arbitrarily-phrased question against structured "
+                    "graph data — not limited to a fixed catalog lookup or "
+                    "filter. Use this when the question needs a fact, a filter, "
+                    "or an aggregate (e.g. a count) over one of the datasets "
+                    "below, and graphrag_retrieve's free-text retrieval isn't "
+                    "the right fit. Available datasets:\n"
+                    f"{_describe_all_datasets()}"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "The natural-language question to answer.",
+                        },
+                        "dataset": {
+                            "type": "string",
+                            "enum": list(querygen.DATASET_REGISTRY),
+                            "description": "Which dataset to query.",
+                        },
+                    },
+                    "required": ["question", "dataset"],
+                },
+            },
+        }
+
+    def run(self, arguments: dict[str, Any], *, ctx: CallContext,
+            run: dict[str, Any]) -> str:
+        schema = querygen.DATASET_REGISTRY.get(arguments.get("dataset"))
+        if schema is None:
+            return json.dumps({"items": [], "finding": "unknown dataset"})
+
+        question = arguments.get("question", "")
+        llm = self._models.llm("step", ws=ctx.ws)
+        reply = llm.complete([
+            {"role": "system", "content": _build_query_request_system_prompt(schema)},
+            {"role": "user", "content": question},
+        ])
+        parsed = extract_own_line_json_object(reply, require_key="matches")
+        if parsed is None:
+            return json.dumps({"items": [], "finding": "no matching data found"})
+
+        try:
+            request = querygen.QueryRequest.model_validate(
+                {**parsed, "dataset": arguments["dataset"]}
+            )
+            compiled = querygen.compile(request, schema)
+        except (ValidationError, ValueError):
+            return json.dumps({"items": [], "finding": "no matching data found"})
+
+        graph_key = schema.graph_key or f"ws:{ctx.ws}"
+        rows = self._services.run_structured_query(
+            ctx, graph_key, compiled, timeout=querygen.DEFAULT_QUERY_TIMEOUT_MS,
+        )
+        if not rows:
+            return json.dumps({"items": [], "finding": "no matching data found"})
+        return json.dumps({"items": rows})
+
+
 class HumanHandoffSignal(Exception):
     """Control signal raised by `human_handoff`: suspend the run pending a human.
 
@@ -874,6 +1052,7 @@ def build_builtin_registry(
         PlaceOrderTool(services),
         GetProfileTool(services),
         SaveProfileTool(services),
+        QueryGraphDataTool(services, models=models),
     ])
 
 

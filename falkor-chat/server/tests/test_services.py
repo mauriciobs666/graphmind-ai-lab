@@ -47,6 +47,13 @@ OK = MessageWriteStatus(written=True, had_head=False, dup_msg=False, author_foun
 DUP = MessageWriteStatus(written=False, had_head=False, dup_msg=True, author_found=True)
 HAD_HEAD = MessageWriteStatus(written=False, had_head=True, dup_msg=False, author_found=True)
 
+# Distinguishes "the caller omitted `timeout`" from "the caller passed `None`
+# explicitly" on `FakeRepo.run_readonly_query` — a bare `None` default on that
+# fake method would make the two indistinguishable, which is exactly the
+# distinction `test_run_structured_query_omitted_timeout_lets_repo_default_apply`
+# below needs to pin (§18, K-055 M6).
+_TIMEOUT_OMITTED = object()
+
 
 class FakeRepo:
     """Records calls and simulates the small amount of state services depend on."""
@@ -110,6 +117,11 @@ class FakeRepo:
         # "deliveryAddress", "profileUpdatedAt"}; absent key means no
         # `Customer` node at all (mirrors repository.get_profile's `None`).
         self.profiles: dict[str, dict] = {}
+        # §18 structured natural-language query generation (K-055 M6) —
+        # scripted rows `run_readonly_query` returns; every call is recorded
+        # on `self.calls` so a pass-through's exact forwarded args are
+        # checkable.
+        self.structured_query_rows: list[dict] = []
 
     # writes / lookups used by services
     def create_channel(self, ws, *, channel_id, name, created_at):
@@ -567,6 +579,12 @@ class FakeRepo:
             "customerId": customer_id, "name": stored["name"],
             "deliveryAddress": stored["deliveryAddress"],
         }
+
+    # ── §18 Structured natural-language query generation (K-055 M6) ─────────
+
+    def run_readonly_query(self, graph_key, compiled, *, timeout=_TIMEOUT_OMITTED):
+        self.calls.append(("run_readonly_query", graph_key, compiled, timeout))
+        return self.structured_query_rows
 
 
 _UNSET = object()
@@ -3883,3 +3901,59 @@ def test_save_profile_partial_update_omitted_address_leaves_address_unchanged():
 
     assert result == {"name": "Bob", "deliveryAddress": "123 Main St"}
     assert svc.get_profile(CTX) == {"name": "Bob", "deliveryAddress": "123 Main St"}
+
+
+# ── §18 run_structured_query (K-055 M6) — thin pass-through only ────────────
+
+
+def test_run_structured_query_forwards_rows_from_repo():
+    repo = FakeRepo()
+    repo.structured_query_rows = [{"p.name": "Widget"}]
+    svc = make_service(repo)
+    compiled = object()  # a plain sentinel — the pass-through never inspects it
+
+    rows = svc.run_structured_query(CTX, "reference", compiled)
+
+    assert rows == [{"p.name": "Widget"}]
+
+
+def test_run_structured_query_forwards_graph_key_and_compiled_unchanged():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    compiled = object()
+
+    svc.run_structured_query(CTX, "ws:acme", compiled)
+
+    assert repo.calls == [
+        ("run_readonly_query", "ws:acme", compiled, _TIMEOUT_OMITTED)
+    ]
+
+
+def test_run_structured_query_omitted_timeout_lets_repo_default_apply():
+    """`timeout=None` (the service's own default) must NOT be forwarded as a
+    literal `None` kwarg — that would mean "no timeout bound" at the FalkorDB
+    client, silently defeating `DEFAULT_QUERY_TIMEOUT_MS`'s safety margin.
+    `FakeRepo.run_readonly_query`'s own default is the `_TIMEOUT_OMITTED`
+    sentinel (never `None`), so this pins that the pass-through omits the
+    `timeout` kwarg entirely rather than forwarding a bare `None` — a
+    regression that blindly forwarded `timeout=timeout` would instead record
+    a literal `None` here, not the sentinel."""
+    repo = FakeRepo()
+    svc = make_service(repo)
+    compiled = object()
+
+    svc.run_structured_query(CTX, "reference", compiled)
+
+    assert repo.calls == [
+        ("run_readonly_query", "reference", compiled, _TIMEOUT_OMITTED)
+    ]
+
+
+def test_run_structured_query_explicit_timeout_is_forwarded():
+    repo = FakeRepo()
+    svc = make_service(repo)
+    compiled = object()
+
+    svc.run_structured_query(CTX, "reference", compiled, timeout=999)
+
+    assert repo.calls == [("run_readonly_query", "reference", compiled, 999)]

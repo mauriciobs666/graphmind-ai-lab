@@ -16,6 +16,7 @@ from redis.exceptions import ResponseError
 
 from . import config, db
 from .extraction import normalize_name
+from .querygen import DEFAULT_QUERY_TIMEOUT_MS, CompiledQuery
 
 
 class EmbeddingDimensionError(Exception):
@@ -3120,3 +3121,56 @@ class Repository:
             return None
         row = res.result_set[0]
         return {"name": row[0], "deliveryAddress": row[1], "profileUpdatedAt": row[2]}
+
+    # ── §18 Structured natural-language query generation (K-055 M6) ───────────
+    #
+    # `docs/plans/workflow-nl-query-generation.md` §3.1 step 5. This is the
+    # **only** repository method in this whole four-capability effort that
+    # takes compiler-produced Cypher rather than a query 1:1-mapped to
+    # `QUERIES.md` — its `compiled: CompiledQuery` parameter (not `cypher:
+    # str, params: dict`) is itself part of the "only `querygen.compile`'s
+    # output ever reaches this method" enforcement (a type-checker-visible
+    # constraint, not just a docstring comment). `graph_key` is an already-
+    # resolved graph key (`"reference"` or `f"ws:{ws}"`) — unlike every other
+    # method here, this one does not go through `self._graph`/`self._reference`
+    # (both of which apply their own fixed prefix/hardcoding), because
+    # `querygen`'s dataset registry can point at either graph and the caller
+    # (`services.run_structured_query`) already resolved which one.
+
+    def run_readonly_query(
+        self, graph_key: str, compiled: CompiledQuery, *,
+        timeout: int = DEFAULT_QUERY_TIMEOUT_MS,
+    ) -> list[dict[str, Any]]:
+        """Execute a `querygen.compile(...)`-produced query and return its rows
+        as plain dicts, keyed by column name (`result.header`) — the first
+        repository read whose column set isn't known ahead of time (every
+        other method here maps a fixed, hardcoded set of columns by index).
+        `querygen.compile` never aliases a `RETURN` expression, so a key is
+        the raw expression text FalkorDB assigns (e.g. `"c.name"`,
+        `"count(p)"`), not a friendly bare property name.
+
+        **Layer 2 of the plan's two-layer safety design (§3.2):** this always
+        calls `.ro_query(...)` — **never** `.query(...)`/`.profile(...)` —
+        which FalkorDB itself refuses to execute if `compiled.cypher` is ever,
+        somehow, a write (live-verified, `claude/graph-dba/falkordb-quirks.md`).
+        This holds even if `querygen.compile` itself has a defect: the engine,
+        not this method's own code, is the actual backstop. Do not add a
+        `.query(...)`/`.profile(...)` call anywhere in this method.
+
+        `timeout` defaults to `querygen.DEFAULT_QUERY_TIMEOUT_MS` — see that
+        constant's own docstring for why it is a safety margin, not an exact
+        per-query ceiling on this deployment's pinned build.
+        """
+        res = self._graph_by_key(graph_key).ro_query(
+            compiled.cypher, compiled.params, timeout=timeout,
+        )
+        columns = [col[1] for col in res.header]
+        return [dict(zip(columns, row)) for row in res.result_set]
+
+    def _graph_by_key(self, graph_key: str):
+        """Select a graph by its already-resolved key — the one place in this
+        class that selects a graph without going through `self._graph(ws)`'s
+        `ws:{ws}` prefixing or `self._reference()`'s hardcoded `"reference"`,
+        because `run_readonly_query`'s caller has already resolved which
+        literal graph key it means (`querygen.DatasetSchema.graph_key`)."""
+        return self._conn.select_graph(graph_key)
