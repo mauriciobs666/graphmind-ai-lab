@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-056
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-057
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -18,63 +18,29 @@
 
 ## Active
 
-**M6 (business entities in workflows) opened 2026-08-26** — one combined "salesperson"-style
-demo agent proving four sibling capabilities: durable cart/orders + deterministic totals
-(K-053), structured catalog lookup (K-052 — prioritized first among the four, ships the shared
-demo scaffold the other three extend), durable customer profile (K-054), and natural-language
-query generation with a structural non-mutation guarantee (K-055). Plans:
-`docs/plans/workflow-catalog-lookup.md`, `docs/plans/workflow-cart-and-totals.md`,
-`docs/plans/workflow-durable-profile.md`, `docs/plans/workflow-nl-query-generation.md`.
-**Design phase complete and gated 2026-08-27**: all four plans plus their companion
-`graph-dba`/`data-scientist`/`security-expert` notes are `analyst`-approved (`docs/reviews/
-workflow-{catalog-lookup,cart-and-totals}.md` approve; `docs/reviews/workflow-{durable-profile,
-nl-query-generation}.md` approve with suggestions, no open MAJOR/BLOCKER) —
-`docs/plans/workflow-salesperson-demo-coordination.md` has the full trail. Implementation not yet
-started; K-052 (catalog lookup) is next up, ships the shared demo scaffold the other three extend.
+Nothing currently active — **M6 (business entities in workflows) closed 2026-08-30**: all four
+sibling capabilities (K-052 catalog lookup, K-053 cart/orders, K-054 durable profile, K-055
+natural-language query generation) delivered and proven live together inside the combined
+`salesperson@v4` demo agent; see `HISTORY.md` for the five closing entries and
+`docs/plans/workflow-salesperson-demo-coordination.md` (archived) for the full multi-session trail.
 
-Everything else open is a follow-up filed out of a closed milestone (`## Open follow-ups`) or the
+Everything open is a follow-up filed out of a closed milestone (`## Open follow-ups`) or the
 deferred M2.5 hardening track.
 
 ## Milestones still open
 
 | Milestone | Reaches ✅ when | Items |
 |---|---|---|
-| **M6 — Business entities in workflows** 🟡 *(in progress)* | All four sibling capabilities proven live inside the combined salesperson demo agent, golden-set/adversarial gates passed for K-055 | K-052 → K-056 (fix, in progress) → K-053, K-054, K-055 |
 | **M2.5 — Hardening** ⚪ *(deferred)* | Real auth, transport-level agent path, real-time push | K-016 → K-017, K-018 |
 
 Follow-ups filed out of a closed milestone are **not** green-gates for it; they are listed under
 `## Open follow-ups`.
 
-## M6 items
+## Open follow-ups
 
-### K-052 — Structured catalog/reference lookup for workflows (🟡 in-progress — plan: `docs/plans/workflow-catalog-lookup.md`)
+Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-> Fixed-shape exact-name/category/price-range lookup against a new, seed-script-only `Product`
-> catalog in `reference`. Ships the shared `salesperson` `WorkflowDef` scaffold the other three M6
-> items extend by version bump — build this one first.
-
-### K-053 — Cart, orders, and deterministic totals (🟡 in-progress — plan: `docs/plans/workflow-cart-and-totals.md`)
-
-> Durable, workspace-scoped cart/order state and an LLM-free computation for line-item totals and
-> order snapshots. Depends on `graph-dba`'s `workflow-cart-and-totals-graph.md` for the
-> `Cart`/`Order` schema; blocked on K-052 landing first (shared def version bump).
-
-### K-054 — Durable user-profile data for workflows (🟡 in-progress — plan: `docs/plans/workflow-durable-profile.md`)
-
-> Durable name/delivery-address capture, workspace-scoped, as two properties on the shared
-> `Customer` node (no separate `Profile` label — the same anchor `workflow-cart-and-totals.md`
-> uses). Depends on `graph-dba`'s `workflow-durable-profile-graph.md`; blocked on K-052.
-
-### K-055 — Natural-language query generation over structured graph data (🟡 in-progress — plan: `docs/plans/workflow-nl-query-generation.md`)
-
-> Arbitrary-phrasing question answering via a constrained query-builder DSL (never free-form
-> LLM-generated Cypher), executed exclusively through `GRAPH.RO_QUERY` as a second,
-> engine-enforced backstop. Depends on `data-scientist`'s `workflow-nl-query-generation-ml.md`
-> (golden-set metric/threshold, delivered) and a `security-expert` review of the mechanism
-> (FR-3/FR-3a adversarial test cases, approved Pass 2) — both delivered; design phase closed.
-> Blocked on K-052.
-
-### K-056 — `salesperson` scaffold: live tool-call skip-and-fabricate under extended conversations, NOT resolved by the targeted breadcrumb fix (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28)
+### K-056 — `salesperson` scaffold: live tool-call skip-and-fabricate under extended conversations, NOT resolved by the targeted breadcrumb fix (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28; post-M6, not a milestone gate)
 
 > Trace-instrumented live reproduction (`docs/reviews/salesperson-tool-reliability-ml.md`)
 > confirms `qwen/qwen3-4b-2507` served via LM Studio reproducibly stops invoking
@@ -114,9 +80,46 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 > holds up. Per explicit user direction, no further mitigation iteration and no K-053 dispatch
 > happened this session — this item stays open for whoever picks it up next.
 
-## Open follow-ups
+### K-057 — Intermittent self-contradictory/incomplete answer on a compound category+price filter question via `salesperson@v4` (🔵 proposed — filed out of K-055's `qa-engineer` live acceptance gate, DEF-01, 2026-08-30)
 
-Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
+> **Why it exists.** `docs/test-reports/workflow-nl-query-generation2-report.md` (DEF-01) found
+> that `@assistant Which peripherals cost less than $60?` produced a fully correct, complete answer
+> on one live attempt and a self-contradictory, incomplete one ("No peripherals under $60 are
+> listed... but here are two peripherals priced below $60: ...", omitting the third,
+> boundary-priced match) on an otherwise identical repeat attempt against `ws:nlq-eval`.
+> Reproducibility: 1 of 2 identical live attempts — not deterministic.
+- **Not a `querygen` DSL defect, on current evidence.** The golden-set harness — which inspects
+  `query_graph_data`'s raw tool result directly, bypassing the outer model — independently measures
+  **100% execution accuracy** on this exact shape (`compound-filter`, catalog, n=3,
+  `docs/test-reports/workflow-nl-query-generation-report.md`'s per-shape breakdown). The failing
+  attempt's distinguishing feature was that the model called **both** `filter_products` (K-052's
+  fixed-shape tool, whose category filter has no price predicate) **and** `query_graph_data` in the
+  same turn; the passing attempt called `filter_products` alone. Most likely explanation:
+  `mistralai/ministral-3-3b` (the `assistant` step's pinned model) conflated/mis-synthesized two
+  tool results into one contradictory reply — an orchestration-layer issue, not a mechanism-layer
+  one, in the same family as the still-open `K-056` model-reliability defect (a different failure
+  mode, same root class: this model's tool-orchestration reliability under this scaffold).
+- **Root cause not conclusively determined.** The live REST/`@mention` surface has no seam to
+  inspect a tool's raw structured result mid-conversation (`GET /workflow-runs/{id}/trace` returns
+  `[]`; `step-runs` surfaces only the rendered `output`) — the same gap
+  `docs/plans/workflow-nl-query-generation-ml.md` already flags as unique to the offline harness's
+  own instrumentation. The live QA pass's analysis is evidence-based, not a certainty.
+- **Owner:** `architect`/`data-scientist` — worth a look alongside `docs/reviews/
+  salesperson-tool-reliability-ml.md`'s existing Ministral tool-reliability findings. Candidate
+  angles (not decided here): (1) steer `systemPrompt` more clearly toward `query_graph_data` alone,
+  not both tools, once a question carries a price predicate `filter_products` can't express; (2) if
+  root-causing this precisely is worth it, the golden-set harness's own raw-result capture
+  (`server/tests/eval/run_nlq_golden_set_eval.py`) already has the inspection seam the live surface
+  lacks — reuse it for a scripted, repeated live-conversation probe (10-20 reps) to establish a real
+  failure rate before further action.
+- **Also recommended, independent of root-causing this specific defect:** surface a tool's raw
+  structured result on `GET /workflow-runs/{id}/step-runs` (or a debug-only query param) — a
+  low-cost live-QA testability gap this pass also flagged, useful for any future live QA pass on
+  any tool-calling capability, not just this one.
+- **Risks/RAM:** none — diagnosis/prompt-tuning only, no graph/schema surface.
+- **Test strategy:** a scripted, repeated live-conversation probe (10-20 reps) of the exact
+  reproduction question against a throwaway workspace, establishing an actual failure rate;
+  re-verify against the golden-set harness's raw-result capture if root-causing proceeds.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
