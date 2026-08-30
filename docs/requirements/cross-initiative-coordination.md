@@ -1,5 +1,5 @@
 # Cross-initiative coordination — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Version:** 2
 
 ## Intent
 Multiple `teco`-led initiatives can now be in flight on this repo at the same time, each
@@ -100,7 +100,21 @@ the stakeholder mentioned the other initiative directly.
   component.
 
 ## Open questions
-None outstanding — pending stakeholder confirmation at readback.
+1. Exact boundary of "the ledger" now that it moves fully into the graph: just the unit table
+   (Unit/Owner/Agent id/Status/Deliverable/Gate→verdict/Cost), or the whole coordination doc
+   (also the documentation-impact scan list and the closing narrative report)? Unresolved —
+   session paused before this was asked.
+2. Given the full ledger now lives in the graph with queryable detail, does the original
+   lightweight registry concept (FR-1/FR-8: minimal entry + pointer to a markdown ledger) still
+   exist as a separate, smaller index, or does it collapse — the ledger nodes themselves double
+   as the cross-initiative record this document was originally about? Unresolved.
+3. Do already-open/historical coordination docs (many exist today, e.g.
+   `falkor-chat/docs/plans/workflow-salesperson-demo-coordination.md`) get migrated into the
+   graph, or does this apply prospectively only, to coordinations opened after this ships?
+   Unresolved.
+4. FR-1–FR-8 and the Out-of-scope/Preferences sections below still describe the **v1, pointer-
+   based** registry and have not yet been rewritten for the broadened scope — pending resolution
+   of open questions 1–3 above.
 
 ## Preferences (non-binding — for the architect)
 - Storage location: the stakeholder suggested co-locating the record in the same FalkorDB graph
@@ -147,3 +161,14 @@ the architect (see Preferences section) — storage mechanism stays an architect
 per Out of scope; not treated as reopening that scope call.
 2026-08-29 — Full readback delivered and confirmed by stakeholder. Status flipped to Ready for
 design.
+2026-08-29 — Reopened before any downstream architect work started. Stakeholder wants the concept
+broadened beyond the lightweight overlap registry: `teco`'s full coordination ledger (the
+unit-by-unit table, not just a pointer to it) moved into the graph. Since no plan/build exists yet
+against v1, revised in place rather than forked into a successor document — Status reverts to
+Interviewing pending the broadened scope; Out-of-scope's "any change to how units get sequenced,
+delegated, or reviewed" line and FR-8's ledger-is-a-pointer framing are both under active
+re-examination in this pass, not carried forward as settled.
+2026-08-29 — Does the coordination ledger move fully into the graph, or does the graph only carry
+a pointer to a markdown ledger as before? → Fully into the graph — confirmed. Exact boundary (just
+the unit rows vs. the whole coordination doc including the doc-impact scan list and closing
+report) still open; paused before that question was put, session paused by stakeholder request.
