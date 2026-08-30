@@ -247,6 +247,43 @@ to the general fact here.
   deduped together with the key, making the "arbitrary representative" explicit
   and query-visible) or drop the `ORDER BY` — never assume the engine will reject
   or normalize the ambiguous case for you.
+- **The safe shape for "distinct projection, ordered by a column NOT in the projection"
+  (the superlative/min-max-by-different-column pattern, e.g. "which product is cheapest") is
+  `WITH DISTINCT <returns-cols>, <order_by-col> ORDER BY <order_by-col> LIMIT n RETURN
+  <returns-cols>` — dedup on the FULL tuple (every needed column, not just the returned ones),
+  in the same clause the `ORDER BY`/`LIMIT` runs in** (verified 2026-08-30, module `41811`,
+  disposable `probe_u29f` graph — follow-up to the entry above, which this refines rather than
+  contradicts). The naive fix ("reject any query where `ORDER BY` isn't in `RETURN`") is
+  over-broad: it also outlaws this shape, which has no other expression in this dialect (single
+  `MATCH`, no aggregate returns "the associated column of the row achieving the min/max"). Root
+  cause confirmed via `GRAPH.EXPLAIN` on both the buggy and fixed forms: the buggy
+  `RETURN DISTINCT p.name ORDER BY p.price` plans `Project → Distinct → Sort → Limit` — `Distinct`
+  collapses to the returned column alone *before* `Sort` runs, so a collapsed group's surviving
+  `price` (the sort key) is arbitrary/order-dependent. Direct repro: three `:Product` rows
+  `Gadget/50`, `Widget/100`, `Widget/3` (true min is `Widget` at 3) — `RETURN DISTINCT p.name
+  ORDER BY p.price ASC LIMIT 1` returned **`Gadget` (wrong answer, not just non-deterministic)**
+  in one creation order and **`Widget` (right answer)** in the reverse order, same data, same
+  query. The fixed shape — `WITH DISTINCT p.name AS c0, p.price AS c1 ORDER BY c1 ASC LIMIT 1
+  RETURN c0` — plans `Project → Distinct → Sort → Limit → Project` (`Distinct` now dedupes on the
+  `(c0,c1)` tuple, so it never discards the pairing `Sort` needs) and returned the correct
+  `Widget` in **both** creation orders. It also does the right thing on genuine duplicates: two
+  physically-identical `(name, price)` rows collapse to one (verified with an exact-duplicate
+  `Widget/3` pair alongside a same-named-but-different-price `Widget/100` row — the true dup
+  collapsed, the distinct-price row did not, and the correct minimum still won). Placing the
+  `ORDER BY ... LIMIT` on the same `WITH` that carries the tuple-`DISTINCT` (rather than on a
+  later `RETURN`) also empirically tested safe (`WITH DISTINCT c0, c1 RETURN c0 ORDER BY c1 LIMIT
+  1` gave identical plans/results) — the load-bearing fix is the tuple-`DISTINCT`, not which
+  clause keyword `ORDER BY` attaches to; putting it on the `WITH` is simply the more direct
+  compile target and keeps `DISTINCT`/`ORDER BY`/`LIMIT` visually and structurally together.
+  **One residual, expected, non-pathological caveat**: a genuine tie in the sort column between
+  two *different* rows (e.g. two distinct products both priced at the true minimum) still resolves
+  to an insertion-order-dependent winner under `LIMIT 1` — verified, flips between the two tied
+  names across creation orders. This is ordinary "no tiebreak column specified" `LIMIT` behavior
+  (true of every SQL/Cypher engine, not a FalkorDB defect) and is categorically different from the
+  original bug: the original bug picked an arbitrary *sort key* for one logical group and could
+  give a **wrong** answer even with no real tie in the data; this residual case only arbitrates a
+  **real** tie. Not attempting to fix this residual case here — it's a data-shape ambiguity, not
+  an engine defect, and out of scope for the compiler fix this entry informs.
 - **`labels(coalesce(a, b))[0]`** subscripting works, for reading the resolved
   label off a `coalesce()` of two optionally-matched nodes.
 - **A map-projection cannot be a `CREATE` relationship endpoint** (verified
