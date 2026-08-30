@@ -5,6 +5,30 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-30 — K-056 resolved by model swap — `qwen3-4b` skip-and-fabricate mechanism superseded, not scaffold-fixed
+
+**What:** K-056 ("`salesperson` scaffold: live tool-call skip-and-fabricate under extended
+conversations") is closed as **resolved by model substitution, not by a scaffold-level fix** — the
+two scaffold-level mitigation candidates tried (`tool_choice: "required"` forcing, a tool-use
+breadcrumb) were both independently falsified/reverted live (`docs/reviews/
+salesperson-tool-reliability-impl.md`). `docs/reviews/salesperson-tool-reliability-ml.md` §8
+ran a controlled alternative-model eval and found `mistralai/ministral-3-3b` shows **zero**
+skip-and-fabricate instances across 176 live-verified turns (Wilson 95% CI 0-2.1%), against the
+pinned `qwen/qwen3-4b-2507`'s confirmed near-certain (87-100% CI) failure by a conversation's 4th
+turn — a categorical, not incremental, improvement on this specific mechanism. `salesperson`'s
+`assistant` step was re-pointed at `ministral-3-3b` (`v2.1`, commit `03a3c8c`) and every subsequent
+version (`v3`, `v4`) carries that pin forward. `qwen/qwen3-4b-2507` remains in use elsewhere
+(`query_graph_data`'s internal single-shot structured-completion call, K-055) but that call shape
+is not vulnerable to the same multi-turn-conversation mechanism.
+
+**Caveat, not swept under the rug:** this is a substitution, not a proof the underlying scaffold
+risk (a model silently skipping a required tool call in a long conversation) can never recur — it
+would resurface if this role is ever re-pointed at a less-robust model again. The shipped
+observability signal (`executor._note_possible_fabrication`) stays in place as a standing
+ops-alerting backstop regardless of which model is pinned. Piloting `ministral-3-3b` surfaced its
+own, different, real defect (a follow-up instruction sometimes silently re-firing an earlier,
+already-completed tool call) — filed separately as `K-058`, not part of this resolution.
+
 ## 2026-08-30 — M6 (business entities in workflows) closed — all four sibling capabilities delivered
 
 **What:** M6's own closing condition ("all four sibling capabilities proven live inside the

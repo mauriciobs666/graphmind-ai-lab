@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-057
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-058
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,46 +40,6 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-056 — `salesperson` scaffold: live tool-call skip-and-fabricate under extended conversations, NOT resolved by the targeted breadcrumb fix (🟡 in-progress — filed out of K-052's QA gate, D-1, 2026-08-28; post-M6, not a milestone gate)
-
-> Trace-instrumented live reproduction (`docs/reviews/salesperson-tool-reliability-ml.md`)
-> confirms `qwen/qwen3-4b-2507` served via LM Studio reproducibly stops invoking
-> `lookup_product_fact`/`filter_products` after 2-3 successful tool-calling turns within one
-> `salesperson@v1` conversation — the model's very first LLM turn skips straight to
-> pattern-completed text, zero `tool_calls` — and fabricates catalog facts the existing
-> `requiredTools` engine guard cannot catch (it only requires `post_message`). Forcing
-> `tool_choice: "required"` on the wire was tested directly and falsified as a fix (didn't force a
-> tool call, triggered a separate runaway-repetition failure).
->
-> **Fix pass (U37, `tdd-engineer`) shipped two things, live-verified 2/2 independent 9-turn runs
-> against a real `ws:tdd-d1-fix` throwaway workspace:** (1) a tool-use breadcrumb folded into the
-> replayed conversation history (`executor._assemble_messages`, sourced from a new persisted
-> `Message.toolsUsed` property) — **did not resolve or measurably reduce the fabrication**; both
-> live passes collapsed at turn 3 and never recovered through turn 9, same shape as the original
-> diagnostic, including the identical fabricated `$149.99` price recurring for "Portable SSD 1TB".
-> Worse, both passes showed a new risk: the model's own posted reply text started **verbatim
-> imitating the breadcrumb's surface format** (`"Assistant: <answer> [verified via <tool>]"`)
-> **without ever calling the tool** — a customer-visible false-verification claim that then
-> replayed into the *next* turn's history as self-authored precedent. An `analyst` diff review
-> (`docs/reviews/salesperson-tool-reliability-impl.md`, MAJOR 1) confirmed this is a real severity
-> increase on the defect, not neutral leftover risk, and recommended reverting the tagging path
-> specifically. **Reverted (U39, `tdd-engineer`)**: the tagging code path in `_assemble_messages`
-> is gone; `Message.toolsUsed` stays shipped as a pure audit/observability property
-> (`StepResult.toolsUsed` → `_link_emissions` → `repository.link_step_emission` → `read_thread`),
-> never fed back into anything the model reads. (2) a generalized observability signal
-> (`executor._note_possible_fabrication`, driven off each step's own `config.tools` grant set, not
-> any hardcoded tool name) — **works correctly and stays shipped**: it fired on every
-> actually-fabricating turn in both live passes and stayed silent on genuine tool-use and on
-> correct-but-unverified abstentions.
->
-> **Still open, unresolved:** a scaffold-level mitigation for the underlying skip-and-fabricate
-> behavior — the breadcrumb candidate is now falsified *and reverted*, alongside `tool_choice`
-> forcing (two of the ml note's candidates tried, both failed live); a proper controlled eval to
-> replace n-of-few anecdotes with an actual rate estimate; and the fallback decision (route this
-> role to a larger model) the ml note named as the likely remaining lever if no scaffold-level fix
-> holds up. Per explicit user direction, no further mitigation iteration and no K-053 dispatch
-> happened this session — this item stays open for whoever picks it up next.
-
 ### K-057 — Intermittent self-contradictory/incomplete answer on a compound category+price filter question via `salesperson@v4` (🔵 proposed — filed out of K-055's `qa-engineer` live acceptance gate, DEF-01, 2026-08-30)
 
 > **Why it exists.** `docs/test-reports/workflow-nl-query-generation2-report.md` (DEF-01) found
@@ -97,8 +57,8 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   same turn; the passing attempt called `filter_products` alone. Most likely explanation:
   `mistralai/ministral-3-3b` (the `assistant` step's pinned model) conflated/mis-synthesized two
   tool results into one contradictory reply — an orchestration-layer issue, not a mechanism-layer
-  one, in the same family as the still-open `K-056` model-reliability defect (a different failure
-  mode, same root class: this model's tool-orchestration reliability under this scaffold).
+  one, in the same family as `K-058` below (a different failure mode, same root class: this
+  model's tool-orchestration reliability under this scaffold).
 - **Root cause not conclusively determined.** The live REST/`@mention` surface has no seam to
   inspect a tool's raw structured result mid-conversation (`GET /workflow-runs/{id}/trace` returns
   `[]`; `step-runs` surfaces only the rendered `output`) — the same gap
@@ -120,6 +80,43 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a scripted, repeated live-conversation probe (10-20 reps) of the exact
   reproduction question against a throwaway workspace, establishing an actual failure rate;
   re-verify against the golden-set harness's raw-result capture if root-causing proceeds.
+
+### K-058 — Ministral (`mistralai/ministral-3-3b`) sometimes silently re-fires an earlier, already-completed write tool call on a follow-up instruction (🔵 proposed — filed out of K-056's model-swap pilot, `docs/reviews/salesperson-tool-reliability-ml.md` §8.4/§9, 2026-08-29/30)
+
+> **Why it exists.** Piloting `mistralai/ministral-3-3b` as K-056's fix (see `HISTORY.md`'s K-056
+> resolution entry) surfaced its own, different, real defect: a follow-up cart instruction
+> sometimes causes the model to **re-issue an earlier, already-completed `add_to_cart` call**
+> alongside the actually-requested new item — silently inflating a cart line the customer never
+> asked to add again. Ground-truth-confirmed twice, independently: §8.4 (n=10 conversations,
+> condition B's 7-turn script) at 3/10 (30%, Wilson CI 10.8-60.3%); §9 (n=32, six controlled
+> conditions isolating one add-after-add pair each) at 1/24 pooled add-conditions (4.2%, CI
+> 0.7-20.2%). The two rates are statistically consistent with a shared true rate somewhere in the
+> high-single-digits-to-twenties-percent range at opportunity level (§9.2) — not resolved to a
+> point estimate, but ruled out as "vanishingly rare."
+- **Categorically less severe than K-056's original fabrication, on two grounds, not just rate:**
+  every occurrence is honestly grounded (the tool call is real and dispatched, the reply matches
+  the resulting — if wrong — state) and **self-disclosing in the very reply the customer reads**
+  (the doubled quantity is stated plainly, giving a real chance to catch it before checkout
+  freezes it into an `Order`). Not a reason to ignore it — `place_order`'s idempotency guard (a
+  caller-minted `order_id`) does not cover this pattern (an extra write dispatched for state
+  already established earlier in the same run, not a literal retried call).
+- **A candidate fix is already named and reasoned through, not yet implemented or eval'd** (ml
+  note §9.4): immediately before executing a write-mutating tool call, check whether the tool's own
+  resolved target (e.g. `productName`) appears, case/normalization-insensitive, in the *current*
+  turn's own raw trigger/reply text; if not, hold the call (route to the existing
+  `_note_possible_fabrication` observability signal, or require an explicit confirmation
+  round-trip) rather than silently dispatching it. Explicitly **not** a blind cross-turn
+  dedup-by-signature (ruled out live-by-reasoning in §9.4 — would incorrectly block a customer's
+  own legitimate later repeat of the same product).
+- **Owner:** `tdd-engineer` (the candidate fix is well-specified; implement it test-first — a
+  reproduction test should be constructible from the confirmed trace shape in §9.2 — then
+  mutation-test the guard: force an off-turn-text write and confirm it's held, not dispatched).
+- **Risks/RAM:** none — dispatch-time guard only, no graph/schema surface.
+- **Test strategy:** the §9.4 gate held against the exact confirmed reproduction (turn 2 requesting
+  only the keyboard must not re-dispatch the mouse); a genuine legitimate repeat (turn N asking for
+  "another" of an earlier item, mentioned in that turn's own text) must still succeed; a live
+  regression eval at the §9 sample size (or larger) after shipping, to confirm the observed rate
+  actually drops rather than just passing the one scripted case.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
