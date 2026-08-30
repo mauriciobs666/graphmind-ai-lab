@@ -842,6 +842,23 @@ def test_query_graph_data_abstains_on_compile_rejection_for_unregistered_label()
     assert svc.structured_query_calls == []
 
 
+def test_query_graph_data_abstains_on_compile_rejection_for_duplicate_returns():
+    # analyst review MAJOR 2: a duplicate `returns` expression (a plausible
+    # small-model completion) used to compile successfully and only fail at
+    # FalkorDB execution time, propagating uncaught through this tool and
+    # failing the whole workflow run — contradicting this tool's own "never a
+    # crash" contract. `querygen.compile`'s new uniqueness guard raises
+    # `ValueError` before execution, which this try/except already absorbs.
+    reply = '{"matches": [{"var": "p", "label": "Product", "filters": []}], "returns": ["p.name", "p.name"]}'
+    svc = StubServices()
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "anything", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []  # never reaches execution
+
+
 def test_query_graph_data_abstains_when_rows_come_back_empty():
     svc = StubServices(structured_query_rows=[])
     tool = QueryGraphDataTool(svc, llm=StubQueryLLM(_CATALOG_FILTER_REPLY))

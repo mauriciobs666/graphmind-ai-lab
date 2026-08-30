@@ -3479,9 +3479,10 @@ def test_run_readonly_query_executes_a_compiled_query_and_returns_dict_rows(repo
 
     rows = repo.run_readonly_query("ws:test", compiled)
 
-    # Column names are the raw RETURN expression text FalkorDB assigns when no
-    # `AS` alias is present (`querygen.compile` never aliases, §3.1) — "c.name",
-    # not "name".
+    # Column names are the raw RETURN expression text FalkorDB assigns — this
+    # non-DISTINCT shape has no `AS` alias at all (`querygen.compile` only
+    # aliases internally in its tuple-DISTINCT branch, and always re-aliases
+    # back to the original text there too, §3.1) — "c.name", not "name".
     assert rows == [{"c.name": "general", "c.channelId": "c1"}]
 
 

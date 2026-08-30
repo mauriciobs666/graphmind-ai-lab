@@ -3145,9 +3145,14 @@ class Repository:
         as plain dicts, keyed by column name (`result.header`) — the first
         repository read whose column set isn't known ahead of time (every
         other method here maps a fixed, hardcoded set of columns by index).
-        `querygen.compile` never aliases a `RETURN` expression, so a key is
-        the raw expression text FalkorDB assigns (e.g. `"c.name"`,
-        `"count(p)"`), not a friendly bare property name.
+        `querygen.compile` never aliases a `RETURN` expression to anything
+        **other than its own original text** — the tuple-`DISTINCT` branch
+        (order_by outside `returns`, no aggregate) aliases internally
+        (`c0`, `c1`, ...) to carry the dedup tuple through a `WITH`, but
+        always re-aliases the final `RETURN` back to the original expression
+        text, so a key here is always that raw expression text FalkorDB
+        assigns (e.g. `"c.name"`, `"count(p)"`), not a friendly bare property
+        name and never one of the internal `c0`/`c1`/... aliases.
 
         **Layer 2 of the plan's two-layer safety design (§3.2):** this always
         calls `.ro_query(...)` — **never** `.query(...)`/`.profile(...)` —

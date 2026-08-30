@@ -167,7 +167,16 @@ class DatasetSchema:
     it as a parameter, and to reject one that genuinely doesn't parse as
     that type. `dict.__contains__`/`in` against this mapping still checks
     keys only, so every existing "is this property registered" call site
-    (`prop in allowed_props`) is unaffected by this shape change."""
+    (`prop in allowed_props`) is unaffected by this shape change.
+
+    **Known gap (analyst review, `docs/reviews/workflow-nl-query-generation-impl.md`
+    MINOR):** the coercion above only fires `if isinstance(value, str)` — a
+    `bool` filter value (`true`/`false`) against a non-bool-typed property
+    (e.g. `price = true`) is neither coerced nor rejected; it passes straight
+    through and silently matches zero rows. Low-risk today because no
+    property in `CATALOG_SCHEMA`/`KNOWLEDGE_BASE_SCHEMA` is bool-typed, but a
+    future schema that adds one (or a stricter fix — a `type(value) is
+    declared_type` identity check) should close this."""
 
     graph_key: str | None  # "reference", or None when resolved per-call to
     # f"ws:{ws}" (a workspace-scoped dataset, e.g. the knowledge base).
@@ -349,6 +358,20 @@ def compile(request: QueryRequest, schema: DatasetSchema) -> CompiledQuery:
         for r in request.returns
     ]
     return_exprs = [expr for expr, _ in return_results]
+    # analyst review MAJOR 2 (`docs/reviews/workflow-nl-query-generation-impl.md`):
+    # a repeated `returns` expression (e.g. `["p.name", "p.name"]`, a
+    # plausible small-model duplication) compiles into a Cypher `RETURN`
+    # with two identically-named columns, which FalkorDB itself rejects at
+    # EXECUTION time ("Multiple result columns with the same name are not
+    # supported") — a crash `QueryGraphDataTool.run()` cannot recover from,
+    # since only `QueryRequest.model_validate`/`compile()` are wrapped in its
+    # try/except, not the query execution after it. Reject here instead,
+    # like every other DSL-legal-but-engine-rejected shape this module
+    # already guards against.
+    _require(
+        len(return_exprs) == len(set(return_exprs)),
+        f"returns contains a duplicate expression: {return_exprs!r}",
+    )
     # Fix C: DISTINCT only when NONE of `returns` is an aggregate expression —
     # applying it unconditionally would silently change today's correct
     # `count(...)`-style semantics (golden-set-verified: nlq-31/32/33 expect

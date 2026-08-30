@@ -571,6 +571,61 @@ def test_compile_uses_tuple_distinct_for_superlative_shape_with_no_filter():
     assert compiled.params == {"limit": 1}
 
 
+def test_compile_tuple_distinct_pairs_multiple_columns_correctly():
+    # analyst review MAJOR 1: every prior tuple-DISTINCT test used exactly
+    # ONE `returns` entry, so a mutation reversing the alias `zip()` order
+    # (silently swapping which value lands under which key) shipped past the
+    # whole suite undetected. Two non-aggregate `returns` columns plus a
+    # third `order_by` column not among them — assert the per-column `AS`
+    # mapping explicitly (not just "contains WITH DISTINCT"), so a swapped
+    # pairing fails this assertion even though "WITH DISTINCT" is still
+    # present in the string.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name", "p.category"],
+        order_by="p.price",
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.cypher == (
+        "MATCH (p:Product) "
+        "WITH DISTINCT p.name AS c0, p.category AS c1, p.price AS c2 "
+        "ORDER BY c2 ASC LIMIT $limit "
+        "RETURN c0 AS `p.name`, c1 AS `p.category`"
+    )
+
+
+# ── analyst review MAJOR 2: a duplicate `returns` entry must be rejected ────
+
+
+def test_compile_rejects_duplicate_projection_in_returns():
+    # A repeated `returns` expression compiles today into a Cypher `RETURN`
+    # with two identically-named columns, which FalkorDB itself rejects at
+    # execution time ("Multiple result columns with the same name are not
+    # supported") — a crash `QueryGraphDataTool` cannot recover from, since
+    # only `QueryRequest.model_validate`/`compile()` are wrapped in its
+    # try/except, not the query execution after it. Reject at compile time,
+    # like every other DSL-legal-but-engine-rejected shape this module guards
+    # against.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name", "p.name"],
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, CATALOG_SCHEMA)
+
+
+def test_compile_rejects_duplicate_aggregate_in_returns():
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["count(p)", "count(p)"],
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, CATALOG_SCHEMA)
+
+
 def test_compile_allows_order_by_in_returns_when_distinct_applies():
     request = QueryRequest(
         dataset="knowledge_base",

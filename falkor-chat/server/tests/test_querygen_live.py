@@ -189,6 +189,30 @@ def test_nlq20_superlative_combined_with_a_filter_matches_golden_set(repo: Repos
     assert rows == [{"p.name": "Fitness Tracker Band"}]
 
 
+def test_tuple_distinct_pairs_multiple_columns_correctly_live(repo: Repository):
+    # analyst review MAJOR 1: every prior tuple-DISTINCT live test used
+    # exactly ONE `returns` entry, so a mutation reversing the alias `zip()`
+    # order (silently swapping which value lands under which key) shipped
+    # past the entire suite undetected — the reviewer confirmed this
+    # separately against a scratchpad mutant. Two non-aggregate `returns`
+    # columns plus a third `order_by` column not among them, against the
+    # real `reference` graph, asserting the actual PAIRED row values (not
+    # just that each value individually appears somewhere).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name", "p.category"],
+        order_by="p.price",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    rows = repo.run_readonly_query("reference", compiled)
+    # The cheapest product overall (min price 19.99) is "Gaming Mouse Pad
+    # XL", category "Peripherals" — a swapped-alias mutant would instead
+    # produce {"p.name": "Peripherals", "p.category": "Gaming Mouse Pad XL"}.
+    assert rows == [{"p.name": "Gaming Mouse Pad XL", "p.category": "Peripherals"}]
+
+
 def test_nlq25_entityid_projection_with_order_by_not_in_returns_runs_correctly(repo: Repository):
     # nlq-25: "Which entities are of type Location?" — the RCA's probe (§4.1.3)
     # recovered returns:["e.entityId"] with order_by:"e.name" (not in returns).
