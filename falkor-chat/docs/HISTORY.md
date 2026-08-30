@@ -5,6 +5,29 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-30 — K-055: `querygen.compile()` closes the `QueryFilter.op` Layer-1 recheck gap
+
+**What:** `tdd-engineer` closed the one MAJOR finding from the security review's Pass 3 live
+adversarial run (`docs/reviews/workflow-nl-query-generation-security.md`, "Finding — MAJOR:
+`QueryFilter.op` has no independent `compile()`-level recheck..."). `QueryFilter.op` was the
+only splice-worthy DSL field where `compile()` trusted Pydantic's `Literal` constraint alone —
+every other field (`label`, `var`, `property`, `returns`/`order_by`) already had an independent
+allowlist recheck for the `.model_construct()`-bypass scenario. Not reachable via any current
+production caller (the model-driven path always runs full Pydantic validation) — defense-in-depth,
+not an active incident.
+
+**Fix:** `compile()` (`server/falkorchat/querygen.py`) now rejects any `filt.op` not in the closed
+six-value set (`{"=", "<>", "<", "<=", ">", ">="}`) immediately alongside the existing
+`filt.property` allowlist check, before splicing it into the `WHERE` clause template.
+
+**Tests:** one new regression test in `server/tests/test_querygen.py`
+(`test_compile_rejects_invalid_op_from_hand_constructed_filter`), mirroring the existing
+`.model_construct()`-bypass suite and reproducing the review's exact live payload
+(`op="> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //"`). Confirmed RED before
+the fix (the malicious `op` compiled cleanly), GREEN after, and mutation-tested (temporarily
+weakening the new check reproduces the RED failure). Full offline suite: 2290 passed / 14
+deselected (was 2289/14 before this change).
+
 ## 2026-08-28 — K-056: tool-use breadcrumb + fabrication observability signal — implemented, live-verified as NOT resolving D-1, breadcrumb reverted
 
 **What:** `tdd-engineer` (U37) implemented both pieces of the user-directed K-056 fix pass

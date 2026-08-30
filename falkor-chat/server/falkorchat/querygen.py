@@ -313,6 +313,10 @@ def compile(request: QueryRequest, schema: DatasetSchema) -> CompiledQuery:
             filt.property in allowed_props,
             f"property {filt.property!r} is not registered for label {match.label!r}",
         )
+        _require(
+            filt.op in {"=", "<>", "<", "<=", ">", ">="},
+            f"filter op {filt.op!r} is not a valid operator",
+        )
         value: object = filt.value
         if (
             isinstance(value, str)

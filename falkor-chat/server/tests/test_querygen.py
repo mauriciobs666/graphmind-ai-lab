@@ -311,6 +311,35 @@ def test_compile_rejects_unregistered_property_on_filter():
         qg_compile(request, CATALOG_SCHEMA)
 
 
+def test_compile_rejects_invalid_op_from_hand_constructed_filter():
+    # security review Pass 3 (`docs/reviews/workflow-nl-query-generation-security.md`,
+    # finding B2b): `QueryFilter.op` was the one field in the DSL with no
+    # independent `compile()`-level recheck — only Pydantic's `Literal`
+    # constraint guarded it, which a `.model_construct()`-built filter
+    # bypasses entirely. Live-reproduced injection string from that finding.
+    match = QueryMatch.model_construct(
+        var="p",
+        label="Product",
+        filters=[
+            QueryFilter.model_construct(
+                property="price",
+                op="> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //",
+                value=0,
+            )
+        ],
+    )
+    request = QueryRequest.model_construct(
+        dataset="catalog",
+        matches=[match],
+        returns=["p.name"],
+        order_by=None,
+        order_dir="ASC",
+        limit=20,
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, CATALOG_SCHEMA)
+
+
 def test_compile_rejects_unregistered_property_in_returns():
     match = QueryMatch.model_construct(var="p", label="Product", filters=[])
     request = QueryRequest.model_construct(
