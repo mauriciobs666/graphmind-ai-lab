@@ -20,7 +20,10 @@ harness itself (not yet built) or re-derive answers via the actual `query_graph_
 (out of scope per the brief — a plain read-only Cypher query per pair is the intended verification
 method here).
 
-**Verdict: needs changes.** Every one of the 39 `expected` values independently re-derives
+**Pass 2 (2026-08-29) update: verdict revised to approve with suggestions** — see `## Pass 2`
+below. The Pass 1 verdict and findings below are preserved as the original record.
+
+**Verdict (Pass 1): needs changes.** Every one of the 39 `expected` values independently re-derives
 correctly against the live graphs — no ground-truth defect, no leakage into the reversed-edge or
 garbled-date extraction artifacts the corpus review flagged, no not-found pair at risk of an
 accidental partial match. But finding #1 is a genuine, systemic gap against this golden set's
@@ -106,6 +109,56 @@ phrasing robustness, not five renderings of one template. No `expected` value, `
 None that need the caller's input — finding #1 is a concrete, self-contained revision the golden
 set's author (or `tico`/`data-scientist`, per the ml note's `analyst`-review posture) can act on
 without further discussion.
+
+## Pass 2 (2026-08-29) — re-gate after rewording fix
+
+Re-reviewed after `tdd-engineer` reworded 18/39 `question` fields (commit `7cf3247`, diffed
+directly with `git show` — confirmed the diff touches only `question` strings, no `id`/`dataset`/
+`shape`/`expected`/`rationale` field anywhere) to close Pass 1 finding #1.
+
+**Verdict: approve with suggestions.**
+
+**Finding #1 disposition: substantially fixed, one residual gap (downgraded Major → Minor).**
+Re-ran the same `(dataset, shape)` template-grouping method as Pass 1's Appendix. Every catalog
+group (`single-fact`, `filter-list`, `compound-filter`, `not-found`) now has as many genuinely
+distinct sentence structures as pairs — confirmed by rereading all 20 catalog questions.
+`knowledge_base`/`filter-list` and `knowledge_base`/`aggregation` are likewise now fully
+diversified (three distinct structures each: "of type X" / "classified as X" / "list all the
+X-type" for filter-list; "how many X-type... there" / "what's the count of X-type" / "how many...
+classified as X" for aggregation).
+
+`knowledge_base`/`single-fact` (4 pairs) still contains one exact-duplicate template: `nlq-21`
+("What type of entity is Marlowe Robotics?") and `nlq-24` ("What type of entity is NovaGrid?") are
+byte-identical in structure — neither was among the 18 reworded ids, so this pair was never
+touched. `nlq-22` ("What kind of entity is Atlas-7?") is only a `type`→`kind` synonym swap of the
+same skeleton, not a structural rephrasing; only `nlq-23` is a genuine restructure ("Can you tell
+me what type of entity Devon Cole is?"). `knowledge_base`/`not-found` (`nlq-28/29/30`) mirrors the
+same three templates one-for-one (internally still three distinct strings, so it individually
+passes, but it borrows rather than independently diversifies). Net: of the 7
+single-fact+not-found pairs, only 2 (`nlq-23`, `nlq-30`) are genuine rephrasings; the rest are the
+original template or a one-word synonym of it. This is a small, easily-fixed residual (reword
+`nlq-21` or `nlq-24` — they cannot both stay verbatim-identical within one 4-pair group) — not
+severe enough on its own to re-block the harness unit, since it affects one duplicate pair rather
+than a systemic pattern, but worth a follow-up edit before this fixture's numbers are reported as
+"tested against arbitrary phrasing."
+
+**Spot-check (item 2): reworded questions still match their unchanged `expected`/`rationale`.**
+Checked `nlq-04`, `nlq-09`, `nlq-12`, `nlq-13`, `nlq-23`, `nlq-27`, `nlq-32` — all still ask exactly
+what their `expected` value answers, no drift. One observation, not a defect: `nlq-11` was
+reworded to "Are there any Accessories products priced above $30?", a yes/no-shaped question,
+while `expected` is still the full 2-item set. This is fine for Layer 1 (which checks the
+structured query result, not the rendered sentence form — `docs/plans/workflow-nl-query-generation-ml.md`
+§5 draws that line explicitly), but flagging it since a yes/no phrasing is a slightly different
+information need than "which" — worth keeping in mind if a future pass reworks Layer 2 rendering
+checks against this same fixture.
+
+**Regression check (item 3): "what's solid" areas unaffected, confirmed not assumed.**
+`git show 7cf3247` confirms zero changes to `id`, `dataset`, `shape`, `expected`, or `rationale`
+across all 39 rows — the not-found pairs still name the same absent entities/products (so live
+0-row genuineness is unaffected), `relationship-traversal`/`conflicting-facts` (`nlq-34..39`) are
+untouched (so the reversed-edge/garbled-date avoidance still holds), and `compound-filter`/
+`relationship-traversal`/`conflicting-facts` dataset restrictions are unchanged. Re-ran
+`pytest tests/eval/test_nlq_golden_set_integrity.py`: 249/249 pass, unchanged from Pass 1.
 
 ## Appendix: template-grouping evidence for finding #1
 
