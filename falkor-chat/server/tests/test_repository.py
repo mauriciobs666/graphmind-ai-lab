@@ -3463,7 +3463,7 @@ _REPOSITORY_PATH = Path(__file__).resolve().parents[1] / "falkorchat" / "reposit
 def test_run_readonly_query_executes_a_compiled_query_and_returns_dict_rows(repo):
     repo.create_channel("test", channel_id="c1", name="general", created_at=100)
     schema = DatasetSchema(
-        graph_key="ws:test", labels={"Channel": frozenset({"name", "channelId"})}
+        graph_key="ws:test", labels={"Channel": {"name": str, "channelId": str}}
     )
     request = QueryRequest(
         dataset="probe",
@@ -3487,7 +3487,7 @@ def test_run_readonly_query_executes_a_compiled_query_and_returns_dict_rows(repo
 
 def test_run_readonly_query_returns_empty_list_for_no_match(repo):
     schema = DatasetSchema(
-        graph_key="ws:test", labels={"Channel": frozenset({"name", "channelId"})}
+        graph_key="ws:test", labels={"Channel": {"name": str, "channelId": str}}
     )
     request = QueryRequest(
         dataset="probe",

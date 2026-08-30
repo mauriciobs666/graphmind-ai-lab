@@ -43,6 +43,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .extraction import normalize_name
+
 # ── The one shared identifier grammar — defined ONCE, reused everywhere ──────
 # `_VAR_RE` is deliberately lowercase-only (this codebase's Cypher variables are
 # short lowercase tokens, e.g. `p`, `e`); `_PROP_RE` deliberately allows mixed
@@ -155,11 +157,21 @@ class DatasetSchema:
     """A declarative, per-dataset registry — not live schema introspection.
     Adding a new dataset is: add a `DatasetSchema` entry (data), not a compiler
     change (code) — see the plan §3.3 for why this is a deliberate choice over
-    `db.labels()`/`db.propertyKeys()` introspection."""
+    `db.labels()`/`db.propertyKeys()` introspection.
+
+    `labels` maps each allowed property name to its declared Python type
+    (U29f fix A, `docs/reviews/workflow-nl-query-generation-rca.md` §4.1) —
+    not just an allowlist of names. `compile()` uses the declared type to
+    coerce a numeric-looking *string* filter value (a JSON-serialization
+    quirk some models produce, e.g. `"50"` instead of `50`) before binding
+    it as a parameter, and to reject one that genuinely doesn't parse as
+    that type. `dict.__contains__`/`in` against this mapping still checks
+    keys only, so every existing "is this property registered" call site
+    (`prop in allowed_props`) is unaffected by this shape change."""
 
     graph_key: str | None  # "reference", or None when resolved per-call to
     # f"ws:{ws}" (a workspace-scoped dataset, e.g. the knowledge base).
-    labels: dict[str, frozenset[str]]  # label -> allowed property names
+    labels: dict[str, dict[str, type]]  # label -> {property name: declared type}
     aggregates: frozenset[str] = field(
         default_factory=lambda: frozenset({"count", "avg", "min", "max"})
     )
@@ -172,7 +184,14 @@ class DatasetSchema:
 # exists on the node).
 CATALOG_SCHEMA = DatasetSchema(
     graph_key="reference",
-    labels={"Product": frozenset({"name", "nameNormalized", "category", "price"})},
+    labels={
+        "Product": {
+            "name": str,
+            "nameNormalized": str,
+            "category": str,
+            "price": float,
+        },
+    },
 )
 
 # Matches the actual shipped document-ingestion schema
@@ -185,9 +204,9 @@ CATALOG_SCHEMA = DatasetSchema(
 KNOWLEDGE_BASE_SCHEMA = DatasetSchema(
     graph_key=None,  # workspace-scoped — resolved to f"ws:{ctx.ws}" at call time
     labels={
-        "Entity": frozenset({"entityId", "name", "nameNormalized", "type"}),
-        "Document": frozenset({"documentId", "title", "sourceFormat"}),
-        "Chunk": frozenset({"chunkId", "text", "seq", "documentId"}),
+        "Entity": {"entityId": str, "name": str, "nameNormalized": str, "type": str},
+        "Document": {"documentId": str, "title": str, "sourceFormat": str},
+        "Chunk": {"chunkId": str, "text": str, "seq": int, "documentId": str},
     },
 )
 
@@ -206,10 +225,10 @@ def _resolve_expr(
     expr: str,
     *,
     declared_var: str,
-    allowed_props: frozenset[str],
+    allowed_props: dict[str, type],
     schema: DatasetSchema,
     allow_aggregate: bool,
-) -> str:
+) -> tuple[str, bool]:
     """Decompose one `returns`/`order_by` entry and validate every piece it
     carries against the schema allowlist + the declared match variable —
     **independently** of whatever the Pydantic field validators already did,
@@ -217,17 +236,19 @@ def _resolve_expr(
     posture (a hand-built `QueryRequest` via `.model_construct()` never runs
     those validators at all).
 
-    Returns the original expression string unchanged (it is safe to splice
-    verbatim once every decomposed piece is confirmed allowlisted — the
-    expression's *shape* was already constrained to exactly `var.property` or
-    `func(var[.property])` by the fully-anchored regexes below).
+    Returns `(expr, is_aggregate)`: the original expression string unchanged
+    (it is safe to splice verbatim once every decomposed piece is confirmed
+    allowlisted — the expression's *shape* was already constrained to exactly
+    `var.property` or `func(var[.property])` by the fully-anchored regexes
+    below) and whether it matched the aggregate shape (U29f fix C — `compile()`
+    uses this to scope `DISTINCT` to non-aggregate projections only).
     """
     proj = _PROJECTION_RE.fullmatch(expr)
     if proj:
         var, prop = proj.group(1), proj.group(2)
         _require(var == declared_var, f"{expr!r} references unknown var {var!r}")
         _require(prop in allowed_props, f"{expr!r} references unknown property {prop!r}")
-        return expr
+        return expr, False
 
     if allow_aggregate:
         agg = _AGGREGATE_RE.fullmatch(expr)
@@ -237,7 +258,7 @@ def _resolve_expr(
             _require(var == declared_var, f"{expr!r} references unknown var {var!r}")
             if prop is not None:
                 _require(prop in allowed_props, f"{expr!r} references unknown property {prop!r}")
-            return expr
+            return expr, True
 
     raise ValueError(f"{expr!r} does not resolve to an allowed projection or aggregate")
 
@@ -283,11 +304,41 @@ def compile(request: QueryRequest, schema: DatasetSchema) -> CompiledQuery:
             filt.property in allowed_props,
             f"property {filt.property!r} is not registered for label {match.label!r}",
         )
+        value: object = filt.value
+        if (
+            isinstance(value, str)
+            and filt.property.endswith("Normalized")
+            and filt.op in ("=", "<>")
+        ):
+            # Fix B: enforce the existing `*Normalized` contract server-side
+            # (DESIGN.md §5.1) — the model may supply the verbatim question
+            # text instead of the lower-cased/whitespace-collapsed stored
+            # value; normalize with the SAME shared helper that produced the
+            # stored value (`extraction.normalize_name`), never a
+            # second, independently-written normalizer.
+            value = normalize_name(value)
+        else:
+            declared_type = allowed_props[filt.property]
+            if isinstance(value, str) and declared_type in (int, float):
+                # Fix A: the model sometimes serializes a numeric filter
+                # value as a JSON string (`"50"` instead of `50`) — coerce by
+                # the property's declared type rather than letting a
+                # string-vs-numeric comparison silently match zero rows.
+                # A value that genuinely doesn't parse is a compile-time
+                # error, not a silent abstention.
+                try:
+                    value = declared_type(value)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"filter value {filt.value!r} for property "
+                        f"{filt.property!r} could not be parsed as "
+                        f"{declared_type.__name__}"
+                    ) from exc
         param_name = f"p{i}"
         where_clauses.append(f"{declared_var}.{filt.property} {filt.op} ${param_name}")
-        params[param_name] = filt.value
+        params[param_name] = value
 
-    return_exprs = [
+    return_results = [
         _resolve_expr(
             r,
             declared_var=declared_var,
@@ -297,23 +348,42 @@ def compile(request: QueryRequest, schema: DatasetSchema) -> CompiledQuery:
         )
         for r in request.returns
     ]
+    return_exprs = [expr for expr, _ in return_results]
+    # Fix C: DISTINCT only when NONE of `returns` is an aggregate expression —
+    # applying it unconditionally would silently change today's correct
+    # `count(...)`-style semantics (golden-set-verified: nlq-31/32/33 expect
+    # the raw un-fused node count, not a distinct count).
+    distinct = not any(is_aggregate for _, is_aggregate in return_results)
 
     order_expr: str | None = None
     if request.order_by is not None:
-        order_expr = _resolve_expr(
+        order_expr, _ = _resolve_expr(
             request.order_by,
             declared_var=declared_var,
             allowed_props=allowed_props,
             schema=schema,
             allow_aggregate=False,
         )
+        if distinct and order_expr not in return_exprs:
+            # graph-dba amendment (`claude/graph-dba/falkordb-quirks.md`,
+            # "RETURN DISTINCT ... ORDER BY ..." entry): this FalkorDB build
+            # does not error on `RETURN DISTINCT <col> ORDER BY <col not in
+            # RETURN>` — it silently sorts by whichever duplicate row
+            # DISTINCT's dedup happened to keep, non-deterministically
+            # (depends on node insertion order). Reject at compile time
+            # instead of shipping that ambiguity.
+            raise ValueError(
+                f"order_by {order_expr!r} must be one of returns {return_exprs!r} "
+                "when the result is deduplicated (DISTINCT)"
+            )
 
     params["limit"] = request.limit
 
     clauses = [f"MATCH ({declared_var}:{match.label})"]
     if where_clauses:
         clauses.append("WHERE " + " AND ".join(where_clauses))
-    clauses.append("RETURN " + ", ".join(return_exprs))
+    return_keyword = "RETURN DISTINCT " if distinct else "RETURN "
+    clauses.append(return_keyword + ", ".join(return_exprs))
     if order_expr is not None:
         clauses.append(f"ORDER BY {order_expr} {request.order_dir}")
     clauses.append("LIMIT $limit")

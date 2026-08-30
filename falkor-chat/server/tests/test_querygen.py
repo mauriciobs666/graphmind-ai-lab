@@ -43,7 +43,8 @@ def test_compile_filter_case_produces_exact_cypher_and_params():
 
     assert isinstance(compiled, CompiledQuery)
     assert compiled.cypher == (
-        "MATCH (p:Product) WHERE p.category = $p0 RETURN p.name, p.price LIMIT $limit"
+        "MATCH (p:Product) WHERE p.category = $p0 "
+        "RETURN DISTINCT p.name, p.price LIMIT $limit"
     )
     assert compiled.params == {"p0": "Audio", "limit": 20}
 
@@ -72,7 +73,7 @@ def test_compile_with_order_by_and_custom_limit():
     compiled = qg_compile(request, CATALOG_SCHEMA)
 
     assert compiled.cypher == (
-        "MATCH (p:Product) RETURN p.name, p.price ORDER BY p.price DESC LIMIT $limit"
+        "MATCH (p:Product) RETURN DISTINCT p.name, p.price ORDER BY p.price DESC LIMIT $limit"
     )
     assert compiled.params == {"limit": 5}
 
@@ -117,7 +118,7 @@ def test_compile_second_dataset_knowledge_base_matches_ac2_example():
     )
     compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
     assert compiled.cypher == (
-        "MATCH (e:Entity) WHERE e.nameNormalized = $p0 RETURN e.type LIMIT $limit"
+        "MATCH (e:Entity) WHERE e.nameNormalized = $p0 RETURN DISTINCT e.type LIMIT $limit"
     )
     assert compiled.params == {"p0": "acme corp", "limit": 20}
 
@@ -341,7 +342,7 @@ def test_compile_rejects_unregistered_aggregate_function():
 
     narrow_schema = DatasetSchema(
         graph_key="reference",
-        labels={"Product": frozenset({"name"})},
+        labels={"Product": {"name": str}},
         aggregates=frozenset(),
     )
     request2 = QueryRequest.model_construct(
@@ -354,6 +355,307 @@ def test_compile_rejects_unregistered_aggregate_function():
     )
     with pytest.raises(ValueError):
         qg_compile(request2, narrow_schema)
+
+
+# ── U29f fix A: numeric filter values coerced by declared property type ──────
+
+
+def test_compile_coerces_numeric_string_filter_value_against_numeric_property():
+    # RCA category A (nlq-08 shape): the model serialized a numeric filter
+    # value as a JSON string instead of a bare number.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[QueryFilter(property="price", op="<", value="50")],
+            )
+        ],
+        returns=["p.name"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == 50.0
+    assert isinstance(compiled.params["p0"], float)
+
+
+def test_compile_leaves_already_numeric_filter_value_unchanged():
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[QueryFilter(property="price", op="<", value=50)],
+            )
+        ],
+        returns=["p.name"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == 50
+
+
+def test_compile_rejects_non_numeric_string_against_numeric_property():
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[QueryFilter(property="price", op="=", value="cheap")],
+            )
+        ],
+        returns=["p.name"],
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, CATALOG_SCHEMA)
+
+
+def test_compile_does_not_coerce_string_value_against_string_property():
+    # A numeric-looking string against a plain string property (e.g. a
+    # product literally named "50") must NOT be coerced — coercion is scoped
+    # strictly to properties whose declared type is numeric.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[QueryFilter(property="name", op="=", value="50")],
+            )
+        ],
+        returns=["p.price"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == "50"
+
+
+# ── U29f fix B: normalize filter values against *Normalized properties ──────
+
+
+def test_compile_normalizes_mixed_case_value_against_normalized_property():
+    # RCA category B (nlq-02/04 shape): the model filtered on
+    # `nameNormalized` with the verbatim (un-normalized) question text.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[
+                    QueryFilter(property="nameNormalized", op="=", value="Portable SSD 1TB")
+                ],
+            )
+        ],
+        returns=["p.category"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == "portable ssd 1tb"
+
+
+def test_compile_leaves_already_normalized_value_unchanged():
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[
+                    QueryFilter(property="nameNormalized", op="=", value="portable ssd 1tb")
+                ],
+            )
+        ],
+        returns=["p.category"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == "portable ssd 1tb"
+
+
+def test_compile_does_not_normalize_for_ordering_operators():
+    # The fix is scoped to `=`/`<>` only (DESIGN §5.1's convention has no
+    # ordering semantics over a normalized value) — a `>` filter must pass
+    # its value through unchanged.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(
+                var="p", label="Product",
+                filters=[QueryFilter(property="nameNormalized", op=">", value="Zeta")],
+            )
+        ],
+        returns=["p.category"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == "Zeta"
+
+
+# ── U29f fix C: scoped DISTINCT + order_by/returns validation guard ─────────
+
+
+def test_compile_adds_distinct_for_non_aggregate_returns():
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(
+                var="e", label="Entity",
+                filters=[QueryFilter(property="name", op="=", value="Marlowe Robotics")],
+            )
+        ],
+        returns=["e.type"],
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert compiled.cypher == (
+        "MATCH (e:Entity) WHERE e.name = $p0 RETURN DISTINCT e.type LIMIT $limit"
+    )
+
+
+def test_compile_does_not_add_distinct_for_aggregate_returns():
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(
+                var="e", label="Entity",
+                filters=[QueryFilter(property="type", op="=", value="Organization")],
+            )
+        ],
+        returns=["count(e)"],
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert compiled.cypher == "MATCH (e:Entity) WHERE e.type = $p0 RETURN count(e) LIMIT $limit"
+    assert "DISTINCT" not in compiled.cypher
+
+
+def test_compile_rejects_order_by_not_in_returns_when_distinct_applies():
+    # graph-dba amendment (`claude/graph-dba/falkordb-quirks.md`, "RETURN
+    # DISTINCT ... ORDER BY ..." entry): this build does not error on an
+    # ORDER BY column absent from a DISTINCT RETURN — it silently sorts
+    # non-deterministically. Reject at compile time instead (the exact
+    # nlq-25 probe shape: order_by names a column not in returns).
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(
+                var="e", label="Entity",
+                filters=[QueryFilter(property="type", op="=", value="Location")],
+            )
+        ],
+        returns=["e.entityId"],
+        order_by="e.name",
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+
+
+def test_compile_allows_order_by_in_returns_when_distinct_applies():
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(
+                var="e", label="Entity",
+                filters=[QueryFilter(property="type", op="=", value="Location")],
+            )
+        ],
+        returns=["e.name"],
+        order_by="e.name",
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert compiled.cypher == (
+        "MATCH (e:Entity) WHERE e.type = $p0 RETURN DISTINCT e.name "
+        "ORDER BY e.name ASC LIMIT $limit"
+    )
+
+
+def test_compile_does_not_validate_order_by_against_returns_for_aggregate_query():
+    # DISTINCT never applies to an aggregate-shaped return, so the new
+    # order_by/returns validation guard must not fire even when order_by
+    # names a column absent from returns.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["count(p)"],
+        order_by="p.price",
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert "DISTINCT" not in compiled.cypher
+    assert compiled.cypher.endswith("ORDER BY p.price ASC LIMIT $limit")
+
+
+# ── RCA regression reproductions (docs/reviews/workflow-nl-query-generation-rca.md §3) ──
+
+
+def test_regression_nlq08_price_filter_with_quoted_numeric_value_now_matches():
+    # nlq-08: "Which products cost less than $50?" — the live probe recovered
+    # filters:[{"property":"price","op":"<","value":"50"}] (a quoted string).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(var="p", label="Product",
+                       filters=[QueryFilter(property="price", op="<", value="50")])
+        ],
+        returns=["p.name"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == 50.0
+
+
+def test_regression_nlq02_name_normalized_mixed_case_value_now_matches():
+    # nlq-02: "What category is the Portable SSD 1TB in?" — the live probe
+    # recovered filters:[{"property":"nameNormalized","op":"=",
+    # "value":"Portable SSD 1TB"}] (verbatim, not normalized).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(var="p", label="Product",
+                       filters=[QueryFilter(property="nameNormalized", op="=",
+                                             value="Portable SSD 1TB")])
+        ],
+        returns=["p.category"],
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.params["p0"] == "portable ssd 1tb"
+
+
+def test_regression_nlq21_duplicate_entity_projection_now_deduped():
+    # nlq-21: "What type of entity is Marlowe Robotics?" — the RCA's key
+    # finding: filter and projection are already correct, the 9 un-fused
+    # duplicate nodes need DISTINCT, not a filter/projection change.
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(var="e", label="Entity",
+                       filters=[QueryFilter(property="name", op="=", value="Marlowe Robotics")])
+        ],
+        returns=["e.type"],
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert "DISTINCT" in compiled.cypher
+
+
+def test_regression_nlq25_order_by_not_in_returns_now_rejected_not_nondeterministic():
+    # nlq-25: "Which entities are of type Location?" — the probe recovered
+    # returns:["e.entityId"] with order_by:"e.name" (not in returns); the
+    # graph-dba amendment requires a compile-time rejection here, not a
+    # silently non-deterministic sort.
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(var="e", label="Entity",
+                       filters=[QueryFilter(property="type", op="=", value="Location")])
+        ],
+        returns=["e.entityId"],
+        order_by="e.name",
+    )
+    with pytest.raises(ValueError):
+        qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+
+
+def test_regression_nlq31_aggregate_count_unaffected_by_distinct_scoping():
+    # nlq-31: "How many Organization-type entities are there?" — golden value
+    # is the raw un-fused count (17); DISTINCT must never touch this shape.
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(var="e", label="Entity",
+                       filters=[QueryFilter(property="type", op="=", value="Organization")])
+        ],
+        returns=["count(e)"],
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert compiled.cypher == "MATCH (e:Entity) WHERE e.type = $p0 RETURN count(e) LIMIT $limit"
 
 
 def test_compile_never_emits_forbidden_tokens_for_any_valid_request():

@@ -22,7 +22,7 @@ import json
 import pytest
 from conftest import TEST_EMBEDDING_DIM
 
-from falkorchat import querygen
+from falkorchat import querygen, tools
 from falkorchat.config import CallContext
 from falkorchat.services import Services, UnknownMemberError
 from falkorchat.tools import (
@@ -777,7 +777,7 @@ def test_query_graph_data_happy_path_compiles_and_returns_items():
     assert call["graph_key"] == "reference"
     assert call["timeout"] == querygen.DEFAULT_QUERY_TIMEOUT_MS
     assert call["compiled"].cypher == (
-        "MATCH (p:Product) WHERE p.category = $p0 RETURN p.name, p.price LIMIT $limit"
+        "MATCH (p:Product) WHERE p.category = $p0 RETURN DISTINCT p.name, p.price LIMIT $limit"
     )
     assert call["compiled"].params == {"p0": "Audio", "limit": 20}
 
@@ -879,6 +879,66 @@ def test_query_graph_data_schema_description_is_generated_from_the_dataset_regis
         assert name in description
         for label in schema.labels:
             assert label in description
+
+
+# ── U29f fix D: prompt hardening (`_QUERY_REQUEST_INSTRUCTIONS`) ────────────
+
+
+def test_query_request_instructions_clarifies_bare_json_numbers():
+    # RCA category A defense-in-depth: a rule + example steering the model
+    # away from serializing a numeric filter value as a quoted string.
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert "bare JSON number" in text
+    assert 'never "50"' in text
+
+
+def test_query_request_instructions_warns_normalized_properties_are_internal():
+    # RCA category B defense-in-depth: the model should target the plain
+    # `name` property, never a `*Normalized` one it can't see the value of.
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert "Normalized" in text
+    assert "name" in text
+
+
+def test_query_request_instructions_has_name_not_entityid_projection_rule():
+    # RCA category D fix: list/classify questions should project `name`, not
+    # an internal `entityId`.
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert "entityId" in text
+
+
+def test_query_request_instructions_has_no_invented_filter_rule_for_superlatives():
+    # The nlq-16 compounding defect: a superlative question ("cheapest") must
+    # not get an invented filter alongside its order_by/limit.
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert "cheapest" in text.lower()
+    assert "invented filter" in text.lower() or "never an invented" in text.lower()
+
+
+def test_query_request_instructions_preserves_existing_constraints():
+    # Every pre-existing constraint (matches cardinality, allowed operators,
+    # JSON-only reply) must survive the rewrite unchanged in substance.
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert "exactly one entry" in text
+    assert "= <> < <= > >=" in text
+    assert "single JSON object" in text
+    assert "never reply with prose" in text.lower()
+
+
+def test_query_request_instructions_still_formats_with_dataset_schema():
+    # The prompt-building seam itself must survive the rewrite: the schema
+    # placeholder is substituted, not left as a literal "{dataset_schema}".
+    prompt = tools._build_query_request_system_prompt(querygen.CATALOG_SCHEMA)
+    assert "{dataset_schema}" not in prompt
+    assert "Product" in prompt
+    assert "price" in prompt
+
+
+def test_query_request_instructions_includes_a_name_projection_example():
+    # A worked example pairing a "list/classify entities" question with a
+    # `.name` projection (fixes nlq-25/26's entityId-over-name defect).
+    text = tools._QUERY_REQUEST_INSTRUCTIONS
+    assert '"e.name"' in text or "'e.name'" in text
 
 
 def test_query_graph_data_offers_both_registered_datasets_in_the_enum():

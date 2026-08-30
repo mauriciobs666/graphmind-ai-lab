@@ -849,15 +849,43 @@ _QUERY_REQUEST_INSTRUCTIONS = (
     '{{"matches": [{{"var": "<short lowercase identifier, e.g. \'p\' or \'e\'>", '
     '"label": "<one of the labels listed below>", '
     '"filters": [{{"property": "<one of the properties listed for that label>", '
-    '"op": "<one of = <> < <= > >=>", "value": <a string, number, or boolean>}}]}}], '
+    '"op": "<one of = <> < <= > >=>", "value": <a bare JSON number for a '
+    'numeric property (e.g. 50, never "50"), a bare JSON string for a text '
+    'property, or true/false>}}]}}], '
     '"returns": ["<var>.<property>", or "count(<var>)"/"count(<var>.<property>)"/'
     '"avg(...)"/"min(...)"/"max(...)" the same way], '
     '"order_by": "<var>.<property>" (omit if not sorting), '
     '"order_dir": "ASC" or "DESC" (default ASC), '
     '"limit": <integer between 1 and 50, default 20>}}\n\n'
     "`matches` has exactly one entry. Use ONLY the labels and properties "
-    "listed below for this dataset — never invent one. Reply with your best "
-    "single JSON object even if you are unsure; never reply with prose.\n\n"
+    "listed below for this dataset — never invent one. Add a filter ONLY for "
+    "a condition the question actually states: a superlative question "
+    "(\"cheapest\", \"most expensive\") needs order_by + limit, never an "
+    "invented filter with no basis in the question. When the question names "
+    "a specific item or entity, filter on its plain `name` property using "
+    "the exact text the question uses — never a `*Normalized` property "
+    "(e.g. `nameNormalized`), those hold internal lower-cased values you do "
+    "not have. When the question asks to list, identify, or classify "
+    "entities, return `<var>.name` — never `<var>.entityId`, which is an "
+    "internal identifier the reader cannot use. Reply with your best single "
+    "JSON object even if you are unsure; never reply with prose.\n\n"
+    "Examples (the schema differs per dataset — only the pattern matters):\n"
+    '- "How much does the Wireless Charging Pad cost?" -> '
+    '{{"matches": [{{"var": "p", "label": "Product", "filters": '
+    '[{{"property": "name", "op": "=", "value": "Wireless Charging Pad"}}]}}], '
+    '"returns": ["p.price"]}}\n'
+    '- "Which products cost less than $50?" -> '
+    '{{"matches": [{{"var": "p", "label": "Product", "filters": '
+    '[{{"property": "price", "op": "<", "value": 50}}]}}], '
+    '"returns": ["p.name"]}}\n'
+    '- "Which entities are of type Location?" -> '
+    '{{"matches": [{{"var": "e", "label": "Entity", "filters": '
+    '[{{"property": "type", "op": "=", "value": "Location"}}]}}], '
+    '"returns": ["e.name"]}}\n'
+    '- "Which product is the cheapest?" -> '
+    '{{"matches": [{{"var": "p", "label": "Product", "filters": []}}], '
+    '"returns": ["p.name"], "order_by": "p.price", "order_dir": "ASC", '
+    '"limit": 1}}\n\n'
     "This dataset's schema:\n{dataset_schema}"
 )
 
