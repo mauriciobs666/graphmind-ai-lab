@@ -226,6 +226,27 @@ to the general fact here.
   absent** (broken on this build); `count{ … }` subquery syntax is unsupported.
   For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`
   instead.
+- **`RETURN DISTINCT <col>` followed by `ORDER BY <expr not in the RETURN list>`
+  does NOT error on this build — it silently accepts an ill-defined ordering**
+  (verified 2026-08-30, module 41811). Unlike SQL engines that reject an
+  unprojected `ORDER BY` column after `DISTINCT` (ambiguous per output row),
+  FalkorDB plans it as `Sort` *after* `Distinct` (`GRAPH.EXPLAIN` shows
+  `Limit → Sort → Distinct → Project`), carrying the `ORDER BY` expression as a
+  hidden column through `Project`. `Distinct` dedupes on the **declared RETURN
+  columns only** and keeps whichever row happened to survive dedup — empirically,
+  the first-encountered row per key in scan/creation order — so the sort key used
+  for a collapsed group is arbitrary and order-dependent, not an error, an
+  aggregate, or a stable "first/last" guarantee. Reproduced with two `:Entity`
+  nodes sharing `entityId:'A'` but different `name`s: `RETURN DISTINCT e.entityId
+  ORDER BY e.name` picked up whichever node's `name` was created/scanned first,
+  and the overall row order changed accordingly when creation order was swapped —
+  same query, same data, different `name` values feeding the sort depending only
+  on insertion order. Treat any `RETURN DISTINCT` + `ORDER BY` where the order
+  expression isn't one of the returned columns as a live correctness bug, not a
+  style nit: either add the order expression to the `RETURN` list (so it's
+  deduped together with the key, making the "arbitrary representative" explicit
+  and query-visible) or drop the `ORDER BY` — never assume the engine will reject
+  or normalize the ambiguous case for you.
 - **`labels(coalesce(a, b))[0]`** subscripting works, for reading the resolved
   label off a `coalesce()` of two optionally-matched nodes.
 - **A map-projection cannot be a `CREATE` relationship endpoint** (verified
