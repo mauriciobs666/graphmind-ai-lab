@@ -1,5 +1,5 @@
 # Kiro Multi-Agent Ecosystem — Vision Follow-ups — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-08-01
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-08-29
 
 ## Intent
 `kiro/DESIGN.md` sketched an early vision — before `falkor-chat` existed — for a team of Kiro
@@ -31,6 +31,10 @@ resolved differently.
 1. **Deliverable/artifact provenance.** No equivalent to the vision's `Artifact` node (linking a
    git commit/file to the agent and task/workflow-step that produced it). Today's `EMITTED` edge
    covers only an AI answer's retrieval context, not "what did this agent's work produce."
+   **2026-08-29 update:** developed into its own requirements document —
+   `falkor-chat/docs/requirements/deliverable-provenance.md` (status: Interviewing). This closes
+   the scoping gap for this item; see that document for the functional requirements and remaining
+   open questions.
 2. **Turn-taking/backoff among several simultaneously-responding AI agents.** An open question in
    the original vision, never answered. Today's one shipped responder (K-013) only guards against
    answering its own messages — it doesn't address two AI agents both firing on the same trigger.
@@ -86,3 +90,6 @@ document as an open question; stakeholder will think about it later.
 2026-08-01 — Real-time push — re-propose or point at K-018? → Point at K-018, don't re-propose.
 2026-08-01 — Is "a Kiro agent wired to falkor-chat" the first slice of the Kiro-integration gap? →
 Yes; captured separately as the immediate demo-agent requirements doc.
+2026-08-29 — Develop artifact/deliverable provenance (item 1) into real scope now? → Yes; captured
+separately as `falkor-chat/docs/requirements/deliverable-provenance.md`, same pattern as item 4's
+demo-agent split. Scoped to `falkor-chat` workflow agents only (not the `claude/` subagent team).
