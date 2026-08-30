@@ -185,3 +185,55 @@ the existing coercion.
   exercise this shape, per the RCA's probes) an acceptable interim signal while it's queued as a
   fast follow-up? This review's verdict treats it as needs-changes-before-close, not as blocking
   the re-run itself — but that's a judgment call the coordinator may want to confirm.
+
+## Pass 2 (2026-08-30) — re-gate on commit `c033b30`
+
+**Verdict: approve.** Both MAJORs are closed, independently re-verified (not just re-read); both
+MINORs match the suggested text. Full offline suite green (2289 passed, 14 deselected); the
+K-055-scoped live suite (`test_querygen_live.py`, the correct scope for this fix) green at 10/10.
+
+**Disposition of Pass 1 findings:**
+
+- **MAJOR — 2+ column re-aliasing untested:** **fixed.** `querygen.py` unchanged in the compiled
+  logic itself (confirmed correct in Pass 1); new coverage added
+  (`test_compile_tuple_distinct_pairs_multiple_columns_correctly`,
+  `test_tuple_distinct_pairs_multiple_columns_correctly_live`), asserting the exact per-column
+  `AS` mapping/paired row values for `returns=["p.name","p.category"], order_by="p.price"`. I
+  re-ran my own Pass 1 mutation (reversed the alias `zip()` in a scratchpad copy, never in the
+  production file) against the current suite: both new tests now fail with the exact swapped
+  values my Pass 1 finding predicted (`{"p.name": "Peripherals", "p.category": "Gaming Mouse Pad
+  XL"}`), confirming the gap is closed, not just asserted closed.
+- **MAJOR — duplicate `returns` crashes the run:** **fixed.** `compile()` now has
+  `_require(len(return_exprs) == len(set(return_exprs)), ...)` (`querygen.py`, right after
+  `return_exprs` is built). Re-confirmed live, independently of the shipped test: calling
+  `compile()` directly with `returns=["p.name","p.name"]` raises `ValueError` before any engine
+  call; driving the full `QueryGraphDataTool.run()` path with a **real** `Repository`/FalkorDB
+  connection wired into a purpose-built services stub (not the test file's `StubServices`) for a
+  duplicate-`returns` model reply returns `{"items": [], "finding": "no matching data found"}`
+  with the services call counter at `0` — the engine is provably never reached, closing the
+  contradiction with the tool's documented "never a crash" contract.
+- **MINOR — stale "never aliases" docstring:** **fixed.** `repository.py`'s docstring and
+  `test_repository.py`'s comment both reworded to the "never aliases to anything other than its
+  own original text" phrasing I suggested; re-read, matches.
+- **MINOR — bare-bool filter value unvalidated:** **fixed (as a documented gap, per my own
+  suggested low-priority disposition).** `DatasetSchema`'s docstring now carries the "Known gap"
+  note verbatim reflecting my finding, including the correct clarification that this predates and
+  is distinct from the `float(True)==1.0` non-issue. No code change (consistent with "low
+  priority... worth a one-line note" — I did not ask for a code fix here, so this is fully closed
+  against what was actually requested).
+
+**Regression check:** full offline suite (`'.venv/bin/python -m pytest -q'`) — 2289 passed, 14
+deselected (0 failed); re-seeded `reference`/`ws:acme` after its documented teardown wipe
+(`seed_catalog.sh`/`seed_demo.sh`/`seed_workflows.sh`/`seed_salesperson.sh`, all
+`verify_*.sh` → `OK`) before re-running live. `pytest -m live tests/test_querygen_live.py` — 10/10
+passed (the 9 original plus the new 2-column case), confirming no regression in the fixes' own
+scope. The repo's broader `-m live` suite (chat-grounding/workflow/judge-calibration live tests
+needing LM Studio, outside this fix's diff surface) also completed while this pass was being
+written: **14/14 passed, 0 failed** — full confirmation of no regression anywhere live. One
+incidental side effect reverted before finishing: that broader run regenerates the checked-in
+`tests/eval/judge_calibration.json` (a live judge-calibration test's own artifact, unrelated to
+K-055) and wrote a stray `docs/test-reports/guard-judge-calibration-2026-08-30.md`; both were
+outside this review's scope, so I `git checkout`'d the former back to its committed state and
+deleted the latter rather than leave an incidental side effect in the tree.
+
+No new findings surfaced in this pass. This closes K-055's implementation-diff gate.
