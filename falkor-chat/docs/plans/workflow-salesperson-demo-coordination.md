@@ -1,6 +1,6 @@
 # Salesperson-demo capabilities — Design Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-052…(TBD) (M6, proposed)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-052, K-053, K-054, K-055 (M6, closed 2026-08-30)
 
 Coordinating the **design phase** (requirements → gated plans, no implementation in this unit) for
 four sibling, stakeholder-confirmed `Ready for design` requirements documents, all proven inside
@@ -899,3 +899,29 @@ at all. Follow-up for whoever owns those workspaces.
   section), unlike `plans/`/`reviews/`/etc. which are specialist-owned. Applied the diff myself —
   content was already fully authored and reasoned by `architect`, verified by `teco` before
   applying, not fresh judgment exercised on `teco`'s part.
+
+## Closed 2026-08-30 — M6's own closing condition met
+
+All four sibling capabilities (K-052, K-053, K-054, K-055) are implemented, individually
+live-acceptance-tested, and now proven together in one final combined e2e pass
+(`docs/test-reports/workflow-salesperson-demo-report.md`, PASS, no defects) — M6's own stated
+closing condition ("all four sibling capabilities proven live inside the combined salesperson demo
+agent, golden-set/adversarial gates passed for K-055"). `HISTORY.md` carries one delivery entry per
+capability plus a closing M6 summary entry, each citing this doc and the capability's own
+plan/review/test-report family by path rather than restating them.
+
+**Milestone-close documentation sweep performed this session:** 38 requirement/plan/review/
+test-plan/test-report documents across all four capabilities flipped `Status: archived` (mechanical
+token-only edits, this coordination doc's own flip included). **Not flipped, deliberately:**
+`docs/reviews/salesperson-tool-reliability-ml.md` / `-impl.md` — these are K-056's own live
+diagnosis/fix-attempt artifacts, and K-056 (a separately-filed model-reliability defect, not one of
+M6's four gating items) remains open per explicit prior user direction ("no further mitigation
+iteration... this item stays open for whoever picks it up next").
+
+**Deliberately not done by `teco` directly, per root `AGENTS.md`'s milestone-close rule** ("the
+human applies the list" for compacting a living, read-whole document like `BACKLOG.md`): removing
+the now-delivered K-052..K-055 paragraphs from `docs/BACKLOG.md`'s `## M6 items` section and its
+`## Milestones still open` table row, relocating `K-056` to `## Open follow-ups` now that M6 no
+longer gates it, and filing a new backlog item for `DEF-01` (U34's intermittent, likely-
+orchestration-layer compound-filter defect). This list is handed to the user/human in `teco`'s own
+closing report for this session, not applied here.

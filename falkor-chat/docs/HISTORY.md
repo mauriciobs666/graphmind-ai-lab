@@ -5,6 +5,79 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-30 — M6 (business entities in workflows) closed — all four sibling capabilities delivered
+
+**What:** M6's own closing condition ("all four sibling capabilities proven live inside the
+combined salesperson demo agent, golden-set/adversarial gates passed for K-055") is met. A final
+`qa-engineer` combined e2e pass (`docs/test-reports/workflow-salesperson-demo-report.md`, PASS, no
+defects) drove one continuous live conversation with the real `salesperson@v4` agent exercising all
+four capabilities together — catalog lookup, cart/order, durable profile, NL query generation —
+plus a second, independent thread proving profile and post-order cart state hold together without
+re-running the state-creating turns. No cross-capability interference, no regression versus any
+capability's own individually-recorded acceptance pass. See the four capability entries below and
+`docs/plans/workflow-salesperson-demo-coordination.md` (now archived) for the full multi-session
+trail. `K-056` (a separately-filed, still-open model-reliability defect, not one of M6's four
+gating items) remains open independent of this closure — see `docs/BACKLOG.md`.
+
+## 2026-08-30 — K-055: natural-language query generation over structured graph data — delivered
+
+**What:** Arbitrary-phrasing question answering via a constrained query-builder DSL
+(`server/falkorchat/querygen.py`), never free-form LLM-generated Cypher, executed exclusively
+through `GRAPH.RO_QUERY` as a second, engine-enforced non-mutation backstop. Wired into
+`salesperson@v4` (`query_graph_data` tool). Full trail: plan
+`docs/plans/workflow-nl-query-generation.md` (v1.1) + ml note (v2, corrected golden-set exclusion
+rule for permanently out-of-scope shapes); implementation review
+`docs/reviews/workflow-nl-query-generation-impl.md` (Pass 2: approve); RCA
+(`docs/reviews/workflow-nl-query-generation-rca.md`) root-causing and fixing 4 accuracy defects
+found by the golden-set harness; security review
+`docs/reviews/workflow-nl-query-generation-security.md` (4 passes — 2 design-time, 2 live — final
+verdict: approve, no open finding, after closing a `QueryFilter.op` allowlist gap found live in
+Pass 3); golden-set harness `docs/test-reports/workflow-nl-query-generation-report.md` (100% on
+every in-scope shape under the corrected gate; `relationship-traversal`/`conflicting-facts` are a
+named, permanent, structural gap — extending the DSL to cover them is a separate future scope
+decision, not resolved here); live acceptance
+`docs/test-reports/workflow-nl-query-generation2-report.md` (PASS WITH DEFECTS — one MAJOR,
+intermittent, likely-orchestration-layer defect on a compound-filter question, filed for follow-up,
+not gating).
+
+## 2026-08-30 — K-054: durable user-profile data for workflows — delivered
+
+**What:** Durable, workspace-scoped customer name/delivery-address capture as two properties on
+the shared `Customer` node (`get_profile`/`save_profile` tools), wired into `salesperson@v3`.
+Plan: `docs/plans/workflow-durable-profile.md` + graph note
+`docs/plans/workflow-durable-profile-graph.md`. Review: `docs/reviews/workflow-durable-profile.md`
+(one BLOCKER found and fixed live — a partial-update contract gap that would have silently erased
+previously captured customer data — Pass 2: approve with suggestions) +
+`docs/reviews/workflow-durable-profile-impl.md`. Live acceptance:
+`docs/test-reports/workflow-durable-profile-report.md` (PASS, all three AC hold).
+
+## 2026-08-30 — K-053: cart, orders, and deterministic totals — delivered
+
+**What:** Durable, workspace-scoped cart/order state (`Cart`/`CartItem`/`Order`/`OrderLine`) and an
+LLM-free computation for line-item totals and order snapshots (`view_cart`/`add_to_cart`/
+`remove_from_cart`/`clear_cart`/`place_order` tools, plus the `order-fulfillment@v1` process def
+for the operator-side lifecycle), wired into `salesperson@v2`. Plan:
+`docs/plans/workflow-cart-and-totals.md` (v2) + graph note
+`docs/plans/workflow-cart-and-totals-graph.md` (v2). Review:
+`docs/reviews/workflow-cart-and-totals.md` (one MAJOR found and fixed — unassigned write ownership
+for `ensure_customer`/`ensure_cart` — approve) + `docs/reviews/workflow-cart-and-totals-impl.md`.
+Live acceptance: `docs/test-reports/workflow-cart-and-totals-report.md` and, after K-056's Ministral
+re-point, the regression re-verification `docs/test-reports/workflow-cart-and-totals2-report.md`
+(both PASS WITH DEFECTS, all ten AC hold).
+
+## 2026-08-30 — K-052: structured catalog/reference lookup for workflows — delivered
+
+**What:** Fixed-shape exact-name/category/price-range lookup (`lookup_product_fact`/
+`filter_products` tools) against a new, seed-script-only ~15-product `Product` catalog in
+`reference`. Ships the shared `salesperson@v1` `WorkflowDef` scaffold the other three M6
+capabilities extended by version bump. Plan: `docs/plans/workflow-catalog-lookup.md`. Review:
+`docs/reviews/workflow-catalog-lookup.md` + `docs/reviews/workflow-catalog-lookup-impl.md`
+(approve). Live acceptance: `docs/test-reports/workflow-catalog-lookup-report.md` and, after
+K-056's Ministral re-point, the regression re-verification
+`docs/test-reports/workflow-catalog-lookup2-report.md` (both PASS WITH DEFECTS, all five AC hold).
+Filed `K-056` out of this capability's own QA gate (D-1: live tool-call skip-and-fabricate under
+extended conversations) — still open, tracked separately, not resolved by this delivery.
+
 ## 2026-08-30 — K-055: `querygen.compile()` closes the `QueryFilter.op` Layer-1 recheck gap
 
 **What:** `tdd-engineer` closed the one MAJOR finding from the security review's Pass 3 live
