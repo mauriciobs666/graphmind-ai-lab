@@ -656,3 +656,52 @@ rest of the module already has.
   configured local model, prompted this way, ever choose to comply) remains genuinely untested by
   this pass, as previously flagged in Pass 2's open questions — this pass only closes the
   structural half of Group A (can compliance, if it happened, ever matter), not the behavioral half.
+
+## Pass 4 — 2026-08-30 (confirmation pass against commit `3d01497`)
+
+**Verdict: approve.** Pass 3's sole MAJOR (`QueryFilter.op` had no independent `compile()`-level
+recheck) is fixed exactly as specified; no new finding. `teco` already verified this at the code
+level (diff read, RED-before/GREEN-after reproduced, full offline suite re-run at 2290 passed/14
+deselected, `verify_*.sh` all OK) — this pass independently re-runs my own original live
+reproduction against the current code, rather than taking that verification on trust.
+
+- **B2b (`QueryFilter.op` injection via `.model_construct()`) — fixed.** `querygen.py:316-319`
+  now has `_require(filt.op in {"=", "<>", "<", "<=", ">", ">="}, f"filter op {filt.op!r} is not a
+  valid operator")`, placed immediately after the `filt.property` allowlist check and before
+  `filt.op` is ever spliced into the `where_clauses` template — exactly the suggested improvement,
+  same shape as the pre-existing checks on every other splice-worthy field. Re-ran my own Pass 3
+  live reproduction verbatim, standalone (no probe graph needed — the fix rejects before any
+  engine call is possible): `QueryFilter.model_construct(property="price", op="> 0 WITH 1 AS x
+  MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //", value=0)` through a normally-constructed
+  `QueryMatch`/`QueryRequest` into `querygen.compile(req, CATALOG_SCHEMA)` now raises
+  `ValueError: filter op '> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //' is
+  not a valid operator` — confirmed directly, not inferred from the diff. `op` is no longer
+  reachable past a Pydantic bypass; every splice-worthy field in the DSL (`label`, `var`,
+  `property`, `op`, `returns`, `order_by`, match count) now has the "independent of whatever the
+  Pydantic field validators already did" recheck the module's own defense-in-depth posture claims
+  for all of them.
+- **New regression coverage — confirmed present and correctly scoped.**
+  `test_querygen.py::test_compile_rejects_invalid_op_from_hand_constructed_filter` uses my exact
+  live-reproduction payload via `.model_construct()`, mirrors the existing bypass-suite's style
+  (`test_compile_rejects_var_mismatch_from_hand_constructed_request` and siblings) precisely, and
+  asserts `pytest.raises(ValueError)`. Ran it in isolation: `1 passed` (`pytest -q
+  tests/test_querygen.py -k invalid_op`).
+- **No other change in the diff** — `git show 3d01497` touches only the one `_require` line in
+  `querygen.py`, the one new test in `test_querygen.py`, and a `HISTORY.md` entry; nothing else in
+  the compile pipeline moved, so no fresh Group A-E sweep is warranted this pass — the fix is
+  additive and strictly more restrictive (can only reject a shape that used to compile, never
+  accept one that used to fail), the same "more restrictive only" property this review already
+  confirmed for the duplicate-`returns` guard.
+
+**Overall verdict for the mechanism (K-055's `query_graph_data`), now that Pass 3's only open item
+is closed:** **approve, no open finding.** Across four review passes (two design-time, two
+live/post-implementation) covering the full FR-3/FR-3a adversarial surface (Groups A-E) against
+both hand-built inputs and the real shipped code/engine, every splice-worthy field in the DSL now
+has both a Pydantic-level guard and an independent `compile()`-level recheck, Layer 2
+(`GRAPH.RO_QUERY`'s engine-level write-refusal) is confirmed live and unchanged as the structural
+backstop, and the accuracy-fix cycle (RCA fixes A-D, the tuple-`DISTINCT` compilation, the
+duplicate-`returns` guard) introduced no new value-splice surface. The two remaining open items are
+both explicitly non-gating and already routed to the right owner: Group A's live-model-compliance
+question (`qa-engineer`/`data-scientist`) and Group E's resource-exhaustion posture (tracked
+separately per the original brief, unchanged since Pass 2's MINOR 1 closure). No blocker, no open
+MAJOR/MINOR against this mechanism as it stands today.
