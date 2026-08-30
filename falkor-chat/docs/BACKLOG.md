@@ -40,46 +40,46 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-057 — Intermittent self-contradictory/incomplete answer on a compound category+price filter question via `salesperson@v4` (🔵 proposed — filed out of K-055's `qa-engineer` live acceptance gate, DEF-01, 2026-08-30)
+### K-057 — `salesperson@v4` mistranslates an inclusive price boundary on "less than $X" questions, dropping the boundary item ~50% of the time (🔵 proposed — root-caused by `data-scientist`, `docs/reviews/salesperson-tool-reliability-ml.md` §11, 2026-08-30)
 
-> **Why it exists.** `docs/test-reports/workflow-nl-query-generation2-report.md` (DEF-01) found
-> that `@assistant Which peripherals cost less than $60?` produced a fully correct, complete answer
-> on one live attempt and a self-contradictory, incomplete one ("No peripherals under $60 are
-> listed... but here are two peripherals priced below $60: ...", omitting the third,
-> boundary-priced match) on an otherwise identical repeat attempt against `ws:nlq-eval`.
-> Reproducibility: 1 of 2 identical live attempts — not deterministic.
-- **Not a `querygen` DSL defect, on current evidence.** The golden-set harness — which inspects
-  `query_graph_data`'s raw tool result directly, bypassing the outer model — independently measures
-  **100% execution accuracy** on this exact shape (`compound-filter`, catalog, n=3,
-  `docs/test-reports/workflow-nl-query-generation-report.md`'s per-shape breakdown). The failing
-  attempt's distinguishing feature was that the model called **both** `filter_products` (K-052's
-  fixed-shape tool, whose category filter has no price predicate) **and** `query_graph_data` in the
-  same turn; the passing attempt called `filter_products` alone. Most likely explanation:
-  `mistralai/ministral-3-3b` (the `assistant` step's pinned model) conflated/mis-synthesized two
-  tool results into one contradictory reply — an orchestration-layer issue, not a mechanism-layer
-  one, in the same family as `K-058` below (a different failure mode, same root class: this
-  model's tool-orchestration reliability under this scaffold).
-- **Root cause not conclusively determined.** The live REST/`@mention` surface has no seam to
-  inspect a tool's raw structured result mid-conversation (`GET /workflow-runs/{id}/trace` returns
-  `[]`; `step-runs` surfaces only the rendered `output`) — the same gap
-  `docs/plans/workflow-nl-query-generation-ml.md` already flags as unique to the offline harness's
-  own instrumentation. The live QA pass's analysis is evidence-based, not a certainty.
-- **Owner:** `architect`/`data-scientist` — worth a look alongside `docs/reviews/
-  salesperson-tool-reliability-ml.md`'s existing Ministral tool-reliability findings. Candidate
-  angles (not decided here): (1) steer `systemPrompt` more clearly toward `query_graph_data` alone,
-  not both tools, once a question carries a price predicate `filter_products` can't express; (2) if
-  root-causing this precisely is worth it, the golden-set harness's own raw-result capture
-  (`server/tests/eval/run_nlq_golden_set_eval.py`) already has the inspection seam the live surface
-  lacks — reuse it for a scripted, repeated live-conversation probe (10-20 reps) to establish a real
-  failure rate before further action.
-- **Also recommended, independent of root-causing this specific defect:** surface a tool's raw
-  structured result on `GET /workflow-runs/{id}/step-runs` (or a debug-only query param) — a
-  low-cost live-QA testability gap this pass also flagged, useful for any future live QA pass on
-  any tool-calling capability, not just this one.
-- **Risks/RAM:** none — diagnosis/prompt-tuning only, no graph/schema surface.
-- **Test strategy:** a scripted, repeated live-conversation probe (10-20 reps) of the exact
-  reproduction question against a throwaway workspace, establishing an actual failure rate;
-  re-verify against the golden-set harness's raw-result capture if root-causing proceeds.
+> **Why it exists.** `docs/test-reports/workflow-nl-query-generation2-report.md` (DEF-01) first
+> found `@assistant Which peripherals cost less than $60?` giving a self-contradictory, incomplete
+> answer on one of two identical live attempts. The backlog's original hypothesis (an
+> orchestration-layer conflation of two tool results, resting on "`filter_products` has no price
+> predicate") was **tested directly against live code and a 20-rep live-reproduced sample and
+> found wrong on both counts** — see §11 for the full method and evidence.
+- **`filter_products` has always supported `minPrice`/`maxPrice`** (present since its K-052
+  introduction, `git log -p` confirmed) — the premise that a second tool is reached for because
+  the first "can't do the job" does not hold.
+- **The real, dominant defect: `mistralai/ministral-3-3b` unreliably translates "less than $X"
+  into `filter_products`'s documented-inclusive `maxPrice` bound.** Across 16 single-tool-call
+  reproductions, 9/16 (56.2%, Wilson CI 33.2-76.9%) used `maxPrice=59` (wrong — rounds down,
+  drops a $59.99 item) vs. 7/16 using the correct `59.99`-equivalent. Net across all 20 reps:
+  9/20 fully correct (45.0%, CI 25.8-65.8%), 10/20 silent boundary-drop (50.0%, CI 29.9-70.1%),
+  1/20 DEF-01's original self-contradiction shape (5.0%, CI 0.9-23.6%, reproduced but the
+  **minority** failure — its own mechanism is "failure to revise an earlier stated conclusion
+  after a later corrective tool call in the same turn," not two results conflated).
+- **A secondary, independently confirmed gap:** `query_graph_data` itself wrongly abstained
+  (`"no matching data found"`) on 2/2 live attempts at this exact question shape — not a
+  contradiction of the golden set's 100% compound-filter accuracy (n=3), but exposure that none
+  of the golden set's three compound-filter pairs use a boundary-adjacent threshold the way
+  DEF-01's $60-vs-$59.99 pairing does.
+- **Fix identified, not yet implemented:** two targeted `systemPrompt`/tool-description wording
+  additions (§11.5) — (1) explicit inclusive-bound/boundary-translation guidance for
+  `filter_products` (targets the 50% failure), (2) a "don't state a conclusion before your last
+  tool call this turn" instruction (targets the 5% shape). **Do not** adopt the original
+  candidate (steer toward `query_graph_data` alone) — its premise is false and it doesn't
+  address either confirmed mechanism, and could remove the self-correction path that let some
+  runs recover to a correct answer.
+- **Owner:** `coder`/`tdd-engineer` for the `v4`→`v5` `systemPrompt` edit (small, single-file,
+  `proof_defs.py`), sequenced after K-058 as part of the same coordination
+  (`docs/plans/salesperson-tool-reliability-coordination.md`).
+- **Risks/RAM:** none — prompt-tuning only, no graph/schema surface.
+- **Test strategy:** re-run §11's own harness pattern (`ds_k057_probe.py`, throwaway workspace,
+  ground-truth-instrumented tool registry, DEF-01's exact question) at n≥20 against the patched
+  `v5` def. Acceptance bar: `maxPrice` boundary-rounding collapses to ≥90% correct at n≥20; the
+  self-contradiction shape does not reappear in the same n. Also recommended: add one
+  boundary-adjacent `compound-filter` pair to `server/tests/eval/nlq_golden_set.jsonl`.
 
 ### K-058 — Ministral (`mistralai/ministral-3-3b`) sometimes silently re-fires an earlier, already-completed write tool call on a follow-up instruction (🔵 proposed — filed out of K-056's model-swap pilot, `docs/reviews/salesperson-tool-reliability-ml.md` §8.4/§9, 2026-08-29/30)
 
