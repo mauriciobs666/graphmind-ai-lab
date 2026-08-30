@@ -364,28 +364,59 @@ def compile(request: QueryRequest, schema: DatasetSchema) -> CompiledQuery:
             schema=schema,
             allow_aggregate=False,
         )
-        if distinct and order_expr not in return_exprs:
-            # graph-dba amendment (`claude/graph-dba/falkordb-quirks.md`,
-            # "RETURN DISTINCT ... ORDER BY ..." entry): this FalkorDB build
-            # does not error on `RETURN DISTINCT <col> ORDER BY <col not in
-            # RETURN>` — it silently sorts by whichever duplicate row
-            # DISTINCT's dedup happened to keep, non-deterministically
-            # (depends on node insertion order). Reject at compile time
-            # instead of shipping that ambiguity.
-            raise ValueError(
-                f"order_by {order_expr!r} must be one of returns {return_exprs!r} "
-                "when the result is deduplicated (DISTINCT)"
-            )
 
     params["limit"] = request.limit
 
     clauses = [f"MATCH ({declared_var}:{match.label})"]
     if where_clauses:
         clauses.append("WHERE " + " AND ".join(where_clauses))
-    return_keyword = "RETURN DISTINCT " if distinct else "RETURN "
-    clauses.append(return_keyword + ", ".join(return_exprs))
-    if order_expr is not None:
-        clauses.append(f"ORDER BY {order_expr} {request.order_dir}")
-    clauses.append("LIMIT $limit")
+
+    needs_tuple_distinct = (
+        distinct and order_expr is not None and order_expr not in return_exprs
+    )
+    if needs_tuple_distinct:
+        # graph-dba (`claude/graph-dba/falkordb-quirks.md`, "distinct
+        # projection, ordered by a column NOT in the projection" entry —
+        # refines the earlier "RETURN DISTINCT ... ORDER BY ..." entry, does
+        # not contradict it): the naive `RETURN DISTINCT <returns> ORDER BY
+        # <order_by>` plans `Project -> Distinct -> Sort -> Limit` — DISTINCT
+        # collapses to the RETURNed columns alone BEFORE Sort runs, so the
+        # sort key surviving for a collapsed group is arbitrary and can
+        # produce a flat-out WRONG answer, not just a non-deterministic one
+        # (live-verified: same data, opposite creation order, one order
+        # gives the correct min/max, the other doesn't). Rejecting this shape
+        # outright (an earlier version of this fix) was also wrong: it is
+        # the DSL's *only* way to express "the <projected column> of the row
+        # achieving the min/max of <order_by column>" — a superlative
+        # question ("which product is the cheapest?") with no aggregate
+        # return. The confirmed fix instead dedups on the FULL tuple (every
+        # column actually needed — both requested and the sort key) in the
+        # same WITH that carries the ORDER BY/LIMIT, then RETURNs only the
+        # originally-requested columns, re-aliased back to their original
+        # expression text (`c0 AS \`p.name\``) so callers keep seeing the
+        # same "column key = raw expression text" contract every other
+        # compiled shape here guarantees (`repository.run_readonly_query`'s
+        # own docstring — `querygen.compile` never aliases a RETURN
+        # expression).
+        aliases = [f"c{i}" for i in range(len(return_exprs))]
+        order_alias = f"c{len(return_exprs)}"
+        with_items = [
+            f"{expr} AS {alias}" for expr, alias in zip(return_exprs, aliases)
+        ]
+        with_items.append(f"{order_expr} AS {order_alias}")
+        clauses.append("WITH DISTINCT " + ", ".join(with_items))
+        clauses.append(f"ORDER BY {order_alias} {request.order_dir}")
+        clauses.append("LIMIT $limit")
+        clauses.append(
+            "RETURN " + ", ".join(
+                f"{alias} AS `{expr}`" for expr, alias in zip(return_exprs, aliases)
+            )
+        )
+    else:
+        return_keyword = "RETURN DISTINCT " if distinct else "RETURN "
+        clauses.append(return_keyword + ", ".join(return_exprs))
+        if order_expr is not None:
+            clauses.append(f"ORDER BY {order_expr} {request.order_dir}")
+        clauses.append("LIMIT $limit")
 
     return CompiledQuery(cypher=" ".join(clauses), params=params)

@@ -21,11 +21,26 @@ at teardown, `falkor-chat/AGENTS.md`); `ws:nlq-eval` is the golden-set
 knowledge-base workspace seeded by an earlier unit and left alone here.
 
 This is deliberately narrower than the full 39-pair golden-set harness
-(`server/tests/eval/run_nlq_golden_set_eval.py`, a later unit's job): four
-representative shapes from the RCA's own probes (§3), enough to confirm the
-compiled fix actually returns the golden set's expected *values* against the
-real data — stronger evidence than the compile()-only unit tests in
-`test_querygen.py` alone, which only check the emitted Cypher/params text.
+(`server/tests/eval/run_nlq_golden_set_eval.py`, a later unit's job): a
+handful of representative shapes from the RCA's own probes (§3), enough to
+confirm the compiled fix actually returns the golden set's expected *values*
+against the real data — stronger evidence than the compile()-only unit tests
+in `test_querygen.py` alone, which only check the emitted Cypher/params text.
+
+**Correction (fix C, superlative shape):** the tuple-DISTINCT `WITH`
+compilation (`claude/graph-dba/falkordb-quirks.md`, "distinct projection,
+ordered by a column NOT in the projection") replaced an earlier reject-outright
+guard that made every superlative question ("which product is the cheapest?")
+raise `ValueError` — that shape (`order_by` not among `returns`, no aggregate
+return) is the DSL's only way to express it, and it's in the golden set
+(`nlq-16/17/20`). The `test_nlq16_*`/`test_nlq17_*`/`test_nlq20_*` cases below
+reproduce it live. `nlq-25` reuses the exact `returns=["e.entityId"],
+order_by="e.name"` shape the RCA's probe recovered for it to prove the new
+compilation runs correctly against real data too — but note `nlq-25`'s
+*golden* value is a list of `name`s, not `entityId`s (RCA category D, a prompt
+fix, not this fix's job), so that test asserts structural correctness (no
+error, correctly ordered, right row count) rather than a golden-set value
+match.
 """
 
 from __future__ import annotations
@@ -119,6 +134,105 @@ def test_nlq21_duplicate_entity_projection_is_deduped_to_one_row(repo: Repositor
     graph_key = f"ws:{NLQ_EVAL_WS}"
     rows = repo.run_readonly_query(graph_key, compiled)
     assert rows == [{"e.type": "Organization"}]
+
+
+def test_nlq16_cheapest_product_superlative_matches_golden_set(repo: Repository):
+    # nlq-16: "Which product is the cheapest?" — filters:[], returns:
+    # ["p.name"], order_by:"p.price", order_dir ASC, limit:1. Golden value:
+    # "Gaming Mouse Pad XL" (min price 19.99 across all 15 products).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name"],
+        order_by="p.price",
+        order_dir="ASC",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    rows = repo.run_readonly_query("reference", compiled)
+    assert rows == [{"p.name": "Gaming Mouse Pad XL"}]
+
+
+def test_nlq17_most_expensive_product_superlative_matches_golden_set(repo: Repository):
+    # nlq-17: "Which product is the most expensive?" — same shape, DESC.
+    # Golden value: "27-inch 4K Monitor" (max price 349.99).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name"],
+        order_by="p.price",
+        order_dir="DESC",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    rows = repo.run_readonly_query("reference", compiled)
+    assert rows == [{"p.name": "27-inch 4K Monitor"}]
+
+
+def test_nlq20_superlative_combined_with_a_filter_matches_golden_set(repo: Repository):
+    # nlq-20: "What is the cheapest product in the Wearables category?" —
+    # superlative shape combined with a filter predicate. Golden value:
+    # "Fitness Tracker Band" (79.99 vs Smartwatch Series 5's 249.99).
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[
+            QueryMatch(var="p", label="Product",
+                       filters=[QueryFilter(property="category", op="=", value="Wearables")])
+        ],
+        returns=["p.name"],
+        order_by="p.price",
+        order_dir="ASC",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    rows = repo.run_readonly_query("reference", compiled)
+    assert rows == [{"p.name": "Fitness Tracker Band"}]
+
+
+def test_nlq25_entityid_projection_with_order_by_not_in_returns_runs_correctly(repo: Repository):
+    # nlq-25: "Which entities are of type Location?" — the RCA's probe (§4.1.3)
+    # recovered returns:["e.entityId"] with order_by:"e.name" (not in returns).
+    # This exercises the tuple-DISTINCT compile path against real duplicate
+    # data (11 raw Location nodes, Colorado x3/Denver x2, per the golden
+    # set's own rationale) — asserting it runs correctly (right row count,
+    # sorted by name, every key the raw "e.entityId" expression text) rather
+    # than the golden-set *name* values, since projecting entityId instead of
+    # name is category D (a prompt fix), not this fix's job.
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(var="e", label="Entity",
+                       filters=[QueryFilter(property="type", op="=", value="Location")])
+        ],
+        returns=["e.entityId"],
+        order_by="e.name",
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    graph_key = f"ws:{NLQ_EVAL_WS}"
+    rows = repo.run_readonly_query(graph_key, compiled)
+    assert len(rows) == 11  # raw node count, entityId is unique per node (no dedup collapse here)
+    assert all(set(row) == {"e.entityId"} for row in rows)
+
+
+def test_nlq26_name_projection_filter_list_still_dedups_correctly(repo: Repository):
+    # nlq-26: "What entities are classified as Person?" — same duplicate-
+    # entity family as nlq-21/25 (5 raw Person nodes, Devon Cole x3), but
+    # projecting `e.name` directly (no order_by) — the plain scoped-DISTINCT
+    # path (untouched by this correction). Golden value: 3 distinct names.
+    request = QueryRequest(
+        dataset="knowledge_base",
+        matches=[
+            QueryMatch(var="e", label="Entity",
+                       filters=[QueryFilter(property="type", op="=", value="Person")])
+        ],
+        returns=["e.name"],
+    )
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    graph_key = f"ws:{NLQ_EVAL_WS}"
+    rows = repo.run_readonly_query(graph_key, compiled)
+    names = {row["e.name"] for row in rows}
+    assert names == {"Devon Cole", "Elena Ferro", "Priya Nandakumar"}
+    assert len(rows) == 3  # DISTINCT actually collapsed Devon Cole's 3 raw nodes to 1
 
 
 def test_nlq31_aggregate_count_still_the_raw_unfused_count(repo: Repository):

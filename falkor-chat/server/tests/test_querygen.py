@@ -519,12 +519,16 @@ def test_compile_does_not_add_distinct_for_aggregate_returns():
     assert "DISTINCT" not in compiled.cypher
 
 
-def test_compile_rejects_order_by_not_in_returns_when_distinct_applies():
-    # graph-dba amendment (`claude/graph-dba/falkordb-quirks.md`, "RETURN
-    # DISTINCT ... ORDER BY ..." entry): this build does not error on an
-    # ORDER BY column absent from a DISTINCT RETURN — it silently sorts
-    # non-deterministically. Reject at compile time instead (the exact
-    # nlq-25 probe shape: order_by names a column not in returns).
+def test_compile_uses_tuple_distinct_when_order_by_not_in_returns():
+    # graph-dba (`claude/graph-dba/falkordb-quirks.md`, "distinct
+    # projection, ordered by a column NOT in the projection" entry): a plain
+    # `RETURN DISTINCT <returns> ORDER BY <order_by not in returns>` can
+    # return a flat-out WRONG answer (DISTINCT collapses to the returned
+    # columns before ORDER BY runs, discarding the sort-key pairing). The
+    # confirmed fix dedups on the full tuple in a WITH, then RETURNs only
+    # the requested columns re-aliased back to their original expression
+    # text (the exact nlq-25 probe shape: order_by names a column not in
+    # returns).
     request = QueryRequest(
         dataset="knowledge_base",
         matches=[
@@ -536,8 +540,35 @@ def test_compile_rejects_order_by_not_in_returns_when_distinct_applies():
         returns=["e.entityId"],
         order_by="e.name",
     )
-    with pytest.raises(ValueError):
-        qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert compiled.cypher == (
+        "MATCH (e:Entity) WHERE e.type = $p0 "
+        "WITH DISTINCT e.entityId AS c0, e.name AS c1 "
+        "ORDER BY c1 ASC LIMIT $limit "
+        "RETURN c0 AS `e.entityId`"
+    )
+
+
+def test_compile_uses_tuple_distinct_for_superlative_shape_with_no_filter():
+    # The DSL's only way to express a superlative ("which product is the
+    # cheapest?"): no aggregate return, order_by/limit only, order_by not
+    # among returns. Must compile (never raise) via the tuple-DISTINCT form.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name"],
+        order_by="p.price",
+        order_dir="ASC",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert compiled.cypher == (
+        "MATCH (p:Product) "
+        "WITH DISTINCT p.name AS c0, p.price AS c1 "
+        "ORDER BY c1 ASC LIMIT $limit "
+        "RETURN c0 AS `p.name`"
+    )
+    assert compiled.params == {"limit": 1}
 
 
 def test_compile_allows_order_by_in_returns_when_distinct_applies():
@@ -625,11 +656,12 @@ def test_regression_nlq21_duplicate_entity_projection_now_deduped():
     assert "DISTINCT" in compiled.cypher
 
 
-def test_regression_nlq25_order_by_not_in_returns_now_rejected_not_nondeterministic():
+def test_regression_nlq25_order_by_not_in_returns_now_deduped_not_nondeterministic():
     # nlq-25: "Which entities are of type Location?" — the probe recovered
-    # returns:["e.entityId"] with order_by:"e.name" (not in returns); the
-    # graph-dba amendment requires a compile-time rejection here, not a
-    # silently non-deterministic sort.
+    # returns:["e.entityId"] with order_by:"e.name" (not in returns). The
+    # confirmed fix compiles this via the tuple-DISTINCT WITH form (never
+    # raises), which dedups correctly instead of the plain-DISTINCT form's
+    # silently non-deterministic (and, per graph-dba, potentially wrong) sort.
     request = QueryRequest(
         dataset="knowledge_base",
         matches=[
@@ -639,8 +671,28 @@ def test_regression_nlq25_order_by_not_in_returns_now_rejected_not_nondeterminis
         returns=["e.entityId"],
         order_by="e.name",
     )
-    with pytest.raises(ValueError):
-        qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    compiled = qg_compile(request, KNOWLEDGE_BASE_SCHEMA)
+    assert "WITH DISTINCT" in compiled.cypher
+    assert "RETURN c0 AS `e.entityId`" in compiled.cypher
+
+
+def test_regression_nlq16_superlative_cheapest_product_now_compiles():
+    # nlq-16: "Which product is the cheapest?" — filters:[], order_by:
+    # "p.price", limit:1, returns:["p.name"]. This exact shape is worked
+    # example #4 in `_QUERY_REQUEST_INSTRUCTIONS` and is in the golden set
+    # (nlq-16/17/20) — an earlier version of fix C rejected it outright,
+    # which was itself a regression; it must compile successfully.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[])],
+        returns=["p.name"],
+        order_by="p.price",
+        order_dir="ASC",
+        limit=1,
+    )
+    compiled = qg_compile(request, CATALOG_SCHEMA)
+    assert "WITH DISTINCT p.name AS c0, p.price AS c1" in compiled.cypher
+    assert "RETURN c0 AS `p.name`" in compiled.cypher
 
 
 def test_regression_nlq31_aggregate_count_unaffected_by_distinct_scoping():
