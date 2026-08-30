@@ -176,6 +176,27 @@ _SCHEMAS = {
             },
         },
     },
+    # K-055 M6: the NL-query tool v4 grants — same "present so the offering
+    # loop has a schema, never dispatched by either guard-safety test below"
+    # posture as the cart/profile tools above.
+    "query_graph_data": {
+        "type": "function",
+        "function": {
+            "name": "query_graph_data",
+            "description": (
+                "Answer an arbitrarily-phrased question against structured "
+                "graph data."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string"},
+                    "dataset": {"type": "string"},
+                },
+                "required": ["question", "dataset"],
+            },
+        },
+    },
 }
 
 
@@ -292,14 +313,15 @@ def test_salesperson_def_pins_ministral_model_and_version_bump():
     role default, which K-056 found silently skips tool calls on ~97.5% of
     conversations reaching a 4th turn — `docs/reviews/
     salesperson-tool-reliability-ml.md` §8), first bumped at `v2.1` and carried
-    forward unchanged into `v3` (K-054, the durable-profile capability bump) —
-    `config.model` is create-only exactly like `config.tools`/`systemPrompt`
-    (`proof_defs.py`'s module docstring), so a version that republished a full,
-    fresh `config` without repeating this line would silently fall back to the
-    shared `step`-role default and undo the re-point."""
+    forward unchanged into `v3` (K-054, the durable-profile capability bump)
+    and `v4` (K-055, NL query generation) — `config.model` is create-only
+    exactly like `config.tools`/`systemPrompt` (`proof_defs.py`'s module
+    docstring), so a version that republished a full, fresh `config` without
+    repeating this line would silently fall back to the shared `step`-role
+    default and undo the re-point."""
     assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
     assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
-    assert SALESPERSON_DEF["version"] == "v3"
+    assert SALESPERSON_DEF["version"] == "v4"
 
 
 # ── 2. a same-version republish is a clean structural no-op ───────────────────
@@ -372,7 +394,8 @@ def test_v1_and_v2_coexist_in_the_same_workspace_without_conflict(wf_repo):
     assert v1_tools == ["post_message", "lookup_product_fact", "filter_products"]
     assert "add_to_cart" in v2_tools and "add_to_cart" not in v1_tools
     assert "get_profile" in v2_tools and "get_profile" not in v1_tools
-    assert len(v2_tools) == len(v1_tools) + 7
+    assert "query_graph_data" in v2_tools and "query_graph_data" not in v1_tools
+    assert len(v2_tools) == len(v1_tools) + 8
 
 
 # ── 3. the safety-critical property: ordinary conversation never ends itself ──

@@ -171,16 +171,16 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # names as the canonical scaffold for FOUR sibling capabilities (`docs/plans/
 # workflow-catalog-lookup.md` §2.3-§2.5, the document that owns this constant's
 # design): catalog lookup (K-052, this landing), cart/order (K-053), durable
-# profile (K-054), and NL query generation (K-055). Each sibling **bumps this
-# constant's `version`** (`v1` -> `v2` -> `v3` -> `v4`) and republishes the FULL
-# cumulative `config.tools`/`systemPrompt` — never edits `v1` in place — because a
-# def's topology is immutable per version (`docs/DESIGN.md` §4) but `config.tools`/
-# `systemPrompt` are create-only properties: a same-version republish with an
-# added tool would silently no-op and the new tool would never reach a running
-# agent (plan §2.5). Topology (one `agent` step + the `ended` decision step + the
-# one `ctx.endConversation` transition) is deliberately identical across all four
-# versions, so the K-034 409 topology-conflict path is never hit by a later
-# sibling's version bump.
+# profile (K-054), and NL query generation (K-055, `v4`). Each sibling **bumps
+# this constant's `version`** (`v1` -> `v2` -> `v3` -> `v4`) and republishes the
+# FULL cumulative `config.tools`/`systemPrompt` — never edits `v1` in place —
+# because a def's topology is immutable per version (`docs/DESIGN.md` §4) but
+# `config.tools`/`systemPrompt` are create-only properties: a same-version
+# republish with an added tool would silently no-op and the new tool would never
+# reach a running agent (plan §2.5). Topology (one `agent` step + the `ended`
+# decision step + the one `ctx.endConversation` transition) is deliberately
+# identical across all four versions, so the K-034 409 topology-conflict path is
+# never hit by a later sibling's version bump.
 #
 # **`v2.1` (K-056, this bump) is a different kind of version bump than the
 # `v1`->`v2`->`v3`->`v4` capability sequence above** — it changes neither
@@ -210,6 +210,16 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # the whole re-point, defeating K-056's fix. Every subsequent version (`v4`,
 # K-055) must carry it forward too, for the same reason.
 #
+# **`v4` (K-055, natural-language query generation) is back on the
+# `v1`->`v2`->`v3`->`v4` capability sequence** — it adds `query_graph_data` to
+# `config.tools` and extends `systemPrompt` with guidance for when to reach for
+# it, per `docs/plans/workflow-nl-query-generation.md` §4 step 7, same
+# cumulative-republish rule as every capability bump above. `config.model`
+# (`lmstudio/mistralai/ministral-3-3b`, K-056's re-point) is carried forward
+# **unchanged** here too, for the same create-only reason the `v3` note above
+# gives — this is the last version this module currently anticipates, but the
+# obligation would bind any future bump the same way.
+#
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
 # to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
@@ -229,7 +239,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v3",
+    "version": "v4",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -247,9 +257,9 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
                 # at first use. Carried forward unchanged from `v2.1` into `v3`
-                # (K-054) — `config.model` is create-only, so omitting this line on a
-                # version bump would silently undo the re-point (see the `v3` note
-                # above).
+                # (K-054) and again into `v4` (K-055) — `config.model` is create-only,
+                # so omitting this line on a version bump would silently undo the
+                # re-point (see the `v3`/`v4` notes above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
@@ -277,6 +287,12 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "known for this customer. As soon as the customer gives you a name "
                     "or delivery address, call `save_profile` with it; you can save one "
                     "field at a time, it never erases the other.\n\n"
+                    "For a question that doesn't match a specific catalog lookup, use "
+                    "`query_graph_data` instead of guessing — for example an aggregate "
+                    "question like \"how many products do you have\", or a question "
+                    "asking for a fact this prompt doesn't specifically anticipate. "
+                    "Never claim not to know or guess an answer you have not retrieved "
+                    "from a tool; try `query_graph_data` first.\n\n"
                     "Deliver every reply by calling the `post_message` tool; text you "
                     "merely write is never seen by the customer. Never pass `mentions`; "
                     "omit that argument entirely."
@@ -284,7 +300,7 @@ SALESPERSON_DEF: dict[str, Any] = {
                 "tools": [
                     "post_message", "lookup_product_fact", "filter_products",
                     "view_cart", "add_to_cart", "remove_from_cart", "clear_cart",
-                    "place_order", "get_profile", "save_profile",
+                    "place_order", "get_profile", "save_profile", "query_graph_data",
                 ],
                 "requiredTools": ["post_message"],
                 "maxIterations": 8,
