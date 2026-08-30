@@ -1,7 +1,7 @@
 # `salesperson` scaffold — live tool-call reliability diagnostic (D-1 follow-up)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-052, K-056 (M6) — informs
-> K-053/K-054/K-055 sequencing
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-052, K-056, K-057 (M6) —
+> informs K-053/K-054/K-055 sequencing
 
 ## Verdict
 
@@ -853,3 +853,247 @@ compatibility check first, same caveat.
   (e.g. [R2IF](https://arxiv.org/pdf/2604.20316), [FunReason](https://arxiv.org/pdf/2505.20192))
 - Llama 3.2 tool-calling support: [Meta/Novita blog walkthrough](https://blogs.novita.ai/does-llama-3-2-support-function-calling/), [llama.cpp function-calling docs](https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md)
 - Gemma 3 tool-calling caveat / FunctionGemma: [Google FunctionGemma announcement](https://blog.google/innovation-and-ai/technology/developers-tools/functiongemma/), [Gemma function-calling walkthrough](https://www.philschmid.de/gemma-function-calling)
+
+## 11. K-057 compound-filter answer-conflation diagnosis (2026-08-30)
+
+**What this section answers, and for whom.** DEF-01 (`docs/test-reports/
+workflow-nl-query-generation2-report.md`) found `@assistant Which peripherals cost less than
+$60?` gave a correct, complete answer on one live attempt and a self-contradictory, incomplete
+one on an identical repeat — the failing attempt called both `filter_products` and
+`query_graph_data`, the passing one called `filter_products` alone. K-057
+(`docs/BACKLOG.md`) filed this as worth a controlled rate estimate before acting, and named a
+leading hypothesis: an **orchestration-layer** conflation of two tool results, resting on the
+premise that `filter_products`'s category filter "has no price predicate." This section
+**tests that hypothesis directly against live code and a live-reproduced sample, rather than
+accepting it** — the same discipline this note's own §8/§9 and
+`docs/reviews/workflow-nl-query-generation-rca.md` apply elsewhere in this codebase. The
+premise turns out to be **factually wrong**, and the dominant failure mode is a **different,
+larger, and previously unmeasured defect**.
+
+### 11.1 Premise check (static, before any live run)
+
+`FilterProductsTool.schema` (`server/falkorchat/tools.py:450-479`) declares `minPrice`/
+`maxPrice` as ordinary optional parameters alongside `category`; `services.filter_products` →
+`repository.filter_products` (`server/falkorchat/repository.py:2724-2769`) compiles all three
+into one sargable `WHERE` clause (`p.price >= coalesce($minPrice, -1.0) AND p.price <=
+coalesce($maxPrice, 1e9)`). `git log -p` on this method's introduction (commit `14891c9`, K-052)
+shows `minPrice`/`maxPrice` present from the tool's very first version — **not** a capability
+added later. **`filter_products` has always been able to express a compound category+price
+predicate; the backlog's stated reason two tools get called is not supported by the code.**
+This alone does not tell us why the model sometimes calls `query_graph_data` too, or why the
+combination sometimes goes wrong — that needs the live probe below — but it rules out "the
+model reaches for a second tool because the first one structurally can't do the job" as the
+mechanism, before spending a single live LLM call on it.
+
+### 11.2 Method
+
+Same in-process harness precedent as §2/§8/§9 (`services.start_workflow_run` via
+`WorkflowTrigger.maybe_trigger`, `trace=True`), but with one **load-bearing departure from
+§8/§9's own convention**, not a stylistic choice: a **real `ModelGateway.from_env()`**, not the
+`StaticModelGateway` single-injected-client sugar §8/§9 used. Reason: `v4` (unlike the `v2`/
+`v2.1` defs §8/§9 tested) adds `query_graph_data`, and `QueryGraphDataTool.run()` resolves its
+own internal structured-completion call via `self._models.llm("step", ws=ctx.ws)` with **no
+`requested=` override** — under a real gateway this resolves to the shared `step`-kind role
+**default** (`config/models.json`: `"step": "lmstudio/qwen/qwen3-4b-2507"`), independently of
+the `assistant` step's own `config.model` pin to `mistralai/ministral-3-3b`
+(`_run_agent_node` passes `requested=config.get("model")` only for its *own* resolution,
+`server/falkorchat/executor.py:741-745`). A `StaticModelGateway` wrapping one injected client
+would silently erase this exact divergence and could not have surfaced what §11.4 below found.
+Confirmed by reading `app.py:361-393` (production wires exactly one shared `ModelGateway` across
+`build_builtin_registry` and `WorkflowExecutor`) and `tests/eval/run_nlq_golden_set_eval.py`
+(the golden-set harness itself already uses a real `ModelGateway.from_env()` for the identical
+reason, one more precedent for this being the right seam, not a novel choice).
+
+`FALKORCHAT_OPENCODE_CONFIG` was pointed at the repo's own `config/opencode.example.json`
+(`localhost:1234/v1`) rather than the shared `$HOME/.config/opencode/opencode.json`, whose
+`lmstudio` provider resolves to a LAN host (`192.168.0.69:1234`) that did not answer in this
+session (`curl` returned nothing before timeout; `localhost:1234/v1/models` answered
+immediately with both `mistralai/ministral-3-3b` and `qwen/qwen3-4b-2507` loaded) — the same
+override `run_nlq_golden_set_eval.py` already uses, for the same documented reason, not an
+ad hoc substitution. `FALKORCHAT_MODEL_CONFIG` was left at its shipped default
+(`config/models.json`) — real production overlay, unmodified.
+
+Fresh throwaway `ws:ds-k057` (`EMBEDDING_DIM=1024 bootstrap_schema.sh` → `seed_demo.sh` →
+`seed_catalog.sh` → `seed_salesperson.sh`), real `falkordb-dev`. **20 independent
+conversations** (backlog's own suggested 10-20 range, upper bound taken given how much
+behavioral diversity turned up early), each a fresh customer id / thread / run, posting
+DEF-01's exact reproduction text verbatim: `@assistant Which peripherals cost less than $60?`.
+A thin `LoggingToolRegistry` (subclasses the shipped `ToolRegistry`, overrides `dispatch` to
+record every call's full, untruncated arguments and raw JSON result before returning) supplied
+the ground-truth seam the live REST surface lacks and DEF-01 itself flagged as missing — the
+executor's own trace payloads truncate tool results at 200 chars (`executor._short`), too short
+to ground-truth a 6-8-item JSON list, so this wrapper (not the trace) is this pass's primary
+evidence source; `repo.read_trace` was still read per rep as a cross-check. Ground truth for
+the question itself, re-verified live immediately before the run:
+
+```
+MATCH (p:Product) WHERE p.category='Peripherals' AND p.price<60 RETURN p.name, p.price
+→ Gaming Mouse Pad XL 19.99 · Wireless Mouse Pro 29.99 · Webcam HD 1080p 59.99
+```
+
+`ws:ds-k057` was `GRAPH.DELETE`d after the pass; `reference`/`ws:acme` were never written to and
+were independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+`verify_workflows.sh acme`, all `OK`) before finishing. Script: `ds_k057_probe.py`, throwaway,
+not committed, left in this session's scratchpad, parameterized by `K057_N`.
+
+### 11.3 Result
+
+**Both tools were called in 4/20 runs (20%, Wilson 95% CI 8.1-41.6%) — DEF-01's own observed
+pattern, reproduced, but not the majority behavior and not, on inspection, driven by a belief
+that `filter_products` lacks a price predicate.** In all 4, the model's **first** `filter_products`
+call used `{"minPrice": 60}` — the *complement* of the question (products at $60 **and up**),
+an apparent direction/framing slip, not a missing-capability workaround (three of the four calls
+that followed reused `minPrice`/`maxPrice` correctly). `query_graph_data` was reached for
+**after** that mis-scoped first call, consistent with a self-correction/second-opinion
+attempt, not a belief filter_products is inadequate for the compound shape.
+
+**The dominant, previously unmeasured failure mode is a numeric-boundary translation error
+in `filter_products`'s own arguments, independent of whether `query_graph_data` is ever
+called.** Across single-`filter_products`-call runs (`n=16`), the model split cleanly into two
+groups by **one number**:
+
+| `maxPrice` argument used | n | Reply |
+|---|---|---|
+| `59.99` (correct: ≤ the boundary item's real price) | 7 | All 3 items, correct, complete |
+| `59` (wrong: excludes the $59.99 boundary item) | 9 | Only 2 items — `Webcam HD 1080p` silently dropped |
+
+**9/16 (56.2%, Wilson 95% CI 33.2-76.9%) of single-tool-call runs were wrong purely from this
+rounding**, with zero orchestration involved — no second tool, no conflicting result to
+synthesize. `filter_products`'s own schema documents `maxPrice` correctly ("only products
+priced at or below this amount"); the model's own translation of "less than $60" into that
+inclusive bound is the unreliable step, not the tool's semantics or its capability. Every
+single-call reply, right or wrong, correctly narrowed to genuinely-`Peripherals` items **despite
+`category` never once being passed** (0/20 runs passed `category` to `filter_products` at
+all) — the model reliably re-derives the category filter from its own knowledge of the returned
+rows' `category` field at synthesis time in every observed case, so category omission was not,
+in this sample, itself a source of wrong answers — only the price-boundary translation was.
+
+**DEF-01's exact self-contradiction shape reproduced once: 1/20 (5.0%, Wilson 95% CI
+0.9-23.6%).** Full trace, `ws:ds-k057` rep 5 — `filter_products({"minPrice": 60})` [wrong
+direction] → `filter_products({"category": "Peripherals", "minPrice": 60})` → correctly returns
+only `Mechanical Keyboard K200` ($89.99, genuinely ≥$60) → `query_graph_data("How many products
+are there in the catalog?")` → correctly `15` → `filter_products({"category": "Peripherals",
+"maxPrice": 60})` → correctly returns all 3 ground-truth items → **final reply: "There are no
+peripherals priced under $60 in the catalog. Here's what we do have under $60: [lists all 3
+correct items]."** The mechanism is not "two tool results synthesized badly" (there is no
+`query_graph_data`-vs-`filter_products` conflict here — `query_graph_data` answered an unrelated
+count question, cleanly) — it is **failure to revise an earlier, self-stated conclusion once a
+later, correct tool call inside the same turn's own multi-iteration loop contradicts it**. This
+is the same "no self-correction after an early misstep" mechanism §10's own literature survey
+names (Laban et al., arXiv:2505.06120) as a general, scale-independent LLM behavior — observed
+here, for the first time in this note's own evidence, **within one turn's tool loop**, not
+across conversation turns as §8.2's collapse-and-never-recover finding showed.
+
+**`query_graph_data` itself failed both times it was asked a live paraphrase of the exact
+reproduction question, independently of the outer model's synthesis.** Rep 7:
+`query_graph_data("Which peripherals cost less than $60?")` → `{"items": [], "finding": "no
+matching data found"}` — wrong; the correct 3-row answer exists and `filter_products`'s own
+concurrent, correctly-scoped call in the same run proves it. Rep 20:
+`query_graph_data("Which peripherals are priced under $60?")` → same abstention, same wrong.
+**This does not contradict `docs/test-reports/workflow-nl-query-generation-report.md`'s 100%
+compound-filter accuracy (n=3) — it exposes a coverage gap the backlog's framing did not
+account for.** Reading `server/tests/eval/nlq_golden_set.jsonl` directly: the three
+`compound-filter`-shape catalog pairs (`nlq-10/11/12`) use thresholds ($50, $30, $200) that sit
+comfortably clear of any product's actual price — **none is a boundary-adjacent case the way
+DEF-01's $60-vs-$59.99 pairing is**. "100% on this exact shape" was true for the shape
+taxonomy label the golden set tests; it was never evidence about boundary-adjacent thresholds
+specifically, which is exactly the sub-case DEF-01's own reproduction question happens to be.
+Both live occurrences of this exact abstention rebut "not a `querygen` DSL defect on current
+evidence" as originally stated in the backlog — it should read "not evidenced as a DSL defect by
+the golden set's existing cases," a narrower and more accurate claim. Both `query_graph_data`
+abstentions were also, in both runs, correctly ignored by the outer model in favor of a
+concurrent correct `filter_products` result (rep 7 gave the fully correct answer despite the
+abstention; rep 20 gave a still-incomplete-but-non-contradictory answer, itself a `maxPrice=59`
+rounding case) — so this abstention defect did not itself cause DEF-01's self-contradiction
+pattern in this sample, but it is a real, independently-confirmed, previously-unflagged
+`query_graph_data` reliability gap on a shape the golden set does not cover.
+
+Also observed, off the reproduction question's exact path but on the same live sample: rep 4's
+`query_graph_data("How many products are in the peripherals category?")` returned
+`{"count(p.name)": 0}` — wrong (ground truth is 4, per
+`docs/test-reports/workflow-catalog-lookup-report.md` TP-03) — an aggregate-with-category-filter
+shape the golden set's own `nlq_golden_set.jsonl` does not carry at all (its `aggregation` pairs
+are unfiltered counts). Named for completeness, not scored into any rate above — one occurrence,
+outside DEF-01's own question shape, flagged as a candidate for the golden set's own future
+expansion rather than something this pass sizes.
+
+**Net correctness: 9/20 fully correct and complete (45.0%, Wilson 95% CI 25.8-65.8%); 11/20
+wrong in some way (55.0%, Wilson 95% CI 34.2-74.2%), of which 10/20 (50.0%) are the silent
+boundary-drop and 1/20 (5.0%) is DEF-01's self-contradiction shape.** These two failure modes do
+not overlap in this sample (the one self-contradictory run's underlying `filter_products` calls
+used the *correct* `59.99`-equivalent boundary once corrected — its problem was the
+uncorrected earlier statement, not the final numbers).
+
+### 11.4 Severity assessment
+
+**Wrong, but not orchestration-layer in the sense the backlog named, and not primarily about
+`query_graph_data` at all.** The single largest, best-evidenced defect (50% of all runs, present
+in the *majority* of `filter_products`-alone runs with zero second tool involved) is
+`mistralai/ministral-3-3b`'s own unreliable conversion of a natural-language "less than $X"
+into `filter_products`'s documented-inclusive `maxPrice` bound — a **model-capability /
+prompt-guidance gap**, not a tool defect, not a synthesis-of-two-results defect, and not fixable
+by steering the model away from `query_graph_data` (the backlog's own named candidate angle):
+that fix targets a mechanism (tool selection) that is not what causes most of the wrong answers
+observed here. DEF-01's own self-contradiction pattern is real (reproduced once, ground-truth
+confirmed) but is the **minority** failure mode in this sample (5% vs. 50%), and its own
+mechanism — failure to revise an earlier stated conclusion after a later corrective tool call in
+the same turn — is closer in shape to §8.2's "no recovery" finding and to K-058's
+duplicate-instruction pattern (an uncorrected earlier action/belief persisting past a later,
+correct one) than to a two-results-conflated-badly story. Severity: **MAJOR**, same as DEF-01's
+own QA-assigned severity — a customer asking this ordinary question gets a wrong or incomplete
+answer roughly half the time on the current model/scaffold, materially worse than DEF-01's own
+1-of-2 anecdote suggested, just for a different reason than DEF-01 guessed.
+
+### 11.5 Recommendation
+
+**Fix now, and the fix is `systemPrompt`/tool-description wording, not a scaffold or model
+change — route as a fast, narrow follow-up, not a full architect/coder cycle.** Two independent,
+targeted wording additions, each aimed at a distinct confirmed mechanism above:
+
+1. **Boundary-translation guidance (targets the 50% failure — priority one).** Add one sentence
+   to `filter_products`'s tool description or the `assistant` step's `systemPrompt` making the
+   inclusive-bound semantics and the translation rule explicit, e.g.: *"`minPrice`/`maxPrice` are
+   inclusive ('at or above'/'at or below'). For 'less than $X', use a `maxPrice` just under X
+   (e.g. `X - 0.01`), never round down to the nearest whole dollar — a product priced at exactly
+   `X - 0.01` must still match."* This targets the mechanism directly confirmed by trace evidence
+   (§11.3's `59` vs. `59.99` split), not a guess dressed as a finding.
+2. **Non-revision guidance (targets the 5% shape — priority two, smaller payoff but cheap to
+   bundle).** A short instruction not to state a conclusion before every planned tool call for
+   the turn has returned, e.g.: *"Do not tell the customer a filter came up empty or that
+   nothing matches until you have made your last catalog lookup for this question — if an
+   earlier attempt looked empty or wrong, a later corrected one wins; never report both."*
+3. **Do not adopt the backlog's originally-named candidate** ("steer `systemPrompt` toward
+   `query_graph_data` alone once a question carries a price predicate `filter_products` can't
+   express") **as written** — its premise is false (§11.1) and it would not address either
+   confirmed mechanism above; §11.3 shows `filter_products` alone is wrong more often (56.2% of
+   its own single-call runs) than the two-tool path is self-contradictory (25%, 1/4) — steering
+   *toward* single-tool use without also fixing the boundary-translation bug would not help, and
+   could plausibly remove the self-correction path that let reps 4/7 recover to a correct answer.
+
+**Evaluation to confirm a fix, before shipping:** re-run this section's own harness
+(`ds_k057_probe.py` pattern — throwaway workspace, `LoggingToolRegistry`, DEF-01's exact
+question) at the same or a larger n against the `systemPrompt`-patched `v5` def, scoring the
+same three outcomes (correct-complete / silent-boundary-drop / self-contradictory) plus the
+`maxPrice` value actually dispatched on every single-call run. **Acceptance bar:** the `59` vs.
+`59.99` split should collapse to ≥90% `59.99`-or-equivalent-correct at n≥20 (a one-sided
+improvement claim against this pass's 43.8% baseline is easy to detect at this n — Wilson lower
+bound at, e.g., 18/20 correct is 71.7%, cleanly above the 43.8% point estimate measured here);
+the self-contradiction shape should not reappear in the same n (it was already rare — absence at
+n=20 is expected either way and not itself proof of a fix, only consistent with one; a
+larger confirming sample, n≈40-60, is worth running only if the team wants to distinguish
+"fixed" from "still ~5%, just not observed again," not required to ship). A **golden-set
+addition** is also recommended, independent of the prompt fix: add one `compound-filter` catalog
+pair at a genuine boundary-adjacent threshold (mirroring DEF-01's $60-vs-$59.99 pairing) to
+`nlq_golden_set.jsonl`, closing the coverage gap §11.3 identified — this is cheap, durable, and
+prevents this exact gap from recurring for the next capability that reads "100% on this shape"
+as blanket assurance.
+
+### 11.6 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this session's
+scratchpad: `ds_k057_probe.py` (`LoggingToolRegistry`-instrumented conversation driver, real
+`ModelGateway.from_env()`, `K057_N` env-parameterized rep count; results in a sibling
+`k057_probe_results.jsonl`). `ws:ds-k057` was `GRAPH.DELETE`d after this pass;
+`ws:acme`/`reference` were never written to and were independently re-verified in sync
+(`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
+finishing.

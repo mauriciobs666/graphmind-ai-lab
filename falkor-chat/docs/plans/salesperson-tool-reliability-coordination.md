@@ -47,5 +47,6 @@ Both tracks close with `analyst` review of any code diff and a combined live reg
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 (Track A) | `data-scientist` (fresh) | `a6686c8ef000c2ec1` | in-flight | K-057 root-cause diagnosis + rate estimate → new dated section in `docs/reviews/salesperson-tool-reliability-ml.md` | self → — | — |
+| U1 (Track A) | `data-scientist` (fresh) | `a6686c8ef000c2ec1` | delivered | K-057 root-cause diagnosis + rate estimate → `docs/reviews/salesperson-tool-reliability-ml.md` §11 | self → accepted (backlog premise falsified; dominant defect is a 50% boundary-rounding error, not orchestration; recommends `systemPrompt` wording fix, follow-up unit needed) | 201k tok / 72 tools |
 | U2 (Track B) | `tdd-engineer` (fresh) | `a057dc6683287232c` | in-flight | K-058 fix: dispatch-time text-presence guard on write-mutating tool calls, TDD + mutation-tested + live regression check | `analyst` → — | — |
+| U3 (Track A follow-up) | TBD | — | queued | K-057 `systemPrompt`/tool-description wording fix per §11.5, `v4`→`v5` | `analyst` → — | — |
