@@ -692,7 +692,7 @@ expect ~0%, label it a known v1 scope limit, not a defect. Also flagged: golden-
 must use the actual `DATASET_REGISTRY` keys (`catalog`/`knowledge_base`), not the ml note's
 illustrative labels; `Entity` has no numeric property (aggregation there is count-only).
 | U29b-gate | `analyst` (fresh) | `a90d20dd5760c0577` | accepted | `docs/reviews/workflow-nl-query-generation-golden-set.md` | self → **needs changes** (1 MAJOR) | 103k tok / 18 tools |
-| U29b-fix | `tdd-engineer` (resume U29b) | `a861eba1703f2282d` | queued | reword ~16 template-clone `question` fields per U29b-gate finding #1 (no `expected`/`shape`/`dataset` changes) | `analyst` (re-gate) → — | — |
+| U29b-fix | `tdd-engineer` (resume U29b) | `a861eba1703f2282d` | in-flight | reword ~16 template-clone `question` fields per U29b-gate finding #1 (no `expected`/`shape`/`dataset` changes) | `analyst` (re-gate) → — | — |
 | U29c | `tdd-engineer` (fresh) | — | queued | K-055 cluster 3c: golden-set harness — Layer 1 execution-accuracy scorer (canonicalization, per-shape breakdown, the two gates in §5) driven directly off `QueryGraphDataTool.run()`'s already-JSON structured result (no seam gap — U28 confirmed `run()` returns `{"items": rows}` before any NL rendering), Layer 2 rendered-answer sanity check, report generation | `analyst` (U31, batched w/ U27-U30) → — | — |
 | U30 | `coder` (resume U27) | — | queued | K-055 cluster 4: `proof_defs.py` (v4), seed/verify scripts | — | — |
 | U31 | `analyst` (resume) | — | queued | code review, K-055 diff | — | — |
