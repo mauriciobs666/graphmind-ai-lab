@@ -1,0 +1,1165 @@
+{
+  "runAt": "2026-08-30T00:40:55Z",
+  "model": "lmstudio/qwen/qwen3-4b-2507",
+  "records": [
+    {
+      "id": "nlq-01",
+      "dataset": "catalog",
+      "shape": "single-fact",
+      "question": "How much does the Wireless Charging Pad cost?",
+      "expected": {
+        "type": "scalar",
+        "value": 24.99
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.price": 24.99
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "24.99 matches expected 24.99",
+      "layer1Extracted": 24.99,
+      "renderedAnswer": "The Wireless Charging Pad costs $24.99.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-02",
+      "dataset": "catalog",
+      "shape": "single-fact",
+      "question": "What category is the Portable SSD 1TB in?",
+      "expected": {
+        "type": "scalar",
+        "value": "Storage"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got []",
+      "layer1Extracted": null,
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-03",
+      "dataset": "catalog",
+      "shape": "single-fact",
+      "question": "What's the price of the Smartwatch Series 5?",
+      "expected": {
+        "type": "scalar",
+        "value": 249.99
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.price": 249.99
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "249.99 matches expected 249.99",
+      "layer1Extracted": 249.99,
+      "renderedAnswer": "The price of the Smartwatch Series 5 is $249.99.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-04",
+      "dataset": "catalog",
+      "shape": "single-fact",
+      "question": "Which category does the Action Camera 4K belong to?",
+      "expected": {
+        "type": "scalar",
+        "value": "Cameras"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got []",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-05",
+      "dataset": "catalog",
+      "shape": "single-fact",
+      "question": "Can you tell me how much the 27-inch 4K Monitor costs?",
+      "expected": {
+        "type": "scalar",
+        "value": 349.99
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.price": 349.99
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "349.99 matches expected 349.99",
+      "layer1Extracted": 349.99,
+      "renderedAnswer": "The 27-inch 4K Monitor costs $349.99.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-06",
+      "dataset": "catalog",
+      "shape": "filter-list",
+      "question": "Which products are in the Peripherals category?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Gaming Mouse Pad XL",
+          "Wireless Mouse Pro",
+          "Webcam HD 1080p",
+          "Mechanical Keyboard K200"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.name": "Gaming Mouse Pad XL"
+          },
+          {
+            "p.name": "Mechanical Keyboard K200"
+          },
+          {
+            "p.name": "Webcam HD 1080p"
+          },
+          {
+            "p.name": "Wireless Mouse Pro"
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "gaming mouse pad xl",
+        "mechanical keyboard k200",
+        "webcam hd 1080p",
+        "wireless mouse pro"
+      ],
+      "renderedAnswer": "The products in the Peripherals category are Gaming Mouse Pad XL, Mechanical Keyboard K200, Webcam HD 1080p, and Wireless Mouse Pro.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-07",
+      "dataset": "catalog",
+      "shape": "filter-list",
+      "question": "What products fall under the Wearables category?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Fitness Tracker Band",
+          "Smartwatch Series 5"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.name": "Fitness Tracker Band"
+          },
+          {
+            "p.name": "Smartwatch Series 5"
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "fitness tracker band",
+        "smartwatch series 5"
+      ],
+      "renderedAnswer": "The products that fall under the Wearables category are Fitness Tracker Band and Smartwatch Series 5.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-08",
+      "dataset": "catalog",
+      "shape": "filter-list",
+      "question": "Which products cost less than $50?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Gaming Mouse Pad XL",
+          "Wireless Charging Pad",
+          "Wireless Mouse Pro",
+          "Laptop Stand Aluminum",
+          "USB-C Hub 7-in-1",
+          "Bluetooth Speaker Mini"
+        ]
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['bluetooth speaker mini', 'gaming mouse pad xl', 'laptop stand aluminum', 'usb-c hub 7-in-1', 'wireless charging pad', 'wireless mouse pro'], got []",
+      "layer1Extracted": [],
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-09",
+      "dataset": "catalog",
+      "shape": "filter-list",
+      "question": "Can you list the products in the Audio category?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Bluetooth Speaker Mini",
+          "Noise Cancelling Headphones X3"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "p.name": "Bluetooth Speaker Mini"
+          },
+          {
+            "p.name": "Noise Cancelling Headphones X3"
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "bluetooth speaker mini",
+        "noise cancelling headphones x3"
+      ],
+      "renderedAnswer": "The products in the Audio category are Bluetooth Speaker Mini and Noise Cancelling Headphones X3.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-10",
+      "dataset": "catalog",
+      "shape": "compound-filter",
+      "question": "Which Peripherals products cost less than $50?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Gaming Mouse Pad XL",
+          "Wireless Mouse Pro"
+        ]
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['gaming mouse pad xl', 'wireless mouse pro'], got []",
+      "layer1Extracted": [],
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-11",
+      "dataset": "catalog",
+      "shape": "compound-filter",
+      "question": "Are there any Accessories products priced above $30?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Laptop Stand Aluminum",
+          "USB-C Hub 7-in-1"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(p.name)": 0
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['laptop stand aluminum', 'usb-c hub 7-in-1'], got ['0']",
+      "layer1Extracted": [
+        "0"
+      ],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-12",
+      "dataset": "catalog",
+      "shape": "compound-filter",
+      "question": "Show me Wearables products that cost under $200.",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Fitness Tracker Band"
+        ]
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['fitness tracker band'], got []",
+      "layer1Extracted": [],
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-13",
+      "dataset": "catalog",
+      "shape": "not-found",
+      "question": "What's the price of the Bluetooth Speaker Max?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-14",
+      "dataset": "catalog",
+      "shape": "not-found",
+      "question": "Which category does the Wireless Earbuds Pro belong to?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-15",
+      "dataset": "catalog",
+      "shape": "not-found",
+      "question": "Can you tell me how much the Gaming Keyboard RGB costs?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-16",
+      "dataset": "catalog",
+      "shape": "aggregation",
+      "question": "Which product is the cheapest?",
+      "expected": {
+        "type": "scalar",
+        "value": "Gaming Mouse Pad XL"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got []",
+      "layer1Extracted": null,
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-17",
+      "dataset": "catalog",
+      "shape": "aggregation",
+      "question": "Which product is the most expensive?",
+      "expected": {
+        "type": "scalar",
+        "value": "27-inch 4K Monitor"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got []",
+      "layer1Extracted": null,
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-18",
+      "dataset": "catalog",
+      "shape": "aggregation",
+      "question": "How many products cost less than $100?",
+      "expected": {
+        "type": "scalar",
+        "value": 10
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(p)": 0
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "0 does not match expected 10",
+      "layer1Extracted": 0,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-19",
+      "dataset": "catalog",
+      "shape": "aggregation",
+      "question": "How many products are in the Peripherals category?",
+      "expected": {
+        "type": "scalar",
+        "value": 4
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(p)": 4
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "4 matches expected 4",
+      "layer1Extracted": 4,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-20",
+      "dataset": "catalog",
+      "shape": "aggregation",
+      "question": "What is the cheapest product in the Wearables category?",
+      "expected": {
+        "type": "scalar",
+        "value": "Fitness Tracker Band"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got []",
+      "layer1Extracted": null,
+      "renderedAnswer": "no matching data found",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-21",
+      "dataset": "knowledge_base",
+      "shape": "single-fact",
+      "question": "What type of entity is Marlowe Robotics?",
+      "expected": {
+        "type": "scalar",
+        "value": "Organization"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          },
+          {
+            "e.type": "Organization"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-22",
+      "dataset": "knowledge_base",
+      "shape": "single-fact",
+      "question": "What kind of entity is Atlas-7?",
+      "expected": {
+        "type": "scalar",
+        "value": "Product"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.type": "Product"
+          },
+          {
+            "e.type": "Product"
+          },
+          {
+            "e.type": "Product"
+          },
+          {
+            "e.type": "Product"
+          },
+          {
+            "e.type": "Product"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "Atlas-7 is a Product.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-23",
+      "dataset": "knowledge_base",
+      "shape": "single-fact",
+      "question": "Can you tell me what type of entity Devon Cole is?",
+      "expected": {
+        "type": "scalar",
+        "value": "Person"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.type": "Person"
+          },
+          {
+            "e.type": "Person"
+          },
+          {
+            "e.type": "Person"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Person'}, {'e.type': 'Person'}, {'e.type': 'Person'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The type of entity Devon Cole is not specified in the provided information.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-24",
+      "dataset": "knowledge_base",
+      "shape": "single-fact",
+      "question": "What type of entity is NovaGrid?",
+      "expected": {
+        "type": "scalar",
+        "value": "Product"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.type": "Product"
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "'Product' matches expected 'Product'",
+      "layer1Extracted": "Product",
+      "renderedAnswer": "NovaGrid is a Product.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-25",
+      "dataset": "knowledge_base",
+      "shape": "filter-list",
+      "question": "Which entities are of type Location?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Austin",
+          "Boulder",
+          "Colorado",
+          "Denver",
+          "Seattle",
+          "Texas",
+          "Washington",
+          "warehouse"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.entityId": "93b11161964b4ef886560338763f11e1"
+          },
+          {
+            "e.entityId": "36a14f97903d42feadf4bfbde03ab52a"
+          },
+          {
+            "e.entityId": "d5b19f0c9a974e85a3bc88ef90b3cb85"
+          },
+          {
+            "e.entityId": "5c5005b15b884d1bbf10cfa2cf83d838"
+          },
+          {
+            "e.entityId": "95513808172f4fc78bdbc366f9d86159"
+          },
+          {
+            "e.entityId": "7aaa282d77604dfb8ab504514097e161"
+          },
+          {
+            "e.entityId": "0bd9f44362a849cdbc782099cbaa95b6"
+          },
+          {
+            "e.entityId": "87d828f5362846d19889ac7ec9c31cce"
+          },
+          {
+            "e.entityId": "78b6eec6e10f457984e26e998521b240"
+          },
+          {
+            "e.entityId": "181207bc46eb45c8a9d65baa27cfc066"
+          },
+          {
+            "e.entityId": "d93d0ec5163b496099a69238b38e4bec"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['austin', 'boulder', 'colorado', 'denver', 'seattle', 'texas', 'warehouse', 'washington'], got ['0bd9f44362a849cdbc782099cbaa95b6', '181207bc46eb45c8a9d65baa27cfc066', '36a14f97903d42feadf4bfbde03ab52a', '5c5005b15b884d1bbf10cfa2cf83d838', '78b6eec6e10f457984e26e998521b240', '7aaa282d77604dfb8ab504514097e161', '87d828f5362846d19889ac7ec9c31cce', '93b11161964b4ef886560338763f11e1', '95513808172f4fc78bdbc366f9d86159', 'd5b19f0c9a974e85a3bc88ef90b3cb85', 'd93d0ec5163b496099a69238b38e4bec']",
+      "layer1Extracted": [
+        "0bd9f44362a849cdbc782099cbaa95b6",
+        "181207bc46eb45c8a9d65baa27cfc066",
+        "36a14f97903d42feadf4bfbde03ab52a",
+        "5c5005b15b884d1bbf10cfa2cf83d838",
+        "78b6eec6e10f457984e26e998521b240",
+        "7aaa282d77604dfb8ab504514097e161",
+        "87d828f5362846d19889ac7ec9c31cce",
+        "93b11161964b4ef886560338763f11e1",
+        "95513808172f4fc78bdbc366f9d86159",
+        "d5b19f0c9a974e85a3bc88ef90b3cb85",
+        "d93d0ec5163b496099a69238b38e4bec"
+      ],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-26",
+      "dataset": "knowledge_base",
+      "shape": "filter-list",
+      "question": "What entities are classified as Person?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "Devon Cole",
+          "Elena Ferro",
+          "Priya Nandakumar"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.entityId": "5dc8b15e12be4f859ccc647d08ec61e7",
+            "e.name": "Devon Cole"
+          },
+          {
+            "e.entityId": "101f83988a5b46da99a543619312cce3",
+            "e.name": "Devon Cole"
+          },
+          {
+            "e.entityId": "47b5269089fb4d4fb5b10ce0411077c0",
+            "e.name": "Devon Cole"
+          },
+          {
+            "e.entityId": "ef4d025a392449ffa0e8f7f71841bdbf",
+            "e.name": "Elena Ferro"
+          },
+          {
+            "e.entityId": "4e4e158da2a1491b9d2b03b55b124fc7",
+            "e.name": "Priya Nandakumar"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected ['devon cole', 'elena ferro', 'priya nandakumar'], got ['101f83988a5b46da99a543619312cce3', '47b5269089fb4d4fb5b10ce0411077c0', '4e4e158da2a1491b9d2b03b55b124fc7', '5dc8b15e12be4f859ccc647d08ec61e7', 'devon cole', 'ef4d025a392449ffa0e8f7f71841bdbf', 'elena ferro', 'priya nandakumar']",
+      "layer1Extracted": [
+        "101f83988a5b46da99a543619312cce3",
+        "47b5269089fb4d4fb5b10ce0411077c0",
+        "4e4e158da2a1491b9d2b03b55b124fc7",
+        "5dc8b15e12be4f859ccc647d08ec61e7",
+        "devon cole",
+        "ef4d025a392449ffa0e8f7f71841bdbf",
+        "elena ferro",
+        "priya nandakumar"
+      ],
+      "renderedAnswer": "The entities classified as Person are Devon Cole, Elena Ferro, and Priya Nandakumar.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-27",
+      "dataset": "knowledge_base",
+      "shape": "filter-list",
+      "question": "Can you list all the Product-type entities?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "18 million dollars",
+          "Atlas-7",
+          "NovaGrid"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.name": "18 million dollars"
+          },
+          {
+            "e.name": "Atlas-7"
+          },
+          {
+            "e.name": "Atlas-7"
+          },
+          {
+            "e.name": "Atlas-7"
+          },
+          {
+            "e.name": "Atlas-7"
+          },
+          {
+            "e.name": "Atlas-7"
+          },
+          {
+            "e.name": "NovaGrid"
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "18 million dollars",
+        "atlas-7",
+        "novagrid"
+      ],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-28",
+      "dataset": "knowledge_base",
+      "shape": "not-found",
+      "question": "What type of entity is Solstice Robotics?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-29",
+      "dataset": "knowledge_base",
+      "shape": "not-found",
+      "question": "What kind of entity is Griffin Aerospace?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-30",
+      "dataset": "knowledge_base",
+      "shape": "not-found",
+      "question": "Can you tell me what type of entity Helio Dynamics is?",
+      "expected": {
+        "type": "not_found"
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": true,
+      "layer1Reason": "result is genuinely empty",
+      "layer1Extracted": [],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-31",
+      "dataset": "knowledge_base",
+      "shape": "aggregation",
+      "question": "How many Organization-type entities are there?",
+      "expected": {
+        "type": "scalar",
+        "value": 17
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(e.entityId)": 17
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "17 matches expected 17",
+      "layer1Extracted": 17,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-32",
+      "dataset": "knowledge_base",
+      "shape": "aggregation",
+      "question": "What's the count of Person-type entities?",
+      "expected": {
+        "type": "scalar",
+        "value": 5
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(p.entityId)": 5
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "5 matches expected 5",
+      "layer1Extracted": 5,
+      "renderedAnswer": "The count of Person-type entities is 5.",
+      "layer2Correct": true
+    },
+    {
+      "id": "nlq-33",
+      "dataset": "knowledge_base",
+      "shape": "aggregation",
+      "question": "How many entities are classified as Concept?",
+      "expected": {
+        "type": "scalar",
+        "value": 3
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(e.entityId)": 3
+          }
+        ]
+      },
+      "layer1Correct": true,
+      "layer1Reason": "3 matches expected 3",
+      "layer1Extracted": 3,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-34",
+      "dataset": "knowledge_base",
+      "shape": "relationship-traversal",
+      "question": "Who did Marlowe Robotics acquire?",
+      "expected": {
+        "type": "scalar",
+        "value": "Brightline Systems"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.entityId": "020e2155276d46468f94ae1b901c4300"
+          },
+          {
+            "e.entityId": "2fe37a9318744e01b04b4bfb9a3b16b1"
+          },
+          {
+            "e.entityId": "4b891a390fd24dd39faef6f3e6bcc6d0"
+          },
+          {
+            "e.entityId": "4e28d474fc0f4afdb4705146deed8d24"
+          },
+          {
+            "e.entityId": "4f55bfb747b64b4ab70a0a417ccb9e42"
+          },
+          {
+            "e.entityId": "9c9f028768a9415cb16fe0a3253f5b97"
+          },
+          {
+            "e.entityId": "a439df3526a84d38b5a7980b3717552f"
+          },
+          {
+            "e.entityId": "ba290ec6c93c4e00ac828f007066fd2c"
+          },
+          {
+            "e.entityId": "c140b78aa4fc49108360471ba07ed7a9"
+          },
+          {
+            "e.entityId": "f00d81e89de04e18874968e8fbd85e59"
+          },
+          {
+            "e.entityId": "fd8e530793db439e90f485b76e288d0e"
+          },
+          {
+            "e.entityId": "fe959ac5d01c42a396efa5892d3c0af2"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.entityId': '020e2155276d46468f94ae1b901c4300'}, {'e.entityId': '2fe37a9318744e01b04b4bfb9a3b16b1'}, {'e.entityId': '4b891a390fd24dd39faef6f3e6bcc6d0'}, {'e.entityId': '4e28d474fc0f4afdb4705146deed8d24'}, {'e.entityId': '4f55bfb747b64b4ab70a0a417ccb9e42'}, {'e.entityId': '9c9f028768a9415cb16fe0a3253f5b97'}, {'e.entityId': 'a439df3526a84d38b5a7980b3717552f'}, {'e.entityId': 'ba290ec6c93c4e00ac828f007066fd2c'}, {'e.entityId': 'c140b78aa4fc49108360471ba07ed7a9'}, {'e.entityId': 'f00d81e89de04e18874968e8fbd85e59'}, {'e.entityId': 'fd8e530793db439e90f485b76e288d0e'}, {'e.entityId': 'fe959ac5d01c42a396efa5892d3c0af2'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-35",
+      "dataset": "knowledge_base",
+      "shape": "relationship-traversal",
+      "question": "Who founded Marlowe Robotics?",
+      "expected": {
+        "type": "scalar",
+        "value": "Elena Ferro"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          },
+          {
+            "e.name": "Marlowe Robotics"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-36",
+      "dataset": "knowledge_base",
+      "shape": "relationship-traversal",
+      "question": "Which company did Marlowe Robotics partner with?",
+      "expected": {
+        "type": "scalar",
+        "value": "Cascade Logistics"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.entityId": "020e2155276d46468f94ae1b901c4300"
+          },
+          {
+            "e.entityId": "2fe37a9318744e01b04b4bfb9a3b16b1"
+          },
+          {
+            "e.entityId": "4b891a390fd24dd39faef6f3e6bcc6d0"
+          },
+          {
+            "e.entityId": "4e28d474fc0f4afdb4705146deed8d24"
+          },
+          {
+            "e.entityId": "4f55bfb747b64b4ab70a0a417ccb9e42"
+          },
+          {
+            "e.entityId": "9c9f028768a9415cb16fe0a3253f5b97"
+          },
+          {
+            "e.entityId": "a439df3526a84d38b5a7980b3717552f"
+          },
+          {
+            "e.entityId": "ba290ec6c93c4e00ac828f007066fd2c"
+          },
+          {
+            "e.entityId": "c140b78aa4fc49108360471ba07ed7a9"
+          },
+          {
+            "e.entityId": "f00d81e89de04e18874968e8fbd85e59"
+          },
+          {
+            "e.entityId": "fd8e530793db439e90f485b76e288d0e"
+          },
+          {
+            "e.entityId": "fe959ac5d01c42a396efa5892d3c0af2"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.entityId': '020e2155276d46468f94ae1b901c4300'}, {'e.entityId': '2fe37a9318744e01b04b4bfb9a3b16b1'}, {'e.entityId': '4b891a390fd24dd39faef6f3e6bcc6d0'}, {'e.entityId': '4e28d474fc0f4afdb4705146deed8d24'}, {'e.entityId': '4f55bfb747b64b4ab70a0a417ccb9e42'}, {'e.entityId': '9c9f028768a9415cb16fe0a3253f5b97'}, {'e.entityId': 'a439df3526a84d38b5a7980b3717552f'}, {'e.entityId': 'ba290ec6c93c4e00ac828f007066fd2c'}, {'e.entityId': 'c140b78aa4fc49108360471ba07ed7a9'}, {'e.entityId': 'f00d81e89de04e18874968e8fbd85e59'}, {'e.entityId': 'fd8e530793db439e90f485b76e288d0e'}, {'e.entityId': 'fe959ac5d01c42a396efa5892d3c0af2'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-37",
+      "dataset": "knowledge_base",
+      "shape": "relationship-traversal",
+      "question": "Where is Marlowe Robotics located?",
+      "expected": {
+        "type": "scalar",
+        "value": "Austin"
+      },
+      "toolResult": {
+        "items": [
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          },
+          {
+            "e.nameNormalized": "marlowe robotics"
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "expected a single scalar row/column, got [{'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}]",
+      "layer1Extracted": null,
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-38",
+      "dataset": "knowledge_base",
+      "shape": "conflicting-facts",
+      "question": "How many employees does Marlowe Robotics have?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "62",
+          "140 employees"
+        ]
+      },
+      "toolResult": {
+        "items": [
+          {
+            "count(e.entityId)": 12
+          }
+        ]
+      },
+      "layer1Correct": false,
+      "layer1Reason": "missing ['140 employees', '62'] from ['12']",
+      "layer1Extracted": [
+        "12"
+      ],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    },
+    {
+      "id": "nlq-39",
+      "dataset": "knowledge_base",
+      "shape": "conflicting-facts",
+      "question": "What is Marlowe Robotics' employee count as of March 2026?",
+      "expected": {
+        "type": "set",
+        "values": [
+          "62",
+          "140 employees"
+        ]
+      },
+      "toolResult": {
+        "items": [],
+        "finding": "no matching data found"
+      },
+      "layer1Correct": false,
+      "layer1Reason": "missing ['140 employees', '62'] from []",
+      "layer1Extracted": [],
+      "renderedAnswer": "The information was not found.",
+      "layer2Correct": false
+    }
+  ]
+}
