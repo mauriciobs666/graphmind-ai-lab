@@ -1,6 +1,6 @@
 # NL-query-generation golden set — semantic content gate (U29b-gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-055 (M6)
 
 **CPG:** considered, not relevant — this is a content/correctness review of a 39-pair JSONL golden
 set and its small structural-integrity test module, checked by direct live `mcp__cypher__query`

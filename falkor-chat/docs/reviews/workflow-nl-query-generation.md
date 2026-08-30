@@ -1,6 +1,6 @@
 # Natural-language query generation over structured graph data — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-055 (M6)
 
 ## Scope & verdict
 

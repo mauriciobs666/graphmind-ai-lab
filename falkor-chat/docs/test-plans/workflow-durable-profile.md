@@ -1,6 +1,6 @@
 # `workflow-durable-profile` — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-054 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-054 (M6)
 
 ## 1. Scope & objective
 

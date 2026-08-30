@@ -1,6 +1,6 @@
 # Natural-language query generation — structural non-mutation security review (FR-3/FR-3a)
 
-> **Status:** active · **Owner:** `security-expert` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `security-expert` · **Tracks:** K-055 (M6)
 
 ## Scope & verdict
 

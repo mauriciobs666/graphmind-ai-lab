@@ -1,6 +1,6 @@
 # `workflow-nl-query-generation` — implementation-diff review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-055 (M6)
 
 ## Scope
 

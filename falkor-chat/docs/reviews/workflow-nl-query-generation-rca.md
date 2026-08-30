@@ -1,6 +1,6 @@
 # `workflow-nl-query-generation` — root-cause analysis of the Layer 1 golden-set failure
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-055 (M6)
 
 ## 1. The question and the decision it serves
 

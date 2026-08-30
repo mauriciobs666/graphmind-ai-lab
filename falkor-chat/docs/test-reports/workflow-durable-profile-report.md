@@ -1,6 +1,6 @@
 # `workflow-durable-profile` — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-054 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-054 (M6)
 
 ## Summary
 

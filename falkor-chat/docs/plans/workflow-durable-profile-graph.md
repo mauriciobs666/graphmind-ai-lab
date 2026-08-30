@@ -1,6 +1,6 @@
 # Durable user-profile data for workflows — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 2
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 2
 
 Graph-side design note for `docs/requirements/workflow-durable-profile.md` (FR-1..FR-4,
 AC-1..AC-3). Schema and write/read-path Cypher for a durable, workspace-scoped, **updatable**

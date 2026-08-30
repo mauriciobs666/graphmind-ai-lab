@@ -1,6 +1,6 @@
 # Cart, orders, and deterministic totals — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-053 (M6) · **Extended by:** `docs/reviews/workflow-cart-and-totals-impl.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-053 (M6) · **Extended by:** `docs/reviews/workflow-cart-and-totals-impl.md`
 
 ## Scope & verdict
 

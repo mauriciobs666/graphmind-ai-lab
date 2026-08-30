@@ -1,6 +1,6 @@
 # `workflow-nl-query-generation` — Test Report (2: live acceptance pass)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-055 (M6)
 
 ## Summary
 

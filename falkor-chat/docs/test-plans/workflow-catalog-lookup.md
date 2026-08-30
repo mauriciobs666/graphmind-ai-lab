@@ -1,6 +1,6 @@
 # `workflow-catalog-lookup` — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-052 (M6) · **Extended by:** `docs/test-plans/workflow-catalog-lookup2.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-052 (M6) · **Extended by:** `docs/test-plans/workflow-catalog-lookup2.md`
 
 ## 1. Scope & objective
 

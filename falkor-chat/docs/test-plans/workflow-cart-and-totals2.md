@@ -1,6 +1,6 @@
 # `workflow-cart-and-totals` — Test Plan (Ministral re-verification)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-053, K-056 (M6) · **Extends:** `docs/test-plans/workflow-cart-and-totals.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-053, K-056 (M6) · **Extends:** `docs/test-plans/workflow-cart-and-totals.md`
 
 ## 1. Scope & objective
 

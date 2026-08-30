@@ -1,6 +1,6 @@
 # `workflow-cart-and-totals` — Test Report (Ministral re-verification)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-053, K-056 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-053, K-056 (M6)
 
 ## Summary
 

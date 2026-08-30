@@ -1,6 +1,6 @@
 # Structured catalog/reference lookup for workflows — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-052 (M6) · **Extended by:** `docs/reviews/workflow-catalog-lookup-impl.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-052 (M6) · **Extended by:** `docs/reviews/workflow-catalog-lookup-impl.md`
 
 ## Scope & verdict
 

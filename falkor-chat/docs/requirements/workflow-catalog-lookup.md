@@ -1,5 +1,5 @@
 # Structured catalog/reference lookup for workflows — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M<n> TBD)
 
 This is one of five sibling capabilities scoped out of a single "business entities in
 falkor-chat workflows" idea (decision log, 2026-08-22 — originally six documents; two of them,

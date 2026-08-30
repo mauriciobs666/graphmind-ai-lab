@@ -1,6 +1,6 @@
 # Natural-language query generation over structured graph data — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-055 (M6) · **Version:** 1.1
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-055 (M6) · **Version:** 1.1
 
 > **Revision note (2026-08-26).** `security-expert`'s `docs/reviews/workflow-nl-query-generation-security.md`
 > (verdict: approve with suggestions, no blocker) independently reproduced this plan's Layer 2

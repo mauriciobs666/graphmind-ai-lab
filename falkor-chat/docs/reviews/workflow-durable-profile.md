@@ -1,6 +1,6 @@
 # Durable user-profile data for workflows — Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-054 (M6) · **Extended by:** `docs/reviews/workflow-durable-profile-impl.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-054 (M6) · **Extended by:** `docs/reviews/workflow-durable-profile-impl.md`
 
 ## Scope & verdict
 

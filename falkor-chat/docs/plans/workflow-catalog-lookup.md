@@ -1,6 +1,6 @@
 # Structured catalog/reference lookup for workflows — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-052 (M6)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-052 (M6)
 
 Turns `docs/requirements/workflow-catalog-lookup.md` (FR-1..FR-7, AC-1..AC-5) into an ordered,
 staged build. **This document is also the canonical owner of the shared demo-agent scaffold** —

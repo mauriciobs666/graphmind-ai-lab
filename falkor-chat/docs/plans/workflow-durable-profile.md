@@ -1,6 +1,6 @@
 # Durable user-profile data for workflows — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-054 (M6)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-054 (M6)
 
 Turns `docs/requirements/workflow-durable-profile.md` (FR-1..FR-4, AC-1..AC-3) into an ordered,
 staged build. The exact `Profile` graph schema is delegated to `graph-dba`'s

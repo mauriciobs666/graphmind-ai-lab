@@ -1,6 +1,6 @@
 # NL-query-generation second-dataset corpus — content review (U29-gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-055 (M6)
 
 **CPG:** considered, not relevant — this is a content/data review of a ~470-line standalone seed
 script and its live-graph output, not an impact analysis across the server codebase; the script's

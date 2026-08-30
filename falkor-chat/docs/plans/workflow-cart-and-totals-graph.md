@@ -1,6 +1,6 @@
 # Cart, orders, and deterministic totals — Graph Design
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 2
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 2
 
 Graph-side design note for `docs/requirements/workflow-cart-and-totals.md` (FR-1..FR-9,
 AC-1..AC-10). Schema, indexes/constraints, and write/read-path Cypher for a durable,

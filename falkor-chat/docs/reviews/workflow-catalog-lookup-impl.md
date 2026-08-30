@@ -1,6 +1,6 @@
 # Structured catalog/reference lookup for workflows — Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-052 (M6) · **Extends:** `docs/reviews/workflow-catalog-lookup.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-052 (M6) · **Extends:** `docs/reviews/workflow-catalog-lookup.md`
 
 **Routing note.** The coordinator's brief for this unit asked for a `## Pass 2` section appended
 to the design-phase plan review at the bare slug. Per root `AGENTS.md`'s own closed role set

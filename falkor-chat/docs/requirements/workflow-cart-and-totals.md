@@ -1,5 +1,5 @@
 # Cart, orders, and deterministic totals — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD) ·
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M<n> TBD) ·
 > **Supersedes:** `docs/requirements/workflow-business-entities.md`, `docs/requirements/workflow-deterministic-compute.md`
 
 This is one of five sibling capabilities scoped out of a single "business entities in

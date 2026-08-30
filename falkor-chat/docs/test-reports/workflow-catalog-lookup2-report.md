@@ -1,6 +1,6 @@
 # `workflow-catalog-lookup` — Test Report (Ministral re-verification)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-052, K-056 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-052, K-056 (M6)
 
 ## Summary
 

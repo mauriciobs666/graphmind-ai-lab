@@ -1,6 +1,6 @@
 # `workflow-salesperson-demo` — Test Report (M6 combined e2e)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-052, K-053, K-054, K-055 (M6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-052, K-053, K-054, K-055 (M6)
 
 ## Summary
 

@@ -1,6 +1,6 @@
 # `workflow-nl-query-generation` — Golden-Set Evaluation Report
 
-> **Status:** active · **Owner:** `tdd-engineer` · **Tracks:** K-055 (M6)
+> **Status:** archived · **Owner:** `tdd-engineer` · **Tracks:** K-055 (M6)
 
 ## Summary
 

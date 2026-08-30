@@ -1,6 +1,6 @@
 # Natural-language query generation over structured graph data — golden-set evaluation method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-055 (M6) · **Version:** 2
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** K-055 (M6) · **Version:** 2
 
 **2026-08-30 revision:** §5's gate formula amended to exclude shapes the shipped mechanism is
 *structurally and permanently* incapable of by design (`relationship-traversal`,

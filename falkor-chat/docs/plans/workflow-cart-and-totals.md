@@ -1,6 +1,6 @@
 # Cart, orders, and deterministic totals — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-053 (M6) · **Version:** 2
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-053 (M6) · **Version:** 2
 
 > **Revision note (2026-08-27).** `analyst`'s plan-gate review
 > (`docs/reviews/workflow-cart-and-totals.md`, verdict: approve with suggestions) found one MAJOR
