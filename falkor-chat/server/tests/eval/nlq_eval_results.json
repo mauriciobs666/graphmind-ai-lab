@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-08-30T00:40:55Z",
+  "runAt": "2026-08-30T11:57:01Z",
   "model": "lmstudio/qwen/qwen3-4b-2507",
   "records": [
     {
@@ -34,14 +34,17 @@
         "value": "Storage"
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.category": "Storage"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got []",
-      "layer1Extracted": null,
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'Storage' matches expected 'Storage'",
+      "layer1Extracted": "Storage",
+      "renderedAnswer": "The Portable SSD 1TB is in the Storage category.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-03",
@@ -75,14 +78,17 @@
         "value": "Cameras"
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.category": "Cameras"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got []",
-      "layer1Extracted": null,
-      "renderedAnswer": "The information was not found.",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'Cameras' matches expected 'Cameras'",
+      "layer1Extracted": "Cameras",
+      "renderedAnswer": "The Action Camera 4K belongs to the Cameras category.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-05",
@@ -123,16 +129,16 @@
       "toolResult": {
         "items": [
           {
-            "p.name": "Gaming Mouse Pad XL"
+            "p.name": "Wireless Mouse Pro"
           },
           {
             "p.name": "Mechanical Keyboard K200"
           },
           {
-            "p.name": "Webcam HD 1080p"
+            "p.name": "Gaming Mouse Pad XL"
           },
           {
-            "p.name": "Wireless Mouse Pro"
+            "p.name": "Webcam HD 1080p"
           }
         ]
       },
@@ -144,7 +150,7 @@
         "webcam hd 1080p",
         "wireless mouse pro"
       ],
-      "renderedAnswer": "The products in the Peripherals category are Gaming Mouse Pad XL, Mechanical Keyboard K200, Webcam HD 1080p, and Wireless Mouse Pro.",
+      "renderedAnswer": "The products in the Peripherals category are Wireless Mouse Pro, Mechanical Keyboard K200, Gaming Mouse Pad XL, and Webcam HD 1080p.",
       "layer2Correct": true
     },
     {
@@ -162,10 +168,10 @@
       "toolResult": {
         "items": [
           {
-            "p.name": "Fitness Tracker Band"
+            "p.name": "Smartwatch Series 5"
           },
           {
-            "p.name": "Smartwatch Series 5"
+            "p.name": "Fitness Tracker Band"
           }
         ]
       },
@@ -175,7 +181,7 @@
         "fitness tracker band",
         "smartwatch series 5"
       ],
-      "renderedAnswer": "The products that fall under the Wearables category are Fitness Tracker Band and Smartwatch Series 5.",
+      "renderedAnswer": "The products that fall under the Wearables category are Smartwatch Series 5 and Fitness Tracker Band.",
       "layer2Correct": true
     },
     {
@@ -195,14 +201,39 @@
         ]
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "Gaming Mouse Pad XL"
+          },
+          {
+            "p.name": "Wireless Charging Pad"
+          },
+          {
+            "p.name": "Wireless Mouse Pro"
+          },
+          {
+            "p.name": "Laptop Stand Aluminum"
+          },
+          {
+            "p.name": "USB-C Hub 7-in-1"
+          },
+          {
+            "p.name": "Bluetooth Speaker Mini"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['bluetooth speaker mini', 'gaming mouse pad xl', 'laptop stand aluminum', 'usb-c hub 7-in-1', 'wireless charging pad', 'wireless mouse pro'], got []",
-      "layer1Extracted": [],
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "bluetooth speaker mini",
+        "gaming mouse pad xl",
+        "laptop stand aluminum",
+        "usb-c hub 7-in-1",
+        "wireless charging pad",
+        "wireless mouse pro"
+      ],
+      "renderedAnswer": "The products listed are: Gaming Mouse Pad XL, Wireless Charging Pad, Wireless Mouse Pro, Laptop Stand Aluminum, USB-C Hub 7-in-1, and Bluetooth Speaker Mini. None of the products have a price specified, so the information was not found.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-09",
@@ -219,10 +250,10 @@
       "toolResult": {
         "items": [
           {
-            "p.name": "Bluetooth Speaker Mini"
+            "p.name": "Noise Cancelling Headphones X3"
           },
           {
-            "p.name": "Noise Cancelling Headphones X3"
+            "p.name": "Bluetooth Speaker Mini"
           }
         ]
       },
@@ -232,7 +263,7 @@
         "bluetooth speaker mini",
         "noise cancelling headphones x3"
       ],
-      "renderedAnswer": "The products in the Audio category are Bluetooth Speaker Mini and Noise Cancelling Headphones X3.",
+      "renderedAnswer": "The products in the Audio category are Noise Cancelling Headphones X3 and Bluetooth Speaker Mini.",
       "layer2Correct": true
     },
     {
@@ -248,14 +279,23 @@
         ]
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "Gaming Mouse Pad XL"
+          },
+          {
+            "p.name": "Wireless Mouse Pro"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['gaming mouse pad xl', 'wireless mouse pro'], got []",
-      "layer1Extracted": [],
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "gaming mouse pad xl",
+        "wireless mouse pro"
+      ],
+      "renderedAnswer": "The Peripherals products listed are \"Gaming Mouse Pad XL\" and \"Wireless Mouse Pro\", but their specific costs are not provided in the data. Therefore, the information was not found.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-11",
@@ -272,14 +312,18 @@
       "toolResult": {
         "items": [
           {
-            "count(p.name)": 0
+            "p.name": "USB-C Hub 7-in-1"
+          },
+          {
+            "p.name": "Laptop Stand Aluminum"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['laptop stand aluminum', 'usb-c hub 7-in-1'], got ['0']",
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
       "layer1Extracted": [
-        "0"
+        "laptop stand aluminum",
+        "usb-c hub 7-in-1"
       ],
       "renderedAnswer": "The information was not found.",
       "layer2Correct": false
@@ -296,14 +340,19 @@
         ]
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "Fitness Tracker Band"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['fitness tracker band'], got []",
-      "layer1Extracted": [],
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
+      "layer1Extracted": [
+        "fitness tracker band"
+      ],
+      "renderedAnswer": "The Fitness Tracker Band is a wearable product.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-13",
@@ -320,7 +369,7 @@
       "layer1Correct": true,
       "layer1Reason": "result is genuinely empty",
       "layer1Extracted": [],
-      "renderedAnswer": "no matching data found",
+      "renderedAnswer": "The information was not found.",
       "layer2Correct": true
     },
     {
@@ -356,7 +405,7 @@
       "layer1Correct": true,
       "layer1Reason": "result is genuinely empty",
       "layer1Extracted": [],
-      "renderedAnswer": "no matching data found",
+      "renderedAnswer": "The information was not found.",
       "layer2Correct": true
     },
     {
@@ -369,13 +418,16 @@
         "value": "Gaming Mouse Pad XL"
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "Gaming Mouse Pad XL"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got []",
-      "layer1Extracted": null,
-      "renderedAnswer": "no matching data found",
+      "layer1Correct": true,
+      "layer1Reason": "'Gaming Mouse Pad XL' matches expected 'Gaming Mouse Pad XL'",
+      "layer1Extracted": "Gaming Mouse Pad XL",
+      "renderedAnswer": "The information was not found.",
       "layer2Correct": false
     },
     {
@@ -388,14 +440,17 @@
         "value": "27-inch 4K Monitor"
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "27-inch 4K Monitor"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got []",
-      "layer1Extracted": null,
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'27-inch 4K Monitor' matches expected '27-inch 4K Monitor'",
+      "layer1Extracted": "27-inch 4K Monitor",
+      "renderedAnswer": "The most expensive product is the 27-inch 4K Monitor.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-18",
@@ -409,13 +464,13 @@
       "toolResult": {
         "items": [
           {
-            "count(p)": 0
+            "count(p)": 10
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "0 does not match expected 10",
-      "layer1Extracted": 0,
+      "layer1Correct": true,
+      "layer1Reason": "10 matches expected 10",
+      "layer1Extracted": 10,
       "renderedAnswer": "The information was not found.",
       "layer2Correct": false
     },
@@ -431,7 +486,7 @@
       "toolResult": {
         "items": [
           {
-            "count(p)": 4
+            "count(p.name)": 4
           }
         ]
       },
@@ -451,14 +506,17 @@
         "value": "Fitness Tracker Band"
       },
       "toolResult": {
-        "items": [],
-        "finding": "no matching data found"
+        "items": [
+          {
+            "p.name": "Fitness Tracker Band"
+          }
+        ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got []",
-      "layer1Extracted": null,
-      "renderedAnswer": "no matching data found",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'Fitness Tracker Band' matches expected 'Fitness Tracker Band'",
+      "layer1Extracted": "Fitness Tracker Band",
+      "renderedAnswer": "The cheapest product in the Wearables category is the Fitness Tracker Band.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-21",
@@ -473,47 +531,14 @@
         "items": [
           {
             "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
-          },
-          {
-            "e.type": "Organization"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}, {'e.type': 'Organization'}]",
-      "layer1Extracted": null,
-      "renderedAnswer": "The information was not found.",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'Organization' matches expected 'Organization'",
+      "layer1Extracted": "Organization",
+      "renderedAnswer": "Marlowe Robotics is an Organization.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-22",
@@ -528,24 +553,12 @@
         "items": [
           {
             "e.type": "Product"
-          },
-          {
-            "e.type": "Product"
-          },
-          {
-            "e.type": "Product"
-          },
-          {
-            "e.type": "Product"
-          },
-          {
-            "e.type": "Product"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}, {'e.type': 'Product'}]",
-      "layer1Extracted": null,
+      "layer1Correct": true,
+      "layer1Reason": "'Product' matches expected 'Product'",
+      "layer1Extracted": "Product",
       "renderedAnswer": "Atlas-7 is a Product.",
       "layer2Correct": true
     },
@@ -562,20 +575,14 @@
         "items": [
           {
             "e.type": "Person"
-          },
-          {
-            "e.type": "Person"
-          },
-          {
-            "e.type": "Person"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.type': 'Person'}, {'e.type': 'Person'}, {'e.type': 'Person'}]",
-      "layer1Extracted": null,
-      "renderedAnswer": "The type of entity Devon Cole is not specified in the provided information.",
-      "layer2Correct": false
+      "layer1Correct": true,
+      "layer1Reason": "'Person' matches expected 'Person'",
+      "layer1Extracted": "Person",
+      "renderedAnswer": "Devon Cole is a Person.",
+      "layer2Correct": true
     },
     {
       "id": "nlq-24",
@@ -620,56 +627,44 @@
       "toolResult": {
         "items": [
           {
-            "e.entityId": "93b11161964b4ef886560338763f11e1"
+            "e.name": "Austin"
           },
           {
-            "e.entityId": "36a14f97903d42feadf4bfbde03ab52a"
+            "e.name": "Texas"
           },
           {
-            "e.entityId": "d5b19f0c9a974e85a3bc88ef90b3cb85"
+            "e.name": "Denver"
           },
           {
-            "e.entityId": "5c5005b15b884d1bbf10cfa2cf83d838"
+            "e.name": "Colorado"
           },
           {
-            "e.entityId": "95513808172f4fc78bdbc366f9d86159"
+            "e.name": "Boulder"
           },
           {
-            "e.entityId": "7aaa282d77604dfb8ab504514097e161"
+            "e.name": "warehouse"
           },
           {
-            "e.entityId": "0bd9f44362a849cdbc782099cbaa95b6"
+            "e.name": "Seattle"
           },
           {
-            "e.entityId": "87d828f5362846d19889ac7ec9c31cce"
-          },
-          {
-            "e.entityId": "78b6eec6e10f457984e26e998521b240"
-          },
-          {
-            "e.entityId": "181207bc46eb45c8a9d65baa27cfc066"
-          },
-          {
-            "e.entityId": "d93d0ec5163b496099a69238b38e4bec"
+            "e.name": "Washington"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['austin', 'boulder', 'colorado', 'denver', 'seattle', 'texas', 'warehouse', 'washington'], got ['0bd9f44362a849cdbc782099cbaa95b6', '181207bc46eb45c8a9d65baa27cfc066', '36a14f97903d42feadf4bfbde03ab52a', '5c5005b15b884d1bbf10cfa2cf83d838', '78b6eec6e10f457984e26e998521b240', '7aaa282d77604dfb8ab504514097e161', '87d828f5362846d19889ac7ec9c31cce', '93b11161964b4ef886560338763f11e1', '95513808172f4fc78bdbc366f9d86159', 'd5b19f0c9a974e85a3bc88ef90b3cb85', 'd93d0ec5163b496099a69238b38e4bec']",
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
       "layer1Extracted": [
-        "0bd9f44362a849cdbc782099cbaa95b6",
-        "181207bc46eb45c8a9d65baa27cfc066",
-        "36a14f97903d42feadf4bfbde03ab52a",
-        "5c5005b15b884d1bbf10cfa2cf83d838",
-        "78b6eec6e10f457984e26e998521b240",
-        "7aaa282d77604dfb8ab504514097e161",
-        "87d828f5362846d19889ac7ec9c31cce",
-        "93b11161964b4ef886560338763f11e1",
-        "95513808172f4fc78bdbc366f9d86159",
-        "d5b19f0c9a974e85a3bc88ef90b3cb85",
-        "d93d0ec5163b496099a69238b38e4bec"
+        "austin",
+        "boulder",
+        "colorado",
+        "denver",
+        "seattle",
+        "texas",
+        "warehouse",
+        "washington"
       ],
-      "renderedAnswer": "The information was not found.",
+      "renderedAnswer": "The entities of type Location are Austin, Texas, Denver, Colorado, Boulder, and Seattle, Washington.",
       "layer2Correct": false
     },
     {
@@ -688,40 +683,24 @@
       "toolResult": {
         "items": [
           {
-            "e.entityId": "5dc8b15e12be4f859ccc647d08ec61e7",
-            "e.name": "Devon Cole"
-          },
-          {
-            "e.entityId": "101f83988a5b46da99a543619312cce3",
-            "e.name": "Devon Cole"
-          },
-          {
-            "e.entityId": "47b5269089fb4d4fb5b10ce0411077c0",
-            "e.name": "Devon Cole"
-          },
-          {
-            "e.entityId": "ef4d025a392449ffa0e8f7f71841bdbf",
             "e.name": "Elena Ferro"
           },
           {
-            "e.entityId": "4e4e158da2a1491b9d2b03b55b124fc7",
+            "e.name": "Devon Cole"
+          },
+          {
             "e.name": "Priya Nandakumar"
           }
         ]
       },
-      "layer1Correct": false,
-      "layer1Reason": "expected ['devon cole', 'elena ferro', 'priya nandakumar'], got ['101f83988a5b46da99a543619312cce3', '47b5269089fb4d4fb5b10ce0411077c0', '4e4e158da2a1491b9d2b03b55b124fc7', '5dc8b15e12be4f859ccc647d08ec61e7', 'devon cole', 'ef4d025a392449ffa0e8f7f71841bdbf', 'elena ferro', 'priya nandakumar']",
+      "layer1Correct": true,
+      "layer1Reason": "exact set match",
       "layer1Extracted": [
-        "101f83988a5b46da99a543619312cce3",
-        "47b5269089fb4d4fb5b10ce0411077c0",
-        "4e4e158da2a1491b9d2b03b55b124fc7",
-        "5dc8b15e12be4f859ccc647d08ec61e7",
         "devon cole",
-        "ef4d025a392449ffa0e8f7f71841bdbf",
         "elena ferro",
         "priya nandakumar"
       ],
-      "renderedAnswer": "The entities classified as Person are Devon Cole, Elena Ferro, and Priya Nandakumar.",
+      "renderedAnswer": "The entities classified as Person are Elena Ferro, Devon Cole, and Priya Nandakumar.",
       "layer2Correct": true
     },
     {
@@ -740,22 +719,10 @@
       "toolResult": {
         "items": [
           {
+            "e.name": "Atlas-7"
+          },
+          {
             "e.name": "18 million dollars"
-          },
-          {
-            "e.name": "Atlas-7"
-          },
-          {
-            "e.name": "Atlas-7"
-          },
-          {
-            "e.name": "Atlas-7"
-          },
-          {
-            "e.name": "Atlas-7"
-          },
-          {
-            "e.name": "Atlas-7"
           },
           {
             "e.name": "NovaGrid"
@@ -860,7 +827,7 @@
       "toolResult": {
         "items": [
           {
-            "count(p.entityId)": 5
+            "count(e.entityId)": 5
           }
         ]
       },
@@ -902,49 +869,13 @@
         "value": "Brightline Systems"
       },
       "toolResult": {
-        "items": [
-          {
-            "e.entityId": "020e2155276d46468f94ae1b901c4300"
-          },
-          {
-            "e.entityId": "2fe37a9318744e01b04b4bfb9a3b16b1"
-          },
-          {
-            "e.entityId": "4b891a390fd24dd39faef6f3e6bcc6d0"
-          },
-          {
-            "e.entityId": "4e28d474fc0f4afdb4705146deed8d24"
-          },
-          {
-            "e.entityId": "4f55bfb747b64b4ab70a0a417ccb9e42"
-          },
-          {
-            "e.entityId": "9c9f028768a9415cb16fe0a3253f5b97"
-          },
-          {
-            "e.entityId": "a439df3526a84d38b5a7980b3717552f"
-          },
-          {
-            "e.entityId": "ba290ec6c93c4e00ac828f007066fd2c"
-          },
-          {
-            "e.entityId": "c140b78aa4fc49108360471ba07ed7a9"
-          },
-          {
-            "e.entityId": "f00d81e89de04e18874968e8fbd85e59"
-          },
-          {
-            "e.entityId": "fd8e530793db439e90f485b76e288d0e"
-          },
-          {
-            "e.entityId": "fe959ac5d01c42a396efa5892d3c0af2"
-          }
-        ]
+        "items": [],
+        "finding": "no matching data found"
       },
       "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.entityId': '020e2155276d46468f94ae1b901c4300'}, {'e.entityId': '2fe37a9318744e01b04b4bfb9a3b16b1'}, {'e.entityId': '4b891a390fd24dd39faef6f3e6bcc6d0'}, {'e.entityId': '4e28d474fc0f4afdb4705146deed8d24'}, {'e.entityId': '4f55bfb747b64b4ab70a0a417ccb9e42'}, {'e.entityId': '9c9f028768a9415cb16fe0a3253f5b97'}, {'e.entityId': 'a439df3526a84d38b5a7980b3717552f'}, {'e.entityId': 'ba290ec6c93c4e00ac828f007066fd2c'}, {'e.entityId': 'c140b78aa4fc49108360471ba07ed7a9'}, {'e.entityId': 'f00d81e89de04e18874968e8fbd85e59'}, {'e.entityId': 'fd8e530793db439e90f485b76e288d0e'}, {'e.entityId': 'fe959ac5d01c42a396efa5892d3c0af2'}]",
+      "layer1Reason": "expected a single scalar row/column, got []",
       "layer1Extracted": null,
-      "renderedAnswer": "The information was not found.",
+      "renderedAnswer": "no matching data found",
       "layer2Correct": false
     },
     {
@@ -957,47 +888,11 @@
         "value": "Elena Ferro"
       },
       "toolResult": {
-        "items": [
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          },
-          {
-            "e.name": "Marlowe Robotics"
-          }
-        ]
+        "items": [],
+        "finding": "no matching data found"
       },
       "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}, {'e.name': 'Marlowe Robotics'}]",
+      "layer1Reason": "expected a single scalar row/column, got []",
       "layer1Extracted": null,
       "renderedAnswer": "The information was not found.",
       "layer2Correct": false
@@ -1012,47 +907,11 @@
         "value": "Cascade Logistics"
       },
       "toolResult": {
-        "items": [
-          {
-            "e.entityId": "020e2155276d46468f94ae1b901c4300"
-          },
-          {
-            "e.entityId": "2fe37a9318744e01b04b4bfb9a3b16b1"
-          },
-          {
-            "e.entityId": "4b891a390fd24dd39faef6f3e6bcc6d0"
-          },
-          {
-            "e.entityId": "4e28d474fc0f4afdb4705146deed8d24"
-          },
-          {
-            "e.entityId": "4f55bfb747b64b4ab70a0a417ccb9e42"
-          },
-          {
-            "e.entityId": "9c9f028768a9415cb16fe0a3253f5b97"
-          },
-          {
-            "e.entityId": "a439df3526a84d38b5a7980b3717552f"
-          },
-          {
-            "e.entityId": "ba290ec6c93c4e00ac828f007066fd2c"
-          },
-          {
-            "e.entityId": "c140b78aa4fc49108360471ba07ed7a9"
-          },
-          {
-            "e.entityId": "f00d81e89de04e18874968e8fbd85e59"
-          },
-          {
-            "e.entityId": "fd8e530793db439e90f485b76e288d0e"
-          },
-          {
-            "e.entityId": "fe959ac5d01c42a396efa5892d3c0af2"
-          }
-        ]
+        "items": [],
+        "finding": "no matching data found"
       },
       "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.entityId': '020e2155276d46468f94ae1b901c4300'}, {'e.entityId': '2fe37a9318744e01b04b4bfb9a3b16b1'}, {'e.entityId': '4b891a390fd24dd39faef6f3e6bcc6d0'}, {'e.entityId': '4e28d474fc0f4afdb4705146deed8d24'}, {'e.entityId': '4f55bfb747b64b4ab70a0a417ccb9e42'}, {'e.entityId': '9c9f028768a9415cb16fe0a3253f5b97'}, {'e.entityId': 'a439df3526a84d38b5a7980b3717552f'}, {'e.entityId': 'ba290ec6c93c4e00ac828f007066fd2c'}, {'e.entityId': 'c140b78aa4fc49108360471ba07ed7a9'}, {'e.entityId': 'f00d81e89de04e18874968e8fbd85e59'}, {'e.entityId': 'fd8e530793db439e90f485b76e288d0e'}, {'e.entityId': 'fe959ac5d01c42a396efa5892d3c0af2'}]",
+      "layer1Reason": "expected a single scalar row/column, got []",
       "layer1Extracted": null,
       "renderedAnswer": "The information was not found.",
       "layer2Correct": false
@@ -1069,46 +928,13 @@
       "toolResult": {
         "items": [
           {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
-          },
-          {
-            "e.nameNormalized": "marlowe robotics"
+            "e.name": "Marlowe Robotics"
           }
         ]
       },
       "layer1Correct": false,
-      "layer1Reason": "expected a single scalar row/column, got [{'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}, {'e.nameNormalized': 'marlowe robotics'}]",
-      "layer1Extracted": null,
+      "layer1Reason": "'Marlowe Robotics' does not match expected 'Austin'",
+      "layer1Extracted": "Marlowe Robotics",
       "renderedAnswer": "The information was not found.",
       "layer2Correct": false
     },
