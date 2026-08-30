@@ -400,3 +400,259 @@ folded into "Open questions" below rather than re-litigated as findings.
   now (cheap, additive) or left to the grep-test discipline the plan already proposes? I recommend
   adopting it, but it's a design taste call, not a safety gap on its own once the grep test
   exists.
+
+## Pass 3 — 2026-08-30 (U33: live Groups A-E adversarial run against the shipped mechanism)
+
+**Scope of this pass:** the mechanism now exists (`server/falkorchat/querygen.py`,
+`server/falkorchat/tools.QueryGraphDataTool`) and has been through a full RCA-driven accuracy fix
+cycle (`docs/reviews/workflow-nl-query-generation-rca.md`, fixes A/B/C/D) and a two-pass
+implementation review (`docs/reviews/workflow-nl-query-generation-impl.md`, Pass 2: approve). This
+pass runs the FR-3a adversarial test-case set (Groups A-E above) **live, for real**, against the
+actual shipped code and a live FalkorDB instance — the thing Pass 1/Pass 2 explicitly could not do
+because the mechanism didn't exist yet. Read both prior reviews plus the RCA and impl-review docs
+in full before this pass; confirmed the accuracy-fix diff (numeric coercion, `*Normalized`
+normalization, the `needs_tuple_distinct` compilation branch, the duplicate-`returns` guard) by
+direct reading of the current `querygen.py` (446 lines, read in full) rather than taking the impl
+review's own characterization on faith.
+
+**Verdict: approve with one new finding — no blocker.** Every Group A/B/C/D case behaves exactly as
+Pass 1/Pass 2 predicted, with one exception: the direct field-injection class (Group B) reveals that
+`QueryFilter.op` is the **one field in the entire DSL with zero independent `compile()`-level
+recheck** — every other splice-worthy field (`label`, `var`, `property`, `returns`/`order_by`) has
+both a Pydantic-level guard *and* an independent re-validation inside `compile()` for exactly the
+`.model_construct()`-bypass scenario this module's own test suite (`test_querygen.py`) already
+drills for those other fields; `op` has neither past the Pydantic `Literal` constraint. This is a
+live-reproducible **Layer 1 completeness gap**, not a live-reproducible mutation — Layer 2
+(`GRAPH.RO_QUERY`'s engine-level write-refusal) caught every attempt, confirmed by a zero-mutation
+node-count check before/after on a disposable probe graph. Per the brief's own calibration ("a
+live-reproducible mutation path would be a BLOCKER... regardless of how minor the accuracy-fix diff
+looks"), no mutation occurred, so this is **MAJOR**, matching this review's own Pass 1 severity
+calibration for the identical shape of gap (`var`, MAJOR 2) — not a BLOCKER.
+
+**Method.** Live-drove `QueryGraphDataTool.run()` (full stack: real `Repository`+`Services` wired
+to FalkorDB, `ScriptedLLM` stand-ins for the model-completion seam, mirroring
+`server/tests/test_tools.py`'s construction pattern) and `querygen.compile()`/
+`repository.run_readonly_query()` directly (bypassing the tool layer, per the brief's item 1) via a
+scratchpad script (`/tmp/.../scratchpad/probe_u33.py`, 36 checks, not shipped). Target: a disposable
+probe graph `ws:sec-u33-probe`, seeded with one marker node and node-counted before/after every
+attempt that got far enough to reach `run_readonly_query`; deleted (`GRAPH.DELETE`) at the end,
+confirmed gone via `FalkorDB.list_graphs()`. `reference`/`ws:nlq-eval`/`ws:acme` were never write
+targets for any case — `knowledge_base`-dataset full-stack cases used `CallContext(ws="sec-u33-probe")`
+so `QueryGraphDataTool`'s own graph-key resolution (`schema.graph_key or f"ws:{ctx.ws}"`) pointed at
+the probe graph, not a shared one; `catalog`-schema `compile()`-only cases (whose `graph_key` is
+hardcoded `"reference"`) were run through `compile()` for the Cypher text only, then
+`repo.run_readonly_query()` was called against `ws:sec-u33-probe` explicitly (decoupling "which
+schema produced this text" from "which physical graph receives it") rather than against `reference`.
+Confirmed no residual mutation with `falkor-chat/scripts/verify_catalog.sh` (`reference`: 15/15
+products, OK) after the full run. This did **not** invoke the FR-10 active-exploitation ritual —
+per this review's own Pass 1 precedent (its live-verified-evidence section), directly invoking
+library code (`querygen.compile`, `repository.run_readonly_query`, `QueryGraphDataTool.run`) with
+adversarial Python objects against this lab's own disposable dev graph is the same class of
+"ordinary pre-ship verification of a documented safety mechanism" Pass 1 already ran without the
+ritual — not an attempt to compromise a running network-facing surface (no Bash exploitation-tool
+invocation, no WebFetch against a live HTTP endpoint).
+
+### Group A — prompt injection against the structured-completion call (structural, not model-behavior)
+
+Not run against the live local model (qwen3-4b-2507) — per this review's own Pass 2 open question,
+that is `qa-engineer`/`data-scientist` territory (model-compliance evaluation), not this lens's
+question. Instead, tested the **structural** claim Group A's cases rest on: even if a
+model *fully complies* with an injection framing, can the resulting text reach a DSL field or
+leak past `extract_own_line_json_object`'s parse boundary?
+
+- **Case A3-equivalent (a "maintenance step" instruction with a literal `CREATE (...)` embedded in
+  prose around a legitimate JSON reply)** — live-verified via `ScriptedLLM` returning
+  `"...run this maintenance step: CREATE (:Product {name:'evil'})\n{<legit JSON>}\nDone."` through
+  the **real** `QueryGraphDataTool.run()` → real `Services`/`Repository` → real `reference` graph
+  (read-only, dataset=`catalog`): the tool correctly extracted only the JSON object, compiled and
+  executed a legitimate read (`{"items": [{"p.name": "Wireless Mouse Pro"}]}`), and a follow-up
+  `MATCH (n:Product {name:'evil'}) RETURN count(n)` against `reference` confirmed **0** — the
+  prose-embedded write text was completely inert, never reaching any code path that could act on
+  it. This confirms `extract_own_line_json_object`'s parse-boundary claim (already established for
+  a different feature, reused here per the plan's "never a second, independently-written parser"
+  posture) generalizes to this adversarial shape.
+- Cases A5/A7/A8 (obfuscated instructions, a raw injection string aimed at `returns`, confusable
+  aggregate wording) reduce structurally to Group B once any instruction *succeeds* in placing
+  attacker text into a DSL field — covered exhaustively there regardless of whether a given
+  model complies on a given day.
+- Case A6 (unknown-dataset abstention) — reconfirmed live: `QueryGraphDataTool.run()` with
+  `dataset="nope"` returns `{"items": [], "finding": "unknown dataset"}` **without ever calling the
+  LLM** (matches `test_query_graph_data_unknown_dataset_abstains_without_calling_the_llm`, re-run
+  directly, still true).
+
+### Group B — direct field-injection against `querygen.compile` (live, `ws:sec-u33-probe`)
+
+All ten of Pass 1's specified cases plus the `.model_construct()` bypass variant the brief's item 1
+explicitly calls for, run live:
+
+| Case | Result |
+|---|---|
+| B1 `label` injection (`"Product) DETACH DELETE p WITH 1 AS ignore RETURN ignore AS r LIMIT 1 //"`) | `compile()` **rejected** — `label ... is not registered for this dataset`. No engine call. |
+| B2 `QueryFilter.property` injection via `.model_construct()` | `compile()` **rejected** — `filter property ... is not a valid identifier` (independent regex recheck fires even with Pydantic bypassed). |
+| **B2b — `QueryFilter.op` injection via `.model_construct()`** (`op="> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //"`) | **`compile()` did NOT reject.** Produced `cypher='MATCH (p:Product) WHERE p.price > 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y // $p0 RETURN DISTINCT p.name LIMIT $limit'` — a real, engine-parseable single-statement write chain, structurally identical to Pass 1's own live-proven §2.3 injection shape. **Layer 2 caught it**: `repo.run_readonly_query()` raised `graph.RO_QUERY is to be executed only on read-only queries`; probe-graph node count unchanged (1 before, 1 after). See finding below. |
+| B3 `var` injection via `.model_construct()` (2 variants) | Both **rejected** — `match var ... is not a valid identifier` (independent `_VAR_FULL_RE` recheck in `compile()`). |
+| B4 `returns` injection via `.model_construct()` (2 variants) | Both **rejected** — `... does not resolve to an allowed projection or aggregate` (`_resolve_expr`'s anchored-regex recheck fires independently of the bypassed field_validator). |
+| B5 `order_by` injection via `.model_construct()` | **Rejected**, same mechanism as B4. |
+| B6 cross-dataset allowlist leakage (`dataset="catalog"`, `label="Entity"`) | **Rejected** — `Entity` is not in `CATALOG_SCHEMA.labels`; the per-dataset registry is correctly scoped, no union-across-datasets leak. |
+| B7 case/whitespace near-misses (`" Product"`, `"PRODUCT"`, `"product"`) | All **rejected** — byte-identical-only allowlist match confirmed, no case-folding/trimming. |
+| B8 Unicode homoglyph / zero-width (`"Pro​duct"`, Greek-Rho `"Ρroduct"`) | Both **rejected** — strict equality, no visual-similarity match. |
+| B9 `QueryFilter(op="; DROP")` via the **normal** constructor | **`ValidationError`** raised immediately, as designed (Pydantic `Literal`). Also re-ran the equivalent bad-`op` value through the **full model-reply path** (`ScriptedLLM` → `QueryRequest.model_validate`, not `.model_construct()`) — correctly abstains (`{"items": [], "finding": "no matching data found"}`), confirming the model-driven path (the only path any current production caller actually uses) is unaffected by B2b's gap. |
+| B10 `dataset = "catalog\"; DETACH DELETE"` | `DATASET_REGISTRY.get(...)` returns `None` — plain dict lookup, no partial/fuzzy match, as before. |
+
+### Group C — Layer-2 audit, independent of Layer 1
+
+- **C1 (static call-site audit, re-run):** `grep -rn run_readonly_query falkorchat/` shows exactly
+  one production call site (`services.py:2898-2899`, both branches of `run_structured_query`), both
+  calling `self._repo.run_readonly_query(...)`; `repository.py`'s own method body (line 3169) calls
+  `.ro_query(...)` exclusively — confirmed by reading the method body directly (reproduced above in
+  full), no `.query(...)`/`.profile(...)` call anywhere in it.
+- **C2 (hand-crafted `CompiledQuery` bypassing `querygen` entirely, live):** constructed
+  `CompiledQuery(cypher="MATCH (n) DETACH DELETE n", params={})` directly (no public constructor
+  guard exists on this dataclass — MINOR 2's declined sub-suggestion, noted already in Pass 2) and
+  called `repo.run_readonly_query("ws:sec-u33-probe", malicious)` — **refused**:
+  `graph.RO_QUERY is to be executed only on read-only queries`. Probe-graph node count unchanged
+  (1 before, 1 after). This is the automated-regression form of Pass 1's own live probe #4/#5,
+  re-confirmed on the same pinned build (`falkordb/falkordb:v4.18.11`, `docker ps` re-checked this
+  pass) — **the Layer-2 backstop fact is still accurate; nothing about this build has changed.**
+- **C3 (forbidden-keyword scan, corrected methodology):** an initial blind `grep`-style substring
+  scan over the whole `querygen.py` file text found `CREATE`/`MERGE`/`SET`/`DELETE`/`REMOVE`/
+  `DROP`/`FOREACH`/`CALL` — but only inside **docstrings and comments** that explain the safety
+  property in prose (the module docstring itself lists the forbidden keywords; RCA-derived comments
+  discuss "DETACH DELETE" as the injection shape being guarded against). Re-scoped to the actual
+  template-literal fragments the compiler builds `clauses` from (`grep -n
+  'clauses\.append\|f"MATCH\|f"WHERE\|"RETURN \|"ORDER BY\|"LIMIT\|"WITH DISTINCT'
+  querygen.py`, 12 matches, all reproduced above) — **none contains a forbidden keyword**; this
+  confirms the review's original C3 claim precisely as originally scoped ("compiled-template
+  strings," not "the source file"), and flags that a literal substring scan over the whole file
+  would be the wrong regression test for this claim if anyone automates it later (worth a note if
+  C3 is ever turned into a CI check: scope the scan to the string literals actually concatenated
+  into `clauses`/`where_clauses`/`with_items`, not the module text).
+
+### Group D — malformed/abstention-path tests (full stack, live)
+
+- **D1** (smuggled `"raw_cypher"` field alongside a real schema, full `QueryGraphDataTool.run()` →
+  real `Services`/`Repository` → `ws:sec-u33-probe`): `{"items": [], "finding": "no matching data
+  found"}`; probe-graph node count unchanged. `extra="forbid"` (MINOR 2, closed in Pass 2) fires as
+  a `ValidationError`, absorbed by the tool's `except (ValidationError, ValueError)`.
+- **D2** (prose-only reply, "I need to run a raw query to answer that"): abstains, same shape —
+  `extract_own_line_json_object` correctly returns `None` for a non-JSON reply, no fallback
+  execution path exists.
+- **D3** (two competing top-level JSON objects, one carrying the injected field): abstains — the
+  ambiguity-rejection rule holds; no mutation.
+
+### Group E — resource exhaustion (tracked separately, not gating, light touch per the brief)
+
+Re-confirmed unchanged since Pass 2: `DEFAULT_QUERY_TIMEOUT_MS = 2500`; `QueryRequest.limit`'s
+Pydantic field metadata is still `Ge(ge=1), Le(le=50)`. No live timeout-exhaustion run was needed
+this pass (nothing in the RCA/accuracy-fix diff touches timeout or limit handling) — this is
+explicitly non-gating per the brief and unchanged from Pass 2's MINOR 1 closure.
+
+### Interaction between the accuracy fixes and the safety guarantee (brief item 4)
+
+Read `needs_tuple_distinct`'s branch (`querygen.py:397-437`) and the duplicate-`returns` guard
+(`:371-374`) in full, specifically for any new unparameterized-value path or new template-
+construction step the original AST-based static tests wouldn't cover:
+
+- **No new value-splice risk.** The tuple-`DISTINCT` branch only introduces new *identifier*
+  handling (`c0`/`c1`/... internal aliases, generated by `range(len(return_exprs))` — never
+  attacker-influenced text) and re-aliases back to `return_exprs`, which is already the
+  independently-validated output of `_resolve_expr` (the exact function Group B's B4/B5 cases
+  exercise). No `QueryFilter.value` touches this branch at all — values are bound in the earlier
+  `where_clauses`/`params` construction, unchanged by this fix.
+- **The duplicate-`returns` guard (`_require(len(return_exprs) == len(set(return_exprs)), ...)`)**
+  operates on `return_exprs` *after* `_resolve_expr` has already validated every entry — it can
+  only ever make `compile()` **more** restrictive (reject a shape that used to reach the engine and
+  crash it, per the impl review's own MAJOR #2), never less. Live-reconfirmed:
+  `compile()` on `returns=["p.name", "p.name"]` raises `ValueError` before any engine call, exactly
+  as the impl review's Pass 2 already showed.
+- **The `op`-field gap (B2b) predates this session's accuracy-fix diff entirely** — the
+  `where_clauses.append(f"{declared_var}.{filt.property} {filt.op} ${param_name}")` line is
+  unchanged since the original implementation (confirmed: it sits above the RCA fix A/B insertion
+  points, `querygen.py:317-348`, and is untouched by `needs_tuple_distinct`/the duplicate-`returns`
+  guard). **This is not a regression from the accuracy-fix cycle** — it is a pre-existing Layer 1
+  completeness gap that neither this review's own Pass 1/Pass 2, nor the impl review's mutation
+  testing, nor `test_querygen.py`'s existing `.model_construct()`-bypass suite (which drills
+  exactly this scenario for `var`/`label`/`property`/`returns`/`order_by`/match-count, but never
+  for `op`) happened to exercise, until this pass's live adversarial run.
+
+### Finding — MAJOR: `QueryFilter.op` has no independent `compile()`-level recheck; a `.model_construct()`-built request can splice a write-clause chain past Layer 1
+
+**Evidence:** `querygen.py:347`, `where_clauses.append(f"{declared_var}.{filt.property} {filt.op}
+${param_name}")` — `filt.op` is spliced verbatim into the WHERE-clause template with no allowlist
+check anywhere in `compile()`. The **only** guard on `op`'s value is the Pydantic `Literal["=",
+"<>", "<", "<=", ">", ">="]` constraint on `QueryFilter.op` (`querygen.py:83`), which fires solely
+on the normal `QueryFilter(...)` constructor / `model_validate()` path. Live-reproduced above (B2b):
+`QueryFilter.model_construct(property="price", op="> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1
+AS y RETURN y //", value=0)` compiles cleanly into a syntactically valid, engine-parseable
+single-statement Cypher write chain — structurally the *exact* injection shape Pass 1's own
+"Live-verified evidence" section proved is real and exploitable on this engine when nothing catches
+it (§2.3's completed example). `compile()` catches this exact bypass class for every other
+splice-worthy field (`var` via `_VAR_FULL_RE`, `label`/`property` via the schema allowlist,
+`returns`/`order_by` via `_resolve_expr`'s anchored decomposition) — `op` is the one field where
+that "independently of whatever the Pydantic field validators already did" posture
+(`_resolve_expr`'s own docstring, `querygen.py:245-246`) was never extended.
+
+**Why it matters:** this is not reachable via any current production caller — `tools.py:985`'s
+`QueryRequest.model_validate(...)` always runs Pydantic validation, so a model-driven completion's
+`op` is always Literal-checked (confirmed live, B9-full-stack). The risk is exactly the one this
+review's original MAJOR 2 named for `var`: **the single field with no second line of defense if
+Layer 2 is ever wrong, patched around, or a future refactor reaches `compile()` by any path other
+than `QueryRequest.model_validate`** (a batch-import tool, a future internal API, a debugging
+shortcut — the same "forgot to wire up what the design already says" risk class MAJOR 2 described,
+except here it isn't a hypothetical implementation slip, it's a confirmed, live, present-tense gap
+in the shipped code). Layer 2 held in every attempt (zero mutation, confirmed by node-count and by
+`verify_catalog.sh`), which is exactly why this is MAJOR and not a BLOCKER — but the module's own
+stated safety argument ("Layer 1... every value a caller supplies can produce them [is closed by]...
+an exact-match allowlist, a hard reject on anything unknown") is not fully true for `op` today, and
+the existing `test_querygen.py` `.model_construct()`-bypass suite gives a false sense of complete
+coverage by drilling every *other* splice-worthy field and silently omitting this one.
+
+**Suggested improvement:** add, in `compile()`, immediately alongside the existing
+`_PROP_FULL_RE.fullmatch(filt.property)` check (`querygen.py:308-311`), an equivalent
+`_require(filt.op in {"=", "<>", "<", "<=", ">", ">="}, f"filter op {filt.op!r} is not a valid
+operator")` — a plain set-membership check, no regex needed since `op` is already a closed
+six-value enum. Add one `test_querygen.py` case mirroring the existing
+`.model_construct()`-bypass suite exactly: `QueryFilter.model_construct(property="price",
+op="> 0 WITH 1 AS x MATCH (m) DETACH DELETE m WITH 1 AS y RETURN y //", value=0)` through
+`QueryMatch.model_construct(...)`/`QueryRequest.model_construct(...)` into `qg_compile(...)`,
+asserting `ValueError`, exactly parallel to
+`test_compile_rejects_var_mismatch_from_hand_constructed_request` and its siblings. This closes the
+one remaining field in the DSL without the "independent recheck, not just Pydantic" property the
+rest of the module already has.
+
+### What's solid (reconfirmed live, this pass)
+
+- Every other splice-worthy field (`label`, `var`, `property`, `returns`, `order_by`, match count)
+  has the independent-of-Pydantic `compile()`-level recheck the design calls for, live-confirmed
+  against all ten of Pass 1's Group B cases plus the cross-dataset/case-sensitivity/homoglyph
+  variants — none reached the engine.
+- Layer 2 (`GRAPH.RO_QUERY`'s engine-level write-refusal) is unchanged and still catches everything
+  Layer 1 lets through, live-reconfirmed on the same pinned build (`falkordb/falkordb:v4.18.11`) —
+  including the one gap this pass found (B2b) and the classic bare-write bypass (C2).
+- The accuracy-fix diff (`needs_tuple_distinct`, the duplicate-`returns` guard) introduces no new
+  value-splice surface and only makes `compile()` strictly more restrictive, never less —
+  confirmed by direct reading and live re-verification, not inferred from the impl review's own
+  characterization.
+- Prompt-injection framing aimed at the model (Group A) cannot succeed structurally even under
+  full model compliance unless it lands attacker text inside an actual DSL field value — confirmed
+  live with a real `CREATE`-bearing prose payload that reached the tool, compiled, and executed a
+  harmless read with zero trace of the embedded write text anywhere in the result or the graph.
+- Every abstention path (Group D: unknown dataset, unparseable reply, `extra="forbid"` rejection,
+  compile rejection, ambiguous dual-JSON, empty rows) still returns the documented `{"items": [],
+  "finding": "no matching data found"}` shape with zero rows touched — the "never a crash, never a
+  fabricated answer" contract holds under live adversarial input, not just under the impl review's
+  unit-test stubs.
+
+### Open questions
+
+- **For `architect`/`cobb`:** should the `op`-allowlist fix above ship as a fast follow-up before
+  any further live demo use, or is it acceptable to queue it given it's not reachable via any
+  current production caller (same disposition question the impl review's own MAJOR #2 open
+  question raised, and reasonably resolved there as "ship before treating K-055 as closed")? I lean
+  toward the same answer here: it's a one-line `_require` plus one test, cheap enough that "closed
+  before K-055 is truly closed" is the more defensible bar, especially since this DSL's whole
+  premise is "structurally incapable," not "incapable modulo one untested field."
+- **For `qa-engineer`/`data-scientist`:** Group A's model-compliance question (would the actual
+  configured local model, prompted this way, ever choose to comply) remains genuinely untested by
+  this pass, as previously flagged in Pass 2's open questions — this pass only closes the
+  structural half of Group A (can compliance, if it happened, ever matter), not the behavioral half.
