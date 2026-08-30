@@ -1,6 +1,13 @@
 # Natural-language query generation over structured graph data — golden-set evaluation method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (M<n> TBD)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-055 (M6) · **Version:** 2
+
+**2026-08-30 revision:** §5's gate formula amended to exclude shapes the shipped mechanism is
+*structurally and permanently* incapable of by design (`relationship-traversal`,
+`conflicting-facts`) from the Overall/AC-2 pass/fail denominators — pooling a permanent, by-design
+0% into a ≥85%/≥75% target made the gate mathematically unattainable regardless of mechanism
+quality; see the new paragraph after §5's table and `docs/reviews/workflow-nl-query-generation-rca.md`
+for the finding that prompted this.
 
 ## 1. The question and the decision it serves
 
@@ -239,11 +246,38 @@ the headline number by double digits.
 
 | Layer | Metric | Data | Acceptance threshold |
 |---|---|---|---|
-| Layer 1 (gate) | **Execution accuracy** — exact match after canonicalization (§3) | 35-45 golden pairs, stratified by shape, split `electronics-catalog` / `document-ingestion-entities` | **Overall ≥ 85%** (Wilson 95% CI reported alongside, never substituted for it — at n≈40 a single flipped case moves the point estimate ~2.5 pts, and the CI at that n is wide enough that 85% and 80% are not reliably distinguishable; the number is a directional pass bar, not a precision claim). **AC-2 gate: `document-ingestion-entities` subset ≥ 75% on its own**, evaluated separately, not folded into the pooled number — a mechanism that aces the catalog and fails the second schema must not pass on the average. |
+| Layer 1 (gate) | **Execution accuracy** — exact match after canonicalization (§3), computed over **in-scope pairs only** — see the exclusion rule below the table | 35-45 golden pairs, stratified by shape, split `electronics-catalog` / `document-ingestion-entities` | **Overall ≥ 85%** (Wilson 95% CI reported alongside, never substituted for it — at n≈40 a single flipped case moves the point estimate ~2.5 pts, and the CI at that n is wide enough that 85% and 80% are not reliably distinguishable; the number is a directional pass bar, not a precision claim). **AC-2 gate: `document-ingestion-entities` subset (the `knowledge_base` dataset key in the shipped harness) ≥ 75% on its own**, evaluated separately, not folded into the pooled number — a mechanism that aces the catalog and fails the second schema must not pass on the average. |
 | Layer 1, not-found/abstention shape | **False-answer rate** (fraction of not-found-shape questions where the mechanism returned a specific value instead of `NOT_FOUND`) | the not-found-shape subset (≥3 per dataset, §4) | **≤ 10%**, gated *separately and more strictly* than the general bar — a fabricated specific-sounding wrong fact is a costlier failure than a generically wrong count (mirrors this lab's own asymmetric-error-class convention for a biased judge, K-027 item 3: gate the costly error class on its own, don't let it hide inside a symmetric average). |
-| Layer 1, shape breakdown | Execution accuracy per shape (single-fact, filter-list, aggregation, compound-filter, conflicting-facts, relationship-traversal) | same golden set, grouped | **Reported, not independently gated** — per the convention that a probe set's individual outcomes must appear in the summary prose even when only the aggregate is gated, so a real partial-failure pattern (e.g. aggregation failing while single-fact passes) is visible and not averaged away. |
+| Layer 1, shape breakdown | Execution accuracy per shape (single-fact, filter-list, aggregation, compound-filter, conflicting-facts, relationship-traversal) | same golden set, grouped | **Reported, not independently gated** — per the convention that a probe set's individual outcomes must appear in the summary prose even when only the aggregate is gated, so a real partial-failure pattern (e.g. aggregation failing while single-fact passes) is visible and not averaged away. `conflicting-facts`/`relationship-traversal` specifically are excluded from the *pooled* rows above (see below) whenever they are structurally out of scope — this row still reports their real per-shape score every run, at whatever it actually is. |
 | Layer 2 | Deterministic value-containment/extraction match on the rendered NL answer (LLM-judge fallback only if regex genuinely can't cover a shape) | same golden set's `expected` field, applied to the live rendered answer | **Reported as a live-demo/AC-5 sanity signal, not a second independent gate** — Layer 1 is the number FR-4/AC-4 requires; Layer 2 catches a mechanism that gets the right data but renders it unusably (e.g. drops the number from the sentence). |
 | Harness safety backstop (only if the chosen mechanism is LLM-generated Cypher) | Zero tolerance: no golden-set run executes a query containing a write clause | every generated query, scanned before execution | **Any occurrence fails the harness run outright** — see §6. This is a harness-level backstop, not a substitute for FR-3's structural prevention or FR-3a's adversarial suite (`security-expert`'s separate scope). |
+
+**Exclusion rule for structurally out-of-scope shapes (added 2026-08-30, per
+`docs/reviews/workflow-nl-query-generation-rca.md`).** If the shipped mechanism is, by its own
+approved design, structurally and *permanently* incapable of a golden-set shape — not merely
+performing poorly on it, but architecturally unable to ever answer it (e.g. a single-`MATCH`-
+pattern DSL with no relationship traversal, `workflow-nl-query-generation.md` §3.6) — that shape's
+pairs are (a) never dropped from the authored golden set (§6's original instruction stands
+unchanged) and are run every time, (b) reported every run as a **named, permanent structural-gap
+line** at their actual score (typically 0%), separately from every gated number, but (c)
+**excluded from the Overall and AC-2 pooled pass/fail denominators above.** The two shapes
+identified as structurally out of scope for the shipped v1 DSL are `relationship-traversal` and
+`conflicting-facts` (both `document-ingestion-entities`-only, both requiring a graph traversal the
+single-`MATCH` DSL cannot express by design).
+
+This is a **correction to this note's original formula, not a new judgment call**: pooling a
+permanent, by-design 0% into a ≥85%/≥75% target makes the gate mathematically unattainable no
+matter how correct the mechanism is on every shape it is actually designed to handle — 6 of 39
+pairs (4 `relationship-traversal` + 2 `conflicting-facts`) permanently zero caps achievable overall
+accuracy at 33/39 = 84.6% (just under the original 85% bar) and caps the `knowledge_base` subset at
+13/19 = 68.4% (under the 75% bar), regardless of in-scope answer quality — exactly the numbers the
+real re-run against the fixed mechanism produced. A gate no spec-compliant implementation can ever
+pass is not a valid acceptance instrument. **This does not retroactively bless a mechanism that
+also underperforms on the shapes it is actually designed for**: the original failing run (18/39
+overall, `docs/test-reports/workflow-nl-query-generation-report.md` first run) still fails under
+this revised formula too (18/33 in-scope = 54.5%, still well under 85%) — the revision removes an
+unattainable floor, it does not lower the bar on anything the mechanism is supposed to be able to
+do.
 
 **Why 85%/75%, not a higher or more "rigorous"-looking number.** Neither dataset nor mechanism
 has a prior baseline to justify a self-referential regression gate the way `graphrag-eval-ml`'s
@@ -257,7 +291,14 @@ majority of questions, not merely directionally plausible. **This is a judgment 
 one** — if `architect`'s chosen mechanism is materially stronger or weaker than a 4B-class local
 model (e.g., a hosted frontier model, or conversely a fully deterministic DSL with no generation
 step at all), revisit this number rather than treat it as fixed; it is not derived from any
-measured baseline because none exists yet.
+measured baseline because none exists yet. **This is a different kind of gap from the exclusion
+rule above, and the two should not be conflated:** a materially different *model* changes what
+accuracy level is realistic and is grounds to revisit the *numeric* threshold; a mechanism
+structurally incapable of an entire *shape* by design is handled by excluding that shape from the
+denominator, not by lowering the threshold — treating every "this shape scores badly" case as
+grounds for exclusion would let a genuine capability shortfall on a shape the mechanism *can*
+attempt (e.g. aggregation/compound-filter, which turned out fully answerable once the real DSL/
+prompt defects were fixed, §6) hide behind an exclusion that isn't actually warranted for it.
 
 ## 6. Mechanism-dependent flags (for `architect`, resolved here only as flags)
 
@@ -284,7 +325,17 @@ measured baseline because none exists yet.
   category," that is itself a finding this evaluation should surface (a shape-level 0% rather than
   a missing test) — not a reason to drop those golden pairs from the set. Report it as a named gap
   against FR-1/FR-2's "arbitrarily-phrased" ambition rather than silently narrowing the golden set
-  to only what the mechanism can do.
+  to only what the mechanism can do. **(2026-08-30 update.)** As it happened, the shipped v1 DSL
+  turned out fully capable of both shapes — aggregation and compound-filter scored 100% once the
+  real DSL/prompt defects `docs/reviews/workflow-nl-query-generation-rca.md` found (a numeric
+  filter value serialized as a JSON string; an un-normalized value against a normalized property;
+  a missing `DISTINCT`) were fixed. The shapes that turned out genuinely, structurally impossible
+  were `relationship-traversal`/`conflicting-facts` instead (§4, document-ingestion dataset only).
+  §5 now codifies the general rule this bullet anticipated: a shape structurally, *permanently*
+  unanswerable by the shipped design's own scope is reported at its real score but excluded from
+  the pass/fail denominator; a shape the mechanism merely performs poorly on — as aggregation/
+  compound-filter did, transiently, before the fix — stays pooled and gated normally. The
+  distinction is architectural incapability, not a low score.
 
 ## 7. Risks & open questions
 
@@ -306,7 +357,12 @@ measured baseline because none exists yet.
    authored, the same sequencing cost `graphrag-eval.md` Unit 1 already paid for its own corpus.
 4. **85%/75% are judgment calls with no prior baseline, named as such in §5** — revisit once
    `architect`'s mechanism choice and its real hardware/model are known; do not treat these numbers
-   as derived from measurement they are not derived from.
+   as derived from measurement they are not derived from. **(2026-08-30 note.)** The specific way
+   this could go wrong that this note failed to anticipate up front — a permanently-0%,
+   structurally-out-of-scope shape pooled into the denominator making the numeric target
+   mathematically unattainable regardless of mechanism quality — is now fixed by §5's exclusion
+   rule; the *numeric* values (85%/75%) are unchanged and this note takes no position on whether
+   they need revisiting for any other reason.
 5. **Not-found/abstention is not an explicit FR in `workflow-nl-query-generation.md`** the way it
    is in the sibling `workflow-catalog-lookup.md` (that document's FR-4/AC-3). This note includes
    it in the golden set and gates it asymmetrically anyway (§5) because a fabrication failure mode
