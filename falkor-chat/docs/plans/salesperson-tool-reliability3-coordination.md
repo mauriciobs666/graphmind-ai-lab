@@ -1,6 +1,6 @@
 # Salesperson tool-orchestration reliability — round 3 (K-059) — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-059 (post-M6, not a milestone gate)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-059 (post-M6, not a milestone gate)
 
 Successor to `docs/plans/salesperson-tool-reliability2-coordination.md` (still `active`, K-061
 shipped/reviewed, live regression left open by design) — ordinal-bumped per root `AGENTS.md`'s
@@ -43,7 +43,7 @@ shape is chosen; if a fix does turn out to be warranted, its shape must also acc
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 | `data-scientist` | `a8ebe52269f4f11b7` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §13 | — → — | 185.0k tok / 85 tools |
-| U2 | `tdd-engineer` | `a450d3f4aadd7fa5b` | in-flight | deterministic `services.place_order` double-dispatch test | — → — | — |
+| U2 | `tdd-engineer` | `a450d3f4aadd7fa5b` | delivered | `server/tests/test_services.py` + `docs/HISTORY.md` entry | `teco` (direct) → verified | 96.3k tok / 31 tools |
 
 ## Notes
 
@@ -88,3 +88,31 @@ shape is chosen; if a fix does turn out to be warranted, its shape must also acc
   instructs reading §13/`services.py`/`repository.py` directly, a safe copy-aside mutation method,
   and a stop-and-ask escalation if the first honest run (pre-mutation) contradicts the diagnosis by
   showing a real duplicate `Order` — that would be a genuine blocker, not a green test.
+- **U2 delivered and independently re-verified by `teco` 2026-08-31** — no stop-and-ask fired
+  (first honest run was green, corroborating the diagnosis). Diff read in full: new test matches
+  `FakeRepo`'s real `place_order` contract (fresh `order_id` per call, cart cleared only on the
+  creating call — confirmed against the actual `FakeRepo.place_order` implementation, not just the
+  delegate's claim). Test re-run in isolation (green). Mutation independently reproduced from a
+  safe copy-aside backup (`if not priced: return None` → `if False: return None` in
+  `services.py`): failed red for the predicted reason (second call minted a real second `Order`),
+  restored via `cp`, `diff` confirmed byte-identical, re-run green. Full offline suite re-run
+  personally: **2307 passed, 14 deselected** — matches exactly. Shared `reference`/`ws:acme` state
+  re-verified `OK` (`verify_workflows.sh`, `verify_salesperson.sh`, `verify_catalog.sh`) after
+  re-seeding — **note:** the first reseed attempt used a malformed `bootstrap_schema.sh` invocation
+  (`teco`'s own typo — a positional `EMBEDDING_DIM=1024` arg instead of a leading env var),
+  creating a stray empty `ws:EMBEDDING_DIM=1024` graph key; caught immediately via a probe query
+  against the loaded-graphs list, `GRAPH.DELETE`d, confirmed gone before the correct
+  `EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh acme` reseed. No data loss, no unrelated graph
+  touched. `HISTORY.md` entry independently confirmed accurate against everything re-verified
+  above. **K-059 closed**: removed from `BACKLOG.md` entirely (delivered item, not kept even as an
+  index row, per root `AGENTS.md`) — its record is the `HISTORY.md` entry above.
+
+## Closed 2026-08-31 — K-059 fully resolved: no fix warranted, invariant pinned by a deterministic test
+
+Diagnosis (U1, n=28, §13) found no live duplicate-dispatch defect and a structural argument
+explaining why `place_order` doesn't share K-061's harm mechanism. Per the diagnosis's own
+recommendation, a deterministic unit test (U2) now pins that invariant with certainty rather than
+resting on a live sample alone — closing the residual power gap the diagnosis was honest about
+(§13.2's suppressed held-rejection stratum) more cheaply than a corrected live re-run would have.
+No production code change was needed or made. This coordination doc is now `archived` — both units
+delivered and independently verified, K-059 fully closed out of `BACKLOG.md`.

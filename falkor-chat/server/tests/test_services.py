@@ -3757,6 +3757,38 @@ def test_place_order_mints_a_fresh_order_id_each_call():
     assert first["orderId"] != second["orderId"]
 
 
+def test_place_order_twice_in_direct_succession_creates_only_one_order():
+    """K-059 (`docs/reviews/salesperson-tool-reliability-ml.md` §13.4/§13.5 point 4):
+    a same-loop repeat of `place_order` immediately after a successful one — same
+    customer, no cart repopulation in between — must not create a second `Order`.
+
+    `services.place_order` mints a fresh `order_id` per call, so the idempotency
+    guard `repository.place_order` keys on (`repository.py:2938-2939`'s `OPTIONAL
+    MATCH (dup:Order {orderId: $orderId})`) never engages across two service-level
+    calls — it's not what protects this case. What actually protects it:
+    `repository.place_order` clears the cart's `CartItem`s only on the call that
+    creates the `Order` (`repository.py:2956-2957`), so the very next call finds an
+    already-empty cart, `_priced_cart_lines` returns `[]`, and `services.place_order`
+    (`services.py:2774-2775`) returns `None` *before* ever calling
+    `repository.place_order` again — a no-op, not a duplicate write.
+    """
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+
+    first = svc.place_order(CTX)
+    calls_after_first = len(repo.calls)
+    second = svc.place_order(CTX)  # same customer, immediately, no repopulation
+
+    assert first is not None
+    assert first["created"] is True
+    assert second is None  # empty-cart no-op (AC-3-shaped abstention), not a 2nd Order
+    # the no-op is resolved before the repo layer is ever asked to write again
+    assert not any(c[0] == "place_order" for c in repo.calls[calls_after_first:])
+    assert len(repo.orders) == 1
+
+
 # ── get_order_status / advance_order ──────────────────────────────────────────────
 
 def test_get_order_status_returns_current_status():

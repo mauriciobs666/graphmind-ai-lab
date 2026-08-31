@@ -40,45 +40,6 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-059 — `place_order` has no protection against a live off-turn duplicate dispatch (🟡 in-progress — diagnosed at n=28, no fix warranted on current evidence; one cheap deterministic confirmation left open, 2026-08-31)
-
-> **Why it exists.** K-058's dispatch-time write guard only covers write-mutating tools with a
-> single resolved string target argument (`add_to_cart`/`remove_from_cart`'s `productName`).
-> `place_order`/`clear_cart` take zero arguments, so the guard structurally cannot check them —
-> correct-and-faithful-to-spec, not an oversight (`executor.py:316-320`'s own comment). Diagnosed
-> (`docs/reviews/salesperson-tool-reliability-ml.md` §13, live n=28, held-rejection-adjacent
-> condition per K-061's own §12.8 recommendation): **0/28 (0.0%, Wilson CI 0.0-12.1%) on both
-> ground-truth signals** (`place_order` dispatch count and `Order` node count, never diverged) —
-> every rep dispatched exactly once, created exactly one `Order`, left the cart empty. A
-> **structural argument independent of the sample** narrows the risk further: `place_order`
-> mints a fresh `order_id` per call and clears the cart only on the call that actually creates
-> the `Order` (`repository.py:2913-2970`); a same-loop repeat immediately after a success finds
-> an already-empty cart and no-ops (`services.py`'s `_priced_cart_lines`/`place_order` return
-> `None` on empty input → `tools.py`'s "The cart is empty" message) — the opposite of
-> `add_to_cart`'s increment-on-repeat semantics that made K-061 harmful.
-- **Caveat the sample doesn't fully close:** the held-rejection-adjacent stratum this pass was
-  designed to power reproduced far less often than the closely-related §12.6 script (1/28, CI
-  0.6-17.7%, vs. §12.6's 14/24, CI 38.8-75.5% — non-overlapping, likely caused by this script's
-  extra profile text/compound instruction suppressing the model's off-turn re-mention tendency,
-  not confirmed which factor). Only one usable rep landed in the target stratum (a clean
-  negative) — not the intended n≈20-30, so "no effect" is corroborated by the structural
-  argument, not independently powered by the live sample. §9's original isolated
-  `place-order-retrigger` shape (0/4) also remains unre-tested at any larger n.
-- **Owner:** `tdd-engineer` for the cheapest closing step — a deterministic unit test calling
-  `services.place_order` twice in direct succession against the same non-empty-then-emptied cart,
-  asserting exactly one `Order` node results; this nails the structural claim with certainty
-  rather than relying on live-model sampling. A corrected live re-run (isolate profile-setup into
-  its own turn 0 to preserve the ~42-58% held-rejection base rate, n≈30-40 total for n≈15-20
-  in-stratum) is the alternative if the team wants to close this on live evidence instead —
-  data-scientist recommends the deterministic test as cheaper and sufficient.
-- **No dispatch-time guard is recommended** — `place_order` has no resolvable target argument to
-  key on; if the deterministic test above ever fails, the narrowest fix would be a
-  `place_order`-specific same-turn dedup keyed on tool name alone (speculative, untested, named
-  only for a reasoned trade-off, not because current evidence calls for it).
-- **Risks/RAM:** none.
-- **Test strategy:** the deterministic `services.place_order` double-dispatch unit test above
-  closes this out; a live regression is optional/lower-priority given the structural argument.
-
 ### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🔵 proposed — disclosed during K-057's own fix verification, two wording attempts failed to move it, `docs/HISTORY.md` 2026-08-31)
 
 > **Why it exists.** Live-verifying K-057's wording fix (`docs/HISTORY.md` 2026-08-31,

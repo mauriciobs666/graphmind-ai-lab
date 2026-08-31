@@ -5,6 +5,40 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — K-059 closed: deterministic unit test pins the `place_order` no-duplicate-order invariant (no production fix — none was warranted)
+
+**What:** K-059 (`docs/BACKLOG.md`) asked whether `place_order` — zero-argument, so K-058's/
+K-061's dispatch-time write guards structurally cannot key on it — has a live duplicate-dispatch
+problem. `data-scientist`'s diagnosis (`docs/reviews/salesperson-tool-reliability-ml.md` §13) found
+0/28 live reps with any duplicate dispatch or duplicate `Order`, and a structural code-reading
+argument (§13.4) explaining why: `repository.place_order` clears the `Cart`'s `CartItem`s only on
+the call that actually creates the `Order` (`repository.py:2956-2957`), so a same-loop repeat
+immediately after a successful call finds an already-empty cart; `services._priced_cart_lines`
+returns `[]` for it and `services.place_order` (`services.py:2774-2775`) returns `None` — a
+harmless no-op, never a second `Order`. §13.5 point 4 recommended closing the remaining
+uncertainty with a cheap deterministic test rather than a larger live re-run. That test is now
+added: `test_place_order_twice_in_direct_succession_creates_only_one_order`
+(`server/tests/test_services.py`, next to the existing `place_order` `FakeRepo`-backed suite) —
+seeds one cart item, calls `svc.place_order(CTX)` twice in direct succession with no
+repopulation in between, and asserts the first call creates an `Order` while the second returns
+`None` *before* the repo layer is ever asked to write again, leaving exactly one `Order` in the
+fake store.
+
+**Verification:** the test's first honest run (before any deliberate mutation) was green — no
+genuine duplicate `Order` turned up, consistent with both the live sample and the structural
+argument, so no production-code fix was made (per §13.5: "no fix is warranted for `place_order`
+on the evidence gathered"). Mutation-tested: temporarily replaced `services.place_order`'s
+`if not priced: return None` guard with `if False: return None` (bypassing the empty-cart abstention)
+on a copy-aside-restored `services.py` (backed up, then restored via `cp` — no `git stash`/
+`checkout` on the live tree) — the new test failed for the predicted reason (second call minted a
+second `Order`, `id2`), confirming it actually exercises the invariant; guard restored, test green
+again, `git diff` on `services.py` empty afterward. Full offline suite:
+`.venv/bin/python -m pytest -q` → **2307 passed, 14 deselected** (the `-m live` reps, deselected
+by default, per convention). Because a default `pytest` run wipes the shared `reference` graph
+(`docs/SERVER.md` §1.7), `scripts/seed_workflows.sh acme`, `scripts/seed_salesperson.sh acme`, and
+`scripts/seed_catalog.sh acme` were re-run afterward; `verify_workflows.sh acme`,
+`verify_salesperson.sh acme`, and `verify_catalog.sh` all report `OK` before finishing.
+
 ## 2026-08-31 — K-061 fix shipped (unit-verified, `analyst`-approved with suggestions): same-turn `add_to_cart` self-duplicate held via a new dispatch-time dedup guard — live regression confirmation still open
 
 **What:** K-061 (`docs/BACKLOG.md`, diagnosed at `docs/reviews/salesperson-tool-reliability-ml.md`
