@@ -97,7 +97,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   100% (11/11, CI 74.1-100%, `ml.md` §14.5) — the shipped K-057 fix's inclusive-bound guidance
   holds symmetrically in both price directions.
 
-### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — shipped fix confirmed live, substantial but not complete: a narrower keying loophole remains, 2026-08-31)
+### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — both known mechanisms fixed and reviewed; a final live confirmation of the second fix is the only open item, 2026-08-31)
 
 > **Why it exists.** Diagnosed at n=24 (`ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%): the
 > model's own current-turn tool-call loop re-dispatches `add_to_cart` a second time for a target it
@@ -131,10 +131,27 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   1"), syntactically distinct as JSON, so both dispatched and the cart doubled. This is not the
   deliberate "different quantity, both must dispatch" carve-out the guard's own docstring names
   (`executor.py:944-947`) — both calls request the same quantity; the difference is purely the
-  model's own inconsistent tool-call formatting. **Candidate fix, named but not evaluated:** key
-  the guard on the tool's *resolved* argument set (each declared parameter's schema default
-  applied before hashing) rather than the raw arguments as received — closes this loophole while
-  preserving the genuine-quantity-change carve-out. Needs its own mutation test before shipping.
+  model's own inconsistent tool-call formatting.
+- **Loophole fix shipped** (`server/falkorchat/executor.py`, `docs/HISTORY.md` 2026-08-31): the
+  dedup key is now computed through a new per-tool `_DEDUP_ARG_RESOLVERS` table
+  (`_resolve_dedup_arguments`) instead of hashing raw arguments — deliberately not a generic
+  "apply the JSON-schema default" lookup (neither tool declares one), because `add_to_cart` and
+  `remove_from_cart` genuinely differ: `add_to_cart` gets a resolver mirroring its own `run()`'s
+  `arguments.get("quantity") or 1` collapse; `remove_from_cart` gets no entry at all, since its
+  own `run()` passes an omitted `quantity` through as `None` — "remove the whole line," a request
+  distinct from any explicit quantity, not an implicit default. Reproduction test first (the
+  exact rep-20 shape), mutation-tested in both directions (reverting the fix, and separately
+  planting a wrong `remove_from_cart` resolver — both correctly caught by the new tests). Full
+  offline suite green (2309 passed, 14 deselected).
+- **`analyst`-reviewed** (`docs/reviews/salesperson-tool-reliability2-impl.md` Pass 2): approve,
+  no blockers/majors. One MINOR (no guardrail warning a future write-tool addition to check for
+  this same bug class) closed directly — a comment added to `_WRITE_TARGET_ARG` pointing future
+  editors at `_DEDUP_ARG_RESOLVERS`.
+- **Still open — this item stays in BACKLOG until closed:** a further live n≈20-25 confirmation
+  pass (same script/method as `ml.md` §15) to confirm the specific rep-20 loophole is closed in a
+  full live conversation, not just at the unit level — the same closing discipline the first fix
+  went through. Strong unit-level evidence already exists (reproduction test, double-direction
+  mutation testing), so this is lower-urgency than the first live pass was, but not yet run.
 - **The co-occurring false-negative-reply symptom stays closed** — 0/25 in the live regression
   pass (`ml.md` §15.3), consistent with the original diagnosis's 1/30 (3.3% CI 0.6-16.7%); no new
   evidence, no standalone follow-up.
@@ -153,16 +170,14 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   warranted for `place_order`: a structural argument (fresh `order_id` per call, cart cleared
   only on the creating call) means a same-loop repeat can't produce a duplicate `Order` the way
   K-061's `add_to_cart` increment-on-repeat semantics did. This shipped fix stays K-061-only.
-- **Owner:** `tdd-engineer` for the resolved-argument-set keying fix (candidate shape named
-  above, not yet implemented or scheduled) — reproduction test first (the exact rep-20 two-call
-  shape), mutation-tested, `analyst`-reviewed same as the first fix; `data-scientist`/
-  `qa-engineer` again afterward for a further short live confirmation pass once it ships.
+- **Owner:** `data-scientist`/`qa-engineer` for the final short live confirmation pass; no further
+  design/implementation owner needed unless that pass finds the loophole isn't actually closed.
 - **Risks/RAM:** none.
-- **Test strategy:** once the resolved-argument-set fix ships — a dedicated unit test for the
-  rep-20 shape (two same-turn `add_to_cart` calls, one omitting `quantity`, one supplying the
-  same default value explicitly, exactly one dispatch expected), mutation-tested; then a further
-  live n≈20-25 pass reusing `ml.md` §12.1's exact 3-turn script to confirm the specific loophole
-  is closed without disturbing the guard's genuine-quantity-change carve-out.
+- **Test strategy:** a live n≈20-25 pass reusing `ml.md` §12.1's exact 3-turn script (rep-20's
+  shape specifically — the model spontaneously producing an omitted-then-explicit-default
+  `quantity` pair — isn't guaranteed to recur on demand, so this pass may need to run more reps
+  or nudge the script if it doesn't reappear naturally) to confirm the specific loophole is closed
+  in a full live conversation, without disturbing the guard's genuine-quantity-change carve-out.
 
 ### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🔵 proposed — severity revised upward, likely more common than filed, 2026-08-31)
 

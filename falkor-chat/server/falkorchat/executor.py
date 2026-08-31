@@ -318,10 +318,62 @@ def _looks_fact_bearing(text: str) -> bool:
 # `save_profile`'s `name`/`deliveryAddress` are free-form customer-supplied
 # text, not a catalog-resolved target — both deliberately out of scope here,
 # extend this mapping if a future incident needs it.
+#
+# Adding a write tool here? Check whether its own `run()` wrapper applies a
+# post-guard argument default (like `add_to_cart`'s `quantity` — K-061's
+# original bug, `docs/reviews/salesperson-tool-reliability-ml.md` §15.2) and,
+# if so, add a matching entry to `_DEDUP_ARG_RESOLVERS` below — otherwise the
+# new tool silently falls through to the raw-argument dedup key and can
+# reintroduce the exact same loophole.
 _WRITE_TARGET_ARG: dict[str, str] = {
     "add_to_cart": "productName",
     "remove_from_cart": "productName",
 }
+
+
+def _resolve_add_to_cart_dedup_args(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Mirror `AddToCartTool.run`'s own wrapper-level default (`tools.py`,
+    `arguments.get("quantity") or 1`) for K-061 dedup-key purposes only —
+    the call actually dispatched still receives the model's raw arguments
+    unchanged; only the *key computed for the same-turn guard* is resolved
+    through this collapse, so an omitted `quantity` and an explicit
+    `quantity: 1` (both mean "add 1") hash identically."""
+    return {**arguments, "quantity": arguments.get("quantity") or 1}
+
+
+# K-061 keying-loophole fix (`docs/reviews/salesperson-tool-reliability-ml.md`
+# §15.2, rep-20 ground truth): a live regression pass found the shipped guard's
+# `dispatch_key = (call.name, _dumps(call.arguments))` hashes the model's raw,
+# pre-default JSON — so `add_to_cart({"productName": "X"})` and
+# `add_to_cart({"productName": "X", "quantity": 1})`, semantically identical
+# ("add 1"), produce two different keys and both dispatch, doubling the cart
+# line. Each tool named in `_WRITE_TARGET_ARG` gets its OWN resolver here,
+# mirroring that tool's own `run()` wrapper's actual default-collapse
+# semantics — deliberately not a generic "look up the JSON-schema `default`"
+# lookup (neither tool's schema declares one) and deliberately not a single
+# shared resolver, because the two tools' semantics genuinely differ:
+#
+#   * `add_to_cart` collapses an omitted/falsy `quantity` to `1` INSIDE THE
+#     WRAPPER (`tools.py` `AddToCartTool.run`), so its dedup key must too.
+#   * `remove_from_cart` has NO such default — `quantity` is passed through
+#     unchanged (`tools.py` `RemoveFromCartTool.run`), and an omitted
+#     `quantity` there means "remove the whole line," a semantically
+#     DISTINCT request from any explicit quantity value, not an implicit
+#     stand-in for some fixed number. It is deliberately absent from this
+#     table: `_resolve_dedup_arguments` falls through to the raw arguments
+#     unchanged for any tool with no entry, keeping "omit quantity" and
+#     "quantity: N" as different dedup keys for `remove_from_cart`.
+_DEDUP_ARG_RESOLVERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "add_to_cart": _resolve_add_to_cart_dedup_args,
+}
+
+
+def _resolve_dedup_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """The K-061 same-turn guard's dedup key is computed from this, never from
+    `call.arguments` directly — see `_DEDUP_ARG_RESOLVERS` above for why a
+    per-tool resolver, not a generic default lookup."""
+    resolver = _DEDUP_ARG_RESOLVERS.get(name)
+    return resolver(arguments) if resolver else arguments
 
 
 def _target_mentioned_in_turn_text(target: str, turn_text: str) -> bool:
@@ -934,17 +986,21 @@ class WorkflowExecutor:
         the K-058 check (so it only ever sees a call whose target IS mentioned in this
         turn's own text — K-058 already held everything else), a call named in
         `_WRITE_TARGET_ARG` is held when it is an **exact repeat** — same tool name, same
-        full argument set (`_dumps(call.arguments)`, not just the resolved target) — of a
-        call that already **successfully dispatched** earlier in this same node
-        execution's own multi-iteration loop (`dispatched_writes`, seeded only on the
-        success path below, never on a held/rejected/failed one). This is a *same-turn*
-        re-fire of the model's *own current-turn* successful write — structurally distinct
-        from K-058's *off-turn* re-fire of a *previous* turn's completed write — so it is a
-        second, independent guard, not a repurposing of K-058's. Keying on the full
-        argument set (not just the target) is deliberate: a customer who says "add 1
-        wireless mouse, then actually make that 2" in one message produces two
-        `add_to_cart` calls for the same product with different `quantity` values, and
-        both must still dispatch.
+        RESOLVED argument set (`_resolve_dedup_arguments`, not the raw `call.arguments` —
+        see its own docstring for why: §15.2's rep-20 loophole showed the raw JSON alone
+        under-counts a repeat when a tool applies its own default INSIDE the wrapper,
+        after the raw key would have been computed) — of a call that already
+        **successfully dispatched** earlier in this same node execution's own
+        multi-iteration loop (`dispatched_writes`, seeded only on the success path below,
+        never on a held/rejected/failed one). This is a *same-turn* re-fire of the model's
+        *own current-turn* successful write — structurally distinct from K-058's *off-turn*
+        re-fire of a *previous* turn's completed write — so it is a second, independent
+        guard, not a repurposing of K-058's. Keying on the full (resolved) argument set
+        (not just the target) is deliberate: a customer who says "add 1 wireless mouse,
+        then actually make that 2" in one message produces two `add_to_cart` calls for the
+        same product with genuinely different `quantity` values, and both must still
+        dispatch — resolving each tool's own default-collapse before hashing narrows the
+        loophole without touching that carve-out.
 
         `satisfied` (`docs/plans/must-post-engine-contract.md` §3.2) is bookkeeping for the
         engine-level must-post contract: on the single success path that survives AC-6
@@ -986,7 +1042,10 @@ class WorkflowExecutor:
                         f"their current message"
                     ),
                 })
-            dispatch_key = (call.name, _dumps(call.arguments))
+            dispatch_key = (
+                call.name,
+                _dumps(_resolve_dedup_arguments(call.name, call.arguments)),
+            )
             if dispatch_key in dispatched_writes:
                 trace.append((
                     "tool_call",

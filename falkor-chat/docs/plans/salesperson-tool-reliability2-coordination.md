@@ -43,6 +43,8 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | U3 | `analyst` | `a0b7ab4bc76ae25ad` | delivered | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → approve w/ suggestions | 115.3k tok / 45 tools |
 | U4 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | mutation-coverage test + rename (analyst MAJOR 1 / MINOR 1) | `teco` (direct) → verified | 169.4k tok / 32 tools |
 | U5 | `data-scientist` | `ae55c708663c46839` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §15 | `teco` (direct) → accepted | 174.2k tok / 89 tools |
+| U6 | `tdd-engineer` | `ad643318819a75668` | delivered | resolved-argument-set keying fix for `executor.py`'s K-061 guard | `analyst` → approve (1 MINOR, closed) | 122.0k tok / 58 tools |
+| U7 | `analyst` | `a984f1bfe18d5f36d` | delivered | `salesperson-tool-reliability2-impl.md` Pass 2 | — → approve | 91.5k tok / 36 tools |
 
 ## Notes
 
@@ -142,3 +144,44 @@ than run in this coordination's earlier pass.
   longer framed as low-severity/opportunistic-only — pooled 20.4%, CI 11.5-33.6%, well above its
   original 8.3% estimate). This coordination doc stays `active`; U5's own finding is itself the
   next unit's trigger, not a close-out — see the ledger for whatever follows.
+- **U6 dispatched 2026-08-31** (`tdd-engineer`, fresh agent): reproduction test for §15.2's exact
+  rep-20 shape, then a resolved-argument-set keying fix for the K-061 guard. Brief explicitly
+  flagged the `remove_from_cart` design nuance (omitted `quantity` means "whole line," not an
+  implicit default — must stay a distinct dedup key from any explicit quantity) so the fix
+  wouldn't over-generalize into a new bug.
+- **U6 delivered and independently re-verified by `teco` 2026-08-31.** Diff read in full:
+  `executor.py` adds a per-tool `_DEDUP_ARG_RESOLVERS` table (not a generic schema-default
+  lookup) — `add_to_cart` gets a resolver mirroring its own `run()`'s `arguments.get("quantity")
+  or 1` collapse; `remove_from_cart` deliberately gets no entry, falling through to raw
+  arguments unchanged, preserving its "omit = whole line" vs. "explicit quantity" distinction.
+  Both new tests (`test_executor_agent.py`) re-run in isolation, green (6/6 same-turn dedup
+  tests). Mutation independently reproduced from a `cp`-backed-up copy (not `git stash`, per
+  this coordination's own U2 operational-note lesson): reverted just the `dispatch_key` line to
+  the raw pre-fix form, confirmed the new repro test failed for the predicted reason (both calls
+  dispatched) while the other 5 tests — including the new `remove_from_cart` distinctness test —
+  stayed green; restored, `md5sum`-confirmed byte-identical, re-ran green. Full offline suite
+  re-run personally: **2309 passed, 14 deselected** — matches exactly (+2 over the 2307 baseline,
+  precisely the two new tests). Shared state re-verified `OK` after re-seeding
+  (`bootstrap_schema.sh acme` → `seed_demo.sh` → `seed_workflows.sh` → `seed_catalog.sh` →
+  `seed_salesperson.sh` → all three `verify_*.sh acme` reports `OK`). `HISTORY.md` entry
+  independently confirmed accurate against everything re-verified above. Not yet committed —
+  held pending `analyst`'s review gate (U7), same double-gate discipline as the original K-061
+  fix (U2→U3→U4).
+- **U7 dispatched 2026-08-31** (`analyst`, fresh agent): review of U6's diff before it's
+  committed.
+- **U7 delivered and independently re-verified by `teco` 2026-08-31.** Verdict: approve, no
+  blockers/majors, one MINOR (the `_DEDUP_ARG_RESOLVERS`/`_WRITE_TARGET_ARG` guardrail gap for a
+  future write tool). Read the Pass 2 diff/section in full: the resolver-mirrors-`run()` claim,
+  the `remove_from_cart` omission rationale, and the double-direction mutation testing (revert the
+  fix; separately plant a wrong `remove_from_cart` resolver) all independently re-confirmed
+  against source. **MINOR 1 closed directly by `teco`** (genuinely trivial single-file no-brainer
+  — a one-line-plus-context code comment on `_WRITE_TARGET_ARG` pointing future editors at
+  `_DEDUP_ARG_RESOLVERS`, no design judgment, no behavior change): re-ran the 6 same-turn dedup
+  tests green after the comment-only edit. Full offline suite and shared-state re-verification
+  from U6's own delivery still hold (comment-only change since then). Findings folded into
+  `docs/BACKLOG.md` K-061 directly by `teco`: fix + review recorded, MINOR closed, still 🟡
+  in-progress — a final live n≈20-25 confirmation pass (same closing discipline as the first fix)
+  is the one remaining open item, flagged as lower-urgency given the strong unit-level/mutation
+  evidence already in hand. Ready to commit: `docs/HISTORY.md`, `server/falkorchat/executor.py`,
+  `server/tests/test_executor_agent.py`, `docs/reviews/salesperson-tool-reliability2-impl.md`,
+  `docs/BACKLOG.md`.

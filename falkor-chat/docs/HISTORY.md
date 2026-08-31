@@ -5,6 +5,60 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — K-061 keying-loophole closed: `add_to_cart`'s K-061 guard now dedups on each tool's own resolved argument set, not the raw pre-default JSON
+
+**What:** the live regression pass that confirmed K-061's first fix (`ml.md` §15.2, `HISTORY.md`
+below) also found a narrower loophole in that fix's own dedup keying: `dispatch_key =
+(call.name, _dumps(call.arguments))` (`executor.py:989` at the time) hashes the model's raw,
+pre-default JSON arguments, but `add_to_cart`'s `quantity` argument is optional and defaults to
+`1` *inside the tool wrapper* (`tools.py` `AddToCartTool.run`, `arguments.get("quantity") or 1`)
+— **after** the guard's key is already computed. So `add_to_cart({"productName": "X"})` followed,
+later the same turn, by `add_to_cart({"productName": "X", "quantity": 1})` — semantically
+identical (both mean "add 1"), syntactically distinct as raw JSON — produced two different dedup
+keys, and both dispatched, doubling the cart line. This is genuinely the same customer-visible
+harm K-061 was filed for, through a keying gap the shipped guard's design didn't anticipate; it is
+**not** the guard's own deliberate "different quantity, both must dispatch" carve-out
+(`executor.py:944-947`'s docstring) — both calls request the same quantity.
+
+`server/falkorchat/executor.py` now resolves the dedup key through a new per-tool table,
+`_DEDUP_ARG_RESOLVERS`, before hashing (`_resolve_dedup_arguments`) — not a generic
+"look up the JSON-schema default" lookup (neither `add_to_cart`'s nor `remove_from_cart`'s schema
+declares a literal `"default"` key) and not a single shared resolver, because the two
+`_WRITE_TARGET_ARG` tools' own `run()` wrapper semantics genuinely differ:
+`_resolve_add_to_cart_dedup_args` mirrors `AddToCartTool.run`'s own `arguments.get("quantity") or
+1` collapse, so an omitted `quantity` and an explicit `quantity: 1` now hash identically;
+`remove_from_cart` gets **no** entry in the table (falls through to the raw arguments unchanged),
+because `RemoveFromCartTool.run` applies no such default — `arguments.get("quantity")` passes an
+omitted quantity through as `None` unchanged, and `None` means "remove the whole line" downstream
+(`services.remove_cart_item`), a semantically distinct request from any explicit quantity value,
+not an implicit stand-in for some fixed default. Collapsing that case into the same key as an
+explicit quantity would have introduced a new, opposite-direction bug (wrongly holding a genuine
+"remove 1" after a "remove the whole line"), so it was deliberately left alone.
+
+**Verification:** reproduction test first,
+`test_same_turn_omitted_and_explicit_default_quantity_are_the_same_key`
+(`server/tests/test_executor_agent.py`, next to the existing K-061 same-turn suite) — `ml.md`
+§15.2's exact rep-20 shape (two same-turn `add_to_cart` calls for the same product, one omitting
+`quantity`, one supplying `quantity: 1` explicitly) — confirmed RED against the pre-fix keying
+(both dispatched) before the fix, GREEN after. A second test,
+`test_same_turn_remove_omitted_quantity_and_explicit_quantity_are_different_keys`, pins the
+correctness case the fix must not regress: `remove_from_cart`'s omitted-quantity ("whole line")
+and explicit-quantity calls stay two different dedup keys and both dispatch — this test was
+already green before the fix (no change in `remove_from_cart` behavior) and stays green after, by
+design. Mutation-tested on the live tree: backed up `executor.py` (`cp`, not `git stash` — the
+lesson from this coordination's own U2 operational note about a `;`-chained `git stash pop`
+mishap), reverted just the `dispatch_key` line to the raw pre-fix `_dumps(call.arguments)`, reran
+— the new reproduction test failed for the predicted reason (both calls dispatched) while the
+other 5 same-turn dedup tests, including the new `remove_from_cart` distinctness test, stayed
+green (proving that test is independent of this specific fix); restored the backed-up file
+byte-identical (`md5sum` match before/after), reran — all 6 same-turn dedup tests green again.
+Full offline suite: **2309 passed, 14 deselected** (`server/.venv/bin/python -m pytest -q`,
+`+2` over the pre-unit baseline of 2307, matching the two new tests; deselected count unchanged).
+The suite's teardown wiped the shared `reference` graph, as it always does on a default run;
+re-seeded (`bootstrap_schema.sh acme` with `EMBEDDING_DIM=1024` → `seed_demo.sh acme` →
+`seed_workflows.sh acme` → `seed_catalog.sh acme` → `seed_salesperson.sh acme`) and re-verified —
+`verify_workflows.sh acme`, `verify_catalog.sh`, `verify_salesperson.sh acme` all report `OK`.
+
 ## 2026-08-31 — K-059 closed: deterministic unit test pins the `place_order` no-duplicate-order invariant (no production fix — none was warranted)
 
 **What:** K-059 (`docs/BACKLOG.md`) asked whether `place_order` — zero-argument, so K-058's/

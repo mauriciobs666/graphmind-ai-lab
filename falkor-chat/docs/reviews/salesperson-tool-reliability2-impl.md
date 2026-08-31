@@ -128,3 +128,79 @@ actually match their names to what they cover.
   `BACKLOG.md`'s next pass (`teco`/the fix's own owner), not something this review can settle —
   flagged as MAJOR 2 above because the current state (silently skipped, untracked) isn't a
   deliberate answer to that question either way.
+
+## Pass 2 (2026-08-31)
+
+**MAJOR 1 / MAJOR 2 / MINOR 1 disposition:** all closed by U4 (same coordination), independently
+re-verified byte-identical by `teco` and committed as `381fdb8`; MAJOR 2's documentation gap was
+handled by `teco` directly, not this delegate. Not re-litigated here. This pass reviews an
+unrelated, later diff against the same K-061 topic: the live n≈25 regression pass (U5,
+`ml.md` §15.2) found a **second, narrower loophole** in the same guard's own keying — this pass
+covers `tdd-engineer`'s (U6) fix for it. Diff (uncommitted): `server/falkorchat/executor.py`
+(new `_DEDUP_ARG_RESOLVERS` table + `_resolve_dedup_arguments`, wired into the K-061
+`dispatch_key` computation), `server/tests/test_executor_agent.py` (two new tests),
+`docs/HISTORY.md` (one new entry).
+
+**Verdict: approve.** No blockers, no majors. One minor worth closing before or shortly after
+commit.
+
+### MINOR 1 — `_DEDUP_ARG_RESOLVERS`'s "no entry ⇒ pass through raw" default has no guardrail against a future write tool silently reintroducing this exact bug class
+
+`_resolve_dedup_arguments` (`executor.py:364-369`) falls through to raw `arguments` for any tool
+name with no table entry — correct today because `_WRITE_TARGET_ARG` (`executor.py:321-324`) has
+exactly two members, and `remove_from_cart`'s absence from the table is a deliberate, verified
+choice (`RemoveFromCartTool.run`, `tools.py:646-654`, passes `quantity` through as `None`
+unchanged — no wrapper default to mirror). But nothing ties the two tables together: if a future
+change adds a third tool to `_WRITE_TARGET_ARG` whose own `run()` wrapper applies a hidden
+post-guard default (exactly K-061's original mechanism), the new tool falls through to "raw
+arguments," silently reintroducing the same bug class, with no test or comment anywhere flagging
+that `_DEDUP_ARG_RESOLVERS` needs a matching entry. The current code comment
+(`executor.py:333-358`) explains *why* the existing two tools are handled the way they are, but
+doesn't warn a future editor of `_WRITE_TARGET_ARG` to check back here.
+
+**Suggested fix:** a one-line comment on `_WRITE_TARGET_ARG` itself ("adding a write tool here?
+check whether its own `run()` wrapper applies a post-guard argument default, and if so add a
+`_DEDUP_ARG_RESOLVERS` entry mirroring it — K-061's original bug, `ml.md` §15.2") is enough; a
+test isn't practical since there's no third tool yet to test against.
+
+### Verified independently
+
+- **Resolver mirrors `AddToCartTool.run` exactly**: `arguments.get("quantity") or 1`
+  (`tools.py:589`) byte-for-byte matches `_resolve_add_to_cart_dedup_args`
+  (`executor.py:327-334`). **`remove_from_cart`'s omission is correct**: `RemoveFromCartTool.run`
+  passes `arguments.get("quantity")` through unchanged (`tools.py:650`), and `services
+  .remove_cart_item`'s `quantity=None` branch reads the current line and removes it whole
+  (`services.py:2696-2726`) — confirmed by reading, not the delegate's claim alone.
+- **Both new tests are real, targeted assertions**, not smoke tests: `reg.dispatched` (the actual
+  tool-dispatch record, `StubRegistry.dispatch`, `test_executor_agent.py:83-85`) is asserted
+  exactly, not just "no exception" — the first new test asserts only the omitted-quantity call
+  reaches dispatch; the second asserts both `remove_from_cart` calls do.
+- **Mutation-tested both directions myself** (not just re-running the delegate's claim), via `cp`
+  backup (not `git stash`, per this coordination's own U2 lesson), restored `md5sum`-identical
+  after each: (1) reverted `dispatch_key` to the raw pre-fix `_dumps(call.arguments)` — the new
+  `test_same_turn_omitted_and_explicit_default_quantity_are_the_same_key` failed for exactly the
+  predicted reason (both calls dispatched), the other 5 same-turn tests stayed green; (2) added a
+  wrong `remove_from_cart` resolver entry that collapsed omitted quantity to `1` — the new
+  `test_same_turn_remove_omitted_quantity_and_explicit_quantity_are_different_keys` failed for
+  exactly the predicted reason (one call wrongly held). Both mutations independently confirm the
+  tests catch the specific regressions they claim to.
+- **The carve-out survives, and is still meaningfully distinct**:
+  `test_same_turn_different_args_for_same_target_still_dispatches_both`
+  (`test_executor_agent.py:1831-1863`, quantities 1 and 2, both nonzero) is unaffected by the
+  resolver (`1 or 1 = 1`, `2 or 1 = 2` — no collapse), stays green, and tests a genuinely different
+  case from the two new tests (a real customer-intended quantity change vs. the same intended
+  quantity expressed two syntactically different ways).
+- **Scope discipline holds**: the K-061 guard's docstring (`executor.py:978-996`) is updated
+  accurately to describe resolved-argument keying and still names the carve-out correctly; no
+  other guard (K-058, K-059) or unrelated code is touched.
+- **`HISTORY.md`'s claims all check out against source**: the pre-fix line citations
+  (`executor.py:989`, `:944-947`) match `381c9fc`'s committed tree exactly; the `services
+  .remove_cart_item` "whole line" claim and the wrapper-default mechanism description are both
+  accurate (see above).
+- **Full offline suite reproduced exactly**: `server/.venv/bin/python -m pytest -q` →
+  **2309 passed, 14 deselected**, matching the delegate's report. Shared state
+  (`reference`/`ws:acme`) re-verified `OK` after re-seeding
+  (`bootstrap_schema.sh acme` → `seed_demo.sh` → `seed_workflows.sh` → `seed_catalog.sh` →
+  `seed_salesperson.sh acme`, all three `verify_*.sh` reports `OK`).
+
+CPG: not applicable — no CPG is loaded for `falkor-chat` server code (unchanged from Pass 1).

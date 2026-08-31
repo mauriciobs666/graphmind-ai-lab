@@ -1965,3 +1965,88 @@ def test_same_turn_dedup_is_not_seeded_by_a_failed_dispatch_attempt():
     ]
     assert not any(k == "same_turn_write_held" for k, _ in result.trace)
     assert result.output == "Added 1 Wireless Mouse Pro to your cart."
+
+
+def test_same_turn_omitted_and_explicit_default_quantity_are_the_same_key():
+    # `ml.md` §15.2's ground-truth rep-20 loophole: `add_to_cart`'s `quantity`
+    # is optional and defaults to 1 INSIDE THE TOOL WRAPPER
+    # (`tools.py` `AddToCartTool.run`, `arguments.get("quantity") or 1`) —
+    # after the K-061 guard's own dedup key was computed from the raw,
+    # pre-default arguments. The model's own two calls here are semantically
+    # identical ("add 1 keyboard") but syntactically distinct as raw JSON —
+    # one omits `quantity` entirely, the other supplies `1` explicitly — so
+    # the pre-fix guard keyed them differently and let both dispatch,
+    # doubling the cart line the customer never asked to double. This is NOT
+    # the deliberate "different quantity, both must dispatch" carve-out
+    # (`test_same_turn_different_args_for_same_target_still_dispatches_both`
+    # above) — both calls request quantity 1; the difference is purely the
+    # model's own inconsistent tool-call formatting.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Mechanical Keyboard K200"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+        ChatResult(text="Mechanical Keyboard K200 added. Total: $89.99"),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Also add a Mechanical Keyboard K200",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    # only the first (omitted-quantity) call reaches the tool — the second,
+    # semantically-identical explicit-quantity-1 repeat is held, not
+    # dispatched, so the cart quantity is never doubled
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Mechanical Keyboard K200"}),
+    ]
+    assert any(k == "same_turn_write_held" for k, _ in result.trace)
+
+
+def test_same_turn_remove_omitted_quantity_and_explicit_quantity_are_different_keys():
+    # Correctness case this fix must NOT regress: `remove_from_cart`'s
+    # `quantity` has NO wrapper-level default at all — an omitted `quantity`
+    # is passed through unchanged as `None` (`tools.py`
+    # `RemoveFromCartTool.run`, `arguments.get("quantity")`), and `None`
+    # means "remove the whole line" downstream, a semantically DISTINCT
+    # request from any specific quantity number. A resolved-argument fix
+    # that collapsed every optional argument to some canonical default would
+    # wrongly conflate these two calls into one dedup key; they must stay
+    # two different keys, and both must dispatch.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "remove_from_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "remove_from_cart",
+                     {"productName": "Wireless Mouse Pro"})]),
+        ChatResult(text="Removed 1, then removed the rest of the line."),
+    ])
+    reg = StubRegistry(
+        {"remove_from_cart": REMOVE_FROM_CART_SCHEMA},
+        results={"remove_from_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "remove 1 wireless mouse pro, actually remove "
+                                  "the rest of it too",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["remove_from_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == [
+        ("remove_from_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+        ("remove_from_cart", {"productName": "Wireless Mouse Pro"}),
+    ]
+    assert not any(k == "same_turn_write_held" for k, _ in result.trace)
