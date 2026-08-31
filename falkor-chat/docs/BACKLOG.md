@@ -95,7 +95,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   the `maxPrice`/"less than" direction was actually live-regression-tested; whenever this item's
   own harness is next run is the cheapest place to close that gap.
 
-### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — unit-level fix shipped and `analyst`-approved with suggestions, `docs/reviews/salesperson-tool-reliability2-impl.md`; live regression confirmation still open, 2026-08-31)
+### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — unit-level fix shipped, `analyst`-approved with suggestions and both findings closed; live regression confirmation still the only open item, 2026-08-31)
 
 > **Why it exists.** Diagnosed at n=24 (`ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%): the
 > model's own current-turn tool-call loop re-dispatches `add_to_cart` a second time for a target it
@@ -106,14 +106,13 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Shipped** (`server/falkorchat/executor.py`, commit `381c9fc`, `docs/HISTORY.md` 2026-08-31): a
   new dispatch-time guard keyed on `(tool name, full argument set)` holds an exact same-turn
   repeat of an already-succeeded write, without blocking a legitimate different-argument call
-  (e.g. "add 1, then make that 2"). Reproduction test first, mutation-tested, full offline suite
-  green (2305 passed, 14 deselected).
+  (e.g. "add 1, then make that 2"). Reproduction test first, mutation-tested.
 - **`analyst`-reviewed** (`docs/reviews/salesperson-tool-reliability2-impl.md`): approve with
-  suggestions, no blocker — placement, keying, and scope all verified correct. One real gap found
-  and a follow-up fix dispatched: the "must not poison the dedup set on a failed dispatch"
-  guarantee was structurally correct but had zero test coverage on the branch that actually
-  matters (a `ServiceError`-then-retry path) — a new test for that path plus a corrected test name
-  is in flight.
+  suggestions, no blocker — placement, keying, and scope all verified correct. Both findings now
+  closed (commit `381fdb8`): a genuine mutation-testing coverage gap on the "must not poison the
+  dedup set on a failed dispatch" invariant is now pinned down by a dedicated test, and the
+  misleadingly-named test was renamed to match what it covers. Full offline suite green
+  (2306 passed, 14 deselected).
 - **Still open — this item stays in BACKLOG until closed:** the live n≈20-30 regression pass
   K-061's own test strategy calls for (same ground-truth method as the diagnosis: `Cart`/
   `CartItem` Cypher + raw `TraceEvent`, never reply text) to confirm the fix actually drops the

@@ -41,7 +41,7 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | U1 | `data-scientist` | `a4bfd0c3e6bcbf81c` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §12 | — → — | 184.5k tok / 83 tools |
 | U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | 135.5k tok / 46 tools |
 | U3 | `analyst` | `a0b7ab4bc76ae25ad` | delivered | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → approve w/ suggestions | 115.3k tok / 45 tools |
-| U4 | `tdd-engineer` | `a98eb2cd64adc9f5d` | in-flight | mutation-coverage test + rename (analyst MAJOR 1 / MINOR 1) | — → — | — |
+| U4 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | mutation-coverage test + rename (analyst MAJOR 1 / MINOR 1) | `teco` (direct) → verified | 169.4k tok / 32 tools |
 
 ## Notes
 
@@ -89,3 +89,27 @@ coordination:** never chain a `git stash pop` with `;` after a command that coul
 use `&&` throughout so a failed `cd`/prior step aborts the whole chain instead of running a stash
 operation unconditionally, and always re-run `git stash list` before *and* after any stash
 operation used for verification purposes, not just `git status` after.
+
+- **U3 delivered and independently re-verified by `teco` 2026-08-31** — code-line references
+  (`executor.py:1003-1042`), the "full argument set" keying claim, and the suite-count claim all
+  reproduced exactly against the source. Verdict: approve with suggestions.
+- **U4 dispatched 2026-08-31** (same `tdd-engineer` agent, resumed via `SendMessage` by its
+  recorded agentId, not a fresh dispatch): closes `analyst`'s two findings (MAJOR 1's genuine
+  mutation-testing coverage gap on the "must not poison the dedup set on a failed dispatch"
+  invariant; MINOR 1's misleading test name). `teco` handled MAJOR 2 (the BACKLOG/HISTORY
+  documentation gap) directly — not this delegate's scope.
+- **U4 delivered and independently re-verified by `teco` 2026-08-31** — `executor.py` confirmed
+  byte-identical to the shipped fix (no drift); reproduced the MAJOR-1 mutation independently
+  (moved the dedup-set seed to before the dispatch attempt) and confirmed the new test catches it
+  while the other 3 same-turn tests stay green; restored and reran clean; full offline suite
+  re-run personally (2306 passed, 14 deselected — matches exactly); shared state re-verified `OK`
+  after re-seeding. Committed as `381fdb8`.
+
+## Closed 2026-08-31 — K-061 unit-level fix shipped, reviewed, and gap-closed; live regression left open by design
+
+Both of `analyst`'s review findings are closed (U4). K-061's own filed test-strategy still has one
+item outstanding — the live n≈20-30 regression pass to confirm the fix moves the rate in a real
+conversation, not just at the unit level — deliberately left open rather than run in this
+coordination (see `docs/BACKLOG.md` K-061's rewritten entry, owner `data-scientist`/`qa-engineer`
+for that next pass). This coordination doc stays `active` (not archived) until that confirmation
+lands and K-061 is fully resolved out of `BACKLOG.md`; no further unit is in flight right now.
