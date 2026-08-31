@@ -5,6 +5,40 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-30 — K-058 resolved: dispatch-time guard on off-turn write-mutating tool calls
+
+**What:** `mistralai/ministral-3-3b`'s own real defect surfaced by the K-056 pilot (a follow-up
+cart instruction sometimes re-issuing an earlier, already-completed `add_to_cart` call within the
+same turn's own tool loop — ground-truth-confirmed at 30% conversation-level and 4.2%
+opportunity-level, `docs/reviews/salesperson-tool-reliability-ml.md` §8.4/§9) is closed by
+implementing the §9.4 candidate mitigation, test-first: `executor._handle_tool_call` now holds
+(never dispatches) a write-mutating call named in the new `_WRITE_TARGET_ARG` map
+(`add_to_cart`/`remove_from_cart`, both resolving a `productName` target) whenever that argument's
+value is not mentioned — case/whitespace-insensitive, via the existing `extraction.normalize_name`
+helper (the `nameNormalized`/`categoryNormalized` precedent) — anywhere in the current turn's own
+trigger/reply text. A held call is reported back to the model as a clean `{"held": true, ...}`
+rejection (never dispatched, never a crash) and surfaced via a new, deliberately distinct
+observability signal, `executor._note_off_turn_write_held`/an `off_turn_write_held` trace entry —
+kept separate from K-056's `_note_possible_fabrication` because the two name different failure
+classes (no grounding tool ran at all, vs. a real write about to run ungrounded in this turn's
+text). `place_order`/`clear_cart` (no resolved target argument) and `save_profile` (free-form
+customer text, not catalog-resolved) are explicitly out of scope. The blind cross-turn
+dedup-by-signature fix §9.4 ruled out was not implemented, per that reasoning.
+
+**Verification:** 7 new unit tests in `server/tests/test_executor_agent.py` (the exact §9.2
+confirmed repro shape held; a genuine later repeat mentioned in its own turn's text still
+dispatches; case/whitespace-insensitive matching; the same guard applied to `remove_from_cart`; a
+target-less write tool — `place_order` — unaffected; no-thread-context backward compatibility).
+Mutation-tested (temporarily forcing the text-presence check to always pass confirmed both
+off-turn-write tests then fail, for the right reason, before the guard was restored). Full offline
+suite: 2296 passed. Live regression check against a throwaway `ws:eval-k058`, real
+`mistralai/ministral-3-3b`, the exact §9.2 conversation shape (turn 1 "Add 1 Wireless Mouse Pro",
+turn 2 "Also add 1 Mechanical Keyboard K200"), n=20 independent conversations: 0/20 ended with an
+inflated cart, and 1/20 showed the model live re-attempting the exact off-turn re-fire — the guard
+held it (`off_turn_write_held` trace entry), and the resulting cart was correct (mouse quantity 1,
+not 2), ground-truth-confirmed via `Cart`/`CartItem` Cypher and the raw `TraceEvent` chain, same
+discipline as the ml note's own §9.1 method.
+
 ## 2026-08-30 — K-056 resolved by model swap — `qwen3-4b` skip-and-fabricate mechanism superseded, not scaffold-fixed
 
 **What:** K-056 ("`salesperson` scaffold: live tool-call skip-and-fabricate under extended

@@ -49,6 +49,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .config import CallContext
+from .extraction import normalize_name
 from .guards import CMP_KINDS, GuardVerdict, evaluate_guard, render_label
 from .llm import ToolCall
 from .modelconfig import StaticModelGateway
@@ -304,6 +305,36 @@ def _looks_fact_bearing(text: str) -> bool:
     tighten (require the token adjacent to a currency cue) only if the log noise
     becomes disruptive."""
     return bool(_FACT_BEARING_RE.search(text))
+
+
+# K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4): the
+# write-mutating tools whose call carries a single resolved-target argument that
+# should be traceable to the current turn's own text. `add_to_cart`/
+# `remove_from_cart` both resolve `productName` against the catalog exactly like
+# `lookup_product_fact`/`filter_products` do (`Product.nameNormalized`) — the
+# same class of call the confirmed repro (§9.2) and the remove-retrigger
+# condition (§9, 0/4 but same named mechanism) both target. `place_order`/
+# `clear_cart` carry no such argument (nothing to check presence of) and
+# `save_profile`'s `name`/`deliveryAddress` are free-form customer-supplied
+# text, not a catalog-resolved target — both deliberately out of scope here,
+# extend this mapping if a future incident needs it.
+_WRITE_TARGET_ARG: dict[str, str] = {
+    "add_to_cart": "productName",
+    "remove_from_cart": "productName",
+}
+
+
+def _target_mentioned_in_turn_text(target: str, turn_text: str) -> bool:
+    """Case/whitespace-insensitive substring check — mirrors the existing
+    `nameNormalized`/`categoryNormalized` precedent (`extraction.normalize_name`,
+    the one shared case-fold + whitespace-collapse helper) rather than inventing
+    a second, independently-written normalizer (K-058 candidate fix, ml note
+    §9.4). An empty `turn_text` (no thread context available — the offline-stub
+    path several pre-existing tests use) means there is nothing to check
+    against, so this returns `True` — fail open on missing data, not closed."""
+    if not turn_text.strip():
+        return True
+    return normalize_name(target) in normalize_name(turn_text)
 
 
 def _missing_required_tools(
@@ -760,6 +791,11 @@ class WorkflowExecutor:
 
         thread_msgs = self._read_thread_context(ctx, run_ctx)
         messages = self._assemble_messages(config, run_ctx, thread_msgs)
+        # K-058: the current turn's own triggering text (the newest thread entry —
+        # by construction, the message that caused this node execution; empty in
+        # the offline-stub path where no thread is wired, per `_target_mentioned_
+        # in_turn_text`'s fail-open contract on missing data).
+        trigger_text = thread_msgs[-1].get("text", "") if thread_msgs else ""
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
         satisfied: set[str] = set()
@@ -811,8 +847,8 @@ class WorkflowExecutor:
                         "it implicitly as a fallback (K-039)",
                     ))
                     self._handle_tool_call(
-                        implicit_call, granted_set, required_by, ctx, run, trace,
-                        emissions, satisfied,
+                        implicit_call, granted_set, required_by, ctx, run, step,
+                        trace, emissions, satisfied, turn_text=trigger_text,
                     )
                 missing = _missing_required_tools(required, satisfied, emissions)
                 if missing:
@@ -830,10 +866,14 @@ class WorkflowExecutor:
                                   toolsUsed=tools_used)
 
             messages.append(_assistant_turn(result))
+            # K-058: "this turn's own raw trigger/reply text" — the triggering
+            # user message plus whatever the model has already said this same
+            # turn (last_text, just updated above for this iteration).
+            turn_text = f"{trigger_text} {last_text}"
             for call in result.tool_calls:
                 content = self._handle_tool_call(
-                    call, granted_set, required_by, ctx, run, trace, emissions,
-                    satisfied,
+                    call, granted_set, required_by, ctx, run, step, trace,
+                    emissions, satisfied, turn_text=turn_text,
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": content}
@@ -860,7 +900,8 @@ class WorkflowExecutor:
     def _handle_tool_call(
         self, call: Any, granted_set: set[str],
         required_by: dict[str, list[str]], ctx: CallContext, run: dict[str, Any],
-        trace: list[tuple[str, str]], emissions: list[str], satisfied: set[str],
+        step: dict[str, Any], trace: list[tuple[str, str]], emissions: list[str],
+        satisfied: set[str], *, turn_text: str = "",
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
@@ -873,6 +914,14 @@ class WorkflowExecutor:
         message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
         onto `emissions` for post-record PRODUCED linking (Option B, K-023).
 
+        K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.4): immediately before
+        dispatch, a write-mutating call named in `_WRITE_TARGET_ARG` is held (never
+        dispatched) rather than run when its own resolved target argument's value is not
+        mentioned anywhere in `turn_text` (the current turn's own trigger/reply text,
+        `_run_agent_node`'s `trigger_text`/`last_text`) — this runs *after* the AC-6/
+        malformed-arg checks (both structural, not this text-grounding concern) but
+        *before* `self._tools.dispatch`, so a held call never reaches the tool at all.
+
         `satisfied` (`docs/plans/must-post-engine-contract.md` §3.2) is bookkeeping for the
         engine-level must-post contract: on the single success path that survives AC-6
         rejection, malformed-arg rejection, and an absorbed model-correctable
@@ -880,7 +929,9 @@ class WorkflowExecutor:
         returned without raising — `call.name` is added to it. `_run_agent_node` reads it
         (alongside `emissions`, for `post_message`'s richer signal) via
         `_missing_required_tools` to know which declared `config.requiredTools` were
-        actually dispatched this node execution."""
+        actually dispatched this node execution. A held call (K-058) never reaches this
+        success path either, by design — it is exactly as "not dispatched" as a rejected
+        or malformed one."""
         if call.name not in granted_set:  # AC-6 defensive rejection
             trace.append(("tool_call", f"REJECTED ungranted tool {call.name!r} (AC-6)"))
             return (f"error: tool {call.name!r} is not granted to this node "
@@ -890,6 +941,26 @@ class WorkflowExecutor:
             trace.append(("tool_call", f"INVALID {call.name}: missing {missing}"))
             return (f"error: call to {call.name} is missing required argument(s) "
                     f"{missing}; fix the arguments and retry")
+        target_arg = _WRITE_TARGET_ARG.get(call.name)
+        if target_arg:
+            target_value = call.arguments.get(target_arg)
+            if (isinstance(target_value, str) and target_value
+                    and not _target_mentioned_in_turn_text(target_value, turn_text)):
+                trace.append((
+                    "tool_call",
+                    f"HELD {call.name}({_short(call.arguments)}) — {target_arg} not "
+                    f"mentioned in this turn's own text (K-058)",
+                ))
+                self._note_off_turn_write_held(call.name, target_value, run, step, trace)
+                return json.dumps({
+                    "held": True,
+                    "reason": (
+                        f"{target_arg} {target_value!r} was not mentioned anywhere in "
+                        f"this turn's own message; the call was not run — only call "
+                        f"this tool for something the customer actually asked for in "
+                        f"their current message"
+                    ),
+                })
         trace.append(("tool_call", f"{call.name}({_short(call.arguments)})"))
         try:
             out = self._tools.dispatch(call.name, call.arguments, ctx=ctx, run=run)
@@ -982,6 +1053,37 @@ class WorkflowExecutor:
         trace.append((
             "possible_fabrication",
             f"fact-bearing answer with no granted tool dispatched: {_short(text)}",
+        ))
+
+    @staticmethod
+    def _note_off_turn_write_held(
+        tool_name: str, target_value: str, run: dict[str, Any], step: dict[str, Any],
+        trace: list[tuple[str, str]],
+    ) -> None:
+        """K-058 observability signal (`docs/reviews/salesperson-tool-reliability-ml.md`
+        §9.2/§9.4): make a *held* off-turn write visible — a write-mutating call whose own
+        resolved target was not mentioned anywhere in the current turn's own text, so it was
+        never dispatched. Deliberately a **distinct** signal from `_note_possible_
+        fabrication`, not a reuse of it: that one means "a fact-bearing reply with no
+        grounding tool dispatched at all" (a K-056-class concern), and this one means "a
+        real, otherwise-well-formed write was about to run ungrounded in this turn's text"
+        (the K-058-class concern, ml note §9.3 — every occurrence here is honestly grounded
+        right up to the point this guard holds it; overloading the K-056 signal would blur
+        two failure classes with different causes and different fixes). Same posture as
+        both siblings: **always** logged (never gated on debug/trace-run status), plus an
+        `off_turn_write_held` trace entry `_trace_step` forwards verbatim on a debug run.
+        Never raised, never blocks the run — the call is simply not dispatched, exactly
+        like a rejected or malformed one."""
+        _log.warning(
+            "off-turn write held: run %s step %s did not dispatch %s(%s=%r) — target "
+            "not mentioned in this turn's own text",
+            run.get("runId"), step.get("key"), tool_name,
+            _WRITE_TARGET_ARG.get(tool_name, "target"), target_value,
+        )
+        trace.append((
+            "off_turn_write_held",
+            f"{tool_name}({_WRITE_TARGET_ARG.get(tool_name, 'target')}={target_value!r}) "
+            f"held — not mentioned in this turn's own text",
         ))
 
     def _read_thread_context(

@@ -1529,3 +1529,243 @@ def test_cart_tool_dispatch_emits_no_extra_llm_call_between_tool_call_and_result
     between = kinds[tool_call_i + 1:tool_result_i]
     assert "llm_prompt" not in between
     assert "llm_response" not in between
+
+
+# ── K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4) ────────
+#
+# `mistralai/ministral-3-3b` sometimes re-issues an earlier, already-completed
+# write-mutating tool call (e.g. `add_to_cart`) within a *later* turn's own
+# multi-iteration tool loop, even though that turn's own text never mentions the
+# re-issued call's target. The dispatch-time guard: immediately before executing
+# a write-mutating call whose schema names a resolved single-string target
+# argument (`add_to_cart`/`remove_from_cart`'s `productName`), check whether that
+# argument's value appears — case/whitespace-insensitive, `extraction.
+# normalize_name`, the same shared helper `nameNormalized`/`categoryNormalized`
+# are built with — in the *current turn's own* raw text (its triggering user
+# message plus whatever the model has already said this same turn). If not,
+# hold the call (never dispatch) and surface it via a dedicated observability
+# signal, `_note_off_turn_write_held` — deliberately distinct from `_note_
+# possible_fabrication`, since that signal targets a different failure class
+# (a fact-bearing reply with no domain tool dispatched at all) and must keep
+# meaning "no grounding tool ran" rather than being overloaded for "a tool ran
+# but its target was ungrounded in this turn's text".
+
+ADD_TO_CART_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "add_to_cart",
+        "description": "Add a product to the cart.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "productName": {"type": "string"},
+                "quantity": {"type": "integer"},
+            },
+            "required": ["productName"],
+        },
+    },
+}
+
+REMOVE_FROM_CART_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "remove_from_cart",
+        "description": "Remove a product from the cart.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "productName": {"type": "string"},
+                "quantity": {"type": "integer"},
+            },
+            "required": ["productName"],
+        },
+    },
+}
+
+
+def test_off_turn_write_is_held_not_dispatched_on_confirmed_repro_shape(caplog):
+    # ml note §9.2's exact confirmed reproduction: turn 2 ("Also add 1 Mechanical
+    # Keyboard K200") correctly adds the keyboard on its first tool-calling
+    # iteration, then spontaneously re-issues add_to_cart for the mouse — a
+    # product turn 2's own text never mentions — on its very next iteration.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="Your cart now includes: Wireless Mouse Pro x2, "
+                        "Mechanical Keyboard K200 x1. Total: $149.97"),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "assistant", "text": "Added 1 Wireless Mouse Pro to your cart.",
+         "authorId": "assistant", "displayName": "Bot"},
+        {"role": "user", "text": "Also add 1 Mechanical Keyboard K200",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    # only the legitimately-requested keyboard reaches dispatch — the mouse
+    # (mentioned nowhere in turn 2's own text) is held, not dispatched
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Mechanical Keyboard K200", "quantity": 1}),
+    ]
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
+    assert any("off-turn write held" in r.getMessage() for r in caplog.records)
+
+    # the held call is fed back to the model as a clean rejection, not a crash —
+    # the same "never crash, never fabricate" posture as QueryGraphDataTool's
+    # abstention shape, just for this different failure class
+    tool_msgs = [m for m in llm.calls[-1]["messages"] if m["role"] == "tool"]
+    held_msg = next(m for m in tool_msgs if m["tool_call_id"] == "c2")
+    assert "held" in held_msg["content"].lower()
+    assert "Wireless Mouse Pro" not in "".join(
+        f"{k}{v}" for k, v in reg.dispatched
+    )
+
+
+def test_legitimate_repeat_mentioned_in_turn_text_still_dispatches():
+    # Explicitly NOT the ruled-out fix (§9.4): a genuine later repeat of the same
+    # product, when THIS turn's own text names it, must still dispatch normally —
+    # "add another mouse" three turns later is a real, intended repeat.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="Added another Wireless Mouse Pro."),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Add another Wireless Mouse Pro please",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+    ]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+    assert result.output == "Added another Wireless Mouse Pro."
+
+
+def test_target_mention_matching_is_case_and_whitespace_insensitive():
+    # Mirrors the nameNormalized/categoryNormalized precedent (extraction.
+    # normalize_name): casefold + whitespace-collapse, not a byte-exact match.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="Added."),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "please add 1   wireless MOUSE   pro",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+    ]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_off_turn_remove_from_cart_is_also_held():
+    # The same guard applies to remove_from_cart (both take a resolved
+    # productName target) — ml note §9's remove-retrigger condition names the
+    # same mechanism for removal, even though it wasn't observed at n=4.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "remove_from_cart",
+                     {"productName": "Mechanical Keyboard K200"})]),
+        ChatResult(text="Removed."),
+    ])
+    reg = StubRegistry(
+        {"remove_from_cart": REMOVE_FROM_CART_SCHEMA},
+        results={"remove_from_cart": '{"found": true, "removed": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Remove the Wireless Mouse Pro",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["remove_from_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == []
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_write_tool_with_no_resolved_target_argument_is_unaffected():
+    # place_order/clear_cart carry no product-name-shaped target argument, so
+    # the guard has nothing to check and never holds them regardless of turn text.
+    schema = {
+        "type": "function",
+        "function": {"name": "place_order", "parameters": {
+            "type": "object", "properties": {}, "required": [],
+        }},
+    }
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c1", "place_order", {})]),
+        ChatResult(text="Order placed."),
+    ])
+    reg = StubRegistry({"place_order": schema},
+                       results={"place_order": '{"orderId": "o1"}'})
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "that's everything, thanks",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["place_order"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == [("place_order", {})]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_no_thread_context_available_does_not_hold_write_calls():
+    # Backward compatibility: when no thread text is obtainable at all (the
+    # offline-stub path several pre-existing tests use — no `services` wired,
+    # or no `threadId` in run_ctx), the guard has no information to act on and
+    # must not block — failing open on missing data, not closed. Mirrors
+    # `test_cart_tool_dispatch_emits_no_extra_llm_call_between_tool_call_and_
+    # result` above, which relies on exactly this default.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Widget", "quantity": 2})]),
+        ChatResult(text="Added."),
+    ])
+    reg = StubRegistry({"add_to_cart": ADD_TO_CART_SCHEMA},
+                       results={"add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg)  # no services — no thread context
+
+    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["add_to_cart"]), {})
+
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Widget", "quantity": 2}),
+    ]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)

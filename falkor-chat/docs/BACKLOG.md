@@ -81,43 +81,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   self-contradiction shape does not reappear in the same n. Also recommended: add one
   boundary-adjacent `compound-filter` pair to `server/tests/eval/nlq_golden_set.jsonl`.
 
-### K-058 — Ministral (`mistralai/ministral-3-3b`) sometimes silently re-fires an earlier, already-completed write tool call on a follow-up instruction (🔵 proposed — filed out of K-056's model-swap pilot, `docs/reviews/salesperson-tool-reliability-ml.md` §8.4/§9, 2026-08-29/30)
-
-> **Why it exists.** Piloting `mistralai/ministral-3-3b` as K-056's fix (see `HISTORY.md`'s K-056
-> resolution entry) surfaced its own, different, real defect: a follow-up cart instruction
-> sometimes causes the model to **re-issue an earlier, already-completed `add_to_cart` call**
-> alongside the actually-requested new item — silently inflating a cart line the customer never
-> asked to add again. Ground-truth-confirmed twice, independently: §8.4 (n=10 conversations,
-> condition B's 7-turn script) at 3/10 (30%, Wilson CI 10.8-60.3%); §9 (n=32, six controlled
-> conditions isolating one add-after-add pair each) at 1/24 pooled add-conditions (4.2%, CI
-> 0.7-20.2%). The two rates are statistically consistent with a shared true rate somewhere in the
-> high-single-digits-to-twenties-percent range at opportunity level (§9.2) — not resolved to a
-> point estimate, but ruled out as "vanishingly rare."
-- **Categorically less severe than K-056's original fabrication, on two grounds, not just rate:**
-  every occurrence is honestly grounded (the tool call is real and dispatched, the reply matches
-  the resulting — if wrong — state) and **self-disclosing in the very reply the customer reads**
-  (the doubled quantity is stated plainly, giving a real chance to catch it before checkout
-  freezes it into an `Order`). Not a reason to ignore it — `place_order`'s idempotency guard (a
-  caller-minted `order_id`) does not cover this pattern (an extra write dispatched for state
-  already established earlier in the same run, not a literal retried call).
-- **A candidate fix is already named and reasoned through, not yet implemented or eval'd** (ml
-  note §9.4): immediately before executing a write-mutating tool call, check whether the tool's own
-  resolved target (e.g. `productName`) appears, case/normalization-insensitive, in the *current*
-  turn's own raw trigger/reply text; if not, hold the call (route to the existing
-  `_note_possible_fabrication` observability signal, or require an explicit confirmation
-  round-trip) rather than silently dispatching it. Explicitly **not** a blind cross-turn
-  dedup-by-signature (ruled out live-by-reasoning in §9.4 — would incorrectly block a customer's
-  own legitimate later repeat of the same product).
-- **Owner:** `tdd-engineer` (the candidate fix is well-specified; implement it test-first — a
-  reproduction test should be constructible from the confirmed trace shape in §9.2 — then
-  mutation-test the guard: force an off-turn-text write and confirm it's held, not dispatched).
-- **Risks/RAM:** none — dispatch-time guard only, no graph/schema surface.
-- **Test strategy:** the §9.4 gate held against the exact confirmed reproduction (turn 2 requesting
-  only the keyboard must not re-dispatch the mouse); a genuine legitimate repeat (turn N asking for
-  "another" of an earlier item, mentioned in that turn's own text) must still succeed; a live
-  regression eval at the §9 sample size (or larger) after shipping, to confirm the observed rate
-  actually drops rather than just passing the one scripted case.
-
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
 > **Why it exists.** The two seeded defs use **two different source conventions**, deliberately for
