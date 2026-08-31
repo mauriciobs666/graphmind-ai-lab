@@ -42,6 +42,7 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | 135.5k tok / 46 tools |
 | U3 | `analyst` | `a0b7ab4bc76ae25ad` | delivered | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → approve w/ suggestions | 115.3k tok / 45 tools |
 | U4 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | mutation-coverage test + rename (analyst MAJOR 1 / MINOR 1) | `teco` (direct) → verified | 169.4k tok / 32 tools |
+| U5 | `data-scientist` | `ae55c708663c46839` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §15 | `teco` (direct) → accepted | 174.2k tok / 89 tools |
 
 ## Notes
 
@@ -105,11 +106,39 @@ operation used for verification purposes, not just `git status` after.
   re-run personally (2306 passed, 14 deselected — matches exactly); shared state re-verified `OK`
   after re-seeding. Committed as `381fdb8`.
 
-## Closed 2026-08-31 — K-061 unit-level fix shipped, reviewed, and gap-closed; live regression left open by design
+## 2026-08-31 — U4 close-out (superseded by U5's finding below — kept for history, not re-litigated)
 
-Both of `analyst`'s review findings are closed (U4). K-061's own filed test-strategy still has one
-item outstanding — the live n≈20-30 regression pass to confirm the fix moves the rate in a real
-conversation, not just at the unit level — deliberately left open rather than run in this
-coordination (see `docs/BACKLOG.md` K-061's rewritten entry, owner `data-scientist`/`qa-engineer`
-for that next pass). This coordination doc stays `active` (not archived) until that confirmation
-lands and K-061 is fully resolved out of `BACKLOG.md`; no further unit is in flight right now.
+Both of `analyst`'s review findings were closed (U4). K-061's own filed test-strategy still had one
+item outstanding at that point — the live n≈20-30 regression pass — deliberately left open rather
+than run in this coordination's earlier pass.
+
+- **U5 dispatched 2026-08-31** (`data-scientist`, fresh agent, per the outstanding test-strategy
+  item above): live n≈25 regression pass reusing `ml.md` §12.1's exact 3-turn script, ground-truth
+  via `Cart`/`CartItem` Cypher + raw `TraceEvent`, comparing against the pre-fix pooled 16.7% (CI
+  7.3-33.6%); also instructed to opportunistically screen for K-062's pattern per its own filed
+  test-strategy note.
+- **U5 delivered and independently re-verified by `teco` 2026-08-31.** All 6 distinct Wilson 95%
+  CIs recomputed from scratch and matched exactly (1/25→4.0% CI 0.7-19.5%; 0/25→0.0% CI 0.0-13.3%;
+  8/25→32.0% CI 17.2-51.6%; 10/49→20.4% CI 11.5-33.6%; plus the two pre-fix figures reproduced
+  unchanged, 5/30 and 2/24). Every code citation behind the rep-20 mechanism claim re-read against
+  source and confirmed exactly: `executor.py`'s `dispatch_key = (call.name, _dumps(call.arguments))`
+  keying line, its own docstring's deliberate "different quantity, both must dispatch" carve-out
+  (distinct from what rep-20 shows), and `tools.py`'s `add_to_cart` schema (`"required":
+  ["productName"]`) plus its wrapper-level `arguments.get("quantity") or 1` default applied
+  *after* the guard's key is computed — the exact mechanism by which two same-intent, same-turn
+  calls (one omitting `quantity`, one supplying the same default value explicitly) produce two
+  different dedup keys and both dispatch. `ws:ds-k061-regression` confirmed torn down (absent from
+  the live graph list, probed directly); `reference`/`ws:acme` confirmed present, `ws:acme`'s
+  `Cart`/`CartItem` state probed directly (no anomaly). Diff confirmed scoped to exactly this
+  section (196 insertions, one file, `docs/BACKLOG.md` untouched by the delegate as instructed). A
+  durable environment fact (schema-default-vs-dedup-key interaction, plus a separate id-reuse
+  gotcha for future live-probe scripts) confirmed written to `kaizen_team` for `cobb` to triage.
+  **Verdict: diagnosis accepted as delivered — and it changes K-061's status.** The shipped fix is
+  real and substantial (16.7%→4.0% point estimate) but does **not** fully close K-061: a narrower,
+  distinct loophole in the guard's own argument-set keying remains, with a named (not yet
+  implemented) candidate fix. Findings folded into `docs/BACKLOG.md` directly by `teco`: K-061
+  rewritten in place (still 🟡 in-progress, not closed — a follow-up fix unit is now warranted,
+  owner `tdd-engineer`) and K-062's severity assessment revised upward (still 🔵 proposed, but no
+  longer framed as low-severity/opportunistic-only — pooled 20.4%, CI 11.5-33.6%, well above its
+  original 8.3% estimate). This coordination doc stays `active`; U5's own finding is itself the
+  next unit's trigger, not a close-out — see the ledger for whatever follows.

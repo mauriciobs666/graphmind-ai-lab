@@ -97,7 +97,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   100% (11/11, CI 74.1-100%, `ml.md` §14.5) — the shipped K-057 fix's inclusive-bound guidance
   holds symmetrically in both price directions.
 
-### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — unit-level fix shipped, `analyst`-approved with suggestions and both findings closed; live regression confirmation still the only open item, 2026-08-31)
+### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — shipped fix confirmed live, substantial but not complete: a narrower keying loophole remains, 2026-08-31)
 
 > **Why it exists.** Diagnosed at n=24 (`ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%): the
 > model's own current-turn tool-call loop re-dispatches `add_to_cart` a second time for a target it
@@ -115,51 +115,84 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   dedup set on a failed dispatch" invariant is now pinned down by a dedicated test, and the
   misleadingly-named test was renamed to match what it covers. Full offline suite green
   (2306 passed, 14 deselected).
-- **Still open — this item stays in BACKLOG until closed:** the live n≈20-30 regression pass
-  K-061's own test strategy calls for (same ground-truth method as the diagnosis: `Cart`/
-  `CartItem` Cypher + raw `TraceEvent`, never reply text) to confirm the fix actually drops the
-  rate in a full live conversation, not just at the unit level. Not run yet — genuinely open, not
-  silently skipped.
-- **The co-occurring false-negative-reply symptom originally filed alongside this did not
-  reproduce at n=24** (pooled 1/30, 3.3% CI 0.6-16.7%) — too rare for its own track; re-screen
-  opportunistically whenever this conversation shape is next live-tested, no standalone follow-up.
-- **The two-consecutive-held-rejections co-occurrence is a real candidate contributing factor,
-  still underpowered to confirm**: all 3 of the n=24 pass's occurrences had ≥1 nearby HELD
-  rejection on an unrelated target in the same turn; 0/10 reps with zero HELD rejections
-  duplicated (CIs still overlap at n=24, not yet distinguishable).
-- **Also found, filed separately as K-062:** a distinct text defect where the model misstates why
-  an unrelated `add_to_cart` call was correctly held — not touched by this fix, confirmed
-  byte-unchanged in the shipped diff.
+- **Live regression confirmed a substantial, real effect — but not a full fix** (`ml.md` §15,
+  n=25, `ws:ds-k061-regression`, same script/ground-truth method as the diagnosis): rate dropped
+  from the pre-fix pooled 16.7% (CI 7.3-33.6%) to **4.0% (1/25, CI 0.7-19.5%)** — CIs still
+  overlap at this n, but every same-turn re-dispatch this pass could observe was correctly held
+  by the shipped guard *except one*, and that one occurrence is ground-truth-confirmed
+  (`mcp__cypher__query` against the throwaway workspace, full `TraceEvent` chain read verbatim)
+  to be a **distinct, narrower loophole in the guard's own keying**, not the pre-fix mechanism
+  recurring: the guard computes its dedup key from the tool call's raw, pre-default JSON
+  arguments (`executor.py:989`, `dispatch_key = (call.name, _dumps(call.arguments))`), but
+  `add_to_cart`'s `quantity` argument is optional and defaults to `1` *inside the tool wrapper*
+  (`tools.py:589`, `arguments.get("quantity") or 1`) — **after** the key is already computed. The
+  model issued `add_to_cart({"productName": "..."})` then, later in the same turn,
+  `add_to_cart({"productName": "...", "quantity": 1})` — semantically identical (both mean "add
+  1"), syntactically distinct as JSON, so both dispatched and the cart doubled. This is not the
+  deliberate "different quantity, both must dispatch" carve-out the guard's own docstring names
+  (`executor.py:944-947`) — both calls request the same quantity; the difference is purely the
+  model's own inconsistent tool-call formatting. **Candidate fix, named but not evaluated:** key
+  the guard on the tool's *resolved* argument set (each declared parameter's schema default
+  applied before hashing) rather than the raw arguments as received — closes this loophole while
+  preserving the genuine-quantity-change carve-out. Needs its own mutation test before shipping.
+- **The co-occurring false-negative-reply symptom stays closed** — 0/25 in the live regression
+  pass (`ml.md` §15.3), consistent with the original diagnosis's 1/30 (3.3% CI 0.6-16.7%); no new
+  evidence, no standalone follow-up.
+- **The two-consecutive-held-rejections co-occurrence remains an unconfirmed candidate
+  contributing factor** — not re-tested by this pass (n=25 was too small and not stratified for
+  it); still underpowered from the original n=24 alone (CIs overlap).
+- **Also found, filed separately as K-062 — severity should be revisited upward.** The live
+  regression pass's opportunistic screen for K-062's pattern (model misstates why an unrelated
+  `add_to_cart` call was held) came back at **8/25 (32.0%, CI 17.2-51.6%)**, well above the
+  original 2/24 (8.3%, CI 2.3-25.8%); pooled, 10/49 (20.4%, CI 11.5-33.6%). The two point
+  estimates are too far apart to fully reconcile at these sample sizes, but even the conservative
+  pooled figure is materially more common than K-062's filed "low severity, opportunistic
+  pickup" framing suggests — see K-062's own entry below, updated accordingly.
 - **Resolved — K-059 does not share this guard design.** K-059's own diagnosis (`ml.md` §13,
   n=28, 2026-08-31) tested the held-rejection-adjacent condition §12.8 flagged and found no fix
   warranted for `place_order`: a structural argument (fresh `order_id` per call, cart cleared
   only on the creating call) means a same-loop repeat can't produce a duplicate `Order` the way
   K-061's `add_to_cart` increment-on-repeat semantics did. This shipped fix stays K-061-only.
-- **Owner:** `data-scientist` (or `qa-engineer`) for the live regression pass; no further
-  design/implementation owner needed unless that pass finds the rate didn't move.
+- **Owner:** `tdd-engineer` for the resolved-argument-set keying fix (candidate shape named
+  above, not yet implemented or scheduled) — reproduction test first (the exact rep-20 two-call
+  shape), mutation-tested, `analyst`-reviewed same as the first fix; `data-scientist`/
+  `qa-engineer` again afterward for a further short live confirmation pass once it ships.
 - **Risks/RAM:** none.
-- **Test strategy:** live n≈20-30 conversation pass reusing `ml.md` §12.1's exact 3-turn script,
-  ground-truth via `Cart`/`CartItem` Cypher + raw `TraceEvent` chain, comparing the post-fix rate
-  against the pooled pre-fix 16.7% (CI 7.3-33.6%).
+- **Test strategy:** once the resolved-argument-set fix ships — a dedicated unit test for the
+  rep-20 shape (two same-turn `add_to_cart` calls, one omitting `quantity`, one supplying the
+  same default value explicitly, exactly one dispatch expected), mutation-tested; then a further
+  live n≈20-25 pass reusing `ml.md` §12.1's exact 3-turn script to confirm the specific loophole
+  is closed without disturbing the guard's genuine-quantity-change carve-out.
 
-### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🔵 proposed — found opportunistically during K-061's n=24 diagnosis pass, `docs/reviews/salesperson-tool-reliability-ml.md` §12.5, 2026-08-31)
+### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🔵 proposed — severity revised upward, likely more common than filed, 2026-08-31)
 
-> **Why it exists.** 2/24 (8.3%, Wilson CI 2.3-25.8%) reps in K-061's diagnosis pass show the
-> model telling the customer an unrelated `add_to_cart` call was held because the product "was not
-> recognized as a product" / "not recognized in the catalog" — factually wrong; the product is
-> real and correctly catalogued, and K-058's guard's own held-call result
+> **Why it exists.** Originally found at 2/24 (8.3%, Wilson CI 2.3-25.8%) in K-061's diagnosis
+> pass: the model telling the customer an unrelated `add_to_cart` call was held because the
+> product "was not recognized as a product" / "not recognized in the catalog" — factually wrong;
+> the product is real and correctly catalogued, and K-058's guard's own held-call result
 > (`executor.py:955-961`) states the *actual* reason verbatim back to the model ("was not
 > mentioned anywhere in this turn's own message"). The model had the accurate explanation
 > available and substituted a plausible-sounding wrong one. Distinct from K-061 (which is about
 > the cart *state* being wrong); here the cart state is correct throughout and only the
 > customer-facing explanation is wrong.
-- **Owner:** unassigned — low severity (doesn't affect cart correctness, only an explanation the
-  customer has no way to act on incorrectly), pick up opportunistically alongside K-061 or K-058
-  follow-up work rather than as its own dedicated pass.
+- **Re-screened during K-061's live fix-regression pass** (`ml.md` §15.4, n=25, same 3-turn
+  script, every candidate match read in full, not just regex-matched): **8/25 (32.0%, Wilson CI
+  17.2-51.6%)** — well above the original estimate. Pooled across both independent samples of the
+  same repro shape: 10/49 (20.4%, CI 11.5-33.6%). The two point estimates (8.3% vs. 32.0%) are
+  too far apart to fully reconcile at these sample sizes without a dedicated pass, but even the
+  conservative pooled figure means roughly a fifth to a third of live reps in this exact
+  conversation shape produce a factually wrong explanation to the customer — this is now assessed
+  as a real, fairly common failure mode, not the rare/low-severity finding it was originally
+  filed as.
+- **Owner:** still unassigned for a fix — severity re-read above changes the *priority* case for
+  picking this up, not the *diagnosis* itself (mechanism is already understood: the model has the
+  correct reason in the tool result and substitutes a wrong one anyway). Worth its own dedicated
+  diagnosis-and-fix pass now, rather than continuing to wait for opportunistic pickup alongside
+  other K-058/K-061 work.
 - **Risks/RAM:** none.
-- **Test strategy:** whoever next runs `ml.md` §12.1's 3-turn script (K-061's fix verification is
-  the natural occasion) should screen replies for this pattern too and fold a count into that
-  pass's report rather than standing up a separate probe.
+- **Test strategy:** a dedicated n≈25-30 live pass isolating this pattern (rather than only
+  riding along on K-061's own script) would narrow the 8.3%-32.0% gap and give a reliable rate
+  before any fix (likely a `systemPrompt`/tool-result-wording change, unconfirmed) is attempted.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 

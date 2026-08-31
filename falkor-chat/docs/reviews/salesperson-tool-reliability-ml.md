@@ -1829,3 +1829,199 @@ call's full untruncated arguments/result and the final reply text). `ws:ds-k060`
 `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to and were
 independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
 `verify_workflows.sh acme`, all `OK`) before finishing.
+
+## 15. K-061 post-fix live regression confirmation (2026-08-31)
+
+**What this section answers, and for whom.** K-061's shipped fix (`server/falkorchat/executor.py`,
+the `dispatched_writes` same-turn write-dedup guard, commit `381c9fc`/`381fdb8`, `analyst`-reviewed
+`docs/reviews/salesperson-tool-reliability2-impl.md`, unit-tested and mutation-tested green) has
+never been run against a real, full live conversation through the actual model — only unit-level.
+This section is that confirmation pass: does the shipped fix actually move the live Symptom A rate
+down from the pre-fix pooled 16.7% (§12.3, 5/30, Wilson 95% CI 7.3-33.6%)? **Answer: yes, and no —
+both at once, precisely stated below.** The point-estimate rate dropped sharply (16.7% → 4.0%), a
+real and substantial effect on the exact mechanism the fix targeted — but the pass's single
+occurrence is ground-truth-confirmed to be a **new, narrower loophole in the shipped guard's own
+keying logic**, not old-mechanism residual noise, which argues against fully closing K-061 on this
+result alone. §12.5's separately-named text defect (mischaracterized hold-reason) also reproduced
+here at a rate substantially higher than its own original diagnosis — folded in per this task's
+opportunistic-screening instruction, §15.4 below.
+
+### 15.1 Method
+
+Same in-process harness precedent as §9.1/§11.2/§12.1 (`services.start_workflow_run`/
+`resume_workflow_run` driven via `WorkflowTrigger.maybe_trigger(..., trace=True)`, real
+`ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))`, real
+`build_builtin_registry(services, agent_id=config.AGENT_ID, models=models)`, real
+`WorkflowExecutor` — byte-identical wiring to `app._build_default_app()`'s `WORKFLOW_ENABLED`
+branch, `app.py:361-393`), against a fresh throwaway `ws:ds-k061-regression`
+(`EMBEDDING_DIM=1024 bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` →
+`seed_salesperson.sh`; `verify_salesperson.sh`/`verify_catalog.sh` both `OK` before driving).
+`FALKORCHAT_TRIGGER_DEF_KEY=salesperson`/`FALKORCHAT_TRIGGER_DEF_VERSION=v5` set as module-level
+env before any `falkorchat` import (FR-15 no-reload-path), same convention as every prior pass in
+this thread. `FALKORCHAT_OPENCODE_CONFIG` pointed at the repo's own
+`config/opencode.example.json` (the ambient `$HOME/.config/opencode/opencode.json` on this box
+carries a stale LAN-host `baseURL` for the `lmstudio` provider that does not resolve from this
+box — confirmed unreachable, `curl` connection refused — so the repo's own example config,
+`baseURL: http://localhost:1234/v1`, was used instead; `salesperson@v5`'s pinned
+`lmstudio/mistralai/ministral-3-3b` step model resolves through the provider id only — the
+model-id part of the ref is never checked against the config file's own `models` list
+(`modelconfig.py:664`), so this substitution is provider-plumbing only, not a model change).
+LM Studio confirmed serving `mistralai/ministral-3-3b` (as `mistralai_ministral-3-3b-instruct-2512`
+in `/v1/models`) at `localhost:1234` before driving — the **same pinned model** §12's diagnosis
+used (`config/models.json` unchanged since §12, verified: no `temperature` override for this
+model, so this exact 3-turn script is still not expected to be deterministic run-over-run, per
+§12.6's own finding).
+
+**Conversation script — §12.1's exact turns 1-3, reused verbatim, not reconstructed from
+memory:**
+1. `Which peripherals cost less than $60?`
+2. `Add 1 Wireless Mouse Pro to my cart.`
+3. `Also add 1 Mechanical Keyboard K200.`
+
+**25 independent conversations** (`K061R_N=25`), each a fresh customer/thread
+(`k061r-cust-1`..`k061r-cust-25`, distinct from both §12's `k061-cust-*` ids and this pass's own
+1-rep smoke-test id `k061r-smoke-1` — the smoke rep was run first, under its own prefix, and
+excluded from the scored batch by construction rather than discovered-and-excluded after the
+fact, closing §12.2's own lesson rather than repeating it) against the same `salesperson@v5` def,
+same workspace. Ground truth, never the model's own reply text for scoring Symptom A:
+- **Cart/CartItem** — `repository.read_cart(ws, customer_id=actor)`, independently spot-
+  re-verified via direct `mcp__cypher__query` against `ws:ds-k061-regression` for the one flagged
+  rep (§15.2).
+- **The full raw `TraceEvent` chain** — `repository.read_trace(ws, run_id=runId)`, parsed
+  per-rep for every `tool_call`/`tool_result` entry (a dispatched `add_to_cart(...)` line carries
+  no prefix; a held one is prefixed `HELD add_to_cart(...) — <reason>`, `executor.py:1005`/`:976`/
+  `:992`), independently re-read via direct `mcp__cypher__query` for the flagged rep, full trace
+  reproduced verbatim below (§15.2).
+- **The final turn-3 assistant reply text** — `services.read_messages(ctx, thread_id=tid,
+  since=0, limit=50)`, stored verbatim per rep, screened by regex for both Symptom-B and
+  §12.5/K-062's pattern then every match read in full, never grepped-and-trusted alone.
+
+`ws:ds-k061-regression` was `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never
+written to and were independently re-verified in sync (`verify_salesperson.sh acme`,
+`verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before finishing. Script:
+`ds_k061_regression_probe.py`, throwaway, not committed, left in this session's scratchpad,
+`K061R_N`/`K061R_CUST_PREFIX` env-parameterized; raw per-rep records (full cart state, full
+`add_to_cart`-related trace lines, full final reply text) in a sibling
+`k061_regression_results.jsonl`.
+
+### 15.2 Result — Symptom A (post-fix)
+
+**1/25 (4.0%, Wilson 95% CI 0.7-19.5%).** The pooled pre-fix rate (§12.3) was 5/30 (16.7%,
+Wilson 95% CI 7.3-33.6%). The point estimate dropped by a factor of ~4; the CIs still overlap
+(0.7-19.5% vs. 7.3-33.6%) — at n=25, this alone does not clear the bar for a statistically
+distinguishable difference, stated plainly per this note's own standing discipline rather than
+oversold. But **this is not the "still ~15-20%, no real effect" pattern the task brief named as
+the re-open trigger** — the point estimate moved sharply in the right direction, and, more
+importantly, ground-truth inspection of the one occurrence (below) shows the shipped guard did
+correctly hold every attempted same-turn duplicate this pass surfaced **except one**, and that
+one exception is mechanistically distinct from the pre-fix defect, not a case of the guard simply
+failing to engage.
+
+**rep-20 — the one Symptom A occurrence, ground-truth-confirmed via direct `mcp__cypher__query`
+against `ws:ds-k061-regression` (run `36e83ee647084bdca52c5236d40fa135`), full trace reproduced
+verbatim:**
+
+| seq | kind | payload |
+|---|---|---|
+| 3 | tool_call | `lookup_product_fact({"name": "Mechanical Keyboard K200"})` |
+| 7 | tool_call | `HELD add_to_cart({"productName": "Wireless Mouse Pro", "quantity": 1}) — productName not mentioned in this turn's own text (K-058)` |
+| 9 | tool_call | `add_to_cart({"productName": "Mechanical Keyboard K200"})` — **dispatched**, result `quantity: 1` |
+| 13 | tool_call | `HELD add_to_cart({"productName": "Wireless Mouse Pro", "quantity": 1}) — productName not mentioned in this turn's own text (K-058)` |
+| 17 | tool_call | `add_to_cart({"productName": "Mechanical Keyboard K200", "quantity": 1})` — **dispatched**, result `quantity: 2` |
+
+Cart ground truth confirms it: `mechanical-keyboard-k200` quantity 2, `wireless-mouse-pro`
+quantity 1 (correctly held throughout, never re-added). **The mechanism is not K-061's original
+one.** The shipped guard (`executor.py:989`, `dispatch_key = (call.name, _dumps(call.arguments))`)
+correctly held the *mouse's* two same-turn re-attempts (seq 7, 13 — though those are actually
+K-058's off-turn guard, not K-061's; the mouse was never dispatched a second time here at all) —
+what it did **not** catch is that the model's own two keyboard calls (seq 9, seq 17) differ at the
+JSON level: the first omits `quantity` entirely, the second includes `"quantity": 1` explicitly.
+`add_to_cart`'s own tool schema marks only `productName` as `required`
+(`tools.py:580`/`:641`); `quantity` defaults to `1` **inside the tool wrapper**
+(`tools.py:589`, `arguments.get("quantity") or 1`) — after the K-061 guard's own dedup key is
+already computed from the raw, pre-default arguments. The two calls are **semantically
+identical** (both request "add 1 keyboard") but **syntactically distinct** as JSON
+(`{"productName": "Mechanical Keyboard K200"}` vs. `{"productName": "Mechanical Keyboard K200",
+"quantity": 1}`), so `_dumps(call.arguments)` produces two different dedup keys and the guard's
+exact-match check (correctly, by its own stated design — `executor.py:944-947`'s own docstring
+names "different `quantity` values, both must still dispatch" as the deliberate carve-out) lets
+the second one through. **This is not that carve-out** — the customer never asked for a quantity
+change; both calls request quantity 1, and the difference is purely the model's own inconsistent
+tool-call formatting (once omitting an optional argument that has a schema default, once
+supplying it explicitly) for what is, in intent, the exact same repeated request. The customer
+still ends up with 2 keyboards they never asked to double — K-061's originally-diagnosed harm,
+reproduced through a mechanism the shipped guard's own keying was not designed to catch.
+
+**This is a genuine, evidence-backed finding that the shipped fix substantially reduces but does
+not fully close K-061** — flagged prominently in the recommendation (§15.5) and in this unit's
+own return to the coordinator, not left as a footnote here.
+
+### 15.3 Result — Symptom B (false "couldn't find" reply on a successful add)
+
+**0/25 (0.0%, Wilson 95% CI 0.0-13.3%)** — did not reproduce, consistent with §12.4's own 0/24
+and the pooled-across-30 single-occurrence rarity already established; no update to that read.
+
+### 15.4 K-062 pattern screening (opportunistic, per K-062's own filed test strategy)
+
+**8/25 (32.0%, Wilson 95% CI 17.2-51.6%)** — every final reply screened for the §12.5 pattern
+(a false claim the *mouse's* off-turn re-fire was held because it "was not recognized as a
+product"/"not found in the catalog," rather than the guard's own correct reason, "not mentioned
+in this turn's own text"), every candidate match read in full rather than trusted from a regex.
+All 8 are confirmed instances of the same pattern §12.5 named (reps 3, 4, 6, 7, 15, 16, 20, 22 —
+rep 20 also being the Symptom A occurrence above; the two defects are independent and co-occurred
+in the same rep by chance, not causally linked as far as this pass's evidence shows). **This rate
+is substantially higher than §12.5's own original 2/24 (8.3%, CI 2.3-25.8%) — the two CIs barely
+overlap (17.2-25.8), and pooling both independent samples of the same repro shape (10/49, 20.4%,
+Wilson 95% CI 11.5-33.6%) still sits well above the original single-pass estimate.** Stated
+plainly rather than smoothed over: **this pass's own evidence revises K-062's severity upward**,
+from "a previously-unflagged, likely-rare text defect" toward "a real, fairly common failure mode
+of this exact conversation shape" — worth a stronger note than K-062's own filed "low severity,
+pick up opportunistically" framing currently carries, since roughly a third of live reps in this
+shape produce a factually wrong explanation to the customer for why an item wasn't added, even
+though the two prior passes' point estimates (8.3% vs. 32.0%) are themselves too far apart to be
+fully reconciled at these sample sizes without a dedicated follow-up — this note flags the
+direction and magnitude of the discrepancy, not a resolved new rate.
+
+### 15.5 Recommendation
+
+1. **The shipped fix works, substantially, against the mechanism K-061 was diagnosed and fixed
+   for.** The point-estimate rate dropped from 16.7% (pre-fix, pooled n=30) to 4.0% (post-fix,
+   n=25) — a real, large effect, even though the CIs still overlap at these sample sizes. Every
+   attempted same-turn re-dispatch this pass could observe via the trace was correctly held by
+   the shipped guard **except the one described in §15.2.**
+2. **K-061 should NOT be closed out of `docs/BACKLOG.md` on this result alone** — the one
+   occurrence is ground-truth-confirmed to be a distinct, narrower loophole in the shipped
+   guard's own exact-argument-set keying (§15.2): two of the model's own same-turn,
+   same-*intent* tool calls differing only in whether an optional, schema-defaulted argument
+   (`quantity`) is present bypass the dedup key, because the key is computed from raw,
+   pre-default JSON rather than the semantically-resolved call. This is `data-scientist`'s own
+   recommendation, not a decision made on the coordinator's behalf — **surfaced explicitly to
+   `teco` as this unit's own fork, per the task brief's stop-and-ask instruction, rather than
+   silently written into a "K-061 confirmed fixed" verdict** (see this unit's own return message).
+3. **A candidate fix shape, named but not evaluated here** (same posture as every prior "no fix
+   candidate proposed" note in this document, §4.3/§8.3/§9.4/§12.9): key the K-061 dedup guard on
+   the tool's own **resolved** argument set (apply each declared parameter's schema default, if
+   any, before computing `_dumps(call.arguments)`) rather than the raw arguments as received from
+   the model. This would close rep-20's exact loophole while preserving the guard's own
+   documented, deliberate carve-out (two calls with a genuinely different resolved `quantity`
+   must still both dispatch) — worth its own targeted mutation-test eval before shipping, not a
+   guess to ship on this note's authority alone.
+4. **K-062's filed severity ("low, opportunistic pickup") should be revisited** — this pass's
+   32.0% (CI 17.2-51.6%) versus the original 8.3% (CI 2.3-25.8%) is too large a gap to fully
+   reconcile at n=25/n=24, but even the pooled, more conservative 20.4% (CI 11.5-33.6%) is a
+   materially more common defect than "found opportunistically, low severity" suggests — worth a
+   `teco` severity re-read against the BACKLOG entry's own wording, independent of whatever
+   happens with K-061 itself.
+5. **Symptom B stays closed** — 0/25 this pass, no new evidence, no change to §12's own
+   recommendation.
+
+### 15.6 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this session's
+scratchpad: `ds_k061_regression_probe.py` (in-process live-harness driver reusing §9.1/§11.2/
+§12.1's own pattern, `K061R_N`/`K061R_CUST_PREFIX` env-parameterized; results in a sibling
+`k061_regression_results.jsonl`, 25 scored records plus one excluded smoke-test record under its
+own `k061r-smoke-1` id). `ws:ds-k061-regression` was `GRAPH.DELETE`d after this pass;
+`ws:acme`/`reference` were never written to and were independently re-verified in sync
+(`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
+finishing.
