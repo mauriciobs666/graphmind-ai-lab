@@ -39,7 +39,8 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 | `data-scientist` | `a4bfd0c3e6bcbf81c` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §12 | — → — | 184.5k tok / 83 tools |
-| U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | in-flight | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | — |
+| U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | 135.5k tok / 46 tools |
+| U3 | `analyst` | `a0b7ab4bc76ae25ad` | in-flight | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → — | — |
 
 ## Notes
 
@@ -62,3 +63,28 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 - No parallel dispatch risk yet (single unit in flight); if further live-eval work is dispatched
   alongside it, re-apply the prior coordination's shared-`reference`-graph sequencing rule before
   assuming disjoint files are enough.
+- **U2 delivered and independently re-verified by `teco` 2026-08-31** — diff read in full, all 3
+  new tests re-run in isolation, mutation test (RED-without-fix, GREEN-with-fix) independently
+  reproduced from a byte-identical copy of the pre-fix file, full offline suite re-run personally
+  (2305 passed, 14 deselected — matches the delegate's own report exactly), shared state
+  (`reference`/`ws:acme`) re-verified `OK` after re-seeding. Committed as `381c9fc`.
+
+### Operational note (2026-08-31) — a `teco`-caused git-tree mishap during independent verification, self-corrected
+
+While reproducing the mutation test, a chained shell command (`cd server && git stash push ... &&
+pytest ... ; git stash pop`) was issued from a cwd that was *already* `server/` (the tool's working
+directory persists across calls, unlike a fresh shell) — the `cd server` step failed silently, the
+`&&`-chained `stash push`/`pytest` never ran, but the trailing `; git stash pop` ran anyway
+(unconditional `;`, not gated on the preceding failure) and popped a **pre-existing, unrelated**
+stash entry from an earlier session ("K-028 in-flight work from killed Fable run"), producing a
+merge conflict that staged/modified two files with no relationship to this unit
+(`server/falkorchat/repository.py`, `docs/plans/workflow-timers-coordination.md`). Caught
+immediately via `git status`; both files were cleanly restored to `HEAD`
+(`git restore --staged --worktree`) with no loss — the old stash itself was never dropped (`git
+stash list` confirmed it survived, conflicted applies are kept, not consumed) and remains exactly
+as it was for whoever owns that unrelated work. This unit's own three files were unaffected
+throughout (diff stat identical before/after). **Lesson for future verification steps in any
+coordination:** never chain a `git stash pop` with `;` after a command that could itself fail —
+use `&&` throughout so a failed `cd`/prior step aborts the whole chain instead of running a stash
+operation unconditionally, and always re-run `git stash list` before *and* after any stash
+operation used for verification purposes, not just `git status` after.
