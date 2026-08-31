@@ -89,7 +89,11 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** re-run §11's own harness pattern (throwaway workspace, ground-truth
   instrumented tool registry) isolating no-`category` `filter_products` calls specifically, at a
   larger n than the n=20 (or n=16 single-call-only) samples so far, to get a tighter rate estimate
-  before root-causing.
+  before root-causing. **Also fold in** (flagged by `analyst`'s K-057 diff review, `docs/reviews/
+  salesperson-tool-reliability-impl3.md`): a "more than $X" probe against `minPrice` — the
+  shipped K-057 fix added symmetric inclusive-bound guidance to `minPrice` by analogy, but only
+  the `maxPrice`/"less than" direction was actually live-regression-tested; whenever this item's
+  own harness is next run is the cheapest place to close that gap.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
