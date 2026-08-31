@@ -1356,3 +1356,211 @@ records including the excluded rep-1, §12.2). `ws:ds-k061` was `GRAPH.DELETE`d 
 `ws:acme`/`reference` were never written to and were independently re-verified in sync
 (`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
 finishing.
+
+## 13. K-059 `place_order` duplicate-dispatch diagnosis (2026-08-31)
+
+**What this section answers, and for whom.** K-059 (`docs/BACKLOG.md`) asks for a rate estimate
+on whether `place_order` — which K-058's dispatch-time write guard structurally cannot cover
+(zero arguments, no resolved target text to check, `executor.py:316-320`'s own comment) — shows
+a live duplicate-dispatch tendency, before deciding whether any fix is warranted. §12.8
+(K-061's own diagnosis, this same document) recommended K-059's next pass deliberately
+reproduce the held-rejection-adjacent condition that co-occurred with every one of K-061's own
+confirmed `add_to_cart` same-turn self-duplicates (§12.7: 3/3 occurrences had company from a
+HELD rejection; 0/10 reps with zero HELD rejections duplicated) — the shared-mechanism
+hypothesis this pass exists to test directly, per the task brief's own instruction to prioritize
+it over §9's original isolated `place-order-retrigger` shape (0/4, too small to read either
+way).
+
+### 13.1 Method
+
+Same in-process live-harness precedent as §9.1/§12.1 (`services.start_workflow_run`/
+`resume_workflow_run` driven directly via `services.post_message` +
+`find_waiting_run_for_thread`/`resume_workflow_run`, real `ModelGateway.from_env(workspace_
+overrides=GraphWorkspaceOverrides(repo))`, real `build_builtin_registry`, real
+`WorkflowExecutor`) against a fresh throwaway `ws:ds-k059` (`EMBEDDING_DIM=1024
+bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` → `seed_salesperson.sh`,
+`verify_salesperson.sh`/`verify_catalog.sh` both `OK` before driving). `salesperson@v5`,
+`FALKORCHAT_TRIGGER_DEF_KEY=salesperson`/`_VERSION=v5`, same convention as §9/§12. Each rep: a
+**uuid4-derived** customer id (`k059-cust-<hex10>`, never a loop index) specifically to
+foreclose the exact id-collision hazard §12.2 caught and excluded a rep over — no rep in this
+pass carries that risk, by construction rather than by post-hoc inspection. Fresh
+channel/thread per rep.
+
+**Conversation script — §12.1's own held-rejection-adjacent shape, with a `place_order` request
+folded into the same trigger turn:**
+1. `Which peripherals cost less than $60?`
+2. `Add 1 Wireless Mouse Pro to my cart. My name is Alex Kim and please deliver to 42 Ocean Ave,
+   Springfield.`
+3. `Also add 1 Mechanical Keyboard K200, and please place my order now.`
+
+Two ground-truth signals per conversation, never the model's own reply text, exactly as the task
+brief specified:
+1. **`Order` node count** for the customer (`MATCH (c:Customer {customerId:$id})-[:PLACED]->
+   (o:Order) RETURN count(o)`) — a genuine duplicate order.
+2. **The raw `TraceEvent` chain** (`repository.read_trace`) — count of `place_order(...)`
+   `tool_call` dispatch entries (a dispatch-count anomaly, which the brief anticipated could
+   diverge from the `Order`-count signal if `place_order` no-ops server-side on a repeat), plus
+   every `HELD` entry (both K-058's off-turn and K-061's already-shipped same-turn variant,
+   `executor.py:968-1005`) for context.
+
+`ws:ds-k059` was `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to
+and were independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+`verify_workflows.sh acme`, all `OK`) before finishing. Script: `ds_k059_probe.py`, throwaway,
+not committed, left in this session's scratchpad; raw per-rep records in a sibling
+`k059_probe_results.jsonl`, all 28 reps captured with zero harness errors.
+
+### 13.2 Two self-caught methodology issues, both fixed before the batch ran
+
+**First, a dry run of the exact §12.1 wording (no profile pre-supplied) never reached
+`place_order` at all.** `salesperson@v5`'s own `systemPrompt` nudges the model to call
+`get_profile` early and ask for whichever of name/delivery-address is missing "only once per
+conversation" before treating checkout as ready. With no profile on file, turn 3's "place my
+order now" produced `get_profile()` → a request for name/address, and the model neither added
+the keyboard nor called `place_order` — a total repro-shape miss, not a defect being measured.
+**Fixed** by folding name + delivery address into turn 2's own text, so `save_profile` resolves
+before turn 3 and does not gate it. Flagging this the same way §12.2 flagged its own id-collision
+artifact — a scripted probe's own preconditions are exactly the kind of thing this note's
+standing discipline says to verify, not assume.
+
+**Second, and more consequential: even after that fix, the held-rejection-adjacent condition
+itself reproduced far less often than §12.6's own closely-related script.** Only **1/28 (3.6%,
+Wilson 95% CI 0.6-17.7%)** reps produced *any* `HELD` entry at all — compare §12.6's **14/24
+(58.3%, CI 38.8-75.5%)** hitting at least one HELD rejection on a 3-turn script that differs
+only in *not* folding profile text into turn 2 and *not* requesting `place_order` in turn 3. The
+two CIs do not overlap — a real, sizeable divergence, not sampling noise, and one this pass did
+not anticipate going in. **This pass's own script change (extra profile text in turn 2, a
+compound add+checkout instruction in turn 3) is the most likely cause** — more content for the
+model to track in turn 2, or a more procedural/checklist-shaped turn-3 instruction, appears to
+suppress the spontaneous off-turn re-mention tendency that produces a HELD entry in the first
+place, though this pass did not isolate which factor (or both) is responsible. **Reporting this
+plainly rather than smoothing it over: it means the primary condition this pass was designed to
+power landed only one usable rep**, not the intended n≈20-30 — see §13.5 for what a corrected
+follow-up would need to look like.
+
+### 13.3 Result
+
+**0/28 (0.0%, Wilson 95% CI 0.0-12.1%) on both ground-truth signals, and they never diverged in
+this sample:** every one of the 28 reps dispatched `place_order` exactly once, produced exactly
+one `Order` node, and left `cartLinesRemaining = 0` afterward (confirming the order actually
+captured and cleared the cart, not a silent no-op). No rep showed a `place_order` dispatch-count
+anomaly (>1 `place_order(...)` trace entry) or an `Order`-count anomaly (>1 `Order` node) —
+identical counts because neither ever occurred once, so the two signals the task brief asked to
+cross-check could not diverge either way in this sample.
+
+**The one rep that actually landed in the held-rejection-adjacent stratum shows no effect** —
+worth citing on its own, the same way §9's confirmed Ministral occurrence was cited individually
+before being pooled: rep 15 (customer `k059-cust-5d4e213bb7`, run
+`8353551a55a74ced963cc882c30d52db`). Turn 3's own trace: `lookup_product_fact(Mechanical
+Keyboard K200)` → `HELD add_to_cart({"productName": "Wireless Mouse Pro", "quantity": 1}) —
+productName not mentioned in this turn's own text (K-058)` → `add_to_cart(Mechanical Keyboard
+K200)` (succeeded, once) → `view_cart()` → `place_order({})` (once) → `save_profile(...)` →
+`post_message(...)`. The model's off-turn mouse re-fire attempt was correctly held by K-058 in
+the same turn `place_order` was dispatched — the exact adjacency §12.8 asked this pass to
+check — and `place_order` was **not** re-issued: one call, one `Order`, cart correctly emptied.
+A single data point, not a rate, but a clean negative on the one direct opportunity this pass
+produced.
+
+**K-061's own already-shipped same-turn dedup guard (`executor.py:989-1005`) never fired in this
+sample either (0/28)** — no same-turn `add_to_cart` self-duplicate attempt occurred at all this
+run (`keyboardDispatchCount` was 1 in every rep). Unsurprising at this n given K-061's own
+diagnosed base rate (pooled 5/30, 16.7%, §12.3) — absence in 28 reps is consistent with that
+rate, not itself informative about whether the shipped guard works (that needs its own targeted
+mutation test, not an incidental absence in an unrelated probe).
+
+### 13.4 A structural argument, independent of the live sample, that narrows the risk further
+
+**Read directly, before assuming the K-061 mechanism would transfer if opportunity were more
+frequent: `place_order`'s own destructive-clear-on-success design already forecloses the "silent
+re-dispatch of an already-completed write" shape for the specific case of two `place_order`
+calls back-to-back in the same tool loop** — a materially different situation from
+`add_to_cart`'s.
+
+- `repository.place_order` (`repository.py:2913-2970`) is a guarded `CREATE` keyed on a
+  **caller-minted `order_id`** (`services.place_order`, `services.py:2784`, mints a fresh one
+  via `self._id()` on every call — confirmed by reading the code, exactly as K-059's own filed
+  text states) — it clears every `CartItem` **only on the call that actually creates the
+  `Order`** (`repository.py:2956-2957`'s `FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END |
+  DETACH DELETE item)`).
+- `services._priced_cart_lines` (`services.py:2613-2638`) returns `[]` for an empty cart, and
+  `services.place_order` (`services.py:2774-2775`) returns `None` on empty-priced input — the
+  tool layer (`tools.py:722-724`) turns that into `"The cart is empty — add an item before
+  placing an order."`, not a second `Order`.
+- Tool-call dispatch within one node execution is **sequential**, not batched or reordered
+  (`executor.py:880-887`'s plain `for call in result.tool_calls: ... self._handle_tool_call(...)`)
+  — each call's write lands in the graph before the next call in the same response is
+  dispatched.
+- Put together: a same-loop re-dispatch of `place_order` immediately after a successful one
+  finds an **already-empty cart** and resolves to a harmless no-op string, not a second `Order`
+  — structurally the opposite of `add_to_cart`'s **increment-on-repeat** semantics
+  (`repository.py:2842-2843`'s `ON MATCH SET item.quantity = item.quantity + $qty`), which is
+  exactly why a same-turn repeat is silently harmful there (K-061's own mechanism) but is not,
+  by this same-cart-state argument, for `place_order`. Every rep in this pass's own sample
+  independently corroborates the premise (100% of successful orders left the cart empty
+  afterward), though none tested the two-calls-in-a-row case directly, since no rep ever
+  attempted a second `place_order` dispatch.
+- The one path this argument does **not** foreclose: a genuine duplicate `Order` would still
+  require the cart to be **repopulated between two `place_order` calls** (e.g. a successful
+  `add_to_cart` landing in between) — a different, and on this evidence unobserved, shape from
+  "re-issue a write after seeing a nearby rejection," and not what either K-059's filed text or
+  this pass's own script targeted.
+
+### 13.5 Recommendation
+
+**No fix is warranted for `place_order` on the evidence gathered here — but the evidence is
+weaker than the task brief intended, and that gap should be closed cheaply rather than papered
+over.**
+
+1. **The live sample (0/28, Wilson CI 0.0-12.1% on both ground-truth signals) does not support a
+   fix, and the structural argument (§13.4) gives a mechanistic reason the K-061 shape should
+   not transfer even under more opportunity** — `place_order`'s destructive-clear-on-success
+   design, not any dispatch-time guard, is what would have to fail for a same-loop duplicate
+   dispatch to become a duplicate `Order`.
+2. **But this pass's power on the specific antecedent condition K-059's own filed text and
+   §12.8 asked it to test — held-rejection-adjacent — is genuinely inadequate: n=1 opportunity,
+   not the intended n≈20-30 (§13.2).** Reporting "no effect" from that n=1 would overclaim; the
+   honest read is "no effect observed in the one opportunity this pass produced, corroborated by
+   a structural argument that does not depend on sample size, but not a powered test of the
+   hypothesis §12.8 named."
+3. **If the team wants to close this out on live evidence rather than rest on the structural
+   argument alone, the cheapest fix is to the script, not a bigger n at this script's own low
+   held-rejection base rate:** isolate profile-setup into its own turn 0 (`"My name is Alex Kim,
+   deliver to 42 Ocean Ave, Springfield."`), keep §12.1's original turns 1-3 wording
+   byte-identical (to preserve its ~42-58% held-rejection base rate, §12.6), and add a turn 4
+   requesting `place_order`. At that base rate, n≈30-40 total reps should yield n≈15-20 reps in
+   the held-rejection-adjacent stratum — enough to narrow a CI meaningfully, the same
+   sizing discipline §9.5/§12.9 already applied elsewhere in this note.
+4. **A cheaper, deterministic alternative that does not depend on the model at all:** a unit/
+   mutation-level test calling `services.place_order` twice in direct succession against the
+   same customer (first against a non-empty cart, second immediately after) and asserting
+   exactly one `Order` node results — this nails down §13.4's structural claim with certainty
+   rather than relying on either live-model sampling or code-reading alone, and is far cheaper
+   than another live batch. Recommend this over a larger live re-run if the goal is closing the
+   uncertainty rather than further characterizing model behavior.
+5. **§9's original isolated `place-order-retrigger` shape (place `place_order` immediately
+   followed by an unrelated new instruction) was not re-tested here** — this pass's full budget
+   went to the held-rejection-adjacent condition per the task brief's own prioritization. §9's
+   0/4 remains the only data point on it. Flagging as an explicit gap rather than silently
+   dropping it, the same discipline §12.9 point 2 applied to Symptom B.
+6. **No dispatch-time guard mirroring K-058/K-061's per-argument pattern is recommended for
+   `place_order`** — it has no resolvable target argument to key on (`executor.py:316-320`), and
+   §13.4's structural argument makes the harm such a guard would prevent (a same-loop
+   `place_order` repeat producing a second `Order`) already unlikely by a different mechanism.
+   If item 4's deterministic test ever fails, the narrowest fix would be a `place_order`-specific
+   same-turn dedup keyed on **tool name alone** (unlike K-061's `(tool, full-args)` key, since
+   `place_order` takes no arguments to include) — but that is speculative and untested here,
+   named only because the task brief asked for a reasoned trade-off rather than an assumed
+   pattern transfer, not because this pass's evidence calls for it.
+
+### 13.6 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this session's
+scratchpad: `ds_k059_probe.py` (in-process live-harness driver reusing §9.1/§12.1's own pattern,
+`K059_N` env-parameterized rep count; results in a sibling `k059_probe_results.jsonl`, all 28
+reps). A throwaway `opencode-k059-probe.json` (a copy of the shared `lmstudio` provider config
+re-pointed at `http://localhost:1234/v1` — the pristine `$FALKORCHAT_OPENCODE_CONFIG` this
+machine's own `~/.config/opencode/opencode.json` resolves to carries a stale LAN IP for that
+provider, unrelated to falkor-chat and out of scope to fix here) was used as
+`FALKORCHAT_OPENCODE_CONFIG` for this pass only, also left in scratchpad, not committed.
+`ws:ds-k059` was `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to and
+were independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+`verify_workflows.sh acme`, all `OK`) before finishing.
