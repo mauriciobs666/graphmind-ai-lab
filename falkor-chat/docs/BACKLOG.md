@@ -97,7 +97,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   100% (11/11, CI 74.1-100%, `ml.md` §14.5) — the shipped K-057 fix's inclusive-bound guidance
   holds symmetrically in both price directions.
 
-### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🟡 in-progress — dedicated diagnosis lands a materially lower rate than the 32% re-screen, plus a candidate mechanism lever; a fix decision is still pending, 2026-08-31)
+### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🟡 in-progress — both candidate fix levers evaluated live and rejected (one no-effect, one actively harmful); no fix shipped, closed pending only a re-worded lever (a), 2026-08-31)
 
 > **Why it exists.** Originally found at 2/24 (8.3%, Wilson CI 2.3-25.8%) in K-061's diagnosis
 > pass: the model telling the customer an unrelated `add_to_cart` call was held because the
@@ -108,63 +108,81 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > available and substituted a plausible-sounding wrong one. Distinct from K-061 (which is about
 > the cart *state* being wrong); here the cart state is correct throughout and only the
 > customer-facing explanation is wrong.
-- **Re-screened during K-061's live fix-regression pass** (`ml.md` §15.4, n=25, same 3-turn
-  script, every candidate match read in full, not just regex-matched): **8/25 (32.0%, Wilson CI
-  17.2-51.6%)** — well above the original estimate. Pooled across those two samples of the same
-  repro shape: 10/49 (20.4%, CI 11.5-33.6%) — too far apart to reconcile without a dedicated pass.
-- **Dedicated round-5 diagnosis** (`ml.md` §16, n=28, same 3-turn script, every reply read in
-  full): a third independent sample, scored under two explicit definitions since the prior two
-  samples' own scoring threshold wasn't fully recoverable from their filed text — **strict**
-  (exact catalog-lookup-failure phrasing, matching how K-062 was originally filed): **1/28 (3.6%,
-  CI 0.6-17.7%)**; **broader** (any false claim about the held item's cart status/disposition,
-  softer phrasings included): **5/28 (17.9%, CI 7.9-35.6%)**. The strict figure sits close to the
-  original 8.3% and well below 32.0%; the broader figure sits between the two prior estimates and
-  overlaps both. **`teco` reads this as evidence the true rate is materially lower than 32%** —
-  plausibly high-single-digits-to-high-teens depending on definition — not as a fourth data point
-  that settles on one number: three independent samples of the identical script still disagree by
-  more than their own CIs predict from sampling alone.
-- **A likely dominant driver of the spread, not a swing in the mechanism itself:** the
-  *precondition* for K-062 to fire at all (a K-058 hold occurring on the held product) occurred in
-  27/28 reps this pass (96.4%, CI 82.3-99.4%) vs. 14/24 (58.3%, CI 38.8-75.5%) on the
-  byte-identical script in an earlier pass (`ml.md` §12.6) — non-overlapping CIs. `ml.md` §12.6
-  already flagged that `mistralai/ministral-3-3b` (the pinned `assistant`-step model) carries no
-  `temperature` pin in `config/models.json`, unlike `qwen/qwen3-4b-2507`'s `0` — consistent with
-  session-to-session sampling variance swinging how often the guard even fires, which confounds
-  every rate comparison across sessions in this whole script family, not just K-062's own.
-- **A definitional gap likely also contributes** — see the strict/broader split above (17.9% vs.
-  3.6%, over 2x apart on the same 28 reps). §15.4's own re-screen named its screen as "the §12.5
-  pattern" without re-stating the phrasing threshold, so which definition the 8.3%/32.0% figures
-  actually used isn't fully recoverable. **This entry now tracks both, explicitly, going forward**
-  rather than picking one silently.
-- **Mechanism lead, correlational only, not yet causally tested:** in this pass, every defect
-  occurrence (5/5 broader, 1/1 of the co-occurring Symptom B) happened in a rep whose model never
-  re-called `view_cart` after the held event before its final reply (0/13 defects when it did
-  re-check vs. 6/14 when it didn't — one-sided Fisher p≈0.010 on the broader table). A second,
-  textual observation: `salesperson@v5`'s own `systemPrompt` (`proof_defs.py:323-362`) gives the
-  model exactly one failure-explanation template — for a genuinely nonexistent product — and never
-  anticipates the "already added earlier, held again this turn" scenario at all; the defect
-  reply's own wording closely paraphrases that template applied to the wrong scenario. Two
-  candidate levers named from this, **neither implemented or evaluated**: (a) nudge the model to
-  re-query `view_cart` before any reply following a `HELD` event; (b) add a `systemPrompt` line
-  naming this specific scenario. Both would need their own targeted eval (lever (a) is readily
-  mutation-testable: force a `HELD` event, assert `view_cart` fires before the next
-  `post_message`) before either ships.
-- **The reproducibility half is shipped:** `config/models.json` now pins `temperature: 0` for
-  `lmstudio/mistralai/ministral-3-3b`, mirroring the existing `qwen/qwen3-4b-2507` entry —
-  confirmed the resolved `ResolvedModel.params` carries `{"temperature": 0}` for both refs, and
-  the offline `model`/`config`-scoped test selection (204 tests) stays green. This does not fix
-  K-062 itself (it fixes the confound in *measuring* K-062 and every sibling defect in this script
-  family across sessions) — a future re-screen of this or any sibling pattern on
-  `mistralai/ministral-3-3b` should be materially more session-to-session comparable from here on.
-- **Owner:** `teco` to decide, from this pass's evidence, whether a fix is warranted at all
-  (strict-rate reading: low-priority polish; broader-rate reading: the moderate-severity item this
-  was revised toward). If a fix is chosen, implementation + review follows normal gating
-  (`tdd-engineer`/`coder` → `analyst`), not a third wording guess ahead of a targeted eval of the
-  two named levers.
-- **Risks/RAM:** none.
-- **Test strategy:** if either candidate lever (view_cart-refresh nudge, systemPrompt addition) is
-  implemented, a targeted eval isolating that lever's own effect on the `HELD`-then-reply path,
-  scored under both the strict and broader definitions above, before shipping.
+- **Rate history across four independent samples of the identical 3-turn script** (all
+  `ml.md`, every candidate reply read in full, never regex-matched): 2/24 (8.3%, original
+  disclosure) → 8/25 (32.0%, §15.4 re-screen) → round-5 dedicated diagnosis (§16, n=28): **strict**
+  1/28 (3.6%, CI 0.6-17.7%), **broader** 5/28 (17.9%, CI 7.9-35.6%) → lever-eval's own fresh
+  baseline arm (§18.3, n=28, run after the `temperature: 0` pin below): strict 0/28 (0.0%),
+  broader 5/28 (17.9%) — a fourth independent sample landing on the *same* broader point estimate
+  as the third by coincidence of sampling, not by design (same n, same taxonomy — the CI is
+  exactly as wide). **`teco` reads the strict/broader split as the more load-bearing fact than any
+  single point estimate**: no sample in this whole thread has ever produced the original exact
+  filed phrasing at meaningful volume (0/28 in all three of §16's, and §18's own three arms'
+  strict counts) — the true, currently-actionable rate is the broader one, high-single-digits to
+  high-teens, still too wide to pin further without a fifth dedicated pass, which is not currently
+  recommended (see Owner below).
+- **A definitional gap contributes to the spread, not fully resolved:** strict vs. broader differ
+  2-5x on the same samples. §15.4's own re-screen named its screen as "the §12.5 pattern" without
+  re-stating the phrasing threshold, so which definition the 8.3%/32.0% figures actually used
+  isn't fully recoverable. **This entry tracks both, explicitly, going forward.**
+- **The precondition-occurrence rate (a K-058 hold firing on the held product at all) swings
+  large and unpredictably, session-to-session *and* arm-to-arm within one pinned-temperature
+  session** — this is now a load-bearing caution for reading any rate in this script family, not
+  just K-062's own. Five independent measurements: §12.6 (unpinned) 14/24 (58.3%); §16.3
+  (unpinned) 27/28 (96.4%); §18's own three arms, all under the **identical** pinned
+  temperature/model/script, differing only in `systemPrompt` text: baseline 15/28 (53.6%), lever
+  (a) 5/28 (17.9%), lever (b) 17/28 (60.7%) — baseline vs. lever (a) alone is non-overlapping
+  (Fisher exact p≈0.011) despite sharing every variable except prompt wording. **The `temperature:
+  0` pin (shipped this round, see below) did not narrow this swing** — §18.7 leaves open whether
+  the driver is backend-level float nondeterminism surviving the pin, or a genuine causal effect
+  of prompt length/content on turn-3 tool-call behavior; neither is resolved. Practical
+  consequence for any future pass in this family: an occurrence-rate difference between two
+  sessions or two prompt variants cannot by itself be read as evidence about the variable under
+  test without a same-session, same-config comparison at higher n than 28, and even then only
+  cautiously — this is why every rate in this entry is reported **conditional on occurrence**
+  where that framing is available, not just unconditionally.
+- **Mechanism lead — re-checking `view_cart` after a hold correlates with a correct reply —
+  replicated a second time, independently, and still only correlational.** Round-5's original
+  finding (§16.4, one-sided Fisher p≈0.010, 0/13 vs. 6/14) reproduced cleanly in the lever eval's
+  own fresh baseline arm (§18.3, Fisher p≈0.0070, 0/8 defects when the model rechecked vs. 5/7 when
+  it didn't) — two independent samples, same association, still not causally tested.
+- **Both named candidate levers were evaluated live (`ml.md` §18, U2, n=28/arm, 84 replies read in
+  full) and rejected — ship neither:**
+  - **Lever (a) (`view_cart`-recheck nudge):** no detectable improvement in the
+    conditional-on-occurrence broader-defect rate (40.0%, n=5, vs. baseline's 33.3%, n=15 — CIs
+    overlap, Fisher p≈0.42 on the unconditional table). Its own mutation-tested compliance rate —
+    whether the model actually rechecks `view_cart` after being told to — is weak: 40.0% (2/5).
+    The eval is under-powered on this arm specifically (its own precondition-occurrence rate came
+    in far lower than baseline's, 17.9% vs. 53.6%, itself part of the swing finding above), not
+    flatly negative — a stronger, more directive wording is the one live option left (see Owner).
+  - **Lever (b) (`systemPrompt` line naming the scenario):** actively **worse**. Conditional
+    broader-defect rate rises from baseline's 33.3% to **88.2%** (n=17, Fisher p≈0.0028 on a
+    same-occurrence-rate — therefore unconfounded — comparison). The added line supplies the model
+    a correct-reason template it sometimes applies to the *wrong item pair* (4/15 defects: a novel
+    item-swap confabulation not seen in baseline or lever (a)), and even where the reason-sentence
+    lands correctly, the itemized cart-contents list immediately following it still omits the held
+    item in most cases (10/15 defects) — getting the reason right did not fix the list. **Lever
+    (b)'s general approach (name the scenario in prose) should not be retried with different
+    wording** — the failure mode is the template-misapplication mechanism, not a wording accident.
+- **The reproducibility fix is shipped, but its effect turned out narrower than expected:**
+  `config/models.json` pins `temperature: 0` for `lmstudio/mistralai/ministral-3-3b`, mirroring
+  the existing `qwen/qwen3-4b-2507` entry — confirmed via `ResolvedModel.params` resolution and
+  204 green offline tests. It does **not**, on its own, reliably pin the precondition-occurrence
+  rate (see the swing finding above) — narrower payoff than this entry originally expected, though
+  still worth keeping (it removes temperature-sampling as *a* variable, even if not the dominant
+  one) and still likely relevant to sibling defects in this script family (K-057/K-060/K-061).
+- **Owner:** no fix owner right now — closed as "no fix warranted from current evidence," same
+  shape as K-060. The only live option, if picked up: a **re-worded lever (a)** naming `view_cart`
+  as the *first* required action after any `HELD` event (rather than "before your final reply"),
+  with its own fresh targeted eval — not a larger-n rerun of this pass's own wording, and not a
+  third wording guess ahead of that eval. Lever (b)'s prose-template approach is explicitly not to
+  be revisited without a structurally different intervention.
+- **Risks/RAM:** none — diagnosis and eval only, no shipped behavior change beyond the config pin.
+- **Test strategy:** if a re-worded lever (a) is picked up, a targeted eval isolating its own
+  effect on the `HELD`-then-reply path (both the unconditional and, more importantly, the
+  conditional-on-occurrence rate), scored under both the strict and broader definitions above,
+  before shipping — `tdd-engineer`/`coder` → `analyst` gating applies to the implementation once a
+  lever earns a positive eval, not before.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 

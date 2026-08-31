@@ -2577,3 +2577,345 @@ own scope was independently re-verified in sync (`verify_salesperson.sh acme`, `
 both `OK`, before and after) — `verify_workflows.sh acme`'s own `triage`/`access-request` gap
 (§17.1) predates and is unrelated to this pass, confirmed by direct `redis-cli` inspection of
 `reference`'s current `WorkflowDef` nodes.
+
+## 18. K-062 lever eval — `view_cart`-recheck vs. `systemPrompt`-scenario nudge (round 5, U2, 2026-08-31)
+
+**What this answers, and for whom.** §16.4/§16.5 named two candidate levers for K-062 (the
+model states the wrong reason for a correctly-held write call) but explicitly evaluated
+neither: (a) a nudge to re-query `view_cart` after any `HELD` event before the final reply, and
+(b) a `systemPrompt` line naming the "already added earlier, held again this turn" scenario the
+current prompt never anticipates. BACKLOG's own test-strategy note requires "their own targeted
+eval... before either ships." This section is that eval — **diagnosis only, no fix implemented
+or proposed for shipping without a decision below** — and it lands a clear, evidence-backed
+answer: **ship neither.** Lever (a) shows no detectable effect at this eval's power (its own
+precondition-occurrence rate came in far lower than baseline's, for reasons discussed in §18.7,
+so the comparison is under-powered rather than flatly negative). Lever (b) is not merely
+ineffective — it **increases** the conditional broader-definition defect rate from 33.3% to
+88.2% (Fisher exact p≈0.0028), introducing a new, more confidently-wrong failure mode of its own.
+
+### 18.1 Method
+
+Three arms, same in-process harness precedent as §9.1/§11.2/§12.1/§15.1/§16.1/§17.1
+(`services.start_workflow_run`/`resume_workflow_run` driven via `WorkflowTrigger.maybe_trigger`,
+real `ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))`, a
+`LoggingToolRegistry` ground-truth wrapper logging every actually-dispatched tool's untruncated
+`(name, arguments, result)` independent of the executor's own 200-char trace-payload cap),
+against `salesperson@v5`'s real, imported `systemPrompt` (`proof_defs.SALESPERSON_DEF`,
+`server/falkorchat/proof_defs.py:323-362`) — **`proof_defs.py` was only ever imported, never
+edited.**
+
+**Lever variants are constructed entirely in memory, at eval-script run time**, by
+`str.replace()` on a single anchor substring taken verbatim from the imported baseline prompt
+(`"if a product name does not match anything in the catalog, say so plainly rather than adding
+it anyway. Prices shown "`), asserted present exactly once before any substitution — a defensive
+assertion that would fail loudly, not silently score against the wrong text, had the shipped
+prompt drifted since this note's own reading of it:
+
+- **Lever (a) insertion:** "...adding it anyway. **If any cart tool call comes back held rather
+  than run, call `view_cart` again before your final reply of this turn, so your summary
+  reflects the cart's actual current contents rather than what you assumed happened.** Prices
+  shown ..."
+- **Lever (b) insertion:** "...adding it anyway. **If instead a cart tool call comes back held
+  because that exact item was already successfully added earlier in this same conversation, tell
+  the customer plainly that it is already in their cart from before — this is a different case
+  from a product that does not match the catalog, and you must not say the product was not found
+  or not recognized when this is what happened.** Prices shown ..."
+
+**Each arm's def snapshot never touches `reference`.** Rather than publishing three new def
+*versions* through `services.publish_workflow_def` (which can only ever write the global
+`reference` graph — `AGENTS.md`'s own documented publish seam), each arm's steps/transitions
+(a deep copy of the imported `SALESPERSON_DEF`, `config.systemPrompt` swapped per arm) are
+materialized **directly into that arm's own throwaway workspace** via
+`Repository.materialize_snapshot(ws, key="salesperson", version="ds-<arm>", ...)` — the exact
+isolatable-probing seam `AGENTS.md`'s "Probing shared graph state without mutating it" section
+documents for this purpose. All three arms therefore share the identical construction path
+(baseline included, materialized under its own `ds-baseline` version rather than reusing the
+real `v5` snapshot, so no arm's own harness differs from the others' by construction, only by
+`systemPrompt` text) and **zero calls to `services.publish_workflow_def` occur anywhere in this
+eval** — confirmed by code inspection of the eval script, not just by outcome. A `WorkflowTrigger`
+per arm is constructed with an explicit `def_key="salesperson"`/`def_version="ds-<arm>"` — the
+constructor takes these directly, independent of `config.TRIGGER_DEF_KEY`/`_VERSION` (which are
+frozen at `falkorchat.config` import time, FR-15), so the three arms coexist and drive correctly
+within one Python process without any env-var-reload trick.
+
+Three throwaway workspaces, one per arm: `ws:ds-k062-lev-baseline`, `ws:ds-k062-lev-lever-a`,
+`ws:ds-k062-lev-lever-b` (`EMBEDDING_DIM=1024 bootstrap_schema.sh <ws>` each; no `seed_demo.sh`/
+`seed_catalog.sh`/`seed_salesperson.sh` — the demo `User`/`Agent` anchors are `repo.ensure_user`/
+`repo.ensure_agent`'d in-process, same minimal-seed pattern `test_workflow_live.py` already
+establishes, and the product catalog was independently confirmed already present and correct in
+`reference` — 15 products, `verify_catalog.sh` `OK` — before this pass began, so it was never
+re-seeded). Same reused §12.1/§15.1/§16.1 3-turn script, byte-identical across all three arms:
+
+1. `Which peripherals cost less than $60?`
+2. `Add 1 Wireless Mouse Pro to my cart.`
+3. `Also add 1 Mechanical Keyboard K200.`
+
+**28 independent conversations per arm** (`k062l-<arm>-cust-1`..`-28`), each a fresh customer/
+thread/run, matching this thread's own n≈25-30 precedent and directly size-matched to §16's own
+n=28 sample for a fresh, temperature-pinned baseline comparison. A 1-rep smoke test per arm ran
+first under its own excluded `k062l-smoke-<arm>` prefix and is not part of any scored batch.
+Ground truth, never the model's own reply text for scoring: `repository.read_cart` (every rep,
+all 84 — cart state was **`{wireless-mouse-pro: 1, mechanical-keyboard-k200: 1}` in every single
+rep across all three arms, no exceptions, no `remove_from_cart` call fired anywhere** — the
+K-061 same-turn dedup guard held cleanly throughout, an incidental confirmation consistent with
+§17's own finding); `repository.read_trace` (every rep, parsed for every `tool_call`/`HELD`
+entry, `executor.py:1030-1055` reason wording confirmed unchanged); the final turn-3 assistant
+reply text via `services.read_messages(ctx, thread_id=tid, since=0, limit=50)`. **Every one of
+the 84 replies across all three arms was read in full** (§15.4/§16.1's own discipline, not
+loosened here), scored per §18.2's taxonomy below.
+
+LM Studio confirmed serving the pinned model at `localhost:1234`; `config/models.json` confirmed
+unchanged — `lmstudio/mistralai/ministral-3-3b` still pins `temperature: 0` (read directly, not
+assumed). `FALKORCHAT_OPENCODE_CONFIG` pointed at the repo's own `config/opencode.example.json`;
+`OPENAI_API_KEY` set to an unused placeholder for the same eagerly-resolved-inert-`openai`-
+provider reason §16.1/§17.1 already documented. All three throwaway workspaces were
+`GRAPH.DELETE`d after this pass (confirmed absent from `GRAPH.LIST` directly);
+`ws:acme`/`reference` were never written to — confirmed via `verify_salesperson.sh acme`,
+`verify_catalog.sh`, `verify_workflows.sh acme`, all `OK` after this pass (the `reference`
+`triage`/`access-request` gap §17.1 flagged as pre-existing and unrelated is now also resolved,
+presumably by whoever `teco` routed it to — outside this unit's own scope either way).
+
+### 18.2 Scoring taxonomy — §16.2's own strict/broader definitions, applied consistently, plus one distinction inherited from §17.5
+
+Same two definitions as §16.2, not a third: **strict** (exact catalog-lookup-failure phrasing —
+"not recognized as a product" / "not found in the catalog" / equivalent, for the mouse
+specifically) and **broader** (any customer-facing claim that misstates the mouse's cart status
+or the held call's disposition, softer framings included).
+
+**One scoring distinction, inherited directly from §17.5 rather than invented here, mattered
+enough in this pass's own data to name explicitly.** §17.5 already established that a reply
+narrating the hold as the assistant's own mistake ("it looks like I missed adding X — let me
+correct that") is **not by itself** a K-062 match — only when that framing is *paired with* an
+inaccurate or incomplete statement of the cart's actual contents does it cross into the broader
+definition. This pass's own baseline arm reproduces exactly that self-blame framing (e.g. "It
+looks like I missed adding the **Wireless Mouse Pro**—let me correct that"), always paired with
+a cart list that omits the mouse entirely — scored as broader defects, consistent with §17.5's
+own distinction, not a departure from it. The same two-part test governs **lever (b)'s** own
+dominant new failure pattern (§18.5): a correct disposition *sentence* ("The Wireless Mouse Pro
+is already there from before") immediately followed by a "Your cart now contains:" itemized list
+that omits the mouse anyway. The sentence is right; the list contradicts it. Scored as a broader
+defect for the same reason §16.2's own worked example scores a list/total mismatch as one — the
+customer-facing claim about cart contents is still false, regardless of whether the accompanying
+prose gets the *reason* right.
+
+No occurrence of the exact strict-definition phrasing was found in any of the 84 replies across
+all three arms (0/28 each) — every scored defect in this pass is a broader-definition match.
+
+### 18.3 Result — baseline (fresh, temperature-pinned; not §16's own 1/28 / 5/28)
+
+| | value |
+|---|---|
+| `HELD`-precondition occurred | **15/28 (53.6%, Wilson 95% CI 35.8-70.5%)** |
+| Broader-definition defect (unconditional, n=28) | **5/28 (17.9%, CI 7.9-35.6%)** |
+| Strict-definition defect (unconditional, n=28) | 0/28 (0.0%, CI 0.0-12.1%) |
+| Broader defect **conditional on occurrence** (n=15) | **5/15 (33.3%, CI 15.2-58.3%)** |
+| `view_cart`-recheck fired after `HELD`, before final reply (n=15) | 8/15 (53.3%, CI 30.1-75.2%) |
+| — broader defect when recheck fired | 0/8 (0.0%, CI 0.0-32.4%) |
+| — broader defect when recheck did **not** fire | **5/7 (71.4%, CI 35.9-91.8%)** |
+
+**§16.4's own mechanism finding replicates, more starkly.** The recheck/defect association
+(Fisher exact **p≈0.0070**, computed the same way §16.4 computed its own p≈0.010) is at least as
+clean here as in §16.4's original pass — every broader defect this arm produced occurred in a
+rep that never re-checked `view_cart` after the hold. Two defect sub-patterns, both already-known
+shapes, not new ones: the self-blame "I missed adding X" framing paired with an incomplete cart
+list (4 of 5 — cust-6/15/26/27), and the "you only asked for the keyboard, not the mouse" false
+reframing of the customer's own unchanged turn-2 request (1 of 5 — cust-12, the exact §16.3
+"rep6" shape). One reply (cust-11, "The Wireless Mouse Pro... and Mechanical Keyboard K200...
+have been added to your cart," correct final total and item list) was read closely and judged
+**not** a defect — ambiguous about *when* the mouse was added, but never false about the cart's
+actual contents — flagged here rather than silently folded into either count, the same
+transparency discipline §16.3 applied to its own "rep9"/"rep15" edge cases.
+
+**This 53.6% precondition-occurrence rate is itself the headline finding of this arm** — see
+§18.7.
+
+### 18.4 Result — lever (a): `view_cart`-recheck nudge
+
+| | value |
+|---|---|
+| `HELD`-precondition occurred | **5/28 (17.9%, Wilson 95% CI 7.9-35.6%)** |
+| Broader-definition defect (unconditional, n=28) | 2/28 (7.1%, CI 2.0-22.6%) |
+| Strict-definition defect (unconditional, n=28) | 0/28 (0.0%, CI 0.0-12.1%) |
+| Broader defect **conditional on occurrence** (n=5) | 2/5 (40.0%, CI 11.8-76.9%) |
+| **`view_cart`-recheck-fires rate (the mutation-tested outcome, n=5)** | **2/5 (40.0%, CI 11.8-76.9%)** |
+| — broader defect when recheck fired (n=2) | 0/2 (0.0%, CI 0.0-65.8%) |
+| — broader defect when recheck did **not** fire (n=3) | 2/3 (66.7%, CI 20.8-93.9%) |
+
+**No detectable improvement over baseline, and the eval is under-powered on this arm
+specifically, not flatly negative.** The unconditional broader rate (7.1% vs. baseline's 17.9%)
+looks lower, but the conditional rate — the mechanistically meaningful comparison, since a
+defect can only occur when the precondition fires at all — is statistically indistinguishable
+from baseline's (40.0% vs. 33.3%, CIs overlap almost entirely; unconditional-rate Fisher exact
+p≈0.42, not significant). **The `view_cart`-recheck-fires rate is the more direct verdict on
+this lever's own mechanism, and it is weak: 40.0% (2/5).** A nudge instructing the model to
+*always* re-check after any `HELD` event should, if followed reliably, drive this close to 100%
+— it does not. The two defects that did occur (cust-22/cust-28) are the same pre-existing
+"you only asked for the keyboard" reframing pattern from baseline, not a new lever-a-specific
+failure mode — consistent with lever (a) targeting the *symptom* (stale cart-state grounding)
+rather than the underlying reasoning error, and only partially engaging even that.
+
+**This arm's own precondition-occurrence rate (17.9%) is itself striking** — a third of
+baseline's (53.6%), non-overlapping Wilson CIs, Fisher exact **p≈0.011** on the occurrence-rate
+2×2 table alone. See §18.7 — this is read as a strong caution against over-interpreting this
+arm's own numbers, not as evidence the lever itself suppresses the precondition (no mechanism is
+proposed for why an instruction about *what to do after* a hold would change *whether* the model
+spontaneously re-attempts the add in the first place).
+
+### 18.5 Result — lever (b): `systemPrompt` scenario-naming line
+
+| | value |
+|---|---|
+| `HELD`-precondition occurred | 17/28 (60.7%, Wilson 95% CI 42.4-76.4%) |
+| Broader-definition defect (unconditional, n=28) | **15/28 (53.6%, CI 35.8-70.5%)** |
+| Strict-definition defect (unconditional, n=28) | 0/28 (0.0%, CI 0.0-12.1%) |
+| Broader defect **conditional on occurrence** (n=17) | **15/17 (88.2%, CI 65.7-96.7%)** |
+| `view_cart`-recheck fired (n=17, not this lever's target, reported for completeness) | 0/17 (0.0%, CI 0.0-18.4%) |
+
+**This lever measurably makes K-062 worse, not better.** The precondition-occurrence rate
+(60.7%) is statistically indistinguishable from baseline's (53.6%, Fisher exact p≈0.79) — unlike
+lever (a), this arm's comparison is **not** confounded by an occurrence-rate shift, which makes
+the defect-rate result below directly attributable to the `systemPrompt` change itself. The
+conditional broader-defect rate jumps from baseline's 33.3% to **88.2%** — non-overlapping
+Wilson CIs, Fisher exact **p≈0.0028** on the conditional table and **p≈0.011** on the
+unconditional table. Three sub-patterns, read in full across all 17 held-precondition replies:
+
+1. **Correct disposition sentence, contradicted by the itemized list that follows it (10 of 15
+   defects — cust-1/5/7/10/11/17/18/19/22/27).** e.g. cust-1: *"The Mechanical Keyboard K200 has
+   been added to your cart. The Wireless Mouse Pro is already there from before. Your cart now
+   contains: - Mechanical Keyboard K200 – $89.99."* The new `systemPrompt` line does exactly what
+   it was written to do for the *sentence* — the model correctly names the scenario and gives the
+   right explanation — but the itemized "Your cart now contains" list that immediately follows
+   still omits the mouse, the same §16.2 worked-example shape (a cart summary that lists only the
+   keyboard) this lever was meant to fix. **Getting the reason right did not fix the list.**
+2. **A new, item-swapped confabulation (4 of 15 defects — cust-16/25/26/28), not present in
+   baseline or lever (a) at all.** e.g. cust-16, ground truth confirmed from the raw trace: the
+   mouse was successfully added in turn 2 and correctly re-attempted-and-held in turn 3 (twice);
+   the keyboard was the one genuinely, successfully dispatched in turn 3. The model's reply:
+   *"The **Mechanical Keyboard K200** ($89.99) is already in your cart from earlier. I added
+   **1 Wireless Mouse Pro** ($29.99) to your cart instead."* — every noun is swapped: the
+   just-added item is narrated as "already there," and the held item is narrated as "added...
+   instead." The new `systemPrompt` sentence supplies a template ("X is already in your cart
+   from before, I added Y instead") that the model sometimes applies to the **wrong pair of
+   items** — a more confidently-wrong failure than the pre-lever baseline ever produced, since it
+   fabricates a coherent, specific, plausible-sounding narrative rather than a vaguer "I missed
+   adding X."
+3. **The pre-existing baseline reframing pattern still occurs (1 of 15 — cust-21):** *"It looks
+   like I misinterpreted your request earlier. You asked to add only the Mechanical Keyboard
+   K200..."* — the new line did not suppress this pattern either.
+
+Two replies among the 17 held-precondition reps were correct and complete (cust-12, cust-23) —
+proof the lever's intended narrative is reachable, just unreliably so, and dominated by its own
+new failure modes when it isn't.
+
+### 18.6 Cross-arm summary
+
+| Arm | Precondition rate | Broader (unconditional) | Broader (conditional on occurrence) | `view_cart`-recheck rate |
+|---|---|---|---|---|
+| Baseline | 15/28 (53.6%) | 5/28 (17.9%) | 5/15 (33.3%) | 8/15 (53.3%) |
+| Lever (a) | 5/28 (17.9%) | 2/28 (7.1%) | 2/5 (40.0%) | **2/5 (40.0%)** |
+| Lever (b) | 17/28 (60.7%) | **15/28 (53.6%)** | **15/17 (88.2%)** | 0/17 (0.0%) |
+
+Strict-definition rate is 0/28 in every arm — no arm produced the original exact filed phrasing
+K-062 was first found on; every defect scored in this pass, in every arm, is a broader-definition
+match.
+
+### 18.7 A load-bearing side finding: the `temperature: 0` pin did not narrow the precondition-occurrence swing
+
+The round-5 coordination brief asked for a one-line note, "not a required finding," on whether
+the `temperature: 0` pin (shipped since §16's own pass) narrowed the CI on the `HELD`-precondition
+occurrence rate. **It did not — the swing is, if anything, still as large as before, and this
+pass's own three arms show it can differ arm-to-arm within a single pinned-temperature session,
+not just session-to-session:**
+
+| Sample | Config | Occurrence rate |
+|---|---|---|
+| §12.6 | unpinned | 14/24 (58.3%, CI 38.8-75.5%) |
+| §16.3 | unpinned | 27/28 (96.4%, CI 82.3-99.4%) |
+| This pass, baseline | **pinned** | **15/28 (53.6%, CI 35.8-70.5%)** |
+| This pass, lever (a) | **pinned** | **5/28 (17.9%, CI 7.9-35.6%)** |
+| This pass, lever (b) | **pinned** | **17/28 (60.7%, CI 42.4-76.4%)** |
+
+This pass's own baseline (53.6%) sits closer to §12.6's unpinned 58.3% than to §16.3's own
+unpinned 96.4%, and this pass's own lever (a) arm (17.9%) is non-overlapping with this pass's own
+baseline (53.6%) despite running under the **identical** pinned model/config/script, differing
+only in the `systemPrompt` text. Two readings, not distinguished by this pass: (a) `temperature:
+0` alone is insufficient to pin this precondition's occurrence rate — a local llama.cpp/MLX-class
+backend can carry batch/kernel-order float nondeterminism large enough to swing a downstream
+categorical decision (§17.1 already flagged this possibility in general terms; this pass's own
+53.6%-vs-17.9% split is the first concrete evidence the magnitude can be this large); or (b) the
+`systemPrompt` text itself has a real, causal effect on how often the model spontaneously
+re-attempts the mouse add in turn 3, independent of anything to do with K-062's own reasoning
+error — a longer/more directive prompt changing turn-3 tool-call behavior is not an implausible
+mechanism. **Neither is resolved here — the practical consequence for this and every future
+pass in this script family is the same either way: an occurrence-rate difference between two
+sessions, or between two prompt variants within one session, cannot by itself be read as
+evidence of anything about the variable under test without a same-session, same-config
+comparison at meaningfully higher n than 28 per arm, and even then only cautiously.** This pass's
+own **defect-rate** comparisons (§18.4/§18.5) are more defensible than its occurrence-rate
+comparisons for exactly this reason — the conditional-on-occurrence framing used throughout this
+section is not a stylistic choice, it is what keeps the defect-rate comparisons interpretable
+despite this confound.
+
+### 18.8 Recommendation
+
+1. **Ship neither lever.** Lever (a) shows no statistically detectable improvement in the
+   conditional defect rate (40.0% vs. baseline's 33.3%, CIs overlap) and its own mutation-tested
+   compliance rate — how often the model actually re-checks `view_cart` after being told to — is
+   weak (40.0%, n=5). Lever (b) is actively **worse**: conditional broader-defect rate rises from
+   33.3% to 88.2% (Fisher exact p≈0.0028 on a same-occurrence-rate, therefore unconfounded,
+   comparison), and it introduces a new, more confidently-wrong item-swapped confabulation
+   pattern (§18.5 sub-pattern 2) not present in either baseline or lever (a).
+2. **If lever (a) is revisited, the wording needs to change before another eval, not just a
+   larger n on this one.** A 40.0% compliance rate on "always call `view_cart` again after a
+   `HELD` event" suggests the instruction is competing with — and often losing to — whatever
+   else is driving the model's turn-3 behavior; a stronger, more specific imperative (naming
+   `view_cart` as the *first* required action after any held write, rather than "before your
+   final reply") is a plausible next wording, but that is itself an untested guess and would need
+   its own eval, not a larger sample of this pass's own wording.
+3. **Lever (b) should not be revisited with a similar "name the scenario, give the correct
+   explanation" wording** — this pass's own evidence is that naming the scenario textually
+   supplies the model a template it sometimes reaches for and misapplies to the wrong item pair,
+   a failure mode strictly worse than K-062's original one. A structural fix (e.g. having the
+   K-058 hold reason itself drive the reply synthesis more directly, rather than asking the model
+   to reason in prose about *which* item was already present) is a different shape of
+   intervention than a `systemPrompt` sentence and is out of scope for this note to design —
+   named here only so `teco`/the backlog does not read this pass as "lever (b) failed, try
+   different wording" without also carrying forward *why* it failed.
+4. **§16.4's own mechanism finding (re-checking `view_cart` after a hold correlates with a
+   correct reply) replicates cleanly in this pass's own baseline arm** (Fisher exact p≈0.0070,
+   0/8 defects when the model rechecked vs. 5/7 when it did not) — this is now three independent
+   passes (§16.4, and this pass's own baseline) pointing at the same association, still
+   correlational, not causally tested by any of them. If a future eval tests lever (a) with
+   stronger wording (point 2), this replication is the reason to keep testing that direction
+   rather than abandoning it — the problem demonstrated in this pass is lever (a)'s own weak
+   wording, not the underlying mechanism hypothesis.
+5. **K-062 itself is unresolved by this pass** — this eval was scoped to the two named levers,
+   not to re-estimating K-062's own base rate (that is §16's job, already done). This pass's own
+   baseline broader rate (17.9%, CI 7.9-35.6%) is consistent with §16's own 17.9% figure by pure
+   coincidence of the point estimate, not by design, and should not be read as narrowing the
+   K-062 base-rate question any further than §16 already did — the CI is exactly as wide as
+   §16's own for the same reason (same n, same definitional taxonomy).
+6. Implementation is not warranted from this pass's evidence — recommend `teco` close out this
+   thread of K-062 without shipping either lever, unless and until a re-worded lever (a) earns
+   its own targeted eval per point 2.
+
+### 18.9 Artifacts
+
+One eval script, one Wilson-CI helper, and one scoring/transcript-listing helper, all throwaway,
+not part of the shipped test suite, not committed, left in this session's scratchpad:
+`ds_k062_lever_probe.py` (in-process live-harness driver — three-arm def construction, in-memory
+`systemPrompt` variant assembly with an assert-then-replace anchor check, direct
+`Repository.materialize_snapshot` per-arm def materialization bypassing `reference` entirely, the
+`LoggingToolRegistry` ground-truth wrapper, `<arm> <n> [--smoke]` CLI), `wilson.py` (the
+standing Wilson-score-interval convention, standalone/dependency-free), `score_arm.py`
+(computes the `HELD`-mouse and `view_cart`-recheck ground-truth flags per rep and prints every
+final reply in full for manual strict/broader scoring). Per-arm results:
+`k062_lever_baseline.jsonl`, `k062_lever_lever_a.jsonl`, `k062_lever_lever_b.jsonl` (28 scored
+records each, full cart/trace/reply per rep), plus three excluded smoke-test reps under their
+own `k062l-smoke-<arm>` prefixes (not written to any scored file). All three throwaway
+workspaces (`ws:ds-k062-lev-baseline`, `ws:ds-k062-lev-lever-a`, `ws:ds-k062-lev-lever-b`) were
+`GRAPH.DELETE`d after this pass, confirmed absent from `GRAPH.LIST` directly.
+`ws:acme`/`reference` were never written to by this pass (no `services.publish_workflow_def`
+call occurs anywhere in the eval script) and this pass's own scope was independently re-verified
+in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`
+after this pass).
