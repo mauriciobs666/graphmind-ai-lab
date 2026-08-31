@@ -25,7 +25,7 @@ text). `place_order`/`clear_cart` (no resolved target argument) and `save_profil
 customer text, not catalog-resolved) are explicitly out of scope. The blind cross-turn
 dedup-by-signature fix §9.4 ruled out was not implemented, per that reasoning.
 
-**Verification:** 7 new unit tests in `server/tests/test_executor_agent.py` (the exact §9.2
+**Verification:** 6 new unit tests in `server/tests/test_executor_agent.py` (the exact §9.2
 confirmed repro shape held; a genuine later repeat mentioned in its own turn's text still
 dispatches; case/whitespace-insensitive matching; the same guard applied to `remove_from_cart`; a
 target-less write tool — `place_order` — unaffected; no-thread-context backward compatibility).

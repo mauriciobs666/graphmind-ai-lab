@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-058
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-059
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -80,6 +80,28 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `v5` def. Acceptance bar: `maxPrice` boundary-rounding collapses to ≥90% correct at n≥20; the
   self-contradiction shape does not reappear in the same n. Also recommended: add one
   boundary-adjacent `compound-filter` pair to `server/tests/eval/nlq_golden_set.jsonl`.
+
+### K-059 — `place_order` has no protection against a live off-turn duplicate dispatch (🔵 proposed — flagged by `analyst`'s K-058 review, `docs/reviews/salesperson-tool-reliability-impl2.md`, 2026-08-30)
+
+> **Why it exists.** K-058's dispatch-time write guard (`docs/reviews/
+> salesperson-tool-reliability-ml.md` §9.4, shipped `HISTORY.md` 2026-08-30) only covers
+> write-mutating tools with a single resolved string target argument (`add_to_cart`/
+> `remove_from_cart`'s `productName`). `place_order`/`clear_cart` take zero arguments, so the
+> guard structurally cannot check them — this is correct-and-faithful-to-spec, not an oversight
+> (`executor.py:42-46`'s own comment states it plainly), but it means the underlying model
+> tendency the guard targets is entirely unaddressed for `place_order` specifically.
+> `place_order`'s own idempotency guard mints a fresh `order_id` per call, so it does not protect
+> against two independently-decided dispatches the way it protects against a literal retried
+> call. The ml note's own §9's `place-order-retrigger` condition found 0/4 — too small a sample to
+> support any rate claim either way.
+- **Owner:** `data-scientist` for a rate estimate (mirror §9's condition-isolation method, larger
+  n) before deciding whether a fix is warranted; if confirmed at a non-trivial rate, likely fix
+  shape is a confirmation step or a different structural guard than K-058's (no single target
+  argument to check presence of).
+- **Risks/RAM:** none — diagnosis first, no graph/schema surface.
+- **Test strategy:** scripted, repeated live-conversation probe isolating a place-order-after-
+  place-order opportunity, ground-truth-checked against `Order` node count, same harness pattern
+  as K-057/K-058's own eval scripts.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
