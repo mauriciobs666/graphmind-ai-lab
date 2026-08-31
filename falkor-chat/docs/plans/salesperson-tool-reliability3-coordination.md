@@ -51,3 +51,21 @@ shape is chosen; if a fix does turn out to be warranted, its shape must also acc
   `analyst` gate for a diagnosis-only deliverable. A fix unit, if warranted, follows normal
   implementer + `analyst` review gating.
 - No parallel dispatch risk (single unit; round 2's coordination has no unit currently in flight).
+- **U1 still in-flight as of 2026-08-31** — checked twice via `SendMessage` after two premature
+  "completed" notifications whose `<result>` were mid-task status lines, not a deliverable
+  (background n=28 probe against `ws:ds-k059`, PID-tracked, per-rep pace ~1min given
+  `mistralai/ministral-3-3b`'s non-deterministic/slower profile per §12.6). §13 explicitly **not**
+  written yet — delegate is holding off until the real result set is in hand rather than
+  fabricating numbers. Two early findings worth preserving regardless of session continuity:
+  (1) the original 3-turn script (mirroring §12.1's wording) never reached `place_order` at all —
+  `salesperson@v5` asks for profile/address first when none is on file; fixed by seeding profile
+  in turn 2 before the turn-3 target action (a script-design correction, same class as §12.2's).
+  (2) a structural read of `repository.place_order` (`server/falkorchat/repository.py:2913-2970`)
+  and `services.place_order`/`_priced_cart_lines` (`server/falkorchat/services.py:2613-2788`)
+  found `place_order` **destructively clears the cart on the call that creates the `Order`**, and
+  a call against an already-empty cart returns `None` (no `Order`, no line-item write) rather than
+  an idempotent no-op — so a literal second sequential `place_order` dispatch right after a
+  successful first one cannot, by this mechanism alone, produce a second `Order` node the way
+  K-061's `add_to_cart` duplicate could; a second `Order` needs the cart repopulated in between.
+  Delegate will report dispatch-count and `Order`-count anomalies **separately** in §13 rather than
+  collapsing them, given this. Not yet independently re-verified by `teco` — pending §13's arrival.
