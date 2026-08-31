@@ -1863,11 +1863,15 @@ def test_same_turn_different_args_for_same_target_still_dispatches_both():
     assert not any(k == "same_turn_write_held" for k, _ in result.trace)
 
 
-def test_same_turn_dedup_does_not_hold_a_call_that_never_succeeded():
+def test_same_turn_dedup_does_not_hold_an_off_turn_held_call():
     # A call that was itself HELD by K-058 (off-turn) must not be treated as
     # "already successfully dispatched" — only a genuinely successful dispatch
     # seeds the same-turn dedup set. Turn text never mentions the mouse at
     # all, so both mouse calls are off-turn holds (K-058), not K-061 holds.
+    # (This covers only the K-058-held branch, which returns before
+    # `dispatch_key` is even computed; the sibling test below covers the
+    # separate "a failed dispatch attempt must not poison the set either"
+    # branch, per `docs/reviews/salesperson-tool-reliability2-impl.md` MAJOR 1.)
     llm = StubChatLLM([
         ChatResult(text="", tool_calls=[
             ToolCall("c1", "add_to_cart",
@@ -1894,3 +1898,70 @@ def test_same_turn_dedup_does_not_hold_a_call_that_never_succeeded():
     kinds = [k for k, _ in result.trace]
     assert kinds.count("off_turn_write_held") == 2
     assert "same_turn_write_held" not in kinds
+
+
+class _FailOnceThenSucceedRegistry(StubRegistry):
+    """`add_to_cart`'s FIRST dispatch attempt raises a model-correctable
+    `ServiceError` (a transient dispatch failure, e.g. `UnknownMemberError`);
+    every dispatch after that succeeds normally, mirroring the model's own
+    bounded re-prompt-and-retry convention (`_handle_tool_call`'s
+    `MODEL_CORRECTABLE_TOOL_ERRORS` path). Used to prove a FAILED dispatch
+    attempt does not seed the K-061 same-turn dedup set — only a genuinely
+    successful one may (MAJOR 1, `docs/reviews/
+    salesperson-tool-reliability2-impl.md`)."""
+
+    def __init__(self, schemas, results, *, exc):
+        super().__init__(schemas, results)
+        self._exc = exc
+        self._raised = False
+
+    def dispatch(self, name, arguments, *, ctx, run):
+        if not self._raised:
+            self._raised = True
+            self.dispatched.append((name, arguments))
+            raise self._exc
+        return super().dispatch(name, arguments, ctx=ctx, run=run)
+
+
+def test_same_turn_dedup_is_not_seeded_by_a_failed_dispatch_attempt():
+    # MAJOR 1 (`docs/reviews/salesperson-tool-reliability2-impl.md`): the code
+    # is already correct — `dispatched_writes.add(dispatch_key)` sits strictly
+    # after the try/except around `self._tools.dispatch`, so a call that RAISES
+    # a model-correctable `ServiceError` must not seed the same-turn dedup set.
+    # This pins that down: the model's own bounded re-prompt has it retry with
+    # the IDENTICAL arguments after the first attempt fails, and that retry
+    # must actually reach the tool — not be wrongly held as "already
+    # dispatched this turn" just because an earlier, failed attempt used the
+    # same arguments.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="Added 1 Wireless Mouse Pro to your cart."),
+    ])
+    reg = _FailOnceThenSucceedRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        {"add_to_cart": '{"found": true}'},
+        exc=UnknownMemberError(["n/a"]),
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Add 1 Wireless Mouse Pro please",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    # the failed first attempt, then the identical-argument retry — BOTH
+    # reach the tool; the retry is not wrongly held as an already-dispatched
+    # same-turn repeat
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+    ]
+    assert not any(k == "same_turn_write_held" for k, _ in result.trace)
+    assert result.output == "Added 1 Wireless Mouse Pro to your cart."

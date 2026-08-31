@@ -40,19 +40,36 @@ shape — two identical `add_to_cart(Mechanical Keyboard K200, quantity=1)` call
 loop) — confirmed RED against the unfixed code (both dispatched, cart doubled) before the fix, GREEN
 after. Mutation-tested: `git stash`ed the `executor.py` fix only (test file changes kept), reran —
 the reproduction test failed for the same reason as the original RED, confirming it actually
-exercises the new guard; fix restored, all tests green again. Two supporting tests added:
+exercises the new guard; fix restored, all tests green again. Three supporting tests added:
 `test_same_turn_different_args_for_same_target_still_dispatches_both` (different `quantity` values
 for the same product must both go through) and
-`test_same_turn_dedup_does_not_hold_a_call_that_never_succeeded` (a call K-058 itself held is never
-treated as "already dispatched" — only a genuine successful dispatch seeds the dedup set). Full
-offline suite: **2305 passed, 14 deselected** (`server/.venv/bin/python -m pytest -q`). The suite's
-teardown wiped the shared `reference` graph; re-seeded (`bootstrap_schema.sh acme` with
+`test_same_turn_dedup_does_not_hold_an_off_turn_held_call` (a call K-058 itself held is never
+treated as "already dispatched" — only a genuine successful dispatch seeds the dedup set; renamed
+from `..._does_not_hold_a_call_that_never_succeeded` — `analyst`'s follow-up review,
+`docs/reviews/salesperson-tool-reliability2-impl.md` MINOR 1, found the original name promised the
+broader guarantee while only covering the K-058-held branch). **Follow-up (same day, after
+`analyst`'s review, MAJOR 1):** the review proved — via an isolated scratch-copy mutation, not the
+live tree — that no existing test actually exercised the "a dispatch that raises a
+model-correctable `ServiceError` must not poison the dedup set" branch (`dispatched_writes.add
+(dispatch_key)` sitting strictly after the `try/except`); a new test,
+`test_same_turn_dedup_is_not_seeded_by_a_failed_dispatch_attempt` (a `StubRegistry` that raises on
+the first `add_to_cart` call and succeeds on an identical-argument retry, asserting the retry
+actually dispatches), closes that hole. Mutation-tested on the live tree this time: temporarily
+moved `dispatched_writes.add(dispatch_key)` to right before the dispatch attempt (after the
+membership check, so it seeds the set regardless of outcome) — the new test failed for the
+predicted reason (the retry was wrongly held), then passed again once the code was restored to its
+already-shipped, correct placement (byte-identical to `git diff` before the mutation). Full offline
+suite: **2306 passed, 14 deselected** (`server/.venv/bin/python -m pytest -q`). The suite's
+teardown wiped the shared `reference` graph both times (once for the original fix's verification,
+once for this follow-up's); re-seeded each time (`bootstrap_schema.sh acme` with
 `EMBEDDING_DIM=1024` → `seed_demo.sh acme` → `seed_workflows.sh acme` → `seed_catalog.sh acme` →
 `seed_salesperson.sh acme`) and re-verified — `verify_workflows.sh acme`, `verify_catalog.sh`,
 `verify_salesperson.sh acme` all report `OK`. A live n≈20-30 regression pass (K-061's own test
 strategy, ground-truth via `Cart`/`CartItem` Cypher + raw `TraceEvent`, to confirm the pooled rate
 actually drops) was not run here — out of scope for this unit test-first fix, left for whoever runs
-the next live verification pass.
+the next live verification pass. `analyst`'s review also raised a documentation-process gap
+(`BACKLOG.md` left stale, this entry's own "resolved" header read as overclaiming against the
+still-open live-regression step) — not addressed here, being handled separately by `teco`.
 
 ## 2026-08-31 — `salesperson-tool-reliability` coordination closed — K-057/K-058 both shipped, reviewed, and combined-regression-gated; three follow-ups spun out
 
