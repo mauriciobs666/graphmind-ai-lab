@@ -179,35 +179,69 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   or nudge the script if it doesn't reappear naturally) to confirm the specific loophole is closed
   in a full live conversation, without disturbing the guard's genuine-quantity-change carve-out.
 
-### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🔵 proposed — severity revised upward, likely more common than filed, 2026-08-31)
+### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🟡 in-progress — dedicated diagnosis lands a materially lower rate than the 32% re-screen, plus a candidate mechanism lever; a fix decision is still pending, 2026-08-31)
 
 > **Why it exists.** Originally found at 2/24 (8.3%, Wilson CI 2.3-25.8%) in K-061's diagnosis
 > pass: the model telling the customer an unrelated `add_to_cart` call was held because the
 > product "was not recognized as a product" / "not recognized in the catalog" — factually wrong;
 > the product is real and correctly catalogued, and K-058's guard's own held-call result
-> (`executor.py:955-961`) states the *actual* reason verbatim back to the model ("was not
+> (`executor.py:1030-1045`) states the *actual* reason verbatim back to the model ("was not
 > mentioned anywhere in this turn's own message"). The model had the accurate explanation
 > available and substituted a plausible-sounding wrong one. Distinct from K-061 (which is about
 > the cart *state* being wrong); here the cart state is correct throughout and only the
 > customer-facing explanation is wrong.
 - **Re-screened during K-061's live fix-regression pass** (`ml.md` §15.4, n=25, same 3-turn
   script, every candidate match read in full, not just regex-matched): **8/25 (32.0%, Wilson CI
-  17.2-51.6%)** — well above the original estimate. Pooled across both independent samples of the
-  same repro shape: 10/49 (20.4%, CI 11.5-33.6%). The two point estimates (8.3% vs. 32.0%) are
-  too far apart to fully reconcile at these sample sizes without a dedicated pass, but even the
-  conservative pooled figure means roughly a fifth to a third of live reps in this exact
-  conversation shape produce a factually wrong explanation to the customer — this is now assessed
-  as a real, fairly common failure mode, not the rare/low-severity finding it was originally
-  filed as.
-- **Owner:** still unassigned for a fix — severity re-read above changes the *priority* case for
-  picking this up, not the *diagnosis* itself (mechanism is already understood: the model has the
-  correct reason in the tool result and substitutes a wrong one anyway). Worth its own dedicated
-  diagnosis-and-fix pass now, rather than continuing to wait for opportunistic pickup alongside
-  other K-058/K-061 work.
+  17.2-51.6%)** — well above the original estimate. Pooled across those two samples of the same
+  repro shape: 10/49 (20.4%, CI 11.5-33.6%) — too far apart to reconcile without a dedicated pass.
+- **Dedicated round-5 diagnosis** (`ml.md` §16, n=28, same 3-turn script, every reply read in
+  full): a third independent sample, scored under two explicit definitions since the prior two
+  samples' own scoring threshold wasn't fully recoverable from their filed text — **strict**
+  (exact catalog-lookup-failure phrasing, matching how K-062 was originally filed): **1/28 (3.6%,
+  CI 0.6-17.7%)**; **broader** (any false claim about the held item's cart status/disposition,
+  softer phrasings included): **5/28 (17.9%, CI 7.9-35.6%)**. The strict figure sits close to the
+  original 8.3% and well below 32.0%; the broader figure sits between the two prior estimates and
+  overlaps both. **`teco` reads this as evidence the true rate is materially lower than 32%** —
+  plausibly high-single-digits-to-high-teens depending on definition — not as a fourth data point
+  that settles on one number: three independent samples of the identical script still disagree by
+  more than their own CIs predict from sampling alone.
+- **A likely dominant driver of the spread, not a swing in the mechanism itself:** the
+  *precondition* for K-062 to fire at all (a K-058 hold occurring on the held product) occurred in
+  27/28 reps this pass (96.4%, CI 82.3-99.4%) vs. 14/24 (58.3%, CI 38.8-75.5%) on the
+  byte-identical script in an earlier pass (`ml.md` §12.6) — non-overlapping CIs. `ml.md` §12.6
+  already flagged that `mistralai/ministral-3-3b` (the pinned `assistant`-step model) carries no
+  `temperature` pin in `config/models.json`, unlike `qwen/qwen3-4b-2507`'s `0` — consistent with
+  session-to-session sampling variance swinging how often the guard even fires, which confounds
+  every rate comparison across sessions in this whole script family, not just K-062's own.
+- **A definitional gap likely also contributes** — see the strict/broader split above (17.9% vs.
+  3.6%, over 2x apart on the same 28 reps). §15.4's own re-screen named its screen as "the §12.5
+  pattern" without re-stating the phrasing threshold, so which definition the 8.3%/32.0% figures
+  actually used isn't fully recoverable. **This entry now tracks both, explicitly, going forward**
+  rather than picking one silently.
+- **Mechanism lead, correlational only, not yet causally tested:** in this pass, every defect
+  occurrence (5/5 broader, 1/1 of the co-occurring Symptom B) happened in a rep whose model never
+  re-called `view_cart` after the held event before its final reply (0/13 defects when it did
+  re-check vs. 6/14 when it didn't — one-sided Fisher p≈0.010 on the broader table). A second,
+  textual observation: `salesperson@v5`'s own `systemPrompt` (`proof_defs.py:323-362`) gives the
+  model exactly one failure-explanation template — for a genuinely nonexistent product — and never
+  anticipates the "already added earlier, held again this turn" scenario at all; the defect
+  reply's own wording closely paraphrases that template applied to the wrong scenario. Two
+  candidate levers named from this, **neither implemented or evaluated**: (a) nudge the model to
+  re-query `view_cart` before any reply following a `HELD` event; (b) add a `systemPrompt` line
+  naming this specific scenario. Both would need their own targeted eval (lever (a) is readily
+  mutation-testable: force a `HELD` event, assert `view_cart` fires before the next
+  `post_message`) before either ships.
+- **Owner:** `teco` to decide, from this pass's evidence, whether a fix is warranted at all
+  (strict-rate reading: low-priority polish; broader-rate reading: the moderate-severity item this
+  was revised toward) and, separately, whether `config/models.json` should pin
+  `temperature: 0` for `mistralai/ministral-3-3b` — a reproducibility fix for this whole script
+  family's rate comparisons, not specific to K-062, but surfaced by this pass. If a fix is chosen,
+  implementation + review follows normal gating (`tdd-engineer`/`coder` → `analyst`), not a third
+  wording guess ahead of a targeted eval of the two named levers.
 - **Risks/RAM:** none.
-- **Test strategy:** a dedicated n≈25-30 live pass isolating this pattern (rather than only
-  riding along on K-061's own script) would narrow the 8.3%-32.0% gap and give a reliable rate
-  before any fix (likely a `systemPrompt`/tool-result-wording change, unconfirmed) is attempted.
+- **Test strategy:** if either candidate lever (view_cart-refresh nudge, systemPrompt addition) is
+  implemented, a targeted eval isolating that lever's own effect on the `HELD`-then-reply path,
+  scored under both the strict and broader definitions above, before shipping.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 
