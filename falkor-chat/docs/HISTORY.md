@@ -5,6 +5,55 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — K-061 resolved: same-turn `add_to_cart` self-duplicate held via a new dispatch-time dedup guard
+
+**What:** K-061 (`docs/BACKLOG.md`, diagnosed at `docs/reviews/salesperson-tool-reliability-ml.md`
+§12 — pooled 5/30, 16.7%, Wilson 95% CI 7.3-33.6%) is fixed: `salesperson@v5`'s own multi-iteration
+tool-call loop, within a single turn, sometimes re-dispatched `add_to_cart` a second time for a
+target it had already successfully added earlier in that *same* turn's loop, doubling the cart
+quantity. `server/falkorchat/executor.py`'s `_run_agent_node` now threads a per-node-execution
+`dispatched_writes: set[tuple[str, str]]` through `_handle_tool_call` (both call sites — the normal
+loop dispatch and the K-039 implicit-`post_message` fallback), seeded only on the success path
+(after `satisfied.add(call.name)`) with `(call.name, _dumps(call.arguments))` for every
+`_WRITE_TARGET_ARG` tool (`add_to_cart`/`remove_from_cart`). Immediately after the existing K-058
+off-turn check (so it only ever sees a call whose target genuinely *is* mentioned in this turn's own
+text — the exact case K-058's guard deliberately does not hold), a call is now held when its
+`(name, full-argument-set)` key already appears in `dispatched_writes` — i.e. an **exact repeat** of
+a call that already succeeded this turn. Keying on the full argument set (not just the resolved
+target) is deliberate: a customer who says "add 1 wireless mouse, then actually make that 2" in one
+message produces two `add_to_cart` calls for the same product with different `quantity`, and both
+still dispatch (`test_same_turn_different_args_for_same_target_still_dispatches_both`). A held call
+is fed back to the model as `{"held": true, "reason": ...}`, same shape K-058 already uses, with a
+distinct reason string ("already succeeded earlier in this same turn... no need to repeat it") and a
+new, deliberately separate observability signal, `_note_same_turn_write_held` (trace kind
+`same_turn_write_held`, its own `_log.warning`) — kept apart from `_note_off_turn_write_held` the
+same way `_note_possible_fabrication` is kept apart from both, since the three represent different
+failure classes with different fixes. K-059 (`place_order` off-turn duplicate) was confirmed still
+🔵 proposed/unstarted before this fix was designed, per K-061's own open question — no shared-guard
+design was in flight, so this ships as a K-061-only fix, scoped to the two `_WRITE_TARGET_ARG` tools
+K-058 already governs (not extended to `place_order`/`clear_cart`, which have no resolved-target
+argument to key on and remain K-059's own, separate, still-open concern).
+
+**Verification:** reproduction test first
+(`test_same_turn_exact_repeat_of_own_successful_write_is_held`, ml.md §12.3's exact confirmed
+shape — two identical `add_to_cart(Mechanical Keyboard K200, quantity=1)` calls in one turn's own
+loop) — confirmed RED against the unfixed code (both dispatched, cart doubled) before the fix, GREEN
+after. Mutation-tested: `git stash`ed the `executor.py` fix only (test file changes kept), reran —
+the reproduction test failed for the same reason as the original RED, confirming it actually
+exercises the new guard; fix restored, all tests green again. Two supporting tests added:
+`test_same_turn_different_args_for_same_target_still_dispatches_both` (different `quantity` values
+for the same product must both go through) and
+`test_same_turn_dedup_does_not_hold_a_call_that_never_succeeded` (a call K-058 itself held is never
+treated as "already dispatched" — only a genuine successful dispatch seeds the dedup set). Full
+offline suite: **2305 passed, 14 deselected** (`server/.venv/bin/python -m pytest -q`). The suite's
+teardown wiped the shared `reference` graph; re-seeded (`bootstrap_schema.sh acme` with
+`EMBEDDING_DIM=1024` → `seed_demo.sh acme` → `seed_workflows.sh acme` → `seed_catalog.sh acme` →
+`seed_salesperson.sh acme`) and re-verified — `verify_workflows.sh acme`, `verify_catalog.sh`,
+`verify_salesperson.sh acme` all report `OK`. A live n≈20-30 regression pass (K-061's own test
+strategy, ground-truth via `Cart`/`CartItem` Cypher + raw `TraceEvent`, to confirm the pooled rate
+actually drops) was not run here — out of scope for this unit test-first fix, left for whoever runs
+the next live verification pass.
+
 ## 2026-08-31 — `salesperson-tool-reliability` coordination closed — K-057/K-058 both shipped, reviewed, and combined-regression-gated; three follow-ups spun out
 
 **What:** `docs/plans/salesperson-tool-reliability-coordination.md` closes: K-057 (below) and

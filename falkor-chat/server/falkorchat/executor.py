@@ -799,6 +799,12 @@ class WorkflowExecutor:
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
         satisfied: set[str] = set()
+        # K-061 (`docs/reviews/salesperson-tool-reliability-ml.md` §12): which
+        # write-mutating calls (tool name + full argument set) have already
+        # succeeded earlier in THIS node execution's own tool loop — threaded
+        # through `_handle_tool_call` so it can hold an exact same-turn repeat
+        # rather than re-dispatching it.
+        dispatched_writes: set[tuple[str, str]] = set()
         last_text = ""
         resolved_model: str | None = None
         model_source: str | None = None
@@ -848,7 +854,8 @@ class WorkflowExecutor:
                     ))
                     self._handle_tool_call(
                         implicit_call, granted_set, required_by, ctx, run, step,
-                        trace, emissions, satisfied, turn_text=trigger_text,
+                        trace, emissions, satisfied, dispatched_writes,
+                        turn_text=trigger_text,
                     )
                 missing = _missing_required_tools(required, satisfied, emissions)
                 if missing:
@@ -873,7 +880,7 @@ class WorkflowExecutor:
             for call in result.tool_calls:
                 content = self._handle_tool_call(
                     call, granted_set, required_by, ctx, run, step, trace,
-                    emissions, satisfied, turn_text=turn_text,
+                    emissions, satisfied, dispatched_writes, turn_text=turn_text,
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": content}
@@ -901,7 +908,8 @@ class WorkflowExecutor:
         self, call: Any, granted_set: set[str],
         required_by: dict[str, list[str]], ctx: CallContext, run: dict[str, Any],
         step: dict[str, Any], trace: list[tuple[str, str]], emissions: list[str],
-        satisfied: set[str], *, turn_text: str = "",
+        satisfied: set[str], dispatched_writes: set[tuple[str, str]], *,
+        turn_text: str = "",
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
@@ -921,6 +929,22 @@ class WorkflowExecutor:
         `_run_agent_node`'s `trigger_text`/`last_text`) — this runs *after* the AC-6/
         malformed-arg checks (both structural, not this text-grounding concern) but
         *before* `self._tools.dispatch`, so a held call never reaches the tool at all.
+
+        K-061 (`docs/reviews/salesperson-tool-reliability-ml.md` §12): immediately after
+        the K-058 check (so it only ever sees a call whose target IS mentioned in this
+        turn's own text — K-058 already held everything else), a call named in
+        `_WRITE_TARGET_ARG` is held when it is an **exact repeat** — same tool name, same
+        full argument set (`_dumps(call.arguments)`, not just the resolved target) — of a
+        call that already **successfully dispatched** earlier in this same node
+        execution's own multi-iteration loop (`dispatched_writes`, seeded only on the
+        success path below, never on a held/rejected/failed one). This is a *same-turn*
+        re-fire of the model's *own current-turn* successful write — structurally distinct
+        from K-058's *off-turn* re-fire of a *previous* turn's completed write — so it is a
+        second, independent guard, not a repurposing of K-058's. Keying on the full
+        argument set (not just the target) is deliberate: a customer who says "add 1
+        wireless mouse, then actually make that 2" in one message produces two
+        `add_to_cart` calls for the same product with different `quantity` values, and
+        both must still dispatch.
 
         `satisfied` (`docs/plans/must-post-engine-contract.md` §3.2) is bookkeeping for the
         engine-level must-post contract: on the single success path that survives AC-6
@@ -942,6 +966,7 @@ class WorkflowExecutor:
             return (f"error: call to {call.name} is missing required argument(s) "
                     f"{missing}; fix the arguments and retry")
         target_arg = _WRITE_TARGET_ARG.get(call.name)
+        dispatch_key: tuple[str, str] | None = None
         if target_arg:
             target_value = call.arguments.get(target_arg)
             if (isinstance(target_value, str) and target_value
@@ -959,6 +984,23 @@ class WorkflowExecutor:
                         f"this turn's own message; the call was not run — only call "
                         f"this tool for something the customer actually asked for in "
                         f"their current message"
+                    ),
+                })
+            dispatch_key = (call.name, _dumps(call.arguments))
+            if dispatch_key in dispatched_writes:
+                trace.append((
+                    "tool_call",
+                    f"HELD {call.name}({_short(call.arguments)}) — already successfully "
+                    f"dispatched this turn (K-061)",
+                ))
+                self._note_same_turn_write_held(call.name, call.arguments, run, step, trace)
+                return json.dumps({
+                    "held": True,
+                    "reason": (
+                        f"a call to {call.name} with these exact arguments "
+                        f"({_short(call.arguments)}) already succeeded earlier in this "
+                        f"same turn; it was not run again — this exact request was "
+                        f"already completed, no need to repeat it"
                     ),
                 })
         trace.append(("tool_call", f"{call.name}({_short(call.arguments)})"))
@@ -998,6 +1040,8 @@ class WorkflowExecutor:
                     f"fix the arguments and retry, or continue without this tool")
         trace.append(("tool_result", _short(out)))
         satisfied.add(call.name)
+        if dispatch_key is not None:
+            dispatched_writes.add(dispatch_key)
         content = out if isinstance(out, str) else str(out)
         self._buffer_emission(content, emissions)
         return content
@@ -1084,6 +1128,38 @@ class WorkflowExecutor:
             "off_turn_write_held",
             f"{tool_name}({_WRITE_TARGET_ARG.get(tool_name, 'target')}={target_value!r}) "
             f"held — not mentioned in this turn's own text",
+        ))
+
+    @staticmethod
+    def _note_same_turn_write_held(
+        tool_name: str, arguments: dict[str, Any], run: dict[str, Any],
+        step: dict[str, Any], trace: list[tuple[str, str]],
+    ) -> None:
+        """K-061 observability signal (`docs/reviews/salesperson-tool-reliability-ml.md`
+        §12): make a *same-turn* held write visible — an exact repeat (same tool name,
+        same full argument set) of a call that already succeeded earlier in this same
+        node execution's own multi-iteration loop. Deliberately a **distinct** signal from
+        `_note_off_turn_write_held`, not a reuse of it: that one means "this turn's own
+        text never mentioned the target anywhere" (an off-turn re-fire of a *previous*
+        turn's already-completed write, K-058); this one means "the target genuinely IS
+        mentioned in this turn's own text — the model re-issued its own already-completed
+        *current*-turn write" (K-061), a different mechanism with a different fix —
+        overloading K-058's signal would blur two failure classes together the same way
+        `_note_possible_fabrication` and `_note_off_turn_write_held` are deliberately kept
+        apart. Same posture as both siblings: **always** logged (never gated on debug/
+        trace-run status), plus a `same_turn_write_held` trace entry `_trace_step`
+        forwards verbatim on a debug run. Never raised, never blocks the run — the call is
+        simply not re-dispatched, exactly like a rejected, malformed, or off-turn-held
+        one."""
+        _log.warning(
+            "same-turn write held: run %s step %s did not re-dispatch %s(%s) — an "
+            "identical call already succeeded earlier in this same turn",
+            run.get("runId"), step.get("key"), tool_name, _short(arguments),
+        )
+        trace.append((
+            "same_turn_write_held",
+            f"{tool_name}({_short(arguments)}) held — already successfully dispatched "
+            f"this turn",
         ))
 
     def _read_thread_context(

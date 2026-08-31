@@ -1769,3 +1769,128 @@ def test_no_thread_context_available_does_not_hold_write_calls():
         ("add_to_cart", {"productName": "Widget", "quantity": 2}),
     ]
     assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+# ── K-061 (`docs/reviews/salesperson-tool-reliability-ml.md` §12) ─────────────
+#
+# Distinct from K-058 above by design, not an oversight: K-058 holds an *off-turn*
+# re-fire of a *previous* turn's already-completed write, checked by asking
+# whether the target is mentioned anywhere in *this* turn's own text. This is a
+# *same-turn* re-fire of the model's *own current-turn* successful write, on a
+# target genuinely mentioned in this turn's text — exactly the case K-058's
+# check does not (and structurally cannot) hold. §12.3's confirmed repro shape:
+# the model's own multi-iteration tool loop dispatches `add_to_cart` for a
+# product once, successfully, then re-issues the identical call again later in
+# that same loop, doubling the cart quantity the customer never asked to double.
+
+def test_same_turn_exact_repeat_of_own_successful_write_is_held(caplog):
+    # ml.md §12.3's confirmed shape: turn 2's own loop dispatches
+    # add_to_cart(Mechanical Keyboard K200, qty=1) successfully on iteration 1,
+    # then re-issues the IDENTICAL call again on iteration 2. The target is
+    # genuinely mentioned in this turn's own text, so K-058's guard would not
+    # (and should not) hold it — this is a different mechanism.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+        ChatResult(text="Mechanical Keyboard K200 x2 added. Total: $179.98"),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Also add 1 Mechanical Keyboard K200",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    with caplog.at_level("WARNING", logger="falkorchat.executor"):
+        result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    # only the first dispatch reaches the tool — the identical repeat is held,
+    # not dispatched, so the cart quantity is never doubled
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Mechanical Keyboard K200", "quantity": 1}),
+    ]
+    assert any(k == "same_turn_write_held" for k, _ in result.trace)
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+    assert any("same-turn write held" in r.getMessage() for r in caplog.records)
+
+    # the held repeat is fed back to the model as a clean rejection, not a
+    # crash and not a second dispatch
+    tool_msgs = [m for m in llm.calls[-1]["messages"] if m["role"] == "tool"]
+    held_msg = next(m for m in tool_msgs if m["tool_call_id"] == "c2")
+    assert "held" in held_msg["content"].lower()
+
+
+def test_same_turn_different_args_for_same_target_still_dispatches_both():
+    # A customer who says "add 1 wireless mouse, then actually make that 2" in
+    # one message can legitimately produce two add_to_cart calls for the same
+    # product with DIFFERENT quantities in the same turn — the guard must key
+    # on the full argument set, not just the resolved target, so both go
+    # through rather than the second being wrongly held.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 2})]),
+        ChatResult(text="Updated to 2 Wireless Mouse Pro."),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "add 1 wireless mouse pro, actually make that 2",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == [
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 2}),
+    ]
+    assert not any(k == "same_turn_write_held" for k, _ in result.trace)
+
+
+def test_same_turn_dedup_does_not_hold_a_call_that_never_succeeded():
+    # A call that was itself HELD by K-058 (off-turn) must not be treated as
+    # "already successfully dispatched" — only a genuinely successful dispatch
+    # seeds the same-turn dedup set. Turn text never mentions the mouse at
+    # all, so both mouse calls are off-turn holds (K-058), not K-061 holds.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart",
+                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+        ChatResult(text="Done."),
+    ])
+    reg = StubRegistry(
+        {"add_to_cart": ADD_TO_CART_SCHEMA},
+        results={"add_to_cart": '{"found": true}'},
+    )
+    services = StubThreadServices(thread_msgs=[
+        {"role": "user", "text": "Also add 1 Mechanical Keyboard K200",
+         "authorId": "u1", "displayName": "Alice"},
+    ])
+    ex = _executor(llm=llm, registry=reg, services=services)
+    config = _config(tools=["add_to_cart"])
+
+    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert reg.dispatched == []
+    kinds = [k for k, _ in result.trace]
+    assert kinds.count("off_turn_write_held") == 2
+    assert "same_turn_write_held" not in kinds
