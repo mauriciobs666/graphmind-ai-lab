@@ -2289,3 +2289,291 @@ own pattern, `K062_N`/`K062_CUST_PREFIX` env-parameterized; results in a sibling
 `GRAPH.LIST`); `ws:acme`/`reference` were never written to and were independently re-verified in
 sync (`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`)
 before finishing.
+
+## 17. K-061 loophole-fix live confirmation (round 2, U8, 2026-08-31)
+
+**What this section answers, and for whom.** §15.2 found the shipped K-061 same-turn dedup
+guard (commit `381c9fc`) substantially reduced the same-turn `add_to_cart` duplicate rate
+(16.7%→4.0%) but left one live occurrence (rep-20) traced to a narrower, distinct loophole in
+the guard's own keying: it hashed the model's raw, pre-default JSON arguments, so
+`add_to_cart({"productName": "X"})` and `add_to_cart({"productName": "X", "quantity": 1})` —
+semantically identical, syntactically distinct — both dispatched. A fix shipped (commit history
+this session, `_DEDUP_ARG_RESOLVERS`/`_resolve_dedup_arguments`, `executor.py`), unit-tested and
+mutation-tested green (U6), `analyst`-approved (U7), but never run against a full live
+conversation. This section is that live confirmation — the one remaining open item on K-061 —
+and it lands a materially stronger result than a plain rate re-check: it directly answers
+whether the fix holds *specifically on the mechanism that leaked*, not just in aggregate.
+**Answer: yes, cleanly, and at a power this thread has not had on this narrow question before.**
+The general same-turn-duplicate rate stayed at the post-first-fix floor (0/25 this pass vs.
+1/25 in §15.2 — CIs fully overlap, no regression), and — the finding that actually closes this
+out — **the exact rep-20 precondition (the model's own raw-JSON inconsistency on `quantity`)
+recurred spontaneously in nearly half this pass's reps (12/25, 48.0%), and the shipped guard
+correctly held every single one (12/12, 0 leaks).** Recommendation: **K-061 should now be
+closed.**
+
+### 17.1 Method
+
+Same in-process harness precedent as §12.1/§15.1 (`services.start_workflow_run`/
+`resume_workflow_run` driven via `WorkflowTrigger.maybe_trigger(..., trace=True)`, real
+`ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))`, real
+`build_builtin_registry(services, agent_id=config.AGENT_ID, models=models)`, real
+`WorkflowExecutor` — byte-identical wiring to `app._build_default_app()`'s `WORKFLOW_ENABLED`
+branch), against a fresh throwaway `ws:ds-k061-loophole` (`EMBEDDING_DIM=1024
+bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` → `seed_salesperson.sh`;
+`verify_salesperson.sh`/`verify_catalog.sh` both `OK` before driving). Same
+`FALKORCHAT_TRIGGER_DEF_KEY=salesperson`/`FALKORCHAT_TRIGGER_DEF_VERSION=v5` env-before-import
+convention (FR-15). `FALKORCHAT_OPENCODE_CONFIG` pointed at the repo's own
+`config/opencode.example.json` — the ambient `$HOME/.config/opencode/opencode.json` still
+carries the stale unreachable LAN-host `baseURL` §15.1 already flagged; this session also hit a
+second, previously-unflagged snag with the example config — `ModelGateway.from_env()` resolves
+**every** declared provider eagerly at construction (`modelconfig.py`'s `_build_providers`), so
+the example config's `openai` provider entry (`{env:OPENAI_API_KEY}`) raised
+`ModelConfigError` on an unset key even though this probe never dispatches to it; worked around
+with `os.environ.setdefault("OPENAI_API_KEY", "unused-in-k061-loophole-probe")`, the same
+precedent already established in `server/tests/eval/test_guard_calibration_live.py`,
+`probe_ministral_judge.py`, and `run_nlq_golden_set_eval.py` — not this thread's own precedent
+before now, worth folding into this note for the next live-harness script in this family.
+LM Studio confirmed serving `mistralai/ministral-3-3b` at `localhost:1234`. `config/models.json`
+confirmed unchanged since commit `9d98aa0` — `lmstudio/mistralai/ministral-3-3b` still pins
+`temperature: 0` (verified by reading the file directly), so this pass should be materially more
+session-to-session comparable to a future re-run than §12/§15/§16's own unpinned passes were,
+though **not** perfectly deterministic — a local inference backend at `temperature: 0` can still
+carry minor batch/kernel-order float nondeterminism, so the recurrence rates below should not be
+read as literally reproducible bit-for-bit on a re-run, only as materially less noisy than this
+thread's earlier, unpinned passes.
+
+**Ground truth — three independent sources, never the model's own reply text for scoring:**
+- **Cart/CartItem** — `repository.read_cart(ws, customer_id=actor)`, checked for every rep (all
+  45, not spot-checked).
+- **The full raw `TraceEvent` chain** — `repository.read_trace(ws, run_id=runId)`, every
+  `tool_call` entry for every rep parsed programmatically (a regex over the exact
+  `{name}({args_json})` / `HELD {name}({args_json}) — {reason}` trace-string grammar
+  `executor.py`'s `_handle_tool_call` emits, `executor.py:1032`/`:1052`/`:1065`), not
+  grepped-and-trusted — every extracted `(held, raw_arguments, reason)` triple was
+  re-derived from the literal trace payload string, and the pairwise raw-JSON-equality vs.
+  resolved-quantity-equality classification (§17.2) was computed from those parsed arguments,
+  not eyeballed.
+- **A `LoggingToolRegistry`** (per this task's brief) — a thin `ToolRegistry` subclass wrapping
+  `dispatch()` to record every actually-dispatched tool's untruncated
+  `(runId, name, arguments, result)`, independent of the trace's own 200-char `tool_result` cap
+  (`_short(out, limit=200)`, `executor.py:220`/`:1100`) — used as a second, independent
+  confirmation that no `add_to_cart` call was ever dispatched twice for the same product in the
+  same run; agreed with the trace-based count on every rep (`add_to_cart`'s own result payload
+  never approached the 200-char cap in practice, so this did not change any classification, but
+  it is a genuine second source, not a redundant one).
+
+**Two arms, 45 reps total:**
+1. **"verbatim" (`n=25`)** — §12.1/§15.1's exact 3-turn script, unmodified, directly comparable
+   to §15.2's own 4.0%:
+   1. `Which peripherals cost less than $60?`
+   2. `Add 1 Wireless Mouse Pro to my cart.`
+   3. `Also add 1 Mechanical Keyboard K200.`
+2. **"nudge" (`n=20`)** — identical turns 1-2; turn 3 replaced with `"Also add 1 Mechanical
+   Keyboard K200 to my cart — please make sure the quantity is exactly 1."`, a light,
+   human-plausible phrasing intended to raise the odds of the model's own spontaneous
+   omitted/explicit-`quantity` inconsistency recurring (rep-20's precondition isn't
+   deterministically producible from the human side, per this task's own brief and the
+   BACKLOG entry's test-strategy note) — deliberately still not naming the mouse, so the
+   K-058 off-turn hold-and-retry dynamic that produced rep-20's multi-iteration loop stays in
+   play. **This arm's own result (§17.3) is a negative finding, reported plainly rather than
+   dropped: the nudge did not work as intended and is not directly comparable to §15.2 or the
+   verbatim arm.**
+
+Each rep: a fresh customer id (`k061l-v-cust-<n>` / `k061l-n-cust-<n>`, distinct across arms and
+from every prior pass's own id namespace — §12.2's id-collision lesson applied from the start,
+not rediscovered), fresh channel/thread, so no rep's state can leak into another's. A 1-rep smoke
+test (`k061l-smoke-v-cust-1`) ran first under its own excluded prefix and is not part of either
+scored batch, closing §12.2's own lesson by construction rather than by post-hoc exclusion.
+
+`ws:ds-k061-loophole` was `GRAPH.DELETE`d after this pass (confirmed absent from `GRAPH.LIST`).
+Script: `ds_k061_loophole_probe.py`, throwaway, not committed, left in this session's scratchpad,
+`LOOPHOLE_N`/`LOOPHOLE_NUDGE_N`/`LOOPHOLE_CUST_PREFIX` env-parameterized; raw per-rep records
+(full cart state, full trace, full `LoggingToolRegistry` call log, full final reply text) in
+sibling `k061_loophole_verbatim.jsonl` / `k061_loophole_nudge.jsonl`.
+
+**A pre-existing, unrelated shared-state anomaly found (not caused by this pass) —**
+`verify_workflows.sh acme` reports `triage@v1`/`access-request@v1` **missing from `reference`**
+(direct `redis-cli GRAPH.QUERY reference "MATCH (d:WorkflowDef) RETURN d.key, d.version"`
+confirms `reference` currently holds only `order-fulfillment@v1`, `salesperson@v5`, and two
+unrelated `timers-oversized*` defs — `triage`/`access-request` are simply absent). This cannot
+be this pass's own doing: nothing this script or the seed scripts it called
+(`bootstrap_schema.sh` — DDL-only, no `MERGE`/`CREATE(n)`/`DELETE`, per `AGENTS.md`;
+`seed_catalog.sh`/`seed_salesperson.sh` — create-only publishes into `reference`, and both
+`salesperson@v5`/`order-fulfillment@v1` were already present before this pass started) ever
+issues a `DELETE` or `GRAPH.DELETE` against `reference`, and this pass's own scope
+(`verify_salesperson.sh acme`, `verify_catalog.sh`) reports fully `OK` both before and after —
+so whatever wiped `reference`'s `triage`/`access-request` rows (most plausibly an earlier
+`test_queries.sh` run by another session, per `AGENTS.md`'s own documented teardown hazard,
+without the follow-up `seed_workflows.sh acme` re-seed) predates or is orthogonal to this unit.
+**Flagged for `teco`, not fixed here** — re-seeding `reference` is a shared-state write outside
+this unit's own scope and this task's stop-and-ask guardrail on touching shared state, and is
+unrelated to K-061/`salesperson`.
+
+### 17.2 Result — Symptom A, general rate (directly comparable to §15.2)
+
+**Verbatim arm: 0/25 (0.0%, Wilson 95% CI 0.0-13.3%).** No cart, in any of the 25 reps, ever
+ended at a quantity other than 1 for either `mechanical-keyboard-k200` or `wireless-mouse-pro`
+(checked directly against `read_cart`, all 25, not spot-checked). §15.2's own post-first-fix
+rate was 1/25 (4.0%, CI 0.7-19.5%) — the two samples' CIs fully overlap, consistent with either
+"no change" or "the loophole fix mattered," and a rate comparison alone at this n cannot
+distinguish the two. **Pooled with §15.2 (independent sample, same script): 1/50 (2.0%, Wilson
+95% CI 0.4-10.5%).**
+
+**Nudge arm: 0/20 (0.0%, Wilson 95% CI 0.0-16.1%)** — also zero, but this arm turned out to
+supply near-zero information about K-061 at all (§17.3) and should not be pooled with the
+verbatim figures above.
+
+### 17.3 Result — the rep-20 loophole precondition, specifically (the pass's actual finding)
+
+A plain rate comparison under-sells what this pass actually found, because the rate alone
+cannot distinguish "the loophole stopped occurring" from "the loophole still occurs but the fix
+now catches it" — and the task brief's own request was for the second, more specific question.
+Parsing every `add_to_cart`-related trace line (§17.1) rather than only the cart's final state
+answers it directly:
+
+| | verbatim (n=25) | nudge (n=20) |
+|---|---|---|
+| K-058 held-mouse event occurred (retry-precondition) | 21/25 (84.0%, CI 65.3-93.6%) | 0/20 (0.0%, CI 0.0-16.1%) |
+| K-061 guard fired at all (any reason) | 13/25 (52.0%, CI 33.5-70.0%) | 0/20 |
+| — of which: raw-identical repeat (the *original*, pre-loophole K-061 shape) | 1/25 (4.0%, CI 0.7-19.5%) | 0/20 |
+| — of which: **raw-differing, resolved-quantity-equal (the exact rep-20 loophole shape)** | **12/25 (48.0%, Wilson 95% CI 30.0-66.5%)** | 0/20 |
+| Of the loophole-shape occurrences, correctly HELD (not leaked) | **12/12 (100%, Wilson 95% CI 75.7-100%)** | n/a |
+| True double-dispatch (cart actually doubled) from any cause | 0/25 | 0/20 |
+
+**The rep-20 loophole precondition — the model spontaneously issuing two same-turn,
+same-*intent* `add_to_cart` calls for the same product that differ only in whether the optional,
+schema-defaulted `quantity` argument is present — recurred in essentially half this pass's reps
+(12/25, 48.0%), a far higher base rate than §15.2's own single n=25 pass could have shown (§15.2
+had no way to observe "precondition occurred but was caught" at all: the *pre-loophole-fix*
+guard's dedup key was pure raw arguments, so by construction every occurrence of this precise
+raw-JSON mismatch necessarily dispatched twice — "the precondition occurred" and "it leaked"
+were the same event, 1-for-1, before this fix existed). **Post-fix, the shipped
+`_DEDUP_ARG_RESOLVERS` guard caught all 12 of 12 spontaneous recurrences this pass observed,
+zero leaks** — a direct, live, ground-truth-confirmed answer to the exact question this unit was
+dispatched to answer, at meaningfully higher power on the narrow mechanism than another plain
+n=25 rate re-check would have delivered (12 independent live trials of the specific failure
+shape, not 1).
+
+One representative trace (`k061l-v-cust-1`, run `8c3b227af9cd4aaf9ff9f8692d4f92f5`), showing the
+exact rep-20 shape and the guard correctly holding it:
+
+| kind | payload |
+|---|---|
+| tool_call | `add_to_cart({"productName": "Mechanical Keyboard K200"})` — dispatched, `quantity: 1` |
+| tool_call | `HELD add_to_cart({"productName": "Mechanical Keyboard K200", "quantity": 1}) — already successfully dispatched this turn (K-061)` |
+
+Cart ground truth: `mechanical-keyboard-k200` quantity 1 (correct — the second call was held,
+not dispatched). 11 other reps show the identical shape (`k061l-v-cust-3/4/5/7/9/11/12/16/18/19/20`);
+one rep (`k061l-v-cust-22`) shows the *original*, raw-identical K-061 repeat instead (both calls
+omit `quantity`), also correctly held — the fix did not regress the guard's pre-existing
+coverage of the shape it already handled.
+
+### 17.4 The nudge arm's own negative result — reported, not discarded
+
+The nudge phrasing was chosen to raise the odds of the model restating `quantity` inconsistently
+across two same-turn calls. It did the opposite of what was intended, and by a mechanism worth
+naming rather than leaving as an unexplained 0/20: reading the nudge arm's own traces (all 20)
+shows the model **always** included `"quantity": 1` explicitly on its first (and, in every rep,
+only) `add_to_cart(Mechanical Keyboard K200, ...)` call — the "please make sure the quantity is
+exactly 1" clause made the model *more* consistent about stating the argument, not less. More
+consequentially, **the K-058 held-mouse retry precondition itself never fired in this arm at all
+(0/20 vs. 21/25 in the verbatim arm)** — the model, focused by the explicit quantity
+instruction, appears to have executed a single clean pass through the tool calls rather than the
+multi-iteration retry loop that (per §15.2's own mechanism finding) is what produced rep-20's
+formatting drift in the first place. In short: this specific nudge suppressed the very dynamic
+it was meant to amplify. **This is reported as a genuine negative finding per this task's own
+brief, not silently dropped** — and it argues against spending further budget on a second nudge
+attempt: the *unmodified* verbatim script already delivered strong power on the narrow loophole
+precondition (48% spontaneous recurrence, n=12) with no scripting intervention at all, so a nudge
+was never actually necessary for this particular precondition, only assumed to be from the
+BACKLOG entry's own (reasonable, at the time) caution that it "isn't guaranteed to recur on
+demand."
+
+### 17.5 An opportunistic, unscored observation (not K-062's own strict/broad pattern)
+
+Two verbatim reps (`k061l-v-cust-2`, `k061l-v-cust-6`) produced a final reply narrating the held
+mouse as something the assistant itself "missed" ("It looks like I missed adding the Wireless
+Mouse Pro — let me correct that") rather than correctly attributing it to the deliberate K-058
+hold. This is **not** a match for K-062's own filed strict or broad definitions (§16.2) — it
+never claims the product "was not recognized"/"not found," and it does not misstate cart state
+(the mouse is correctly in the cart both times, `read_cart` confirmed) — so it is not counted
+toward either K-062 figure and was not chased further, per this task's own secondary/
+opportunistic-only instruction. Named here only because it surfaced while reading replies for
+this pass's own purpose: a third narrative-inaccuracy shape (mischaracterizing a deliberate hold
+as the assistant's own mistake) distinct from K-062's two already-tracked ones, worth a mention
+if K-062 gets a future round rather than a reason to reopen it now. A plain regex screen for
+K-062's own strict/broad patterns and for Symptom B (§12.4/§15.3's false "couldn't find" shape)
+found **0/25 verbatim, 0/20 nudge** — no update to either backlog item from this pass.
+
+### 17.6 Mechanism assessment
+
+The shipped fix (`_DEDUP_ARG_RESOLVERS`/`_resolve_dedup_arguments`, `executor.py`) worked exactly
+as its own design intent on every live occurrence this pass could observe: `add_to_cart`'s
+resolver mirrors `AddToCartTool.run`'s own `arguments.get("quantity") or 1` collapse, so an
+omitted-`quantity` call and an explicit-`quantity: 1` call now hash to the same dedup key
+regardless of which one the model happens to emit first — confirmed 12/12 live, not just at the
+unit/mutation-test level (U6/U7). Combined with the unit-level reproduction test (the exact
+rep-20 shape) and double-direction mutation testing (reverting the fix; separately planting a
+wrong `remove_from_cart` resolver) already in hand from U6/U7, this pass supplies the one
+evidence type that was still missing: a full live conversation, through the real model, showing
+the fix holds under the model's own genuine, unscripted inconsistency — not a scripted
+reproduction of one known bad case.
+
+**Residual risk, stated plainly rather than oversold.** 12/12 is a 0%-observed leak rate at
+n=12, whose Wilson 95% CI (0.0-24.3%, computed the same way as every other figure in this
+section) does not rule out a low-single-digit-to-high-teens residual leak rate on this exact
+precondition from live evidence alone — no live sample of this size ever proves a rate is
+exactly zero. What narrows that residual further is the combination with the mutation-test
+evidence: the guard's own resolver is a small, fully-covered, deliberately non-generic per-tool
+table (`_WRITE_TARGET_ARG`'s own code comment names the exact discipline: any future write tool
+must get its own resolver or silently fall through to the old raw-argument loophole for *that*
+tool), so the remaining risk is not "this fix might not work" but "a *future* write tool added
+to `_WRITE_TARGET_ARG` without its own `_DEDUP_ARG_RESOLVERS` entry could reintroduce the same
+bug class for a *different* tool" — already flagged as U7's own MINOR finding and closed with a
+guardrail comment, not a live-testable risk today since `remove_from_cart` (the only other
+tool in `_WRITE_TARGET_ARG`) has no default-collapse to mis-key in the first place
+(`_WRITE_TARGET_ARG`'s own design note, `executor.py:358-365`).
+
+### 17.7 Recommendation
+
+1. **K-061 should now be closed in `docs/BACKLOG.md`.** Both known mechanisms (the original raw-
+   argument-set same-turn duplicate, and the narrower default-collapse keying loophole) have
+   shipped fixes, both `analyst`-approved, both mutation-tested, and both now live-confirmed:
+   the general rate stayed at the post-first-fix floor (0/25 this pass, pooled 1/50 = 2.0% CI
+   0.4-10.5% with §15.2), and the specific loophole precondition recurred at high, genuinely
+   informative frequency (12/25, 48.0%) with a **clean 12/12 catch rate** — the strongest
+   evidence this thread has produced on this narrow question, well beyond what another plain
+   rate re-check at n=25 could have delivered.
+2. **No further live-only unit is warranted for K-061 specifically.** The residual risk named in
+   §17.6 (a hypothetical future write tool skipping its own dedup resolver) is a code-review-time
+   guardrail already shipped (U7's MINOR fix), not something more live testing would sharpen —
+   the next unit that touches this mechanism should be triggered by a *new* write tool being
+   added to `_WRITE_TARGET_ARG`, not by a calendar-driven re-check of this one.
+3. **The nudge-arm negative finding (§17.4) is itself worth keeping** as a standing note for
+   whoever next needs to induce a specific spontaneous model inconsistency in this script family:
+   a quantity-emphasis instruction made the model *more* consistent and suppressed the retry
+   dynamic that produces formatting drift — the unmodified script's own natural ~48% recurrence
+   rate on this precondition was already sufficient, and should be tried before any scripted
+   nudge on a similarly-shaped future question.
+4. **The pre-existing `reference` gap (§17.1 — `triage@v1`/`access-request@v1` missing) is
+   unrelated to K-061 and out of this unit's scope** — flagged for `teco` to route to whoever
+   owns `reference`'s general health (a `seed_workflows.sh acme` re-seed looks like the fix per
+   `AGENTS.md`'s own documented hazard, but that write is deliberately not made here).
+5. **Symptom B and K-062 stay exactly as filed** — 0/25 and 0/20 this pass on both, no update to
+   either backlog item; the one opportunistic near-miss (§17.5) is noted, not scored.
+
+### 17.8 Artifacts
+
+Two throwaway scripts/data files, not part of the shipped test suite, not committed, left in this
+session's scratchpad: `ds_k061_loophole_probe.py` (in-process live-harness driver reusing
+§9.1/§11.2/§12.1/§15.1's own pattern, `LOOPHOLE_N`/`LOOPHOLE_NUDGE_N`/`LOOPHOLE_CUST_PREFIX`
+env-parameterized, plus the `LoggingToolRegistry` ground-truth wrapper described in §17.1);
+results in sibling `k061_loophole_verbatim.jsonl` (25 scored records) and
+`k061_loophole_nudge.jsonl` (20 scored records), plus one excluded smoke-test record under its
+own `k061l-smoke-v-cust-1` id (not written to either scored file). `ws:ds-k061-loophole` was
+`GRAPH.DELETE`d after this pass, confirmed absent from `GRAPH.LIST` directly (not inferred from
+script exit status). `ws:acme`/`reference` were never written to by this pass and this pass's
+own scope was independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+both `OK`, before and after) — `verify_workflows.sh acme`'s own `triage`/`access-request` gap
+(§17.1) predates and is unrelated to this pass, confirmed by direct `redis-cli` inspection of
+`reference`'s current `WorkflowDef` nodes.

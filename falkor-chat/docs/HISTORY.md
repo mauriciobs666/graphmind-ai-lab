@@ -5,6 +5,71 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — K-061 closed: both same-turn `add_to_cart` self-duplicate mechanisms fixed, `analyst`-approved, and live-confirmed
+
+**What:** K-061 (diagnosed at `ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%) is closed —
+both known mechanisms behind `salesperson@v5` sometimes silently doubling a cart line have
+shipped fixes, each `analyst`-approved and each independently live-confirmed:
+
+1. **Original mechanism** (commit `381c9fc`, closed out below under its own earlier entry): a
+   same-turn dedup guard keyed on `(tool name, full argument set)`, holding an exact repeat of an
+   already-succeeded write within the same turn without blocking a legitimate different-argument
+   call. Live-regression-tested at n=25 (`ml.md` §15.2): rate dropped from the pre-fix 16.7% to
+   4.0% (1/25) — but that one occurrence was root-caused to a second, narrower mechanism.
+2. **Keying-loophole mechanism** (this session): the guard hashed the model's raw, pre-default
+   JSON arguments, so `add_to_cart({"productName": "X"})` and
+   `add_to_cart({"productName": "X", "quantity": 1})` — semantically identical, syntactically
+   distinct — both dispatched. Fixed via a per-tool `_DEDUP_ARG_RESOLVERS` table
+   (`_resolve_dedup_arguments`, `server/falkorchat/executor.py`) resolving each write tool's own
+   dedup key through that tool's actual wrapper-level default-collapse semantics, deliberately not
+   a generic JSON-schema-default lookup: `add_to_cart` gets a resolver mirroring its own `run()`'s
+   `arguments.get("quantity") or 1` collapse; `remove_from_cart` deliberately gets none, since its
+   own `run()` passes an omitted `quantity` through unchanged — "remove the whole line," a request
+   distinct from any explicit quantity, not an implicit default. Reproduction test first (the
+   exact live-observed shape), mutation-tested in both directions (reverting the fix; separately
+   planting a wrong `remove_from_cart` resolver — both correctly caught). `analyst`-reviewed
+   (`docs/reviews/salesperson-tool-reliability2-impl.md` Pass 2): approve, one MINOR (a future-tool
+   guardrail comment on `_WRITE_TARGET_ARG`) closed directly.
+
+**Live confirmation of the second fix** (`ml.md` §17, round 2 U8, `data-scientist`, n=45 across
+two arms): the general same-turn-duplicate rate stayed at the post-first-fix floor (0/25 verbatim
+arm this pass vs. 1/25 in §15.2 — CIs fully overlap; pooled 1/50, 2.0% CI 0.4-10.5%). More
+substantively, parsing every trace line (not just final cart state) found the specific
+keying-loophole precondition — the model spontaneously issuing two same-turn, same-intent
+`add_to_cart` calls differing only in whether the optional `quantity` argument is explicit —
+recurring in **12/25 reps (48.0%, CI 30.0-66.5%)**, far higher power on the narrow mechanism than
+the original single-occurrence finding could offer, and the shipped guard **correctly held all
+12/12 (0 leaks)**. A second "nudge" arm (n=20, a light quantity-emphasis phrasing intended to
+raise the odds of the inconsistency) produced a genuine negative result instead — it suppressed
+the K-058 retry dynamic that produces the formatting drift in the first place — reported as a
+finding, not discarded; the unmodified script's own ~48% natural recurrence rate turned out to
+already supply ample power without any scripted nudge.
+
+**Verification:** all statistics (both same-turn floor and loophole-precondition rates, plus the
+prior fix rounds' own) independently recomputed via Wilson 95% CI and matched exactly; the exact
+K-058/K-061 trace-string grammar and both `executor.py` code citations (`_WRITE_TARGET_ARG`'s
+future-tool guardrail comment, `_DEDUP_ARG_RESOLVERS`'s `remove_from_cart`-distinctness rationale)
+confirmed verbatim against source; the live pass's own throwaway workspace (`ws:ds-k061-loophole`)
+confirmed torn down (absent from `GRAPH.LIST`); `reference`/`ws:acme` re-verified in sync via all
+relevant `verify_*.sh` scripts. Full offline suite (last touched by the loophole fix): 2309
+passed, 14 deselected.
+
+**A pre-existing, unrelated shared-state drift found and fixed while verifying this pass:**
+`reference` was missing the `triage@v1`/`access-request@v1` workflow defs (`ws:acme`'s own
+snapshot still had them) — most plausibly a prior default `pytest` run's teardown (which wipes
+`reference` entirely, `docs/SERVER.md` §1.7) whose re-seed sequence omitted `seed_workflows.sh`.
+Confirmed causally unrelated to K-061/this pass (neither issues a `DELETE`/`GRAPH.DELETE` against
+`reference`). Fixed directly: `./scripts/seed_workflows.sh acme` (idempotent, create-only);
+`verify_workflows.sh acme`, `verify_salesperson.sh acme`, and `verify_catalog.sh` all report `OK`
+afterward.
+
+**Residual risk, not a fix warranted:** a *future* write tool added to `_WRITE_TARGET_ARG`
+without its own `_DEDUP_ARG_RESOLVERS` entry could reintroduce the same bug class for that new
+tool — already covered by a shipped code-review-time guardrail comment (the MINOR above), not a
+live-testable risk today (`remove_from_cart`, the only other tool in scope, has no
+default-collapse to mis-key in the first place). The next unit that touches this mechanism should
+be triggered by a new write tool joining `_WRITE_TARGET_ARG`, not by a calendar-driven re-check.
+
 ## 2026-08-31 — `mistralai/ministral-3-3b` pinned to `temperature: 0` in `config/models.json`
 
 **What:** K-062's round-5 dedicated diagnosis (`ml.md` §16) found the K-058 hold precondition

@@ -1,6 +1,6 @@
 # Salesperson tool-orchestration reliability — round 2 (K-061) — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-061 (post-M6, not a milestone gate)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-061 (post-M6, not a milestone gate)
 
 Successor to `docs/plans/salesperson-tool-reliability-coordination.md` (archived 2026-08-31,
 K-057 + K-058 closed) — ordinal-bumped per root `AGENTS.md`'s collision rule 5 (same kind/topic/
@@ -45,6 +45,7 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | U5 | `data-scientist` | `ae55c708663c46839` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §15 | `teco` (direct) → accepted | 174.2k tok / 89 tools |
 | U6 | `tdd-engineer` | `ad643318819a75668` | delivered | resolved-argument-set keying fix for `executor.py`'s K-061 guard | `analyst` → approve (1 MINOR, closed) | 122.0k tok / 58 tools |
 | U7 | `analyst` | `a984f1bfe18d5f36d` | delivered | `salesperson-tool-reliability2-impl.md` Pass 2 | — → approve | 91.5k tok / 36 tools |
+| U8 | `data-scientist` | `a65505a21069bdbe2` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §17 | `teco` (direct) → accepted | 181.9k tok / 88 tools |
 
 ## Notes
 
@@ -185,3 +186,46 @@ than run in this coordination's earlier pass.
   evidence already in hand. Ready to commit: `docs/HISTORY.md`, `server/falkorchat/executor.py`,
   `server/tests/test_executor_agent.py`, `docs/reviews/salesperson-tool-reliability2-impl.md`,
   `docs/BACKLOG.md`.
+- **U8 dispatched 2026-08-31** (`data-scientist`, fresh agent), on the user's explicit instruction
+  to run the final K-061 live confirmation pass now: a live n≈20-25 pass reusing §15.1/§12.1's
+  exact 3-turn script, the only known live-repro shape for the K-061 same-turn guard. Goal:
+  confirm the specific rep-20 keying loophole (`add_to_cart` with an omitted `quantity` followed
+  by the same call with an explicit `quantity: 1`, same turn) is closed in a full live
+  conversation, not just at the unit/mutation-test level. Brief noted BACKLOG's own caveat that
+  rep-20's exact shape "isn't guaranteed to recur on demand," so the delegate may need more reps
+  or a light nudge toward that specific tool-call inconsistency for adequate power on the narrow
+  loophole itself — left to the delegate's own judgment, with the instruction to report both the
+  general same-turn-duplicate rate (comparable to §15.2) and, if the loophole shape doesn't
+  spontaneously recur, an explicit note on how it tried to induce it rather than a silent gap.
+  Told to fold in a fresh K-062 opportunistic screen only if it falls out naturally from reading
+  the replies anyway — not this pass's goal, K-062 already has its own dedicated round 5. Told
+  `mistralai/ministral-3-3b` now pins `temperature: 0` in `config/models.json` (shipped this
+  session, commit `9d98aa0`) — no need to rediscover or work around the sampling-variance
+  confound §12.6/§16 both flagged; this pass should be more session-to-session comparable than
+  any prior one in this thread.
+- **U8 delivered and independently re-verified by `teco` 2026-08-31.** Diff confirmed scoped to
+  exactly `docs/reviews/salesperson-tool-reliability-ml.md` (§17, 288 insertions) —
+  `docs/BACKLOG.md` untouched by the delegate as instructed. All Wilson 95% CIs recomputed from
+  scratch and matched exactly across both arms (0/25→0.0% CI 0.0-13.3%; 0/20→0.0% CI 0.0-16.1%;
+  pooled 1/50→2.0% CI 0.4-10.5%; 21/25→84.0% CI 65.3-93.6%; 13/25→52.0% CI 33.5-70.0%; the
+  raw-identical 1/25→4.0% CI 0.7-19.5%; and the pass's own key finding, the loophole-precondition
+  recurrence 12/25→48.0% CI 30.0-66.5%, with a 12/12→100% CI 75.7-100% catch rate). Both
+  `executor.py` code citations verified verbatim against source: the exact trace-string grammar
+  at :1032/:1052/:1065, and the `_WRITE_TARGET_ARG`/`_DEDUP_ARG_RESOLVERS` design-note comments.
+  The three cited prior-precedent harness files (`test_guard_calibration_live.py`,
+  `probe_ministral_judge.py`, `run_nlq_golden_set_eval.py`) confirmed to exist. `ws:ds-k061-loophole`
+  confirmed absent from the live `GRAPH.LIST`. The `kaizen_team` write (the `OPENAI_API_KEY`
+  eager-provider-resolution gotcha) confirmed present, correctly attributed.
+  A pre-existing, unrelated `reference` gap the delegate flagged but correctly left unfixed
+  (`triage@v1`/`access-request@v1` missing from `reference`, `ws:acme`'s own snapshot unaffected)
+  was independently confirmed real by `teco` (`verify_workflows.sh acme` → FAIL) and fixed
+  directly: `./scripts/seed_workflows.sh acme` (idempotent, create-only), then all three
+  `verify_*.sh acme`/`verify_catalog.sh` reports `OK`.
+  **Verdict: diagnosis accepted as delivered, and its own recommendation adopted — K-061 is now
+  closed.** Both mechanisms (original raw-argument-set duplicate, keying-loophole) have shipped
+  fixes, both `analyst`-approved, both mutation-tested, and both now live-confirmed at good power.
+  `docs/BACKLOG.md`'s K-061 entry removed entirely (forward-looking-only convention — a delivered
+  item's record is `HISTORY.md`, never kept in `BACKLOG.md` even as an index row); a full closing
+  entry added to `docs/HISTORY.md` synthesizing both fix rounds and this final live confirmation.
+  This round's own work is complete — flipping this coordination doc's own `Status:` to `archived`
+  as part of the same close-out, per `teco`'s own mechanical-flip authority.
