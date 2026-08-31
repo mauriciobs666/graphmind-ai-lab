@@ -466,11 +466,20 @@ class FilterProductsTool:
                         },
                         "minPrice": {
                             "type": "number",
-                            "description": "Only products priced at or above this amount.",
+                            "description": (
+                                "Only products priced at or above this amount (inclusive). "
+                                "For 'more than $X', use a minPrice just above X (e.g. "
+                                "X + 0.01) — a product priced at exactly X must not match."
+                            ),
                         },
                         "maxPrice": {
                             "type": "number",
-                            "description": "Only products priced at or below this amount.",
+                            "description": (
+                                "Only products priced at or below this amount (inclusive). "
+                                "For 'less than $X', use a maxPrice just under X (e.g. "
+                                "X - 0.01), never round down to the nearest whole dollar — "
+                                "a product priced at exactly X - 0.01 must still match."
+                            ),
                         },
                     },
                     "required": [],

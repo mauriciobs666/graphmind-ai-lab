@@ -16,7 +16,7 @@
 # `server/tests/test_order_fulfillment.py`), so the seeded defs and the tested
 # defs cannot drift.
 #
-#   salesperson@v4         — kind `conversation`, one `type:'agent'` step
+#   salesperson@v5         — kind `conversation`, one `type:'agent'` step
 #                           (`assistant`, start, waitsForHuman) with the
 #                           catalog-lookup tools (K-052) PLUS the five
 #                           cart/order tools (K-053: `view_cart`, `add_to_cart`,
@@ -43,10 +43,23 @@
 #                           `mistralai/ministral-3-3b` (`config.model` is
 #                           create-only too — see proof_defs.py's module
 #                           docstring — so this needed its own version, not an
-#                           in-place edit of v2). `v3` (K-054) and `v4` (K-055)
-#                           both carry that `config.model` line forward
-#                           unchanged — omitting it on a version bump would
-#                           silently undo the re-point.
+#                           in-place edit of v2). `v3` (K-054) and `v4`
+#                           (K-055) both carry that `config.model` line
+#                           forward unchanged — omitting it on a version bump
+#                           would silently undo the re-point. `v5` (K-057) is
+#                           itself a `v2.1`-shaped bump, not a capability
+#                           bump: same tools as v4, only `systemPrompt` gains
+#                           one added sentence (plus an orthogonal,
+#                           unversioned `filter_products` tool-description
+#                           wording addition in tools.py) — live-verified at
+#                           n=20 to clear both mechanisms it targets. A
+#                           second, further wording iteration was live-tested
+#                           (not shipped, never a published version) aimed at
+#                           a third mechanism the first iteration's own live
+#                           run surfaced; it did not improve on `v5`'s own
+#                           result and was reverted — see proof_defs.py's own
+#                           comment on SALESPERSON_DEF and
+#                           docs/reviews/salesperson-tool-reliability-ml.md §11.
 #   order-fulfillment@v1  — kind `process`, the LLM-FREE order-lifecycle proof
 #                           flow (K-053, docs/plans/workflow-cart-and-totals.md
 #                           §3.4): four `human`/`decision` steps, three
@@ -68,7 +81,8 @@
 #
 # THIS SCRIPT IS EDITED IN PLACE by each sibling capability (K-054 durable
 # profile bumped `salesperson` to v3; K-055 NL query generation bumped it
-# further to v4; K-053 landed `order-fulfillment` alongside it) and re-run —
+# further to v4; K-057's wording fix bumped it to v5; K-053 landed
+# `order-fulfillment` alongside it) and re-run —
 # it is the same evolving artifact seed_workflows.sh itself is across
 # K-022/K-024/etc., not a new script per capability (docs/plans/
 # workflow-catalog-lookup.md §3.4).
@@ -91,7 +105,7 @@
 #   FALKORDB_PORT                        (default: 6379)
 #   FALKORCHAT_WS_ID                     (default: acme)     — workspace id (graph key ws:<id>)
 #   FALKORCHAT_SALESPERSON_DEF_KEY       (default: salesperson)      — LOCAL to this script
-#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v4)              (K-037-style decoupling:
+#   FALKORCHAT_SALESPERSON_DEF_VERSION   (default: v5)              (K-037-style decoupling:
 #                                        no config var reads either of these two — this
 #                                        def is never an @mention trigger target in this
 #                                        milestone, only ever started/observed directly)
@@ -107,7 +121,7 @@ HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 SALESPERSON_DEF_KEY="${FALKORCHAT_SALESPERSON_DEF_KEY:-salesperson}"
-SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v4}"
+SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v5}"
 ORDER_FULFILLMENT_DEF_KEY="${FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY:-order-fulfillment}"
 ORDER_FULFILLMENT_DEF_VERSION="${FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION:-v1}"
 

@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-059
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-060
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,47 +40,6 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-057 — `salesperson@v4` mistranslates an inclusive price boundary on "less than $X" questions, dropping the boundary item ~50% of the time (🔵 proposed — root-caused by `data-scientist`, `docs/reviews/salesperson-tool-reliability-ml.md` §11, 2026-08-30)
-
-> **Why it exists.** `docs/test-reports/workflow-nl-query-generation2-report.md` (DEF-01) first
-> found `@assistant Which peripherals cost less than $60?` giving a self-contradictory, incomplete
-> answer on one of two identical live attempts. The backlog's original hypothesis (an
-> orchestration-layer conflation of two tool results, resting on "`filter_products` has no price
-> predicate") was **tested directly against live code and a 20-rep live-reproduced sample and
-> found wrong on both counts** — see §11 for the full method and evidence.
-- **`filter_products` has always supported `minPrice`/`maxPrice`** (present since its K-052
-  introduction, `git log -p` confirmed) — the premise that a second tool is reached for because
-  the first "can't do the job" does not hold.
-- **The real, dominant defect: `mistralai/ministral-3-3b` unreliably translates "less than $X"
-  into `filter_products`'s documented-inclusive `maxPrice` bound.** Across 16 single-tool-call
-  reproductions, 9/16 (56.2%, Wilson CI 33.2-76.9%) used `maxPrice=59` (wrong — rounds down,
-  drops a $59.99 item) vs. 7/16 using the correct `59.99`-equivalent. Net across all 20 reps:
-  9/20 fully correct (45.0%, CI 25.8-65.8%), 10/20 silent boundary-drop (50.0%, CI 29.9-70.1%),
-  1/20 DEF-01's original self-contradiction shape (5.0%, CI 0.9-23.6%, reproduced but the
-  **minority** failure — its own mechanism is "failure to revise an earlier stated conclusion
-  after a later corrective tool call in the same turn," not two results conflated).
-- **A secondary, independently confirmed gap:** `query_graph_data` itself wrongly abstained
-  (`"no matching data found"`) on 2/2 live attempts at this exact question shape — not a
-  contradiction of the golden set's 100% compound-filter accuracy (n=3), but exposure that none
-  of the golden set's three compound-filter pairs use a boundary-adjacent threshold the way
-  DEF-01's $60-vs-$59.99 pairing does.
-- **Fix identified, not yet implemented:** two targeted `systemPrompt`/tool-description wording
-  additions (§11.5) — (1) explicit inclusive-bound/boundary-translation guidance for
-  `filter_products` (targets the 50% failure), (2) a "don't state a conclusion before your last
-  tool call this turn" instruction (targets the 5% shape). **Do not** adopt the original
-  candidate (steer toward `query_graph_data` alone) — its premise is false and it doesn't
-  address either confirmed mechanism, and could remove the self-correction path that let some
-  runs recover to a correct answer.
-- **Owner:** `coder`/`tdd-engineer` for the `v4`→`v5` `systemPrompt` edit (small, single-file,
-  `proof_defs.py`), sequenced after K-058 as part of the same coordination
-  (`docs/plans/salesperson-tool-reliability-coordination.md`).
-- **Risks/RAM:** none — prompt-tuning only, no graph/schema surface.
-- **Test strategy:** re-run §11's own harness pattern (`ds_k057_probe.py`, throwaway workspace,
-  ground-truth-instrumented tool registry, DEF-01's exact question) at n≥20 against the patched
-  `v5` def. Acceptance bar: `maxPrice` boundary-rounding collapses to ≥90% correct at n≥20; the
-  self-contradiction shape does not reappear in the same n. Also recommended: add one
-  boundary-adjacent `compound-filter` pair to `server/tests/eval/nlq_golden_set.jsonl`.
-
 ### K-059 — `place_order` has no protection against a live off-turn duplicate dispatch (🔵 proposed — flagged by `analyst`'s K-058 review, `docs/reviews/salesperson-tool-reliability-impl2.md`, 2026-08-30)
 
 > **Why it exists.** K-058's dispatch-time write guard (`docs/reviews/
@@ -102,6 +61,35 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** scripted, repeated live-conversation probe isolating a place-order-after-
   place-order opportunity, ground-truth-checked against `Order` node count, same harness pattern
   as K-057/K-058's own eval scripts.
+
+### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🔵 proposed — disclosed during K-057's own fix verification, two wording attempts failed to move it, `docs/HISTORY.md` 2026-08-31)
+
+> **Why it exists.** Live-verifying K-057's wording fix (`docs/HISTORY.md` 2026-08-31,
+> `docs/reviews/salesperson-tool-reliability-ml.md` §11) at n=20 found every one of the 4/20
+> remaining wrong replies traced to a third, previously unobserved mechanism, distinct from both
+> mechanisms §11 diagnosed: when `filter_products` is called with no `category` argument (a
+> mixed-category result set), the model sometimes silently drops a genuinely-matching item from
+> its synthesized reply instead of including it — not a rounding error, not a self-contradiction,
+> a synthesis-time omission on an unfiltered result set.
+- **Two independent, reasonable-looking wording attempts already failed to fix this — worth
+  weighing before a third.** A `category`-parameter nudge (encouraging the model to always pass
+  `category` when the customer names one) plus a `systemPrompt` synthesis-time "check every
+  returned item, never drop a match" safety net were live-tested together at n=20: the model
+  still never passed `category` (0/20) and net wrong-reply rate went **up** (30% vs. the shipped
+  fix's own 20%), while also suppressing a multi-call self-correction pattern that had rescued
+  several replies under the plain wording. Reverted, never shipped. Two failed wording attempts
+  is itself evidence this may not be fixable by wording alone.
+- **Owner:** `data-scientist` for a proper root-cause pass before any further wording guess — same
+  discipline this whole investigation thread has applied throughout (never ship/reattempt an
+  unverified mitigation, ml note §4.2/§8.4/§9.4). Worth checking whether `filter_products`'s own
+  synthesis step (not `systemPrompt` wording) is the more reliable lever — e.g. whether the tool
+  could return an explicit per-item flag or a restructured payload less prone to synthesis-time
+  omission — before assuming another wording iteration is the only path.
+- **Risks/RAM:** none — diagnosis first, no graph/schema surface.
+- **Test strategy:** re-run §11's own harness pattern (throwaway workspace, ground-truth
+  instrumented tool registry) isolating no-`category` `filter_products` calls specifically, at a
+  larger n than the n=20 (or n=16 single-call-only) samples so far, to get a tighter rate estimate
+  before root-causing.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 

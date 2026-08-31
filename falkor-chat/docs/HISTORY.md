@@ -5,6 +5,63 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — K-057 resolved: `filter_products` inclusive-bound wording fix, `salesperson@v4`→`v5`
+
+**What:** K-057 (`salesperson@v4` mistranslating "less than $X" into `filter_products`'s
+documented-inclusive `maxPrice` bound, silently dropping the boundary-priced item — root-caused by
+`data-scientist`, `docs/reviews/salesperson-tool-reliability-ml.md` §11) is closed with the two
+targeted wording additions §11.5 recommended, `SALESPERSON_DEF` bumped `v4`→`v5`
+(`server/falkorchat/proof_defs.py`): (1) inclusive-bound/boundary-translation guidance, placed on
+`FilterProductsTool`'s own `minPrice`/`maxPrice` parameter descriptions (`server/falkorchat/
+tools.py`) rather than in `systemPrompt` — colocated with the exact parameter whose value the
+model gets wrong, already resent fresh on every LLM turn as part of the tool schema, and it does
+not bloat the already-large `systemPrompt` further (this is a code-level change, not versioned
+data, so it applies to every def/version that grants `filter_products`, not only `v5`); (2) a
+short "do not state a conclusion before your last planned tool call this turn has returned"
+instruction, added to `systemPrompt` since it targets turn-level conversational behaviour, not any
+one tool's contract. `config.model` (`lmstudio/mistralai/ministral-3-3b`) carried forward
+unchanged, per the established create-only discipline.
+
+**A third, previously unobserved failure mode was found during live regression and is
+deliberately NOT fixed here.** When `filter_products` is called with no `category` (returning a
+mixed-category result), the model sometimes silently drops a genuinely-matching item from its
+synthesized reply — not a rounding error, not a self-contradiction, a synthesis-time omission on
+an unfiltered result set; §11.5 never diagnosed or targeted this mechanism. Two further wording
+attempts aimed at it (a `category`-parameter nudge to always pass `category` when the customer
+names one; a `systemPrompt` synthesis-time "check every returned item, never drop a match"
+safety net) were live-tested together at n=20 and did not clear it — the model still never passed
+`category` (0/20) and the resulting failure rate did not improve (30% vs. this shipped version's
+own 20%), while also suppressing a multi-call self-correction pattern that had rescued several
+replies under the shipped wording. Reverted, not shipped — per this lab's own standing discipline
+of never shipping an unproven mitigation (ml note §4.2/§8.4/§9.4), this third mechanism is left as
+a disclosed, open gap rather than a third wording guess; two independent, reasonable-looking
+wording attempts both failing to move the model's behaviour is itself evidence this may not be
+fixable by wording alone, and is a candidate for a proper root-cause pass rather than more
+iteration.
+
+**Verification:** `server/tests/test_salesperson_scaffold.py`'s version/model-pin assertions
+updated to `v5`. Full offline suite: 2302 passed, 14 deselected, 0 failed (includes one new
+golden-set entry added alongside this fix, see below). Live regression against a throwaway
+`ws:k057-fix-eval`, real `ModelGateway.from_env()` (not `StaticModelGateway` — `query_graph_data`
+resolves its own model independently of the `assistant` step's pin), a `LoggingToolRegistry`
+capturing full untruncated tool-call arguments, DEF-01's exact reproduction text verbatim
+(`@assistant Which peripherals cost less than $60?`), n=20 independent conversations against the
+shipped `v5` wording: `maxPrice` boundary value correct in 20/20 calls (100%, Wilson 95% CI
+83.9-100%, against §11.3's 43.8% baseline) — the rounding defect did not recur; the
+self-contradiction shape did not reappear (0/20, Wilson 95% CI 0-16.1%); net full-reply
+correctness 16/20 (80%, Wilson 95% CI 58.4-91.9%), with all 4 remaining wrong replies attributable
+to the third mechanism above (not the two mechanisms this fix targets). The reverted second
+wording iteration, tested only (never published as a shipped version, its evaluation graph
+artifacts not retained): maxPrice still 20/20 correct, self-contradiction still 0/20, but net
+correctness fell to 14/20 (70%, Wilson 95% CI 48.1-85.5%) with 6/20 wrong from the same
+category-omission mechanism at a higher observed rate. `reference`/`ws:acme` re-verified in sync
+after every restore (`verify_workflows.sh acme`, `verify_catalog.sh`, `verify_salesperson.sh
+acme`, all `OK`, `salesperson@v5`); the throwaway `ws:k057-fix-eval` was `GRAPH.DELETE`d after the
+final run. One boundary-adjacent `compound-filter` golden-set pair was added
+(`server/tests/eval/nlq_golden_set.jsonl`, `nlq-40` — Peripherals under $60, mirroring DEF-01's
+own $60-vs-$59.99 pairing), closing the coverage gap §11.3 identified (none of the existing
+`compound-filter` pairs sat near an actual product price).
+
 ## 2026-08-30 — K-058 resolved: dispatch-time guard on off-turn write-mutating tool calls
 
 **What:** `mistralai/ministral-3-3b`'s own real defect surfaced by the K-056 pilot (a follow-up

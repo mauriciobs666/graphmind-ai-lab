@@ -217,8 +217,67 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # cumulative-republish rule as every capability bump above. `config.model`
 # (`lmstudio/mistralai/ministral-3-3b`, K-056's re-point) is carried forward
 # **unchanged** here too, for the same create-only reason the `v3` note above
-# gives — this is the last version this module currently anticipates, but the
-# obligation would bind any future bump the same way.
+# gives.
+#
+# **`v5` (K-057, compound-filter answer-conflation fix) is a `v2.1`-shaped
+# bump, not a capability bump** — it changes neither `config.tools` nor the
+# tool set the `assistant` step is granted, only `systemPrompt` (one added
+# sentence) and, orthogonally, `FilterProductsTool`'s own tool-description
+# text in `tools.py` (not versioned data — a code-level change that applies to
+# every def/version that grants `filter_products`, not just `v5`). Root cause,
+# live evidence and the exact wording recommendation are
+# `docs/reviews/salesperson-tool-reliability-ml.md` §11 (§11.5 in particular):
+# `mistralai/ministral-3-3b` unreliably translates "less than $X" into
+# `filter_products`'s documented-inclusive `maxPrice` bound — 56.2% of
+# single-call runs rounded down to the nearest whole dollar (`maxPrice=59`),
+# silently dropping a `$59.99`-priced item — and, far more rarely (5%),
+# sometimes states a conclusion ("nothing matches") before a later, corrective
+# tool call in the same turn's own loop has actually returned, then never
+# revises it. §11.5's own fix is two targeted wording additions: (1) inclusive-
+# bound/boundary-translation guidance, placed on `filter_products`'s own
+# `minPrice`/`maxPrice` parameter descriptions (`tools.py`) rather than in
+# `systemPrompt` — colocated with the exact parameter whose value the model
+# gets wrong, already resent fresh on every LLM turn as part of the tool
+# schema (the same "never stale" property §4.3 of the ml review notes for
+# `systemPrompt` itself), and it does not bloat the already-large
+# `systemPrompt` further; (2) a short "do not state a conclusion before your
+# last planned tool call this turn has returned" instruction, added to
+# `systemPrompt` since it is about turn-level conversational behaviour, not
+# any one tool's contract. Live-verified at n=20: `maxPrice` boundary-rounding
+# 20/20 correct, self-contradiction shape 0/20 — both of §11.5's own named
+# mechanisms cleared. Net full-reply correctness at that same n: 16/20 (80%,
+# Wilson 95% CI 58.4-91.9%) — see `docs/HISTORY.md`'s K-057 entry for the full
+# figures.
+#
+# **A THIRD, previously unobserved failure mode was found in that same live
+# run, responsible for every one of the 4/20 remaining wrong replies — not
+# fixed here, deliberately.** When `filter_products` is called with no
+# `category` (a mixed-category result), the model sometimes silently drops a
+# genuinely-matching item from its synthesized reply instead of including it —
+# not a rounding error, not a self-contradiction, a synthesis-time omission on
+# an unfiltered result set; §11.5 never diagnosed or targeted this mechanism.
+# Two further wording attempts aimed squarely at it — (a) a `category`
+# parameter description nudging the model to always pass `category` when the
+# customer names one, sidestepping the mixed-category result entirely, and
+# (b) a `systemPrompt` synthesis-time safety net telling the model to check
+# every returned item's own category/price and include every genuine match —
+# were live-tested together at n=20 (own throwaway probe run, not shipped as
+# a version) and **did not clear the defect**: the model still never passed
+# `category` (0/20) and the failure rate, if anything, went up (6/20 = 30% net
+# wrong, vs 4/20 = 20% here) while also suppressing the multi-call
+# self-correction pattern that had rescued 8/20 replies under this version's
+# plain wording. Reverted — not shipped. Per this lab's own standing
+# discipline (§4.2/§8.4/§9.4 of the ml review: never ship a mitigation that
+# wasn't proven to work), this third mechanism is left as a disclosed,
+# unresolved gap for a proper root-cause pass rather than a third wording
+# guess — two independent, reasonable-looking wording attempts both failing
+# to move the model's behaviour is itself evidence this may not be a
+# wording-fixable defect at all.
+#
+# `config.model` (`lmstudio/mistralai/ministral-3-3b`) is carried forward
+# **unchanged** here too, for the same create-only reason the `v3`/`v4` notes
+# above give — this is the last version this module currently anticipates,
+# but the obligation would bind any future bump the same way.
 #
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
@@ -239,7 +298,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v4",
+    "version": "v5",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -257,9 +316,9 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
                 # at first use. Carried forward unchanged from `v2.1` into `v3`
-                # (K-054) and again into `v4` (K-055) — `config.model` is create-only,
-                # so omitting this line on a version bump would silently undo the
-                # re-point (see the `v3`/`v4` notes above).
+                # (K-054), `v4` (K-055) and again into `v5` (K-057) — `config.model`
+                # is create-only, so omitting this line on a version bump would
+                # silently undo the re-point (see the `v3`/`v4`/`v5` notes above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
@@ -268,7 +327,11 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "category, price) and list products matching a category or price "
                     "range, using your catalog tools. Never guess a price or category "
                     "you have not retrieved from a tool; if nothing matches, say so "
-                    "plainly rather than inventing an answer.\n\n"
+                    "plainly rather than inventing an answer. Do not tell the customer "
+                    "a filter came up empty or that nothing matches until you have made "
+                    "your last catalog lookup for this question — if an earlier attempt "
+                    "looked empty or wrong, a later corrected one wins; never report "
+                    "both.\n\n"
                     "You can also manage the customer's shopping cart: view it, add or "
                     "remove items, clear it, and place an order once they are ready to "
                     "check out. Only add or remove an item the customer actually asked "

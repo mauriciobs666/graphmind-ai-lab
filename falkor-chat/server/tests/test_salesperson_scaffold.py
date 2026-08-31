@@ -313,15 +313,16 @@ def test_salesperson_def_pins_ministral_model_and_version_bump():
     role default, which K-056 found silently skips tool calls on ~97.5% of
     conversations reaching a 4th turn — `docs/reviews/
     salesperson-tool-reliability-ml.md` §8), first bumped at `v2.1` and carried
-    forward unchanged into `v3` (K-054, the durable-profile capability bump)
-    and `v4` (K-055, NL query generation) — `config.model` is create-only
-    exactly like `config.tools`/`systemPrompt` (`proof_defs.py`'s module
-    docstring), so a version that republished a full, fresh `config` without
-    repeating this line would silently fall back to the shared `step`-role
-    default and undo the re-point."""
+    forward unchanged into `v3` (K-054, the durable-profile capability bump),
+    `v4` (K-055, NL query generation) and `v5` (K-057, the compound-filter
+    wording fix) — `config.model` is create-only exactly like
+    `config.tools`/`systemPrompt` (`proof_defs.py`'s module docstring), so a
+    version that republished a full, fresh `config` without repeating this
+    line would silently fall back to the shared `step`-role default and undo
+    the re-point."""
     assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
     assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
-    assert SALESPERSON_DEF["version"] == "v4"
+    assert SALESPERSON_DEF["version"] == "v5"
 
 
 # ── 2. a same-version republish is a clean structural no-op ───────────────────
