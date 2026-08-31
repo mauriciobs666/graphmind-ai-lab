@@ -1097,3 +1097,262 @@ scratchpad: `ds_k057_probe.py` (`LoggingToolRegistry`-instrumented conversation 
 `ws:acme`/`reference` were never written to and were independently re-verified in sync
 (`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
 finishing.
+
+## 12. K-061 same-turn `add_to_cart` duplicate diagnosis (2026-08-31)
+
+**What this section answers, and for whom.** K-061 (`docs/BACKLOG.md`) filed the QA combined-
+regression pass's Defect 1
+(`docs/test-reports/salesperson-tool-reliability-regression-report.md`) — 2/6 reps (`rep-4`,
+`rep-6`) where the model's own current-turn, legitimately-mentioned `add_to_cart(mechanical-
+keyboard-k200)` call silently fired twice, and a related 1/6 false "couldn't find" reply
+(`rep-2`, Symptom B) despite a fully successful add. K-061's own `Owner` line asks for a larger
+follow-up sample (n≈20-30) isolating the exact two-consecutive-held-rejections shape all 6/6
+original reps hit, to move from "found twice in six" toward a rate estimate for both symptoms,
+before any fix is designed — **diagnosis only, no fix implemented here**, per the task brief and
+this note's own standing discipline (§4.2/§8.4/§9.4/§11.5).
+
+### 12.1 Method
+
+Same in-process harness precedent as §9.1/§11.2 (`services.start_workflow_run`/
+`resume_workflow_run` driven via `WorkflowTrigger.maybe_trigger(..., trace=True)`, real
+`ModelGateway.from_env(workspace_overrides=GraphWorkspaceOverrides(repo))`, real
+`build_builtin_registry(services, agent_id=config.AGENT_ID, models=models)`, real
+`WorkflowExecutor` — byte-identical wiring to `app._build_default_app()`'s `WORKFLOW_ENABLED`
+branch, `app.py:361-393`) against a fresh throwaway `ws:ds-k061`
+(`EMBEDDING_DIM=1024 bootstrap_schema.sh` → `seed_demo.sh` → `seed_catalog.sh` →
+`seed_salesperson.sh`, `verify_salesperson.sh`/`verify_catalog.sh` both `OK` before driving).
+`salesperson` is `conversation`-kind and chat-triggered (not startable via bare
+`POST /workflow-runs`) — `FALKORCHAT_TRIGGER_DEF_KEY=salesperson`/
+`FALKORCHAT_TRIGGER_DEF_VERSION=v5` set as module-level env before any `falkorchat` import
+(FR-15 no-reload-path), same convention the regression pass and this note's own §9/§11 already
+established. Each rep: `services.ensure_actor` for a fresh customer id (`k061-cust-<n>`, the
+`ensure_user`-before-write convention), a fresh channel/thread
+(`services.create_channel`/`create_thread`), so no rep's cart or thread state can leak into
+another's (mirrors §9.1/§11.2's own isolation).
+
+**Conversation script — the exact Defect-1 repro shape, turns 1-3 only** (the QA pass's turns 4-5
+exercised unrelated capabilities — durable profile, NL query generation — that cannot causally
+affect turn 3's behavior, since they happen after it; dropped here on purpose to isolate this
+mechanism and keep n≈25 affordable):
+1. `Which peripherals cost less than $60?`
+2. `Add 1 Wireless Mouse Pro to my cart.`
+3. `Also add 1 Mechanical Keyboard K200.` (the QA pass's exact two-consecutive-held-rejections
+   trigger turn)
+
+**25 independent conversations** (`K061_N=25`), each a fresh customer/thread against the same
+`salesperson@v5` def, same workspace. Ground truth, never the model's own reply text for scoring
+Symptom A:
+- **Cart/CartItem** — `repository.read_cart(ws, customer_id=actor)`
+  (`MATCH (cart:Cart {customerId:$id})-[:HAS_ITEM]->(item:CartItem) RETURN item.productId,
+  item.quantity`), independently spot-re-verified via direct `mcp__cypher__query` against
+  `ws:ds-k061` for two reps (below).
+- **The full raw `TraceEvent` chain** — `repository.read_trace(ws, run_id=runId)`
+  (`executor.py:900-963`'s `HELD add_to_cart(...) — productName not mentioned in this turn's own
+  text (K-058)` entries and every dispatched `add_to_cart` call), independently re-read via
+  direct `mcp__cypher__query` for the same two reps.
+- **The final turn-3 assistant reply text** — `services.read_messages(ctx, thread_id=tid,
+  since=0, limit=50)` (an explicit `since`, so no read-cursor side effect), stored verbatim per
+  rep for Symptom B's classification, never grepped-and-trusted alone (every flagged rep's full
+  text was read directly, below).
+
+`ws:ds-k061` was `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to and
+were independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+`verify_workflows.sh acme`, all `OK`) before finishing. Script: `ds_k061_probe.py`, throwaway, not
+committed, left in this session's scratchpad, parameterized by `K061_N`; raw per-rep records in a
+sibling `k061_probe_results.jsonl`.
+
+### 12.2 A self-caught methodology defect — one rep excluded, n=24 valid
+
+**rep-1's cart was contaminated by an earlier, separate 1-rep smoke test of this same script
+against this same workspace, before the n=25 pass was launched** — both used the deterministic
+customer id `k061-cust-1` (loop index 1), so the n=25 pass's turn-2/turn-3 `add_to_cart` calls
+landed on a cart that already held quantity 1 for both `wireless-mouse-pro` and
+`mechanical-keyboard-k200` from the discarded smoke test. Caught by inspecting rep-1's raw trace
+directly (`mcp__cypher__query` against `ws:ds-k061`, run `d251c279f119449095fae81958d11f99`):
+turn 2's *single* `add_to_cart({"productName": "Wireless Mouse Pro", "quantity": 1})` tool call
+returned `{"found": true, ..., "quantity": 2}` on its **first and only** dispatch that run — one
+call, cart already at 1, `repository.add_to_cart`'s documented increment-not-replace semantics
+(`repository.py:2828-2850`, `"ON MATCH SET item.quantity = item.quantity + $qty"`) correctly
+produced 2. Turn 3's single `add_to_cart(Mechanical Keyboard K200)` call shows the identical
+shape. This is **not** a same-turn model duplicate — the trace shows exactly one `add_to_cart`
+tool-call entry per product this run, not two — it is a test-harness id-collision artifact,
+caught before it could inflate this pass's own Symptom A count. rep-1 is excluded from every
+count below; **n=24 valid reps.** Every other customer id (`k061-cust-2`..`k061-cust-25`) is
+confirmed fresh (never used in any prior run against this workspace) — no other rep carries this
+risk. Flagging this plainly, the same way §6 corrected QA's own report and §11.1 checked a
+premise before trusting it — a scripted probe's own state hygiene is exactly the kind of thing
+this note's standing discipline says to verify, not assume.
+
+### 12.3 Result — Symptom A (same-turn duplicate)
+
+**3/24 (12.5%, Wilson 95% CI 4.3-31.0%).** Confirmed, ground-truth-checked
+(`mechanical-keyboard-k200` `CartItem.quantity` = 2, and in every case the raw trace shows **two**
+distinct `add_to_cart(Mechanical Keyboard K200)` tool-call entries in the same turn's own
+multi-iteration loop, not one call double-counting — ruling out the §12.2 artifact mechanism for
+all three):
+
+| rep | held-mouse count | keyboard dispatches | final reply discloses the duplicate? |
+|---|---|---|---|
+| 11 | 2 (both HELD) | 2 | **No** — reply falsely claims the mouse "was not recognized as a product in the catalog," states only the keyboard total (2× $89.99 = $179.98), never flags the doubled quantity as unusual |
+| 12 | 2 (both HELD) | 2 | **Yes, plainly** — "Mechanical Keyboard K200: $89.99 (x2)" stated in the reply text |
+| 24 | 1 (one HELD) | 2 | **Yes, plainly** — "Mechanical Keyboard K200 – 2 × $89.99" stated in the reply text |
+
+rep-11's non-disclosure (data correct in the graph, reply omits the anomaly entirely rather than
+misstating it) sits closer to QA's `rep-4` (fully silent) than to `rep-6` (states "one" when two
+were dispatched) — a third distinct disclosure pattern (never surfaced at all) beyond QA's own
+two, worth naming: this defect's customer-facing visibility is not consistent across occurrences
+even when the same underlying mechanism fires. 2/3 occurrences here **are** self-disclosing
+(matching §9.3's severity framing for the cross-turn cousin defect), 1/3 is not.
+
+**Pooled with QA's own 2/6 (independent sample, same repro shape):** 5/30 (16.7%, Wilson 95% CI
+7.3-33.6%) — narrows the floor of QA's own wide 9.7-70.0% CI meaningfully without pinning down a
+precise point value, the same kind of gain §9.2's Ministral follow-up delivered for a related
+mechanism.
+
+### 12.4 Result — Symptom B (false "couldn't find" reply on a successful add)
+
+**0/24 (0.0%, Wilson 95% CI 0.0-13.8%) — did not reproduce in this pass at n=24, at all.**
+Screened every final reply for a false-negative pattern (`couldn't find`/`could not find`/`not
+recognized`/`no product named`/similar, near a mention of "keyboard"), then read every match's
+full text directly rather than trust the regex. Two matches surfaced (below) — **neither is
+QA's Symptom B shape** (a false claim the *keyboard* wasn't found): both are the model
+mischaracterizing *why the mouse's off-turn re-fire was held*, while correctly stating the
+keyboard succeeded. **Pooled with QA's own 1/6: 1/30 (3.3%, Wilson 95% CI 0.6-16.7%)** — QA's
+own single occurrence stands as the only confirmed instance across 30 combined reps; this pass
+adds real width to the denominator without adding a numerator, consistent with Symptom B being
+markedly rarer than Symptom A rather than the same rate, though the pooled CI (0.6-16.7%) still
+cannot rule out a rate comparable to Symptom A's — 30 reps is not enough to distinguish "much
+rarer" from "somewhat rarer" at this sample size, stated plainly rather than oversold.
+
+### 12.5 A related, previously-unflagged text defect — not Symptom B, named separately
+
+**2/24 (8.3%, Wilson 95% CI 2.3-25.8%) — the model states an incorrect reason for the K-058
+guard's own correct hold, while still correctly reporting the keyboard succeeded:**
+- rep-6: *"The **Wireless Mouse Pro** was not recognized as a product name in this
+  conversation—only the **Mechanical Keyboard K200** was added to your cart."*
+- rep-11 (also a Symptom A occurrence, §12.3): *"The **Wireless Mouse Pro** was not recognized as
+  a product in the catalog, so I could not add it to your cart."*
+
+Ground truth: `wireless-mouse-pro` **is** a real, correctly-catalogued product in both reps'
+`filter_products` results earlier in the same conversation, and the guard's own held-call payload
+(`json.dumps({"held": True, "reason": f"{target_arg} {target_value!r} was not mentioned anywhere
+in this turn's own message; ..."})`, `executor.py:955-961`) states the *correct* reason verbatim
+back to the model — the model had the accurate explanation available and substituted a
+plausible-sounding but factually wrong one ("not a real/recognized product") instead. **Distinct
+from Symptom B** (Symptom B is a false negative about a tool call that *succeeded*; this is a
+false explanation for a tool call that was *correctly held*, with the actually-relevant fact
+sitting right there in the tool result). Not itself scored as either symptom — named here because
+it is a genuine, ground-truth-confirmed, previously-unflagged reply-text defect this pass's own
+n=24 happens to surface, in the same spirit §11.3's rep-4 aggregate-count observation was named
+without being folded into that section's headline rate.
+
+### 12.6 The two-consecutive-held-rejections shape itself did not reproduce as reliably as 6/6
+
+**10/24 (41.7%, Wilson 95% CI 24.5-61.2%) hit the exact shape** (two HELD rejections on the
+mouse); **14/24 (58.3%, CI 38.8-75.5%) hit at least one**; **10/24 hit zero.** QA's own n=6 saw
+this shape in **6/6 (100%)** reps on an identical turn-1-through-3 script (turn 1's text is
+byte-identical between the two passes; turns 4-5, dropped here, occur after turn 3 and cannot
+have influenced it). The two results are not necessarily in tension — QA's own CI at n=6 for
+100% is 61.0-100% (Wilson), which this pass's 41.7% point estimate falls outside of, so this is
+worth stating plainly as a real divergence, not smoothing it over: **6/6 was very likely
+optimistic small-n variance, not a reliably deterministic property of this exact turn
+sequence.** A candidate mechanical explanation, not verified here: `config/models.json` pins
+`temperature: 0` for `qwen/qwen3-4b-2507` but carries **no** entry for
+`mistralai/ministral-3-3b` (the `assistant` step's actual pinned model, `SALESPERSON_DEF`
+`config.model`) — absent an explicit override, `ministral-3-3b` runs at LM Studio's own decoding
+default, which is very unlikely to be temperature 0, meaning this exact 3-turn script is not
+expected to be deterministic across repeated live runs even with byte-identical prompts. Worth
+noting for whoever next needs a *reproducible* single-rep repro of this shape: pin
+`models.<ref>.temperature: 0` for `mistralai/ministral-3-3b` in the overlay (mirroring the
+existing `qwen3-4b-2507` entry) first, rather than assuming the 6/6-shape turn script alone is
+sufficient.
+
+### 12.7 Symptom A vs. the held-rejection shape — a real update to the "not proven causation" framing, still not clinched
+
+K-061's own filed text called the shape/duplicate co-occurrence "a contributing observation, not
+proven causation" (4/6 QA reps hit the shape without duplicating). This pass's corrected n=24
+sharpens that picture in one specific way: **every one of this pass's 3 genuine Symptom A
+occurrences had at least one HELD rejection on the mouse somewhere in the same turn; zero of the
+10 reps with no HELD rejection at all produced a duplicate.**
+
+| Held-rejection count this turn | n | Symptom A rate | Wilson 95% CI |
+|---|---|---|---|
+| 0 | 10 | 0/10 (0.0%) | 0.0-27.8% |
+| 1 | 4 | 1/4 (25.0%) | 4.6-69.9% |
+| 2 (the full shape) | 10 | 2/10 (20.0%) | 5.7-51.0% |
+| ≥1 (either) | 14 | 3/14 (21.4%) | 7.6-47.6% |
+
+**The CIs still overlap (0.0-27.8% vs. 7.6-47.6%) — this does not clear the bar for a
+statistically distinguishable effect at n=24, and is not reported as one.** But the point-estimate
+gap (0% vs. ~21%) is now cleaner than the original n=6 read (where 4/6 non-duplicating reps
+*also* hit the shape, muddying any split), and every genuine occurrence in this pass, without
+exception, had company from at least one held rejection. **Read together, K-061's own "not proven
+causation" stands, but should be revised toward "a real candidate contributing factor, still
+underpowered to confirm" rather than left exactly as filed** — a materially different confidence
+level for whoever next designs a fix, even though the headline verdict (no fix shape should be
+chosen on this evidence alone yet) is unchanged.
+
+### 12.8 The K-059 shared-root-cause question — suggestive, not resolved (not run here, per the task brief)
+
+**Not tested directly — K-059's own `place_order` eval is explicitly out of scope for this
+diagnosis (task brief) — but this pass's own evidence bears on the shared-mechanism hypothesis in
+one specific way worth flagging for whoever picks up K-059 next.** All three confirmed Symptom A
+occurrences (§12.3) show the identical structural shape: the model's own multi-iteration tool
+loop, within one turn, re-issues a call for a target it had **already successfully dispatched
+earlier in that same loop** — not a cross-turn re-fire (that is K-058's, already-guarded,
+mechanism), and, per §12.7, seemingly more likely (though not proven, at this n) when the loop
+also produced a nearby HELD rejection on an unrelated target. This is the same general shape
+K-059's own filed text names as the shared-mechanism candidate ("re-issuing/duplicating a write
+after seeing a nearby rejection"), and §12.7's data is consistent with — but does not prove —
+that framing. **What would actually resolve it:** `place_order` takes zero arguments (no
+resolved-target text-mention check is even structurally possible, `executor.py:42-46`'s own
+comment on this), so the analogous repro would need a turn sequence that produces a HELD
+rejection on some *other* write call in the same turn as a `place_order` dispatch, then checks
+for a duplicate `Order` — K-059's own filed test strategy, not attempted here. **Recommendation:
+K-059's own diagnosis pass should deliberately include a condition that reproduces a nearby HELD
+rejection in the nearest 2-3 turns of tool-loop, not only the isolated `place-order-retrigger`
+shape §9.2's table already found 0/4 on** — if the same "co-occurs with a held rejection" pattern
+shows up there too, that is the strongest evidence either fix should attempt for both symptoms
+in one shared guard design rather than two independent ones.
+
+### 12.9 Recommendation
+
+**Diagnosis only, as scoped — do not fix yet, but the picture is sharper than "found twice in
+six" and worth acting on the way it now reads, not the way it was originally filed.**
+
+1. **Symptom A is real, ground-truth-confirmed at n=24 beyond the original n=6 (pooled 5/30,
+   16.7%, CI 7.3-33.6%), and not consistently self-disclosing (1/3 occurrences in this pass were
+   fully silent, matching QA's own `rep-4`)** — this alone is enough to treat it as a live defect
+   worth a fix design, not a wait-and-see. The disclosure inconsistency specifically argues
+   against "the customer will probably notice" as a mitigating factor in any severity call.
+2. **Symptom B did not reproduce at n=24 (0/24) and remains a single occurrence pooled across 30
+   reps (3.3%, CI 0.6-16.7%)** — real (QA's `rep-2` was ground-truth-confirmed), but far too
+   rare in this evidence to justify its own dedicated fix track ahead of Symptom A. Worth
+   re-screening for opportunistically in any future pass that touches this same conversation
+   shape, not worth a standalone follow-up sample on its own.
+3. **§12.5's mischaracterized-hold-reason text defect (2/24, 8.3%) is new, real, and
+   independent of both filed symptoms** — worth its own backlog line for `teco` to consider
+   filing (not folded into K-061, which is scoped to the cart-state duplicate and the "couldn't
+   find" false negative specifically), since its fix shape (correcting what the model is told or
+   how it explains a `held` result) is unrelated to either.
+4. **On the K-059 link (§12.8): plausible and worth designing K-059's own next diagnosis pass to
+   test for directly, not yet strong enough to commit to "one shared guard, no separate K-061
+   fix."** The data leans toward a shared mechanism more than the original n=6 did, but "leans
+   toward" is the honest ceiling of what n=24 (or n=3 confirmed occurrences) can support for a
+   design decision this consequential — recommend K-059's own pass includes the held-rejection-
+   adjacent condition from §12.8 before either fix is designed, so the two items converge on one
+   fix shape if the pattern holds, or diverge cleanly if it doesn't, rather than guessing now.
+5. **No fix candidate is proposed here** — same posture as §4.3/§8.3/§9.4: naming one without its
+   own targeted mutation-test eval would repeat the exact mistake this note's own standing
+   discipline exists to prevent, and K-061's own `Owner` line asked for diagnosis, not a fix, at
+   this step.
+
+### 12.10 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this session's
+scratchpad: `ds_k061_probe.py` (in-process live-harness driver reusing §9.1/§11.2's own pattern,
+`K061_N` env-parameterized rep count; results in a sibling `k061_probe_results.jsonl`, 25 raw
+records including the excluded rep-1, §12.2). `ws:ds-k061` was `GRAPH.DELETE`d after this pass;
+`ws:acme`/`reference` were never written to and were independently re-verified in sync
+(`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
+finishing.
