@@ -79,3 +79,11 @@ attempt yet. Whether a fix is warranted, and its shape, is a decision for after 
   dedicated diagnosis has now landed). **No fix has been chosen yet** — that decision, and the
   separate `temperature: 0` config-pin question, are `teco`'s own next open items, per the
   delegate's own §16.5 recommendation not to treat this pass as settling severity on its own.
+- **2026-08-31 — reproducibility fix shipped directly by `teco`** (trivial single-file no-brainer
+  per own routing table: one config entry, mirrors an existing precedent exactly, no design
+  judgment): `config/models.json` now pins `temperature: 0` for `lmstudio/mistralai/ministral-3-3b`
+  — verified via a direct `Overlay.model_settings()` resolution check and the offline
+  `model`/`config`-scoped test selection (204 tests, green). `docs/HISTORY.md` and `docs/BACKLOG.md`
+  K-062 both updated. This closes the reproducibility half of §16.5's recommendation; the fix
+  decision for K-062 itself (view_cart nudge / systemPrompt addition / no fix) remains open,
+  per the user's own explicit choice this round to ship only the config pin for now.

@@ -231,13 +231,18 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   naming this specific scenario. Both would need their own targeted eval (lever (a) is readily
   mutation-testable: force a `HELD` event, assert `view_cart` fires before the next
   `post_message`) before either ships.
+- **The reproducibility half is shipped:** `config/models.json` now pins `temperature: 0` for
+  `lmstudio/mistralai/ministral-3-3b`, mirroring the existing `qwen/qwen3-4b-2507` entry —
+  confirmed the resolved `ResolvedModel.params` carries `{"temperature": 0}` for both refs, and
+  the offline `model`/`config`-scoped test selection (204 tests) stays green. This does not fix
+  K-062 itself (it fixes the confound in *measuring* K-062 and every sibling defect in this script
+  family across sessions) — a future re-screen of this or any sibling pattern on
+  `mistralai/ministral-3-3b` should be materially more session-to-session comparable from here on.
 - **Owner:** `teco` to decide, from this pass's evidence, whether a fix is warranted at all
   (strict-rate reading: low-priority polish; broader-rate reading: the moderate-severity item this
-  was revised toward) and, separately, whether `config/models.json` should pin
-  `temperature: 0` for `mistralai/ministral-3-3b` — a reproducibility fix for this whole script
-  family's rate comparisons, not specific to K-062, but surfaced by this pass. If a fix is chosen,
-  implementation + review follows normal gating (`tdd-engineer`/`coder` → `analyst`), not a third
-  wording guess ahead of a targeted eval of the two named levers.
+  was revised toward). If a fix is chosen, implementation + review follows normal gating
+  (`tdd-engineer`/`coder` → `analyst`), not a third wording guess ahead of a targeted eval of the
+  two named levers.
 - **Risks/RAM:** none.
 - **Test strategy:** if either candidate lever (view_cart-refresh nudge, systemPrompt addition) is
   implemented, a targeted eval isolating that lever's own effect on the `HELD`-then-reply path,

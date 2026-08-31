@@ -5,6 +5,27 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — `mistralai/ministral-3-3b` pinned to `temperature: 0` in `config/models.json`
+
+**What:** K-062's round-5 dedicated diagnosis (`ml.md` §16) found the K-058 hold precondition
+itself firing at very different rates across two live sessions on the byte-identical 3-turn
+script (96.4% vs. 58.3%, non-overlapping CIs) — consistent with `salesperson@v5`'s pinned
+`assistant`-step model, `lmstudio/mistralai/ministral-3-3b`, carrying no `temperature` pin, unlike
+`qwen/qwen3-4b-2507`'s `0`. Added a `"temperature": 0` entry for it in `config/models.json`,
+mirroring the existing `qwen3-4b-2507` shape exactly (`Overlay.model_settings` → `ResolvedModel.
+params`, confirmed `{"temperature": 0}` for both refs via a direct resolution check).
+
+**Why:** a reproducibility fix for this whole live-script-family's rate comparisons — every prior
+K-057/K-060/K-061/K-062 live pass that used `mistralai/ministral-3-3b` ran at an undocumented,
+apparently highly variable sampling temperature, which confounds cross-session rate comparisons
+more than any single mechanism finding in that thread. Does not itself fix K-062 (or any other
+filed defect in the thread) — narrows the measurement noise around all of them going forward.
+
+**Verification:** `python3 -c "import json; json.load(...)"` confirms valid JSON; a direct
+`Overlay.load(...).model_settings(...)` check confirms both refs resolve `{"temperature": 0}`;
+the offline `pytest -k "model or config"` selection (204 tests) stays green, no other file
+touched.
+
 ## 2026-08-31 — K-061 keying-loophole closed: `add_to_cart`'s K-061 guard now dedups on each tool's own resolved argument set, not the raw pre-default JSON
 
 **What:** the live regression pass that confirmed K-061's first fix (`ml.md` §15.2, `HISTORY.md`
