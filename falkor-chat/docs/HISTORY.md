@@ -5,6 +5,28 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-08-31 — `salesperson-tool-reliability` coordination closed — K-057/K-058 both shipped, reviewed, and combined-regression-gated; three follow-ups spun out
+
+**What:** `docs/plans/salesperson-tool-reliability-coordination.md` closes: K-057 (below) and
+K-058 (2026-08-30 entry) are both implemented and independently `analyst`-approved
+(`docs/reviews/salesperson-tool-reliability-impl2.md`/`-impl3.md`). The coordination's own closing
+bar — proving both fixes hold **together**, alongside the rest of the shipped M6 tool surface, in
+one realistic combined conversation, not just individually in isolation — was met by a
+`qa-engineer` combined regression pass (`docs/test-reports/salesperson-tool-reliability-regression-
+report.md`): both fixes held on their own stated claims (K-057: 6/6 correct; K-058: 12/12 off-turn
+attempts held, zero false positives), but the combination surfaced **two new, genuine defects**
+neither fix's own isolated eval was positioned to catch — a same-turn self-duplicate `add_to_cart`
+on a legitimately-mentioned target (2/6 reps), and a false "product not found" reply after a fully
+successful add (1/6 reps). Neither implicates K-058's shipped code as wrong — both sit in a gap
+`docs/reviews/salesperson-tool-reliability-ml.md` §9.4 already named as deliberately unguarded (no
+safe way to block a legitimately-mentioned repeat without also blocking a customer's genuine
+"add another" request). Filed as **K-061** (`docs/BACKLOG.md`).
+
+**Follow-ups spun out, none blocking this closure:** K-059 (`place_order`'s own unaddressed
+off-turn-duplicate exposure), K-060 (a third `filter_products` synthesis defect K-057's own fix
+verification disclosed), K-061 (the two new defects above). All three are `docs/BACKLOG.md`
+items for whoever picks them up next.
+
 ## 2026-08-31 — K-057 resolved: `filter_products` inclusive-bound wording fix, `salesperson@v4`→`v5`
 
 **What:** K-057 (`salesperson@v4` mistranslating "less than $X" into `filter_products`'s

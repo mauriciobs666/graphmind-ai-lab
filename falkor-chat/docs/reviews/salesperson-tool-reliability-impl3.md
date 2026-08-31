@@ -1,6 +1,6 @@
 # `salesperson-tool-reliability` — implementation review, K-057 fix (Pass 3)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-057 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-057 (M6)
 
 ## Scope & verdict
 

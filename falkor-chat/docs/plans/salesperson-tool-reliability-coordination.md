@@ -1,6 +1,6 @@
 # Salesperson tool-orchestration reliability — K-057 + K-058 — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-057, K-058 (post-M6, not a milestone gate)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-057, K-058 (post-M6, not a milestone gate; closed 2026-08-31)
 
 Coordinating the investigation and (where warranted) fix of the two live, unresolved
 `salesperson@v4` tool-orchestration defects on `mistralai/ministral-3-3b` surfaced during M6's
@@ -59,8 +59,23 @@ verified sequentially from here on, even across disjoint files.
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 (Track A) | `data-scientist` (fresh) | `a6686c8ef000c2ec1` | delivered | K-057 root-cause diagnosis + rate estimate → `docs/reviews/salesperson-tool-reliability-ml.md` §11 | self → accepted (backlog premise falsified; dominant defect is a 50% boundary-rounding error, not orchestration; recommends `systemPrompt` wording fix, follow-up unit needed) | 201k tok / 72 tools |
-| U2 (Track B) | `tdd-engineer` (fresh) | `a057dc6683287232c` | delivered | K-058 fix: dispatch-time text-presence guard on write-mutating tool calls, TDD + mutation-tested + live regression check (`executor.py`, `test_executor_agent.py`) | `analyst` → pending (U4) | 227k tok / 114 tools |
-| U3 (Track A follow-up) | `coder` | `a6bc71a78fc5750b3` | delivered | K-057 fix: `filter_products` inclusive-bound wording + `systemPrompt` non-revision guidance, `v4`→`v5` (`proof_defs.py`, `tools.py`, +`nlq-40`); 2nd iteration tried, reverted, filed as K-060 | `analyst` → pending (U5) | 302k tok / 75 tools |
+| U2 (Track B) | `tdd-engineer` (fresh) | `a057dc6683287232c` | delivered | K-058 fix: dispatch-time text-presence guard on write-mutating tool calls, TDD + mutation-tested + live regression check (`executor.py`, `test_executor_agent.py`) | `analyst` → **approve** (U4) | 227k tok / 114 tools |
+| U3 (Track A follow-up) | `coder` | `a6bc71a78fc5750b3` | delivered | K-057 fix: `filter_products` inclusive-bound wording + `systemPrompt` non-revision guidance, `v4`→`v5` (`proof_defs.py`, `tools.py`, +`nlq-40`); 2nd iteration tried, reverted, filed as K-060 | `analyst` → **approve** (U5) | 302k tok / 75 tools |
 | U4 (gate, U2) | `analyst` (fresh) | `a1e425dd10e023f9f` | delivered | Diff review of U2's `executor.py` K-058 guard → `docs/reviews/salesperson-tool-reliability-impl2.md` | self → **approve** (2 MINOR, 1 residual-risk note — none blocking; filed K-059 for the `place_order` gap) | 179k tok / 67 tools |
 | U5 (gate, U3) | `analyst` (fresh) | `a04a9e3bd8fd3c142` | delivered | Diff review of U3's `proof_defs.py`/`tools.py` K-057 wording fix → `docs/reviews/salesperson-tool-reliability-impl3.md` | self → **approve** (1 MINOR — untested `minPrice` symmetric guidance, folded into K-060's test strategy) | 107k tok / 36 tools |
-| U6 (close) | `qa-engineer` (fresh) | `a5ea21105cf3c30a6` | in-flight | Combined live regression pass over both K-057 (`v5`) + K-058 (write guard) together, alongside the rest of the M6 tool surface → `docs/test-reports/salesperson-tool-reliability-regression.md` | self → — | — |
+| U6 (close) | `qa-engineer` (fresh) | `a5ea21105cf3c30a6` | delivered | Combined live regression pass over both K-057 (`v5`) + K-058 (write guard) together, alongside durable profile + NL query generation → `docs/test-reports/salesperson-tool-reliability-regression-report.md` | self → **PASS on both fixes' own claims, 2 new defects found** (filed as K-061) | 237k tok / 96 tools (final turn; resumed twice to reach its actual deliverable) |
+
+## Closed 2026-08-31 — both tracks delivered, reviewed, and combined-regression-gated
+
+K-057 and K-058 are both implemented (`docs/HISTORY.md` 2026-08-31/2026-08-30), independently
+`analyst`-approved (U4/U5), and — the closing bar this coordination set for itself — proven to
+hold together, alongside two more of the shipped M6 tool surface, in one realistic combined
+conversation (U6). Neither fix's implementation is faulted by that combined pass. Three follow-up
+items were spun out of this coordination's own work rather than folded back in, per the same
+"a coordination doc cites, it doesn't keep growing" discipline `HISTORY.md`/`BACKLOG.md` already
+follow: **K-059** (`place_order`'s own unaddressed off-turn-duplicate exposure, flagged by U4's
+review), **K-060** (a third, unfixed `filter_products` synthesis defect disclosed by U3's own live
+verification), **K-061** (two new defects U6's combined pass found — a same-turn self-duplicate
+`add_to_cart` and a false "not found" reply — sitting exactly in the gap K-058's spec already
+named as deliberately unguarded). All three are independent, appropriately-sized follow-up
+investigations for whoever picks them up next; none blocks this coordination's own closure.

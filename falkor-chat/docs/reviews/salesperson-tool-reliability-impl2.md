@@ -1,6 +1,6 @@
 # `salesperson` K-058 dispatch-time write guard — implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-058 (post-M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-058 (post-M6)
 
 ## Scope & verdict
 

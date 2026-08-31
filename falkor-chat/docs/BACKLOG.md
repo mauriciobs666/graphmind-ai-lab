@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-060
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-061
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -94,6 +94,46 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   shipped K-057 fix added symmetric inclusive-bound guidance to `minPrice` by analogy, but only
   the `maxPrice`/"less than" direction was actually live-regression-tested; whenever this item's
   own harness is next run is the cheapest place to close that gap.
+
+### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🔵 proposed — found by the K-057/K-058 combined regression gate, `docs/test-reports/salesperson-tool-reliability-regression-report.md` Defect 1, 2026-08-31)
+
+> **Why it exists.** The K-057+K-058 combined regression pass (`docs/plans/
+> salesperson-tool-reliability-coordination.md` U6) — the first live test to exercise both fixes
+> together in one realistic conversation — found 2/6 (33%, Wilson CI 9.7-70.0%) reps where
+> `mechanical-keyboard-k200` landed in the cart at quantity **2** though the customer asked for 1,
+> once. Ground-truth-confirmed via direct `Cart`/`CartItem` Cypher and the raw `TraceEvent` chain
+> in both occurrences (`rep-4`, `rep-6`).
+- **A third, distinct pattern from K-058, K-059, and K-060 — not the same defect reappearing.**
+  K-058's confirmed mechanism (`ml.md` §9.2) is an *off-turn* re-fire of a *previous turn's*
+  already-completed action; this is a *same-turn* duplicate of the model's *own current-turn*
+  successful write, on a target genuinely mentioned in that same turn's text. K-058's guard is
+  correctly, deliberately unable to catch this — blocking a call whose target is legitimately
+  mentioned is exactly the "blind dedup" approach `ml.md` §9.4 already ruled out (it would
+  incorrectly block a customer's own later "add another one" request). This is that named,
+  deliberately-open gap, now ground-truth-confirmed as a live occurrence rather than a
+  theoretical risk.
+- **A related but distinct second symptom, same repro shape (filed together, same trigger
+  context, split if either is picked up independently):** in 1/6 reps (`rep-2`), instead of a
+  silent duplicate, the model's final reply falsely claimed *"I couldn't find a product named
+  Mechanical Keyboard K200"* despite a fully successful, correctly-recorded add earlier in the
+  same turn — data was correct, only the customer-facing text was wrong. Named risk (not
+  observed, not confirmed): a customer trusting this false negative and retrying would hit a
+  fresh-turn `add_to_cart` that K-058's guard would *not* hold (the target is mentioned in that
+  later turn's own text too), potentially compounding into a real, customer-induced duplicate.
+- **Contributing observation, not proven causation:** all 6/6 reps in the regression pass hit the
+  same two-consecutive-held-rejections shape on an unrelated `add_to_cart(Wireless Mouse Pro)`
+  call; both duplicate-keyboard occurrences co-occurred with it, but 4/6 reps hit the identical
+  shape without duplicating — n=6 cannot establish it as a deterministic trigger.
+- **Owner:** `data-scientist` for a larger follow-up sample (n≈20-30) on this exact
+  two-consecutive-held-rejections conversation shape, to move past "found twice in six" toward a
+  rate estimate, before deciding on a fix shape (the report suggests it may share a root cause
+  with K-059's upcoming `place_order` guard-design work — "re-issuing/duplicating a write after
+  seeing a nearby rejection" looks like the same underlying model tendency across different
+  tools — worth checking before designing two separate fixes).
+- **Risks/RAM:** none — diagnosis first, no graph/schema surface.
+- **Test strategy:** reuse `docs/test-reports/salesperson-tool-reliability-regression-report.md`'s
+  own repro steps and harness pattern at a larger n; ground-truth via `Cart`/`CartItem` Cypher and
+  raw `TraceEvent` chain, never reply text.
 
 ### K-029 — Converge the seed def sources into `proof_defs.py` (+ the symmetric `decision` publish invariant) (🔵 proposed — filed out of K-024, open item O-5 / gate m-9 / nit n-3)
 

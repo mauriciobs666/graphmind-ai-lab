@@ -1,6 +1,6 @@
 # `salesperson-tool-reliability-regression` — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-057, K-058
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-057, K-058
 
 ## 1. Scope & objective
 
