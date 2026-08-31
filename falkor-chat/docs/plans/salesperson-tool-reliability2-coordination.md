@@ -40,7 +40,8 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 |---|---|---|---|---|---|---|
 | U1 | `data-scientist` | `a4bfd0c3e6bcbf81c` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §12 | — → — | 184.5k tok / 83 tools |
 | U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | delivered | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | 135.5k tok / 46 tools |
-| U3 | `analyst` | `a0b7ab4bc76ae25ad` | in-flight | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → — | — |
+| U3 | `analyst` | `a0b7ab4bc76ae25ad` | delivered | `docs/reviews/salesperson-tool-reliability2-impl.md` | — → approve w/ suggestions | 115.3k tok / 45 tools |
+| U4 | `tdd-engineer` | `a98eb2cd64adc9f5d` | in-flight | mutation-coverage test + rename (analyst MAJOR 1 / MINOR 1) | — → — | — |
 
 ## Notes
 

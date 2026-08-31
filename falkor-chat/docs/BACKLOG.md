@@ -95,55 +95,52 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   the `maxPrice`/"less than" direction was actually live-regression-tested; whenever this item's
   own harness is next run is the cheapest place to close that gap.
 
-### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — diagnosed at n=24, `docs/reviews/salesperson-tool-reliability-ml.md` §12, fix now being designed, 2026-08-31)
+### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — unit-level fix shipped and `analyst`-approved with suggestions, `docs/reviews/salesperson-tool-reliability2-impl.md`; live regression confirmation still open, 2026-08-31)
 
-> **Why it exists.** First found by the K-057+K-058 combined regression pass at n=6 (33%, wide
-> CI); a dedicated n=24 follow-up (`ml.md` §12) confirmed it beyond small-n noise — **pooled
-> 5/30 (16.7%, Wilson 95% CI 7.3-33.6%)** — the model's own current-turn tool-call loop
-> re-dispatches `add_to_cart` a second time for a target it already successfully added earlier in
-> that same loop, doubling the cart quantity. Ground-truth-confirmed via `Cart`/`CartItem` Cypher
-> and the raw `TraceEvent` chain in all 3 of this pass's occurrences (rep-11, rep-12, rep-24) plus
-> the original 2 (rep-4, rep-6) — 2 of the 3 new occurrences self-disclose in the reply text
-> (`ml.md` §9.3's severity framing), 1/3 does not (silent, matching the original `rep-4`).
-- **Distinct from K-058 by design, not an oversight.** K-058's guard blocks an *off-turn* re-fire
-  of a *previous turn's* completed action; this is a *same-turn* re-fire of the model's *own
-  current-turn* successful write on a target genuinely mentioned in that turn's text — exactly the
-  case K-058's guard deliberately does not touch (`ml.md` §9.4 already ruled out blind same-target
-  dedup, since it would incorrectly block a customer's own later "add another one").
-- **The co-occurring symptom originally filed alongside this (a false "couldn't find" reply
-  despite a successful add) did not reproduce at n=24 (0/24) and remains a single pooled
-  occurrence (1/30, 3.3%, CI 0.6-16.7%)** — real (the original `rep-2` was ground-truth-confirmed)
-  but too rare to warrant its own fix track ahead of the confirmed duplicate; re-screen for it
-  opportunistically whenever this conversation shape is next tested, no standalone follow-up
-  needed.
-- **The two-consecutive-held-rejections co-occurrence is now a real candidate contributing
-  factor, still underpowered to confirm** (revised from "not proven causation" as originally
-  filed): all 3 of this pass's genuine occurrences had ≥1 nearby HELD rejection on an unrelated
-  target in the same turn; 0/10 reps with zero HELD rejections duplicated. CIs still overlap
-  (0.0-27.8% vs. 7.6-47.6% at n=24) — not statistically distinguishable yet, but the point-estimate
-  split is cleaner than the original n=6 read.
-- **Also found, not part of this item (filed separately as K-062):** a distinct text defect where
-  the model misstates *why* an unrelated `add_to_cart` call was correctly held by K-058's guard,
-  even though the actual reason was handed back to it verbatim in the tool result.
-- **Owner:** implementer for a same-turn write-dedup fix — track, per turn, which write calls
-  (tool name + resolved target + full argument set, not just target name, so a legitimate
-  same-turn "add 1 more" with different args isn't blocked) have already been successfully
-  dispatched this turn's tool-loop, and hold an exact repeat rather than re-executing it (mirrors
-  K-058's existing per-turn dispatch-guard shape in `executor.py`, extended to a same-turn/
-  already-succeeded check rather than K-058's off-turn/not-mentioned check). Reproduction test
-  first (this is a bug fix with a clear repro shape, `ml.md` §12.1's exact 3-turn script).
-- **Open, not yet resolved by this diagnosis pass — worth resolving before finalizing this fix's
-  shape:** whether K-061 and K-059 (`place_order` off-turn duplicate dispatch) should share one
-  guard design. `ml.md` §12.8 found suggestive-but-unproven evidence (same "re-fire after a nearby
-  held rejection" shape) and recommends K-059's own next diagnosis pass deliberately test the
-  held-rejection-adjacent condition before committing either way — not blocking, but the fix
-  implementer should check for K-059 progress before locking in a K-061-only guard shape that a
-  shared design would later have to unwind.
-- **Risks/RAM:** none — same-turn state tracking only, no graph/schema surface.
-- **Test strategy:** reproduction test on `ml.md` §12.1's exact 3-turn script (mutation-tested —
-  revert the fix, confirm the reproduction test fails); offline suite green; live regression at the
-  same n≈20-30 this diagnosis used, same ground-truth method (`Cart`/`CartItem` Cypher + raw
-  `TraceEvent` chain, never reply text), to confirm the rate actually drops.
+> **Why it exists.** Diagnosed at n=24 (`ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%): the
+> model's own current-turn tool-call loop re-dispatches `add_to_cart` a second time for a target it
+> already successfully added earlier in that same loop, doubling the cart quantity. Distinct from
+> K-058 by design (K-058 blocks an *off-turn* re-fire of a *previous* turn's write; this is a
+> *same-turn* re-fire of the model's own *current*-turn write on a target genuinely mentioned in
+> that turn's text — exactly the case K-058's guard deliberately doesn't touch).
+- **Shipped** (`server/falkorchat/executor.py`, commit `381c9fc`, `docs/HISTORY.md` 2026-08-31): a
+  new dispatch-time guard keyed on `(tool name, full argument set)` holds an exact same-turn
+  repeat of an already-succeeded write, without blocking a legitimate different-argument call
+  (e.g. "add 1, then make that 2"). Reproduction test first, mutation-tested, full offline suite
+  green (2305 passed, 14 deselected).
+- **`analyst`-reviewed** (`docs/reviews/salesperson-tool-reliability2-impl.md`): approve with
+  suggestions, no blocker — placement, keying, and scope all verified correct. One real gap found
+  and a follow-up fix dispatched: the "must not poison the dedup set on a failed dispatch"
+  guarantee was structurally correct but had zero test coverage on the branch that actually
+  matters (a `ServiceError`-then-retry path) — a new test for that path plus a corrected test name
+  is in flight.
+- **Still open — this item stays in BACKLOG until closed:** the live n≈20-30 regression pass
+  K-061's own test strategy calls for (same ground-truth method as the diagnosis: `Cart`/
+  `CartItem` Cypher + raw `TraceEvent`, never reply text) to confirm the fix actually drops the
+  rate in a full live conversation, not just at the unit level. Not run yet — genuinely open, not
+  silently skipped.
+- **The co-occurring false-negative-reply symptom originally filed alongside this did not
+  reproduce at n=24** (pooled 1/30, 3.3% CI 0.6-16.7%) — too rare for its own track; re-screen
+  opportunistically whenever this conversation shape is next live-tested, no standalone follow-up.
+- **The two-consecutive-held-rejections co-occurrence is a real candidate contributing factor,
+  still underpowered to confirm**: all 3 of the n=24 pass's occurrences had ≥1 nearby HELD
+  rejection on an unrelated target in the same turn; 0/10 reps with zero HELD rejections
+  duplicated (CIs still overlap at n=24, not yet distinguishable).
+- **Also found, filed separately as K-062:** a distinct text defect where the model misstates why
+  an unrelated `add_to_cart` call was correctly held — not touched by this fix, confirmed
+  byte-unchanged in the shipped diff.
+- **Open, not yet resolved — relevant to K-059 too:** whether K-061 and K-059 (`place_order`
+  off-turn duplicate dispatch, still `🔵 proposed`/unstarted) should eventually share one guard
+  design. `ml.md` §12.8 found suggestive-but-unproven evidence (same "re-fire after a nearby held
+  rejection" shape); this shipped fix is K-061-only (confirmed no shared design was in flight at
+  dispatch time) — K-059's own next diagnosis pass should test the held-rejection-adjacent
+  condition before its own fix shape is chosen.
+- **Owner:** `data-scientist` (or `qa-engineer`) for the live regression pass; no further
+  design/implementation owner needed unless that pass finds the rate didn't move.
+- **Risks/RAM:** none.
+- **Test strategy:** live n≈20-30 conversation pass reusing `ml.md` §12.1's exact 3-turn script,
+  ground-truth via `Cart`/`CartItem` Cypher + raw `TraceEvent` chain, comparing the post-fix rate
+  against the pooled pre-fix 16.7% (CI 7.3-33.6%).
 
 ### K-062 — `salesperson@v5` sometimes states the wrong reason for a correctly-held write call, even though the correct reason was handed back to it (🔵 proposed — found opportunistically during K-061's n=24 diagnosis pass, `docs/reviews/salesperson-tool-reliability-ml.md` §12.5, 2026-08-31)
 

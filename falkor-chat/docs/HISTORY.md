@@ -5,7 +5,7 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
-## 2026-08-31 — K-061 resolved: same-turn `add_to_cart` self-duplicate held via a new dispatch-time dedup guard
+## 2026-08-31 — K-061 fix shipped (unit-verified, `analyst`-approved with suggestions): same-turn `add_to_cart` self-duplicate held via a new dispatch-time dedup guard — live regression confirmation still open
 
 **What:** K-061 (`docs/BACKLOG.md`, diagnosed at `docs/reviews/salesperson-tool-reliability-ml.md`
 §12 — pooled 5/30, 16.7%, Wilson 95% CI 7.3-33.6%) is fixed: `salesperson@v5`'s own multi-iteration
