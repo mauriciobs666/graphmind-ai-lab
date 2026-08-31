@@ -1564,3 +1564,268 @@ provider, unrelated to falkor-chat and out of scope to fix here) was used as
 `ws:ds-k059` was `GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to and
 were independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
 `verify_workflows.sh acme`, all `OK`) before finishing.
+
+## 14. K-060 no-`category` `filter_products` synthesis-omission diagnosis (2026-08-31)
+
+**What this section answers, and for whom.** K-060 (`docs/BACKLOG.md`) was disclosed as a side
+finding while live-verifying K-057's shipped `v5` fix at n=20 (`docs/HISTORY.md` 2026-08-31): all
+4 remaining wrong replies traced to a third mechanism — when `filter_products` is called with no
+`category` argument (a mixed-category result set), the model sometimes silently drops a
+genuinely-matching item from its synthesized reply. Two independent wording-only fix attempts
+already failed to move it (BACKLOG's own record) and are explicitly not to be repeated here. This
+pass's brief: a larger-n isolated rate estimate, a mechanism finding (list length / item
+position / category diversity, or an honest "still unclear"), the `analyst`-flagged `minPrice`
+"more than $X" regression fold-in (`docs/reviews/salesperson-tool-reliability-impl3.md`), and a
+reasoned call on whether the `Owner` note's payload-restructuring lever is worth its own follow-up
+unit — diagnosis only, no fix attempted, per this note's own standing discipline (§4.2/§8.4/§9.4).
+
+### 14.1 Method
+
+Same in-process live-harness precedent as §11.2/§12.1/§13.1: real `ModelGateway.from_env()` (not
+`StaticModelGateway` — §11.2's own load-bearing reasoning about `query_graph_data`'s independent
+`step`-role resolution applies unchanged, since this pass's conditions elicit `query_graph_data`
+in some reps too, below), `services`/`repo`/`WorkflowExecutor`/`WorkflowTrigger` wired
+byte-identically to `app._build_default_app()`'s `WORKFLOW_ENABLED` branch (`app.py:361-393`),
+against a fresh throwaway `ws:ds-k060` (`EMBEDDING_DIM=1024 bootstrap_schema.sh` → `seed_demo.sh`
+→ `seed_catalog.sh` → `seed_salesperson.sh`, `verify_salesperson.sh`/`verify_catalog.sh` both `OK`
+before driving). `salesperson@v5`, `FALKORCHAT_TRIGGER_DEF_KEY=salesperson`/`_VERSION=v5`, same
+convention as §11/§12/§13. `guard_judge=None`: read `SALESPERSON_DEF["transitions"]`
+(`proof_defs.py:376-378`) first — its only transition guard is a plain deterministic `cmp` on
+`ctx.endConversation`, never `kind: "fuzzy"` — so the LLM guard judge is never reached on this
+def's topology; omitting it avoids reaching into `app.py`'s private `_LlmGuardJudge` (importing
+`falkorchat.app` would itself execute the module-level `_build_default_app()` at import time, an
+unwanted side effect this pass's own env vars would trigger for real).
+
+**Ground-truth seam:** a `LoggingToolRegistry` composition wrapper around the shipped
+`build_builtin_registry(...)` instance, duck-typing the two methods `WorkflowExecutor` actually
+calls (`schema`, `dispatch` — confirmed by grepping `executor.py` for every `self._tools.*`
+call site) and logging every dispatched call's full, untruncated arguments/result — the same
+motivation as §11.2's subclass (executor trace payloads truncate at 200 chars, too short to
+ground-truth a multi-item JSON list), implemented as delegation rather than inheritance here
+since `ToolRegistry` has no public seam for injecting an already-built tool list without
+duplicating `build_builtin_registry`'s own default-parameter wiring.
+
+**Four single-turn conditions** (DEF-01's own repro shape is a single `@mention`, no multi-turn
+cart/profile state needed for this defect — unlike §12/§13's own scripts), each a fresh
+`customer_id`/channel/thread (`k060-<condition>-<rep>-<uuid4 hex8>` — a fresh uuid suffix on
+every actor id, foreclosing §12.2's own id-collision hazard by construction, same discipline
+§13.1 adopted after that lesson):
+
+| Cond | Question | Ground truth (verified live, `reference`, immediately before driving) |
+|---|---|---|
+| A | *"Which peripherals cost less than $60?"* (DEF-01's own exact repro text) | 3 items, 1 category: Gaming Mouse Pad XL $19.99, Wireless Mouse Pro $29.99, Webcam HD 1080p $59.99 (all Peripherals) |
+| B | *"What products do you have for under $60?"* (same price threshold, no category mentioned — removes the category-narrowing task) | 7 items, 3 categories: the 3 above + Wireless Charging Pad $24.99 (Accessories), Laptop Stand Aluminum $34.99 (Accessories), USB-C Hub 7-in-1 $39.99 (Accessories), Bluetooth Speaker Mini $49.99 (Audio) |
+| C | *"What products do you have for under $100?"* (longer list, more categories, no narrowing) | 10 items, 5 categories: the 7 above + Fitness Tracker Band $79.99 (Wearables), Smart Home Hub $89.99 (Smart Home), Mechanical Keyboard K200 $89.99 (Peripherals) |
+| D | *"Which products cost more than $150?"* (analyst-flagged `minPrice` fold-in, impl3.md) | 4 items, 4 categories: Action Camera 4K $179.99 (Cameras), Noise Cancelling Headphones X3 $199.99 (Audio), Smartwatch Series 5 $249.99 (Wearables), 27-inch 4K Monitor $349.99 (Displays) |
+
+Thresholds were chosen to sit comfortably clear of any product's actual price (nearest gap ≥
+$10.01 in every condition) — deliberately avoiding a second, already-diagnosed-and-fixed
+boundary-rounding confound (§11.3/K-057) so any wrong reply in this pass is attributable to the
+omission mechanism, not a `maxPrice`/`minPrice` translation error recurring. `n=30/15/15/15`
+(A/B/C/D) — A weighted higher as the primary, backlog-precedented isolation condition; a 4-rep
+pilot (uuid-suffixed, no collision risk) is folded into the counted totals below rather than
+discarded, since nothing about it was contaminated. `ws:ds-k060` was `GRAPH.DELETE`d after this
+pass; `ws:acme`/`reference` were never written to and were independently re-verified in sync
+(`verify_salesperson.sh acme`, `verify_catalog.sh`, `verify_workflows.sh acme`, all `OK`) before
+finishing. Script: `ds_k060_probe.py`, throwaway, not committed, left in this session's
+scratchpad; raw per-rep records (question, every tool call's full arguments/result, final reply
+text, run status) in a sibling `k060_probe_results.jsonl`, 75 reps.
+
+### 14.2 Result — Condition A (the isolated, backlog-precedented condition)
+
+**Every one of 30/30 reps called `filter_products` with no `category` on its first call** (0/30
+— replicates §11.3's own 0/20 finding for this exact prompt at a materially larger n). But this
+pass surfaces a previously-undocumented split in what happens next:
+
+| Shape | n | Outcome |
+|---|---|---|
+| Single `filter_products({"maxPrice": 59.99})` call only, no correction | 10/30 (33.3%) | 9/10 correct, complete; 1/10 wrong (dropped item) |
+| `filter_products({"maxPrice": 59.99})` **then** a self-correcting `filter_products({"category": "Peripherals", "maxPrice": 59.99})` | 20/30 (66.7%) | **20/20 correct, complete** |
+
+**Full-reply correctness: 29/30 (96.7%, Wilson 95% CI 83.3-99.4%); 1/30 wrong (3.3%, CI
+0.6-16.7%).** The spontaneous second, category-narrowed call — not requested or required by any
+`systemPrompt`/tool-description wording currently shipped — is fully protective in this sample:
+every one of the 20 reps that made it produced the exact, complete 3-item answer, with **zero**
+over-inclusion of a genuine non-Peripherals match from the raw 7-item result (independently
+checked by scanning every Condition A reply for the 4 non-Peripherals product names — none
+appear in any reply, correct or wrong). The **single wrong rep**
+(`k060-A-6-24201872`) sits in the 10-rep single-call subset — its raw
+`filter_products({"maxPrice": 59.99})` result correctly contained all 7 items (verified from the
+logged tool result), but the final reply omitted **Gaming Mouse Pad XL** ($19.99 — the cheapest
+item, first by ascending-price order in both the raw 7-item result and the 3-item ground truth),
+stating only the other two: *"Here are the peripherals under $60: • Wireless Mouse Pro ($29.99)
+• Webcam HD 1080p ($59.99)"* — DEF-01's/K-060's own exact mechanism, ground-truth-confirmed
+again, not a rounding or self-contradiction shape.
+
+**Isolated to the true opportunity (single-call-only, no self-correction — the condition K-060's
+own text actually names): 1/10 wrong (10.0%, Wilson 95% CI 1.8-40.4%).**
+
+**Pooled with the backlog's own K-060 disclosure sample (identical prompt, identical `v5` def,
+post-fix verification, n=20, 4 wrong):** 5/50 (10.0%, Wilson 95% CI 4.3-21.4%) — this narrows the
+backlog's own 20% point estimate meaningfully, though **the two samples' own point estimates
+diverge more than expected** (this pass: 3.3% all-shapes / 10.0% isolated-opportunity; backlog:
+20.0%) — reported plainly rather than smoothed over, per this note's own §12.6/§13.2 precedent.
+The two CIs (0.6-16.7% vs. 8.1-41.6%) **do overlap** (a shared 8.1-16.7% range), so this is not a
+clean statistical contradiction the way §12.6's 6/6-vs-41.7% divergence was — but the gap is
+large enough to flag rather than ignore. The most likely explanation, following §12.6's own
+already-diagnosed systemic caveat for this exact model: `config/models.json` pins
+`temperature: 0` for `qwen/qwen3-4b-2507` but carries **no** entry for `mistralai/ministral-3-3b`
+(the `assistant` step's actual pinned model) — this script's own live confirmation (11/11
+identical `minPrice` values in Condition D, §14.5, but visibly varying reply *wording* across
+every condition) is consistent with non-zero-temperature decoding, meaning this exact rate is
+not expected to be stable run-to-run even against byte-identical prompts and code. Whether the
+backlog's own n=20 sample or this pass's n=30 sample is closer to a hypothetical "true" rate
+cannot be determined from either sample alone; the pooled 10.0% (CI 4.3-21.4%) is the best
+combined estimate this note can currently offer.
+
+### 14.3 Result — Conditions B/C (mechanism: category-narrowing complexity, list length/diversity)
+
+**Both conditions came back 15/15 (100%, Wilson 95% CI 79.6-100%) — but this is a much weaker
+result than it looks, because neither condition reliably elicited `filter_products` at all.**
+
+| Cond | `filter_products` (no category) | `query_graph_data` | other | Full-reply correct |
+|---|---|---|---|---|
+| B (under $60, no category, 7-item/3-cat) | 7/15 (46.7%) | 7/15 (46.7%) | 1/15 (a `query_graph_data` + 7× `lookup_product_fact` loop — inefficient, still correct) | 15/15 |
+| C (under $100, no category, 10-item/5-cat) | 2/15 (13.3%) | 13/15 (86.7%) | 0 | 15/15 |
+
+**The `filter_products`-no-category opportunity samples here (n=7, n=2) are too small to test
+the list-length/category-diversity hypothesis via `filter_products` specifically — 0 wrong in
+7+2=9 reps is consistent with, but far too thin to independently confirm, Condition A's own
+low base rate.** What actually happened is a genuine, previously-unflagged finding of its own:
+**tool-selection itself is sensitive to phrasing, independent of the omission defect this pass
+was designed to measure.** "Which peripherals cost less than $X" (A) and "which products cost
+more than $X" (D, §14.5) reliably elicit `filter_products` (100%/73.3%); "what products do you
+have for under/for $X" (B/C) push the model toward `query_graph_data` instead (46.7%/86.7%), more
+so as the price threshold (and therefore, plausibly, the anticipated result-set size) grows. This
+is a tool-selection-layer observation, not this pass's own K-060 mechanism, but worth naming for
+whoever next touches tool-description wording or the NL-query golden set.
+
+**A related, secondary finding: `query_graph_data` was 100% correct on this plain
+price-threshold-only shape (7/7 in B, 13/13 in C, all 20 pooled — every raw result verified to
+contain the exact right item set), in direct contrast to §11.3's own finding that
+`query_graph_data` failed both times it was tested on the compound "peripherals under $60"
+phrasing (the same price threshold, but with a category folded into the same natural-language
+question).** This suggests §11.3's `query_graph_data` weakness may be specific to translating a
+**compound** category+price predicate into the querygen DSL, not price-only filtering — narrower
+than §11.3's own framing left it. Not scored into this pass's own headline rate (out of scope —
+K-060 is about `filter_products`'s own synthesis, not `query_graph_data`'s DSL accuracy) but
+worth flagging as a candidate `nlq_golden_set.jsonl` coverage note for whoever next expands it.
+
+### 14.4 Mechanism assessment — confirmed, low base rate, protective self-correction; item-level correlation genuinely unclear
+
+**The mechanism itself is real and reproduces exactly as K-060 describes it**: a single
+`filter_products` call with no `category`, a genuinely-mixed multi-category raw result, and a
+final reply that silently omits one item the raw tool result actually contains — not a rounding
+error, not a self-contradiction, not a fabrication of an unretrieved fact. But three things this
+pass adds that were not previously known:
+
+1. **The opportunity for this defect to manifest is itself much rarer than "0/20 ever pass
+   `category`" implied.** In this fresh sample, the model spontaneously self-corrects via a
+   second, category-scoped call in 66.7% of Condition A reps, and that self-correction is 100%
+   protective (§14.2). The true "at risk" population is the ~1-in-3 single-call reps, not every
+   no-category call.
+2. **Within that isolated at-risk population, the rate (10%, CI 1.8-40.4%; pooled with the
+   backlog's own sample, 10.0%, CI 4.3-21.4%) is materially lower than the 20% the backlog's own
+   n=20 disclosure implied**, though not statistically distinguishable from it at either sample's
+   own n (overlapping CIs) — most plausibly explained by `ministral-3-3b`'s unpinned decoding
+   temperature (same already-diagnosed caveat as §12.6, reconfirmed here for a different defect).
+3. **Item-level correlation (position / category diversity / list length) is genuinely unclear
+   at this n — stated honestly rather than oversold.** This pass's own single confirmed
+   occurrence dropped the cheapest, first-by-price item from both the raw 7-item result and the
+   3-item ground truth — consistent with a "first/cheapest-item" vulnerability, but n=1 cannot
+   support that as a finding, only as a hypothesis worth a future pass's attention if a larger
+   powered sample of the isolated single-call condition becomes available. Conditions B/C's own
+   `filter_products` opportunity samples (n=7, n=2) are too small to say anything about whether a
+   longer list or more category diversity raises or lowers the omission rate — 0 wrong in 9
+   combined reps is a promising but statistically uninformative data point, not a finding.
+
+### 14.5 `minPrice` "more than $X" regression fold-in (Condition D) — closes the impl3.md gap
+
+**11/11 (100%, Wilson 95% CI 74.1-100%) `filter_products` dispatches used `minPrice: 150.01`** —
+exactly the `X + 0.01` inclusive-bound value the K-057 fix's `minPrice` parameter description
+specifies (`tools.py:467-474`), the first live confirmation of that direction (impl3.md's own
+flagged gap: the shipped `minPrice` wording was added by analogy to the measured `maxPrice` fix
+but never itself live-regression-tested). No boundary-rounding error occurred in any of the 11
+dispatches. **Full-reply correctness: 15/15 (100%, Wilson 95% CI 79.6-100%)** across both tool
+paths (11 `filter_products`, 4 `query_graph_data` — the latter's own raw results independently
+verified correct in §14.3). **The `minPrice`/"more than $X" gap impl3.md flagged as untested is
+now closed: the shipped inclusive-bound guidance holds live, symmetric with `maxPrice`'s own
+already-confirmed 100% (HISTORY.md, 2026-08-30 K-057 fix entry).**
+
+### 14.6 The payload-restructuring lever — assessed, not live-tested this pass, and why
+
+**Not run as a live A/B in this pass — the base rate this pass itself measured makes a live
+payload experiment here underpowered by construction, not merely expensive.** The `Owner` note's
+own candidate (an explicit per-item index/flag, or a restructured JSON shape, as an alternative
+lever to wording) is worth checking, but doing so credibly requires isolating the single-call,
+no-category opportunity — which, per §14.2, occurs spontaneously in only ~33% of no-category
+`filter_products` calls (the other ~67% self-correct away before the defect gets a chance to
+fire) — **and** the defect itself now measures at only ~10% (pooled CI 4.3-21.4%) within that
+opportunity. Detecting even a large effect (say, halving the rate) at those two compounding rates
+through the full multi-turn conversation harness this pass used would need on the order of
+150-200 total conversations per payload variant to reach ~50 isolated-opportunity reps each —
+well beyond this pass's own remaining budget, and arguably beyond a single dedicated follow-up
+unit's budget too if driven the same way. Running a live A/B at a smaller, affordable n (e.g.
+n=15-20 per arm through the full conversation harness) would not distinguish a real effect from
+the sampling noise this pass's own §14.2 finding already demonstrates exists at this scale —
+exactly the discipline this note's own §4.2/§8.4/§9.4 exists to enforce (never spend a live-eval
+budget on a comparison it cannot actually resolve).
+
+**A cheaper design, left here for whoever picks this up next, rather than a payload
+experiment attempted badly now:** bypass tool-selection/self-correction variance entirely by
+scripting a **fixed-context, synthesis-only** comparison — construct the exact
+system-prompt-plus-user-question-plus-tool-result message sequence a single-call, no-category
+`filter_products` reply is synthesized from (the raw JSON this pass already captured verbatim in
+`k060_probe_results.jsonl` is a ready template), and drive only the final completion call twice
+per rep — once against the shipped `{"items": [...]}` shape, once against a restructured
+candidate (e.g. `{"items": [{"index": 1, ...}, ...], "count": N}`) — scoring only whether the
+final reply mentions every genuine match. This needs one live completion call per rep instead of
+a full multi-step tool loop (§13.1's own eval script shows the completion-only pattern, ~3-5x
+cheaper per rep than this pass's own ~7s/rep two-tool-call shape), so a well-powered n (40-60 per
+arm) becomes affordable where the full-conversation route is not. **Important caveat for whoever
+runs it:** this isolates the payload-shape variable cleanly, but its absolute rate is not a
+faithful stand-in for the full conversation's own rate (no tool-selection variance, no
+possibility of the self-correction pattern that already protects two-thirds of real
+conversations) — valid for a payload-shape **delta**, not a rate estimate on its own.
+
+### 14.7 Recommendation
+
+1. **No fix — wording or payload — is warranted yet.** The measured, pooled rate (10.0%, Wilson
+   95% CI 4.3-21.4%) is materially lower than K-060's own filed 20% estimate, the defect is
+   already two-thirds self-mitigated by a spontaneous model behavior no current wording asks for
+   or relies on, and two wording attempts have already failed against this same mechanism. Acting
+   now would repeat the exact mistake this note's own standing discipline exists to prevent:
+   guessing a fix shape ahead of a stable rate estimate.
+2. **Do not attempt a third wording iteration** — unchanged from the task brief's own instruction,
+   and reinforced by this pass's own evidence: the mechanism now looks rarer and more
+   self-correcting than filed, which weakens rather than strengthens the case for urgency.
+3. **The payload-restructuring lever is plausible but not yet worth its own follow-up unit** — the
+   observed rate is too low and too uncertain to power a live A/B affordably (§14.6). If the team
+   wants to pursue it, the fixed-context synthesis-only design in §14.6 is the way to do it
+   affordably; running it through the full conversation harness at an affordable n would not
+   resolve anything.
+4. **If anything is worth a cheap follow-up before a fix decision, it is tightening the rate
+   estimate itself, not testing a payload variant against an unstable baseline** — a further
+   n≈30-40 pass at Condition A's own exact prompt (ideally via the §14.6 synthesis-only harness,
+   which incidentally also produces single-call-only reps for free, since there is no tool
+   decision to make) would narrow the pooled CI further and clarify whether 10% or something
+   closer to 20% is the more durable number, before any fix — wording or payload — is designed
+   against it.
+5. **D's `minPrice` regression gap (impl3.md) is closed** — the shipped `X + 0.01` inclusive-bound
+   guidance holds live in the "more than $X" direction at 100% (11/11, CI 74.1-100%), symmetric
+   with `maxPrice`'s own already-confirmed reliability. No action needed.
+6. **The tool-selection-phrasing sensitivity (§14.3) and the narrower `query_graph_data`
+   compound-predicate weakness (§14.3) are both named for completeness, not this pass's own
+   scored question** — worth a mention to whoever next expands `nlq_golden_set.jsonl` coverage
+   or touches tool-description wording, not a standalone follow-up on their own evidence here.
+
+### 14.8 Artifacts
+
+One throwaway script, not part of the shipped test suite, not committed, left in this session's
+scratchpad: `ds_k060_probe.py` (in-process live-harness driver reusing §11.2/§12.1/§13.1's own
+pattern, `K060_N_A`/`K060_N_B`/`K060_N_C`/`K060_N_D` env-parameterized rep counts; results in a
+sibling `k060_probe_results.jsonl`, 75 reps across the four conditions, each with every tool
+call's full untruncated arguments/result and the final reply text). `ws:ds-k060` was
+`GRAPH.DELETE`d after this pass; `ws:acme`/`reference` were never written to and were
+independently re-verified in sync (`verify_salesperson.sh acme`, `verify_catalog.sh`,
+`verify_workflows.sh acme`, all `OK`) before finishing.

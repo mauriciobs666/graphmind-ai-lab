@@ -40,38 +40,62 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🔵 proposed — disclosed during K-057's own fix verification, two wording attempts failed to move it, `docs/HISTORY.md` 2026-08-31)
+### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🟡 in-progress — root-caused at n=75, low base rate, no fix warranted yet, 2026-08-31)
 
 > **Why it exists.** Live-verifying K-057's wording fix (`docs/HISTORY.md` 2026-08-31,
 > `docs/reviews/salesperson-tool-reliability-ml.md` §11) at n=20 found every one of the 4/20
-> remaining wrong replies traced to a third, previously unobserved mechanism, distinct from both
-> mechanisms §11 diagnosed: when `filter_products` is called with no `category` argument (a
-> mixed-category result set), the model sometimes silently drops a genuinely-matching item from
-> its synthesized reply instead of including it — not a rounding error, not a self-contradiction,
-> a synthesis-time omission on an unfiltered result set.
-- **Two independent, reasonable-looking wording attempts already failed to fix this — worth
-  weighing before a third.** A `category`-parameter nudge (encouraging the model to always pass
-  `category` when the customer names one) plus a `systemPrompt` synthesis-time "check every
-  returned item, never drop a match" safety net were live-tested together at n=20: the model
-  still never passed `category` (0/20) and net wrong-reply rate went **up** (30% vs. the shipped
-  fix's own 20%), while also suppressing a multi-call self-correction pattern that had rescued
-  several replies under the plain wording. Reverted, never shipped. Two failed wording attempts
-  is itself evidence this may not be fixable by wording alone.
-- **Owner:** `data-scientist` for a proper root-cause pass before any further wording guess — same
-  discipline this whole investigation thread has applied throughout (never ship/reattempt an
-  unverified mitigation, ml note §4.2/§8.4/§9.4). Worth checking whether `filter_products`'s own
-  synthesis step (not `systemPrompt` wording) is the more reliable lever — e.g. whether the tool
-  could return an explicit per-item flag or a restructured payload less prone to synthesis-time
-  omission — before assuming another wording iteration is the only path.
-- **Risks/RAM:** none — diagnosis first, no graph/schema surface.
-- **Test strategy:** re-run §11's own harness pattern (throwaway workspace, ground-truth
-  instrumented tool registry) isolating no-`category` `filter_products` calls specifically, at a
-  larger n than the n=20 (or n=16 single-call-only) samples so far, to get a tighter rate estimate
-  before root-causing. **Also fold in** (flagged by `analyst`'s K-057 diff review, `docs/reviews/
-  salesperson-tool-reliability-impl3.md`): a "more than $X" probe against `minPrice` — the
-  shipped K-057 fix added symmetric inclusive-bound guidance to `minPrice` by analogy, but only
-  the `maxPrice`/"less than" direction was actually live-regression-tested; whenever this item's
-  own harness is next run is the cheapest place to close that gap.
+> remaining wrong replies traced to a third mechanism, distinct from both §11 diagnosed: when
+> `filter_products` is called with no `category` argument (a mixed-category result set), the model
+> sometimes silently drops a genuinely-matching item from its synthesized reply — not a rounding
+> error, not a self-contradiction, a synthesis-time omission on an unfiltered result set. A
+> larger, isolated diagnosis pass (`ml.md` §14, n=75 across 4 conditions) confirms the mechanism is
+> real and reproduces exactly as filed, but finds it **rarer and more self-mitigated than the
+> original n=4/20 disclosure implied**: the model spontaneously self-corrects via a second,
+> category-scoped `filter_products` call in 66.7% of single-`category`-omitting reps, and that
+> self-correction is 100% protective; within the true at-risk population (the ~1-in-3 reps with no
+> self-correction), the rate is 10.0% (pooled with the original disclosure sample, 5/50, Wilson 95%
+> CI 4.3-21.4% — down from the original 20% point estimate, though the two samples' CIs still
+> overlap, most plausibly because `mistralai/ministral-3-3b` — the pinned `assistant`-step model —
+> has no `temperature` entry in `config/models.json`, unlike `qwen/qwen3-4b-2507`'s pinned `0`, so
+> exact reproducibility run-to-run isn't expected). Item-level mechanism (position/category-
+> diversity/list-length) remains genuinely unclear at this n — the one fresh confirmed occurrence
+> dropped the cheapest, first-by-price item, a hypothesis worth a future pass's attention, not yet
+> a finding.
+- **Two independent, reasonable-looking wording attempts already failed to fix this before the
+  §14 diagnosis pass — still worth weighing before a third.** A `category`-parameter nudge
+  (encouraging the model to always pass `category` when the customer names one) plus a
+  `systemPrompt` synthesis-time "check every returned item, never drop a match" safety net were
+  live-tested together at n=20: the model still never passed `category` (0/20) and net wrong-reply
+  rate went **up** (30% vs. the shipped fix's own 20%), while also suppressing the same
+  self-correction pattern §14 later found to be 100% protective on its own. Reverted, never
+  shipped.
+- **A payload-restructuring lever (an explicit per-item index/flag, or a restructured JSON shape,
+  as an alternative to wording) is plausible but not live-tested — the measured rate is too low
+  and too compounded (33% opportunity × 10% defect) to power a live A/B affordably through the
+  full conversation harness (would need ~150-200 conversations per variant, `ml.md` §14.6).** A
+  cheaper design is specified for whoever picks this up next: a **fixed-context, synthesis-only**
+  comparison that replays a captured single-call, no-category tool result and drives only the
+  final completion twice (shipped payload vs. a restructured candidate) — ~3-5x cheaper per rep,
+  affordable at a well-powered n=40-60/arm, but its absolute rate is a payload-shape **delta**
+  only, not a substitute for the full-conversation rate (no tool-selection/self-correction
+  variance).
+- **Owner:** no fix owner yet — `data-scientist` next if a further rate-tightening pass or the
+  §14.6 synthesis-only payload comparison is picked up; `tdd-engineer`/`coder` only once a fix
+  shape is actually chosen. Per `ml.md` §14.7: acting on a fix now (wording or payload) would
+  repeat this thread's own already-learned lesson (guessing a fix shape ahead of a stable rate
+  estimate) — the rate just narrowed materially and a third wording attempt is explicitly not
+  recommended.
+- **Risks/RAM:** none — diagnosis only so far, no graph/schema surface.
+- **Test strategy:** if picked up again, the cheapest next step is **not** another full-conversation
+  live pass at the isolated condition — `ml.md` §14.6's fixed-context synthesis-only harness design
+  (replays a captured tool result, drives only the final completion) is both cheaper per rep and
+  the right seam for a payload-shape A/B, should one be attempted. A further n≈30-40 full-conversation
+  pass at Condition A's exact prompt would also narrow the pooled CI (currently 4.3-21.4%) if a
+  payload-agnostic rate estimate is wanted first.
+- **Closed, not open — no further action needed:** the `analyst`-flagged `minPrice` "more than $X"
+  regression gap (`docs/reviews/salesperson-tool-reliability-impl3.md`) is now confirmed live at
+  100% (11/11, CI 74.1-100%, `ml.md` §14.5) — the shipped K-057 fix's inclusive-bound guidance
+  holds symmetrically in both price directions.
 
 ### K-061 — `salesperson@v5` sometimes silently duplicates its own current-turn, legitimately-mentioned `add_to_cart` call, inflating a cart line the customer never asked to double (🟡 in-progress — unit-level fix shipped, `analyst`-approved with suggestions and both findings closed; live regression confirmation still the only open item, 2026-08-31)
 
