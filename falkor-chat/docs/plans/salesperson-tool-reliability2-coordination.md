@@ -39,7 +39,7 @@ own BACKLOG entry explicitly asks for a rate estimate before a fix shape is chos
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 | `data-scientist` | `a4bfd0c3e6bcbf81c` | delivered | `docs/reviews/salesperson-tool-reliability-ml.md` §12 | — → — | 184.5k tok / 83 tools |
-| U2 | `tdd-engineer` | — | queued | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | — |
+| U2 | `tdd-engineer` | `a98eb2cd64adc9f5d` | in-flight | `server/falkorchat/executor.py` same-turn write-dedup fix | `analyst` → — | — |
 
 ## Notes
 
