@@ -48,5 +48,7 @@ Both tracks close with `analyst` review of any code diff and a combined live reg
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 (Track A) | `data-scientist` (fresh) | `a6686c8ef000c2ec1` | delivered | K-057 root-cause diagnosis + rate estimate → `docs/reviews/salesperson-tool-reliability-ml.md` §11 | self → accepted (backlog premise falsified; dominant defect is a 50% boundary-rounding error, not orchestration; recommends `systemPrompt` wording fix, follow-up unit needed) | 201k tok / 72 tools |
-| U2 (Track B) | `tdd-engineer` (fresh) | `a057dc6683287232c` | in-flight | K-058 fix: dispatch-time text-presence guard on write-mutating tool calls, TDD + mutation-tested + live regression check | `analyst` → — | — |
-| U3 (Track A follow-up) | TBD | — | queued | K-057 `systemPrompt`/tool-description wording fix per §11.5, `v4`→`v5` | `analyst` → — | — |
+| U2 (Track B) | `tdd-engineer` (fresh) | `a057dc6683287232c` | delivered | K-058 fix: dispatch-time text-presence guard on write-mutating tool calls, TDD + mutation-tested + live regression check (`executor.py`, `test_executor_agent.py`) | `analyst` → pending (U4) | 227k tok / 114 tools |
+| U3 (Track A follow-up) | `coder` (fresh) | `a6bc71a78fc5750b3` | in-flight | K-057 `systemPrompt`/tool-description wording fix per §11.5, `v4`→`v5` (`proof_defs.py`) | `analyst` → pending (U5) | — |
+| U4 (gate, U2) | `analyst` (fresh) | `a1e425dd10e023f9f` | in-flight | Diff review of U2's `executor.py` K-058 guard → `docs/reviews/salesperson-tool-reliability-impl2.md` | self → — | — |
+| U5 (gate, U3) | `analyst` | — | queued | Diff review of U3's `proof_defs.py` K-057 wording fix, once U3 delivers | self → — | — |
