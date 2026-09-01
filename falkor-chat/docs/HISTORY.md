@@ -5,6 +5,34 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-01 — K-035 closed: bare-call argument-key shadowing fixed in `_parse_content_tool_calls`
+
+**What:** K-035 (filed at the K-027 slice A analyst gate, finding M-2) is closed — a bare tool
+call whose *argument object* happens to carry a `name`/`action`/`tool` key (e.g.
+`create_user({"name": "bob"})`) no longer gets mis-parsed as a call literally named after that
+value. Per `architect`'s plan (`docs/plans/bare-call-key-shadowing.md`, candidate 1 of three), the
+fix is a guard in `_parse_content_tool_calls` (`server/falkorchat/llm.py`) that suppresses the
+loose JSON-envelope match (`_normalize_tool_call`) when `content` is itself bare-call-shaped
+(matches `_BARE_CALL_OPEN`), letting `_parse_bare_call_syntax` — already correct for this shape —
+handle it instead. `_BARE_CALL_OPEN`'s definition moved up to sit above `_parse_content_tool_calls`
+(now referenced by two functions), and the function's stale `NOTE (K-035)` docstring/comment was
+rewritten to describe the fixed behavior, including naming the accepted content-wide residual (a
+genuine envelope elsewhere in the same message as an unrelated bare-call-shaped line still falls
+through to text — bounded, safe-side, not an observed real-model shape).
+
+**Tests:** six new offline pins added to `server/tests/test_llm.py`, all driving the public
+`llm.chat(...)` seam — the backlog's three repro rows (shadowing via `name`/`action`/`tool`, each
+pinned to the call's own identifier and full arguments), a genuine three-key envelope regression
+pin (`name` > `action` > `tool` precedence still holds when content is not bare-call-shaped), the
+M-1/K-035 negative-direction interaction (a shadowed bare call with trailing prose still stays
+text, not resurrected via the argument's `name` key), and the accepted residual as a documented
+characterization. Confirmed red-first (failed for the shadowing reason, not a test-authoring
+mistake), green after the fix, and mutation-tested (temporarily reverting just the guard sent the
+three repro-row tests back red for the original reason, confirming they exercise the fix). Full
+offline suite: 2309 passed / 14 deselected before, 2315 passed / 14 deselected after — zero
+regressions, individually re-confirmed for the six existing tests plan §5 names plus the full
+K-027 bare-call section (19 tests).
+
 ## 2026-08-31 — K-061 closed: both same-turn `add_to_cart` self-duplicate mechanisms fixed, `analyst`-approved, and live-confirmed
 
 **What:** K-061 (diagnosed at `ml.md` §12, pooled 5/30, 16.7% Wilson CI 7.3-33.6%) is closed —

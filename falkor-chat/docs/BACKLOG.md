@@ -380,52 +380,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
   flow to confirm the `maxSteps: 24` headroom still covers it.
 
-### K-035 — An argument key named `name`/`action`/`tool` shadows the bare call's own name (🔵 proposed — filed out of the K-027 slice A analyst gate, finding M-2, 2026-07-24)
-
-> **Why it exists.** In `llm._parse_content_tool_calls` the **JSON probe runs before** the bare-call
-> probe, and `_normalize_tool_call` maps `name` / `action` / `tool` loosely. So for a bare call whose
-> *argument object* happens to carry one of those keys, the argument is mistaken for the call
-> envelope and the real call name is never seen:
->
-> | model emits | parsed as |
-> |---|---|
-> | `create_user({"name": "bob"})` | `ToolCall(name='bob', arguments={})` |
-> | `run_tool({"action": "delete"})` | `ToolCall(name='delete', arguments={})` |
-> | `x({"tool": "y", "args": {"a": 1}})` | `ToolCall(name='y', arguments={"a": 1})` |
->
-> Reproduced by `analyst` at the K-027 slice A gate; the three rows above are verbatim from
-> [`docs/reviews/k027-parse-robustness.md`](reviews/k027-parse-robustness.md) **M-2**.
-- **Not currently reachable, and that is the whole risk.** No registered tool declares such a
-  parameter — `post_message` takes `text`/`mentions`, `graphrag_retrieve` takes `query`,
-  `human_handoff` takes `reason` (`server/falkorchat/tools.py`). The premise was verified at the
-  gate and **deferring the fix was judged correct** for a slice whose point was not to widen
-  precedence. It is filed as its own item because the *shape* of the failure is bad, not because the
-  likelihood is high: it manufactures a tool call **named after a user-supplied value**, so it fails
-  **silently and misleadingly** — `executor._handle_tool_call`'s AC-6 check rejects `'bob'` as an
-  ungranted tool, burns a re-prompt iteration, and tells the model its own argument is not a tool.
-  That trace is close to undebuggable, and a bullet under "candidate follow-ups, small" would not
-  have surfaced at the moment someone registers `create_user(name)`.
-- **Tripwire in place (do not remove).** `server/falkorchat/llm.py` carries a comment at the
-  probe-order site naming this item, because that is where the next author will be looking. **Read
-  this item before registering any tool with a `name`, `action` or `tool` parameter.**
-- **Owner:** **`architect`** to pick the remedy (it is a precedence decision, not a bug fix), then
-  **`tdd-engineer`**. Candidates, cheapest first: (1) in `_normalize_tool_call`, skip the loose
-  `name`/`action`/`tool` mapping when the surrounding content also matches `_BARE_CALL_OPEN` — a
-  partial hardening available today; (2) run the bare-call probe **first**, which reorders the
-  content fallback and needs its own regression pass over the JSON shapes; (3) pass the granted tool
-  names down as a **recognition filter** — this also closes most of M-1's residual and the
-  `Summary ({"a": 1})` class, but it is a real layering decision (`llm.py`'s note that name
-  validation belongs to the agent loop is deliberate, and worth keeping unless consciously reversed).
-  Open question 3 of the K-027 gate review is exactly this choice.
-- **Risks/RAM (rule 6):** none — parse layer only, no node type, index, property or vector dimension.
-  No Cypher, no schema, no script.
-- **Test strategy:** offline pins in `server/tests/test_llm.py` driving the public `llm.chat(...)`
-  seam (never the private probes). Pin all three rows in the table above to the **call's own**
-  identifier; pin that a genuine `{"name": …, "arguments": …}` envelope with no surrounding call
-  expression still parses as a call (the shape this must not regress); and pin the negative
-  direction — an argument object carrying `name` must not resurrect a call the M-1 final-content rule
-  rejected.
-
 ### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations (🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29)
 
 > **Why it exists.** Pass 3 fixed M1 (the destructive every-tick `renderWaitingForm` rebuild) and,

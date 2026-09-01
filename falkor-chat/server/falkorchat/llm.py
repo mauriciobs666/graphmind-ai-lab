@@ -271,6 +271,16 @@ def _parse_native_tool_calls(raw: Any) -> list[ToolCall]:
     return calls
 
 
+# A call expression opening a line: optional indentation, `name(`. MULTILINE `^` is the
+# first false-positive guard — prose *about* a tool ("I will call post_message(...)")
+# never starts its line with the identifier, so it is never mistaken for a call. Leading
+# whitespace is deliberately allowed, so an **indented** call is still recovered, as is
+# `name ({…})` with a space or tab *between* the identifier and the paren; markdown
+# list markers (`- name(…)`, `1. name(…)`) are not, because the marker precedes the
+# identifier.
+_BARE_CALL_OPEN = re.compile(r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(", re.MULTILINE)
+
+
 def _parse_content_tool_calls(content: Any) -> list[ToolCall]:
     """Fallback: detect a tool call emitted inside `content` (Q3, Qwen3).
 
@@ -281,24 +291,34 @@ def _parse_content_tool_calls(content: Any) -> list[ToolCall]:
     **Bare call syntax second** (K-027 slice A): `name({...})` written as an
     expression — see `_parse_bare_call_syntax`. Plain prose (no recognizable
     tool-call keys and no call expression) yields no calls, so it stays text.
+
+    **FIXED (K-035):** the JSON probe's loose `name`/`action`/`tool` envelope match is
+    suppressed when `content` is itself bare-call-shaped (matches `_BARE_CALL_OPEN`) —
+    an *argument* object whose own keys include `name`/`action`/`tool` no longer
+    shadows the surrounding call's real identifier. `create_user({"name": "bob"})` now
+    falls through to the bare-call probe, which recovers `ToolCall(name='create_user',
+    arguments={"name": "bob"})` instead of a call manufactured from the argument value.
+    **Residual, by design** (K-035 plan §3): the guard is content-wide, not
+    span-correlated with the specific object `extract_json_object` found — a message
+    combining a genuine envelope with an *unrelated* bare-call-shaped line elsewhere
+    still suppresses the envelope, and the bare-call probe then finds no valid call, so
+    the whole thing falls through to text. Bounded and safe-side (text over a wrongly
+    dispatched call); not an observed real-model shape.
     """
-    # NOTE (K-035): the JSON probe running first means an *argument* object whose keys
-    # include `name`/`action`/`tool` shadows the surrounding call name —
-    # `create_user({"name": "bob"})` parses as a call named `bob`, and the bare-call
-    # probe below never sees it. Harmless only while no granted tool declares such a
-    # parameter (today: `text`/`mentions`/`query`/`reason`). **Read K-035 in
-    # `docs/BACKLOG.md` before registering a tool with a `name`, `action` or `tool`
-    # argument** — the failure is silent and manufactures a call named after a
-    # user-supplied value.
     obj = extract_json_object(content)
     if obj is not None:
         if isinstance(obj.get("tool_calls"), list):
             calls = _parse_native_tool_calls(obj["tool_calls"])
             if calls:
                 return calls
-        call = _normalize_tool_call(obj)
-        if call:
-            return [call]
+        # K-035: an argument object's own name/action/tool key must not be mistaken
+        # for the call envelope when the content is itself a bare `name(...)` call
+        # expression — the bare-call probe below is what recovers the call's real
+        # identifier in that shape.
+        if not (isinstance(content, str) and _BARE_CALL_OPEN.search(content)):
+            call = _normalize_tool_call(obj)
+            if call:
+                return [call]
     return _parse_bare_call_syntax(content)
 
 
@@ -333,16 +353,6 @@ def _coerce_arguments(raw: Any) -> dict[str, Any]:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
-
-
-# A call expression opening a line: optional indentation, `name(`. MULTILINE `^` is the
-# first false-positive guard — prose *about* a tool ("I will call post_message(...)")
-# never starts its line with the identifier, so it is never mistaken for a call. Leading
-# whitespace is deliberately allowed, so an **indented** call is still recovered, as is
-# `name ({…})` with a space or tab *between* the identifier and the paren; markdown
-# list markers (`- name(…)`, `1. name(…)`) are not, because the marker precedes the
-# identifier.
-_BARE_CALL_OPEN = re.compile(r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(", re.MULTILINE)
 
 
 def _parse_bare_call_syntax(content: Any) -> list[ToolCall]:

@@ -597,6 +597,87 @@ def test_chat_keeps_a_bare_empty_tool_calls_envelope_as_text():
     assert result.text == prose
 
 
+# --- chat(): K-035 — an argument key must not shadow the bare call's own name ---
+
+
+def test_chat_recovers_a_bare_call_whose_argument_key_would_shadow_via_name():
+    result = _chat_content('create_user({"name": "bob"})')
+
+    assert result.is_tool_call
+    call = result.tool_calls[0]
+    assert call.name == "create_user"
+    assert call.arguments == {"name": "bob"}
+
+
+def test_chat_recovers_a_bare_call_whose_argument_key_would_shadow_via_action():
+    result = _chat_content('run_tool({"action": "delete"})')
+
+    assert result.is_tool_call
+    call = result.tool_calls[0]
+    assert call.name == "run_tool"
+    assert call.arguments == {"action": "delete"}
+
+
+def test_chat_recovers_a_bare_call_whose_argument_key_would_shadow_via_tool():
+    result = _chat_content('x({"tool": "y", "args": {"a": 1}})')
+
+    assert result.is_tool_call
+    call = result.tool_calls[0]
+    assert call.name == "x"
+    assert call.arguments == {"tool": "y", "args": {"a": 1}}
+
+
+def test_chat_still_parses_a_genuine_envelope_carrying_all_three_shadow_keys():
+    # Not bare-call-shaped (opens with `{`, not `identifier(`) — the K-035 guard
+    # must not suppress this recognized envelope, and existing name > action > tool
+    # precedence (_normalize_tool_call) must still pick `name`.
+    payload = json.dumps(
+        {
+            "name": "graphrag_retrieve",
+            "action": "ignored_action",
+            "tool": "ignored_tool",
+            "arguments": {"query": "billing"},
+        }
+    )
+    message = {"role": "assistant", "content": payload}
+    fake_transport, _ = _chat_transport(message)
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", transport=fake_transport)
+
+    result = llm.chat([{"role": "user", "content": "help"}], _TOOLS)
+
+    assert result.is_tool_call
+    call = result.tool_calls[0]
+    assert call.name == "graphrag_retrieve"
+    assert call.arguments == {"query": "billing"}
+
+
+def test_chat_keeps_a_shadowed_bare_call_with_trailing_prose_as_text():
+    # The K-035 guard correctly routes this to the bare-call probe (the call opens
+    # its line), but the bare-call probe's own M-1 rule then rejects it — trailing
+    # prose after the call means it was being narrated, not made. The argument's
+    # `name` key must not let the JSON envelope path resurrect it instead.
+    prose = 'create_user({"name": "bob"})\nI did this because the user asked.'
+    result = _chat_content(prose)
+
+    assert not result.is_tool_call
+    assert result.text == prose
+
+
+def test_chat_drops_a_genuine_envelope_when_unrelated_trailing_text_looks_bare_call_shaped():
+    # Residual, by design (K-035 plan §3): the guard is content-wide, not
+    # span-correlated with the specific object `extract_json_object` found. An
+    # unrelated bare-call-shaped line elsewhere in the same message suppresses a
+    # genuine envelope too. Not an observed real-model shape; documented rather
+    # than closed.
+    prose = (
+        '{"name": "graphrag_retrieve", "arguments": {"query": "billing"}}\nfoo(bar)'
+    )
+    result = _chat_content(prose)
+
+    assert not result.is_tool_call
+    assert result.text == prose
+
+
 def test_chat_prefers_native_tool_calls_over_a_bare_call_in_content():
     # Precedence is unchanged: the structured field stays authoritative and the
     # content is returned as text alongside it.
