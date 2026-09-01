@@ -1,6 +1,6 @@
 # Doc-reference-convention — `manuals/` + collision-rule-5 gloss + coordination-doc authorship — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-005 (`claude/tico/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-005 (`claude/tico/kaizen/plan.md`)
 
 ## Goal
 
@@ -41,7 +41,9 @@ content to the same owned document — batch them rather than splitting into fur
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 | `architect` | `a82a66991518c04b4` | accepted | `docs/plans/doc-reference-convention.md` (v1.5.1) · `docs/reviews/doc-reference-convention.md` Part IV (§21-30) | `analyst` (`af1ce8bafad36ea77`) → APPROVE (recheck §30, all 3 findings fixed correctly) | 132.4k+161.5k tok, 38+25 tools (architect) · 132.6k+146.3k tok, 47+12 tools (analyst) |
-| U2 | `tico` | — | queued | `claude/tico/kaizen/{plan,history}.md` K-005 closed | none → — | — |
+| U2 | `tico` | `af561bb521b420750` | accepted | `claude/tico/kaizen/{plan,history}.md` K-005 closed, commit `50afb1c` | none → — | 60.9k tok, 10 tools |
+
+**Both units delivered and committed (`80ab320`, `50afb1c`). Coordination closed.**
 
 U2 depends on U1's gated, committed result (it cites the landed change). Below the doc-only
 ceremony floor for most tasks, but this crosses the coordination-doc threshold because U1 carries
