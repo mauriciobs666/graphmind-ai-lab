@@ -2,6 +2,76 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-01 — Commit-scope gap closed; mandatory session-close duty; tico becomes a docs-only coordinator
+- **Incident that triggered this:** the stakeholder reported tico refusing to commit a consulted
+  specialist's returned artifact — correct behavior by the letter of the prompt (the 2026-08-29
+  consult widening extended *who* tico could call to the full roster but explicitly left
+  commit-authority scope untouched, per that entry's own "Not changed" note below), but a real gap:
+  a consult with `architect`/`graph-dba`/`data-scientist`/`security-expert`/`devops` had no path to
+  ever become committable, only `qa-engineer`/`analyst` under Mode 3 did.
+- **Fix 1 — commit-authority (b) generalized.** `tico.md`'s Guardrails and `claude/AGENTS.md`'s
+  "Git-commit authority" both widened: the returned artifact of a review-shaped consult tico
+  itself called is committable regardless of *which* roster agent produced it, once tico has read
+  and confirmed it fits — no longer limited to Mode 3's qa-engineer/analyst case. Also generalized
+  the "Proactive specialist consultation" review-shaped bullet to name that some specialists
+  (`security-expert`, `qa-engineer`, `analyst`) hand back their own separate written deliverable
+  rather than an inline finding to fold in — that's the case this commit grant covers.
+- **Fix 2 — session close is now a mandatory duty, not a courtesy.** Direct stakeholder correction
+  mid-session ("this is not something tico would do as a favor, it is HIS responsibility"): tico's
+  Guardrails gained a new bullet, "Session close is your responsibility, not an offer" — before
+  ending any session, verify (don't assume) everything in its remit is committed, re-running the
+  concurrent-write `git status` check from `claude/AGENTS.md` first, and report plainly anything
+  left dirty that isn't tico's to commit. Applies in both interactive and subagent-report closes.
+- **Fix 3 — tico becomes a coordinator, scoped to work that never touches code (major).** Direct
+  stakeholder ruling, reversing the "tico is never a second coordinator" line held since
+  2026-07-30 and reaffirmed 2026-08-29: *"tico IS a coordinator but doesn't touch source code, only
+  requirements and plans."* Three follow-up questions (`AskUserQuestion`) settled the exact shape:
+  (1) tico may sequence/gate **any** multi-unit chain that never touches source/tests/config — not
+  just the requirements→plan handoff; (2) the hand-off line to `teco` is **absolute and immediate**
+  — the instant any unit would need `coder`/`tdd-engineer`/`frontend-engineer`, tico hands the
+  *whole remaining chain* to `teco`, never coordinates a chain it knows up front will need one;
+  (3) tico gets the **same ledger mechanism** `teco` uses (`docs/plans/<slug>-coordination.md`,
+  same table shape/status vocabulary/required-at-3-units-or-a-gate threshold), not a lighter one.
+  - **New section**, "Coordinating a docs-only chain" (`tico.md`): the boundary, the ledger
+    convention, dispatch/gate/integrate discipline (mirrors `teco`'s mechanics, docs-scoped, not
+    duplicated verbatim), the mid-chain handoff protocol, and the milestone-close archival note
+    (kept **`teco`'s** mechanical job even for a chain tico ran start-to-finish — one flip-owner,
+    no second write-guard needing the carve-out).
+  - **Guardrails rewritten:** the old absolute "sequencing/gating/chaining is always teco's job"
+    line is now conditional on touching code — the never-negotiable line is narrower and harder:
+    never `coder`/`tdd-engineer`/`frontend-engineer` under any name, and never a chain known
+    up front to need one.
+  - **Commit authority gained a 4th case (d):** the returned deliverable of a unit tico is
+    actively coordinating under its own docs-only coordination, once checked against its
+    done-condition, by explicit path — mirrors `teco`'s integrator grant, narrower in scope.
+  - **Write/Edit guard widened:** `guard-tico-doc-writes.sh`'s allowlist gained
+    `docs/plans/*-coordination.md` (doubled glob) — tico's own coordination ledger, never a plan
+    itself (still `architect`'s to write).
+  - **`teco.md` updated symmetrically:** a new routing-table row (a docs-only goal routes to
+    `tico`, not `teco`, since tico now coordinates that scope itself) and a Handoff-contracts note
+    that an existing tico-authored coordination doc is `teco`'s state of record to resume from,
+    same as one `teco` opened itself — reusing `teco`'s existing "coordination doc is state of
+    record" step-1 mechanic rather than inventing a new resume path.
+  - **`claude/README.md`** (tico row, teco cross-reference) and **`claude/AGENTS.md`** (roster
+    line, "Git-commit authority" section) updated in the same change.
+  - **Subagent degradation:** a new bullet in "If you are invoked as a subagent anyway" — a
+    docs-only coordination degrades the same way `teco`'s own subagent behavior does: a mid-run
+    fork returns as a question in the final report instead of a live pause.
+- **Not done here:** the formal `docs/plans/doc-reference-convention.md` spec (owner: `architect`)
+  still doesn't document tico's coordination-ledger use of the `-coordination` role or the
+  shared-ownership norm for a slug whose coordination doc changes hands between tico and teco —
+  root `AGENTS.md`'s owner-by-kind table was deliberately left unchanged (teco keeps the
+  archived-flip regardless of who ran the chain, sidestepping the need for a table edit), but the
+  formal spec catching up is the same class of follow-up as tico's existing K-005 item. Folded
+  into K-005 rather than opening a near-duplicate (see `plan.md`).
+- **Verified:** `bash claude/scripts/audit-team.sh` — see the same-day run recorded once, below.
+- **Plan items:** K-012 rewritten in place (its "decline all sequencing" premise is now false —
+  narrowed to "decline code-touching sequencing, still points at teco"); K-013 and K-014 opened
+  for live e2e validation of the coordination mechanism and the mid-chain handoff, per this
+  team's validate-by-running discipline (K-001/K-004/K-006/K-010/K-011 precedent); K-010's
+  proposed change amended to also exercise the widened (b) grant with a non-qa/analyst roster
+  member. K-005 extended (see above) rather than duplicated.
+
 ## 2026-08-29 — Proactive specialist consultation: initiate + multi-turn, superseding the Mode-3 offer
 - **What:** designed and implemented by `cobb` from `claude/docs/requirements/
   tico-specialist-collaboration.md` (Ready for design). Full design rationale, the exact

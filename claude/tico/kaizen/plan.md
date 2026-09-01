@@ -13,9 +13,11 @@
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
 | K-005 | 2026-07-29 | low | 🔵 | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
-| K-010 | 2026-08-29 | high | 🔵 | Live e2e spin of a proactive review-shaped consult (announce-then-proceed, no acceptance wait) |
+| K-010 | 2026-08-29 | high | 🔵 | Live e2e spin of a proactive review-shaped consult (announce-then-proceed, no acceptance wait), including one non-qa/analyst roster member returning its own artifact |
 | K-011 | 2026-08-29 | high | 🔵 | Live e2e spin of a fast-tracked direct Q&A + multi-turn follow-up via `SendMessage` |
-| K-012 | 2026-08-29 | medium | 🔵 | Live check that a consult declines `coder`/`tdd-engineer`/`frontend-engineer` and multi-unit sequencing, pointing at `teco` |
+| K-012 | 2026-08-29 | medium | 🔵 | Live check of the code/docs coordination boundary — tico still declines `coder`/`tdd-engineer`/`frontend-engineer` and any chain known to need one |
+| K-013 | 2026-09-01 | high | 🔵 | Live e2e spin of a docs-only coordination (ledger open, multi-unit sequencing, review gates, commit case (d)) |
+| K-014 | 2026-09-01 | high | 🔵 | Live check of a mid-chain handoff to `teco` when a code-shaped need surfaces — coordination doc becomes teco's state of record |
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
@@ -38,12 +40,12 @@
 - **Proposed change:** run `claude --agent tico` once asking it to explain a real project aspect (verify: grounded in actual docs/code, plain-language, light-suggestion framing, inline Mermaid when it fits) and once asking it to write a first real manual end-to-end (verify: `docs/manuals/<slug>.md` created with the header block, Mermaid used only where it earns its keep, guard hook passes the write silently, commit-as-you-go holds, **the offered verification-pass bullet actually fires and correctly spawns `qa-engineer`/`analyst` via `Agent` on acceptance**). Also worth one delegated (subagent) invocation of the Mode 3 fallback to see it complete in one pass from a self-contained brief.
 - **Notes:** added when Modes 2/3 were introduced (2026-07-29); do the interview e2e (K-001) and this one independently — different mode, different failure surface.
 
-### K-005 — Formal doc-reference-convention update for `manuals/`, and a collision-rule-5 gloss
+### K-005 — Formal doc-reference-convention update for `manuals/`, a collision-rule-5 gloss, and tico's coordination-doc role
 - **Status:** 🔵 proposed
 - **Priority:** low
 - **Rationale:** root `AGENTS.md` was extended directly with the new `manuals/` kind (needed immediately for tico's new capability), but the formal, heavily-reviewed spec at `docs/plans/doc-reference-convention.md` (Owner: `architect`, Status: active, Tracks: C-322) still doesn't mention it. That document is architect's, not cobb's, to extend with a proper versioned changelog entry.
-- **Proposed change:** an `architect` pass adding (a) a `manuals/` mention to the convention plan (changelog entry, any affected checks/tables) — purely additive, doesn't reopen any existing ruling (D1/D4/D6 etc.); and (b) a gloss on collision rule 5's "approved, gated, or executed against" test, from a 2026-08-20 kaizen distillation finding (`tico/kaizen/history.md`, 2026-08-21 entry): a document reaching its approval **gate** alone (e.g. `Status: Ready for design`) does not by itself force a successor document if nothing downstream has actually *executed* against the specific content being revised — `docs/requirements/generic-cypher-mcp2.md`'s own 2026-08-20 Decision-log entry and `docs/plans/generic-cypher-mcp2.md`'s `T1` precedent paragraph both establish this reading in practice, but the rule's literal disjunctive text doesn't yet say so, so a future agent reading it cold could misapply it.
-- **Notes:** not blocking — root `AGENTS.md` is what's actually enforced/read every session; this is closing the paper trail, not fixing a behavior gap. Both sub-items are the same underlying job (an architect pass adding clarifying content to the same owned document) — batch them rather than splitting into two K-items.
+- **Proposed change:** an `architect` pass adding (a) a `manuals/` mention to the convention plan (changelog entry, any affected checks/tables) — purely additive, doesn't reopen any existing ruling (D1/D4/D6 etc.); (b) a gloss on collision rule 5's "approved, gated, or executed against" test, from a 2026-08-20 kaizen distillation finding (`tico/kaizen/history.md`, 2026-08-21 entry): a document reaching its approval **gate** alone (e.g. `Status: Ready for design`) does not by itself force a successor document if nothing downstream has actually *executed* against the specific content being revised — `docs/requirements/generic-cypher-mcp2.md`'s own 2026-08-20 Decision-log entry and `docs/plans/generic-cypher-mcp2.md`'s `T1` precedent paragraph both establish this reading in practice, but the rule's literal disjunctive text doesn't yet say so, so a future agent reading it cold could misapply it; and (c), new 2026-09-01: a note that `plans/<slug>-coordination.md` may now be authored/extended by either `tico` (docs-only chains) or `teco` (any chain touching code), with the archived-flip staying `teco`'s regardless of authorship — root `AGENTS.md`'s owner-by-kind table was deliberately left textually unchanged for this (the existing `teco` row already covers it without an edit), but the formal spec doesn't yet explain *why* a `tico`-authored coordination doc is still `teco`'s to flip.
+- **Notes:** not blocking — root `AGENTS.md` is what's actually enforced/read every session; this is closing the paper trail, not fixing a behavior gap. All three sub-items are the same underlying job (an architect pass adding clarifying content to the same owned document) — batch them rather than splitting into further K-items.
 
 ### K-006 — Live e2e spin of the demo-environment delegation
 - **Status:** 🔵 proposed
@@ -85,21 +87,64 @@
   crash. Also worth confirming the missing-`subagent_type` guard (`guard-tico-agent-dispatch.sh`)
   actually escalates on a real malformed dispatch, not just the direct hook test `cobb` ran.
 
-### K-012 — Live check of the roster/boundary refusal
+### K-012 — Live check of the code/docs coordination boundary
 - **Status:** 🔵 proposed
 - **Priority:** medium
-- **Rationale:** AC-7's decline behavior (asked to consult `coder`/`tdd-engineer`/
-  `frontend-engineer`, or to sequence/gate multiple delegated units) is easy to get right in
-  isolation and easy to erode later as the consult mechanism gets used more — worth one concrete
-  check now that it's shipped, rather than assuming the prompt text alone is sufficient.
-- **Proposed change:** in a live session, ask tico to "have `coder` fix X" and, separately, to
-  "get `analyst` and `qa-engineer` to work through this in sequence" — confirm tico declines both
-  and points at `teco`, rather than reinterpreting either as a single-topic consult it's allowed
-  to run.
-- **Notes:** low cost, quick to run — bundle with K-010 or K-011's session rather than spinning up
-  a fourth session just for this.
+- **Rationale:** since 2026-09-01 tico coordinates its own docs-only multi-unit chains
+  (ledger-tracked, same mechanism class as `teco`'s) — the original AC-7 premise (decline ALL
+  sequencing) no longer holds. What must still hold, and is easy to erode as the coordination
+  mechanism gets used: tico still never dispatches `coder`/`tdd-engineer`/`frontend-engineer`
+  under any name, and hands off the *whole* chain to `teco` the instant any unit would need one —
+  worth a concrete live check now that the boundary moved, rather than assuming the prompt text
+  alone holds it.
+- **Proposed change:** in a live session, ask tico to "have `coder` fix X" (confirm it still
+  declines and points at `teco`) and, separately, walk it through a genuinely docs-only
+  multi-unit chain — confirm it now runs that itself, ledger-tracked (this overlaps K-013, run
+  together) — then introduce a code-shaped need mid-chain and confirm tico stops and hands the
+  *whole remaining chain* to `teco` (K-014) rather than dispatching an implementer itself or
+  quietly absorbing the code unit into its own coordination.
+- **Notes:** bundle with K-013/K-014's session rather than spinning up a separate one.
+
+### K-013 — Live e2e spin of a docs-only coordination
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Rationale:** the whole coordination mechanism (2026-09-01) is unexercised — does the ledger
+  actually open at the right threshold, does dispatch/gate/integrate discipline hold under a real
+  multi-unit chain, and does the widened commit case (d) actually fire on a verified unit
+  deliverable.
+- **Proposed change:** in a real `claude --agent tico` session, run a genuine docs-only chain to
+  completion — e.g. a requirements interview → `architect` plan → `analyst` review of that plan →
+  a revision round. Verify: the ledger opens once the 3-units-or-a-gate threshold is crossed (not
+  before), each dispatch carries a self-contained brief and records the returned `agentId`, the
+  review gate actually routes to `analyst`, each verified deliverable gets committed under case
+  (d), and the ledger reads as the resumable state (not tico's context) if the session were
+  interrupted.
+- **Notes:** run together with K-012/K-014 — same session, different checkpoints.
+
+### K-014 — Live check of a mid-chain handoff to `teco`
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Rationale:** the hand-off protocol (coordination doc becomes `teco`'s state of record) reuses
+  `teco`'s existing step-1 "read and reconcile an existing coordination doc" mechanic, but that
+  reuse is untested from tico's side — does tico's summary in the handoff actually give `teco`
+  enough to resume without re-spending already-delivered units, and does `teco` correctly treat
+  a tico-authored ledger as authoritative rather than re-deriving state from scratch.
+- **Proposed change:** mid-way through K-013's chain, introduce a need that would require `coder`
+  (e.g. the plan turns out to need a small implementation spike to validate an approach). Confirm
+  tico stops, states the situation plainly, and hands off; then start a `teco` session on the same
+  slug and confirm it reads the existing `docs/plans/<slug>-coordination.md` as state of record
+  per its own step 1, rather than restarting the decomposition.
+- **Notes:** the highest-risk item of the three new ones — a silent re-spend of already-delivered
+  work would be a correctness failure, not a crash.
 
 ## Parking lot / ideas
+- **Prompt weight crossed the audit's advisory threshold (2026-09-01): 4,344 → 5,397 w.** The
+  docs-only coordination feature is the whole delta — a real new capability, not duplication, so
+  no immediate compression is warranted. But this file was explicitly floored at "~3,450–3,500 w
+  with every rule intact" by the 2026-08-24 C2 pass before the consult feature (K-010/K-011/K-012)
+  pushed it to 4,344 w, and this change pushes it further past `audit-team.sh`'s 2,500 w advisory
+  line. Worth a dedicated compression pass once the new mechanism has seen live use (K-013/K-014)
+  and any dead prose in it is identifiable — same discipline as `teco`'s own K-016, not before.
 - **`tico.md`'s archived-flip ownership over-claims against root `AGENTS.md` (pre-existing; found by `cobb`'s C2 lint, not introduced by it).** Mode 3 states "You are this kind's owner — you perform that flip yourself, on the same evidence basis as any other doc kind." Root `AGENTS.md` assigns `archived` to **`teco`, at milestone close** (its write guard auto-allows the mechanical one-token edit) and routes only the *non-mechanical* archived flips to the by-kind owner. Root `AGENTS.md` wins — it is the convention's home and explicitly carves the mechanical case out. `tico.md` cites the right table and states the conclusion absolutely. Proposed rewrite: *"You are this kind's owner: the `superseded` flip is yours, as is any `archived` flip that needs judgment — the mechanical archived flip at milestone close is `teco`'s (root `AGENTS.md`)."* Left out of C2 deliberately: it is an authority correction, not a compression, and belongs under its own gate.
 - **Prompt-quality lint (2026-07-29, authoring pass over the Mode 2/3 addition):** clean on contradiction, ambiguity, persona, and composition (root `AGENTS.md`'s new `manuals/` convention and tico.md agree, no restatement). Two minors, not acted on: (a) **cognitive load** — the prompt grew 98→152 lines adding two modes; still followable in one pass today, but if it grows further, split Mode 2/3's craft guidance into an on-demand skill rather than keep inlining. (b) **coverage** — no explicit guidance for "a new manual would overlap an existing one" or "researching a manual surfaces what looks like an actual bug" (vs. a docs gap); low-value to prescribe pre-emptively, revisit if either happens in practice.
 - **Existing requirements docs still carry the pre-2026-07-27 unbolded status line** — do **not** hand-normalise them mid-interview. The one-time backfill across all active feature documents is step 3 of `docs/plans/doc-reference-convention.md` (owner: `coder`, whose writes aren't doc-guarded); after it lands, `tico` only ever writes the new form (noted 2026-07-27).

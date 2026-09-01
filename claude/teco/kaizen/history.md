@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-01 — Symmetric update for tico's new docs-only coordination capability
+- **What:** small, targeted additions (not a rewrite) so `teco` recognizes the new boundary from
+  its own side. Full design and rationale live in `tico/kaizen/history.md`'s 2026-09-01 entry —
+  not restated here. Two edits:
+  1. **Routing table** gained a new row: a goal that decomposes entirely into
+     requirements/plan/review work (no unit ever touches source/tests/config) now routes to
+     "pause → user, recommend `tico`" instead of straight to `teco` — tico coordinates that scope
+     itself since 2026-09-01.
+  2. **Handoff contracts**, tico bullet: noted that tico may now arrive having already run part of
+     a docs-only coordination and handed off mid-chain — its `docs/plans/<slug>-coordination.md`
+     ledger is `teco`'s state of record for that slug, exactly like one `teco` opened itself. No
+     new mechanic needed: step 1's existing "a coordination doc for this slug is the state of
+     record, read and reconcile it" already covers a tico-authored ledger without modification.
+- **Why:** direct consequence of tico's coordinator capability — `teco` needs to know when to
+  defer at intake and how to resume a chain tico started, or the two agents silently duplicate or
+  drop work on the same slug.
+- **Not changed:** everything else — decomposition, dispatch, the ledger format/thresholds, the
+  archived-flip ownership. `teco`'s own K-016 (prompt-size consolidation) is unaffected in scope;
+  this added ~90 words, not a new subsystem.
+- **Verified:** `bash claude/scripts/audit-team.sh` — see the same-day run recorded once in
+  `tico/kaizen/history.md`.
+- **Plan items:** none opened on `teco`'s side — the live e2e validation (K-013/K-014) is tracked
+  in `tico/kaizen/plan.md` since tico is the initiating side of the handoff.
+
 ## 2026-08-25 — Distillation (unit U4, `cobb`): 6 raw `kaizen_team` entries verified, routed, cleared
 
 - **What:** `cobb` ran the `agent-maintenance` §5 distillation procedure against every `teco`-tied

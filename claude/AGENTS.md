@@ -12,8 +12,10 @@ does and when to use it lives in the injected descriptions and [`README.md`](./R
 `teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`;
 since 2026-08-29 may proactively initiate a single-topic specialist consult — review-shaped or
 fast-track Q&A, across `architect`/`analyst`/`graph-dba`/`data-scientist`/`qa-engineer`/
-`security-expert`/`devops`, never implementers — announced then proceeded, not offered; see
-`tico/tico.md`) ·
+`security-expert`/`devops`, never implementers — announced then proceeded, not offered; since
+2026-09-01 also coordinates its own docs-only multi-unit chains (requirements → plan → review,
+ledger-tracked like `teco`'s), handing the whole chain to `teco` the instant a unit needs an
+implementer; see `tico/tico.md`) ·
 `architect` · `coder` · `tdd-engineer` · `frontend-engineer` ·
 `qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
 tooling techniques such as the WSL2 browser-automation fallback, driving an interactive TUI, and
@@ -115,19 +117,36 @@ versioning commands), so this is entirely self-discipline, backstopped only by
 
 - **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.** `teco` may
   commit any coordinated specialist's already-verified deliverable **by explicit path** (its
-  integrator role, deliberately wider than its own Write/Edit guard). `tico` may commit three
-  things: its own doc kinds (requirements, manuals); the returned artifact of a
-  `qa-engineer`/`analyst` review-shaped consult it itself called under Mode 3 (announce-then-
-  proceed since 2026-08-29, not an offer — `tico/tico.md`, "Proactive specialist consultation"),
-  once tico has confirmed the artifact fits; and **a file it itself wrote in the current
-  session that its `Write`/`Edit` guard let through**, including a one-off the human approved at
-  the guard's escalation prompt (e.g. a `docs/BACKLOG.md` entry). In that third case the
-  write-approval is what confers committability — a human who has just approved the write has
+  integrator role, deliberately wider than its own Write/Edit guard). `tico` may commit four
+  things: its own doc kinds (requirements, manuals, and — since 2026-09-01 — its own docs-only
+  coordination ledger, `docs/plans/<slug>-coordination.md`); the returned artifact of a
+  review-shaped consult it itself called under "Proactive specialist consultation"
+  (announce-then-proceed since 2026-08-29, not an offer — `tico/tico.md`) — from any agent in
+  tico's consult roster (`architect`, `analyst`, `graph-dba`, `data-scientist`, `qa-engineer`,
+  `security-expert`, `devops`; widened 2026-09-01 from Mode 3's original qa-engineer/analyst-only
+  case), once tico has confirmed the artifact fits; the returned deliverable of a unit tico is
+  **actively coordinating** under its own docs-only coordination (new 2026-09-01, mirrors teco's
+  integrator grant, narrower in scope — only tico's own docs-only chain, never one already handed
+  off to teco), once checked against its done-condition; and **a file it itself wrote in the
+  current session that its `Write`/`Edit` guard let through**, including a one-off the human
+  approved at the guard's escalation prompt (e.g. a `docs/BACKLOG.md` entry). In that last case
+  the write-approval is what confers committability — a human who has just approved the write has
   already supplied the review — so **that case alone** covers only files `tico` wrote itself this
   session; it does not stretch to an earlier session's writes, and it does not narrow the other
-  two. Explicit-path staging applies to all three. Both agents' grants hold whether they are
+  three. Explicit-path staging applies to all four. Both agents' grants hold whether they are
   running interactively or as a delegated subagent — they're tied to the agent's role, not its
-  invocation mode.
+  invocation mode. **Since 2026-09-01, `tico` also carries a standing, mandatory duty (not an
+  offer) to verify at every session close that everything in its own remit — its document(s) and
+  any consult/coordination artifact it's authorized to commit — is actually committed, and to
+  report plainly anything left dirty that isn't its to commit** (`tico/tico.md`, Guardrails,
+  "Session close is your responsibility"). **Also since 2026-09-01, `tico` coordinates its own
+  docs-only multi-unit chains** (requirements → plan → review, ledger-tracked like `teco`'s own
+  coordination docs) **and hands the whole remaining chain to `teco` the instant a unit would
+  touch source, tests, or config** — `tico/tico.md`, "Coordinating a docs-only chain"; `teco`
+  treats an existing tico-authored coordination doc for that slug as its state of record to
+  resume from, same as one it opened itself. The milestone-close archival flip on any
+  `docs/plans/<slug>-coordination.md` stays `teco`'s mechanical step regardless of who ran the
+  chain (unchanged from the by-kind owner table below) — a one-token edit, not a judgment call.
 - **Universal interactive-mode grant — every agent.** Every agent in this directory may `git
   add`/`git commit` its **own verified work from the current session**, by explicit path only
   (never `git add -A`/`git add .`/`git commit -a`, never `git push`/`reset`/`rebase`, never amend
