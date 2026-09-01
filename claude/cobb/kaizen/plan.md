@@ -55,6 +55,17 @@
 - **Notes:** Surfaced 2026-06-07 self-review.
 
 ## Parking lot / ideas
+- **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s
+  `defaultMode: "bypassPermissions"` pin removed (left unset, resolving to the global `auto`
+  default), the three `allow`/`ask` rules kept unchanged, the KB entry actually written into
+  `skills/agent-standards/claude-code.md`'s `## Hooks` section (the header stamp had been
+  forward-referencing it since the Gen 4 design session, but the entry body didn't exist until
+  now), and the strengthened upstream-feedback text drafted (not submitted) to
+  `claude/cobb/kaizen/upstream-feedback-draft-bypass-permissions-subagent-gap.md`. **U4
+  (`analyst`'s implementation review) is still queued** per the coordination ledger — that's
+  the remaining open step in this family, not anything of cobb's own. Left as an untracked
+  reminder rather than a formal K-item since U4 belongs to `analyst`/`teco`, not to cobb's own
+  backlog.
 - **Extend the independent-review-gate practice to `cobb.md` self-edits specifically (surfaced
   2026-08-20, `Q2`'s D-1 finding + its own fix).** `Q2`'s closing acceptance pass
   (`docs/test-reports/generic-cypher-mcp2-report.md`) found `cobb.md` had shipped a self-edit

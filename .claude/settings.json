@@ -1,7 +1,6 @@
 {
   "enabledMcpjsonServers": ["cypher"],
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash",
       "Edit(**)",

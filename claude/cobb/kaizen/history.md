@@ -2,6 +2,156 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-01 — U3: reverted the `bypassPermissions` config pin, folded Gen 4's findings into the KB, drafted (not submitted) the upstream feedback
+- **What:** implementation unit U3 of `claude/docs/plans/bypass-permissions-subagent-gap-coordination.md`,
+  executed per Gen 4's design (`claude/docs/plans/bypass-permissions-subagent-gap.md` §4.2) after
+  `analyst`'s Pass 2 gate ("approve with suggestions, unchanged. U1 is ready to gate U3"). Delegated
+  run, fresh context — no memory of the two prior Gen 4 sessions beyond the design/review docs
+  themselves.
+  1. **`.claude/settings.json`:** removed the `"defaultMode": "bypassPermissions"` key entirely
+     (left unset rather than writing an explicit `"auto"` — the design left the choice open and
+     "unset, letting the global default apply" reads as the more honest expression of "stop
+     pinning a mode," since `~/.claude/settings.json`'s `defaultMode: "auto"` is what will resolve
+     it in practice). Kept the three `allow` rules (`Bash`, `Edit(**)`, `mcp__cypher__query`) and
+     the `ask` rules (destructive-ops patterns, `Edit(**/docs/BACKLOG.md)`) untouched, exactly as
+     the design specified — they're independently beneficial under `auto`, not bypass-specific.
+  2. **Softened §4.2's "directly refutes" overclaim** (Pass 2's one open soft caveat): the headless
+     hook-`ask` live test result now reads as "inconsistent with… in a headless context this test
+     can't fully separate from mode" rather than a clean refutation, with the `-p`-has-no-prompt-
+     surface-by-default confound spelled out inline (same disambiguation §2.4 already applied to
+     its own inconclusive isolation-lever test).
+  3. **Folded the KB findings into `skills/agent-standards/claude-code.md`'s `## Hooks` section**,
+     as a new "Resolution/update, 2026-09-01" entry (same style as the existing 2026-08-24 one):
+     background-subagent-dispatch-by-default-since-v2.1.232, the file-edit-vs-Bash asymmetry, the
+     bypassPermissions-doesn't-close-the-gap finding, the inconclusive isolation-lever test, and the
+     headless-mode-confound caveat. **Notable:** the file's own header stamp (top-of-file `>` block)
+     already forward-referenced "the `## Hooks` section's 2026-09-01 entry" — added by an earlier
+     Gen 4 session while drafting the design doc, per this file's own cross-references convention —
+     but the entry body itself had never actually been written until this pass; the file was
+     internally inconsistent (a citation with nothing to cite) until now.
+  4. **Drafted (not submitted) the strengthened upstream feedback** from §4.1, referencing existing
+     receipt `3ccd08fc` without re-drafting its original content — saved to
+     `claude/cobb/kaizen/upstream-feedback-draft-bypass-permissions-subagent-gap.md` (no existing
+     precedent in this repo for where a draft-external-submission artifact belongs; chose cobb's
+     own kaizen dir over `docs/plans/` since the content fits none of `AGENTS.md`'s closed doc-kind/
+     role taxonomy — it's not a plan, review, or requirement, just a draft awaiting human
+     submission). Left unsubmitted per the brief: filing external feedback under the user's
+     identity isn't an autonomous action.
+  5. **Housekeeping:** left the design doc's own `Status: active` unchanged — U4 (`analyst`'s
+     implementation review) is still queued per the coordination ledger, and this family's
+     `archived`-flip convention (`AGENTS.md`) ties to milestone close / by-kind-owner judgment, not
+     to a single implementation unit landing; flipping now would be premature. Did not touch
+     `docs/reviews/bypass-permissions-subagent-gap.md` or the coordination doc, per the brief's
+     constraints. Left everything staged-in-working-tree, uncommitted, for `teco` to verify and
+     commit (delegated-subagent convention).
+- **Why:** closes out the technical half of the Gen 4 investigation the coordination doc opened —
+  the config that motivated all of Gen 1-4's forensic work is now reverted to the team's last
+  standing recommendation (Gen 3's), with the KB left in a state a future session can actually
+  find (no more dangling forward-reference), and the upstream-facing evidence preserved for a human
+  to file at their discretion rather than being lost once this session's context closes.
+- **Plan items:** —
+
+## 2026-09-01 — Gen 4 amendment: closed `analyst`'s two Major findings with live tests; corrected the hook-`ask`-skipped-under-bypass claim
+- **What:** amended `claude/docs/plans/bypass-permissions-subagent-gap.md` in place (same file, no
+  version bump — not yet fully gated) per `analyst`'s review (`claude/docs/reviews/
+  bypass-permissions-subagent-gap.md`, "approve with suggestions," two Major + two Minor findings).
+  Fresh session, no memory of the original Gen 4 delivery beyond the two documents.
+- **Major 1 (isolation lever) — inconclusive, not negative, and why that's itself the finding:**
+  live-tested `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` via a nested headless (`claude -p`) process
+  (the only way to set a session-level env var for a fresh process — nothing available to an
+  already-running agent mutates its own process's env). Two false starts surfaced a genuinely new,
+  unresolved observation: a nested session's own top-level `--agent cobb` hooks appeared to
+  additionally constrain a subagent it dispatched, beyond that subagent's own hooks (flagged, not
+  chased). A clean third attempt (no top-level agent, so only `tdd-engineer`'s own hook applied)
+  showed zero friction for an ordinary write, with the isolation lever set — but a matched
+  no-lever control came back identically clean, and both runs' own `subagent_stats.
+  started_in_background` read `0`. Headless/print mode never enters the background-dispatch path
+  the bug lives in, lever or not — so the test never reached its own precondition. Documented in
+  full (§2.4) rather than reported as a fix; the revert recommendation (§4.2) doesn't depend on the
+  answer either way.
+- **Major 2 (hook-`ask`-skipped-under-bypass claim) — corrected, live evidence points the opposite
+  way.** Dispatched a headless `tdd-engineer` write to a path on its own deny-list
+  (`docs/plans/*`) under the live `bypassPermissions` pin: blocked pre-write, guard's own message
+  verbatim in the tool result, recorded as a `permission_denials` entry — contrasted directly
+  against the clean §2.4 runs for an *allowed* target under identical conditions. If hook `ask`
+  were silently skipped, the denied case should have looked like the allowed one; it didn't.
+  Rewrote §4.2's central safety argument: no longer "bypass costs a real safety guarantee lost
+  under `auto`" (unsupported after this test) — the revert recommendation now rests on the
+  friction-parity finding alone (§1.2/§3), which was always sufficient on Gen 3's own logic once
+  bypass's promised benefit turned out not real.
+- **Minor 1/2:** fixed §1.2's `docs/BACKLOG.md` row caption (was mischaracterized as an `ask`-rule
+  firing; it's an ordinary Edit content-mismatch, per the review's own transcript trace) and added
+  one sentence to §2.3 disambiguating the Bash-timing-gap method's own confound (long Bash gaps
+  traced to real command runtime, not a masked prompt).
+- **Scratch-file discipline:** four live-test runs (nested headless dispatches), all cleaned up and
+  confirmed removed (`git status`/`ls` checked after each); none left tracked-tree state changed.
+- **Not touched:** `skills/agent-standards/claude-code.md`'s existing 2026-09-01 KB stamp (added by
+  the original Gen 4 session, still uncommitted) doesn't assert the corrected claim, so it needed
+  no fix; left as-is.
+
+## 2026-09-01 — Gen 4 investigation: `bypassPermissions` doesn't close the Task-delegated write-prompt gap either; root-caused to background-subagent dispatch (default since v2.1.232)
+- **What:** delivered `claude/docs/plans/bypass-permissions-subagent-gap.md` (design/investigation,
+  `Status: active`, gated to `analyst` next per this family's convention — U1 of
+  `claude/docs/plans/bypass-permissions-subagent-gap-coordination.md`), continuing the
+  `agent-permission-friction` → `write-guard-classifier-gap` → `permission-default-mode` line
+  (Gen 1-3, all archived). Trigger: fresh 2026-09-01 evidence from a `teco`-coordinated run showed
+  every ordinary Task-delegated subagent `Write`/`Edit` (3 agent types, 8 non-`BACKLOG.md` calls)
+  still produced a real, human-latency-scale confirmation prompt (6.2s-462.2s), despite the
+  project's `.claude/settings.json` pinning `permissions.defaultMode: "bypassPermissions"` since
+  2026-08-29 (commits `f10cedf`/`c994442`/`6f719ae`, applied directly by the user, no `cobb` design,
+  no `analyst` gate — a process gap documented in the new doc's §0) specifically to eliminate this
+  friction.
+- **Root cause found:** re-read of the sub-agents doc's "Background Subagents" section (not quoted
+  by any prior generation) plus the Claude Code changelog surfaced that non-teammate `Agent`/`Task`
+  dispatches have run as **background subagents by default since v2.1.232** — a fact absent from
+  this team's KB and from Gen 1-3's analysis (their empirical work predates the discovery, though
+  not the harness behavior itself: 2.1.238-241, already >2.1.232). The docs promise parent
+  `bypassPermissions`/`acceptEdits` "takes precedence and can't be overridden" onto a dispatched
+  subagent, with no stated exception for background dispatch — but live evidence contradicts this
+  for the now-default background path. **Sharper characterization than Gen 1-3 reached:** across
+  every transcript examined, zero `Bash` calls ever produced a confirmation gap (the blanket
+  `Bash` allow rule works perfectly, every time, from a background-dispatched subagent) — the gap
+  is specific to file-editing tools (`Write`/`Edit`), not "rules/mode never reach a background
+  subagent" in general.
+- **Empirical test (own dispatch, per the brief's constraint):** two live `Agent` dispatches this
+  session. Test 1 (scratchpad path) was uninformative by construction — the scratchpad is
+  harness-exempt from permission review, logged as a negative-control data point, not a
+  reproduction. Test 2 (in-repo `docs/plans/*` path, two Task-hops deep — `teco`→`cobb`→
+  `tdd-engineer`) reproduced the gap more severely than any of today's original three instances: a
+  **961-second (16 min 1 s)** `tool_use`→`tool_result` gap on the `Write` call, read directly off
+  the dispatch's own transcript timestamps. That dispatch then died to an unrelated transient
+  platform timeout (`server_error`, relayed by `teco`) before reaching its `Edit`/`rm` steps,
+  leaving a scratch file (`falkor-chat/docs/plans/_permission-test-scratch-cobb.md`) on disk with
+  only its first line written — found and removed directly by `cobb` once discovered; the 961s
+  figure itself is unaffected by the later timeout (recorded before it occurred).
+- **Verdict:** genuine harness bug/regression (outcome type (b) of the coordination doc's menu),
+  not a config/precedence error on this repo's side and not a `teco`-session-scoping issue —
+  `teco`'s own transcript confirms continuous literal `bypassPermissions` throughout, and the gap
+  reproduces one dispatch-layer deeper than any direct `teco` child. **Recommendation:** revert
+  `.claude/settings.json`'s `defaultMode` away from `bypassPermissions` (back to unset/`auto`) —
+  not merely "accept the friction" as Gen 3 concluded, but an active correction, because
+  `bypassPermissions` delivers **zero** reduction in the exact friction it was adopted to remove
+  (today's gaps are the same shape/scale `auto` already produces) while it additionally **costs**
+  real safety `auto` still provides: hook `"ask"` is documented to be skipped entirely under
+  bypass, silently disabling every doc-scoped write guard's escalation half (AC-4,
+  `agent-permission-friction.md`) team-wide, for as long as the pin stays live. Not implemented by
+  this unit — reversion is a one-line settings edit, left for `analyst`'s gate (U2) and a follow-up
+  implementation unit (U3) per this family's established convention. Also: strengthened the
+  existing upstream report (receipt `3ccd08fc`) with today's cross-agent-type reproduction, the
+  file-edit-vs-Bash asymmetry, and the newly-identified background-dispatch-default mechanism —
+  recommended as a follow-up `/feedback` submission (interactive action, not runnable by this
+  session).
+- **KB updated:** `skills/agent-standards/claude-code.md`'s top-of-file stamp block, new bullet
+  cross-referencing this finding from the existing 2026-08-24 `defaultMode` stamp.
+- **Not resolved:** why `architect`'s two repeat-edits to the same file sailed with a ~0.1s gap
+  today while `tdd-engineer`'s four repeat-edits to the same file each independently re-prompted,
+  under the identical `bypassPermissions` config, same session. Attempted to ask `teco`
+  (`SendMessage`) whether a "don't ask again" UI option was clicked for `architect`'s first prompt
+  specifically — `teco` wasn't reachable by name from this session at the time. Flagged in the doc
+  (§1.3) as an open, non-blocking detail (most likely a human UI-choice artifact, not a config
+  difference — the docs describe an optional session-scoped "remember this answer" grant), not
+  guessed at further.
+
 ## 2026-08-29 — Designed & implemented `tico`'s proactive specialist consultation; explicit partial reversal of the 2026-07-30 decline
 - **What:** designed and shipped `claude/docs/requirements/tico-specialist-collaboration.md`
   (Ready for design, FR-1 through FR-9, AC-1 through AC-7) — `tico` may now **proactively

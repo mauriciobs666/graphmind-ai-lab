@@ -29,6 +29,13 @@
 > `code.claude.com/docs/en/permission-modes`, `.../permissions`, and `.../sub-agents` (whole
 > pages) — see the `## Hooks` section's 2026-08-24 resolution callout for the parent-mode
 > inheritance rule and the frontmatter-`permissionMode`-is-inert-for-primary-sessions finding.
+> **`bypassPermissions` does NOT actually close the gap either — live-reproduced 2026-09-01,
+> Claude Code 2.1.252** (`claude/docs/plans/bypass-permissions-subagent-gap.md`) — see the
+> `## Hooks` section's 2026-09-01 entry: non-teammate `Agent`/`Task` dispatches run as
+> **background subagents by default since v2.1.232**, and a background subagent's `Write`/`Edit`
+> calls keep producing real, human-latency-scale confirmation prompts even under a parent
+> confirmed continuously in literal `bypassPermissions`, contradicting the parent-mode-inheritance
+> guarantee quoted above with no documented exception found for this path.
 > Skills / Memory / Hooks / SDK still on the **2026-05-31** baseline (`code.claude.com/docs`,
 > `platform.claude.com/docs`) — due for refresh. Field lists grow between releases; re-verify
 > before relying on an exact key.
@@ -417,6 +424,73 @@ the always-loaded project memory (`CLAUDE.md`).
   `acceptEdits` specifically is untested, so don't assume `acceptEdits` both closes the `"allow"`
   gap *and* leaves the `"ask"` safety net intact just because switching modes wasn't the thing that
   broke it originally (`claude/docs/reviews/permission-default-mode.md`, Major finding 2).
+- **Resolution/update, 2026-09-01 (`claude/docs/plans/bypass-permissions-subagent-gap.md`, Gen 4;
+  `claude/docs/reviews/bypass-permissions-subagent-gap.md`, both passes):** a later session pinned
+  `permissions.defaultMode: "bypassPermissions"` on this repo (2026-08-29, three commits,
+  `6f719ae` final) specifically to escape the friction the entry above documents — on the reading
+  that `bypassPermissions` "takes precedence and can't be overridden" onto a dispatched subagent
+  (the same inheritance-rule quote above). **Fresh, cross-agent-type live evidence shows it doesn't
+  work either:** three independently-dispatched subagent types (`architect`, `tdd-engineer`,
+  `analyst`), all under a parent session independently confirmed (via its own transcript's
+  `"type":"permission-mode"` records) to have stayed in literal `bypassPermissions` throughout,
+  still produced real, human-latency-scale (`tool_use`→`tool_result` gaps 6.2s-462.2s, one outlier
+  at 961s two Task-hops deep) confirmation prompts on ordinary, non-protected, in-remit `Write`/
+  `Edit` calls — 8 of 10 non-protected calls, with **no scope-stickiness at all** in most runs (the
+  same file re-prompted independently on every touch, not just the first). Root cause, read from
+  two doc sections together (`code.claude.com/docs/en/sub-agents`, fetched 2026-09-01):
+  1. **Non-teammate `Agent`/`Task` dispatches run as background subagents by default, and have
+     since Claude Code v2.1.232** (`~/.claude/cache/changelog.md`, verbatim: "non-teammate agent
+     spawns in interactive sessions now run in the background by default"; v2.1.251: "background
+     subagents, the default, still show status only"). There is no caller-facing toggle on the
+     `Agent`/`Task` tool itself to opt out — only the session-level env var
+     `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, which forces foreground dispatch "in every kind of
+     session," per the same page.
+  2. **The "Background Subagents" doc section describes *where* a needed prompt surfaces, not
+     whether one is needed** ("Claude Code surfaces the prompt in your main session and names the
+     subagent that is asking") — and sits immediately adjacent to the parent-mode-inheritance
+     passage quoted above, with **no stated exception for the background-dispatch path**. Read
+     together the two passages promise no interaction; the live evidence shows one exists anyway.
+  3. **The gap is specific to file-editing tools, not permission/mode inheritance in general:**
+     across all evidence gathered (three fresh transcripts plus a targeted live reproduction), **not
+     one `Bash` call ever produced a confirmation gap** — the blanket `"Bash"` `permissions.allow`
+     rule visibly reached every background-dispatched subagent, every time, including cases with
+     genuinely long Bash runtimes (traced to real `pytest`/`git stash` execution, not a masked
+     prompt) that could have been mistaken for a silent wait under the same timing-gap method. Only
+     `Write`/`Edit` (and, by the `Edit(path)`-covers-`Write` semantics already established above,
+     presumably `NotebookEdit`) fail to inherit the parent's mode under background dispatch. This is
+     a materially more precise bug description than "delegated writes don't inherit bypass" — it's
+     a **tool-class-specific** inheritance failure, not a blanket one.
+  4. **The isolation lever (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`) could not be live-tested from
+     inside a running session or subagent** — it must be set before an interactive, TTY-attached
+     process starts, and no tool available to a running Claude Code agent can mutate a live
+     process's own env or retroactively apply the var. A nested headless (`-p`) test was run as the
+     best available proxy, but headless mode's own subagent dispatch never entered the
+     background-dispatch code path either way (`subagent_stats.started_in_background: 0` on every
+     arm, lever-set and control alike) — so the test is genuinely inconclusive, not a clean result,
+     and should not be cited as evidence the lever does or doesn't help. Left for a human-driven
+     interactive test, or `pty`-based automation, to actually resolve.
+  5. **A related, narrower headless-mode caveat surfaced while checking a different claim (whether a
+     `PreToolUse` hook's `"ask"` decision is itself skipped under `bypassPermissions` — it is
+     *not*; a live headless test found a hook-`ask`-guarded path still blocked pre-write under a live
+     `bypassPermissions` pin): don't over-read a headless (`-p`) test's result as proof of what
+     `bypassPermissions` itself does** — `-p` mode is separately documented
+     (`code.claude.com/docs/en/headless`) to run with **no prompt surface by default** ("Manual"
+     mode on every plan; `dontAsk` denies rather than prompts, precisely because there's no human to
+     ask). An instant denial in a headless context is consistent both with "the mode genuinely
+     enforces the hook" and with "`-p` denies any would-be-prompt regardless of mode" — the two
+     aren't distinguishable from a headless data point alone. Same caveat class as point 4: headless
+     dispatch is not a faithful proxy for the interactive/background-dispatch code path this whole
+     entry is about.
+  **Practical guidance:** `bypassPermissions` buys **nothing** over `auto` on the dimension it's
+  usually adopted for (delegated-write friction under background dispatch — identical either way,
+  per the evidence above) — this repo's `defaultMode` pin was reverted 2026-09-01
+  (`.claude/settings.json`, back to unset, resolving to the global `auto` default) on exactly this
+  finding. The three `permissions.allow`/`ask` rules the 2026-08-29 pin also added (`Bash`,
+  `Edit(**)`, `mcp__cypher__query` allow; destructive-ops + `Edit(**/docs/BACKLOG.md)` ask) were
+  kept — they narrow or add safety under `auto` too, independent of mode. If a future session is
+  tempted to reach for `bypassPermissions`/`acceptEdits` again to solve delegated-write friction,
+  re-read this entry first: the friction is a background-subagent-dispatch/file-edit-tool bug, not
+  something any persisted `defaultMode` choice currently fixes.
 
 ## Bash tool environment
 
