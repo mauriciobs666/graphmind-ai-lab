@@ -2,9 +2,62 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** C-322 (repo-wide convention)
 >
-> **Version 1.4 · 2026-07-27 · author `architect` · design-only, nothing implemented.**
+> **Version 1.5.1 · 2026-09-01 · author `architect` · verification/clarification only — no design
+> change, no decision reopened (D1, D4, D6 and every other prior ruling stand).**
 > **This is the final design pass. §12 is the execution contract — implementers read §12 and §9.6,
 > not this changelog.**
+>
+> **v1.5.1 changelog — `analyst`'s Part IV spot-check of v1.5** (Part IV of
+> `docs/reviews/doc-reference-convention.md`, verdict *approve with suggestions*: 0 blockers, 1
+> major, 2 minors, all three folded in here) **found one real gap and two opportunistic cleanups:**
+>
+> - **Major (§24), fixed.** §9.6's "who performs the `archived` flip, by kind" table — the section
+>   this document itself calls the one place root `AGENTS.md` copies from, and the exact table §12
+>   Step 1 item 8 names — had no `manuals/` row, even though root `AGENTS.md`'s live table already
+>   reads *"`requirements/*` and `manuals/*` → `tico`"*. The `requirements/*` row now reads
+>   `requirements/*`, `manuals/*` (v1.5.1), matching root `AGENTS.md`'s combined shape (the same
+>   pattern the table already uses for `test-plans/*`+`test-reports/*`). v1.5's changelog is
+>   corrected accordingly — its item 3 no longer claims §9.6 "needs no edit."
+> - **Minor (§25), fixed.** `` `teco.md`:56 ``, cited in §9.4's `-coordination` row and §9.7's
+>   handoff table, had drifted stale (current text is at line 63, per commit `370d7b5`) — pre-existing,
+>   not introduced by v1.5, but v1.5 touched the exact cell in §9.4 without correcting its neighbor.
+>   Both citations now read `` `teco.md`:63 ``, with the drift noted in place.
+> - **Minor (§26), fixed.** §9.7's handoff-contract table and the §7 risk-table row (*"3 of the 5
+>   document kinds"*) are the same routing-table shape as §9.6 and are equally silent on `manuals/`
+>   — defensible as frozen v1.2/v1.3 migration snapshots (the same reasoning already applied to §3.2
+>   and §12 Step 1), but nobody had said so. Both now carry a one-line note stating they are frozen
+>   at that snapshot and pointing to §9.6 for the current routing.
+>
+> No section is renumbered and no ruled decision — D1–D8, any of §9.5's own branch rules, §12's
+> execution contract — is reopened.
+>
+> **v1.5 changelog — closes a documented gap between this spec and root `AGENTS.md`, which was
+> already extended directly and is live-enforced** (`claude/tico/kaizen/plan.md` K-005). Three
+> purely additive catch-up edits, batched as one pass:
+>
+> 1. **`manuals/` is added as a recognized `<kind>`** (§9.2), matching root `AGENTS.md`'s
+>    already-shipped wording verbatim — a manual's slug does not have to shadow one feature's topic,
+>    since a manual is often broader than a single feature. §9.5 rule 2's family chain gains an
+>    optional `→ manuals/x.md` link, same wording as root `AGENTS.md`'s collision rule 2. §9.4's
+>    closed role-set table needs no new row: `manuals/`'s primary document is role `(none)`, already
+>    covered by that row's `any`-directory entry — reasoning stated in place, §9.4.
+> 2. **§9.5 rule 5's selector gains a gloss.** The literal disjunctive text — *"approved, gated, or
+>    executed against"* — could be misread as letting a reached approval gate alone force the
+>    successor-document branch. It doesn't: approval/gating and execution are two different events,
+>    and only the latter triggers "Yes" when nothing downstream has actually acted on the specific
+>    content being revised. Verified against live precedent, both read in full:
+>    `docs/requirements/generic-cypher-mcp2.md`'s 2026-08-20 Decision-log entry and
+>    `docs/plans/generic-cypher-mcp2.md`'s `T1` precedent paragraph — flagged by a `kaizen_team`
+>    distillation finding (`claude/tico/kaizen/history.md`, 2026-08-21 entry).
+> 3. **§9.4's `-coordination` role note is extended.** Since 2026-09-01 `tico` also authors/extends
+>    `plans/<slug>-coordination.md` for its own docs-only chains (never one touching code); `teco`
+>    still authors it for any chain that does. The milestone-close `archived` flip **stays `teco`'s
+>    regardless of authorship** — the reasoning for why is stated where the producer note lives
+>    (§9.6's own flip-performer table needing no *behavioral* change for this — see v1.5.1 above for
+>    the one edit it did need, for `manuals/`).
+>
+> No section is renumbered and no ruled decision — D1–D8, any of §9.5's own branch rules, §12's
+> execution contract — is reopened. This is a verification/clarification pass only.
 >
 > **v1.4 changelog — patch pass answering the `analyst` spot-check** (Part III of
 > `docs/reviews/doc-reference-convention.md`, verdict *approve with suggestions*: **no blockers**,
@@ -1019,7 +1072,7 @@ scheduled.
 | **A mixed convention is worse than either** — half `archive/`, half status-marker, for years | Medium | Redesignate existing `archive/` explicitly as *history of the previous convention*, in root `AGENTS.md`, so the mix is **documented state** rather than drift. Never move anything into `archive/` again. |
 | **Nobody follows the citation rule**, because it lives only in root `AGENTS.md` | Medium | It standardises the **plurality** spelling (652 refs already comply), so the default behaviour is already mostly right. S4 makes violations visible. Accepted: a convention with 5 copies drifts worse than one with 1. |
 | **Status markers rot** — a document is frozen but nobody adds the line | **Medium** *(raised in v1.2 — M2)* | v1.1 rated this Low **on the strength of a teco clause it had marked "optional"** — the mitigation was not actually being bought. **v1.2 made it required (N2d); v1.3 (B5) makes it *performable*: `teco` coordinates, each kind's owner performs.** Residual risk stands: under D4 the status line *is* the archival sweep, and it is enforced by a prompt clause, not a script (D8). |
-| **The archival flip is a guarded write for 3 of the 5 document kinds** — `teco`'s `PreToolUse` allowlist is `docs/plans/*` only, so a flip on a review, requirements doc, test plan or test report escalates to an **interactive human approval per file** | **High if unfixed — mitigated to Low** *(v1.3 — B5)* | **Route by the existing guard topology, no hook edit** (§9.6's "who flips it" column): `plans/` → `architect` (or `teco` for `-coordination`) · `reviews/` → `analyst` · `requirements/` → `tico` · `plans|reviews/*-ml` → `data-scientist` · `test-plans/`, `test-reports/` → `qa-engineer` (**no doc guard at all**). Verified against all 9 `claude/*/hooks/` scripts. The rejected alternative — widening `teco`'s allowlist — is a permanent loosening of a deliberately narrow guardrail and must be argued on its own merits, not smuggled in as a side effect of a docs convention. **The same defect bit S2/N4** (`HISTORY.md`/`BACKLOG.md` writes), re-owned to an implementer in v1.3. |
+| **The archival flip is a guarded write for 3 of the 5 document kinds** — `teco`'s `PreToolUse` allowlist is `docs/plans/*` only, so a flip on a review, requirements doc, test plan or test report escalates to an **interactive human approval per file** | **High if unfixed — mitigated to Low** *(v1.3 — B5)* | **Route by the existing guard topology, no hook edit** (§9.6's "who flips it" column): `plans/` → `architect` (or `teco` for `-coordination`) · `reviews/` → `analyst` · `requirements/` → `tico` · `plans|reviews/*-ml` → `data-scientist` · `test-plans/`, `test-reports/` → `qa-engineer` (**no doc guard at all**). Verified against all 9 `claude/*/hooks/` scripts. The rejected alternative — widening `teco`'s allowlist — is a permanent loosening of a deliberately narrow guardrail and must be argued on its own merits, not smuggled in as a side effect of a docs convention. **The same defect bit S2/N4** (`HISTORY.md`/`BACKLOG.md` writes), re-owned to an implementer in v1.3. **This row is frozen at the v1.3 migration snapshot (5 kinds); `manuals/`, added v1.5, is not counted here — see §9.6 for the current, v1.5.1-updated routing table.** |
 | **New documents omit the header** — N3 normalises 26 once, then document 27 starts the drift back | **Medium if unfixed — mitigated to Low** *(v1.3 — M9)* | Verified: `claude/tico/tico.md`:37 is the **only** header contract in all 13 agent prompts, and the three producing prompts that carry full document skeletons (`analyst`:53–61, `qa-engineer`:29, `architect`:40) mention no header field. **N2e adds one template line to all six producing prompts.** This is the same argument M1 made for the filename rule — a prompt-level template beats a general `AGENTS.md` rule — applied to the field N3 exists to establish. Owner: `cobb`. |
 | **`tico`'s stakeholder-gated `Status:` transition is broken by the new vocabulary** | **High if mishandled — mitigated to Low** *(v1.2 — B3)* | `tico.md`:71 gates *"Ready for design"* on explicit stakeholder confirmation and `claude/README.md`:8 promises it to the user. **§9.6 absorbs both `tico` values verbatim rather than renaming them**, so neither line changes. **N2c's done-condition is that `tico.md`:71 and `README.md`:8 are byte-identical to HEAD** — the gate's survival is *verified*, not assumed. |
 | **The composed citation form drifts** — label and target disagree | **Low, and now measured** *(v1.2 — B1; closed by the D1 ruling)* | Measured at **3/143 ≈ 2%**, producing 100% of the repo's broken links. **Mitigated by the ruling**: the form is never required and no longer recommended, so the population cannot grow by obligation; the existing 143 stay untouched. |
@@ -1162,8 +1215,16 @@ why."* Documenting `-impl` is what makes an existing prompt rule followable. See
 <component>/docs/<kind>/<topic-slug>[-<role>].md
 ```
 
-- **`<kind>`** ∈ `plans` · `reviews` · `requirements` · `test-plans` · `test-reports`. **The
-  directory carries the document's kind** — the filename never repeats it.
+- **`<kind>`** ∈ `plans` · `reviews` · `requirements` · `test-plans` · `test-reports` · `manuals`
+  (v1.5 — catching up to root `AGENTS.md`, already shipped there). **The directory carries the
+  document's kind** — the filename never repeats it. **`manuals/` is the one kind whose slug does
+  not have to shadow one feature's topic** (contrast rule 2, §9.5): a manual is end-user-facing and
+  often broader than a single feature — a whole workflow or subsystem from the user's point of
+  view — so it is exempt from the family-slug expectation the other kinds carry. Root `AGENTS.md`,
+  verbatim: *"Unlike the other kinds, a manual doesn't have to shadow one feature's topic slug —
+  it's often broader… when a manual does document one feature end-to-end, it reuses that feature's
+  slug per the family rule below."* When it does shadow one feature end-to-end, §9.5 rule 2's
+  family chain is where that reuse is stated.
 - **`<topic-slug>`** — kebab-case, lowercase, a noun phrase naming the **feature or topic**. Stable
   for the life of the topic. **Deliberately shared across kinds** (§9.5 rule 2).
 - **`[-<role>]`** — optional, from the **closed set** in §9.4. Distinguishes co-located documents of
@@ -1273,8 +1334,8 @@ Three consequences, stated so nothing is left to interpret:
 
 | Role | Directory | Meaning | Producer | In a prompt today? |
 |---|---|---|---|---|
-| *(none)* | any | the primary document of that kind | the kind's owner | ✅ |
-| `-coordination` | `plans/` | teco orchestration ledger | `teco` | ✅ `teco.md`:56 |
+| *(none)* | any | the primary document of that kind — includes `manuals/`'s primary document (v1.5, §9.2); it needs no row of its own | the kind's owner | ✅ |
+| `-coordination` | `plans/` | orchestration ledger | `teco` (any chain touching code) or `tico` (its own docs-only chains — v1.5) | ✅ `teco.md`:63 (v1.5.1 — was `:56`, drifted stale by commit `370d7b5`); `tico.md`:55 |
 | `-ml` | `plans/`, `reviews/` | method note / methodology review | `data-scientist` | ✅ `data-scientist.md`:71–72 |
 | `-graph` | `plans/` | graph data-model design note | `graph-dba` | ✅ `graph-dba.md`:51 (0 files yet) |
 | `-rca` | `reviews/` | root-cause analysis | `analyst` | ✅ `analyst.md`:60 (0 files yet) |
@@ -1291,15 +1352,32 @@ Two judgement calls, stated:
   different artifacts on one slug: the plan review and the implementation review. The directory
   cannot tell them apart, and the absence of the rule already broke a family (N4). This is the one
   role that needs a prompt edit (§9.7).
+- **`-coordination`'s producer is no longer `teco` alone (v1.5).** Since 2026-09-01, `tico` also
+  authors/extends `plans/<slug>-coordination.md`, but only for its own **docs-only** chains
+  (requirements → plan → review, never a unit touching source, tests, or config); `teco` still
+  authors it for any chain that does touch code, and a `tico`-run chain hands the whole remaining
+  chain to `teco` the instant it needs an implementer (`claude/tico/tico.md`, "Coordinating a
+  docs-only chain"; `claude/AGENTS.md`, "Git-commit authority", the `tico` bullet). **The
+  milestone-close `archived` flip stays `teco`'s regardless of who authored the chain** — §9.6's
+  "who performs the flip" table is unchanged by this, because the flip is keyed to the document's
+  *kind* (`plans/<slug>-coordination.md`), not to whichever agent happened to produce a given
+  instance of it: a `tico`-authored coordination doc is `teco`'s state of record to resume from the
+  moment a unit needs an implementer, exactly as if `teco` had opened it, so routing its eventual
+  flip through `teco` too costs nothing and avoids teaching a second write-guard the same carve-out.
+  This is why root `AGENTS.md`'s owner-by-kind table needed no edit for this change — the existing
+  `teco` row there already covered it, and this note is the explanation that table itself doesn't
+  carry.
 
 ### 9.5 Collision and uniqueness rules
 
 1. **Primary key: `(component, kind, topic-slug, role)`.** Unique by construction within a directory.
 2. **The same slug across several kinds is *required*, not merely tolerated — it is the family.**
    `requirements/x.md` → `plans/x.md` → `plans/x-coordination.md` → `reviews/x.md` →
-   `test-plans/x.md` → `test-reports/x-report.md`. **A downstream document inventing a new slug is a
-   defect** (N4). Nine such families exist today; the healthiest is `cpg-query-access`, spanning
-   `plans` + `requirements` + `reviews` + `test-plans`.
+   `test-plans/x.md` → `test-reports/x-report.md` → optionally `manuals/x.md` **(v1.5)** — *only*
+   when the manual documents that exact feature end-to-end; a manual with broader scope is its own
+   topic slug, not a family member (§9.2's `manuals/` exemption). **A downstream document inventing
+   a new slug is a defect** (N4). Nine such families exist today; the healthiest is
+   `cpg-query-access`, spanning `plans` + `requirements` + `reviews` + `test-plans`.
 3. **A topic slug is never reused for a different topic**, in any component or kind.
 4. **Cross-directory basename collision is safe *because every citation carries a directory*** —
    the §2.2 spelling rule. Verified: all **16** citations of `m2-cpg-analysis-skill.md` (which
@@ -1326,6 +1404,27 @@ Two judgement calls, stated:
    **The selector — one question, answered by the record, not by a field:**
 
    > **Has the earlier document been approved, gated, or executed against?**
+
+   > **v1.5 gloss (verification/clarification only — the branch rule itself is not reopened) — a
+   > reached gate alone does not force "Yes."** Read literally, the three-way disjunction lets
+   > *reaching an approval gate* — on its own, with nothing downstream having acted on the content —
+   > force the successor-document branch. That is not the intended reading. **Approval/gating and
+   > execution are two different events, and only the latter forces "Yes."** A document that has
+   > reached its gate (e.g. `requirements/`'s `Ready for design`) but that nothing downstream has yet
+   > *executed* against the specific content being revised still answers **No** — revise in place.
+   > Nothing about the branch itself changes: a document that **has** been executed against, gated or
+   > not, still forces the successor branch below; this only forecloses reading a bare gate as
+   > sufficient by itself. **Live precedent, verified by reading both documents in full — not cited
+   > secondhand:** `docs/requirements/generic-cypher-mcp2.md` reached `Ready for design` on
+   > 2026-08-19; the next day, FR-4/AC-3/FR-14/AC-11 were reversed. Its own 2026-08-20 Decision-log
+   > entry rules the correction **in place**, stating explicitly that the document "reached its
+   > approval gate (Status → Ready for design) on 2026-08-19, but nothing has since been *executed*
+   > against the now-reversed FR-4/FR-14 — no unit ever ran the deletion `G1`/`AC-11` would have
+   > gated." Independently,
+   > `docs/plans/generic-cypher-mcp2.md`'s `T1` precedent paragraph reaches the identical reading,
+   > citing this document's own collision rule 5 by name. Flagged for this pass by a `kaizen_team`
+   > distillation finding (`claude/tico/kaizen/history.md`, 2026-08-21 entry, "collision-rule-5 gloss
+   > flagged for `architect`, folded into K-005").
 
    - **No → revise it in place.** Bump the optional `Version:` field and add a dated revision note;
      for reviews, append a dated `## Pass N` section. Three documents already do this:
@@ -1488,7 +1587,7 @@ flips it" column is the B5 routing table (v1.3).**
 | `plans/<slug>-ml.md`, `reviews/<slug>-ml.md` | `data-scientist` | `docs/plans/*\|…\|docs/reviews/*\|…` | ✅ |
 | `plans/<slug>-graph.md` | `graph-dba` | no doc guard (`guard-destructive-ops.sh` only) | ✅ |
 | `reviews/*` | `analyst` | `docs/reviews/*\|*/docs/reviews/*` | ✅ |
-| `requirements/*` | `tico` | `docs/requirements/*\|*/docs/requirements/*` | ✅ |
+| `requirements/*`, `manuals/*` (v1.5.1) | `tico` | `docs/requirements/*\|…\|docs/manuals/*\|…` | ✅ |
 | `test-plans/*`, `test-reports/*` | `qa-engineer` | no doc guard | ✅ |
 
 > **`teco` coordinates; it does not perform.** Its allowlist is `docs/plans/*` only, so a flip it
@@ -1542,13 +1641,19 @@ A convention that silently contradicts these breaks every agent. **v1.2 corrects
 lands on SIX prompts, not two** (blocker B3 + major M9, v1.3), **and `qa-engineer`'s edit must be a
 rewrite, not a 4-word trim** (major M1).
 
+> **v1.5.1 note — this table is frozen at the v1.3 migration snapshot.** It records what the
+> six-prompt migration actually delivered and does not track live prompt drift (its own citations
+> had already gone stale before this pass, §9.4's `-coordination` row fix above). `manuals/` and
+> `tico`'s 2026-09-01 docs-only-coordination capability postdate it and are **not** reflected here;
+> the current, maintained routing lives in §9.6.
+
 | Contract as written today | Write path fits? | Prompt change (**v1.3, final**) |
 |---|---|---|
 | `architect` → `<component>/docs/plans/<slug>.md` (`architect.md`:40) | ✅ identical | ⚠️ **M9 — +1 template line**: the plan opens with the §9.6 header block. + kaizen + README row re-check |
 | `data-scientist` → `<slug>-ml.md` in `plans/` and `reviews/` (`data-scientist.md`:71–72) | ✅ identical | ⚠️ **M9 — +1 template line.** + kaizen + README row re-check |
 | `graph-dba` → `<component>/docs/plans/<slug>-graph.md` (`graph-dba.md`:51) | ✅ identical | ⚠️ **M9 — +1 template line.** + kaizen + README row re-check |
 | `tico` → `<component>/docs/requirements/<slug>.md` (`tico.md`:33) | ✅ identical | ⚠️ **B3 + B4 — the header template at `:37` gains `**Owner:**`/`**Tracks:**` AND bolds its labels.** Its `Status:` **values stay byte-identical** (§9.6), so **`:71`'s gated transition and `README.md`:8 are verified unchanged, by content match** (m15). + kaizen + README row re-check |
-| `teco` → `<component>/docs/plans/<slug>-coordination.md` (`teco.md`:56) | ✅ identical | ⚠️ **M2 + B5 — `:65`'s documentation-curation bullet makes the `Status: archived` flip a done-condition of the closing unit, *routed to each document's owner*; `teco` coordinates, does not perform.** Required, not optional. **+ M9's template line** for its own coordination docs. + kaizen |
+| `teco` → `<component>/docs/plans/<slug>-coordination.md` (`teco.md`:63, v1.5.1 — was `:56`) | ✅ identical | ⚠️ **M2 + B5 — `:65`'s documentation-curation bullet makes the `Status: archived` flip a done-condition of the closing unit, *routed to each document's owner*; `teco` coordinates, does not perform.** Required, not optional. **+ M9's template line** for its own coordination docs. + kaizen |
 | `analyst` → `docs/reviews/<slug>.md` + `<slug>-rca.md` (`analyst.md`:51, 60) | ⚠️ **incomplete** — `-impl` used 4×, specified nowhere; `:51`'s slug rule is **already breached** (§9.1 N4) | **+1 sentence** naming `-impl` as the implementation-review role. **+ M9's template line** in the review skeleton (`:53–61`). + kaizen + README row re-check |
 | `qa-engineer` → `docs/test-plans/<kebab>.md` + `<kebab>-report.md` (`qa-engineer.md`:28, 41) | ⚠️ paths fit; **:28 licenses the milestone prefix AND overrides the repo rule — and so does `:54`** (m17) | **M1 — rewrite `:28`, don't trim it, and subordinate `:54`'s "doc conventions" override too.** See below. **+ M9's template line** in the `:29` test-plan structure and the `:41` report structure. + kaizen + README row re-check |
 

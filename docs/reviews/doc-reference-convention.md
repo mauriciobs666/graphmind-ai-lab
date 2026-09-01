@@ -1237,3 +1237,198 @@ none reopens D1, D4, D6 or rename-nothing.
 M21's two check lines, M22's addition to step 4). **Step 1 may be executed as written** once M21's
 check lines are corrected — its content is verified sound. The plan document remains unmodified by
 this review; Parts I and II are preserved verbatim.*
+
+---
+
+# Part IV — light spot-check of v1.5 (2026-09-01)
+
+> **Reviewer:** `analyst` · **Date:** 2026-09-01 · **Artifact:**
+> `docs/plans/doc-reference-convention.md`, uncommitted v1.5 amendment on top of v1.4 (working
+> tree; `git diff -- docs/plans/doc-reference-convention.md`). **Scope:** the three v1.5 edits
+> only — §9.2's `<kind>` enumeration + §9.5 rule 2's family chain (adding `manuals/`), §9.5 rule
+> 5's selector gloss, and §9.4's `-coordination` producer note — plus the sections named in the
+> brief as likely to interact with them (§9.6, §9.7, §12, §3.2). Not a full re-review; earlier
+> parts and the v1.4 disposition are not re-litigated. **Method:** diffed the plan against `HEAD`,
+> read every cited source in full rather than trusting the changelog's characterization (root
+> `AGENTS.md`'s current text, `claude/tico/kaizen/plan.md` K-005, `docs/requirements/
+> generic-cypher-mcp2.md`'s 2026-08-20 Decision-log entry, `docs/plans/generic-cypher-mcp2.md`'s
+> `T1`-adjacent paragraph, `claude/tico/tico.md`'s "Coordinating a docs-only chain," `claude/
+> AGENTS.md`'s "Git-commit authority").
+> **CPG:** not applicable — this is a documentation/process change with no code-level component.
+> **Verdict (v1.5, original pass): APPROVE WITH SUGGESTIONS** — 0 blockers · 1 major · 2 minors.
+> **Verdict (v1.5.1, rechecked below — §30): APPROVE.** All three findings closed, clean.
+
+## 21. No ruling reopened — verified true, not just asserted
+
+Grepped every `D1`/`D4`/`D6` occurrence in the diffed file: **zero** lines containing them are
+touched by the v1.5 diff. The changelog's claim ("D1, D4, D6 and every other prior ruling stand")
+holds by inspection, not just by assertion.
+
+## 22. `manuals/` wording — verified against root `AGENTS.md`'s live text
+
+Read root `AGENTS.md`:96–107 and :151–156 directly (not the plan's paraphrase of them). The
+plan's §9.2 quote — *"Unlike the other kinds, a manual doesn't have to shadow one feature's topic
+slug — it's often broader… when a manual does document one feature end-to-end, it reuses that
+feature's slug per the family rule below"* — matches root `AGENTS.md`'s actual sentence
+word-for-word around an honest ellipsis (the elided clause, *"(a whole workflow or subsystem from
+the user's point of view)"*, is parenthetical and its omission doesn't change the claim). §9.5
+rule 2's added family-chain link (*"→ optionally `manuals/x.md`… only when the manual documents
+that exact feature end-to-end; a manual with broader scope is its own topic slug, not a family
+member"*) matches root `AGENTS.md`'s collision rule 2 sentence in substance (the plan claims "same
+wording," not verbatim, for this one — accurate as stated).
+
+## 23. The two new glosses — evidence checked at the source, not on faith
+
+**Rule 5's selector gloss.** Read `docs/requirements/generic-cypher-mcp2.md` lines 259–313 in
+full. Its 2026-08-20 Decision-log entry states, almost verbatim to the plan's quote: *"It reached
+its approval gate (Status → Ready for design) on 2026-08-19, but nothing has since been
+*executed* against the now-reversed FR-4/FR-14 — no unit ever ran the deletion `G1`/`AC-11` would
+have gated."* (`docs/requirements/generic-cypher-mcp2.md:302-304`). Read `docs/plans/
+generic-cypher-mcp2.md` lines 313–361 in full: the paragraph at lines 355–361 (T1's precedent
+paragraph) states the mechanical choice is `tico`'s call "per root `AGENTS.md`'s collision rule 5,
+not preempted here," citing the rule by name. Both sources say exactly what the gloss claims — the
+"approved/gated, verbatim" characterization checks out. The gloss itself is placed correctly (right
+after the selector question, before the No/Yes branches) and doesn't contradict either branch —
+it only forecloses reading a bare gate as sufficient alone, leaving the branch outcomes untouched.
+Self-consistency check: this document's own two other "approved" mentions (line 1371, 1450–1453)
+always pair "approved" with "partly-executed," never rest on approval alone — consistent with the
+new gloss, not contradicted by it.
+
+**`-coordination` authorship note.** Read `claude/tico/tico.md` lines 41–61 ("Coordinating a
+docs-only chain") and `claude/AGENTS.md` lines 118–149 ("Git-commit authority," the `tico`
+paragraph) in full. Both confirm: `tico` authors `plans/<slug>-coordination.md` only for its own
+docs-only chains, hands the whole remaining chain to `teco` the instant a unit needs an
+implementer, and the milestone-close `archived` flip stays `teco`'s regardless of authorship
+(`claude/AGENTS.md`:147–149 states this explicitly). The plan's new prose matches these sources
+accurately.
+
+## 24. Major — §9.6's "who performs the `archived` flip, by kind" table wasn't updated for `manuals/`, and it's the one table this document calls canonical
+
+**Evidence.** §9.6 opens with *"This section is normative and is the one place the header block is
+stated… root `AGENTS.md` copies from here"* (`docs/plans/doc-reference-convention.md:1465-1466`).
+Its "who performs the `archived` flip, by kind" table (:1558–1566) has 7 rows covering `plans/`,
+`plans/-coordination`, `plans/-ml`+`reviews/-ml`, `plans/-graph`, `reviews/*`, `requirements/*`,
+`test-plans/*`+`test-reports/*` — **no `manuals/` row.** Root `AGENTS.md`'s live by-kind owner
+table, which this section claims to be the source of, already reads *"`requirements/*` and
+`manuals/*` → `tico`"* (`AGENTS.md:201`) — combined into one row, exactly the shape this table
+already uses elsewhere (`test-plans/*`+`test-reports/*` → `qa-engineer`). §12 Step 1 item 8 names
+this exact table (*"the B5 routing table (who flips `archived`, by kind)"*, :2045-2046) as one of
+the eight things root `AGENTS.md` must state verbatim from §9.6 — so the asymmetry is real, not
+cosmetic: the document root `AGENTS.md` is supposed to copy from is now missing content that root
+`AGENTS.md` already has.
+
+**Why it matters.** K-005's own proposed change (a) explicitly asked for *"a `manuals/` mention to
+the convention plan (changelog entry, any affected checks/tables)"* — this is exactly such a table,
+and it's the one place in the document whose entire job is being the copy-from source. The v1.5
+changelog explicitly reasons through §9.2, §9.5 rule 2, and §9.4 (deciding §9.4 needs no new row,
+with the reasoning stated in place) but never mentions §9.6 at all — this reads as an oversight,
+not a considered omission, since the changelog's own habit is to state "needs no edit" reasoning
+explicitly wherever it applies (as it did for §9.4 and, separately, for §9.6's `-coordination` row
+under item 3). No live behavior breaks (root `AGENTS.md` already has the correct routing and is
+what's actually enforced), but the formal spec stays incomplete on exactly the axis K-005 sought to
+close.
+
+**Suggested improvement.** Add a row to §9.6's table: `manuals/<slug>.md` | `tico` | `docs/
+manuals/*\|*/docs/manuals/*` | ✅ (its guard allowlist already includes `docs/manuals/` per
+`claude/AGENTS.md`'s hook-machinery section) — a one-line addition, the same shape as the existing
+`test-plans/*`+`test-reports/*` combined row, or as its own row mirroring `requirements/*`.
+
+## 25. Minor — a pre-existing stale citation sits in the exact row v1.5 touched
+
+§9.4's `-coordination` row and §9.7's handoff-contract table both cite `` `teco.md`:56 `` as where
+`teco` documents the coordination-ledger convention (:1277 pre-diff, :1625). Current
+`claude/teco/teco.md` line 56 is a blank line — the "Open a coordination doc" text it's meant to
+point at has drifted to line 63 (traced: commit `370d7b5` inserted a new routing-table row above it,
+shifting later content down). This predates v1.5 and isn't something the diff introduced or
+claimed to fix, but v1.5 edited this exact table cell (appending `` `tico.md`:55 ``, verified
+accurate) without correcting its stale neighbor. **Suggested improvement:** since the row is
+already open for this pass, bump `` `teco.md`:56 `` → `` `teco.md`:63 `` in both citations
+(§9.4, §9.7) in the same patch, or file it as a one-line follow-up if the architect prefers not to
+touch a line outside K-005's stated scope.
+
+## 26. Minor — §9.7's handoff-contract table and the §11 risk-table row don't reflect `manuals/`/`tico`'s new capability either, silently
+
+§9.7's per-prompt table (:1619–1627) and the risk-table row at :1050 ("3 of the 5 document kinds")
+are the same *shape* of table as §9.6 — a routing table keyed by document kind — and are equally
+silent on `manuals/`. Unlike §9.6, though, both are plausibly defensible as frozen snapshots of the
+original v1.2/v1.3 migration pass (§9.7's own citations are already stale in exactly the way found
+above, showing it was never meant to track live prompt drift): the same "historical record, don't
+retroactively misrepresent it" reasoning the architect applied to §3.2 and §12 (checked below,
+§27) would cover these too. The difference from §9.6 is that nobody said so — §9.6's canonical
+framing makes its gap load-bearing; these two are lower-stakes, but a one-line note ("frozen at the
+v1.3 migration snapshot; `manuals/`/`tico`'s 2026-09-01 capability postdates it") would remove the
+ambiguity for the next reader who wonders whether they were missed by accident.
+
+## 27. §3.2 and §12 — the architect's "don't touch, it's history" reasoning holds
+
+Read §3.2 (:634–647) and §12 Step 1 (:1991–2055) in full. Both are explicitly dated, ordered
+execution/edit records tied to specific line numbers and specific commits of the *original*
+6-prompt migration (v1.2/v1.3-era), written in a "what shipped and why" past-tense register, not a
+"here is the current state" register. Retroactively inserting `manuals/`/`tico`'s docs-only
+coordination into either would misstate what that pass actually delivered — the architect's stated
+reasoning for leaving them alone is sound and I found no counter-evidence.
+
+## 28. What's solid
+
+- Every quoted source (root `AGENTS.md`, the two `generic-cypher-mcp2` documents, `tico.md`,
+  `claude/AGENTS.md`) says what the changelog claims it says, checked by reading the source in
+  full rather than trusting the paraphrase — no misquote, no overclaimed "verbatim," no
+  mischaracterized precedent.
+- The rule-5 gloss is well-placed and doesn't disturb the branch rule it clarifies; it also
+  matches this document's own established practice (see §23 above), which is a stronger form of
+  self-consistency than the gloss merely not contradicting anything.
+- No ruled decision (D1, D4, D6, or any other) is touched, reworded, or reopened anywhere in the
+  diff.
+
+## 29. Open questions
+
+None that block. The one major (§24) is a same-shape one-line table addition the architect can
+make directly; the two minors are opportunistic, not urgent.
+
+---
+
+## 30. v1.5.1 recheck (2026-09-01) — all three findings closed
+
+**Diffed again** (`git diff -- docs/plans/doc-reference-convention.md`, current working tree
+against `HEAD`, which now carries both v1.5 and this v1.5.1 patch). Confirmed the patch touches
+only: the changelog block, §7's risk-table row, §9.4's `-coordination` row, §9.6's flip-performer
+table, and §9.7's table-intro note plus one row — nothing outside that footprint.
+
+- **§24 (major), fixed correctly.** §9.6's table (:1583–1591) now reads `` `requirements/*`,
+  `manuals/*` (v1.5.1) | `tico` | `docs/requirements/*\|…\|docs/manuals/*\|…` | ✅ ``, combined
+  into one row exactly as suggested, in the placement the architect reported. **Re-verified the
+  guard-allowlist claim myself, not on the architect's word** — read
+  `claude/tico/hooks/guard-tico-doc-writes.sh:17` directly: its allowlist is
+  `docs/requirements/*|*/docs/requirements/*|docs/manuals/*|*/docs/manuals/*|docs/plans/*-coordination.md|*/docs/plans/*-coordination.md`.
+  The table cell's elided form matches (the `-coordination.md` clause is correctly left off this
+  row, since that's a different kind with its own `plans/<slug>-coordination.md` row two lines
+  above). v1.5's own changelog item 3 is also corrected in place — it no longer claims §9.6 "needs
+  no edit"; the new wording scopes that claim to the `-coordination` authorship change only and
+  points to the v1.5.1 entry for the one edit `manuals/` actually needed. No contradiction between
+  the two changelog entries.
+- **§25 (minor), fixed correctly.** Both citations (§9.4's `-coordination` row, §9.7's `teco` row)
+  now read `` `teco.md`:63 ``, each annotated "was `:56`, drifted stale by commit `370d7b5`."
+  Re-checked `claude/teco/teco.md`:63 directly — it is still the "Open a coordination doc" bullet
+  I traced the content to originally. Correct.
+- **§26 (minor), fixed correctly.** §9.7 gained a `v1.5.1 note` blockquote ahead of its table
+  stating it is frozen at the v1.3 migration snapshot and pointing to §9.6 for current routing; §7's
+  risk-table row gained the same framing inline. Both match the substance I suggested; wording is
+  the architect's own, not a copy of mine, and reads cleanly.
+
+**No new ruling reopened.** Grepped every `D1`–`D8` occurrence the diff touches: all three hits are
+inside the changelog's own restated assurance ("D1, D4, D6 and every other prior ruling stand"; "no
+ruled decision — D1–D8 … is reopened" ×2) — no ruling's actual text is edited. **No new
+inconsistency introduced:** the one other place a "5 kinds" count could have gone stale (§7's risk
+row) is exactly the one the patch annotated; no other `5 document kinds`/`five kinds` count survives
+uncorrected (checked repo-wide within the file). The `Version 1.5.1` header bump is the correct
+branch under the document's own rule 5 (this document has not been approved/gated/executed against
+in a way that would force a successor — same as every prior in-place revision).
+
+**Disposition: clean. All three Part IV findings (§24 major, §25/§26 minor) are fixed as
+described, nothing new is introduced, and no ruling is reopened.**
+
+---
+
+*Part IV, as amended by §30, routes to nobody further — the v1.5.1 patch fully closes it. The plan
+document remains unmodified by this review; Parts I–III and the original §21–§29 spot-check are
+preserved verbatim, superseded only in verdict by §30's clean recheck.*
