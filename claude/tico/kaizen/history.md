@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-01 — K-005 ✅ closed: doc-reference-convention v1.5.1 amendment (manuals/, collision-rule gloss, coordination-doc authorship)
+- **What:** `architect` shipped a v1.5.1 amendment to `docs/plans/doc-reference-convention.md` (Tracks: C-322), closing tico's kaizen K-005 item. Three additive edits: (a) `manuals/` as a recognized doc kind, per root `AGENTS.md`'s direct extension (2026-07-29+); (b) a gloss on collision rule 5 clarifying that a document reaching its approval **gate** alone does not force a successor document if nothing downstream has executed against the specific content being revised (grounded in `docs/requirements/generic-cypher-mcp2.md` and `docs/plans/generic-cypher-mcp2.md` precedent); and (c) a note on tico's new (2026-09-01) docs-only coordination-ledger authorship of `plans/<slug>-coordination.md`, with the archived-flip staying `teco`'s regardless of who ran the chain.
+- **Gated:** analyst review (`docs/reviews/doc-reference-convention.md`, Part IV): 1 major + 2 minors found at first pass, all fixed in the v1.5.1 patch, rechecked and approved.
+- **Verified:** Commit `80ab320` (three files touched: the main plan, a new coordination ledger for the topic itself, and the analyst review). No prior ruling reopened; all changes are additive.
+- **Plan items:** K-005 ✅ closed.
+
 ## 2026-09-01 — Commit-scope gap closed; mandatory session-close duty; tico becomes a docs-only coordinator
 - **Incident that triggered this:** the stakeholder reported tico refusing to commit a consulted
   specialist's returned artifact — correct behavior by the letter of the prompt (the 2026-08-29
