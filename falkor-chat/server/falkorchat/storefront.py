@@ -418,6 +418,18 @@ class Storefront:
             return None
 
         record = ParticipantRecord.from_row(row)
+        # **This write is load-bearing — do not delete it as "the cache is never
+        # read here anyway".** It is the *refresh* half of the read-through
+        # cache, and the only one there is: `lookup` populates on a miss but
+        # never re-reads a hit, so without this line a record that changed in
+        # the graph after a participant's first `lookup` would be served stale
+        # to `lookup`'s callers indefinitely, while `resolve_token` itself kept
+        # returning the current one. Every authenticated request refreshes the
+        # entry as a side effect of the read it already performed, at no extra
+        # query. Pinned by
+        # `test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`
+        # (review `docs/reviews/salesperson-ui-impl.md` Pass 6, S6-1 — deleting
+        # this line passed all 2439 tests before that test existed).
         self._cache_put(record)
         return record
 

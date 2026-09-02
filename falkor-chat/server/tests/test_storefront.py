@@ -29,13 +29,14 @@ mutation each one catches).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import inspect
 import re
 from pathlib import Path
 
 import pytest
 
-from falkorchat import config, db
+from falkorchat import config, db, storefront
 from falkorchat.repository import Repository
 from falkorchat.services import Services
 from falkorchat.storefront import (
@@ -359,21 +360,79 @@ def test_resolve_token_reads_the_graph_on_every_call(seeded, repo):
     assert seeded.resolve_token(_bearer(record)).language == "es"
 
 
-def test_the_token_comparison_is_constant_time():
-    """`hmac.compare_digest`, not `==` (§4.3) — asserted **statically**, and
-    deliberately so.
+def test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record(
+    seeded, repo
+):
+    """The *other* half of the read-through cache: `resolve_token`'s `_cache_put`
+    is what keeps `lookup` fresh, and `lookup` is the only reader there is.
 
-    Constant-time comparison has no observable behaviour: `==` passes every
-    functional test in this file. A timing measurement would be the only dynamic
-    alternative and is not reliable in a unit suite. So this reads the source of
-    `resolve_token` and asserts the call is there and that the stored hash is
-    never compared with an operator — a tripwire against a future "simplify",
-    not evidence that the comparison is fast.
+    Written because the refresh was unpinned: deleting that one line passed all
+    2439 tests in the repository (`docs/reviews/salesperson-ui-impl.md` Pass 6,
+    S6-1), while `lookup` — the accessor S7/S9 are pointed at — went on serving
+    the join-time record forever. The observer here is therefore `lookup`, not
+    `resolve_token`: the test above already covers the read path, and it stays
+    green under the deletion this one catches.
+
+    `lookup` populates on a miss but never re-reads a hit, so nothing else in
+    the module can refresh the entry.
     """
-    source = inspect.getsource(Storefront.resolve_token)
-    body = source.split('"""', 2)[-1]  # past the docstring
+    record = seeded.join("Ada", "en")
+    assert seeded.resolve_token(_bearer(record)) is not None
+    assert seeded.lookup(record.participant_id).language == "en"  # populated, fresh
 
-    assert "hmac.compare_digest(stored_hash, hash_token(token))" in body
+    repo.set_participant_record(WS, participant_id=record.participant_id, language="es")
+
+    # The cache is still holding the old value — `lookup` alone cannot notice.
+    assert seeded.lookup(record.participant_id).language == "en"
+    # …until the next authenticated request refreshes it as a side effect.
+    assert seeded.resolve_token(_bearer(record)).language == "es"
+    assert seeded.lookup(record.participant_id).language == "es"
+
+
+def test_the_token_comparison_goes_through_hmac_compare_digest(seeded, monkeypatch):
+    """`hmac.compare_digest`, not `==` (§4.3), pinned **behaviourally**.
+
+    Constant-time comparison has no observable behaviour — replacing the call
+    with `!=` reddens no functional test in this file — so it has to be pinned by
+    something other than the resolution outcome. A spy on the call is the
+    strongest form available: it survives reformatting and renaming (unlike
+    matching the call's source text), and unlike a source read it also goes red
+    if a future branch *skips* the comparison entirely.
+
+    What it does **not** claim: that the comparison is actually fast. That is a
+    property of `hmac.compare_digest`, and this asserts only that we reach it.
+    """
+    record = seeded.join("Ada", "en")
+    expected_hash = hash_token(record.token)
+    calls: list[tuple] = []
+    real = hmac.compare_digest
+
+    def spy(a, b):
+        calls.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(storefront.hmac, "compare_digest", spy)
+    resolved = seeded.resolve_token(_bearer(record))
+
+    assert resolved is not None  # the comparison was reached *and* succeeded
+    # Exactly one call, and it compared the two hashes — never the raw token.
+    assert calls == [(expected_hash, expected_hash)]
+    assert record.token not in calls[0]
+
+
+def test_resolve_token_never_compares_the_hash_with_an_operator():
+    """The static half, narrowed to the clause that does the work.
+
+    The spy above proves `compare_digest` is *reached*; it cannot prove nothing
+    else compares the hash beside it. This reads `resolve_token`'s body for an
+    equality operator — a tripwire against a future "simplify" that adds a
+    short-circuit `if stored_hash == …` in front of the real call.
+
+    Deliberately not matching the call's exact source text: that form reddens on
+    a reformat or a local rename, i.e. on correct code (Pass 6, S6-4).
+    """
+    body = inspect.getsource(Storefront.resolve_token).split('"""', 2)[-1]
+
     assert "==" not in body
     assert "!=" not in body
 
@@ -500,17 +559,24 @@ def test_turn_state_is_per_participant(seeded):
 
 
 _CONFIG_SOURCE = Path(config.__file__).read_text(encoding="utf-8")
+_REPO_ROOT = Path(__file__).resolve().parents[2]  # falkor-chat/
 _PACKAGE_DIR = Path(__file__).resolve().parents[1] / "falkorchat"
 
 
 def test_config_reads_exactly_the_documented_storefront_env_vars():
-    """The seven S6 names, spelled once each. Pins `_PRESENTER_KEY` under the
-    `FALKORCHAT_STOREFRONT_` prefix, which is how §5.1's S6 row lists it (the
-    same elision as `_DIR`/`_TURN_WORKERS`, against `FALKORCHAT_THREAD_LIMIT`
-    written out in full because it does *not* take the prefix)."""
-    read = set(re.findall(r'"(FALKORCHAT_[A-Z_]+)"', _CONFIG_SOURCE))
+    """The seven S6 names, spelled once each, in the one module that reads them.
 
-    assert {name for name in read if "STOREFRONT" in name} == {
+    Six take the `FALKORCHAT_STOREFRONT_` prefix and `FALKORCHAT_THREAD_LIMIT`
+    does not — the presenter key included, so the delivered spelling is
+    `FALKORCHAT_STOREFRONT_PRESENTER_KEY`. The justification is deliberately
+    **in-repo and checkable**: this set is exactly what `config.py` reads and
+    exactly what `docs/SERVER.md` §1.3's table documents, so a rename that
+    updates one and not the other reddens here. It is *not* justified by
+    quoting the plan — a docstring that cites another document as its authority
+    inherits that document's drift, which is the failure this coordination has
+    now produced three times.
+    """
+    expected = {
         "FALKORCHAT_STOREFRONT_ENABLED",
         "FALKORCHAT_STOREFRONT_DIR",
         "FALKORCHAT_STOREFRONT_PRESENTER_KEY",
@@ -518,20 +584,55 @@ def test_config_reads_exactly_the_documented_storefront_env_vars():
         "FALKORCHAT_STOREFRONT_QUIESCE_S",
         "FALKORCHAT_STOREFRONT_LOCALES",
     }
+    read = set(re.findall(r'"(FALKORCHAT_[A-Z_]+)"', _CONFIG_SOURCE))
+
+    assert {name for name in read if "STOREFRONT" in name} == expected
     assert "FALKORCHAT_THREAD_LIMIT" in read
+
+    # The doc half, asserted rather than asserted-in-prose: every name the code
+    # reads is documented, so renaming one in `config.py` without sweeping
+    # `SERVER.md` reddens here instead of drifting silently. Precedent for a
+    # test reaching outside the package: `test_seed_workflows_script.py`, which
+    # pins a `scripts/` invariant the same way.
+    server_md = (_REPO_ROOT / "docs" / "SERVER.md").read_text(encoding="utf-8")
+    undocumented = sorted(
+        name for name in expected | {"FALKORCHAT_THREAD_LIMIT"}
+        if name not in server_md
+    )
+    assert undocumented == []
+
+
+def _modules_mentioning(needle: str) -> list[str]:
+    """Every module in the package whose source contains `needle`.
+
+    Shared by the tripwire below and its control so the two run the *identical*
+    scan — a control that walks the tree by some other route would not prove the
+    tripwire's own walk found anything.
+    """
+    return sorted(
+        str(path.relative_to(_PACKAGE_DIR))
+        for path in _PACKAGE_DIR.rglob("*.py")
+        if needle in path.read_text(encoding="utf-8")
+    )
 
 
 def test_no_second_workspace_variable_exists_anywhere_in_the_package():
     """§4.9 move 2: the storefront's workspace **is** `config.WS_ID`. B3 was only
     possible because two variables could disagree; with one, the
     misconfiguration is not expressible. This is the tripwire against
-    reintroducing `FALKORCHAT_DEMO_WS` by reflex."""
-    offenders = [
-        str(path.relative_to(_PACKAGE_DIR))
-        for path in _PACKAGE_DIR.rglob("*.py")
-        if "FALKORCHAT_DEMO_WS" in path.read_text(encoding="utf-8")
-    ]
-    assert offenders == []
+    reintroducing `FALKORCHAT_DEMO_WS` by reflex.
+
+    **The control is the first assertion, and it is not decoration.** As shipped
+    this test asserted only emptiness, and `Path.rglob` on a *missing* directory
+    yields nothing and raises nothing — so it passed identically whether it
+    scanned 27 modules or zero (`docs/reviews/salesperson-ui-impl.md` Pass 6,
+    S6-3: `_PACKAGE_DIR` repointed at a nonexistent path, still green). Pinning a
+    string that **must** be found, through the same scan, is what makes the
+    emptiness below a finding rather than an absence of evidence.
+    """
+    assert _modules_mentioning("FALKORCHAT_STOREFRONT_ENABLED") == ["config.py"]
+
+    assert _modules_mentioning("FALKORCHAT_DEMO_WS") == []
 
 
 def test_dev_surface_has_no_environment_variable():
