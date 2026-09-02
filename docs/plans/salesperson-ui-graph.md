@@ -1,6 +1,8 @@
 # The one salesperson UI — graph design note (S0)
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 1.2 · **Reviews:** `docs/reviews/salesperson-ui-graph.md`
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M<n> TBD) · **Version:** 1.3 · **Reviews:** `docs/reviews/salesperson-ui-graph.md`
+
+*2026-09-02 — v1.3: prose only, no Cypher touched. §12's open item 2 is closed — `architect` confirms the storefront never advances read-cursors, so F3's orphan class is platform-wide and both resets' cursor blocks are pure defence; §2.1's fixture snapshot is re-pinned to `salesperson@v7` (N-5 of `docs/reviews/salesperson-ui-impl.md` — `v6` is a burned, reverted version number).*
 
 *2026-09-02 — v1.2: revised against that review's `## Pass 2` (needs changes). **P1 (blocker): two closing code fences were glued to their last code line**, so a conformant CommonMark parser saw 4 blocks instead of 6 and swallowed §5-§8 into one 455-line block — `reset_all_participants` was not extractable at all. Each fence is now on its own line, and the extract-and-execute loop that missed it (it tolerated the glued fence, proving the queries ran while the document failed to deliver them) now asserts **block count** and **max block length** and re-parses the finished file with `markdown-it`. P2 narrows `reset_participant`'s own-cursor sweep so it no longer deletes a participant's read-state on a *surviving* thread, while `reset_all` keeps the wide sweep — the two resets have different node lifecycles and the note now says so. P3 turns `unscopedCount > 0` into a response contract and returns `unscopedIds`. Nits: §8's roster timings are re-stated as noise, and §2.1's wording no longer contradicts §1.1. One live bug found and fixed while implementing P2: the liveness lookup dereferenced a null `own` alias and raised on the empty-cursor case.*
 
@@ -96,7 +98,7 @@ shapes, including two adversarial ones:
 3 `Message` on a full `HEAD`/`NEXT`/`TAIL`/`POSTED_BY`/`MENTIONS_MEMBER`/`EMITTED` chain ·
 2 `ReadCursor` · `WorkspaceConfig` (the K-042 singleton carrying K-056's Ministral re-point) ·
 `Document`/`Chunk`/`Entity` incl. a `Chunk-[:DERIVED_FROM]->Message` edge ·
-`WorkflowDefSnapshot salesperson@v6` + `Step` · `Customer u1` + `Cart` + `CartItem` + `Order` +
+`WorkflowDefSnapshot salesperson@v7` + `Step` · `Customer u1` + `Cart` + `CartItem` + `Order` +
 `OrderLine`.
 
 *Participants (each: `User`+`Channel`+`Thread`, 3 messages incl. one **`Agent`-authored reply**,
@@ -1026,13 +1028,17 @@ pytest suite was not run in either pass.
 
 1. §4's note on re-writing the profile name after "reset mine" (S7's service wrapper, existing
    `save_profile` call, no new Cypher).
-2. **Does the storefront advance read-cursors at all?** (review OQ-1). §5.2's
-   `GET /shop/api/messages?since=<ms>` reads as an explicit-`since` read, not cursor mode, and
-   `ensure_participant` creates no cursor — my fixtures seed them defensively. If the storefront
-   never calls `advance_cursor`, F3's orphan class is a platform-wide `QUERIES.md` concern and
-   both resets' cursor blocks are pure defence. `architect` to confirm; it changes the priority
-   of §7's residual, not its correctness. The cursor handling is cheap either way (§8) and is
-   staying in regardless.
+2. **Resolved — the storefront never advances read-cursors** (review OQ-1, confirmed by
+   `architect` against `docs/plans/salesperson-ui.md`). Nothing in that plan calls
+   `advance_cursor`; §5.2's `GET /shop/api/messages?since=<ms>&limit=` is an explicit-`since`
+   read with **no cursor mode**; `GET /shop/api/state` composes profile/cart/order/turn only; no
+   step S6–S10 mentions cursor advancement; and `ReadCursor` appears in the plan exactly twice,
+   both as *reset* concerns (§4.8's delete inventory, where it goes with the thread as an orphan
+   class). `ensure_participant` creates no cursor either — the fixtures seed them defensively.
+   **F3's orphan class is therefore a platform-wide `QUERIES.md` concern, not a storefront one,
+   and both resets' cursor blocks are pure defence rather than load-bearing for this feature.**
+   That is a change to the priority of §7's residual, not to its correctness: the cursor handling
+   is cheap either way (§8) and stays in.
 3. **`MAX_QUEUED_QUERIES 25` under `reset_all`** (review OQ-2). The ~240 ms stop-the-world write
    against 50 participants polling at 2 s is estimated at ~18 queued queries — under the cap, but
    not by much. Not measurable from S0 (it needs concurrent load against the shared instance);
