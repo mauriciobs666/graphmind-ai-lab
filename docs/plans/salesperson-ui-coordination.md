@@ -6,7 +6,7 @@
 
 Deliver the business-facing salesperson UI specified in `docs/requirements/salesperson-ui.md`
 (FR-1…FR-11, AC-1…AC-11): a modern, mobile-usable, multi-participant chat product surface built
-against the workflow-engine-backed `salesperson` agent (falkor-chat M6; `v5` today, bumped to `v6`
+against the workflow-engine-backed `salesperson` agent (falkor-chat M6; `v5` today, bumped to `v7`
 by plan step S1), replacing the retired
 standalone `salesperson/` Streamlit app.
 
@@ -97,8 +97,48 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S0-gate Pass 3** — Narrow closeout on P2/P3 only | `analyst` | `a1fb4168b116a1f4e` (resumed) | **accepted — APPROVE** | `docs/reviews/salesperson-ui-graph.md` Pass 3 | — | 332k tok / 8 tools cumulative |
 | **S4** — Repository + service primitives, implementing S0's Cypher verbatim | `coder` | — | queued (**behind S2 — shared live DB**) | `repository.py`, `services.py`, `QUERIES.md` §18, 2 test files | `analyst` → — | — |
 | **S5** — Node toolchain + `salesperson/` SPA scaffold | `devops` | `a770537aafab6b123` | accepted | `salesperson/**` (new) | teco-verified by execution | 113k tok / 63 tools |
-| **S1** — `salesperson@v6` def bump + `AGENTS.md` rows 82-83 | `coder` | `aef74d44be60f1cff` | delivered (code accepted; **one self-inflicted side effect, see below**) | `proof_defs.py`, 2 scripts, scaffold test, `falkor-chat/AGENTS.md` | `analyst` → — | 130k tok / 42 tools |
-| **S2** — chat-path `run_ctx` merge | `tdd-engineer` | — | in-flight | `services.py`, `trigger.py`, 2 test files | `analyst` → — | — |
+| **S1** — `salesperson@v6`→**`v7`** def bump + `AGENTS.md` rows 82-83 | `coder` | `aef74d44be60f1cff` | **gated → needs changes** (F-1 blocker: `v6` collides with a reverted K-060 experiment in `ws:acme`; **S1's original report was correct, teco's rebuttal was wrong** — see below) | `proof_defs.py`, 2 scripts, scaffold test, `falkor-chat/AGENTS.md` | `analyst` → — | 130k tok / 42 tools |
+| **S2** — chat-path `run_ctx` merge | `tdd-engineer` | `a1aa5c430de8da50d` | delivered (**re-dispatched 2026-09-02** after the first dispatch was lost — no agent id recorded, never ran) | `services.py`, `trigger.py`, `test_services.py`, `test_trigger.py`, **+`test_process_input.py` (5th file, outside the plan's S2 column)**, `QUERIES.md` §12.1/§12.12, `HISTORY.md` | `analyst` (S1+S2 impl gate) → — | 113k tok / 45 tools |
+| **S1+S2 impl gate** — review both delivered diffs | `analyst` (fresh) | `a3a1f90613439b23c` | delivered — **needs changes** (1 blocker, 1 major, 4 minor, 2 nits) | `docs/reviews/salesperson-ui-impl.md` | — | 164k tok / 79 tools |
+| **S1b** — F-1 blocker: `v6`→`v7` bump; F-8 verify-script detection; F-5 HISTORY entry; re-seed wiped `reference` | `coder` | `aef74d44be60f1cff` (resumed) | delivered — suite 2330 teco-verified; F-8 proven by a **constructed negative control** (every pre-existing check green, new check still fails) | `proof_defs.py`, 2 scripts, scaffold test, `falkor-chat/AGENTS.md`, `HISTORY.md` | `analyst` re-gate (Pass 2) → — | — |
+| **U13** — Plan v1.3: `v6`→`v7` sweep + F-4 stale §5.0 file map | `architect` (**fresh** — prior instance at 316k tok, follow-up self-contained) | `abeef0ec5b77cc45f` | delivered — **11 sites swept, not the 3 the review named**; also flagged a contradiction in *this* doc (fixed) | `docs/plans/salesperson-ui.md` v1.3 | `analyst` re-gate (Pass 2) → — | 109k tok / 27 tools |
+| **U13b** — Plan v1.4: F-6 clause on S8; pin S1's done-condition to a throwaway probe (+ class sweep); §2.2 baseline wording | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — **class sweep found 2 more unpinned-workspace instances**, incl. **S4's, a false-evidence trap** (verify with no arg asserts against `ws:acme`, not the reset probe — passes green proving nothing) | `docs/plans/salesperson-ui.md` v1.4 | `analyst` re-gate (Pass 2) → — | 131k tok / 10 tools |
+| **U13c** — Plan v1.5: impl review added to header `Reviews:`; §8 outstanding-obligations clause; §6.1 marked deliberately unpinned | `architect` | `abeef0ec5b77cc45f` (resumed) | **accepted** — teco-verified: header conformant, both done-conditions read `<that same probe graph>` (not a bare placeholder), no bare verify call left in any done-condition | `docs/plans/salesperson-ui.md` **v1.5** (+40/−21 over v1.2) | `analyst` re-gate (Pass 2) → — | 137k tok / 3 tools |
+| **S2b** — F-2 major: service-side `run_ctx` size bound; F-3 invariant test; `HISTORY.md:68` `v6`→`v7` | `tdd-engineer` | `a1aa5c430de8da50d` (resumed) | delivered — suite **2336** teco-verified; **F-3 closed the real gap** (reversing the merge now fails a test; it previously left all 2330 green). **Two items referred to the re-gate:** F-2's bound is caller-only where both siblings bound *merged*, and `test_workflow_timers.py` (K-028's file) was edited outside column | `services.py`, `test_services.py`, **`test_workflow_timers.py`**, `HISTORY.md` |
+| **Pass 2 re-gate** — S1b + S2b, revise review in place | `analyst` | `a3a1f90613439b23c` (resumed) | **accepted — APPROVE WITH SUGGESTIONS** (no blockers, no majors). Answered all 3 teco questions **by mutation, not argument**; upheld the author's F-2 deviation against teco's inclination to overrule | `docs/reviews/salesperson-ui-impl.md` `## Pass 2` + Appendices D/E | — | 227k tok / 39 tools |
+| **S4** — Repository + service primitives, implementing S0's Cypher verbatim | `coder` (**fresh**) | `ad18a6012575d8d7b` | delivered — suite **2379** teco-verified; **5 note blocks confirmed byte-identical in `repository.py`**; `ws:acme` inventory unchanged. **Ninth method `ensure_participant` added** (note §12 mandates §3 verbatim; sole writer of `Channel.participantId`) — referred to the gate | `repository.py` (+636), `services.py` (+107), `QUERIES.md` §18 (+598), 2 test files (+1222), `DESIGN.md`, `HISTORY.md` | `analyst` (Pass 3, **fresh**) → — | 284k tok / 110 tools |
+| **S4 gate** — Pass 3 on the largest, most safety-critical diff | `analyst` (**fresh** — Pass 1/2 reviewer at 227k tok) | `a4fed35b842be85c5` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 1 major, 6 minor, 2 nits). Attacked both guards **7 ways**, none broke; found forging closes *harder* than the note claims (`Channel` UNIQUE). Upheld the 9th method — **the plan's 8-method list was the defect** | `docs/reviews/salesperson-ui-impl.md` `## Pass 3` + Appendices F/G | — | 231k tok / 89 tools |
+| **S4b** — M-1 major + M-2/3/4/5/7 + 2 nits | `coder` (**fresh**) | `a18dc58f5d7dc983c` | delivered — **M-1 parameter dropped, not gated** (teco-verified signature); suite **2381** teco-verified; **re-measured the reviewer's own N-7 citation table by ablation and found it short by two** | `repository.py`, `services.py`, `QUERIES.md`, `DESIGN.md`, `HISTORY.md`, `test_repository.py` | `analyst` Pass 4 → — | 173k tok / 95 tools |
+| **S4b gate** — Pass 4 on the S4 findings | `analyst` | `a4fed35b842be85c5` (resumed) | **accepted — APPROVE**, 1 nit. Re-measured N-7 unfiltered and **corrected itself**: its Pass 3 `-k` filter was not the error source. Confirmed `CREATE`→`MERGE` is an *equivalent mutant*, no coverage gap | `docs/reviews/salesperson-ui-impl.md` `## Pass 4` | — | 277k tok / 33 tools |
+| **U20** — Pass 5 re-gate of plan v1.13 | `analyst` | `ab94a9b40db374063` (resumed) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 1 major). **P5-1: the undifferentiated-handler defect recurred inside §5.3, the section built to fix it** — `409` this time. P5-2 beat both teco-offered options: "storefront disabled" has **no code path** | `docs/reviews/salesperson-ui.md` `## Pass 5` | — | 227k tok / 18 tools |
+| **U21** — Plan v1.14: all 6 Pass 5 findings + both rulings; **added a §5.2-response → C-rule completeness table** | `architect` | `a3ff2db4359dbebc2` (resumed) | delivered — **the table caught a 3rd instance of the defect class within minutes** (`403` on two presenter responses meaning different things, C2 covering both with one no-op action). Also **rejected half the reviewer's timer suggestion** with reasoning | `docs/plans/salesperson-ui.md` **v1.14** | `analyst` Pass 6 → — | 172k tok / 17 tools |
+| **U22** — Pass 6: convergence check, not just a re-gate | `analyst` | `ab94a9b40db374063` (resumed) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 1 major, 4 minor). **Cleared S3+S6 for dispatch on evidence**: hashed every step row across v1.2/v1.10/v1.14 — S3 and S6 byte-identical in all three, S7/S8/S10/S12a changed at every version. **P6-1: the completeness table caught the 3rd instance and created the 4th** — `(response → rule)` keying still lets one row span two routes | `docs/reviews/salesperson-ui.md` `## Pass 6` | — | 253k tok / 10 tools |
+| **U23** — Plan v1.15: table re-keyed on **(route, response)** (9→36 rows) + P6-2/3/4/5, new C10/C11/C12 | `architect` | `a3ff2db4359dbebc2` (resumed) | delivered — **re-keying surfaced a 5th instance, a *blank cell***: `reset` → `5xx` asserted "never retried" since v1.10 with **no client rule**; "never retried" was defended at the library and application layers, never the browser. Also found P6-2 undercounted (5 `422` routes, not 3) | `docs/plans/salesperson-ui.md` **v1.15** | `analyst` Pass 7 → — | 198k tok / 11 tools |
+| **U24** — Pass 7: is the class closed? + dispatch judgment | `analyst` (**fresh** — the Pass 3-6 reviewer had *prescribed* the fix under test) | `a4f0457bda1615d13` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 3 major). **Class NOT closed — instance 6 found on two axes the table cannot key** (below it: the discriminator is the error body's *field*; beside it: TanStack's `shouldRetry` is status-blind). **P7-3 would have shipped**: `FalkorDBUnreachableError` has no handler, so a query-time timeout escapes as a bare `500` on every poller at once. **Reproduced Pass 6's undocumented hash method** to authenticate its v1.14 column | `docs/reviews/salesperson-ui.md` `## Pass 7` | — | 126k tok / 38 tools |
+| **U25** — Plan v1.16: **close the class at runtime, not in the table** — total server error map + client loud-default C13 | `architect` | `a3ff2db4359dbebc2` (resumed) | delivered — **building the guard surfaced instance 7**: F8 was reset-scoped only by accident of context; `/messages` and `/order/advance` are writes with the same may-have-committed ambiguity, so the map now splits **read-vs-write**, not reset-vs-other. **Scored its own fix honestly: closes *unruled* (1,3,4,5,7), does NOT close *mis-ruled* (2,6)** — and flagged a bounded hole in its own guard (`return` vs `raise`) | `docs/plans/salesperson-ui.md` **v1.16**; S6/S7 row hashes re-verified unchanged | `analyst` Pass 8 → — | 240k tok / 16 tools |
+| **U26** — Pass 8: final plan gate — is the class closed **enough to ship**? | `analyst` | `a4f0457bda1615d13` (resumed; asked to argue against its own Pass 7 prescription) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 4 major, 3 minor, 1 nit). **Confirmed the architect's own scoring by producing three mis-ruled instances inside the v1.16 delta itself** (P8-1/2/3): generalising F8 from "either reset" to "every write" extended C4's *domain* faster than its *content*, and the cross-cutting `504` row hid the cells that opened. **Argued against its own Pass 7 prescription** — C13 detects an *absent* rule, is silent on a rule that matches and is wrong, and that residual appears nowhere in the shipping document. **Gave the stopping rule teco asked for** (below) | `docs/reviews/salesperson-ui.md` `## Pass 8` — committed `0efc014` | — | 169k tok / 9 tools |
+| **U27** — Plan v1.17: the **one consolidating touch** — P8-1…P8-N1, no Pass 9 | `architect` (**fresh** — the v1.14-v1.16 architect was at 240k tok and this task is self-contained) | `a8e01a3759dafabd0` | in-flight (mid-run `SendMessage`: S6's landed env-var contradiction + S6's row unfrozen) | `docs/plans/salesperson-ui.md` **v1.17** | **none — plan gates stopped** | — |
+| **S6** — Storefront core: participant registry, join, token verify, turn-state map | `coder` (**fresh**) | `a5db169a0966bad59` | delivered — **committed `2f7938d`**, suite **2439** teco-verified **solo**. Mutation-tested both danger-zone assertions teco flagged at dispatch: a cache-first branch reddens the deleted-participant test, an in-process-authoritative registry reddens the restart-survival test. **Found a contradiction between the plan's prose and its own S6 env table** (`FALKORCHAT_PRESENTER_KEY` vs `FALKORCHAT_STOREFRONT_PRESENTER_KEY`) — relayed to U27 in flight. Pinned the `compare_digest("", "")` trap for S10 | `storefront.py` (new), `config.py` (+61/-0), `test_storefront.py` (new), `SERVER.md`, `HISTORY.md` | `analyst` Pass 6 → — | 202k tok / 66 tools |
+| **S6 gate** — Pass 6 on the storefront core: can the cache reach an auth decision? | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — the S3-gate reviewer, 109k tok, adjacent surface) | in-flight (**has the live DB to itself**; S7 held behind it so it can run mutations) | `docs/reviews/salesperson-ui-impl.md` `## Pass 6` | — | — |
+| **S7** — Storefront state, reset, catalog, images | `coder` | `a5db169a0966bad59` (to resume — same module, 202k tok, under both thresholds) | queued (**cleared by Pass 7; serialized behind the S6 gate — shared live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
+| **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
+| **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
+| **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
+| **P5-3** — `SERVER.md` is in no row of §5.0's file map (**3rd map gap this review has found**) | `architect` | — | queued (**held until Pass 7 returns** — the plan is under review; editing it now hands that gate a moving target) | `docs/plans/salesperson-ui.md` §5.0 | `analyst` → — | — |
+| **U14** — Plan v1.6: S4 row corrected to **nine** methods (M-6) | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — also found **M-6's structural root**: S0's Interfaces column has named `ensure_participant` since v1.0, so the S4 row contradicted **the row above it**, not the note | `docs/plans/salesperson-ui.md` v1.6 | `analyst` → — | 157k tok / 51 tools |
+| **U14b** — Plan v1.7: *cite, don't re-list* applied to S7/S10 | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — **the re-list was also WRONG**: S7/S10's quiesce done-condition was **vacuously true** (writes anchored on deleted nodes match zero rows whether quiesce works or not) on the demo's most destructive op | `docs/plans/salesperson-ui.md` v1.7 | plan re-gate → — | 174k tok / 60 tools |
+| **U14c** — Plan v1.8: absorb S0's unactioned §12 hand-offs + full §12 audit | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — **4 items unabsorbed** (teco's 3 + the anomaly-response contract), 2 absorbed in code but not plan text, 3 correctly S4-scoped. **Found: no step owns the presenter view** | `docs/plans/salesperson-ui.md` v1.8 | plan re-gate → — | 199k tok / 8 tools |
+| **U14d** — Plan v1.9: presenter view given an owner — **new row `S12d`** (`frontend-engineer`), numbering stable, no renumber; §10's AC-5 row corrected from 2 wrong owners to 3 right ones; §6.3 #8, §5.0, S15, §9 swept | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — also handed over **6 ranked self-flagged uncertainties**, incl. asking the gate to diff its own most-compressed edit against the source | `docs/plans/salesperson-ui.md` **v1.9** (20 steps) | **plan re-gate** → — | 212k tok / 5 tools |
+| **U16** — Independent re-gate of the plan delta, v1.2→v1.9 (**+84/−39 accepted on teco's own verification alone** — producer self-verification, a teco process gap) | `analyst` (**fresh**) | `ab94a9b40db374063` | **accepted — NEEDS CHANGES** (1 blocker, 3 major, 8 minor, 2 nits). **Vindicated the gate outright**: the blocker was caused by a teco instruction | `docs/reviews/salesperson-ui.md` `## Pass 3` | — | 146k tok / 48 tools |
+| **U17** — Plan v1.10: M-1 blocker (F8 → server-side S7/S10 + new `504`), M-2, M-3 (narrow), M-4 + 8 minors + 2 nits | `architect` | `abeef0ec5b77cc45f` (resumed) | delivered — **took M-3's origin on itself**: the six-field roster was the plan's own v1.0 invention, not a shortfall in delivered S4 | `docs/plans/salesperson-ui.md` **v1.10** (+106/−50 over v1.2) | `analyst` Pass 4 → — | **253k tok** / 20 tools — **now over the resume threshold; next architect unit dispatches fresh** |
+| **U18** — Pass 4 re-gate of plan v1.10 | `analyst` | `ab94a9b40db374063` (resumed) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 1 major, 3 minor). Blocker + all 3 majors fixed; **2 architect fixes judged better than the reviewer's own proposals** | `docs/reviews/salesperson-ui.md` `## Pass 4` | — | 187k tok / 26 tools |
+| **U19** — Plan v1.11: P4-1 partial sweep + P4-2/3/4 | `architect` (**fresh** — prior instance at 253k tok) | `a3ff2db4359dbebc2` | delivered — swept all 4 hits of the removed fields (1 defect, 3 legitimate); **found an undocumented gap nobody had seen**: S12a's `504` re-read calls `/state` on the reset-all path, which answers `401` once the sweep invalidates the presenter's participant token | `docs/plans/salesperson-ui.md` v1.11 | `analyst` Pass 5 → — | 96k tok / 26 tools |
+| **U19b** — Plan v1.12: reset-all `504` re-read → roster not `/state`; S12d negative-control fixture explained | `architect` | `a3ff2db4359dbebc2` (resumed) | delivered — **found a second, worse defect one layer up**: S12a's `401 → rejoin` is undifferentiated across two credentials, so a **successful** reset-all yanks the presenter off `/shop/presenter`, breaking §4.3's explicit promise (teco-verified, lines 466-470) | `docs/plans/salesperson-ui.md` v1.12 | `analyst` Pass 5 → — | 107k tok / 10 tools |
+| **U19c** — Plan v1.13: client credential contract consolidated into a **new §5.3** (C1–C8) — teco's call to fix the class, not add a third clause | `architect` | `a3ff2db4359dbebc2` (resumed) | delivered — surfaced a **pre-existing hole: §6 had no client tier at all** (the SPA's whole test-strategy presence was "`npm test` green" in 4 step rows). Made + labelled one decision (`localStorage`); flagged `503` as carrying the same defect `504` had | `docs/plans/salesperson-ui.md` **v1.13** | `analyst` Pass 5 → — | 143k tok / 18 tools |
+| **U20** — Pass 5 re-gate of plan v1.13 | `analyst` | `ab94a9b40db374063` (resumed) | in-flight | `docs/reviews/salesperson-ui.md` `## Pass 5` | — | — |
+| **U15** — Graph note v1.3: close §12 open item 2 (storefront does **not** advance cursors — `architect`-confirmed); N-5 `v6`→`v7` | `graph-dba` (**fresh** — S0 instance at 431k tok) | `ad82106cf50e24e44` | in-flight | `docs/plans/salesperson-ui-graph.md` v1.3 | `analyst` → — | — |
+| **S1c** — N-1: extend the drift check to transition `guard` (also create-only); N-4 burn note in `seed_salesperson.sh` | `coder` | `aef74d44be60f1cff` | queued (**behind S4 — shared live DB**) | `verify_salesperson.sh`, `seed_salesperson.sh` | `analyst` → — | — |
+| **S2c** — N-2: comment says "~20 chars", measured **46**; N-3: one sentence noting the timers test is now coupled to the start bound | `tdd-engineer` | `a1aa5c430de8da50d` | queued (**behind S4 — `services.py` same-file collision**) | `services.py`, `test_workflow_timers.py` | `analyst` → — | — | `analyst` re-gate (Pass 2) → — | — |
 | S2 · S3 — `run_ctx` merge, responder kill switch | `tdd-engineer` | — | queued (**serialized behind S1 — shared live DB**) | — | — → — | — |
 | S4…S16 — remaining implementation | per plan v1.2 §5.1 | — | queued | — | — → — | — |
 
@@ -108,7 +148,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 |---|---|---|
 | **OQ-1** AC-3 acceptance basis | **Stub-LLM pass + a *published* live latency curve + a staggered demo script.** A live pass/fail concurrency threshold is explicitly **not** the bar. | As the plan proposed (§6.4 stands). R1 is accepted as a stated residual, not engineered away. |
 | **OQ-3** code home | **Neither option offered.** Move the existing Streamlit app to a new **`deprecated/salesperson/`** directory **now**, and give the new client component the freed **`salesperson/`** name. Server half stays inside `falkor-chat` (as the plan argued). | **Plan change.** §4.1 rewritten; no `salesperson-ui/`; S5 scaffolds into `salesperson/`; S16's `git rm -r salesperson/` becomes a *preserving* move done early, not a delete done last; §2.4's parity citations must be re-pointed at `deprecated/salesperson/*.py`; R11 is materially weakened as a risk. |
-| **OQ-5** presenter identity | **`FALKORCHAT_PRESENTER_KEY` rejected.** Presenter routes are **bound to localhost only** — no operator secret, no key exchange, no rate-limiting. | **Plan change.** §4.3/§4.8 rewritten; `POST /shop/api/presenter/session` and S10's rate-limiting largely disappear. **This design has not been reviewed** — `analyst` asked mid-run to assess it, incl. `request.client.host` spoofing, `X-Forwarded-For`, and `::1` vs `127.0.0.1` under `--host 0.0.0.0`. |
+| **OQ-5** presenter identity | **`FALKORCHAT_PRESENTER_KEY`, rate-limited** — the plan's original env-var operator secret. The localhost-only binding chosen in this round was **reverted at U7/B1**: it was *weaker* than the key it replaced, because uvicorn 0.49.0 defaults `proxy_headers=True` and trusts `FORWARDED_ALLOW_IPS`, so behind the TLS proxy §3 promises every peer is loopback. The analyst's startup-printed-token option was also declined. | No net plan change from the original design. §4.3 records **why** the loopback variant was rejected so a later reader doesn't "simplify" it back; R6 names the standing shared secret as the accepted residual. See the U7 row below for the full round trip. |
 | **OQ-6** product images | **An agent sources ~15 permissively-licensed stock images** (Unsplash/Pexels-class), commits them keyed by `productId` slug, and records the licence in the component README. | As proposed. `dist/` stays gitignored with a documented build (plan default). |
 | **OQ-2** locales | **en / pt-BR / es** — plan default accepted. | No change. |
 | **OQ-4** order advance | **Participant self-serve only**; no presenter-driven variant. | No change. |
@@ -123,7 +163,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | `falkor-chat/README.md` / `AGENTS.md` / `docs/QUERIES.md` | only if new REST routes / graph reads are added | implementer |
 | `docs/HISTORY.md` (whichever tree owns the new component) | one entry per delivered change | implementer |
 | `docs/BACKLOG.md` | new `K-`/`C-` items filed out of gates | `teco` reports, human applies |
-| `falkor-chat/AGENTS.md` | v4→v5 drift **fixed 2026-09-02 (U1c)**; plan step S1 bumps to `v6` and must carry the same two rows forward | `teco` (done) → S1 implementer |
+| `falkor-chat/AGENTS.md` | v4→v5 drift **fixed 2026-09-02 (U1c)**; plan step S1 bumps to `v7` (**not `v6` — burned, see the S1 section**) and must carry the same two rows forward | `teco` (done) → S1 implementer |
 | `docs/manuals/salesperson-ui.md` | end-user manual for the shipped UI (FR-1…FR-11 walkthroughs) | `tico` |
 
 ## U1b verification (teco, 2026-09-02)
@@ -167,7 +207,7 @@ docstring and `seed_salesperson.sh`'s header. **Skipped the independent-review g
 construction** (root `AGENTS.md`: trivial, low-risk units may, stated explicitly). An unfiltered
 sweep confirmed no other live document claims v4 as current — remaining `v4` mentions are in
 frozen `plans/`, `reviews/` and `test-reports/` documents, where they are correct history.
-**Plan step S1 bumps the def to `v6`; whoever takes S1 must carry these same two rows forward.**
+**Plan step S1 bumps the def to `v7` — not `v6`, which is burned (see the S1 section); whoever takes S1 must carry these same two rows forward.**
 
 ## U2 gate outcome (2026-09-02) — **needs changes**
 
@@ -465,7 +505,7 @@ def wf_repo(conn) -> Repository:
 
 So **any `pytest` run wipes the global `reference` graph**, and `conn` wipes `ws:test`. Therefore:
 
-- **S1** seeds and verifies `salesperson@v6` + `order-fulfillment@v1` into `reference` and asserts
+- **S1** seeds and verifies `salesperson@v7` + `order-fulfillment@v1` into `reference` and asserts
   `verify_salesperson.sh` exits 0 — a concurrent suite run pulls that graph out from under it.
 - **S2 and S3** each end in "pytest green". Two concurrent full-suite runs wipe `reference` and
   `ws:test` under one another.
@@ -553,46 +593,55 @@ its pre-S0 inventory. The unit stayed inside its probe graph.
 `User`; an always-true `u.userId > ''` conjunct upgrades it to an index scan. The S0 gate is asked to
 confirm that is sound rather than a fragile trick.
 
-## S1 — code accepted, but its "pre-existing defect" report is **wrong**, and teco corrected it
+## S1 — code accepted; its "pre-existing defect" report was **correct**, and teco's rebuttal was wrong
 
-**What S1 reported:** `ws:acme` already held a `salesperson@v6` snapshot *before* its run, diverging
+**What S1 reported:** `ws:acme` already held a `salesperson@v6` snapshot before its run, diverging
 from `reference`, so `./scripts/verify_salesperson.sh` with no argument (defaults to `acme`) exits 1.
-It filed this as a **pre-existing defect** and declined to fix it.
+It filed this as a **pre-existing defect** and declined to fix it. **That was right.**
 
-**The symptom is real — I reproduced it:**
+**The two `v6`s are different definitions that collided on a version number** — established by the
+S1+S2 impl gate (`docs/reviews/salesperson-ui-impl.md`, F-1) and independently re-verified by teco
+against the live graph:
 
-```
-./scripts/verify_salesperson.sh          -> exit 1   "salesperson@v6: reference def and ws:acme snapshot diverge (1 differences)"
-./scripts/verify_salesperson.sh s1v6     -> exit 0   "OK — 2 defs in sync"
-```
+| | K-060 lever string | `language` |
+|---|---|---|
+| `ws:acme` `salesperson@v6` assistant step | **present** | absent |
+| `proof_defs.py` v6 (S1's work) | absent | 7 occurrences |
 
-**But "pre-existing" is false, and the reasoning behind it does not hold.** `v6` has **never existed
-in any commit**:
+The `ws:acme` copy is v5 plus one paragraph — the K-060 synthesis-time safety net that
+`falkor-chat/docs/BACKLOG.md:67` records as **"Reverted, never shipped."** It was live-tested against
+`ws:acme` from an uncommitted working tree, published to the graph, then reverted in the tree. It is
+in **no file and no commit**.
 
-```
-git log -S '"v6"' -- falkor-chat/server/falkorchat/proof_defs.py   -> no commits
-git show HEAD:falkor-chat/server/falkorchat/proof_defs.py | grep -c '"v6"'  -> 0
-```
+**Why teco's rebuttal failed.** teco ran `git log -S '"v6"' -- .../proof_defs.py` (no commits) and
+`git show HEAD:... | grep -c '"v6"'` (0), and concluded v6 could not predate the unit. Both commands
+are true and both are irrelevant: they search **commit history** for an artifact that never entered
+it. A graph snapshot published from a working-tree-only experiment is structurally invisible to
+`git log -S`. The absence of evidence was read as evidence of absence, in the one place where the
+search could not have found anything.
 
-The version was created by S1 itself, in today's uncommitted work. A `salesperson@v6` snapshot in
-`ws:acme` therefore **cannot** predate the unit. What actually happened is that S1 ran
-`seed_salesperson.sh acme` **more than once**: an early run materialized v6 into `ws:acme`, the
-`systemPrompt` then changed (the §4.10 assertion was rewritten mid-run during mutation testing), and
-because materialize is **create-only** the `ws:acme` snapshot froze at the earlier content while
-`reference` moved on.
+**The double-seed hypothesis is withdrawn.** `seed_salesperson.sh:215`'s `snap_pre` probe was
+reporting accurately. S1's own scratch workspace `ws:s1v6` holds a v6 byte-identical to the file, so
+the author verified cleanly against a clean surface; the `ws:acme` copy was never theirs.
 
-**The delegate's evidence was misread, not fabricated.** `seed_salesperson.sh:215` probes `snap_pre`
-*before* publish/materialize, so "already present — no-op" is true — but it only proves the snapshot
-existed before **that invocation**, not before the unit. That is exactly the inference gap between
-"my own earlier side effect" and "someone else's pre-existing defect".
+**Impact is contained:** `MATCH (r:WorkflowRun) WHERE r.defKey='salesperson'` in `ws:acme` returns
+**zero rows**, so nothing is bound to the orphan snapshot, and S11 pins the demo at its own
+workspace. `reference@v6` and `ws:s1v6@v6` are both correct.
 
-**Impact is contained, and the fix is safe:** `MATCH (r:WorkflowRun) WHERE r.defKey='salesperson'` in
-`ws:acme` returns **zero rows**, so nothing is bound to the orphan snapshot, and S11 pins the demo at
-its own workspace anyway. `reference@v6` and `ws:s1v6@v6` are both correct.
+**Resolution: S1 bumps to `v7`** (gate option (a), the reviewer's recommendation) — string edits
+only, no graph surgery, no approval-gated destructive op. `v6` is a **burned version number**: it
+denotes the reverted K-060 experiment that exists only in `ws:acme`, and it must never be reused.
+The v5→v7 gap is deliberate and must be documented where a reader would otherwise "fix" it.
 
-**Lesson worth carrying:** a create-only materialize plus an in-run content change is a silent
-divergence generator. Any unit that both seeds a def and then edits that def in the same run should
-seed **only** into a scratch workspace, never a shared one.
+**Lessons worth carrying.**
+
+1. **Commit history cannot falsify a claim about live graph state.** This lab live-tests from
+   uncommitted working trees as a matter of course, so the graph routinely holds artifacts that were
+   never committed. To check what is in a graph, query the graph.
+2. **teco told the gate not to re-examine this** — the brief said "the misattribution is already
+   established; you don't need to re-litigate it." The gate re-litigated it anyway and caught the
+   error. A coordinator's own conclusion handed to a reviewer as settled fact is the one input a
+   reviewer has no independent reason to check; never mark teco's own reasoning as out of scope.
 
 ## Outstanding cleanup for the stakeholder (teco will not run destructive ops)
 
@@ -601,7 +650,10 @@ Three items, all benign, all needing a human hand:
 ```
 docker exec falkordb-dev redis-cli GRAPH.DELETE probe_u8_rename_dst    # U8's spent rename probe (empty)
 docker exec falkordb-dev redis-cli GRAPH.DELETE ws:probe-s0-reset      # S0's spent reset probe (wiped, 0 nodes)
-docker exec falkordb-dev redis-cli GRAPH.DELETE ws:s1v6                # S1's scratch seed/verify workspace
+docker exec falkordb-dev redis-cli GRAPH.DELETE ws:s1v6                # S1's scratch seed/verify workspace (holds the CORRECT v6 - F-1 evidence, keep until S1c closes)
+docker exec falkordb-dev redis-cli GRAPH.DELETE ws:s1v7                # S1b's scratch seed/verify workspace
+docker exec falkordb-dev redis-cli GRAPH.DELETE ws:probe-s0r3          # S0 v1.2's throwaway probe - teco-verified EMPTY (0 nodes); the note's own disposal list never accounted for it
+docker exec falkordb-dev redis-cli GRAPH.DELETE ws:probe-s4b           # S4b's FalkorDB-quirk isolation probe (2 :User nodes)
 ```
 
 Plus the orphan divergent snapshot in `ws:acme` described above — deleting the `salesperson@v6`
@@ -870,16 +922,143 @@ three — specifically to hunt for what the narrowing might now miss. Results:
   correctly typed, and the constraint violation propagates as an *exception* rather than a status row,
   which is what makes "propagate as 5xx, don't retry" the only thing a caller can do.
 
+## The M-1 blocker — caused by a teco instruction, not by the architect
+
+**What shipped into the plan:** F8 ("a client-side timeout on a reset means *unknown*, not nothing
+changed") was routed to **S12a**, the SPA transport step.
+
+**Why that is wrong.** `FALKORDB_SOCKET_TIMEOUT` is the **server's** Redis socket timeout to
+FalkorDB — teco-verified: `falkorchat/config.py:29` feeds `db.py:44`'s
+`FalkorDB(socket_timeout=…)`. The graph note assigns the rule to **S7/S10**, and the delivered
+`QUERIES.md` §18.7 carries it correctly. Only the plan got it wrong.
+
+**Consequence had it shipped:** no server step carries the rule, and S12a's rule can never fire —
+the browser receives a clean `503` meaning "nothing changed" while the delete has committed. A
+participant is told their data survived when it did not.
+
+**Cause: teco's brief.** It read: *"Route it wherever it actually belongs — the SPA step that owns
+reset UX (S12-something or S13), not S8."* That asserted the client side as a **premise**, in a
+brief whose stated purpose was absorbing the note faithfully. The architect followed it. A
+delegate has no standing to doubt a coordinator's factual premise, and an isolated-context
+delegate has no cheap way to check one.
+
+**The rule this yields:** when routing a mandate to an owner, **state the mandate and ask where it
+belongs** — do not supply the answer as background fact. teco's routing guesses are the least
+reviewed input in the whole pipeline: no gate reads the briefs, and the delegate treats them as
+given. Where teco does have a view, mark it as a steer to be overridden, not as a premise. The M-3
+brief was written that way deliberately ("**My steer, and it is a steer, not an instruction**").
+
+**This is the second finding of its class this coordination.** The first: teco told the S1/S2 gate
+that its own misattribution conclusion was settled and not to re-litigate it — and it was wrong.
+Both are teco's reasoning entering an artifact through a channel nothing reviews.
+
+## CORRECTION — the S1b "phantom concurrent writer" was real, and teco was wrong
+
+**What teco recorded earlier:** that the S1b `coder`'s report of a concurrent rewrite of
+`falkor-chat/AGENTS.md` was a confabulated collision — the delegate re-reading its own edit and
+failing to recognise it — and that its deference to the imagined other agent was the real risk.
+
+**That was wrong. There was a second writer.** `git log -- falkor-chat/AGENTS.md` shows
+**`ef02c7a` "docs: context-file convention + repo-wide AGENTS.md bloat sweep"**
+(2026-09-02T19:10:15), an ancestor of `HEAD`, authored by **no unit of this coordination** — the
+separate Claude Code session that has been committing to this repo throughout. Its diffstat for
+that file (26 changed lines) matches S1b's uncommitted work exactly: **that session committed this
+coordination's in-progress file along with its own sweep.**
+
+**Why teco got it wrong.** teco checked only which of *its own* delegates were in flight, found the
+`architect` fenced off that file and reporting one file touched, and concluded nobody could have
+written it. *"None of my agents did it"* is not *"nobody did it"* — and teco had **already
+discovered the concurrent session earlier in the same coordination**, then failed to apply that
+knowledge to the next diagnosis that needed it.
+
+**Content verified intact after the sweep**, so nothing was lost: `salesperson@v7` ×2, the burned-`v6`
+note ×2, F-8's full drift-check clause, and row 73's DDL-only safety fact are all present in both
+`HEAD` and the working tree. The sweep compacted prose without dropping substance.
+
+**The delegate was right and its instinct was sound.** teco's earlier note framed its deference to
+the "phantom" as the lesson; the actual lesson is that teco dismissed an accurate field report
+because teco's own model of who could be writing was incomplete. A `kaizen_team` correction entry
+is filed (`5d8a1c34-…`).
+
+## Follow-up 13 — a real gap in the doc convention, for the doc-standard owner (`cobb`/human)
+
+Root `AGENTS.md`'s header block defines an optional **`Reviews:`** field but never says what it
+ranges over: *reviews **of this document*** (here, only `docs/reviews/salesperson-ui.md`) or
+*reviews **in this family*** (also `docs/reviews/salesperson-ui-impl.md`, which reviews the
+implementation but amended the plan twice — F-4's file map, F-6's S8 clause). Both readings are
+defensible from the text.
+
+Decided **for this coordination only**: list both, because a reader following only the first
+citation cannot see why the plan says what it says. That is a local call on one document, **not a
+convention change** — the convention itself is genuinely ambiguous and should be settled by whoever
+owns the doc standard.
+
+## Follow-up 14 — the unpinned-workspace trap is a repo-wide class, not a plan defect
+
+U13b's class sweep of `docs/plans/salesperson-ui.md` found **three** done-conditions that invoked a
+`*.sh` script with no workspace argument, where the default resolves to `ws:{FALKORCHAT_WS_ID}` →
+`acme`:
+
+| Step | Shape | Why it mattered |
+|---|---|---|
+| S1 | `seed_salesperson.sh <ws>` unpinned | **Destructive-ish** — how a working-tree def reached `ws:acme` and burned `v6` (F-1) |
+| S4 | `verify_salesperson.sh` no arg, post-`reset_all` | **False evidence** — asserts against `ws:acme`, not the graph the test just reset; passes green proving nothing |
+| S11 | verify scripts exempted from the row's own "every seed script gets the workspace explicitly" rule | The rule is what a `devops` implementer copies |
+
+All three are fixed in plan v1.4. **The class is not plan-specific** — any done-condition, script
+docstring or runbook line in this repo that invokes these scripts bare has the same shape, and the
+read-only ones are the dangerous kind precisely because they cannot corrupt anything and so never
+announce themselves. Worth a repo-wide sweep outside this coordination.
+
+Deliberately left unpinned, as a decision rather than an oversight: plan §6.1's *"Re-run the seed
+sequence after any default pytest run"* — that is guidance to a human restoring their own dev
+workspace, and pinning it would make it wrong for its purpose.
+
 ## Follow-up 12 — one clause, not worth reopening an approved note
 
 §7's `Agent`-owned orphan residual is described more broadly than it is. Pass 3 established it only
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
 
-## Dispatch state — everything is now blocked on one thing: the live database
+## The plan gates are stopped at Pass 8 — the stopping rule, and who set it
 
-S0 is closed on design, but **S4 cannot start until S2 finishes**. S4's done-condition is integration
-tests on `ws:test`, and the suite wipes both `ws:test` and the global `reference` graph — the same
-serialization constraint recorded earlier. S3, S6-S10 and S11/S12a all sit behind that same chain.
-This is the coordination's real critical path now, and it is one-at-a-time by construction, not by
-choice.
+Eight review passes on `docs/plans/salesperson-ui.md` end here. The rule was set by the **reviewer**,
+not by teco's patience, and teco asked for it in those words: *"if you believe further plan passes
+have negative expected value, say so — I would rather stop on your recommendation than on my
+patience."*
+
+Its answer, and the reason it is more than an opinion: passes 5-8 each returned roughly one major
+plus a short tail in one surface, and by Pass 8 **the marginal instance was being produced by the
+fixes rather than found in the original** — P8-1, P8-2 and P8-3 are all mis-ruled instances created
+by the v1.16 delta that was supposed to close the class. That pattern converges slowly under review
+and quickly under execution. Both halves of the class now have an owner:
+
+- **Unruled responses** (a response with no client rule) — closed *structurally*, by S8's total-by-type
+  error map bounding the producible set and C13 making any survivor loud in the demo. Neither depends
+  on anyone having enumerated correctly, which is what four table re-keys failed to achieve.
+- **Mis-ruled responses** (a rule that matches and is wrong) — open, and carried by two mechanisms
+  rather than by more review: each rule stating its own discriminator, and **S12a's per-rule tests
+  enumerating the routes each rule spans**. That last clause is Pass 8's highest-value line: C4's test
+  then names all six writing routes, and P8-2 fails at implementation time, mechanically, with no
+  reviewer in the loop.
+
+So the coordination resumes at the two **implementation** gates, where the evidence is runnable:
+S8's `{handlers} × {routes}` assertion (checking that adding a handler with no row actually fails it)
+and S12a's per-rule tests. Plan revisions after v1.17 are verified by `diff` plus the step-row hashes,
+not by commissioning a Pass 9.
+
+## Dispatch state — the critical path is still the live database, one step at a time
+
+S0-S6 are closed and committed (`2f7938d` is S6). The constraint has not changed and will not: every
+implementation step's done-condition is integration tests on `ws:test`, and the suite wipes both
+`ws:test` and the global `reference` graph, so **two agents cannot run it at once** — a second run
+produces mutually-corroborated spurious failures, which this coordination has already seen once.
+
+That serialization now costs more than it did, because the **review** gates want to run mutations
+too, and Pass 8's whole argument is that runnable evidence is where the remaining value is. So the
+gate and the next implementation step alternate rather than overlap: the S6 gate holds the database
+while S7 waits, then S7 holds it. S8-S10 and S11/S12a sit behind that same chain. One at a time by
+construction, not by choice.
+
+The only work genuinely parallel to it is **document** work — the v1.17 plan touch is running
+concurrently with the S6 gate precisely because it touches no database and no source file.

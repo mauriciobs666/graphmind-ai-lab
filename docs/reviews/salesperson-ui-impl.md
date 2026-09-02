@@ -1,6 +1,6 @@
-# The one salesperson UI — Implementation Review (S1, S2, S4)
+# The one salesperson UI — Implementation Review (S1–S4)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S4
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S3, S4
 
 ## 1. Scope & verdict
 
@@ -709,6 +709,305 @@ battery is the whole evidence.
 
 ---
 
+## Pass 4 — 2026-09-02 (re-gate of S4b)
+
+**Reviewed:** the same working tree after S4b actioned all nine Pass 3 findings — `repository.py`,
+`tests/test_repository.py`, `QUERIES.md` §18.0/§18.3, `DESIGN.md` §7.1, `HISTORY.md`'s S4 entry, and
+the two relabelled section headers in `repository.py`/`services.py`. Baseline unchanged. Compact by
+rule: dispositions first, new findings in full.
+
+**Verdict: approve.** All nine findings are correctly disposed of, six of them mutation- or
+execution-proven by me rather than accepted. **One new nit** (N-8). Both flagged items ruled on
+below, and I agree with the implementer on both.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is still at `4bb96e1` and contains none of the
+S4/S4b additions; every question this pass turns on was settled by ablation and by running the
+suite.**
+
+**Verified by execution this pass:** full suite **2381 passed / 14 deselected** (serial run —
+see the process note below); **10 ablations** on the current tree; the corrected §18.0 citation
+table re-measured independently; the verbatim discipline re-checked in both directions after the
+§18.3 edit; the S4 done-condition run end to end; the four Pass-3 guard probes re-run for
+regression.
+
+### Pass 3 dispositions
+
+| # | Disposition | Evidence I rechecked |
+|---|---|---|
+| **M-1** Major | **Fixed by removal** — `thread_id` gone from the signature and from the Cypher's `SET`; docstring now rules out `channelId` **and** `threadId` together and names where a containment check would have to live | Signature is `participant_id`/`display_name`/`token_hash`/`language`; `QUERIES.md` §18.3's block and its `// …` param comment both dropped `$threadId` (`threadId` correctly stays in the `RETURN` projection — read-back, not settable). **No production caller of `set_participant_record` exists tree-wide** — every hit is a test, a doc, or this review. Ruling on the downstream half below |
+| **M-2** Minor | **Fixed** — `p-ccc:demo-welcome` seeded into `…_leaves_the_non_participant_subgraph_intact`, with the delete asserted plus the two surviving members' cursors and the unowned-cursor sweep | My Pass 3 mutation now bites: narrowing `reset_all`'s sweep to the liveness-filtered form goes **0 → 1 failed** (that exact test), 507 passed |
+| **M-3** Minor | **Fixed** — `test_reset_participant_with_a_duplicate_marker_raises_and_writes_nothing` pins raise + node-count + `User.threadId` + survivors | Re-ran the mutation that *removes* the raise (re-mint id made unique per channel, so the delete proceeds under a duplicate marker): the new test reddens. It has teeth against the behaviour it guards, not just against a constraint that would fire anyway |
+| **M-4** Minor | **Fixed** — `try/finally` teardown, keeping `Product` as the label under test. I prefer this to my own alternate-label suggestion: it removes the pollution *and* keeps the assertion on the label that matters, and `finally` covers the failure path my version would not have | After a clean suite run, `reference` held **0** `Product` nodes; re-seeding gave exactly **15**, and `./scripts/verify_catalog.sh` → **exit 0**. First time this half of the done-condition has passed in the chain |
+| **M-5** Minor | **Fixed, better than specified** — §7.1 gains a `>`-note mirroring the `Message.threadId` precedent, carrying both the no-index and no-`UNIQUE` reasoning **and** an explicit reversal condition | Read `DESIGN.md` §7.1; the reversal condition ("a second writer of the marker … or §18.4's raise stops being acceptable") is the durable half and it is there |
+| **M-6** Minor | **Fixed** — plan §5.1's S4 row now reads "**Nine methods, not eight**", separates the five verbatim-from-note queries from the four this plan specifies, and states the inertness consequence | Read the revised row in `docs/plans/salesperson-ui.md` |
+| **M-7** Minor | **Fixed as specified** — the *older* header relabelled in both files; S4's untouched | `repository.py:3768` and `services.py:2963` now read `# ── Structured NL query generation (K-055 M6) — no QUERIES.md section ──` |
+| **N-6** Nit | **Fixed** — docstring rewritten to say the wrapper now exists and the helper is kept as a fixture tool. See **N-8** for one residual error | Read `tests/test_repository.py:26-34` and `:2793-2800` |
+| **N-7** Nit | **Fixed, and my framing was the weaker one** — §18.0 now carries a measured two-row table plus the "not interchangeable, cite the one that matches the query you are changing" rule, which is better than the one-name correction I suggested | Re-measured independently; see ruling 1 |
+
+### N-8 · **Nit** · the rewritten `_add_to_channel` docstring says "five callers"; there are four
+
+`tests/test_repository.py:28-29` — "still has five callers that seed fixtures older than §18".
+`grep -n "_add_to_channel(" tests/test_repository.py` returns **four** call sites: `:1554`, `:1555`,
+`:1569`, `:1580`. (`tests/test_api.py` has its own separate local copy of the helper, not a caller
+of this one.) The whole point of the N-6 rewrite was to stop this docstring asserting something
+false, so it is worth the one-character fix — or drop the count, which is the part that will rot
+again on the next fixture change.
+
+### The two flagged items
+
+**1 — the §18.0 citation table: I re-measured it my own way and it is exactly right.** Third
+independent measurement, on the current tree, with **no `-k` filter** and both test files
+collected (my Pass 3 runs used a `-k` filter, which is the methodological difference worth naming;
+re-running the single-guard ablations unfiltered reproduced my Pass 3 counts exactly, so the filter
+was not the source of any error). Stripping G1+G2 from `_RESET_PARTICIPANT_CYPHER` → **5 failed,
+503 passed**; from `_RESET_ALL_PARTICIPANTS_CYPHER` → **5 failed, 503 passed**; the two sets are
+disjoint and both match the shipped table **name for name, with no extras and none missing**
+(Appendix H). We do not disagree a third time — the implementer's measurement is correct and mine
+now agrees with it. The added "not interchangeable, cite the one that matches the query you are
+changing" sentence is the part that stops the error recurring, and it is a better fix than the one
+I asked for.
+
+**2 — editing `HISTORY.md` outside the file list was right, and the corrected entry is accurate.**
+The alternative was worse in every direction: the entry describes the *uncommitted* diff S4b had
+just changed, so leaving it would have shipped four false statements into the permanent record, and
+adding a *second* dated entry for a step that has not been delivered once would have violated
+`AGENTS.md`'s "an open item is rewritten, not appended to" and left `HISTORY.md` narrating a fix
+pass rather than a delivered change. Correcting in place is the convention's own answer. §5.0's map
+already puts `HISTORY.md` outside §5.1's Files column and mandates one entry per step, so the file
+was S4's to write in the first place — this is a correction to its own entry, not an incursion.
+I checked all four corrections and the entry now reads true: "neither `channelId` nor `threadId`"
+matches the shipped signature; **41 + 4 = 45** new nodes and 2336 + 45 = **2381** matches the suite
+I ran; and the Docs paragraph now names §7.1 and the header relabel. One residual to watch, not a
+finding: the entry's own mutation paragraph is now the longest unverified claim in it — I confirmed
+five of its seven ablations directly.
+
+### The discarded `CREATE`→`MERGE` ablation — no gap, and reporting it was the right call
+
+**Measured: 508 passed, 0 failed.** The implementer's reasoning is correct and I confirmed the
+mechanism: `MERGE` cannot match a `Thread` hung off the *other* channel, so it creates a second one
+with the same `$newThreadId` and `Thread.threadId`'s UNIQUE constraint fires identically. That
+makes it an **equivalent mutant** — it changes no observable behaviour on this path — and a
+surviving equivalent mutant is a property of the mutation, not a hole in the test. The test's teeth
+are demonstrated by the *non*-equivalent mutation instead: making the re-minted id unique per
+channel removes the raise and lets the delete proceed under a duplicate marker, and
+`test_reset_participant_with_a_duplicate_marker_raises_and_writes_nothing` reddens (Appendix H).
+Reporting a discarded ablation rather than quietly dropping it is exactly the posture that makes a
+mutation table worth reading.
+
+### Verbatim discipline, re-checked after the §18.3 edit
+
+Re-ran Pass 3's Appendix F check against the current tree: **9 fenced blocks in §18, max 77 lines**,
+and all five class constants byte-identical to their §18 transcription *and* to the note's own
+fenced blocks. The note is now **v1.3** (prose only, no Cypher touched), so "verbatim" is verbatim
+against the current note, not a stale one. §18.3 sits next to those blocks and the edit did not
+disturb them.
+
+### Process note for `teco` (not a finding against S4)
+
+These repository tests are integration tests against a **single shared `ws:test` graph**, so two
+`pytest` processes cannot run concurrently — they wipe each other's fixtures mid-test. I produced a
+spurious **"43 failed"** that way by running an ablation battery while a full-suite run was still in
+flight; re-run serially, the same tree is **2381 passed / 14 deselected**. Worth knowing before
+anyone parallelises verification, or reads a surprising red run as a real regression.
+
+### Open questions (Pass 4)
+
+None blocking. `ws:test` is left holding the post-`reset_all` fixture plus both re-materialized
+defs; `reference` holds the clean 15-product catalog and both defs — I re-seeded both (the suite
+run had emptied `reference`), and **the Pass 3 stray `prod1` is gone**, removed by M-4's own
+teardown rather than by me. I created no graph key and deleted none.
+
+---
+
+## Pass 5 — 2026-09-02 (S3: the two wiring switches)
+
+**Reviewed:** the uncommitted working-tree delivery of `docs/plans/salesperson-ui.md` (v1.15)
+§5.1 step **S3** — `config.py`, `app.py`, `tests/test_app.py`, `docs/SERVER.md`,
+`docs/HISTORY.md` — against that row's scope and done-condition and against §4.9 / §4.3 part 4.
+Baseline: `git diff` vs `HEAD` (`5a5a257`). Not reviewed: S1/S2/S4 (Passes 1–4), and anything S8
+or S16 owns.
+
+**Verdict: approve with suggestions.** 0 blockers · 1 major (carry-forward, does **not** gate S3)
+· 2 minor · 2 nits. The done-condition is met on evidence I re-derived independently: the
+flattening helper is correct for every registration shape `create_app` actually uses, its positive
+control genuinely closes the vacuity mode, `dev_surface` dominates `mount_mcp` across all four
+`/mcp` seams, `/health` is exactly one route in both configurations, all three
+`_build_default_app` return paths are independently covered, and my own nine-mutation battery
+reproduced nine kills (the implementer's seven, plus two more isolating a partial surface).
+
+CPG: considered, not relevant — `cpg_falkorchat` is loaded and reachable (285,547 nodes), but S3's
+question is "what does this FastAPI app object register at *runtime*", a construction-time property
+of `_IncludedRouter`/`Mount` instances rather than a static call/AST fact; I answered it by building
+the real apps in the venv instead.
+
+### P5-1 · **Major** · `_route_paths` reports **pre-prefix** paths — the helper S8 inherits cannot see a router's mount prefix
+
+`tests/test_app.py:_route_paths` recurses through `route.original_router.routes` and appends each
+route's raw `.path`. FastAPI 0.139 keeps the `prefix=` passed to `include_router` on the
+`_IncludedRouter` wrapper (`route.include_context.prefix`), **not** on the inner routes — so the
+helper reports a prefixed router by its bare paths. Run on an S8-shaped app (Appendix I, §3):
+
+```
+helper says: ['/health', '/join', '/orders/{oid}']
+truth      : ['/health', '/shop/api/join', '/shop/api/orders/{oid}']
+```
+
+Nothing in S3 is weakened by this — S3's app has no prefixed include, and the exact-list assertion
+still *counts* every included route, so no S3 assertion is vacuous. It gates **S8**: §4.9 and the
+S5.1 S8 row hand this same helper the job of asserting the storefront route table, whose entire
+content is a router at `/shop/api` and a mount at `/shop`. As written, an S8 assertion would pass
+identically whether that router were mounted at `/shop/api`, at `/`, or at `/admin` — the seventh
+instance of this build's recurring "green while asserting nothing" shape, pre-planted.
+
+**Suggested improvement** (verified working, Appendix I §4 — reproduces all four S3 assertions
+unchanged and gets nested prefixes right): thread an accumulator through the walk —
+`walk(inner.routes, prefix + getattr(getattr(route, "include_context", None), "prefix", ""))`,
+appending `prefix + path`. Owner: S8's implementer, as an S8 pre-condition; or `tdd-engineer` now.
+
+### P5-2 · **Minor** · the helper silently drops any route object it cannot classify
+
+The walk's final clause is `if path is not None: found.append(path)` — a route exposing neither
+`original_router` nor `.path` vanishes without trace. `starlette.routing.Host` is exactly that
+shape, and I confirmed it: a `Host` carrying a whole sub-app of routes is reported as `[]`
+(Appendix I §2). No such route exists in `create_app` today, and the positive control would not
+catch one, because the control only asserts the routes it was written against.
+
+**Suggested improvement:** make the unclassifiable case loud rather than silent — `else: raise
+AssertionError(f"route-table helper cannot classify {route!r}")` in place of the silent skip. One
+line, and it converts a future blind spot from a passing test into a failing one.
+
+### P5-3 · **Minor** · `falkor-chat/docs/SERVER.md` appears in **no row** of the plan's §5.0 shared-file map, and S8/S9 will falsify §1.3 again
+
+The implementer's call to update `SERVER.md` was right: §1.3 documented the auth/tenancy seam and
+§2.1 sketched `create_app`'s two mounting lines, and S3 falsified both. Leaving it to S16 would
+have shipped a doc that describes an app shape the code no longer has. But the map is the
+mechanism that keeps that from becoming a merge collision, and `SERVER.md` is absent from it —
+`grep -n 'SERVER.md' docs/plans/salesperson-ui.md` returns five prose citations and zero Files-column
+assignments. S8 adds `storefront`/`storefront_dir` to the same signature and S9 edits `app.py`
+again; both will need the same §1.3/§2.1 edits.
+
+**Suggested improvement** (`architect`, on the plan): add the row
+`` `falkor-chat/docs/SERVER.md` | S3 (**delivered**), S8, S9 | **S3 → S8 → S9** `` — already
+satisfied by the existing `app.py` ordering, so it changes no sequencing. This is the third
+§5.0 map gap this review has found (F-4, M-6, now P5-3); the map is regenerated from §5.1, and
+§5.1's Files columns are what omit doc files.
+
+### P5-4 · **Nit** · the two `/health` routes diverge when the *context provider itself* raises
+
+`app.py`'s bare route calls `provider()` **inside** the `try`, so a raising context provider yields
+503. `api.py:56`'s route resolves `ctx` through `Depends(get_context)` — **outside** any `try` — so
+the same failure yields 500. The docstring and `SERVER.md` both claim "the router's own contract".
+Today `config.get_context()` cannot raise (it returns a constant `CallContext`), so this is
+unreachable; it becomes reachable the moment real auth lands in that seam — which is precisely what
+§1.3 says it is waiting for. Either hoist `ctx = provider()` above the `try` to match, or say in the
+comment that this branch is deliberately stricter.
+
+### P5-5 · **Nit** · `SERVER.md`'s new env table reads its own default backwards
+
+`SERVER.md:115` pairs **Default: off** with **Effect: `_build_default_app` builds the storefront
+deployment** — the Effect column describes the *set* state while the neighbouring column says the
+var is unset. Row 116 has the same shape with the opposite polarity (`Default: **on**`, Effect
+describes *Off ⇒ …*), so the two rows read in opposite directions. Prefix each Effect with the
+condition (`When set (=1) …` / `When off (=0) …`).
+
+### Answers to the six questions in the brief
+
+1. **The flattening helper — my independent judgment.** *Correct and complete for presence, on
+   every registration shape `create_app` uses; incorrect for path spelling under a prefix
+   (P5-1); silently blind to one route class nobody uses (P5-2).* I exercised it directly against
+   FastAPI 0.139 rather than reading it (Appendix I §1): plain `include_router`, `include_router`
+   with a prefix, a router included into a router (two levels), `@app.get`, `add_api_route`,
+   `@app.websocket`, a `Mount` of a sub-Starlette app, and `APIRouter(prefix=…)`. **Every one is
+   reported.** The nested case matters and works — the walk recurses, and a two-level include
+   yields the inner route, not an opaque wrapper. `Mount`s deliberately stop the walk and appear as
+   one path each; the `/` static mount normalises to `""` and **does** land in `_registered_paths`,
+   so `== ["/health"]` catches a surviving `/` mount by itself — the separate `isinstance(r, Mount)`
+   assertion is belt-and-braces, not the load-bearing part.
+   The vacuity mode is real and the positive control closes it: I re-ran the whole helper with its
+   traversal attribute renamed, and the `dev_surface=False` assertion **still passed** (`["/health"]`)
+   while the control **failed** — 37 registered paths collapse to 2. That is the exact defect shape
+   this build keeps producing, and the control is the thing that makes it go red.
+2. **`mount_mcp = mount_mcp and dev_surface` — domination is total.** All four `/mcp` seams sit
+   behind the post-assignment `mount_mcp`: `mcp_mod.configure(...)` and `mcp_lifespan` (`app.py:270`),
+   `app.mount("/mcp", mcp_app)` and `app.add_middleware(_McpPathAlias)` (`app.py:350-353`). Built
+   for real with `mount_mcp=True, dev_surface=False`: `_registered_paths == ['/health']`, zero
+   `Mount`s, **and `app.user_middleware == []`** — the `_McpPathAlias` shim goes with it, which the
+   test suite does not assert but the code gets right. Nothing re-enables it downstream: `app.py`
+   contains exactly four route-registration calls (`grep -n 'include_router\|\.mount(\|add_middleware\|add_api_route'`)
+   and the only `create_app` callers in the component are `_build_default_app`'s three returns.
+3. **`/health` — exactly one, in both configurations, contract genuinely matched.** Measured:
+   default app = 37 registered paths, `count("/health") == 1`; `dev_surface=False` = `["/health"]`.
+   There is no path that registers two — the bare route lives in the `else` of the same `if
+   dev_surface` that includes the router. The failure behaviour is real, not approximated: my M-f
+   mutation (return 200 without calling `services.ping`) is killed by
+   `test_dev_surface_false_health_reports_503_when_falkordb_does_not_answer`, and that test drives a
+   live `TestClient` through the lifespan against real FalkorDB, so the 503 comes from the route, not
+   from a startup abort. One reachable-only-after-auth divergence: P5-4.
+4. **All three `_build_default_app` return paths, verified separately.** Lines 390 (plain), 455
+   (workflow), 462 (responder) each pass `mount_mcp=dev_surface, dev_surface=dev_surface`. I broke
+   each one independently and each killed **only its own** parametrized id — `[plain-app]`,
+   `[workflow-app]`, `[responder-app]` (Appendix I §5, M-d/M-e/M-g). The parametrization is not
+   decorative.
+5. **The mutation set — I re-ran nine of my own, all killed, and the set does cover a partial surface.**
+   I re-derived the battery myself against a copy-aside of `app.py` rather than trusting the report
+   (`app.py` restored byte-identical, md5 `fe8102d7…`, and the full suite re-run green afterwards).
+   The partial-`dev_surface` question is the interesting one, and the answer is yes: I removed each
+   of the three surfaces' guards **independently** — legacy router mounted regardless (M-h), `/`
+   mount regardless (M-c), `/mcp` regardless (M-a) — and each is killed on its own by the single
+   exact-list assertion, because `_registered_paths(app) == ["/health"]` is an equality over the
+   whole table rather than three membership checks. The one gap the set leaves is the
+   `_McpPathAlias` middleware: it is correctly gated, but no test would fail if it were not
+   (removing `and dev_surface` is caught by the `/mcp` *route*, so the middleware is never the thing
+   under test). Not worth a finding — the middleware only rewrites a path whose mount is asserted
+   absent — but worth knowing that its correctness here is by construction, not by test.
+6. **`SERVER.md` — right call, accurate content.** Updating it was correct: S3 falsified §1.3 and
+   §2.1 directly, and it is assigned to no step (P5-3 is that the map should say so, not that S3
+   should have skipped it). The load-bearing new claim — *"until [auth] lands, the whole REST router
+   is unauthenticated"* — is **true and I verified it**: `api.py`'s only dependency across the entire
+   router is `Depends(get_context)` (no `Security`, no `Header`, no `Authorization`), `api.py:45`
+   forwards to `config.get_context`, and `config.py:162-170` returns a hardcoded
+   `CallContext(ws=WS_ID, actor=USER_ID)`. The §1.4 `/health` row and the §2.1 note are both
+   accurate. `README.md`/`AGENTS.md` untouched is right — neither carries an env-var table that S3
+   made incomplete, and S16 owns the narrative.
+
+### Carry-forward confirmed for S16
+
+**Two** new env vars, not one: `FALKORCHAT_STOREFRONT_ENABLED` (`config.py:145`, default off) and
+`FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH` (`config.py:124`, default **on**). Both are currently
+documented only in `docs/SERVER.md` §1.3's table.
+
+### What's solid (Pass 5)
+
+- **The positive control is the right instrument and it works.** Not a formality: with the helper's
+  traversal broken, the `dev_surface=False` assertion still passes and only the control fails. That
+  is the first artifact in this build that structurally prevents the recurring defect rather than
+  avoiding it once.
+- **The exact-list equality over the whole route table** (rather than three `not in` checks) is what
+  makes every partial-surface mutant die on a single assertion.
+- **`mount_mcp = mount_mcp and dev_surface` as one dominating line** rather than a guard at each of
+  the four `/mcp` seams — one place to be right, and the `dev_surface=False, mount_mcp=True` test
+  proves the dangerous shape is inexpressible from a call site.
+- **The `_IncludedRouter` trap was found by the implementer while writing the test**, and written
+  into the helper's docstring where the next reader meets it. That is the correct home for it.
+- `dev_surface` genuinely has no env var — `grep -rn 'dev_surface' falkorchat/` finds it only as a
+  parameter and in comments. The structural claim in §4.9 move 1 holds as built.
+
+### Open questions (Pass 5)
+
+None blocking. **One routing decision for `teco`:** P5-1 is a defect in an S3 artifact whose
+consequence lands entirely in S8. Fixing it now (a 2-line change to `_route_paths` plus a prefixed
+assertion in the control) keeps S3's owner on it; deferring it makes it an S8 pre-condition that
+S8's implementer must be told about explicitly, or it will be re-derived — or not.
+
+**Environment left as found:** I ran the full suite once serially (**2391 passed, 14 deselected**,
+16.8s) and seven mutation batteries against a copy-aside `app.py`, restored byte-identical before
+the suite run. I created no graph key and deleted none. `ws:test` holds the suite's fixture state;
+`reference` is empty of node data, as the brief said it would be — the suite's `wf_repo` fixture
+wipes it with no teardown, so it is still empty now. `ws:s1v6`, `ws:s1v7`, `ws:probe-s0r3`,
+`ws:probe-s4b` still await stakeholder cleanup; I touched none of them.
+
+---
+
 ## Appendix
 
 ### Appendix A — F-1 causal chain (all links verified by execution or by document)
@@ -875,3 +1174,111 @@ the test-planted `prod1` (M-4), not by S4's code.
 probe. `reference` holds the 15-product catalog **plus** the stray `Product {productId:'prod1'}`
 and both `salesperson@v7` / `order-fulfillment@v1` defs (re-seeded by me, since the suite run
 wiped them). No graph key was created or deleted by this pass.
+
+### Appendix H — Pass 4 re-measurement (current tree, serial, no `-k` filter)
+
+Same seam as Appendix G: a pytest plugin rewrites `Repository._RESET_*_CYPHER` on the class at
+import time. `md5sum falkorchat/repository.py` identical before and after every run; `git status`
+shows no new or changed file from this pass.
+
+**The §18.0 citation table, re-measured (`tests/test_repository.py` + `tests/test_services.py`,
+508 collected):**
+
+| Ablated query | Result | Tests that go red |
+|---|---|---|
+| G1+G2 off, `_RESET_PARTICIPANT_CYPHER` | **5 failed, 503 passed** | `…_of_a_cross_member_leaves_the_demo_channel_whole`, `…_keeps_a_cursor_on_a_surviving_thread`, `…_is_a_no_op_for_non_participants[u1]`, `[u2]`, `…_with_a_mismatched_marker_is_a_total_no_op` |
+| G1+G2 off, `_RESET_ALL_PARTICIPANTS_CYPHER` | **5 failed, 503 passed** | `…_deletes_every_participant_subgraph`, `…_leaves_the_non_participant_subgraph_intact`, `…_keeps_exactly_the_survivor_labels`, `…_reports_unscoped_participants_and_leaves_them_whole`, `…_is_idempotent_and_returns_an_all_zeros_row_when_clean` |
+
+Disjoint, five each, and identical to the shipped `QUERIES.md` §18.0 table name for name.
+
+**Single-guard ablations, unfiltered — all reproduce Pass 3's counts** (so the `-k` filter used in
+Pass 3 was not under-counting): G2-off-mine **3**, G2-off-all **2**, G1-off-mine **2**, G1-off-all
+**3**, author-scoped walk **3**.
+
+**M-2 and M-3 re-checks:**
+
+| Mutation | Pass 3 | Pass 4 |
+|---|---|---|
+| `reset_all` cursor sweep narrowed to the liveness-filtered form | 0 failed (the gap) | **1 failed** — `test_reset_all_leaves_the_non_participant_subgraph_intact` |
+| re-mint `CREATE` → `MERGE` (the implementer's discarded ablation) | — | **0 failed** — equivalent mutant; MERGE cannot match a `Thread` hung off the other channel, so it creates and UNIQUE fires identically |
+| re-mint `threadId` made unique per channel (**removes** the raise, lets the delete proceed) | — | **3 failed**, including `test_reset_participant_with_a_duplicate_marker_raises_and_writes_nothing` — M-3's test has teeth |
+
+**Guard probes re-run for regression** (unchanged from Pass 3): duplicate marker → raises, 57 → 57
+nodes, nothing written; `ensure_participant(channel_id='demo-general')` → raises on `Channel`
+UNIQUE, 56 → 56, `demo-general.participantId` still `null`; unscoped-way-2 under `reset_all` →
+`unscopedCount 1`, left whole; `reset_all` under a duplicate marker → cleans up, demo subgraph
+intact.
+
+**The done-condition, end to end, in the order `HISTORY.md` states it:** fixture →
+`seed_catalog.sh` → `seed_salesperson.sh test` → `reset_all_participants("test")` (userCount 2,
+channelCount 2, messageCount 6) → `./scripts/verify_salesperson.sh test` **exit 0** and
+`./scripts/verify_catalog.sh` **exit 0**. Both halves green for the first time.
+
+**Verbatim, re-checked after the §18.3 edit:** 9 fenced blocks in `QUERIES.md` §18, max 77 lines;
+all five constants byte-identical to their §18 transcription and to graph note **v1.3**'s own
+blocks.
+
+### Appendix I — Pass 5 route-helper probes and mutation battery (all run, FastAPI 0.139 / Starlette 1.3.1 / Python 3.12.3)
+
+**§1 — every registration shape, against the shipped `_route_paths`.** Reported / truth:
+
+| Shape | Helper reports | Correct? |
+|---|---|---|
+| `include_router(r)` | `['/a']` | ✅ |
+| `include_router(r, prefix='/shop/api')` | `['/a']` (truth `/shop/api/a`) | ❌ **P5-1** |
+| router → router, two levels | `['/deep']` (truth `/mid/deep`) | ✅ presence, ❌ prefix |
+| `APIRouter(prefix='/pref')` | `['/pref/b']` | ✅ (baked into `.path` at include) |
+| `@app.get` · `add_api_route` · `@app.websocket` | `['/direct']` · `['/added']` · `['/ws']` | ✅ |
+| `app.mount('/m', sub_app)` | `['/m']` (walk stops — documented) | ✅ |
+| `starlette.routing.Host('evil.example', app=sub)` | `[]` | ❌ **P5-2** |
+
+`_IncludedRouter` has **no** `.path` attribute (`getattr(route,'path','<none>') == '<none>'`), which
+is why a broken traversal drops the router entirely rather than reporting one wrong path.
+
+**§2 — the real `create_app`, built for real.**
+
+| Configuration | `_registered_paths` | `Mount`s | `user_middleware` |
+|---|---|---|---|
+| default (`mount_mcp=True`, `web_dir=falkor-chat/web`) | 37 paths, `/health` ×1, `/channels` ✓, `''` ✓, `/mcp` ✓ | `[('/mcp', None), ('', 'web')]` | `['_McpPathAlias']` |
+| `mount_mcp=True, dev_surface=False` | `['/health']` | `[]` | `[]` |
+
+**§3 — the vacuity mode, and the control that closes it.** The helper re-run with its traversal
+attribute renamed (`original_router` → `SOME_FUTURE_NAME`), everything else identical:
+
+| Traversal attr | default paths seen | positive control passes | `dev_surface=False` assertion passes |
+|---|---|---|---|
+| `original_router` | 37 | **True** | True |
+| `SOME_FUTURE_NAME` | **2** | **False** | **True** |
+
+The second row is the finding-shaped failure: the `dev_surface=False` assertion is *still green*
+while asserting nothing. Only the positive control goes red. (The 2 survivors are the `/mcp` and
+`''` mounts, which carry their own `.path`.)
+
+**§4 — P5-1's suggested fix, run.** Threading `prefix + include_context.prefix` through the walk:
+default app still 37 paths / 1 `/health` / `/channels` ✓ / `''` ✓; `dev_surface=False` still
+`['/health']`; S8-shaped app now `['/health', '/shop/api/join']` = truth; two-level nested include
+now `['/top/mid/deep']` = truth. All four S3 assertions unchanged.
+
+**§5 — mutation battery** (`app.py` copied aside, mutated, targeted run, restored each time;
+`md5sum` `fe8102d7ef2d4846b44860214a240a43` before and after, and the full suite green afterwards).
+Baseline for every row: **10 passed, 33 deselected**.
+
+| # | Mutation | Result | Killed by |
+|---|---|---|---|
+| M-a | delete `mount_mcp = mount_mcp and dev_surface` | 1 failed | `…_registers_no_legacy_router_no_web_mount_and_no_mcp` |
+| M-c | `if web.is_dir():` — `/` mount ignores `dev_surface` | 1 failed | same |
+| M-h | `if True:` — legacy router mounted regardless | 1 failed | same |
+| M-b | bare `/health` registered in **both** configurations | 2 failed | `…_with_one_health_route` **and** `…_no_web_mount_and_no_mcp` |
+| M-f | bare `/health` returns 200 without calling `services.ping` | 1 failed | `…_health_reports_503_when_falkordb_does_not_answer` |
+| M-d | `_build_default_app` **plain** path → `mount_mcp=True` | 1 failed | `…_derives_both_switches…[plain-app]` |
+| M-e | `_build_default_app` **workflow** path → `dev_surface=True` | 1 failed | `…[workflow-app]` |
+| M-g | `_build_default_app` **responder** path → `dev_surface=True` | 1 failed | `…[responder-app]` |
+| M-i | `WorkflowTrigger` ignores `TRIGGER_RESPONDER_FALLTHROUGH` | 1 failed | `test_trigger_responder_fall_through_is_gated_on_its_own_flag` |
+
+M-a/M-c/M-h are the partial-`dev_surface` cases: each of the three surfaces, broken alone, dies on
+the one exact-list assertion.
+
+**§6 — suite and lint, re-run by me, serially.** `pytest -q` → **2391 passed, 14 deselected**
+(16.8s). `ruff check falkorchat/app.py falkorchat/config.py tests/test_app.py` → **All checks
+passed** (the 34 errors a repo-wide `ruff check falkorchat/ tests/` reports are all in files S3 did
+not touch).
