@@ -1,6 +1,6 @@
 # The one salesperson UI — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.16 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.17 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`
 
 *2026-09-02 — v1.1: revised against `docs/reviews/salesperson-ui.md` (4 blockers, 9 majors, 15 minors) and the stakeholder's OQ-1…OQ-6 answers; the client component takes the `salesperson/` name and the retired app moves to `deprecated/salesperson/`.*
 *2026-09-02 — v1.2: revised against that review's `## Pass 2` (approve with suggestions) — N1 pins `FALKORCHAT_WS_ID=demo` and adds a non-label survivor clause plus a positive non-participant survivor test, N2 assigns the SPA's shared entry files to S12a, N3 re-keys the route-table assertion onto the `storefront` parameter, plus both nits; `teco`'s `deprecated/` move is recorded as landed.*
@@ -18,6 +18,7 @@
 *2026-09-02 — v1.14: revised against `docs/reviews/salesperson-ui.md` `## Pass 5` (approve with suggestions) — §5.3 completes its matrix against §5.2 (C6 splits into C6a/C6b, new C9 for the quiesce `503`, plus a completeness table making the omission checkable), C8 gains a named test and the single-timer rule, `localStorage` is re-grounded on restart/cross-tab rather than XSS, S8's unreachable second `503` source is struck, and §6 covers the whole SPA track — plus C2 splitting the two meanings of a presenter `403`, which the new completeness table surfaced.*
 *2026-09-02 — v1.15: revised against `docs/reviews/salesperson-ui.md` `## Pass 6` (approve with suggestions) — §5.3's completeness table is re-keyed on **(route, response)** so a row cannot span two routes (P6-1), which surfaced a fifth instance and three new rules: **C10** (`/order/advance`'s `404`/`409` are stale-button outcomes, not logouts), **C11** (`422`, now stated in §5.2 too — P6-2), **C12** (`5xx` never auto-retried, the browser being the layer nothing else covered); plus C1's route→credential clause (P6-3), C2 quoting S10's rate-limiter (P6-4) and the cross-tab discriminator re-labelled usability (P6-5).*
 *2026-09-02 — v1.16: revised against `docs/reviews/salesperson-ui.md` `## Pass 7` (approve with suggestions) — the section's organising idea moves from enumeration to **two totality guards**: S8's error map becomes **total by type** (P7-3 — the unmapped query-time `TimeoutError` that answered a bare `500` on nine routes) with a decidable gate, and new **C13** makes any unruled `(route, response)` fail loudly on the client; C11 re-keys onto the error body's `field` (P7-1), C12 re-keys onto the transport axis and is verified against the pinned lock (P7-2, P7-4), S10's attempt counter is decided as observational (P7-5), the table becomes the source of truth with a stated generation rule (P7-6), S12c seeds the locale chooser from `/health`, and `docs/SERVER.md` gets its §5.0 row.*
+*2026-09-02 — v1.17: revised against `docs/reviews/salesperson-ui.md` `## Pass 8` (approve with suggestions; **the plan gates stop here — no Pass 9**, review resumes at S8's and S12a's implementation gates) — §5.3 gains the **route-class table** S8's gate is computed over (P8-4), the cross-cutting `504` splits into one row per writing route each carrying its own re-read (P8-1/P8-2/P8-3), the grouping licence tightens to *one meaning **and** one action* (P8-3, C9 split by P8-5), C13 states what it does **not** catch and the mis-ruled residual is scored in the document (P8-6), S8 adds the per-route `responses={…}` static half of its gate (P8-7) and the `field` selection rule (P8-N1), **each of S12a's per-rule tests must enumerate the routes its rule spans** (the mis-ruled half's mechanical guard), join is decided **non-idempotent with the roster artifact accepted** (Pass 8 OQ-1), `GET /shop/api/health` is decided **graph-free** (Pass 8 OQ-2), and every env name is spelled in full — sweeping the presenter key prose to S6's delivered `FALKORCHAT_STOREFRONT_PRESENTER_KEY`; plus the S6 implementation gate's plan-side carry-forwards (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`): S10 must reject an **unset** presenter key via `presenter_configured` and extend the constant-time tripwire to `presenter_login` (S6-2, S6-4), S8 gains two source tripwires, and `SERVER.md` §1.5 is explicitly **out of scope** for every step here.*
 
 ## 1. Goal & scope
 
@@ -434,11 +435,18 @@ subtree delete. The cost is 50 `Channel` nodes — negligible.
 5. **No unauthenticated reader of the workspace exists** in the storefront deployment — the
    legacy REST router, the `/` web mount and `/mcp` are not in the route table (§4.9).
 
-**Presenter identity — `FALKORCHAT_PRESENTER_KEY`, restored by stakeholder decision (OQ-5).**
+**Presenter identity — `FALKORCHAT_STOREFRONT_PRESENTER_KEY`, restored by stakeholder decision (OQ-5).**
 One operator secret, typed once at `/shop/presenter`, exchanged for a presenter bearer token via
 `POST /shop/api/presenter/session` (rate-limited, S10). It is not a login: no accounts, no
 per-user credentials, no identity store, no authorization model — the same category of thing as
-`FALKORCHAT_AGENT_ID`. The alternative of letting any participant fire "reset everyone" fails
+`FALKORCHAT_AGENT_ID`. **The name takes the `FALKORCHAT_STOREFRONT_` prefix like every other
+storefront variable** — as delivered by S6 (`config.py:182`, pinned by
+`tests/test_storefront.py`'s env-name test and documented in `falkor-chat/docs/SERVER.md` §1.3).
+v1.16 dropped the `STOREFRONT` segment here, in R6 and in OQ-5, while §5.1's S6 row elided the whole
+prefix; S10/S11 following the prose would have read the key from a variable nothing sets
+and compared against `""`, so presenter login would **silently never authenticate** (see §5.1's
+spell-in-full rule, and S10's `presenter_configured` clause for why an unset key must be rejected
+*before* `hmac.compare_digest`). The alternative of letting any participant fire "reset everyone" fails
 AC-5's evident intent and hands a demo-ruining button to the audience.
 
 **Do not "simplify" this to a localhost check.** That variant was proposed, taken to the
@@ -743,9 +751,11 @@ arriving through the *timing* dimension R4 did not consider. So:
   report from the graph rather than claiming nothing changed. S12a's half is only what the
   browser can still see (§5.2). **This argument is about the resets because they are what §4.8 is
   about, but nothing in it is reset-specific** — any write whose query crosses the socket bound has
-  the same "may have committed" ambiguity. S8's error map generalises it to every writing route and
-  §5.3's completeness table carries the rows; the resets keep their own named code
-  (`reset_state_unknown`) because C4's *re-read endpoint* differs per route.
+  the same "may have committed" ambiguity. S8's error map generalises it to **the five writing routes
+  of §5.3's route-class table** — not "every route", which is what made v1.16's gate uncomputable —
+  and §5.3's cross-cutting table carries **one row per writing route**; the resets keep their own
+  named code (`reset_state_unknown`) because C4's *action* differs per route, and on join it is not a
+  re-read at all: the token was never delivered, so there is nothing to read with (§5.3 C4, R12).
 
   **The re-read is allowed to fail too, and it is the *likelier* fault.** It is another query
   against the same graph, and FalkorDB serialises writes per graph — the stalled reset that
@@ -829,7 +839,10 @@ environment.**
    `services.ensure_actor` at lifespan startup projects `config.USER_ID` into the graph the
    storefront actually uses (harmless — §5.2's roster filters on `User.tokenHash IS NOT NULL`, so
    that node is invisible to the presenter). **B3's misconfiguration is not expressible either,
-   because there is no second value to get wrong.**
+   because there is no second value to get wrong.** *Both halves of this move are now delivered and
+   test-enforced by S6: `dev_surface` has no environment variable (move 1), and a tripwire asserts
+   that no module in the `falkorchat` package mentions `FALKORCHAT_DEMO_WS` at all — so
+   reintroducing it by reflex fails the suite rather than passing review.*
 
    One consequence this carries, and it is the reason S11 *pins* the variable: `config.WS_ID`
    defaults to `"acme"` (`config.py:16`), so a `start_demo.sh` that merely *used*
@@ -913,7 +926,17 @@ guess: this lab's standing discipline is never to ship an unproven mitigation.
 **P** marks steps that may run in parallel with their siblings in the same stage. **Cite, don't
 re-list:** a row that implements a contract defined elsewhere (§4.8's reset inventory, S0's note)
 **cites the section and names only what the row itself adds**. M-6 is what re-listing costs — S4's
-row re-listed S0's method set, dropped one, and so disagreed with the row above it. §5.0 is
+row re-listed S0's method set, dropped one, and so disagreed with the row above it.
+**Spell every environment-variable name in full, in every row and in every prose section** — no
+prefix elision (a storefront variable written as its bare suffix under an implied
+`FALKORCHAT_STOREFRONT_`), because the elided form and the prose form are then two spellings of one
+name that drift independently: v1.16 shipped the S6 row elided and §4.3/R6/OQ-5 spelled out
+**wrong**; the implementer had to pick one, picked the row — which is what the code implements — and only that made the prose *known* to be wrong (§4.3). The check is
+`grep -o 'FALKORCHAT_[A-Z_]*PRESENTER[A-Z_]*' docs/plans/salesperson-ui.md | sort -u` returning a
+single spelling — and it only works if no section quotes a wrong spelling even to disown it, which
+is why the paragraphs describing this defect name the *segment* rather than the variable. This is
+the same defect shape as the Pass 8 majors one level up — a rule stated in two places and
+generalised in one — and the same remedy: one canonical statement, cited elsewhere. §5.0 is
 regenerated mechanically from §5.1's Files column — it is what dispatch is gated on, so it lists
 **every** file any step touches, not only the contested ones.
 
@@ -941,7 +964,7 @@ regenerated mechanically from §5.1's Files column — it is what dispatch is ga
 | `falkor-chat/docs/DESIGN.md` (§5.1 arrow notation — `Channel {channelId, name, participantId, createdAt}`) | S4 (**delivered**) | — · mandated by the S0 note's §12 and absent from this map until v1.8; S4 shipped it anyway |
 | **`falkor-chat/docs/HISTORY.md`** | S1, S2 (**delivered**), and every remaining falkor-chat step — one entry per delivered step (`teco`'s F-5 call) | **append-only, in dispatch order** — each step adds its own entry; never a merge |
 | `falkor-chat/README.md` | S16 | — |
-| **`falkor-chat/docs/SERVER.md`** | S16 | — · **the third map gap found in review.** §4.1 leans on its §1.4 as "the platform's documented REST surface, unchanged", and §4.9 changes what that process actually serves (no legacy router, no `/`, no `/mcp`, plus `/shop` + `/shop/api`) — so the document §4.1 cites as the reason the surface is undisturbed is itself made stale by §4.9. S16 adds the storefront deployment to it; no earlier step may edit it |
+| **`falkor-chat/docs/SERVER.md`** | S6 (§1.3 env table, **delivered**), S16 (§1.4 + close-out) | **S6 → S16**, by disjoint section — **the third map gap found in review.** §4.1 leans on its §1.4 as "the platform's documented REST surface, unchanged", and §4.9 changes what that process actually serves (no legacy router, no `/`, no `/mcp`, plus `/shop` + `/shop/api`) — so the document §4.1 cites as the reason the surface is undisturbed is itself made stale by §4.9; S16 adds the storefront deployment to §1.4 and does the final pass. **v1.16 said "no earlier step may edit it" and S6 correctly did anyway** — it documented its own six env vars in §1.3 as it landed, which is the better rule for a document a reader consults *during* the build, so ownership is per-section rather than per-document. **§1.5's layout block is deliberately *not* in this plan's scope:** it is headed "Layout (as built, M1)" and lists 8 of the package's 27 modules — the nineteen it omits accumulated across M2–M6 and none of them is this plan's, so hanging it on S8 (or any step here) would make one step the owner of five milestones of documentation debt it did not create, and the `(as built, M1)` label makes the block a dated snapshot rather than a false claim about now. It is a standalone `falkor-chat/docs/BACKLOG.md` item — *refresh §1.5 to the current module set, or retitle it as an M1 snapshot* (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`; `teco` files it) |
 | `falkor-chat/scripts/{seed,verify}_salesperson.sh` | S1 | — |
 | `falkor-chat/scripts/start_demo.sh` | S11 | — |
 | `salesperson/` scaffold + toolchain config (`package.json`, `vite.config.ts`, `build.sh`, `.gitignore`) | S5 | — |
@@ -978,13 +1001,13 @@ no sequencing changes as a result.
 | **S3** | **Two wiring switches.** (a) `config.TRIGGER_RESPONDER_FALLTHROUGH` (`FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH`, default on) → `WorkflowTrigger(responder=None)` when off (§4.3 part 4). (b) **§4.9's `create_app(..., dev_surface: bool = True)`**, derived in `_build_default_app` as `not config.STOREFRONT_ENABLED` alongside `mount_mcp`; when false, neither `api.build_router` nor the `/` `StaticFiles` mount nor `/mcp` is registered, and a bare `GET /health` liveness route is added. **`dev_surface` is a parameter, never an env var.** | `falkor-chat/server/falkorchat/config.py`, `.../app.py`, `falkor-chat/server/tests/test_app.py` | `config.TRIGGER_RESPONDER_FALLTHROUGH`, `config.STOREFRONT_ENABLED`, `create_app(..., dev_surface=)` | With the fall-through flag off, an unmentioning non-resuming message reaches no responder. With `dev_surface=False`, **`app.routes` contains no legacy route and no `/`/`/mcp` mount** (asserted on the route table, not by probing 404s), and `GET /health` still answers. Default deployment byte-identical: full existing pytest suite green | `tdd-engineer` | **P**, owns `app.py`/`config.py` first |
 | **S4** | **Repository + thin service primitives** — **the five queries S0 specifies verbatim** (`docs/plans/salesperson-ui-graph.md` §12: `ensure_participant` §3, `reset_participant` §4, `reset_all_participants` §5, **`get_customer_current_order`** §10.1, **`order_belongs_to_customer`** §10.2) **plus four this plan specifies and the note has no Cypher for** (`add_channel_member`, `get_participant_record`, `set_participant_record`, `list_participants` — designed into `QUERIES.md` §18.2/§18.3), plus `Services` wrappers (`get_current_order`, `order_belongs_to_customer`) so `storefront.py` never holds Cypher (`falkor-chat/AGENTS.md` rule 1, `DESIGN.md` §14.2). **Nine methods, not eight: `ensure_participant` is S4's, not S6's** (`docs/plans/salesperson-ui-graph.md` §12 hands it here twice, mandating its §3 verbatim; `docs/reviews/salesperson-ui-impl.md` M-6). It is the **only writer of `Channel.participantId` tree-wide** — the provenance marker both resets scope on — so without it neither reset ever resolves a participant and **both are inert**; and it stays **one atomic write**, because decomposing it opens a crash window leaving a `tokenHash`-carrying `User` whose channel is unmarked: exactly the unscoped participant the note's provenance reasoning depends on being unreachable. Every query added to `falkor-chat/docs/QUERIES.md` **§18** (§17 is the current highest). | `falkor-chat/server/falkorchat/repository.py`, `.../services.py`, `falkor-chat/docs/QUERIES.md`, `falkor-chat/server/tests/test_repository.py`, `.../test_services.py` | the nine repository methods + two service wrappers; all parameterised; `.query`/`.ro_query` split per the platform rule | Integration tests on an isolated `ws:test` graph prove: two participants' resets are disjoint; the delete is **thread-scoped** (an `Agent`-authored reply in the participant's thread is deleted, and no other participant's is); **every §4.8 survivor is asserted by label**, `WorkspaceConfig` included; **and — the assertion that label checks structurally cannot make — a non-participant `Channel` + `Thread` + `Message` (a `User` with no `tokenHash`, mirroring `seed_demo.sh`'s `demo-general`/`demo-welcome`) is seeded into the probe graph and asserted to survive `reset_all` intact**, because victims and survivors share those three labels; `reference` untouched; post-`reset_all` `verify_salesperson.sh <that same probe graph>` (**argument explicit** — unpinned it reads `ws:{FALKORCHAT_WS_ID}` and proves nothing about the graph under test) + `verify_catalog.sh` exit 0; every method idempotent | `coder` | **after S0** |
 | **S5** | **Node toolchain + component scaffold** into the freed `salesperson/` (after U5's `git mv` to `deprecated/salesperson/`). Provision Node/npm (falkor-chat's own note: `node` is not on `PATH` on WSL2), scaffold Vite + React + TS + Tailwind + Vitest + Playwright, `build.sh`, `.gitignore` for `dist/`/`node_modules/`, initial `README.md` + `AGENTS.md`. | `salesperson/**` (new), `salesperson/{README,AGENTS}.md` | `npm run build` → `salesperson/dist/` with `base: "/shop/"` | `./salesperson/build.sh` produces `dist/index.html` + hashed assets from a clean checkout; `npm test` runs; Node version documented. **This done-condition is §4.2's HTMX-fallback decision deadline** — if it cannot be met, escalate before S12a rather than after | `devops` | **P**, after U5 |
-| **S6** | **Storefront core** — participant registry + join + token verify + turn-state map. Token `secrets.token_urlsafe(32)`, `sha256` stored on `User.tokenHash`, `hmac.compare_digest`. **`resolve_token` re-reads the graph; the in-process map is a read-through cache only** (§4.3). Join also writes the display name into the profile (§4.10). Env: `FALKORCHAT_STOREFRONT_ENABLED`, `_DIR`, `_PRESENTER_KEY`, `_TURN_WORKERS`, `_QUIESCE_S`, `_LOCALES`, `FALKORCHAT_THREAD_LIMIT`. **No `FALKORCHAT_DEMO_WS`** (§4.9). | `falkor-chat/server/falkorchat/storefront.py` (new), `.../config.py`, `falkor-chat/server/tests/test_storefront.py` (new) | `Storefront(services, *, presenter_key, turn_workers, quiesce_s)`; `join(display_name, language) -> ParticipantRecord`; `resolve_token(bearer) -> ParticipantRecord \| None` | Join provisions `User`+`Channel`+`Thread`+profile-name idempotently; wrong/absent/malformed/deleted-participant tokens all resolve to `None`; **restart survival: a `Storefront` rebuilt from scratch resolves a token minted by the previous instance** | `coder` | **after S4** |
+| **S6** | **Storefront core** — participant registry + join + token verify + turn-state map. Token `secrets.token_urlsafe(32)`, `sha256` stored on `User.tokenHash`, `hmac.compare_digest`. **`resolve_token` re-reads the graph; the in-process map is a read-through cache only** (§4.3). Join also writes the display name into the profile (§4.10). Env, **spelled in full** (§5.1's rule — v1.16 elided five of these under the prefix and §4.3/R6/OQ-5 spelled the third one wrong): `FALKORCHAT_STOREFRONT_ENABLED`, `FALKORCHAT_STOREFRONT_DIR`, `FALKORCHAT_STOREFRONT_PRESENTER_KEY`, `FALKORCHAT_STOREFRONT_TURN_WORKERS`, `FALKORCHAT_STOREFRONT_QUIESCE_S`, `FALKORCHAT_STOREFRONT_LOCALES`, plus `FALKORCHAT_THREAD_LIMIT` (which does **not** take the prefix). **No `FALKORCHAT_DEMO_WS`** (§4.9). Documents these six in `falkor-chat/docs/SERVER.md` §1.3. | `falkor-chat/server/falkorchat/storefront.py` (new), `.../config.py`, `falkor-chat/server/tests/test_storefront.py` (new) | `Storefront(services, *, presenter_key, turn_workers, quiesce_s)`; `join(display_name, language) -> ParticipantRecord`; `resolve_token(bearer) -> ParticipantRecord \| None` | Join provisions `User`+`Channel`+`Thread`+profile-name idempotently; wrong/absent/malformed/deleted-participant tokens all resolve to `None`; **restart survival: a `Storefront` rebuilt from scratch resolves a token minted by the previous instance** | `coder` | **after S4** |
 | **S7** | **Storefront state, reset, catalog, images.** `get_state(ctx)` composing `services.get_profile` + `get_cart` + **`services.get_current_order`** (a repository read, not composed here); `reset_participant` with §4.8's quiesce, **re-writing the profile name afterwards** — the `Customer` node goes with the reset while `User.displayName` survives, so the wrapper re-calls `services.save_profile(ctx, name=<User.displayName>)`; existing call, no new Cypher (`docs/plans/salesperson-ui-graph.md` §12 item 1); `list_catalog()` with an **explicit row bound** (`services.filter_products` defaults `limit=20` — correct for 15 products, silently wrong at 21); `build_image_manifest()` over **`<FALKORCHAT_STOREFRONT_DIR>/products/`** (§4.7); `advance_own_order()` via `services.order_belongs_to_customer` then `advance_order`. | `falkor-chat/server/falkorchat/storefront.py`, `falkor-chat/server/tests/test_storefront.py` | `get_state`, `reset_participant`, `list_catalog`, `build_image_manifest`, `advance_own_order` | State shape stable and the order block populated from the repository read; reset participant-disjoint; **manifest is non-empty against a fixture asset dir** and every `imageUrl` is `/shop/products/<id>.<ext>` or `null`; `list_catalog()` returns all 15 rows; advancing another participant's order refused; **after a self-reset the profile name is back, not an em-dash** (§2.4's FR-10 parity bar); **the quiesce done-condition is `docs/plans/salesperson-ui-graph.md` §7's four conditions (a)–(d)** (that note supersedes v1.0's "no orphan rows" wording as vacuous — those writes create nothing post-reset whether quiesce works or not), **read participant-scoped for reset-mine**: (b)/(c) over that participant's own posts, (d) over cursors owned by the reset participant — S7 has no global intake stop, which is what (b)'s "(intake stopped)" and (d)'s "after `reset_all`" are worded for; **and F8, both orderings** (§4.8, `falkor-chat/docs/QUERIES.md` §18.7): a FalkorDB socket `TimeoutError` returns **`504 reset_state_unknown`** after re-reading state, never the quiesce `503` — **and a stub whose re-read *also* raises `TimeoutError` still returns `504`, with no state body, never a `500`** | `coder` | **after S6** |
-| **S8** | **The `/shop/api` router + mounts.** `storefront_api.build_storefront_router(...)`, the `get_participant()`/`get_presenter()` dependencies, size-bounded Pydantic models mirroring `schemas.py`, **the error map — which this step makes *total by type*, the plan's first totality guard**: today `_register_error_handlers` (`app.py:80`) maps `ServiceError` and the workflow errors only, and **`FalkorDBUnreachableError` (`db.py:47`) has no handler at all**, so a query-time `redis.exceptions.TimeoutError` escapes as a bare `500` — on `/state` and `/messages`, for **every polling participant at once**, in exactly the scenario §4.8's F8 exists for. S8 registers **typed** handlers, in this codebase's own stated idiom of typed handlers "without a blanket handler masking real bugs" (`app.py:136-137`): `FalkorDBUnreachableError` and `redis.exceptions.ConnectionError` → **`503 graph_unavailable`** (nothing was sent — the precedent is `api.py:63` / `app.py:345`); a query-time `redis.exceptions.TimeoutError` → **`503 graph_read_timeout`** on a read-only route and **`504 <op>_state_unknown`** on a writing one (§5.3's cross-cutting table). **Precedence, stated so it cannot be built the other way round:** the two reset routes catch the timeout themselves and answer F8's named `504 reset_state_unknown` (S7/S10); the typed handler is the backstop for the other nine, and must not pre-empt them. Also **maps `RequestValidationError` to the storefront's own stable `{error: "validation_failed", field: "<name>"}`** rather than exposing FastAPI's `loc` shape, because §5.3 C11 dispatches on `field` and a framework-detail body is not a contract. Plus `schemas.py:256-257`'s reserved-key list, which still omits `timerFired`** (`docs/reviews/salesperson-ui-impl.md` F-6 — routed here because S8 edits `schemas.py` anyway), and the `create_app` wiring: include the router and mount `FALKORCHAT_STOREFRONT_DIR` at `/shop` **inside `create_app`** (`/` is a catch-all registered last and Starlette matches in registration order, so a mount added after `create_app` returns is unreachable). Plus §4.9's **route-table assertion** and the **readiness preflight** in `_lifespan`. | `falkor-chat/server/falkorchat/storefront_api.py` (new), `.../schemas.py`, `.../app.py`, `falkor-chat/server/tests/test_storefront_api.py` (new), `.../test_app.py` | `create_app(..., storefront: bool = False, storefront_dir: Path \| None = None, dev_surface: bool = True)`; routes per §5.2; `401` bad/absent token, `403` bad presenter key, `404` unknown order, `409` stale CAS / turn in flight / `unscoped_participant`, **`422 validation_failed` + `field`** from the Pydantic bounds on all five input-taking routes (§5.2, §5.3 C11), `503` quiesce timeout, **`503 graph_unavailable`** / **`503 graph_read_timeout`** / **`504 <op>_state_unknown`** from the typed handlers, **`504 reset_state_unknown`** on a reset's own FalkorDB socket timeout, and a `Thread` UNIQUE violation on **reset-mine** propagating as `5xx`, never retried (§5.2) | `TestClient` contract tests for every route, incl. the **auth matrix** and **the cross-participant probe**: with A holding cart items, messages and an order, every route called with B's token returns only B's data. **A stubbed repository raising `redis.exceptions.TimeoutError` from a reset is called exactly once** — the *application* layer never retries (§4.8's stated premise; the library layer is beyond this test's reach by construction, which is why the premise is written down rather than only asserted). **The gate is decidable, not a reading exercise: `{registered handlers} × {routes} ⊆ §5.3's completeness table`** — enumerate the handlers actually registered on the app object, cross them with the route table, and assert every resulting `(route, response)` has a row; a handler with no row, or a row with no producer, fails the step. **The gate bounds what the error map can produce, and that is not everything a route can produce** — a handler that returns a `JSONResponse(status_code=…)` directly never raises and so is invisible to the handler set. That residue is covered the only way it can be, by execution rather than by enumeration: the per-route contract tests below assert each route's own returns, and **C13 is the backstop for whatever both miss** — which is the reason the client guard exists rather than being redundant with this one. **Asserted by execution, not inspection:** a stubbed repository raising `redis.exceptions.ConnectionError` returns `503 graph_unavailable` on `/state`, and one raising `redis.exceptions.TimeoutError` returns `503 graph_read_timeout` on `/state` but `504` on `POST /messages` — **and no route anywhere answers a bare `500`**. `/shop` shadows nothing. Preflight refuses to start on a missing `Agent`, missing snapshot or empty catalog, naming the fix command | `coder` | **after S7; owns `app.py` after S3** |
+| **S8** | **The `/shop/api` router + mounts.** `storefront_api.build_storefront_router(...)`, the `get_participant()`/`get_presenter()` dependencies, size-bounded Pydantic models mirroring `schemas.py`, **the error map — which this step makes *total by type*, the plan's first totality guard**: today `_register_error_handlers` (`app.py:80`) maps `ServiceError` and the workflow errors only, and **`FalkorDBUnreachableError` (`db.py:47`) has no handler at all**, so a query-time `redis.exceptions.TimeoutError` escapes as a bare `500` — on `/state` and `/messages`, for **every polling participant at once**, in exactly the scenario §4.8's F8 exists for. S8 registers **typed** handlers, in this codebase's own stated idiom of typed handlers "without a blanket handler masking real bugs" (`app.py:136-137`): `FalkorDBUnreachableError` and `redis.exceptions.ConnectionError` → **`503 graph_unavailable`** (nothing was sent — the precedent is `api.py:63` / `app.py:345`); a query-time `redis.exceptions.TimeoutError` → **`503 graph_read_timeout`** on a `reads-only` route and **`504 <op>_state_unknown`** on a `writes` one, with `<op>` fixed per route (`join` / `post` / `order` / `reset`) by §5.3's cross-cutting table. **The classes are §5.3's route-class table, which this step is built against** — five `writes`, four `reads-only`, and **two routes (`GET /shop/api/health`, `POST /shop/api/presenter/session`) that issue no query at all** and therefore can produce **none** of the three; a handler firing on either is a defect, not a row. **Precedence, stated so it cannot be built the other way round:** the two reset routes catch the timeout themselves and answer F8's named `504 reset_state_unknown` (S7/S10); the typed handler is the backstop for the other **seven graph-touching** routes, and must not pre-empt them. Also **maps `RequestValidationError` to the storefront's own stable `{error: "validation_failed", field: "<name>"}`** rather than exposing FastAPI's `loc` shape, because §5.3 C11 dispatches on `field` and a framework-detail body is not a contract — **selection rule pinned: the *first* entry of `exc.errors()` (declaration order for a single request model), and `field` is the last element of its `loc`** (`displayName`, never `body.displayName`), so a multi-violation request produces one deterministic, client-facing name (§5.3 C11). Plus `schemas.py:256-257`'s reserved-key list, which still omits `timerFired`** (`docs/reviews/salesperson-ui-impl.md` F-6 — routed here because S8 edits `schemas.py` anyway), and the `create_app` wiring: include the router and mount `FALKORCHAT_STOREFRONT_DIR` at `/shop` **inside `create_app`** (`/` is a catch-all registered last and Starlette matches in registration order, so a mount added after `create_app` returns is unreachable). Plus §4.9's **route-table assertion** and the **readiness preflight** in `_lifespan`. Plus **a per-route `responses={…}` declaration on every one of the eleven routes**, naming exactly that route's own returns (its status codes and their bodies — *not* the three cross-cutting ones, which come from the handler set): FastAPI keeps them on the route object, so they are machine-readable and turn the second half of the gate below from a reading exercise into an assertion, at the cost of one dict per route. | `falkor-chat/server/falkorchat/storefront_api.py` (new), `.../schemas.py`, `.../app.py`, `falkor-chat/server/tests/test_storefront_api.py` (new), `.../test_app.py` | `create_app(..., storefront: bool = False, storefront_dir: Path \| None = None, dev_surface: bool = True)`; routes per §5.2; `401` bad/absent token, `403` bad presenter key, `404` unknown order, `409` stale CAS / turn in flight / `unscoped_participant`, **`422 validation_failed` + `field`** from the Pydantic bounds on all five input-taking routes (§5.2, §5.3 C11), `503` quiesce timeout, **`503 graph_unavailable`** / **`503 graph_read_timeout`** / **`504 <op>_state_unknown`** from the typed handlers, **`504 reset_state_unknown`** on a reset's own FalkorDB socket timeout, and a `Thread` UNIQUE violation on **reset-mine** propagating as `5xx`, never retried (§5.2) | `TestClient` contract tests for every route, incl. the **auth matrix** and **the cross-participant probe**: with A holding cart items, messages and an order, every route called with B's token returns only B's data. **A stubbed repository raising `redis.exceptions.TimeoutError` from a reset is called exactly once** — the *application* layer never retries (§4.8's stated premise; the library layer is beyond this test's reach by construction, which is why the premise is written down rather than only asserted). **The gate is decidable, not a reading exercise, and it has two halves.** *(i) Handler half:* **`{registered handlers} × {routes-that-can-raise-them} ⊆ §5.3's completeness table`** — enumerate the handlers actually registered on the app object, cross them with the route table **filtered by §5.3's route classes** (a `503 graph_read_timeout` is expected on the four `reads-only` routes, a `504 <op>_state_unknown` on the five `writes`, and **neither on the two `no graph access` routes**), and assert every resulting `(route, response)` has a row; a handler with no row, or a row with no producer, fails the step. Without the class filter this half is not computable and its symmetric side falsely fails on `/health` and `presenter/session` — the classification is the input, not a nicety. *(ii) Declaration half:* **`{declared in each route's `responses={…}`} ∪ {handler-produced} == §5.3's table`**, read back off `app.routes`; every route must carry a declaration, so an omission fails loudly rather than silently shrinking the set. **What neither half closes** — a handler that returns a `JSONResponse(status_code=…)` directly never raises, so it is invisible to the handler set, and a declaration is itself an enumeration that can be wrong (a declared response nobody produces, or a produced one nobody declared). The declaration half narrows that residue and does not remove it; the per-route contract tests then prove each declared entry is actually producible, so the two disagree loudly instead of agreeing by omission — and **C13 is the backstop for whatever all three miss**, which is the reason the client guard exists rather than being redundant with this one. **Asserted by execution, not inspection:** a stubbed repository raising `redis.exceptions.ConnectionError` returns `503 graph_unavailable` on `/state`, and one raising `redis.exceptions.TimeoutError` returns `503 graph_read_timeout` on `/state` but `504` on `POST /messages` — **and no route anywhere answers a bare `500`**. **Two source tripwires carried from S6's gate** (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`, answers 1 and 4): `storefront_api.py` **never calls `.lookup(`** — `lookup` and `resolve_token` return the identical `ParticipantRecord`, so a router authenticating through the read-through cache would be indistinguishable from one authenticating against the graph; and `create_app` constructs the `Storefront` **without passing `id_gen`** — S6's participant-id collision argument rests on no caller ever pinning it, and S8 is the first caller. `/shop` shadows nothing. **The two `no graph access` routes are asserted negatively**: with the repository stubbed to raise on *any* call, `GET /shop/api/health` and `POST /shop/api/presenter/session` still answer their normal `200`/`403`/`422` — proving they issue no query and so can produce none of the three cross-cutting responses. Preflight refuses to start on a missing `Agent`, missing snapshot or empty catalog, naming the fix command | `coder` | **after S7; owns `app.py` after S3** |
 | **S9** | **Concurrency layer** (§4.4). The bounded `ThreadPoolExecutor` turn queue **keyed by `participantId`** with queue-position accounting and §4.4 measure 1a's `409 TurnInProgress` refusal *before* the message write; the storefront post path (`services.post_message` + enqueue trigger with `run_ctx={"language": …}`, **no `_safe_embed`**); raise the anyio limiter **inside `_lifespan` before `yield`**; graceful executor shutdown. | `falkor-chat/server/falkorchat/storefront.py`, `.../storefront_api.py`, `.../app.py` | `Storefront.enqueue_turn(ctx, participant, posted)`; `turn: {state, queuePosition}` on `GET /shop/api/state` | With `turn_workers=1` and a stub 2 s LLM, three *different* participants' posts report queue positions 0/1/2 and complete in order; **two posts 100 ms apart from one participant produce exactly one `WorkflowRun` on that thread**, the second returning `409` with no `Message` written; poll latency unaffected while the queue is full; executor drains on shutdown | `coder` | **after S8** |
-| **S10** | **Presenter surface** — `POST /shop/api/presenter/session` (key → token, rate-limited: **a fixed per-attempt delay, plus an attempt counter that is deliberately *observational only*** — it is logged and exposed to the operator so a brute-force attempt is visible, and it **never changes the response**, so the codes this route can answer stay `200` / `403` / `422` / the cross-cutting three. **Decided rather than left open (Pass 7, P7-5):** the alternative — a lockout after N attempts — is **rejected**, because there is exactly one shared presenter key (§4.3), so a lockout is a self-DoS: anyone on the LAN could lock the presenter out of their own demo mid-show, which is worse than the brute-force risk it mitigates, given that the fixed delay already bounds the attempt rate and R6 already accepts the standing key as a residual. It would also add an unlisted response (`429`/`423`, or a `403` that silently changes meaning from *wrong key* to *throttled*) that C2's second half would render as "your key is wrong" when the key may be right. **Reversal trigger:** if this is ever exposed beyond a controlled LAN, the answer is not a lockout but K-016), `GET /shop/api/presenter/participants` (roster filtered on `User.tokenHash IS NOT NULL`, so `config.USER_ID`'s lifespan node never appears; **it returns §5.2's four keys and nothing more** — the delivered `list_participants` (`falkor-chat/docs/QUERIES.md` §18.3) projects no activity data, and composing `messageCount`/`cartTotal`/`orderStatus` per participant would be ~150 extra graph queries per presenter poll at 50 participants, outside R10's budget and unprofiled by S0's §8. **Reversal trigger:** if the demo genuinely needs activity stats, they are **one aggregate roster query** designed by `graph-dba` as a §18.3 append, never a per-participant fan-out), `POST /shop/api/presenter/reset-all` with §4.8's stop-intake-then-drain quiesce. | `falkor-chat/server/falkorchat/storefront.py`, `.../storefront_api.py`, `falkor-chat/server/tests/test_storefront_api.py` | `presenter_login(key) -> token`, `list_participants()`, `reset_all()` | A participant token is refused on every presenter route; a wrong key is refused and counted; `reset-all` invalidates every participant token **but not the presenter's**, and clears the presenter's own conversation too; **the same §7 (a)–(d) quiesce conditions as S7**, applied to `reset_all`'s stop-intake-then-drain path; roster excludes non-participant `User`s **and its field set is exactly §5.2's four keys** — asserted, not assumed; **`unscopedCount == 0` returns no `incomplete` field at all**, not `incomplete: false`; **F8, both orderings** (§4.8): a FalkorDB socket `TimeoutError` returns **`504 reset_state_unknown`** after re-reading state, never the quiesce `503` — **and a stub whose re-read *also* raises `TimeoutError` still returns `504`, with no state body, never a `500`**; **§5.2's anomaly contract holds in full** | `coder` | **after S9** |
+| **S10** | **Presenter surface** — `POST /shop/api/presenter/session` (key → token, **entirely in-process: it reads `config.STOREFRONT_PRESENTER_KEY` (`FALKORCHAT_STOREFRONT_PRESENTER_KEY` — S6's delivered spelling, §4.3) and mints a token without touching the graph, which is what puts it in §5.3's `no graph access` class**; **an unset key must never authenticate** — `hmac.compare_digest("", "")` is `True`, so the route checks S6's delivered `Storefront.presenter_configured` *before* comparing and answers `403` when no key is configured (`falkor-chat/docs/SERVER.md` §1.3); rate-limited: **a fixed per-attempt delay, plus an attempt counter that is deliberately *observational only*** — it is logged and exposed to the operator so a brute-force attempt is visible, and it **never changes the response**, so the codes this route can answer stay `200` / `403` / `422` / the cross-cutting three. **Decided rather than left open (Pass 7, P7-5):** the alternative — a lockout after N attempts — is **rejected**, because there is exactly one shared presenter key (§4.3), so a lockout is a self-DoS: anyone on the LAN could lock the presenter out of their own demo mid-show, which is worse than the brute-force risk it mitigates, given that the fixed delay already bounds the attempt rate and R6 already accepts the standing key as a residual. It would also add an unlisted response (`429`/`423`, or a `403` that silently changes meaning from *wrong key* to *throttled*) that C2's second half would render as "your key is wrong" when the key may be right. **Reversal trigger:** if this is ever exposed beyond a controlled LAN, the answer is not a lockout but K-016), `GET /shop/api/presenter/participants` (roster filtered on `User.tokenHash IS NOT NULL`, so `config.USER_ID`'s lifespan node never appears; **it returns §5.2's four keys and nothing more** — the delivered `list_participants` (`falkor-chat/docs/QUERIES.md` §18.3) projects no activity data, and composing `messageCount`/`cartTotal`/`orderStatus` per participant would be ~150 extra graph queries per presenter poll at 50 participants, outside R10's budget and unprofiled by S0's §8. **Reversal trigger:** if the demo genuinely needs activity stats, they are **one aggregate roster query** designed by `graph-dba` as a §18.3 append, never a per-participant fan-out), `POST /shop/api/presenter/reset-all` with §4.8's stop-intake-then-drain quiesce. | `falkor-chat/server/falkorchat/storefront.py`, `.../storefront_api.py`, `falkor-chat/server/tests/test_storefront_api.py` | `presenter_login(key) -> token`, `list_participants()`, `reset_all()` | A participant token is refused on every presenter route; a wrong key is refused and counted; **an *unset* presenter key authenticates nobody: `presenter_configured` is checked *before* any `compare_digest`, asserted with a `presenter_key=""` storefront answering `403` to an empty submitted key** (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`, S6-2 — the guard S6 delivered and tested is useless unless this row tells S10 to call it); **S6's constant-time tripwire pair is extended to `presenter_login`** — a `hmac.compare_digest` spy asserting exactly one call with the expected arguments, plus `assert "==" not in body` (same pass, S6-4: the shipped tripwire inspects `resolve_token` only, and `presenter_login` is the other `compare_digest` site); `reset-all` invalidates every participant token **but not the presenter's**, and clears the presenter's own conversation too; **the same §7 (a)–(d) quiesce conditions as S7**, applied to `reset_all`'s stop-intake-then-drain path; roster excludes non-participant `User`s **and its field set is exactly §5.2's four keys** — asserted, not assumed; **`unscopedCount == 0` returns no `incomplete` field at all**, not `incomplete: false`; **F8, both orderings** (§4.8): a FalkorDB socket `TimeoutError` returns **`504 reset_state_unknown`** after re-reading state, never the quiesce `503` — **and a stub whose re-read *also* raises `TimeoutError` still returns `504`, with no state body, never a `500`**; **§5.2's anomaly contract holds in full** | `coder` | **after S9** |
 | **S11** | **Demo bring-up script** — `falkor-chat/scripts/start_demo.sh`, which **first pins `FALKORCHAT_WS_ID=demo`** (overridable, but never left to `config.py`'s `"acme"` default — that is the repo's populated dev/demo workspace; §4.9 move 2). Then: FalkorDB → `bootstrap_schema.sh "$FALKORCHAT_WS_ID"` at `EMBEDDING_DIM=1024` → `seed_demo.sh "$FALKORCHAT_WS_ID"` → `seed_catalog.sh` → `seed_salesperson.sh "$FALKORCHAT_WS_ID"` → preflight `verify_salesperson.sh` + `verify_catalog.sh` → build the SPA → uvicorn with `FALKORCHAT_ENABLE_AGENT=1`, `FALKORCHAT_WORKFLOW_ENABLED=1`, `FALKORCHAT_TRIGGER_DEF_KEY=salesperson`, `_VERSION=v7`, `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0`, `FALKORCHAT_STOREFRONT_ENABLED=1`, `FALKORCHAT_STOREFRONT_DIR`, and a **non-empty** `UVICORN_ARGS` so `--reload` is off. Every seed **and verify** script gets the workspace **explicitly**, even though the pin makes its default correct — defence in depth, not a load-bearing requirement. `seed_workflows.sh` is deliberately **not** run: this demo needs neither `triage` nor `access-request`. Add the script-table row to `falkor-chat/AGENTS.md`. | `falkor-chat/scripts/start_demo.sh` (new), `falkor-chat/AGENTS.md` | — | From a cold box the script yields a reachable `/shop` with a working join **and a working first agent turn**, against `ws:demo` and not `ws:acme` (assert the resolved workspace in the startup banner); it fails loudly and specifically when Node, the bundle, FalkorDB, a def, the catalog or the demo `Agent` is missing | `devops` | **after S5, S8** |
-| **S12a** | **Session + API client + routing.** **The three shared entry files and their mount slots (`main.tsx`, `App.tsx`, `index.css`) are this row's *first* deliverable** — S12b, S12c, S12d, S13 and S14 all block on them, so a half-finished S12a stalls five steps. Then: **§5.3's credential & session contract in full — C1–C13, stated there and deliberately not restated here** (the two credentials and their storage keys, per-credential `401`/`403` dispatch, the per-path `504` re-read, the two `409`s, the post-reset language step, `503`, the polling cadence — including the shared-constant and single-timer rules, which is why no cadence figure appears in this row); **typing** `reset-all`'s `incomplete`/`unresolved` response so **S12d** can render it (§5.2), TanStack Query as the polling layer, route shell for join / chat / presenter. | `salesperson/src/api/**`, `salesperson/src/session/**`, `salesperson/src/routes.tsx`, **`salesperson/src/{main.tsx,App.tsx,index.css}`** | `useSession()`, `useShopState()`, `apiClient` | Join → chat round-trips against a live server; **each of §5.3's C1–C13 has a test that goes red when the rule is broken, not merely green when it is kept** (C1 alone is emergent — no client can satisfy C2 and C3 together with a global handler) — specifically: a participant-route `401` returns the participant view to join **while `/shop/presenter` stays mounted and the presenter credential stays in storage** (**C3** — drive it the way `reset-all` does, by invalidating *only* the participant token, so a global `401` handler fails); a presenter-route `401`/`403` returns only to key entry with the participant session intact, **and a `403` from `POST /shop/api/presenter/session` reports a bad key in place without clearing anything or navigating** (**C2**, both halves); a `409 TurnInProgress` retains the composer text and re-enables send at `turn.state === 'idle'` (**C6a**); **a `409 unscoped_participant` on the same route surfaces as a failure — no retry, no send re-enable, no language-step navigation — so a handler that dispatches on the `409` rather than on the error body fails** (**C6b**); a `503` on either reset keeps the credential and the view and offers a retry, reporting *nothing changed* (**C9**); a reset-mine `200` keeps the credential and lands on the language step, not join (**C7**); a `504` re-reads and never reports "nothing changed", asserted on **both** a `504 reset_state_unknown` body and a body-less proxy-style `504`, and on a browser fetch timeout (**C4**); **the reset-all `504` re-read is asserted on the URL the client actually requests — it must be `GET /shop/api/presenter/participants`, so a client wired to `/state` for both paths fails rather than passing through the participant `401` path** (**C4/C5**); **a `404` and a `409` from `POST /shop/api/order/advance` re-read `/state` and re-render the order while the participant stays signed in — a handler that routes either through the `401`/`404` participant path fails, because it logs them out for a stale button** (**C10**); a `422` carrying `field: displayName`, `text` **or `key`** shows an in-place field error and clears nothing, while one carrying `field: language`, `limit` or `transition` goes to the dev surface and is **not** retried — **asserted on the `field` value with the route held constant, so a route-keyed implementation fails** (**C11**); **no automatic retry fires anywhere except the one-shot catalog fetch — counted, with a `401` on `/state` dispatching to C3 on the *first* response rather than after a backoff ladder, and a `422` on `/messages` issued exactly once** (**C12**); **a reset mutation fired offline fails into C9's path rather than being queued and auto-resumed** (**C12**'s `networkMode: 'always'`); **an injected response no rule covers — a `418` on `/state` will do — renders the explicit "unhandled response" failure naming route and status, and clears no credential** (**C13**, the guard that fails when a fall-through silently swallows it); **a `5xx` from either reset fires no automatic retry — asserted by counting requests, since the browser is the one layer §4.8's premise and S8's call-count test do not reach** (**C12**); **both polling hooks read one shared exported constant — asserted by changing that constant in the test and observing both intervals move, so two literals fail — and the catalog query is fetched once across a multi-tick run** (**C8**). **For C3 and C4 alike, assert the intercepted request and the stored credentials, never the rendered outcome** — a global `401` handler and a wrong re-read endpoint each produce the *right* rendered outcome for the wrong reason, which is exactly how both defects survived four review passes; **`App.tsx` exposes an i18n-provider slot and a layout-shell slot, and `index.css` a Tailwind layer entry, each with a no-op default, so S12b and S12c mount into them without editing any shared entry file** (verified by S12b/S12c touching none); `npm test` green | `frontend-engineer` | **after S5 and S8** |
+| **S12a** | **Session + API client + routing.** **The three shared entry files and their mount slots (`main.tsx`, `App.tsx`, `index.css`) are this row's *first* deliverable** — S12b, S12c, S12d, S13 and S14 all block on them, so a half-finished S12a stalls five steps. Then: **§5.3's credential & session contract in full — C1–C13, stated there and deliberately not restated here** (the two credentials and their storage keys, per-credential `401`/`403` dispatch, the per-path `504` re-read, the two `409`s, the post-reset language step, `503`, the polling cadence — including the shared-constant and single-timer rules, which is why no cadence figure appears in this row); **typing** `reset-all`'s `incomplete`/`unresolved` response so **S12d** can render it (§5.2), TanStack Query as the polling layer, route shell for join / chat / presenter. | `salesperson/src/api/**`, `salesperson/src/session/**`, `salesperson/src/routes.tsx`, **`salesperson/src/{main.tsx,App.tsx,index.css}`** | `useSession()`, `useShopState()`, `apiClient` | Join → chat round-trips against a live server; **each of §5.3's C1–C13 has a test that goes red when the rule is broken, not merely green when it is kept** (C1 alone is emergent — no client can satisfy C2 and C3 together with a global handler); **and — the guard for the *mis-ruled* half of the defect class (§5.3 C13's residual) — each rule's test must enumerate by name the routes its rule spans, driving every one of them, so a rule whose domain was widened without widening its content fails here rather than in a review pass**: C4 drives all **five** writing routes, C9 both of its actions on both of its trigger kinds, C11 all six `(route, field)` cells, C2/C3 every route carrying their credential. A rule's route list is read off §5.3's route-class and cross-cutting tables, and a test that covers a proper subset is a failing test, not a partial one. Specifically: a participant-route `401` returns the participant view to join **while `/shop/presenter` stays mounted and the presenter credential stays in storage** (**C3** — drive it the way `reset-all` does, by invalidating *only* the participant token, so a global `401` handler fails); a presenter-route `401`/`403` returns only to key entry with the participant session intact, **and a `403` from `POST /shop/api/presenter/session` reports a bad key in place without clearing anything or navigating** (**C2**, both halves); a `409 TurnInProgress` retains the composer text and re-enables send at `turn.state === 'idle'` (**C6a**); **a `409 unscoped_participant` on the same route surfaces as a failure — no retry, no send re-enable, no language-step navigation — so a handler that dispatches on the `409` rather than on the error body fails** (**C6b**); a `503` on either reset keeps the credential and the view and offers a **retry control**, reporting *nothing changed*, **while a `503` arriving on a poll tick of `/state`, `/messages` or `/presenter/participants` renders a staleness indicator and offers *no* control — asserted on both branches, so a single undifferentiated `503` handler fails** (**C9**, both actions); a reset-mine `200` keeps the credential and lands on the language step, not join (**C7**); **`504` — the test names and drives all five writing routes, and never reports "nothing changed" on any of them**, asserted on **both** a named `<op>_state_unknown` body and a body-less proxy-style `504`, and on a browser fetch timeout (**C4**): reset-mine re-reads `/state`; **reset-all's re-read is asserted on the URL the client actually requests — it must be `GET /shop/api/presenter/participants`, so a client wired to `/state` for both paths fails rather than passing through the participant `401` path** (**C4/C5**); `/order/advance` re-reads `/state` and re-renders the order; **`POST /messages` re-reads `/messages` *and* `/state` and reconciles — with the message present and `turn.state === 'idle'` it must report the turn as lost and re-enable send, so a client that re-reads only `/messages` and leaves the participant waiting fails**; and **`POST /shop/api/session` performs *no* re-read at all** (there is no credential) and renders the "your join may not have completed — join again" report, so a client that attempts any authenticated call on that branch fails; **a `404` and a `409` from `POST /shop/api/order/advance` re-read `/state` and re-render the order while the participant stays signed in — a handler that routes either through the `401`/`404` participant path fails, because it logs them out for a stale button** (**C10**); a `422` carrying `field: displayName`, `text` **or `key`** shows an in-place field error and clears nothing, while one carrying `field: language`, `limit` or `transition` goes to the dev surface and is **not** retried — **asserted on the `field` value with the route held constant, so a route-keyed implementation fails** (**C11**); **no automatic retry fires anywhere except the one-shot catalog fetch — counted, with a `401` on `/state` dispatching to C3 on the *first* response rather than after a backoff ladder, and a `422` on `/messages` issued exactly once** (**C12**); **a reset mutation fired offline fails into C9's path rather than being queued and auto-resumed** (**C12**'s `networkMode: 'always'`); **an injected response no rule covers — a `418` on `/state` will do — renders the explicit "unhandled response" failure naming route and status, and clears no credential** (**C13**, the guard that fails when a fall-through silently swallows it); **a `5xx` from either reset fires no automatic retry — asserted by counting requests, since the browser is the one layer §4.8's premise and S8's call-count test do not reach** (**C12**); **both polling hooks read one shared exported constant — asserted by changing that constant in the test and observing both intervals move, so two literals fail — and the catalog query is fetched once across a multi-tick run** (**C8**). **For C3 and C4 alike, assert the intercepted request and the stored credentials, never the rendered outcome** — a global `401` handler and a wrong re-read endpoint each produce the *right* rendered outcome for the wrong reason, which is exactly how both defects survived four review passes; **`App.tsx` exposes an i18n-provider slot and a layout-shell slot, and `index.css` a Tailwind layer entry, each with a no-op default, so S12b and S12c mount into them without editing any shared entry file** (verified by S12b/S12c touching none); `npm test` green | `frontend-engineer` | **after S5 and S8** |
 | **S12b** | **Mobile layout shell**, mounted into S12a's layout slot — **edits no shared entry file**. Sticky header with cart/order/profile icon buttons, bottom-sheet overlays, safe-area insets, no horizontal scroll at 360 px; **AC-5's participant half — the participant's own reset control in the profile sheet's *chrome* (`components/sheets/`, S12b's own subtree — **not** S14's profile card in `views/Profile*`), behind a confirm step**; the Playwright mobile project. | `salesperson/src/layout/**`, `salesperson/src/components/sheets/**`, `salesperson/tests/e2e/**`, `salesperson/playwright.config.ts` | — | Playwright at 360×740 and 390×844 shows no horizontal overflow and legible type; sheets open/close by icon; **the reset control is present, and confirming it calls `POST /shop/api/reset` and returns the client to the language step with the previous language pre-selected (§4.8; the client-side rule is **§5.3 C7**, built by S12a — S12b renders it), asserted on rendered state rather than on the fetch** | `frontend-engineer` | **after S12a**, ‖ S12c |
 | **S12c** | **i18n**, mounted into S12a's provider slot — **edits no shared entry file**. `react-i18next` wiring, the three locale bundles, locale-aware currency/date formatting, and the join-screen language chooser feeding `POST /shop/api/session` — **seeded from `GET /shop/api/health`'s `locales`, which nothing consumed before**. That deletes §5.3 C11's config-drift trigger at source rather than handling it: the chooser can then only offer values the server accepts, so the UI-supplied `language` `422` becomes unreachable instead of merely well-rendered (C11's branch remains as the defence-in-depth behind it). | `salesperson/src/i18n/**`, `salesperson/src/locales/{en,pt-BR,es}.json` | `t()`, `useLocale()` | All three bundles complete (no missing-key fallbacks in a key-coverage test); chosen locale reaches the join request; UI chrome switches | `frontend-engineer` | **after S12a**, ‖ S12b |
 | **S12d** | **Presenter view** (AC-5's UI half), mounted into S12b's layout shell — **edits no shared entry file**. The roster table over `GET /shop/api/presenter/participants` (one row per participant, **§5.2's four keys** — no activity data, see S10); the **reset-everyone** control behind a confirm step; and the rendering of `reset-all`'s `incomplete: true` / `unresolved` body as a named list of participants whose state is still live (§5.2). Presenter key entry, token storage and response typing stay in S12a — this row **renders**. | `salesperson/src/views/Presenter*`, `salesperson/tests/e2e/presenter.spec.ts` (its own spec file, not S12b's) | — | **The roster renders, not merely routes:** with three participants provisioned and one holding cart items and an order — **that activity is the point of the fixture and must not be "simplified" away: a participant who *has* data worth showing is the negative control for the four-key contract, proving the roster shows name and language and nothing more even then** — `/shop/presenter` shows three rows carrying each participant's display name **and language** (§5.2's roster keys — the roster carries no activity data, see S10), **asserted on rendered text rather than on the fetch**; an empty roster shows an explicit empty state, not a blank panel; a `reset-all` response carrying `incomplete: true` and two `unresolved` ids renders both ids and does **not** read as a clean sweep; the reset-everyone control requires a confirm step | `frontend-engineer` | **after S12b, S12c**, ‖ S13, S14 |
@@ -1020,15 +1043,21 @@ routes require `Bearer presenter.<presenterToken>`. **No route accepts `ws`, `th
 `customerId` or `orderId` from the client.** Every bounded body and query below is a Pydantic model
 (§4.2, built by S8), so a violation answers **`422`**, not `400` — stated per route because §5.3's
 completeness table is the source of truth for the response set and this column is its prose view.
-**Three responses are omitted from every row below on purpose** — `503 graph_unavailable`,
-`503 graph_read_timeout` and `504 <op>_state_unknown` are produced by S8's typed error handlers on
-*every* route, identically, and are listed once in §5.3's cross-cutting table rather than repeated
-eleven times.
+**Three responses are omitted from the rows below on purpose** — `503 graph_unavailable`,
+`503 graph_read_timeout` and `504 <op>_state_unknown` are produced by S8's typed error handlers
+rather than by any route's own body, and are listed once in §5.3's cross-cutting table rather than
+repeated per route. **Which of the three a given route can produce is decided by its class**, and
+the eleven routes are classified in §5.3's **route-class table** — `writes` (all three are
+reachable, and the `504` carries that route's own `<op>` token and its own re-read endpoint),
+`reads-only` (`503 graph_unavailable` and `503 graph_read_timeout` only — a read that times out
+changed nothing), `no graph access` (**none of the three**, because no query is issued). That table
+is the input to S8's `{registered handlers} × {routes}` gate; v1.16 said "every route" in all three
+cases and the gate was therefore not computable.
 
 | Route | Body / query | Returns |
 |---|---|---|
 | `GET /shop/api/health` | — | `{status, storefrontEnabled, locales}` |
-| `POST /shop/api/session` | `{displayName ≤ 60, language ∈ locales}` | `{participantId, token, displayName, language, welcome}` · **`422`** on a bounds/enum violation (§5.3 C11) |
+| `POST /shop/api/session` | `{displayName ≤ 60, language ∈ locales}` | `{participantId, token, displayName, language, welcome}` · **`422`** on a bounds/enum violation (§5.3 C11) · **not idempotent** — a lost response can leave a ghost participant whose token nobody holds (§5.3 C4's join case, R12) |
 | `GET /shop/api/state` | — | `{profile:{name,deliveryAddress}, cart:{items[],total}, order:{orderId,status,lines[],total}\|null, turn:{state,queuePosition}}` |
 | `GET /shop/api/messages` | `?since=<ms>&limit=<1..200>` | message rows (participant's own thread, server-resolved) · **`422`** on an out-of-range `limit` (§5.3 C11) |
 | `POST /shop/api/messages` | `{text ≤ 2000}` | the posted row · **`409 TurnInProgress`, nothing written**, when that participant already has a turn in flight · **`422`** when `text` exceeds the bound (§5.3 C11) |
@@ -1075,7 +1104,7 @@ rendering is a real mitigation but not a discriminator here. Under FR-1's contro
 choice sits inside R6's already-accepted residual rather than adding a new one; note also that the
 presenter **key** is never stored — only the token exchanged for it (the table's `{token}`).
 
-**The rules — C1…C13.** S12a's done-conditions cite these by number. **C13 is the one that does not enumerate** — it is the runtime guard the other twelve are checked by.
+**The rules — C1…C13.** S12a's done-conditions cite these by number. **C13 is the one that does not enumerate** — it is the runtime guard against a `(route, response)` no rule covers. It is *not* a guard on whether the other twelve are **right**: see C13's own residual paragraph.
 
 - **C1 — every `401`/`403` is dispatched *per credential*, never by one global handler.** Which
   credential the failed request carried decides what is cleared and where the user lands. A single
@@ -1092,7 +1121,12 @@ presenter **key** is never stored — only the token exchanged for it (the table
   names, so keep them apart: on the **two authenticated** presenter routes it means *the presenter
   session is gone* (clear the credential, return to key entry); on **`POST /shop/api/presenter/session`**
   a `403` means *the key you just typed is wrong* — there is no credential to clear and the user is
-  already on key entry, so the rule is to report the bad key in place. S10's rate-limiter is a
+  already on key entry, so the rule is to report the bad key in place. **A deployment with no key
+  configured answers that same `403` deliberately** (S10 checks `presenter_configured` before any
+  comparison, because `compare_digest("", "")` is `True`): the two *meanings* differ, but the client
+  cannot and must not distinguish them — telling the LAN that no key is configured is worse than
+  telling it the key was wrong — and the **action is identical**, so one row is correct under this
+  section's grouping licence. The operator's signal is the server log, not the response. S10's rate-limiter is a
   **"fixed delay + attempt counter"** (its wording, quoted rather than paraphrased — it does *not*
   back off progressively), so the client must not assume growing backoff and must not add retry
   logic of its own around it.
@@ -1105,23 +1139,59 @@ presenter **key** is never stored — only the token exchanged for it (the table
   precisely what §4.3's "they can keep driving the demo through the reset" forbids, on the most
   visible action in AC-5.
 - **C4 — after a `504`, re-read from the endpoint the failed path's *surviving* credential can
-  reach.** (§4.8's F8 is the server half; this is the browser's.) The branch keys on **the status
+  reach — and C4's content is *per writing route*, one case each, never a generalisation.** (§4.8's
+  F8 is the server half; this is the browser's.) The branch keys on **the status
   code, not the error string**: §3 puts TLS behind a reverse proxy, which emits its own bare
   `504 Gateway Timeout` with an HTML body meaning exactly the same thing here (*unknown, re-read
   state*) and carrying no `reset_state_unknown` to match on. A fetch that times out in the browser
   takes the same branch. Never report "nothing changed".
-  - after **reset-mine** → `GET /shop/api/state`. The participant credential survives its own reset
-    (§4.8), so the call answers with state.
-  - after **reset-all** → **`GET /shop/api/presenter/participants`**. If that delete committed, the
-    participant credential is already dead, so `/state` would answer `401` rather than state — while
-    the roster is what the surviving **presenter** credential can still reach, and is the thing that
-    actually says whether the sweep happened.
-  - after **`POST /shop/api/messages`** → `GET /shop/api/messages`; after
-    **`POST /shop/api/order/advance`** → `GET /shop/api/state`. These two are here because S8's total
-    error map (below) showed the `504` is **not** reset-only: *any* write whose query times out may
-    have committed, so `POST /messages` can leave a message in the transcript and `/order/advance` can
-    leave the order advanced. Same rule, same re-read-and-report, and the same prohibition on saying
-    "nothing changed". §4.8's F8 argues the case on the resets; it generalises unchanged.
+  **The rule spans exactly the five writing routes of the route-class table below, and each gets its
+  own case here.** v1.16 generalised F8 from "either reset" to "every write" and extended C4's
+  *domain* — the cross-cutting `504` row, which said "every route that writes" — without extending
+  its *content*: it listed four cases, so **join was missing entirely** and one of the four present
+  (`POST /messages`) named a re-read that cannot answer the question. That asymmetry — widening the
+  domain is one edit, widening the content is five — is the
+  mis-ruled residual C13 does not catch, and the reason S12a's C4 test must **enumerate all five
+  routes by name**.
+  - after **`POST /shop/api/reset`** (reset-mine) → `GET /shop/api/state`. The participant credential
+    survives its own reset (§4.8), so the call answers with state.
+  - after **`POST /shop/api/presenter/reset-all`** → **`GET /shop/api/presenter/participants`**. If that
+    delete committed, the participant credential is already dead, so `/state` would answer `401` rather
+    than state — while the roster is what the surviving **presenter** credential can still reach, and is
+    the thing that actually says whether the sweep happened.
+  - after **`POST /shop/api/order/advance`** → `GET /shop/api/state`. The write may have left the order
+    advanced; `/state` carries the order block, so the rendered order is the report.
+  - after **`POST /shop/api/messages`** → **`GET /shop/api/messages` *and* `GET /shop/api/state`, and
+    the two must be reconciled.** The post path is `services.post_message` **then** enqueue (S9), so a
+    query-time timeout fires *during the write*, before the enqueue: the overwhelmingly likely committed
+    state is **message written, turn never scheduled**. Re-reading only `/messages` shows the message
+    present, says nothing about the turn, and leaves the participant waiting forever on a reply nobody
+    queued — which is exactly the state §4.4 measure 1a refuses *before* the write ("a written message
+    with no reply would sit in the transcript forever"), reintroduced through the back door.
+    **The reconciliation:** message present **and** `turn.state === 'idle'` ⇒ *the turn was lost* — say
+    so and re-enable send. Message present **and** `turn.state !== 'idle'` ⇒ the turn is running; wait,
+    as normal. Message absent ⇒ nothing committed; the composer text is retained and send re-enabled.
+    **State the cost of the only recovery the API offers:** re-sending posts a second line, so the
+    transcript keeps a duplicate — tell the participant that rather than letting them discover it.
+  - after **`POST /shop/api/session`** (join) → **there is no re-read, and there cannot be one.** Join
+    writes (`User`+`Channel`+`Thread`+profile, S6), but the response that would have carried the token
+    is what was lost — so the client holds **no credential with which to read anything**, and every
+    other route answers `401`. The rule is therefore a *report*, not a re-read: **"your join may not
+    have completed — join again"**, plus a warning that a stale roster row may appear. There is no
+    variant of this case that re-reads, which is why the cross-cutting `504` row could not stay one row.
+    **Consequence, decided rather than engineered away (Pass 8 OQ-1):** if the write did commit, the
+    graph keeps a `User` with a `tokenHash` nobody holds — a ghost row in the presenter roster owning a
+    `Channel` and `Thread`, while the person re-joins as a second identity. **Join stays
+    non-idempotent and the artifact is accepted** (R12): the alternative is a client-supplied
+    idempotency nonce, which §5.2's invariant does permit (it bans `ws`/`threadId`/`customerId`/
+    `orderId`, not a nonce) but which would reopen **delivered** S6 — a new `join()` parameter, a
+    uniqueness constraint and an S0 amendment — to close a window that requires a FalkorDB socket
+    timeout during the one write a participant makes before they hold any state. The ghost costs one
+    roster line, is self-healing (`reset-all` sweeps it: it is a participant `User`), and S12d renders
+    it as an ordinary participant who never speaks. **Reversal trigger:** if join ever acquires a side
+    effect that matters beyond the roster (payment, external provisioning, a per-participant quota), or
+    the storefront is used outside a controlled demo, the nonce is the answer and it lands as its own
+    step rather than as an S6 amendment.
 - **C5 — a `401` from `/state` following a `504` on reset-all is *evidence the sweep committed*,**
   not an ordinary auth failure to swallow; it still routes through C3. **A client that wires
   `/state` for both C4 paths appears to work and is standing on luck** — the `401` falls into the
@@ -1158,16 +1228,30 @@ presenter **key** is never stored — only the token exchanged for it (the table
   covers the perception. The alternative — re-enabling optimistically on the client — is **rejected**,
   because it races the server's `409` and re-opens the double-post that §4.4 measure 1a exists to
   close.
-- **C9 — a `503` means *nothing changed*, and the client says so.** Three sources, one meaning, which
-  is why they share a rule (and why the table may group them): the **quiesce timeout** on either reset
-  (§4.8 — the reset never reached the graph); **`graph_unavailable`** on any route (the graph could
-  not be reached at all, so nothing was sent); and **`graph_read_timeout`** on a read-only route
-  (a query timed out, and a read that times out changes nothing by definition). In every case: keep
-  the credential, keep the view, surface it as a transient refusal, and offer a plain retry — a retry
-  is safe **because** nothing changed, which is exactly what distinguishes this code from C4's `504`.
-  Do not navigate, and do not silently swallow it: a reset-everyone that quietly did nothing mid-demo
-  is the failure the presenter must see, and a poll that quietly stops updating is the one they will
-  not notice until it matters.
+- **C9 — a `503` means *nothing changed*, and the client says so. One meaning, but two actions, and
+  the action keys on *who asked* — not on the route and not on the source.** Three sources share the
+  meaning: the **quiesce timeout** on either reset (§4.8 — the reset never reached the graph);
+  **`graph_unavailable`** on any route that touches the graph (it could not be reached at all, so
+  nothing was sent); and **`graph_read_timeout`** on a reads-only route (a query timed out, and a read
+  that times out changes nothing by definition). Common to all three: keep the credential, keep the
+  view, navigate nowhere, and never silently swallow it. The action then splits:
+  - **User-initiated request** (either reset, `POST /messages`, `/order/advance`, either `session`
+    route, the one-shot catalog fetch) ⇒ **surface a transient refusal with a plain retry control.**
+    A retry is safe **because** nothing changed, which is exactly what distinguishes this code from
+    C4's `504`. A reset-everyone that quietly did nothing mid-demo is the failure the presenter must
+    see.
+  - **Background poll tick** (`/state`, `/messages`, `/presenter/participants` — C8's 2 s cadence)
+    ⇒ **a staleness indicator and *no* control.** There is nothing to offer a retry button for: the
+    next tick *is* the retry, and a button that duplicates it invites a second request during an
+    outage, which is C12's amplification argument one rule over. What the participant or presenter
+    needs is to know the view has stopped updating and since when — a poll that quietly freezes is
+    the failure nobody notices until it matters.
+
+  **Why this split is stated rather than left to taste:** it is the same defect as P8-3 one rule
+  down — three sources with one meaning grouped under one rule, where the *action* was not in fact
+  common. The discriminating axis here is genuinely not the route (`/state` takes both branches: the
+  poll and a user-initiated refresh), which is why C9 may still be one rule and one table row where
+  C4 may not.
 - **C10 — `/order/advance`'s `404` and `409` are ordinary order outcomes, not auth failures and not
   alarms.** `404` is *no current order of theirs*; `409` is *the CAS guard did not match* (§5.2) —
   both are what a **stale button** produces when the order already moved on. Neither can mean
@@ -1202,6 +1286,17 @@ presenter **key** is never stored — only the token exchanged for it (the table
     a version bump may change — but maps it to the storefront's own stable
     **`{error: "validation_failed", field: "<name>"}`**, one field name per response. C11 branches on
     `field`; S8 owns the mapping.
+  - **One field name, out of a report that carries all of them — so the selection rule is part of the
+    contract, not an implementation detail.** Pydantic validates every field and FastAPI's
+    `RequestValidationError.errors()` returns **all** violations at once. S8 takes the **first entry**
+    of that list, which for a single request model is **declaration order** — so `displayName` before
+    `language` on `POST /shop/api/session`, deterministically, and C11's highlighting cannot depend on
+    dict ordering or on which field the user fixed last. And **`field` is the client-facing name**,
+    the last element of the error's `loc` (`displayName`, never `body.displayName` or `query.limit`):
+    the client knows its own input names, not FastAPI's parameter-source prefixes. A response
+    therefore never carries two field names, and a user-supplied violation co-occurring with a
+    UI-supplied one resolves to whichever is declared first — which is why the client bounds the
+    user-supplied fields itself (above), so the common case never round-trips at all.
 - **C12 — no automatic retry anywhere, except the one-shot catalog fetch — and the rule is keyed on
   the *transport*, not on the status.** §5.2's absolute — "a `Thread` UNIQUE violation propagates as
   `5xx` and is **never retried**" — is held at the library layer by §4.8's stated premise and at the
@@ -1239,22 +1334,49 @@ presenter **key** is never stored — only the token exchanged for it (the table
   bit:** if a future version changes the query default or makes `shouldRetry` status-aware, re-derive
   this rule; the explicit `retry: 0` pins above are what make that a re-derivation rather than a
   regression.
-- **C13 — anything with no rule fails *loudly*, and this is the guard the other twelve are checked
-  by.** Any `(route, response)` the client receives that matches no rule above renders an explicit
+- **C13 — anything with no rule fails *loudly*.** Any `(route, response)` the client receives that matches no rule above renders an explicit
   **"unhandled response"** failure — naming the route and the status — instead of falling through to
   the nearest handler that happens to match. It clears no credential, navigates nowhere, and retries
   nothing.
-  **Why this rule exists, stated plainly because it is the organising idea of this section.** Six
-  passes of this plan closed six instances of one defect class — a client rule spanning server
-  responses that share a status code but not a meaning — by *enumerating* better: first a rule list,
-  then a table keyed on response, then a table keyed on `(route, response)`. Enumeration is necessary
-  and it made the search mechanical, but it **cannot close the class**, for a reason worth quoting
-  from the Pass 7 review: *"unexpressible in the table" is a document property; "unhandled ⇒ loud" is
-  a runtime property, and only the second survives §5.2 being wrong.* Every instance so far was a
+  **Why this rule exists, stated plainly because it is the organising idea of this section.**
+  Successive passes of this plan closed seven instances of one defect class — a client rule spanning
+  server responses that share a status code but not a meaning — by *enumerating* better: first a rule
+  list, then a table keyed on response, then a table keyed on `(route, response)`. Enumeration is
+  necessary and it made the search mechanical, but it **cannot close the class**, for a reason worth
+  quoting from the Pass 7 review: *"unexpressible in the table" is a document property;
+  "unhandled ⇒ loud" is a runtime property, and only the second survives §5.2 being wrong.* Every one
+  of those seven was a
   response the plan did not know about; a guard that only covers responses the plan knows about can
   never catch the next one. C13 does, and it catches it **in the demo, in front of the person who can
   act on it**, rather than in a review pass. It is deliberately the least clever rule here: a
   fall-through that shouts.
+
+  **What C13 does not do, stated because the residual is real and ships.** C13 detects the
+  **absence** of a matching rule. It is silent whenever a rule matches and is **wrong** — the branch
+  runs, the client renders something plausible, and nothing shouts. That band is not hypothetical and
+  it is not shrinking on its own. Scoring the class honestly, across eight review passes of this
+  section:
+  - **Unruled — closed.** Seven instances were found, five of them (1, 3, 4, 5, 7) responses the plan
+    did not know it could receive. The pair that closes them is structural rather than enumerative:
+    S8's error map is **total by type**, so the producible set is bounded by construction, and C13
+    makes any survivor loud in the demo. Neither half depends on anyone having enumerated correctly.
+  - **Mis-ruled — open, and *fed* by every generalisation.** Pass 8 found three more (C4 silent on
+    join — the one writing route whose `504` admits no re-read at all; C4's `/messages` re-read
+    confirming the write but saying nothing about the turn, which is the state §4.4 measure 1a
+    exists to prevent; the one `504` row grouping five routes that share a meaning but not an
+    action) — **all three created by the v1.16 delta that was meant to close the class**, because
+    extending a rule's domain is one edit while extending its per-route content is five. C13 stays quiet on all three: a rule matches. The
+    server map is innocent: it produces a documented `504`.
+  - **The mitigation, labelled accurately: each rule states its own discriminator** ("on the body,
+    not the code" — C6b; "on the `field`, not the route" — C11; "on the transport, not the status" —
+    C12; "on the status code, not the error string" — C4) — which converts an implicit assumption
+    into a visible claim and makes review fast. **That is a review aid, not a guard**: C4's
+    discriminator is stated too, and C4 is precisely the rule that broke.
+  - **The mechanical guard for this half is in S12a, not here.** Each rule's red-on-break test must
+    **enumerate the routes the rule spans** — so C4's test names all five writing routes and a
+    missing case fails at implementation time, without a reviewer. That is where the residual is
+    carried; it is executable, and it is the reason this plan stops taking review passes and resumes
+    at the implementation gates.
 
 **Completeness — this table is the source of truth for the storefront's response set; §5.2's
 `Returns` column is its prose view.** v1.15 had that backwards: it said the table certifies against
@@ -1266,25 +1388,72 @@ size a hand-maintained table needs one:
 > remembered**: `{responses a route returns itself} ∪ {responses S8's typed error handlers can
 > produce on it}`. The second half is enumerable **only because the error map is total by type**
 > (S8, below) — which is what makes the S8 gate decidable rather than a reading exercise:
-> **{registered handlers} × {routes} ⊆ this table**.
+> **{registered handlers} × {routes *that route class permits them on*} ⊆ this table**. The class
+> filter is not a refinement of the gate, it *is* the gate — without it the cross product is
+> nonsense on the two routes that issue no query. S8 states the gate's two halves in full; this is
+> the table they are evaluated against.
 
-**Cross-cutting — produced by S8's typed handlers, identically on every route.** These are grouped
-deliberately, and the grouping is safe for the one reason that licenses any grouping here: **their
-meaning is route-independent by construction**, not merely similar. A row may never span two
-meanings; it may span routes that share one.
+**Route classes — the gate's *other* input, and the reason it is computable.** "Every route",
+"every route that **writes**" and "every route that only **reads**" are only usable if the plan says
+which route is which; v1.16 did not, so the gate above could not actually be evaluated, and its
+symmetric half ("a row with no producer fails the step") failed on the two routes that reach no
+graph at all. **All eleven routes, classified:**
+
+| Class | Routes | Which cross-cutting responses it can produce |
+|---|---|---|
+| **writes** (5) | `POST /shop/api/session` · `POST /shop/api/messages` · `POST /shop/api/order/advance` · `POST /shop/api/reset` · `POST /shop/api/presenter/reset-all` | all three — `503 graph_unavailable`, and a query-time `redis.TimeoutError` becomes that route's **own** `504 <op>_state_unknown` |
+| **reads-only** (4) | `GET /shop/api/state` · `GET /shop/api/messages` · `GET /shop/api/catalog` · `GET /shop/api/presenter/participants` | `503 graph_unavailable` and `503 graph_read_timeout`; **never a `504`** — a read that times out changed nothing |
+| **no graph access** (2) | `GET /shop/api/health` · `POST /shop/api/presenter/session` | **none of the three.** No query is issued, so no typed handler can fire and these routes take **no** cross-cutting row |
+
+Two classification calls the plan owes an argument for, both decided here:
+
+- **`GET /shop/api/health` does not touch the graph — deliberately, and unlike the platform's
+  `/health` (`api.py:63`, which pings and answers `503`).** It returns `{status, storefrontEnabled,
+  locales}` from `config` and the in-process `Storefront` (`Storefront.locales`, delivered by S6),
+  and its two consumers are a liveness probe and **S12c's locale chooser** — which must render on
+  the join screen *before* anything else works. Coupling it to the graph would mean a participant
+  cannot even see the language list during an outage, and would buy nothing: the storefront
+  deployment already carries the platform's graph-pinging liveness at the bare `GET /health`
+  (§4.9 move 1, `app.py:338` — `services.ping`, `503` when FalkorDB does not answer). Two liveness
+  routes with two different meanings is the intent, not an accident.
+- **`POST /shop/api/presenter/session` does not touch the graph either** — the presenter is not a
+  `User` (§4.3), the key comparison and the token mint are in-process (S10's `presenter_login`), and
+  the attempt counter is in-process and observational. So it is **not** a writing route, and Pass 8's
+  "six writing routes" is **five**: the sixth is excluded by classification rather than needing a
+  sixth C4 case. `POST /shop/api/session` — the *participant* join — is the one that writes.
+
+**Cross-cutting — produced by S8's typed handlers, on the routes each class above permits.** These
+rows are grouped deliberately, and the licence for any grouping in this section is now stated in
+full: **a row may span routes only when they share one meaning *and* one action.** Meaning alone is
+not enough — v1.16's licence said only "their meaning is route-independent by construction", and the
+one row whose *action* was per-route (the `504`, whose action is C4's re-read endpoint) hid two
+missing cases and one wrong one under a single line. Where a rule's action varies on an axis that is
+**not** the route — C9's user-initiated-vs-poll — the row may still span routes, provided the rule
+names that axis explicitly. A row may never span two meanings, and **never two actions keyed on the
+route**.
 
 | Response | Where it can arise | Rule |
 |---|---|---|
-| `503 graph_unavailable` | every route — the graph could not be reached (`FalkorDBUnreachableError`, `redis.ConnectionError`); **nothing was sent** | C9 |
-| `504 <op>_state_unknown` | every route that **writes** — a query-time `redis.TimeoutError`; the write may have committed | C4 |
-| `503 graph_read_timeout` | every route that only **reads** — a query-time `redis.TimeoutError`; nothing changed | C9 |
+| `503 graph_unavailable` | the **9** routes of classes `writes` + `reads-only` — the graph could not be reached (`FalkorDBUnreachableError`, `redis.ConnectionError`); **nothing was sent** | C9 (action per C9's user-initiated-vs-poll split) |
+| `503 graph_read_timeout` | the **4** `reads-only` routes — a query-time `redis.TimeoutError`; nothing changed | C9 (same split; on `/state`, `/messages` and `/presenter/participants` this is normally the poll branch) |
+| `504 join_state_unknown` | `POST /shop/api/session` — the write may have committed, **and the token was not delivered** | C4 · **no re-read is possible**; report + join again; ghost roster row accepted (R12) |
+| `504 post_state_unknown` | `POST /shop/api/messages` — the message may be written **and the turn never enqueued** (S9 writes before it enqueues) | C4 · re-read `GET /shop/api/messages` **and** `GET /shop/api/state`, reconcile on `turn.state` |
+| `504 order_state_unknown` | `POST /shop/api/order/advance` — the transition may have committed | C4 · re-read `GET /shop/api/state` |
+| `504 reset_state_unknown` | `POST /shop/api/reset` — the delete may have committed. **Producer is the route itself** (S7 catches its own `TimeoutError`, §4.8 F8), not the typed handler | C4 · re-read `GET /shop/api/state` |
+| `504 reset_state_unknown` | `POST /shop/api/presenter/reset-all` — same, **producer is the route itself** (S10) | C4 + C5 · re-read `GET /shop/api/presenter/participants` |
 | any unmapped response | — (must not exist once the map is total; C13 is the proof it does not) | **C13** |
+
+Each `504` above is also reachable as a **bare proxy `504`** with an HTML body and no error token
+(§3's reverse proxy) and as a browser fetch timeout; C4 keys on the status code precisely so those
+take the same branch (P4-3). **The five `504` rows are one per writing route, not one row spanning
+five**, because their action differs by route — including one route (`join`) whose action is *not a
+re-read at all*. That is the licence above doing its job.
 
 **Per route.**
 
 | Route | Response | Rule |
 |---|---|---|
-| `GET /shop/api/health` | `200` | — (unauthenticated liveness) |
+| `GET /shop/api/health` | `200` | — (unauthenticated liveness; **class `no graph access`**, so this route's whole response set is this one row — it takes none of the three cross-cutting rows) |
 | `POST /shop/api/session` | `200` | mints the participant credential (table above) |
 | `POST /shop/api/session` | `422` `displayName` | C11 · user-supplied |
 | `POST /shop/api/session` | `422` `language` | C11 · UI-supplied |
@@ -1309,9 +1478,9 @@ meanings; it may span routes that share one.
 | `POST /shop/api/reset` | `404` no such participant | C3 |
 | `POST /shop/api/reset` | `409 unscoped_participant` | C6b |
 | `POST /shop/api/reset` | `503` quiesce timeout | C9 |
-| `POST /shop/api/reset` | `504 reset_state_unknown` **or a bare proxy `504`** — grouped because C4 keys on the code and *not* the body by design (P4-3), so these are one response | C4 + C5 |
+| `POST /shop/api/reset` | `504 reset_state_unknown` (or a bare proxy `504`) | **its row is in the cross-cutting table above**, with its re-read endpoint — listed there rather than here so all five `504`s are read together |
 | `POST /shop/api/reset` | `5xx` `Thread` UNIQUE | C12 |
-| `POST /shop/api/presenter/session` | `200` | mints the presenter credential (table above) |
+| `POST /shop/api/presenter/session` | `200` | mints the presenter credential (table above); **class `no graph access`**, so its response set is exactly these three rows |
 | `POST /shop/api/presenter/session` | `403` bad key | C2 · second half |
 | `POST /shop/api/presenter/session` | `422` `key` | C11 · **user-supplied** |
 | `GET /shop/api/presenter/participants` | `200` | C8 (cadence); rendered by S12d |
@@ -1322,7 +1491,7 @@ meanings; it may span routes that share one.
 | `POST /shop/api/presenter/reset-all` | `401` presenter session gone | C2 · first half |
 | `POST /shop/api/presenter/reset-all` | `403` wrong credential type | C2 · first half |
 | `POST /shop/api/presenter/reset-all` | `503` quiesce timeout | C9 |
-| `POST /shop/api/presenter/reset-all` | `504` (named or bare — as above) | C4 + C5 |
+| `POST /shop/api/presenter/reset-all` | `504 reset_state_unknown` (or a bare proxy `504`) | **its row is in the cross-cutting table above** (C4 + C5) |
 | `POST /shop/api/presenter/reset-all` | `5xx` | C12 |
 
 **A new `(route, response)` pair is not shipped until it has a row here, and §5.2 is updated to
@@ -1335,14 +1504,21 @@ then a sixth appeared on two axes the key cannot express at all: **below** it, i
 discriminated by the error body's field (**C11**), and **beside** it, on the transport axis
 query-vs-mutation, which the table has no column for (**C12**). Making the map total then surfaced a
 seventh (see S8: a write's query-time timeout meant *unknown* on two routes and an unmapped `500` on
-the rest).
+the rest). **And fixing *that* produced three more of a different kind** — rules that matched and
+were wrong, created by the fix itself: they are scored, with the reason the arithmetic favours them,
+in C13's residual paragraph, and they are why this section's licence now demands one action as well
+as one meaning.
 
 **So the enumeration is necessary and is not the guard.** Each re-key made the *search* cheaper —
 finding instance six took one pass, not four — but every instance was a response the plan did not
 know it could receive, and no table of known responses can bound the unknown ones. The two guards
 that do are **total by type on the server** (S8, so the producible set is bounded by construction and
 the gate above is decidable) and **loud by default on the client** (**C13**). This table is how the
-two are checked against each other; it is not what makes them true.
+two are checked against each other; it is not what makes them true. **Those two guards close the
+*unruled* half only** — a rule that matches and is wrong passes both. The third mechanism, for that
+half, is **S12a's per-rule tests enumerating the routes each rule spans**; it is the last piece and
+it is executable, which is why plan review stops here and the remaining evidence is collected at the
+S8 and S12a implementation gates.
 
 **Invariants the server enforces vs. conventions the client upholds** — the split matters because
 only the left column survives a buggy or hostile client:
@@ -1350,7 +1526,7 @@ only the left column survives a buggy or hostile client:
 | Enforced by the server (S8/S10) | Upheld by the client (S12a) |
 |---|---|
 | A participant token is refused on every presenter route and vice versa (§6.2's auth matrix) | C1–C3's dispatch: *which* session is cleared and *where* the user lands |
-| No route accepts `ws`/`threadId`/`customerId`/`orderId` from the client (§5.2) | C4's choice of re-read endpoint |
+| No route accepts `ws`/`threadId`/`customerId`/`orderId` from the client (§5.2) | C4's per-route choice of re-read endpoint — and its refusal to re-read at all after a lost join, where no credential survives |
 | `reset-all` invalidates participant tokens and not the presenter's (§4.8) | C5's reading of a `401` as evidence rather than as failure |
 | `409 TurnInProgress` before any write when a turn is in flight (§4.4 1a); `409 unscoped_participant` rather than a false `200` when the graph is unrepaired (§5.2) | C6a's composer retention and C6b's refusal to render an alarm as busy; C7's language step; C8's cadence |
 | The quiesce timer bounds both resets and returns `503` having touched nothing (§4.8) | C9's *nothing changed* report and its safe retry |
@@ -1409,7 +1585,11 @@ falkor-chat's and do not apply to it.
   only appearance in the test strategy was `npm test` green inside four step rows): **§5.3's C1–C13,
   each with a test that goes red when the rule is broken**, asserted on **intercepted requests and
   stored credentials** rather than on rendered outcomes — §5.3 C5 is why that distinction is not
-  pedantry.
+  pedantry — **and each rule's test enumerating by name the routes its rule spans** (S12a's
+  done-condition; C4 over all five writing routes, C9 over both actions, C11 over all six
+  `(route, field)` cells). This is the plan's only mechanical guard against a rule whose domain was
+  widened without its content, and it is one of the two implementation gates review resumes at (the
+  other is S8's `{handlers} × {routes}` assertion).
 - **S12b/S12c/S12d/S13/S14 — the rest of the SPA track**, whose tests live in each step's own
   done-condition rather than in a bullet here, and run in two places: the **Playwright mobile
   project**, defined once by **S12b** and single-owner thereafter (§5.0), which S12d's
@@ -1506,12 +1686,13 @@ outcome, and this is stated here so nobody has to decide it under time pressure 
 | R3 | **Prompt adherence on two counts** — the language instruction carried in a JSON CONTEXT block (§4.5) and the order-time address confirmation (§4.10). Both are exactly the class of thing K-057/K-060 shows this 3 B model getting wrong. | Medium | §6.3 #5 and #7 gate AC-8 and AC-9 on **measured** runs; §4.5 and §4.10 each carry a pre-designed reversal path, and neither is a further wording guess. |
 | R4 | **Reset is a destructive multi-label sweep on a shared graph**, with a **timing** dimension as well as a scoping one — wrong and it either bricks the demo (deleting the `Agent`, the def snapshot, or `WorkspaceConfig`) or wipes a bystander, and a reset racing an in-flight turn burns a turn (an LLM call consumed, nothing written) and can mint an orphan `ReadCursor` (`docs/plans/salesperson-ui-graph.md` §7, F3 — the `Message`/`StepRun`/`TraceEvent` orphans v1.0 feared do not occur). | **High** | S0's `graph-dba` note fixes the exact Cypher and the §4.8 quiesce contract before S4 is written; S4 asserts every survivor by label and the thread-scoped rule; S7/S10 assert the note's §7 (a)–(d) quiesce conditions under a stub-LLM turn. `WorkspaceConfig` is called out by name because taking it would silently undo K-056's Ministral re-point. |
 | R5 | **Node is not on `PATH` on the dev box** (falkor-chat's own AGENTS.md note) — no bundle, no demo. | Medium | S5 is a `devops` step that provisions and documents it, and **S5's done-condition is the HTMX-fallback decision deadline** (§4.2) rather than a standing option. `start_demo.sh` fails loudly with the fix. `dist/` stays gitignored (OQ-6). |
-| R6 | **No authentication, and one standing shared secret.** Anyone reachable on the network with the link can join under any name, including impersonating a display name; `FALKORCHAT_PRESENTER_KEY` is a long-lived secret in the server's environment, and anyone who learns it can reset the whole demo. Over plain HTTP on a shared LAN, every participant bearer token is on the wire. | Medium (accepted) | Bounded by FR-1's controlled-demo scope and "never real customer data". §4.9 removes every unauthenticated *read* path, so the residual is the key itself plus token interception, not a browsable surface. S10 rate-limits the key exchange. A TLS-terminating reverse proxy closes the on-the-wire half and **is compatible with the key-based design** (it was not with the rejected loopback variant). **Revisit reopens K-016.** |
+| R6 | **No authentication, and one standing shared secret.** Anyone reachable on the network with the link can join under any name, including impersonating a display name; `FALKORCHAT_STOREFRONT_PRESENTER_KEY` is a long-lived secret in the server's environment, and anyone who learns it can reset the whole demo. Over plain HTTP on a shared LAN, every participant bearer token is on the wire. | Medium (accepted) | Bounded by FR-1's controlled-demo scope and "never real customer data". §4.9 removes every unauthenticated *read* path, so the residual is the key itself plus token interception, not a browsable surface. S10 rate-limits the key exchange. A TLS-terminating reverse proxy closes the on-the-wire half and **is compatible with the key-based design** (it was not with the rejected loopback variant). **Revisit reopens K-016.** |
 | R7 | **`--reload` kills in-flight background work** when any file under `falkor-chat/` is written during a live run, silently. Its blast radius is smaller than it looks *because* §4.3 makes the graph the authoritative registry — a restart does not invalidate tokens or lose carts. | Medium | S11 sets a non-empty `UVICORN_ARGS`; §6.3 states the procedural rule; S6 carries the restart-survival done-condition. |
 | R8 | **The `reference` graph is wiped** by `scripts/test_queries.sh`'s teardown *and* by a default `pytest -q` run's `wf_repo` fixture — taking the catalog **and** both def publications with it, mid-demo-prep. | Medium | `start_demo.sh` runs `verify_catalog.sh` + `verify_salesperson.sh` as a preflight and re-seeds on failure; §4.9's startup readiness check refuses to serve a workspace missing the def or the catalog; §6.1 states the re-seed obligation. |
 | R9 | **`salesperson@v7` publish/materialize drift** between `reference` and `ws:{WS_ID}` — the workspace snapshot is what actually executes, and the two can diverge independently. | Low | `verify_salesperson.sh` in S11's preflight (scoped to exactly the two defs that matter) plus §4.9's startup snapshot check. **Not** `GET /workspaces/{ws}/readiness` — that route is unmounted in the storefront deployment and expects `access-request@v1`, which this demo never seeds. |
 | R10 | **Poll load** — 50 clients × 2 routes / 2 s ≈ 50 req/s of graph reads, against a measured ~614 msg/s write path. | Low | Well inside budget; `GET /shop/api/state` deliberately composes profile+cart+order into one round trip. S0's `GRAPH.PROFILE` check confirms the reads stay index-backed. |
 | R11 | **Retiring the Streamlit app.** Downgraded from v1.0: under OQ-3 it is a history-preserving `git mv` to `deprecated/`, not a delete, so the app survives **on disk**, not only in history — and the move (U5) happens *before* the new component is built, not after acceptance. | Low | The only residual is stale references to the old paths, which S16's acceptance command catches. |
+| R12 | **Join is not idempotent, so a lost `POST /shop/api/session` response can leave a ghost participant** — the write commits, the token never reaches the browser, and the graph keeps a `User` with a `tokenHash` nobody holds, owning a `Channel` and `Thread`, while the person re-joins as a second identity. It requires a FalkorDB socket timeout (default 10 s) during that one write. | Low (accepted) | Decided in §5.3 C4's join case: **accepted rather than engineered away**, because the alternative (a client-supplied idempotency nonce, which §5.2's invariant does permit) reopens **delivered** S6 — new `join()` parameter, uniqueness constraint, S0 amendment — for a window this narrow. The client reports "your join may not have completed — join again"; the presenter is warned a stale roster row may appear; S12d renders it as a participant who never speaks; `reset-all` sweeps it, since it is an ordinary participant `User`. **Reversal trigger:** join acquiring a side effect beyond the roster (payment, external provisioning, a quota), or use outside a controlled demo — then the nonce lands as its own step. |
 
 ---
 
@@ -1527,7 +1708,7 @@ will otherwise want to re-litigate.
 | OQ-2 | Locale set | English (default), Brazilian Portuguese, Spanish. |
 | OQ-3 | Component home | Retired app → `deprecated/salesperson/` (history-preserving move, `teco`'s U5, sequenced *before* S5); the new SPA component takes `salesperson/`. Server half stays inside `falkor-chat` as argued. §4.1. |
 | OQ-4 | Who advances the order | Participant self-serve only; no presenter-driven variant. §4.6 adds the "demo controls" framing so it does not read as a product defect. |
-| OQ-5 | Presenter distinction | `FALKORCHAT_PRESENTER_KEY`. The loopback-binding alternative was tried and **rejected on executed evidence** (uvicorn's default `proxy_headers=True` inverts it behind exactly the reverse proxy §3's HTTPS implies); §4.3 records that so it is not "simplified" back. |
+| OQ-5 | Presenter distinction | `FALKORCHAT_STOREFRONT_PRESENTER_KEY` (S6's delivered spelling). The loopback-binding alternative was tried and **rejected on executed evidence** (uvicorn's default `proxy_headers=True` inverts it behind exactly the reverse proxy §3's HTTPS implies); §4.3 records that so it is not "simplified" back. |
 | OQ-6 | Product images | An agent sources ~15 permissively-licensed stock photos; licence recorded in `salesperson/README.md`; `dist/` stays gitignored. S14 + S5. |
 
 **Nothing in this plan is open** — a statement about §8's questions, not about outstanding work:
@@ -1541,7 +1722,7 @@ Streamlit rejection quotes.
 
 ## 9. Ready to implement
 
-Plan: **`/home/mauricio/prg/graphmind-ai-lab/docs/plans/salesperson-ui.md`** (v1.16) — **20 steps**
+Plan: **`/home/mauricio/prg/graphmind-ai-lab/docs/plans/salesperson-ui.md`** (v1.17) — **20 steps**
 (S0–S16 with S12 split into S12a/S12b/S12c/S12d), one `graph-dba` design note (S0, dispatch first,
 blocks S4), a six-step falkor-chat server track, a seven-step SPA track, plus bring-up, QA and docs.
 
