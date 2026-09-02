@@ -108,18 +108,33 @@ where the salesperson lives.
   | **Tool-caller** | **none durable** — prior 40-conversation experiments ran on throwaway scripts |
   | **Chat responder** | **none** |
 
+- **FR-21a** — _(Amended 2026-09-02.)_ **`chat-responder` ships its deterministic layer only** at
+  first delivery — latency, format, faithfulness to what the tool actually returned. Subjective
+  reply-quality judging is **deferred**, not cancelled. _(Rationale: no golden data exists for the
+  role, and the only available method is LLM-as-judge, whose measured agreement on *relevance* was
+  κ=0.21 — barely better than chance — against κ=0.83 on faithfulness. Funding it properly costs
+  roughly what FR-22 costs; the stakeholder chose an honest partial number now over doubling the
+  expensive half of the delivery.)_
 - **FR-22** — The tool-caller role requires **fixed, versioned multi-turn conversation scripts** as a
   durable, verified asset — the main new golden-data cost in this feature, and the prerequisite for
   FR-9's per-turn reporting.
+- **FR-22a** — Each conversation *shape* is covered by **several distinct scripts, not one script
+  repeated**. _(Rationale: replicates of a single script yield a confidence interval describing "this
+  script again", not "a script of this kind". Raised by the architect as a disclosure; the plan sizes
+  it at 4 scripts × 4 replicates × 3 shapes.)_
 
 ### What gets measured — inference models
 
 - **FR-8** — Tool-calling accuracy is reported as **separate counts, not one percentage**, covering
   at minimum: (a) whether a tool was called at all when one was required; (b) whether the call
   arrived in native tool-call form rather than prose; (c) right tool chosen; (d) argument
-  correctness, split into *omitted required argument*, *wrong value*, and *boundary/unit
-  translation*; (e) spurious or duplicate calls; (f) stopping when done; (g) whether the final reply
-  matches what the tool actually returned.
+  correctness, split into *omitted required argument* and *wrong value*, with **boundary/unit
+  translation recorded as a labelled subset of *wrong value*, not a sibling category** — and the
+  per-argument boundary rule supplied by the pack data rather than inferred; (e) spurious or
+  duplicate calls; (f) stopping when done; (g) whether the final reply matches what the tool actually
+  returned. _(Amended 2026-09-02: the original three-way split was not a partition — a boundary error
+  is a kind of wrong value, so disjoint coding forced either double-counting or an arbitrary
+  tie-break that would make two runs incomparable.)_
 - **FR-9** — Every inference result is reported **per turn position** across a multi-turn
   conversation. A single-turn score is never a valid result. _(Rationale: the model falkor-chat pins
   today is flawless at turns 1–3 and fails in 39/40 conversations at turn 4. A single-turn harness
@@ -151,9 +166,14 @@ where the salesperson lives.
 
 ### Trustworthiness
 
-- **FR-15** — Every reported rate carries a **95% confidence interval**, and two models are declared
-  different **only when their intervals don't overlap**. "Not distinguishable at this sample size" is
-  a **valid result**, not a failure.
+- **FR-15** — Every reported rate carries a **95% confidence interval**. Two models are declared
+  different on the basis of the **confidence interval on the paired difference between them, measured
+  on the same items** — not by checking whether their two separate intervals overlap. "Not
+  distinguishable at this sample size" remains a **valid result**, not a failure. _(Amended
+  2026-09-02: the original overlap rule cannot fire in this lab's regime — at n ≤ 40 with a baseline
+  ≥ 0.90, no result separates two marginal intervals; even 40/40 vs 34/40 would read "not
+  distinguishable" despite a +15pp paired difference. It also threw away the very covariance FR-16's
+  paired design pays for.)_
 - **FR-16** — Models are compared **paired**: both run the same fixed scripts/queries in the same
   session, compared item by item.
 - **FR-17** — A run **can include any previously-tested model as a reference arm**, re-measured in the
@@ -202,9 +222,9 @@ open, but neither is a first-delivery requirement):
   read, then that result is treated as **invalid** rather than merged into comparisons.
 - **AC-3** — Given two results scored on **different versions** of the same task pack, when they are
   compared, then the output **visibly flags** the version mismatch.
-- **AC-4** — Given two models whose confidence intervals overlap, when results are reported, then the
-  output says they are **not distinguishable at this sample size** rather than ranking one above the
-  other.
+- **AC-4** — Given two models whose **paired-difference confidence interval includes zero**, when
+  results are reported, then the output says they are **not distinguishable at this sample size**
+  rather than ranking one above the other. _(Amended 2026-09-02 with FR-15.)_
 - **AC-5** — Given an embedding run, when results are reported, then a **keyword-only arm** appears
   alongside, and the model's **output dimension** is recorded.
 
@@ -227,6 +247,28 @@ _(This document lives at the repo root because the component it describes doesn'
 precedent as `docs/requirements/generic-cypher-mcp.md`, which preceded `cypher-mcp/`.)_
 
 ## Decision log
+
+2026-09-02 — **Design pass returned** (`architect`, `docs/plans/small-model-benchmarking.md` plus a
+`-ml` companion method note). Four requirements were challenged as unbuildable-as-written; three
+went back to the stakeholder and all three amendments were **accepted**:
+
+- **FR-15 / AC-4 amended** — declare a difference from the **paired-difference interval**, not from
+  non-overlap of two separate intervals. The original rule could never fire at this lab's sample
+  sizes.
+- **FR-8(d) amended** — *boundary/unit translation* is a **subset** of *wrong value*, not a sibling;
+  pack data supplies the per-argument boundary rule.
+- **FR-21a added** — `chat-responder` ships its **deterministic layer only**; judged reply quality
+  deferred (LLM-judge relevance agreement measured κ=0.21).
+- **FR-22a added** — several distinct scripts per conversation shape, not one script repeated
+  (architect disclosure, nothing blocked).
+
+Design-side resolution of the open constraint: **copy the golden data, clean-build the code, change
+nothing in falkor-chat.** Justification accepted — falkor-chat's golden set must *track* its corpus
+while this tool's must *freeze*, so divergence is correct behaviour rather than drift; residual
+metric duplication is discharged by a cross-check test against falkor-chat's own fixtures rather
+than by shared code. Two frictions handled in-plan rather than escalated: FR-7's KV-cache setting
+and LM Studio version have no programmatic source (operator-attested, with a staleness trip-wire),
+and FR-11's peak RAM is best-effort.
 
 2026-09-02 — What decision should this tool settle first? → **None in particular.** It's a standing
 capability: a reusable harness so any future "which small model?" question is a run away, with
