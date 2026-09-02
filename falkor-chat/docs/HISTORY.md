@@ -371,6 +371,80 @@ the plan's §4.3/R6/OQ-5 prose says `FALKORCHAT_PRESENTER_KEY`, and S10/S11 must
 difference. `README.md` and `AGENTS.md` are **deliberately untouched** — the plan assigns the
 storefront's narrative there to S16.
 
+**Review close-out (`docs/reviews/salesperson-ui-impl.md` Pass 6 + Appendix J — approve with
+suggestions, 0 blockers, 2 major, 2 minor, 0 nits).** The three findings that are S6's are closed
+in `5594134`; `storefront.py` gained a comment and nothing else (+12/−0).
+
+- **S6-1 (Major) — the cache refresh was load-bearing and pinned by nothing.** `resolve_token`
+  ends by writing the freshly-read record into the map. Delete that one line and the whole
+  repository stays green — Appendix J §2 records the mutant surviving at 45 passed in the file and
+  2439 passed / 14 deselected across the suite — while `lookup`, the cache's only reader and the
+  accessor S7/S9 are pointed at, goes on serving the join-time record indefinitely. It is the
+  *refresh* half of the read-through cache and the only one there is: `lookup` populates on a miss
+  but never re-reads a hit, so nothing else in the module can freshen an entry. Closed with
+  `test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`, which uses **`lookup`
+  as the observer** — the existing read-path test stays green under this deletion and cannot serve
+  — plus a comment at the call site naming that test. Three docstrings correctly saying the cache
+  is *never consulted here* are what invited the deletion, so the counter-statement belongs at the
+  line itself.
+- **S6-3 (Minor) — the package scan asserted emptiness with no control.** The
+  `FALKORCHAT_DEMO_WS` tripwire walked the package with `Path.rglob`, which on a **missing**
+  directory yields nothing and raises nothing — so it passed identically whether it scanned the
+  package or scanned nothing at all (the review repointed it at a nonexistent path and the file
+  stayed green at 45 passed). The same file's own docstring argues that a scan asserting emptiness
+  needs a positive control, and the token scan duly has one; this sibling did not. Both assertions
+  now run through one `_modules_mentioning(needle)` helper, so the control is the **identical**
+  scan rather than a second route to the same tree: a string that must be found
+  (`FALKORCHAT_STOREFRONT_ENABLED`, in exactly `config.py`) is asserted before the string that must
+  not be.
+- **S6-4 (Minor) — the constant-time tripwire: right decision, wrong form.** Pinning
+  `hmac.compare_digest` statically was correct — the review confirmed that replacing it with `!=`
+  reddens no functional test, so nothing but a tripwire can see the property — but the form was
+  over-tight (it matched the call's exact source text, so a reformat or a local rename would redden
+  *correct* code) and under-scoped (it inspected `resolve_token` only). Replaced by the spy the
+  review executed: `hmac.compare_digest` is monkeypatched, a valid token resolved, and the test
+  asserts exactly one call carrying the two hashes — plus that the raw token is not among the
+  arguments. The `==`/`!=` clause survives as its own narrow test, because the spy proves the call
+  is *reached* and cannot prove nothing compares the hash beside it. The same pair extends to
+  `presenter_login` when S10 lands.
+- **S6-2 (Major) is not S6's.** `compare_digest("", "")` is `True`, so an unset presenter key must
+  be refused *before* any comparison; S6 guards it (`presenter_configured`), tests it both ways and
+  documents it in three places, but none of those is the artifact S10 executes from. Routed to
+  `architect` for the v1.17 plan sweep.
+
+**Also re-grounded, and made executable.** The env-var test's docstring justified its expected set
+by quoting the plan — a docstring that cites another document inherits that document's drift, which
+is what produced the `FALKORCHAT_PRESENTER_KEY` spelling split in the first place. It now reads
+`docs/SERVER.md` and asserts every name `config.py` reads appears there, so renaming a variable
+without sweeping the table reddens instead of drifting silently. (Precedent for a test reaching
+outside the package: `test_seed_workflows_script.py` pins a `scripts/` invariant the same way.
+Anyone reorganising §1.3's table should know this test reads it.)
+
+**Mutation-tested in both directions** — the two mutants that previously survived now die, and a
+*benign* refactor was probed to confirm the loosened tripwire no longer punishes correct code.
+`_cache_put` removed from `resolve_token` → **1 failed / 46 passed**, the new test alone;
+`_PACKAGE_DIR` repointed at a nonexistent directory → **1 failed / 46 passed**;
+`compare_digest(…)` → `!=` → **2 failed / 45 passed**, the spy and the source clause together,
+where Appendix J §2 records one test before; the local `stored_hash` renamed to `stored_digest` —
+correct code, which the old exact-text form would have reddened → **47 passed**; and S6's headline
+cache-first mutant re-run → **7 failed / 40 passed**, up from the 5 it killed at S6. Both files
+restored from byte-copies after every mutation (`md5sum -c` clean). Suite: **2439 → 2441 passed /
+14 deselected**, `tests/test_storefront.py` 45 → 47 tests; ruff clean.
+
+**One residual, carried not closed.** `lookup` and `resolve_token` return the identical
+`ParticipantRecord`, so a future `record = shop.lookup(pid)` is indistinguishable from an
+authenticated one at the call site — a typing risk, not a control-flow one (the review enumerated
+all eight `_records` touch sites and confirmed only `lookup`/`cached_ids` read the map, neither
+from `resolve_token`). **No type-level guard was adopted, deliberately:** nothing type-checks this
+repository — no mypy or pyright configuration anywhere in the tree, no pre-commit hook, ruff on
+`E,F,W,I` only — so a `NewType`, subclass or `Protocol` would be enforced by nothing, and a
+structurally identical dataclass passes anywhere the original does under duck typing. Both are
+detection wearing a type's clothes. The prevention-shaped option is that the confusable surface may
+not need to exist at all: at plan v1.16 (`acb5a2a`) `lookup` has **no planned caller** — S9's
+`enqueue_turn(ctx, participant, posted)` receives the record from the authenticated route, and
+S7's `get_state(ctx)`/`reset_participant` take `ctx`. `teco` routed *did S7 actually need `lookup`*
+into S7's brief as an explicit deliverable, holding the deletion as its own call at S7's close.
+
 ## 2026-09-01 — K-035 closed: bare-call argument-key shadowing fixed in `_parse_content_tool_calls`
 
 **What:** K-035 (filed at the K-027 slice A analyst gate, finding M-2) is closed — a bare tool
