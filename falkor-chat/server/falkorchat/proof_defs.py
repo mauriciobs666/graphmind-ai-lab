@@ -276,8 +276,47 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 #
 # `config.model` (`lmstudio/mistralai/ministral-3-3b`) is carried forward
 # **unchanged** here too, for the same create-only reason the `v3`/`v4` notes
-# above give — this is the last version this module currently anticipates,
-# but the obligation would bind any future bump the same way.
+# above give — and the obligation binds every later bump the same way, as
+# `v7` below does.
+#
+# **`v6` is a BURNED version number — never reuse it.** It denotes the reverted
+# K-060 synthesis-time experiment (`docs/BACKLOG.md`: "Reverted, never shipped"),
+# which was nonetheless materialized into `ws:acme` from an uncommitted working
+# tree and, `config` being create-only, can never be overwritten there. The
+# `v5` -> `v7` gap is deliberate; do not "fix" it by renumbering.
+#
+# **`v7` (the storefront demo, `docs/plans/salesperson-ui.md` §4.5/§4.10) is a
+# `v2.1`/`v5`-shaped bump, not a capability bump** — `config.tools` is
+# byte-identical to `v5` and topology is unchanged (so the K-034 409
+# topology-conflict path is never approached); only `systemPrompt` gains two
+# sentences.
+#   1. **Per-participant language** (§4.5). The storefront starts each
+#      participant's run with `run_ctx={"language": …}`, and the executor
+#      re-sends the run's whole `ctx` as a `CONTEXT:` turn on *every* LLM
+#      iteration (`executor._assemble_messages`), reloading it from the run
+#      rather than rewriting it on the chat path — so a value placed there
+#      survives an arbitrarily long conversation. Language is therefore data on
+#      the run, not topology and not a def-per-locale fan-out: the added
+#      sentence tells the model to reply in the language named by `language` in
+#      that CONTEXT block, and to fall back to English when none is named.
+#   2. **Order-time delivery-address confirmation** (§4.10). `v5`'s profile
+#      guidance is explicitly *early-conversation* ("call `get_profile` once,
+#      early in the conversation… only once per conversation"), nothing in the
+#      def confirmed an address at checkout, and `services.place_order` does not
+#      require one — so the "when they place an order, the conversation prompts
+#      for and displays their delivery address" acceptance criterion was not
+#      actually covered by pointing at the carried-forward profile guidance. The
+#      added sentence closes that half.
+# **Both additions are prompt-adherence claims on a 3 B model, and neither is
+# signed off by code review** — the plan makes each a *measured* live run
+# (§6.3 #5/#7). If either fails, §4.5/§4.10 each name their own documented
+# fallback (one def per language; a structural address requirement in
+# `services.place_order`) rather than a further wording guess — the same
+# standing "never ship an unproven mitigation" discipline the `v5` note above
+# invokes for its third, deliberately-unfixed mechanism.
+#
+# `config.model` (`lmstudio/mistralai/ministral-3-3b`) is carried forward
+# **unchanged** at `v7` too, for the same create-only reason.
 #
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
@@ -298,7 +337,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v5",
+    "version": "v7",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -316,13 +355,16 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
                 # at first use. Carried forward unchanged from `v2.1` into `v3`
-                # (K-054), `v4` (K-055) and again into `v5` (K-057) — `config.model`
-                # is create-only, so omitting this line on a version bump would
-                # silently undo the re-point (see the `v3`/`v4`/`v5` notes above).
+                # (K-054), `v4` (K-055), `v5` (K-057) and again into `v7` (the
+                # storefront demo) — `config.model` is create-only, so omitting this
+                # line on a version bump would silently undo the re-point (see the
+                # `v3`/`v4`/`v5`/`v7` notes above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
-                    "customer.\n\n"
+                    "customer. Reply in the language named by `language` in the "
+                    "CONTEXT block; if no language is named there, reply in "
+                    "English.\n\n"
                     "You can answer factual questions about specific products (name, "
                     "category, price) and list products matching a category or price "
                     "range, using your catalog tools. Never guess a price or category "
@@ -339,8 +381,12 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "cart line; if a product name does not match anything in the "
                     "catalog, say so plainly rather than adding it anyway. Prices shown "
                     "in the cart and in a placed order always reflect the catalog's "
-                    "current price, retrieved fresh, never a guess. When you place an "
-                    "order, confirm what was ordered and its total using only what the "
+                    "current price, retrieved fresh, never a guess. Before you place "
+                    "an order, confirm the delivery address on file with the customer; "
+                    "if none is on file, ask them for one and save it with "
+                    "`save_profile` first. Never invent a delivery address. When you "
+                    "place an order, confirm what was ordered and its total using only "
+                    "what the "
                     "tool actually returned.\n\n"
                     "You can also remember the customer's name and delivery address "
                     "across conversations. Call `get_profile` once, early in the "

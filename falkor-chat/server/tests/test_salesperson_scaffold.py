@@ -314,15 +314,68 @@ def test_salesperson_def_pins_ministral_model_and_version_bump():
     conversations reaching a 4th turn — `docs/reviews/
     salesperson-tool-reliability-ml.md` §8), first bumped at `v2.1` and carried
     forward unchanged into `v3` (K-054, the durable-profile capability bump),
-    `v4` (K-055, NL query generation) and `v5` (K-057, the compound-filter
-    wording fix) — `config.model` is create-only exactly like
+    `v4` (K-055, NL query generation), `v5` (K-057, the compound-filter
+    wording fix) and `v7` (the storefront demo's two `systemPrompt`
+    sentences) — `config.model` is create-only exactly like
     `config.tools`/`systemPrompt` (`proof_defs.py`'s module docstring), so a
     version that republished a full, fresh `config` without repeating this
     line would silently fall back to the shared `step`-role default and undo
     the re-point."""
     assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
     assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
-    assert SALESPERSON_DEF["version"] == "v5"
+    assert SALESPERSON_DEF["version"] == "v7"
+
+
+#: The exact `config.tools` list `salesperson@v5` shipped — the cumulative set
+#: `v1`->`v2`->`v3`->`v4` built up and `v5` (a prompt-only bump) left untouched.
+#: Hard-coded rather than derived from `SALESPERSON_DEF`, so it is a real
+#: baseline: `config.tools` is create-only (`proof_defs.py`'s module docstring),
+#: so a bump that republishes a fresh `config` and drops a tool would strand
+#: every capability that tool implements at the previous version, with no
+#: runtime error to notice.
+V5_TOOLS = frozenset({
+    "post_message", "lookup_product_fact", "filter_products",
+    "view_cart", "add_to_cart", "remove_from_cart", "clear_cart",
+    "place_order", "get_profile", "save_profile", "query_graph_data",
+})
+
+
+def test_salesperson_v7_carries_v5_tools_forward_and_adds_both_prompt_sentences():
+    """`v7` (`docs/plans/salesperson-ui.md` §4.5/§4.10) is a `v2.1`/`v5`-shaped
+    bump: `config.tools` and topology are unchanged from `v5` and only
+    `systemPrompt` grows, by exactly two sentences.
+
+    The cumulative-republish rule is what this pins. All three of `config.tools`,
+    `config.model` and `systemPrompt` are create-only properties, so a version
+    bump republishes the FULL `config` — and a bump that quietly omitted a tool
+    would silently strand that capability, since the graph never errors on a
+    missing create-only field, it just keeps whatever the new version declared.
+    Hence a **superset** assertion against a hard-coded `v5` baseline, plus a
+    present-tense check on both added sentences' load-bearing content: the
+    `language` CONTEXT-block carrier (§4.5) and the order-time delivery-address
+    confirmation (§4.10)."""
+    assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
+    config = assistant["config"]
+
+    assert V5_TOOLS <= set(config["tools"])
+    # No duplicates smuggled in by a hand-edited cumulative republish.
+    assert len(config["tools"]) == len(set(config["tools"]))
+    assert config["requiredTools"] == ["post_message"]
+
+    prompt = config["systemPrompt"]
+    # §4.5 — the language carrier is `language` in the run ctx, which the
+    # executor re-sends as a CONTEXT turn every iteration; English is the
+    # documented fallback when the key is absent.
+    assert "`language`" in prompt and "CONTEXT" in prompt
+    assert "English" in prompt
+    # §4.10 — order-time address confirmation, the half `v5` genuinely lacked
+    # (its own profile guidance is explicitly early-conversation only).
+    assert "Before you place an order, confirm the delivery address on file" in prompt
+    assert "Never invent a delivery address." in prompt
+
+    # Topology is byte-identical to v5 — a change here is the K-034 409 path.
+    assert [s["key"] for s in SALESPERSON_DEF["steps"]] == ["assistant", "ended"]
+    assert len(SALESPERSON_DEF["transitions"]) == 1
 
 
 # ── 2. a same-version republish is a clean structural no-op ───────────────────

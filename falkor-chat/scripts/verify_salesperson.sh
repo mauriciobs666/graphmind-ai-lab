@@ -20,7 +20,7 @@
 # right after a `pytest` / `test_queries.sh` run, before uvicorn is back up. It
 # drives the same `services.*` methods the REST `/diff` route does.
 #
-# For EACH def (default versions `salesperson@v5`, `order-fulfillment@v1` —
+# For EACH def (default versions `salesperson@v7`, `order-fulfillment@v1` —
 # override with FALKORCHAT_SALESPERSON_DEF_VERSION /
 # FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION, the same knobs seed_salesperson.sh
 # reads), it checks:
@@ -34,6 +34,13 @@
 #        salesperson:       2 steps (assistant/agent, ended/decision), 1 transition;
 #        order-fulfillment: 4 steps (placed/decision, fulfilled/human,
 #                            delivered/decision, cancelled/decision), 3 transitions.
+#   6. every STORED step `config` (on BOTH sides) still matches the shipped
+#      `falkorchat.proof_defs` constant it was seeded from. Check 3 compares the
+#      two sides against EACH OTHER, so it is blind to a version whose config was
+#      stored from an earlier or uncommitted working tree — both sides agree, the
+#      topology is right, and the version name silently denotes something the file
+#      can no longer produce. `config` is create-only, so re-seeding cannot repair
+#      it; the failure text says to bump the version, which is the only fix.
 #
 # Exit 0 = all green. Exit 1 = anything missing or divergent.
 #
@@ -42,7 +49,7 @@
 #   FALKORDB_PORT                            (default: 6379)
 #   FALKORCHAT_WS_ID                         (default: acme)
 #   FALKORCHAT_SALESPERSON_DEF_KEY           (default: salesperson)
-#   FALKORCHAT_SALESPERSON_DEF_VERSION       (default: v5)
+#   FALKORCHAT_SALESPERSON_DEF_VERSION       (default: v7)
 #   FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY     (default: order-fulfillment)
 #   FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION (default: v1)
 
@@ -52,7 +59,7 @@ HOST="${FALKORDB_HOST:-127.0.0.1}"
 PORT="${FALKORDB_PORT:-6379}"
 WS_ID="${1:-${FALKORCHAT_WS_ID:-acme}}"
 SALESPERSON_DEF_KEY="${FALKORCHAT_SALESPERSON_DEF_KEY:-salesperson}"
-SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v5}"
+SALESPERSON_DEF_VERSION="${FALKORCHAT_SALESPERSON_DEF_VERSION:-v7}"
 ORDER_FULFILLMENT_DEF_KEY="${FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY:-order-fulfillment}"
 ORDER_FULFILLMENT_DEF_VERSION="${FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION:-v1}"
 
@@ -81,12 +88,14 @@ FALKORCHAT_SALESPERSON_DEF_VERSION="$SALESPERSON_DEF_VERSION" \
 FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY="$ORDER_FULFILLMENT_DEF_KEY" \
 FALKORCHAT_ORDER_FULFILLMENT_DEF_VERSION="$ORDER_FULFILLMENT_DEF_VERSION" \
 "$VENV_PY" - <<'PY'
+import json
 import os
 import sys
 
 from redis.exceptions import ResponseError
 
 from falkorchat import config, db
+from falkorchat.proof_defs import ORDER_FULFILLMENT_DEF, SALESPERSON_DEF
 from falkorchat.repository import Repository
 from falkorchat.services import Services, WorkflowDefNotFoundError
 
@@ -96,6 +105,11 @@ from falkorchat.services import Services, WorkflowDefNotFoundError
 # DEMO_EXPECTED_DEFS-style constant for this script's own pair — see
 # services.DEMO_EXPECTED_DEFS's own comment: it is scoped to the
 # triage/access-request pair verify_workflows.sh checks).
+#
+# The last element is the SHIPPED constant the seed script publishes from —
+# what each stored `config` is checked against below. seed_salesperson.sh
+# copies these same constants with only `key`/`version` overridden, so every
+# step `config` is expected to match the file byte-for-byte at any version.
 DEFS = [
     (
         os.environ["FALKORCHAT_SALESPERSON_DEF_KEY"],
@@ -103,6 +117,7 @@ DEFS = [
         {"assistant": "agent", "ended": "decision"},
         "assistant",
         1,
+        SALESPERSON_DEF,
     ),
     (
         os.environ["FALKORCHAT_ORDER_FULFILLMENT_DEF_KEY"],
@@ -113,6 +128,7 @@ DEFS = [
         },
         "placed",
         3,
+        ORDER_FULFILLMENT_DEF,
     ),
 ]
 
@@ -137,7 +153,8 @@ def read(fn, absent=None):
 
 failures = []
 
-for key, version, expected_steps, expected_start, expected_transition_count in DEFS:
+for (key, version, expected_steps, expected_start, expected_transition_count,
+     source_def) in DEFS:
     label = f"{key}@{version}"
     diff = read(
         lambda: services.diff_def_snapshot(ctx, key=key, version=version), absent=ABSENT,
@@ -177,6 +194,20 @@ for key, version, expected_steps, expected_start, expected_transition_count in D
         (f"ws:{ctx.ws} snapshot",
          lambda: services.get_snapshot_structure(ctx, key=key, version=version)),
     )
+    # Config drift against the SHIPPED constant (`proof_defs.py`). This is the
+    # one failure mode `diff_def_snapshot` structurally CANNOT see: it compares
+    # `reference` against the snapshot, so a version whose `config` was stored
+    # from an EARLIER (or uncommitted) working tree passes every check above —
+    # identical topology, both sides agreeing with each other — while the name
+    # `key@version` denotes a prompt/tool set nobody can reproduce from the
+    # file. `config` is create-only (proof_defs.py's module docstring;
+    # materialize's `_check_no_structural_conflict` treats a config-only
+    # difference as a silent no-op), so re-seeding can never repair it: the
+    # only fix is a version bump, which is what the failure text says. Exactly
+    # the trap this script's own "do NOT re-seed" advisory below warns about —
+    # until this check existed, nothing could detect it.
+    file_configs = {s["key"]: s.get("config", {}) for s in source_def["steps"]}
+
     for side, reader in sides:
         structure = read(reader)
         if structure and "startKeys" in structure:
@@ -186,6 +217,26 @@ for key, version, expected_steps, expected_start, expected_transition_count in D
                 f"{label}: {side} has {len(starts)} START edges "
                 f"({', '.join(starts)}) — see K-034"
             )
+        for st in (structure or {}).get("steps", []):
+            want = file_configs.get(st["key"])
+            if want is None:
+                continue  # unknown step — the topology check above owns that
+            # `config` is an OPAQUE SERIALIZED STRING on read-back (rule 8).
+            stored = st["config"]
+            got = json.loads(stored) if isinstance(stored, str) else stored
+            if got != want:
+                drifted = sorted(
+                    k for k in set(got) | set(want) if got.get(k) != want.get(k)
+                )
+                print(
+                    f"    ⚠ {side}: step {st['key']!r} config differs from "
+                    f"proof_defs.py on {', '.join(drifted)}"
+                )
+                failures.append(
+                    f"{label}: {side} step {st['key']!r} DIVERGES FROM proof_defs.py "
+                    f"({', '.join(drifted)}) — this version is create-only; "
+                    f"bump the version"
+                )
 
     # Topology sanity — each def's own exact shape (per DEFS above).
     if snap_present:
