@@ -1,4 +1,9 @@
-# GraphMind AI Lab
+# GraphMind AI Lab — Salesperson (retired)
+
+> **Retired and unmaintained.** This standalone Streamlit app was moved to
+> `deprecated/salesperson/` and is preserved for reference only — no fixes, no upgrades, and
+> no guarantee it still runs. See `deprecated/README.md` for what `deprecated/` means and
+> what replaces this app. The instructions below are kept as they were at retirement.
 
 A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by FalkorDB + LLMs.
 
@@ -21,7 +26,7 @@ A Streamlit chatbot for “Pastel do Mau” (Brazilian pastel shop) powered by F
 ## Run FalkorDB
 
 Use the helper script — a thin wrapper around the canonical
-`../falkor-chat/scripts/start_falkordb.sh` (both components share the same
+`../../falkor-chat/scripts/start_falkordb.sh` (both components share the same
 FalkorDB container; see that script for `-d`/`--help` and port/image overrides):
 
 ```bash

@@ -1,4 +1,8 @@
-# AGENTS.md
+# AGENTS.md — salesperson (retired)
+
+> **Retired and unmaintained.** This component lives at `deprecated/salesperson/` and is
+> preserved for reference only. Do not build on it or copy its conventions into new work —
+> see `deprecated/README.md`. Everything below describes the app as it was at retirement.
 
 ## Project overview
 - Streamlit salesperson chatbot.

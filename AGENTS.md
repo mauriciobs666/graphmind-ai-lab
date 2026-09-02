@@ -7,8 +7,6 @@ and OpenCode artifacts).
 
 ## Structure
 
-- `salesperson/` — Streamlit sales-assistant chatbot. FalkorDB knowledge graph + LangChain +
-  LangGraph; optional local LLM via LM Studio. See `salesperson/AGENTS.md`.
 - `falkor-chat/` — Hybrid chat system (humans + AI) where **FalkorDB is the single store for
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
@@ -58,12 +56,20 @@ and OpenCode artifacts).
   by OpenCode agents live separately, in `opencode/skills/`. See `skills/README.md`. Format
   ports across Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per
   tool.
+- `deprecated/` — **retired components, preserved but not maintained.** Nothing here gets bug
+  fixes, dependency upgrades or refactors, and nothing here is a precedent for new work — do
+  not copy its patterns or conventions out. It holds `deprecated/salesperson/`, the standalone
+  Streamlit sales-assistant chatbot (its own `kg_pastel` FalkorDB graph + LangChain/LangGraph;
+  optional local LLM via LM Studio), retired because it talks to an older, separate backend
+  rather than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
+  workflow-engine-backed `salesperson` agent — is specified in
+  `docs/requirements/salesperson-ui.md` and planned in `docs/plans/salesperson-ui.md`, but is
+  **not built yet**. See `deprecated/README.md`.
 
 ## Component docs (read before working in a component)
 
 | Component | Entry doc(s) |
 |---|---|
-| `salesperson/` | `salesperson/AGENTS.md` · `salesperson/README.md` |
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
@@ -72,10 +78,10 @@ and OpenCode artifacts).
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
+| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` (retired — reference only) |
 
 ## Working in this repo
 
-- **Chatbot tasks** → `salesperson/`, follow `salesperson/AGENTS.md`. No pytest/lint scripts; manual checks.
 - **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/AGENTS.md` (`falkor-chat/CLAUDE.md`
   imports it). This is FalkorDB
   OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
@@ -83,6 +89,11 @@ and OpenCode artifacts).
 - **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
 - **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills, `opencode/skills/` for
   OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
+- **Retired components** → `deprecated/`. Read them for reference; do not maintain, extend, or
+  copy from them. The retired Streamlit chatbot is `deprecated/salesperson/`; a request to work
+  on "the salesperson app" is almost certainly about its not-yet-built replacement
+  (`docs/requirements/salesperson-ui.md`), so confirm before touching anything under
+  `deprecated/`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents,

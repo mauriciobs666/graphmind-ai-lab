@@ -430,7 +430,7 @@ In Claude Code the server is configured at **project scope** by the repo-root `.
 Two non-obvious details in that shape:
 
 - **The `bash -c` wrapper is what makes the path portable without leaking one.** A cwd-relative
-  path breaks whenever a session starts inside `falkor-chat/` or `salesperson/` — the normal way to
+  path breaks whenever a session starts inside `falkor-chat/` or `cypher-mcp/` — the normal way to
   work in this monorepo — and an absolute path would leak the maintainer's home directory into a
   tracked file, which `claude/scripts/audit-team.sh` check 7 fails the repo on. Claude Code expands
   only `${VAR}` and `${VAR:-default}` in a config file, so the **unbraced** `$CLAUDE_PROJECT_DIR`
