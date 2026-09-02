@@ -1,0 +1,44 @@
+[project]
+name = "model-bench"
+version = "0.1.0"
+description = "Benchmark one local LLM at a time against a versioned task pack, with a full environment fingerprint."
+requires-python = ">=3.12"
+# No runtime dependencies, deliberately and permanently — docs/plans/small-model-benchmarking.md
+# §3.2. A benchmarking tool whose own dependency tree can rot is a tool whose old results stop
+# being reproducible; stdlib `urllib.request` (falkor-chat/server/falkorchat/transport.py's own
+# precedent), `json`, `math`, `statistics`, `hashlib`, `subprocess` cover everything. The one
+# stated reversal trigger: add `numpy` if a pack's corpus exceeds ~1 000 documents or scoring
+# exceeds ~5 s.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.14,<0.15",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# falkor-chat/server/pyproject.toml's convention, copied verbatim: `-m "not live"` DESELECTS the
+# live-marked tests by default so the standard run stays network-free even when LM Studio happens
+# to be up (a reachability-skip alone would not — it would run them). Opt in with `pytest -m live`.
+addopts = '-ra -m "not live"'
+markers = [
+    "live: end-to-end test against a REAL LM Studio; deselected by default, run with `pytest -m live` (see AGENTS.md)",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Deliberately small: pyflakes + pycodestyle + import order — matches falkor-chat/server and
+# mcp-monitor. No behavioral rewrites.
+select = ["E", "F", "W", "I"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["modelbench*"]

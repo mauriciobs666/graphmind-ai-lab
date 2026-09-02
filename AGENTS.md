@@ -47,6 +47,13 @@ and OpenCode artifacts).
   driving scenario is auto-waking a headless agent CLI on an `@mention` in a `falkor-chat` thread
   (zero falkor-chat-side changes needed), but genericity is proven against a second, purpose-built
   fake MCP server too. See `mcp-monitor/README.md` and `mcp-monitor/AGENTS.md`.
+- `model-bench/` — Standalone, human-started harness for benchmarking **small local LLMs** against
+  LM Studio: one model × one versioned task pack per run, stored with a full environment
+  fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
+  no pass/fail gate, no leaderboard, and no runtime read outside `model-bench/` (golden data is
+  copied in and versioned here). **Skeleton only so far** — stage S0 of
+  `docs/plans/small-model-benchmarking.md`, whose requirements and plan stay at the repo root. See
+  `model-bench/README.md` and `model-bench/AGENTS.md`.
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
@@ -77,6 +84,7 @@ and OpenCode artifacts).
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
+| `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 | `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` (retired — reference only) |
 

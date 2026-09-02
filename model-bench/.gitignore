@@ -1,0 +1,12 @@
+# The component-local venv (setup.sh). Also covered by the repo-root .gitignore; repeated here so
+# this component's ignores are readable in one place.
+.venv/
+
+# Operator-attested fingerprint fields — LM Studio app version, KV-cache setting, host RAM, other
+# resident workloads (docs/plans/small-model-benchmarking.md §3.4). Machine-specific by definition,
+# and copied into every run record anyway, so the file itself is never committed.
+host.json
+
+# Raw model output per run: useful for a post-hoc "why did it fail", not needed for any comparison,
+# and large (plan §3.5). The run records under results/runs/ ARE committed.
+results/transcripts/
