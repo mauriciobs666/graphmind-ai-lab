@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+
+## 2026-09-02 — U6 of `salesperson-ui`: agent-prompt correction pass + cross-agent sweep
+
+- **What:** `analyst` finding M9 (`docs/reviews/salesperson-ui.md`) routed the `frontend-engineer`
+  prompt's stale CPG/Streamlit statements to `cobb`. Corrected them (see
+  `claude/frontend-engineer/kaizen/history.md`, same date), updated the `claude/README.md` catalog
+  row, then swept `claude/` + `skills/` for the same assumption. Two further live artifacts carried
+  it and were fixed in the same pass: `analyst.md:84` (one-token example refresh) and
+  `data-scientist.md:56` (the "This lab's terrain" sentence described the retired app's
+  architecture). `skills/cpg-analysis/SKILL.md` §1's first-guess naming example dropped
+  `salesperson` → `cpg_salesperson` and gained the durable warning that a component can be renamed
+  or retired while a graph built from its old contents keeps the old name.
+- **Method note worth keeping:** the correct fix for a rotting concrete pointer was not a fresher
+  pointer. `frontend-engineer`'s own `plan.md` had predicted this exact rot in 2026-08-24's C6 lint
+  ("three places that rot together... a deletion candidate on its third rot"). Replacing
+  `cpg_salesperson` with `cpg_falkorchat` would have been the fourth site of the same fragility;
+  the durable statement — *the CPGs here are Python-only, so no front-end source is in one* —
+  answers the agent's actual question and cannot rot on a rename.
+- **`claude/AGENTS.md`: verified negative.** Its roster names `frontend-engineer`,
+  `analyst` and `data-scientist` without restating any CPG or component claim, so nothing in it
+  became false. No edit made — recorded so a later reader does not re-derive the check.
+- **Not folded in (flagged to `teco` instead):** the `skills/joern-cpg/SKILL.md` per-file CPG
+  scaling under-projection, and three artifacts left deliberately untouched — see the U6 report.
+
 ## 2026-09-01 — U3: reverted the `bypassPermissions` config pin, folded Gen 4's findings into the KB, drafted (not submitted) the upstream feedback
 - **What:** implementation unit U3 of `claude/docs/plans/bypass-permissions-subagent-gap-coordination.md`,
   executed per Gen 4's design (`claude/docs/plans/bypass-permissions-subagent-gap.md` §4.2) after

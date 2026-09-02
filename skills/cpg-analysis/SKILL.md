@@ -54,10 +54,12 @@ mcp__cypher__query(
   `DELETE` against a shared analysis graph.
 - **Finding the graph name.** It comes from whoever loaded the CPG. There is
   deliberately **no `list_graphs` tool** (the surface is one tool, two
-  parameters). Before falling back to discovery, try a **first guess**: both
-  live graphs today follow the pattern **`cpg_<component>`**, the
+  parameters). Before falling back to discovery, try a **first guess**: a
+  loaded CPG here follows the pattern **`cpg_<component>`**, the
   component-directory name with hyphens stripped (`falkor-chat` →
-  `cpg_falkorchat`, `salesperson` → `cpg_salesperson`). Send a cheap query
+  `cpg_falkorchat`). Confirm the graph you land on actually covers the code
+  you mean — a component can be renamed or retired while a graph built from
+  its old contents keeps the old name. Send a cheap query
   against that guessed name — e.g. `MATCH (n) RETURN count(n)`, or the
   freshness recipe itself, which doubles as an existence probe (see
   [`references/freshness.md`](references/freshness.md)). A **hit** means the

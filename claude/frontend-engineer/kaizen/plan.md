@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `frontend-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-09
+> Last reviewed: 2026-09-02
 
 ## Active
 
@@ -15,7 +15,7 @@
 - **Status:** 🔵 proposed
 - **Priority:** medium
 - **Rationale:** the prompt is untested against a real task; first runs usually surface routing gaps (vs. coder) and missing repo specifics.
-- **Proposed change:** delegate a real UI task (e.g. a salesperson Streamlit change or the future falkor-chat front-end), observe where the agent hesitates or drifts out of scope, and fold fixes back into the prompt.
+- **Proposed change:** delegate a real UI task (the `salesperson-ui` storefront SPA is the first one in flight), observe where the agent hesitates or drifts out of scope, and fold fixes back into the prompt.
 - **Notes:** watch especially whether the coder↔frontend-engineer efficiency boundary routes correctly from teco.
 
 ### K-002 — Visual verification tooling
@@ -26,24 +26,30 @@
 - **Notes:** keep it optional — Streamlit apps may only need `streamlit run` + manual checks.
 
 ## Parking lot / ideas
-- **Judged and kept, do not re-litigate (2026-08-24, C6 lint).**
-  - **`today that's concretely `cpg_salesperson` for `salesperson/chatbot.py`` (`:18`)** and **"In *this*
-    repo the running UIs are Streamlit apps" (`:20`)** — kept under the plan's **finding 10**, whose
-    test is *scope above rot*: `devops`'s repo example was deleted because that agent is
-    **user-scoped**, making a one-repo snapshot a false anchor everywhere else. `frontend-engineer`
-    is project-scoped, so a repo fact is a true anchor, and neither line carries a standing
-    "refresh it" obligation of the kind finding 10 warns about.
-  - **"`falkor-chat/` may grow a web front-end — check its docs before assuming a stack for it"
-    (`:20`)** — reads as speculation but functions as a class-1 **anti-trigger**: without it the
-    agent's nearest precedent (salesperson) would have it assume Streamlit for falkor-chat.
-  - **"Every UI state is a requirement" (`:75`)** vs. step 3 vs. the data-fetching bullet — three
-    touches, kept. Cutting one principle bullet for ~17 w would be a structural change out of step
-    with every other agent's principles list.
-- **Watch note — `cpg_salesperson` now lives in three places that rot together (2026-08-24, C6 lint).**
-  The frontmatter `description` ("`cpg_salesperson` today"), `:18`, and the surrounding repo fact at
-  `:20`. Different readers justify it (routers read the description, the agent reads the body), so it
-  stands today — but if `salesperson/chatbot.py` ever stops being this repo's Streamlit entry point
-  it is a **three-site** update, which is precisely the shape finding 10 says becomes a deletion
-  candidate on its third rot. Recorded so the count is visible next time rather than rediscovered.
+- **Resolved 2026-09-02 — the `cpg_salesperson` three-site rot arrived, and was fixed by deletion,
+  not by a fresher pointer.** The 2026-08-24 C6 lint kept `:18`'s concrete `cpg_salesperson` pointer
+  and `:20`'s "the running UIs are Streamlit apps" under the *scope above rot* test, and recorded a
+  watch note that the pair plus the frontmatter `description` were a **three-site** update which
+  would become a deletion candidate on its third rot. That rot is the `salesperson-ui` coordination:
+  the Streamlit app is retired, the `salesperson/` name is reassigned to a React storefront, and
+  `cpg_salesperson` now holds a retired codebase under a name that suggests the new one. All three
+  sites were rewritten (see `history.md`, 2026-09-02) to statements that cannot rot on a rename —
+  *the CPGs here are Python-only, so no front-end source is in one* — rather than to new pointers.
+  **The finding to carry forward:** *scope above rot* justified keeping a concrete repo fact, but it
+  did not justify keeping one whose truth depended on a **path**. A repo fact anchored to a durable
+  property survives; one anchored to a directory name is a countdown.
+- **Still kept from that lint:** the anti-trigger function of the old "`falkor-chat/` may grow a web
+  front-end — check its docs" clause is preserved in `:20`'s replacement ("Different products,
+  different bars — never take one as the stack precedent for the other" plus the retired-Streamlit
+  anti-precedent); and **"Every UI state is a requirement" (`:75`)** vs. step 3 vs. the data-fetching
+  bullet — three touches, kept, for the reason given in 2026-08-24: cutting one principle bullet for
+  ~17 w would be a structural change out of step with every other agent's principles list.
+- **Watch — the "Python-native UIs" section may now be dead weight (2026-09-02).** With the repo's
+  only Streamlit app retired, `:9`, the frontmatter `description`'s "Python-native UIs like
+  Streamlit" clause, and the `:51` Streamlit-fluency section are pure discipline breadth with no
+  live surface in this repo. Not cut in U6 (a correction pass, not a redesign) and arguably correct
+  to keep — the agent is not repo-locked and Streamlit is a real front-end skill. Revisit only if a
+  token budget forces a choice, or if the description's Streamlit clause is ever observed
+  *misrouting* a dispatch.
 - A perishable "framework quirks" resource file (like graph-dba's `falkordb-quirks.md`) if the lab settles on one web framework and version-specific gotchas accumulate.
 - Design-system/token conventions section if the lab adopts one.

@@ -53,7 +53,7 @@ Three standing modes:
 
 ## This lab's terrain
 
-Graph-backed AI apps: `falkor-chat` (FalkorDB as the single store; GraphRAG = in-graph vector search + traversal) and `salesperson` (LangChain/LangGraph over a FalkorDB knowledge graph, optional local LLM via LM Studio). Before opining, read the component's docs (`README.md`, `AGENTS.md`, `docs/`) and the actual prompts, retrieval code, and data shapes — advice grounded in the general case when the specific case is readable is a failure mode.
+Graph-backed AI apps: `falkor-chat` (FalkorDB as the single store; GraphRAG = in-graph vector search + traversal, and the workflow-engine-backed `salesperson` agent it hosts). Before opining, read the component's docs (`README.md`, `AGENTS.md`, `docs/`) and the actual prompts, retrieval code, and data shapes — advice grounded in the general case when the specific case is readable is a failure mode.
 
 ## How you work
 

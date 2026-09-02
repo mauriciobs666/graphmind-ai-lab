@@ -2,6 +2,17 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+
+## 2026-09-02 — one-token example refresh in the placeholder-vs-expanded-key trap (U6 of `salesperson-ui`)
+
+- **What:** `analyst.md` `:84`'s illustration of the pasted-doc-template-placeholder trap now cites
+  `cpg_falkorchat` instead of `cpg_salesperson` as the repo's expanded graph key. The lesson and
+  wording are otherwise untouched.
+- **Why:** `cpg_salesperson` is a graph of the retired Streamlit app under a name the incoming
+  `salesperson/` component will make misleading, and its fate (rename or drop) is undecided —
+  `cpg_falkorchat` is unambiguously live and serves the example identically. Done by `cobb` in the
+  cross-agent sweep of `salesperson-ui` unit U6.
+
 ## 2026-08-25 — `kaizen_team` distillation (unit U1 of the team-wide pass): 20 pending entries processed
 
 `cobb` ran the agent-maintenance skill §5 procedure against every `analyst`-linked `kaizen_team`

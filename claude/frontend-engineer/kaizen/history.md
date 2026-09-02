@@ -2,6 +2,35 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+
+## 2026-09-02 — U6 of `salesperson-ui`: the three-site `cpg_salesperson` / Streamlit repo fact corrected
+
+- **What:** three edits, all correcting statements the `salesperson-ui` work makes false.
+  (1) Frontmatter `description` — dropped `(cpg_salesperson today)` from the CPG-check clause; the
+  clause itself (check for a relevant CPG, use `cpg-analysis` before changing shared UI code)
+  stands. (2) "Orient first" item 4 — the concrete pointer *"today that's concretely
+  `cpg_salesperson` for `salesperson/chatbot.py`"* replaced with the durable fact that answers the
+  same question: this lab's CPGs are `pysrc2cpg`-built and therefore Python-only, so **no
+  front-end source is in any of them** — what a CPG answers for a front-end engineer is the
+  behavior of the server behind the UI (`cpg_falkorchat`). (3) The repo-terrain sentence — *"the
+  running UIs are Streamlit apps (`salesperson/chatbot.py`), and `falkor-chat/` may grow a web
+  front-end"* replaced with the two surfaces that actually exist: falkor-chat's deliberately
+  minimal developer-facing vanilla-JS UI (`falkor-chat/web/`) and the business-facing React + TS
+  SPA the FastAPI server mounts at `/shop`, plus the retired-Streamlit anti-precedent.
+- **Why:** `analyst`'s plan gate on `docs/plans/salesperson-ui.md` (finding M9, `docs/reviews/salesperson-ui.md`)
+  found this prompt states two things the coordination invalidates, and that the fix routes to
+  `cobb`. The Streamlit app is retired; the `salesperson/` name is taken over by the new React
+  storefront; `cpg_salesperson` holds the *retired* app's code (359 `METHOD` nodes) under a name
+  that will suggest the new one.
+- **Evidence for the Python-only claim (live, this session):** `cpg_falkorchat` filename extensions
+  are `py` × 8524 and extension-less × 521 — zero `.js`/`.ts`/`.html`/`.css`. So `falkor-chat/web/app.js`,
+  the one front-end already in the repo, is not in a CPG and never was.
+- **Deliberately not pinned:** neither the new component's directory (`salesperson/` vs.
+  `salesperson-ui/`, still in flux at the time of writing) nor `deprecated/salesperson/` is named —
+  the prompt now describes the surfaces, not the paths, so the next rename is not a fourth site.
+- **Plan items:** closes the 2026-08-24 C6-lint watch note (the `cpg_salesperson` three-site rot
+  it predicted, arrived) and retires the two now-obsolete "judged and kept" entries it guarded.
+
 ## 2026-08-25 — K-003 closed — conventions precedence stated once (conventions-precedence family)
 - **What:** `:56`'s local-scope claim (*"indistinguishable from a good existing file in the same folder"*) had no stated precedence against the project-scope material. One sentence appended at `:56`, where the local claim is made; +25 w.
 - **This instance is prophylactic, not corrective — recorded so nobody deletes it later.** `:17` (*"Discover conventions; don't import your favorites"*) and `:77` (*"The project's stack and idiom win over your favorite library"*) both run on the project-vs-**agent** axis, not project-vs-local. So unlike `coder:12` and `tdd-engineer:36`, this file does **not** carry two co-equal *scope* claims — it has one local-scope claim and two anti-preference claims. The copy is justified by uniform treatment across declared routing partners, not by a live ambiguity here. A future reader who derives this analysis will be tempted to call the copy dead weight; `audit-team.sh` check 10 now stops that edit, and this note explains why it exists.

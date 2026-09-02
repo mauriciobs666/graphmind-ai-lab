@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+
+## 2026-09-02 — "This lab's terrain" no longer describes the retired salesperson app (U6 of `salesperson-ui`)
+
+- **What:** `data-scientist.md` `:56` listed two graph-backed AI apps, the second being
+  *"`salesperson` (LangChain/LangGraph over a FalkorDB knowledge graph, optional local LLM via LM
+  Studio)"*. That component is being retired; the salesperson agent now lives inside falkor-chat's
+  workflow engine, and the `salesperson/` name is being taken over by a React storefront UI with no
+  ML surface at all. The sentence now reads: falkor-chat (FalkorDB as the single store; GraphRAG =
+  in-graph vector search + traversal, **and the workflow-engine-backed `salesperson` agent it
+  hosts**). Everything after it — read the component's docs and actual prompts before opining — is
+  unchanged.
+- **Why:** left as written, an ML-method question about "the salesperson agent" would have been
+  answered against a LangChain/LangGraph architecture that is no longer the one running. Found by
+  `cobb` in the cross-agent sweep of `salesperson-ui` unit U6.
+
 ## 2026-08-25 — `kaizen_team` distillation: 3 current-shape entries, all discarded as already documented
 
 - **What:** `cobb` processed all 3 current-shape entries `PRODUCED` by `data-scientist` in the
