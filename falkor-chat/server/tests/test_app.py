@@ -15,8 +15,9 @@ import time
 import warnings
 
 import pytest
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from starlette.routing import Mount
+from starlette.routing import Host, Mount
 
 from falkorchat import config, db
 from falkorchat.app import create_app
@@ -672,3 +673,329 @@ def test_judge_prompt_survives_a_condition_with_no_evidence_at_all():
     user = _render_judge_user("enough info?", {}, [])
 
     assert user == "CONDITION: enough info?"
+
+
+# ── salesperson-ui S3: the two wiring switches (plan §4.3 part 4, §4.9) ───────
+#
+# Both assertions here are on the **route table**, never on a 404 probe: a 404
+# passes when a route is absent *and* when it exists but errors, so it is
+# evidence that proves less than it appears to (plan §4.9, §6.1).
+
+
+def _route_paths(app) -> list[str]:
+    """Every path registered on `app`, flattened and fully prefixed, duplicates kept.
+
+    Two FastAPI 0.139 facts this has to get right, both of which produce an
+    assertion that cannot fail if it gets them wrong:
+
+    1. **An included router is ONE opaque `_IncludedRouter` entry** in `app.routes`
+       rather than its `APIRoute`s spliced in, and that wrapper has no `.path` at
+       all — so the naive `[r.path for r in app.routes]` reports the whole legacy
+       REST surface as zero paths whether the router is mounted or not. Recurse
+       through anything carrying a nested router.
+    2. **`include_router(prefix=...)` lives on that wrapper**
+       (`include_context.prefix`), NOT on the inner routes — so appending a raw
+       inner `.path` reports `/join` for a router mounted at `/shop/api`. Thread
+       the prefix through the walk and accumulate it, so nested includes compose.
+
+    `Mount`s deliberately stop the walk and appear as their own single entry
+    (`/mcp`, and `""` for the `/` static catch-all — how Starlette normalises it).
+
+    A route matching neither shape **raises** rather than being skipped: a helper
+    whose entire job is completeness must not under-report silently, which is the
+    same failure mode it exists to catch. `starlette.routing.Host` is exactly that
+    shape; `create_app` registers none today.
+    """
+    found: list[str] = []
+
+    def walk(routes, prefix: str = "") -> None:
+        for route in routes:
+            nested = getattr(getattr(route, "original_router", None), "routes", None)
+            if nested is not None:
+                own = getattr(getattr(route, "include_context", None), "prefix", "")
+                walk(nested, prefix + (own or ""))
+                continue
+            path = getattr(route, "path", None)
+            if path is None:
+                raise AssertionError(
+                    f"route-table helper cannot classify {route!r} — it carries "
+                    "neither a nested router nor a `.path`, so it would vanish "
+                    "from the table this helper exists to assert on"
+                )
+            found.append(prefix + path)
+
+    walk(app.routes)
+    return found
+
+
+# `/openapi.json`, `/docs`, `/docs/oauth2-redirect`, `/redoc` — FastAPI's own,
+# on every app it builds. Subtracted so the assertions below read as "what this
+# app registered", and so a FastAPI upgrade that changes its doc routes does not
+# quietly turn an exact-set assertion into a false failure.
+_FASTAPI_BUILTIN_PATHS = frozenset(_route_paths(FastAPI()))
+
+
+def _registered_paths(app) -> list[str]:
+    return [p for p in _route_paths(app) if p not in _FASTAPI_BUILTIN_PATHS]
+
+
+def test_default_deployment_registers_the_legacy_surface_with_one_health_route(tmp_path):
+    """The control for the assertion below: the helper genuinely SEES the legacy
+    router, the `/` static mount and `/mcp`. Without this, `dev_surface=False`'s
+    empty route table would pass against a helper that finds nothing ever."""
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<!doctype html><title>falkor-chat</title>")
+
+    app = create_app(context_provider=CTX, mount_mcp=True, web_dir=web)
+
+    paths = _registered_paths(app)
+    assert "/channels" in paths                     # api.build_router is mounted
+    assert "/search" in paths
+    assert "/mcp" in [r.path for r in app.routes if isinstance(r, Mount)]
+    assert "" in [r.path for r in app.routes if isinstance(r, Mount)]   # `/` static
+    # exactly one `/health` — the router's own; the S3 liveness route must not
+    # be registered a second time on this configuration
+    assert paths.count("/health") == 1
+    # The other half of the control — that the helper reports *where* a router is
+    # mounted, not merely that it is — needs a prefix, which this app has none of:
+    # see the next test.
+
+
+def test_route_paths_helper_reports_a_routers_mount_prefix_through_nested_includes():
+    """The second half of the control: the helper must report where a router is
+    mounted, not just that it exists.
+
+    FastAPI 0.139 keeps `include_router(prefix=...)` on the `_IncludedRouter`
+    wrapper (`include_context.prefix`), NOT on the inner `APIRoute`s — so a walk
+    that appends the raw inner `.path` reports `/join` for a router mounted at
+    `/shop/api`. `create_app` itself has no prefixed include, which is exactly why
+    this needs its own probe: an assertion over S3's route table cannot fail on a
+    prefix bug, and S8's route table is a router at `/shop/api` and a mount at
+    `/shop` — i.e. it is ALL prefix. Unfixed, an S8 assertion would read the same
+    whether that router were mounted at `/shop/api`, at `/`, or at `/admin`.
+
+    Two levels, because the prefixes must accumulate rather than the innermost
+    winning.
+    """
+    inner = APIRouter()
+
+    @inner.get("/join")
+    def join():  # pragma: no cover - never called; only its registration matters
+        return {}
+
+    outer = APIRouter()
+    outer.include_router(inner, prefix="/api")
+    probe = FastAPI()
+    probe.include_router(outer, prefix="/shop")
+
+    assert _registered_paths(probe) == ["/shop/api/join"]
+
+
+def test_route_paths_helper_refuses_a_route_it_cannot_classify():
+    """A helper whose whole job is completeness must not under-report silently —
+    that is the very failure it exists to prevent. `starlette.routing.Host` is a
+    route with neither `original_router` nor `.path`; `create_app` registers none
+    today, so this is a tripwire for a future one rather than a live case."""
+    probe = FastAPI()
+    probe.routes.append(Host("evil.example", app=FastAPI()))
+
+    with pytest.raises(AssertionError, match="cannot classify"):
+        _route_paths(probe)
+
+
+def test_dev_surface_false_registers_no_legacy_router_no_web_mount_and_no_mcp(tmp_path):
+    """§4.9 move 1: the storefront deployment does not mount the unauthenticated
+    surfaces at all. `dev_surface=False` is dominant — it un-mounts `/mcp` even
+    when `mount_mcp=True` is asked for, so the dangerous shape is not expressible.
+    """
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<!doctype html><title>falkor-chat</title>")
+
+    app = create_app(
+        context_provider=CTX, mount_mcp=True, web_dir=web, dev_surface=False
+    )
+
+    # the whole route table, exactly: one bare liveness route and nothing else
+    assert _registered_paths(app) == ["/health"]
+    assert [r.path for r in app.routes if isinstance(r, Mount)] == []
+
+
+def test_dev_surface_false_still_answers_the_health_liveness_probe(conn):
+    app = create_app(
+        Services(Repository(conn)), context_provider=CTX,
+        mount_mcp=False, dev_surface=False,
+    )
+    with TestClient(app) as c:
+        r = c.get("/health")
+        assert r.status_code == 200
+        assert r.json() == {"status": "ok"}
+
+
+def test_dev_surface_false_health_reports_503_when_falkordb_does_not_answer(conn):
+    """Same contract as the router's own `/health` — liveness, not a stub 200."""
+    class _DeadServices(Services):
+        def ping(self, ctx):  # noqa: ANN001
+            raise RuntimeError("FalkorDB unreachable")
+
+    app = create_app(
+        _DeadServices(Repository(conn)), context_provider=CTX,
+        mount_mcp=False, dev_surface=False,
+    )
+    with TestClient(app) as c:
+        assert c.get("/health").status_code == 503
+
+
+class _ProviderFailingAfterStartup:
+    """Resolves the context once (for the lifespan's `ensure_actor`), then raises.
+
+    Stands in for the post-auth `config.get_context` seam (`docs/SERVER.md` §1.3),
+    where resolving the *caller* can genuinely fail. Today's provider returns a
+    constant and cannot, which is why the contract needs a stub to be pinned at all.
+    """
+
+    def __init__(self, ctx) -> None:  # noqa: ANN001
+        self._ctx = ctx
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.calls == 1:
+            return self._ctx
+        raise RuntimeError("caller could not be resolved")
+
+
+def test_dev_surface_false_health_does_not_report_an_auth_failure_as_a_dead_database(conn):
+    """The bare `/health` must resolve the context OUTSIDE its `try`, matching
+    `api.py`'s route (which takes `ctx` through `Depends`, outside any handler of
+    its own). Swallowing a context-resolution failure into the FalkorDB branch
+    would report a rejected caller as "FalkorDB unreachable" — a 503 pointing an
+    operator at the database when the database is fine."""
+    provider = _ProviderFailingAfterStartup(CallContext(ws="test", actor="u1"))
+    app = create_app(
+        Services(Repository(conn)), context_provider=provider,
+        mount_mcp=False, dev_surface=False,
+    )
+    with TestClient(app) as c:
+        with pytest.raises(RuntimeError, match="caller could not be resolved"):
+            c.get("/health")
+    assert provider.calls == 2  # once at startup, once in the route
+
+
+@pytest.mark.parametrize(
+    "enable_agent, workflow_enabled",
+    [(False, False), (True, False), (True, True)],
+    ids=["plain-app", "responder-app", "workflow-app"],
+)
+def test_default_app_derives_both_switches_from_storefront_enabled(
+    monkeypatch, enable_agent, workflow_enabled
+):
+    """§4.9 move 1: `_build_default_app` derives `dev_surface` as
+    `not config.STOREFRONT_ENABLED`, alongside `mount_mcp` derived the same way —
+    on every one of its three return paths, not just the wired one."""
+    from falkorchat import app as app_mod
+
+    captured: dict = {}
+
+    def fake_create_app(services=None, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(app_mod, "create_app", fake_create_app)
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", enable_agent)
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", workflow_enabled)
+    monkeypatch.setattr(app_mod.config, "AGENT_ID", "assistant")
+
+    monkeypatch.setattr(app_mod.config, "STOREFRONT_ENABLED", False)
+    app_mod._build_default_app()
+    assert captured.get("dev_surface") is True
+    assert captured.get("mount_mcp") is True
+
+    monkeypatch.setattr(app_mod.config, "STOREFRONT_ENABLED", True)
+    app_mod._build_default_app()
+    assert captured.get("dev_surface") is False
+    assert captured.get("mount_mcp") is False
+
+
+class _SpyResponder:
+    """Stands in for `AgentResponder` (deferred-imported inside
+    `_build_default_app`, so a module attribute swap reaches it)."""
+
+    def __init__(self, services, *, worker=None, agent_id=None, models=None):  # noqa: ANN001
+        self._agent_id = agent_id
+        self.calls: list = []
+
+    def maybe_respond(self, ctx, **kwargs):  # noqa: ANN001
+        self.calls.append(kwargs)
+        return {"replied": True}
+
+
+class _NoWaitingRunServices:
+    """No parked run in this thread — so `maybe_trigger` reaches step 3/4."""
+
+    def find_waiting_run_for_thread(self, ctx, *, thread_id):  # noqa: ANN001
+        return None
+
+
+def _drive_unmentioning_message(trigger):
+    """Send the wired trigger an unmentioning, non-resuming message.
+
+    Swaps the trigger's live `Services` for a stub so this stays offline; the
+    trigger under test is otherwise exactly the one `_build_default_app` wired.
+    """
+    trigger._services = _NoWaitingRunServices()
+    return trigger.maybe_trigger(
+        CallContext(ws="test", actor="p1"), thread_id="t1", msg_id="m1",
+        text="how much is the blue mug?", role="member", mentions=[],
+    )
+
+
+def test_trigger_responder_fall_through_is_gated_on_its_own_flag(monkeypatch):
+    """§4.3 part 4 / S3(a): `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0` wires
+    `WorkflowTrigger(responder=None)`, making the M2 responder's workspace-wide
+    retrieval structurally unreachable from a participant's message."""
+    from falkorchat import app as app_mod
+    from falkorchat import responder as responder_mod
+
+    captured: dict = {}
+
+    def fake_create_app(services=None, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(app_mod, "create_app", fake_create_app)
+    monkeypatch.setattr(responder_mod, "AgentResponder", _SpyResponder)
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", True)
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", True)
+    monkeypatch.setattr(app_mod.config, "AGENT_ID", "assistant")
+    monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_KEY", "salesperson")
+    monkeypatch.setattr(app_mod.config, "TRIGGER_DEF_VERSION", "v7")
+
+    # Flag ON (the default) — unchanged M3 behaviour: the trigger holds the
+    # responder and an unhandled message falls through to it.
+    monkeypatch.setattr(app_mod.config, "TRIGGER_RESPONDER_FALLTHROUGH", True)
+    app_mod._build_default_app()
+    trigger = captured["trigger"]
+    assert isinstance(trigger._responder, _SpyResponder)
+    assert _drive_unmentioning_message(trigger) == {"replied": True}
+    assert len(trigger._responder.calls) == 1
+
+    # Flag OFF — no responder is wired at all, so the same message reaches none.
+    monkeypatch.setattr(app_mod.config, "TRIGGER_RESPONDER_FALLTHROUGH", False)
+    app_mod._build_default_app()
+    trigger = captured["trigger"]
+    assert trigger._responder is None
+    assert _drive_unmentioning_message(trigger) is None
+
+
+def test_trigger_responder_fall_through_defaults_to_on():
+    """The flag is opt-OUT: an existing deployment that sets nothing keeps the
+    M2 fall-through it has today."""
+    assert config.TRIGGER_RESPONDER_FALLTHROUGH is True
+
+
+def test_storefront_is_disabled_by_default():
+    assert config.STOREFRONT_ENABLED is False

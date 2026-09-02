@@ -214,6 +214,92 @@ generation (K-055 M6)` section header in `repository.py`/`services.py` was **rel
 file convention is §N = QUERIES.md §N, and K-055's `run_readonly_query` takes compiler-produced
 Cypher, so it has no QUERIES.md section) — `QUERIES.md` §18 is the storefront's.
 
+## 2026-09-02 — salesperson-ui S3: the two wiring switches (`dev_surface`, responder fall-through)
+
+**What:** Step S3 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — two switches
+that make the storefront's isolation structural rather than configurational.
+
+**(a) `create_app(..., dev_surface: bool = True)`** (§4.9 move 1). `False` registers **none** of
+the unauthenticated surfaces: no `api.build_router`, no `/` `StaticFiles` catch-all, no `/mcp`.
+It **dominates `mount_mcp`** — `create_app(mount_mcp=True, dev_surface=False)` still mounts no
+`/mcp`, so the dangerous shape is not expressible from any call site, not merely discouraged.
+Because `GET /health` lives *inside* `api.build_router` (`api.py`), un-mounting the router would
+have taken the liveness probe with it, so that branch re-registers a bare `/health` with the
+router's own contract (`services.ping`; 503 when FalkorDB does not answer). It is registered on
+that branch **only**: verified there is exactly one `/health` route in each configuration —
+`dev_surface=True` has 37 registered paths and 1 `/health`, `dev_surface=False` has exactly
+`["/health"]` and zero `Mount`s (the `_McpPathAlias` middleware goes with `/mcp` too).
+
+**`dev_surface` is a parameter and deliberately not an env var.** `_build_default_app` derives it
+— and `mount_mcp` — as `not config.STOREFRONT_ENABLED`, on **all three** of its return paths
+(plain app, responder app, workflow app), so no operator setting can restore the legacy surface
+while participants exist. `FALKORCHAT_STOREFRONT_ENABLED` is off by default, so the default
+deployment is unchanged.
+
+**(b) `config.TRIGGER_RESPONDER_FALLTHROUGH`** (`FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH`,
+**default on**, §4.3 part 4). Off ⇒ `WorkflowTrigger(responder=None)`, so `trigger.py`'s step-4
+fall-through has nothing to hand an unmatched message to. This matters because the M2 responder's
+retrieval is workspace-**wide** (`services.hybrid_search` with `channel_id=None`): in a
+shared-workspace storefront it could answer one participant using another's messages. Opt-out, so
+every existing deployment keeps today's behaviour.
+
+**Tests (`tests/test_app.py`, +10).** Both switches are asserted on the **route table**, never by
+probing for a 404 — a 404 passes both when a route is absent and when it exists but errors. A
+`_route_paths` helper flattens `app.routes`, which matters concretely: FastAPI 0.139 keeps an
+included router as one opaque `_IncludedRouter` entry rather than splicing its `APIRoute`s in, so
+the naive `[r.path for r in app.routes]` reports the legacy REST surface as *zero paths whether or
+not it is mounted* — an assertion that cannot fail. A positive control test asserts the helper
+genuinely sees `/channels`, `/search`, the `/mcp` mount and the `/` mount on the default app, so
+the `dev_surface=False` empty-table assertion cannot pass vacuously.
+
+**Mutation-tested — seven deliberate breaks, each killed by the intended test:** the legacy router
+registered anyway under `dev_surface=False`; the fall-through ignoring its flag; the `/` mount
+surviving; `/mcp` surviving; the bare `/health` registered in *both* configurations (caught by the
+exactly-one-`/health` assertion); `_build_default_app` ignoring `config.STOREFRONT_ENABLED`; and
+the bare `/health` stubbed to 200 without ever calling `services.ping`.
+
+Suite: **2381 passed / 14 deselected before → 2391 passed / 14 deselected** after; ruff clean.
+
+**Docs:** `docs/SERVER.md` §1.3 (the auth/tenancy seam) now states plainly that the REST router is
+unauthenticated until auth lands, and documents `dev_surface` as the structural closure with both
+new env vars in a table; §1.4's `GET /health` row notes it is the one route that survives
+`dev_surface=False`; §2.1's `create_app` sketch notes both of its lines are skipped under it.
+`README.md` and `AGENTS.md` are **deliberately untouched** — the plan assigns the storefront's
+narrative there to S16, which owns both files.
+
+**Review close-out (`docs/reviews/salesperson-ui-impl.md` Pass 5 — approve with suggestions, 0
+blockers).** All four findings applied.
+
+- **P5-1 (Major), the one that mattered:** `_route_paths` reported **pre-prefix** paths. FastAPI
+  0.139 keeps `include_router(prefix=…)` on the `_IncludedRouter` wrapper
+  (`include_context.prefix`), not on the inner routes, so a router mounted at `/shop/api` was
+  reported as `/join`. No S3 assertion was weakened — this app has no prefixed include and the
+  exact-list equality still counts every route — but §4.9 and the S8 row hand this same helper a
+  route table **whose entire content is a prefix**, where the flaw would have made an assertion
+  pass identically at `/shop/api`, `/`, or `/admin`. The prefix is now threaded through the walk
+  and accumulates across nested includes. Pinned by its own test on an S8-shaped two-level probe
+  (`FastAPI → APIRouter(prefix="/shop") → APIRouter(prefix="/api")` ⇒ `["/shop/api/join"]`),
+  because no assertion over S3's own unprefixed table can fail on a prefix bug.
+- **P5-2 (Minor):** the walk silently dropped any route with neither `original_router` nor `.path`
+  (`starlette.routing.Host` is that shape). It now **raises** — a helper whose whole job is
+  completeness must not under-report silently, which is the failure it exists to catch.
+- **P5-4 (Nit):** the bare `/health` resolved `provider()` *inside* its `try`, so a
+  context-resolution failure would surface as 503 "FalkorDB unreachable" where `api.py`'s
+  `Depends`-resolved route yields 500. Hoisted above the `try`. Unreachable while
+  `config.get_context` returns a constant — so it is pinned with a provider stub that resolves once
+  for the lifespan and then raises, rather than left fixed-but-unpinned.
+- **P5-5 (Nit):** `SERVER.md`'s env table read against its own Default column; each Effect now
+  opens with its condition (*When set (`=1`)* / *When cleared (`=0`)*).
+- **P5-3 is not S3's** — `docs/SERVER.md` is absent from the plan's §5.0 shared-file map (the third
+  such gap the review found). Routed to `architect`; the file is edited here regardless, because S3
+  falsified §1.3 and §2.1 directly.
+
+Mutation-tested again, five deliberate breaks, all killed: prefix never accumulating (i.e. the
+shipped prefix-blind walk), the accumulated prefix dropped at the leaf, nested prefixes not
+composing, the unclassifiable route silently skipped, and `provider()` back inside the `try`. The
+two headline S3 mutants were re-run and still die. Suite: **2391 → 2393 passed / 14 deselected**;
+`app.py` and `test_app.py` restored byte-identical after every mutation (md5 verified).
+
 ## 2026-09-01 — K-035 closed: bare-call argument-key shadowing fixed in `_parse_content_tool_calls`
 
 **What:** K-035 (filed at the K-027 slice A analyst gate, finding M-2) is closed — a bare tool

@@ -83,11 +83,43 @@ Services and the repository already take `ws` / `actor` as parameters, so when a
 (token → user + workspace claim, or the `identity` graph as source of truth) **only `get_context`
 changes** — everything below is untouched.
 
+**Until it lands, the whole REST router is unauthenticated**, and that is fine only while every
+caller is trusted. It stops being fine the moment mutually-untrusting people share one workspace:
+`GET /channels`, `GET /threads/{tid}/messages`, `GET /search?q=` and the post box all resolve
+through the process-constant `get_context()`, so any client on the network can read every
+transcript in the workspace and write into any thread. `/mcp` and the `/` web mount are the same
+seam again.
+
+The salesperson storefront (`docs/plans/salesperson-ui.md` §4.9) closes this **by construction
+rather than by configuration** — `create_app` takes:
+
+```python
+create_app(services, dev_surface=True)   # the default: today's app, unchanged
+create_app(services, dev_surface=False)  # no api.build_router, no `/` mount, no /mcp
+```
+
+`dev_surface=False` un-mounts the entire unauthenticated dev surface. It dominates `mount_mcp`, so
+`/mcp` is absent however the app was constructed. Because `GET /health` lives *inside*
+`api.build_router`, that branch re-registers a bare liveness route with the same contract
+(`services.ping`, 503 when FalkorDB does not answer) — exactly one `/health` exists in either
+configuration.
+
+**`dev_surface` is a function parameter and deliberately not an environment variable.** That is
+the whole point: `_build_default_app` derives it (and `mount_mcp`) as
+`not config.STOREFRONT_ENABLED`, and there is no operator setting that can put the legacy surface
+back while storefront participants exist. Assert its effect on `app.routes`, never by probing for
+a 404 — a 404 is returned both when a route is absent and when it exists but errors.
+
+| Env var | Default | Effect |
+|---|---|---|
+| `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
+| `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH` | **on** | **When cleared (`=0`)**, `WorkflowTrigger(responder=None)`: a message matching no workflow reaches nothing instead of the M2 responder, whose retrieval is workspace-**wide** (`hybrid_search` with `channel_id=None`) and would otherwise surface another participant's messages. Left on, the M2 fall-through behaves as it always has |
+
 ### 1.4 REST surface → service → verified query
 
 | Endpoint | Service method | `QUERIES.md` |
 |---|---|---|
-| `GET /health` | `ping` | liveness probe (trivial `RO_QUERY RETURN 1`; 503 when FalkorDB is down) |
+| `GET /health` | `ping` | liveness probe (trivial `RO_QUERY RETURN 1`; 503 when FalkorDB is down). The only route of this table that survives `dev_surface=False`, re-registered bare by `create_app` since it otherwise lives inside `build_router` (§1.3) |
 | `POST /channels` | `create_channel` | §3 create a channel |
 | `GET /channels[?limit=]` | `list_channels` | §3 list channels in a workspace |
 | `POST /channels/{cid}/threads` | `create_thread` | §3 create a thread |
@@ -480,6 +512,11 @@ app = FastAPI(lifespan=mcp_app.router.lifespan_context)  # MUST forward, or sess
 app.include_router(api.build_router(services))
 app.mount("/mcp", mcp_app)                                # agents connect at /mcp
 ```
+
+(Simplified: the shipped `create_app` also takes the opt-in `responder`/`embed_worker`/`trigger`/
+`ingestion_pipeline`/`sweep_interval_s` collaborators. **Both lines above are skipped under
+`dev_surface=False`** — the storefront deployment mounts neither the REST router nor `/mcp`; see
+§1.3.)
 
 > **Lifespan gotcha (python-sdk #1367):** forward the MCP app's lifespan to FastAPI or the
 > Streamable-HTTP session manager is never started (requests 500 with "task group not

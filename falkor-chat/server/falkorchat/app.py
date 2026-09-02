@@ -23,7 +23,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -186,6 +186,7 @@ def create_app(
     *,
     context_provider: Callable[[], CallContext] | None = None,
     mount_mcp: bool = True,
+    dev_surface: bool = True,
     web_dir: Path | None = None,
     responder: object | None = None,
     embed_worker: object | None = None,
@@ -201,6 +202,23 @@ def create_app(
     session manager (run-once per instance) isn't started repeatedly.
     `web_dir` overrides where the static browser client is served from; it
     defaults to the repo-root `web/` and is skipped if that directory is absent.
+
+    `dev_surface=False` (salesperson-ui §4.9 move 1) un-mounts the **whole
+    unauthenticated dev surface**: `api.build_router`, the `/` `StaticFiles`
+    catch-all *and* `/mcp` — the last one regardless of `mount_mcp`, so the
+    dangerous combination is not expressible. What is left is a bare `GET /health`
+    liveness route (the router's own lives inside `api.build_router`, so
+    un-mounting it would otherwise take the probe with it); it is registered on
+    this branch **only**, so the default deployment still has exactly one.
+
+    This is a **function parameter and deliberately not an environment variable**.
+    The storefront serves mutually-untrusting participants out of one workspace,
+    and every route the legacy router exposes resolves through the process-constant
+    `config.get_context()` with no authentication — a workspace-wide transcript
+    read, a full-text search and a post box. Making the switch un-settable from the
+    environment is what closes that structurally instead of by configuration:
+    `_build_default_app` derives it as `not config.STOREFRONT_ENABLED`, and there
+    is no operator setting that puts the surface back while participants exist.
 
     `responder`/`embed_worker` (K-013) are **opt-in** out-of-band handlers wired
     onto `BackgroundTasks` in the message-post path; both default to `None` so
@@ -243,6 +261,11 @@ def create_app(
         services = Services(Repository(db.LazyFalkorDB()))
 
     provider = context_provider or config.get_context
+
+    # `dev_surface` is dominant over `mount_mcp`: §4.9 requires that `/mcp` — the
+    # same unauthenticated seam as the REST router — is absent from the storefront
+    # route table however the app was constructed.
+    mount_mcp = mount_mcp and dev_surface
 
     if mount_mcp:
         mcp_mod.configure(
@@ -300,12 +323,35 @@ def create_app(
     if context_provider is not None:
         app.dependency_overrides[api.get_context] = context_provider
 
-    app.include_router(
-        api.build_router(
-            services, responder=responder, embed_worker=embed_worker,
-            trigger=trigger, ingestion_pipeline=ingestion_pipeline,
+    if dev_surface:
+        app.include_router(
+            api.build_router(
+                services, responder=responder, embed_worker=embed_worker,
+                trigger=trigger, ingestion_pipeline=ingestion_pipeline,
+            )
         )
-    )
+    else:
+        # §4.9: the legacy router is not mounted, and `GET /health` lives inside
+        # it (`api.build_router`) — so re-register the liveness probe bare here,
+        # with the router's own contract: `services.ping` only (no participant
+        # data), 503 when FalkorDB does not answer.
+        @app.get("/health")
+        def health():
+            # `provider()` is resolved OUTSIDE the try, matching `api.py`, whose
+            # route takes `ctx` through `Depends(get_context)` — i.e. outside any
+            # handler of its own. Unreachable while `config.get_context` returns a
+            # constant, but the moment real auth lands in that seam (§14.3) a
+            # failure to resolve the caller must surface as a 500, not be reported
+            # as "FalkorDB unreachable".
+            ctx = provider()
+            try:
+                ok = services.ping(ctx)
+            except Exception:  # noqa: BLE001 - any failure to reach FalkorDB is 503
+                ok = False
+            if not ok:
+                raise HTTPException(status_code=503, detail="FalkorDB unreachable")
+            return {"status": "ok"}
+
     _register_error_handlers(app)
 
     if mount_mcp:
@@ -316,7 +362,7 @@ def create_app(
     # Static UI mounts LAST: "/" is a catch-all, so it must sit behind the REST
     # routes and the /mcp mount (Starlette matches routes in registration order).
     web = _DEFAULT_WEB_DIR if web_dir is None else web_dir
-    if web.is_dir():
+    if dev_surface and web.is_dir():
         app.mount("/", StaticFiles(directory=str(web), html=True), name="web")
 
     return app
@@ -342,8 +388,13 @@ def _build_default_app() -> FastAPI:
     """
     repo = Repository(db.LazyFalkorDB())
     services = Services(repo)
+    # salesperson-ui §4.9 move 1: one flag drives both switches. The storefront
+    # deployment mounts none of the unauthenticated surfaces (`api.build_router`,
+    # the `/` static catch-all, `/mcp`); off — the default — this is exactly the
+    # app shape that shipped before, since both parameters take their own default.
+    dev_surface = not config.STOREFRONT_ENABLED
     if not config.ENABLE_AGENT:
-        return create_app(services)
+        return create_app(services, mount_mcp=dev_surface, dev_surface=dev_surface)
 
     # Imported lazily so the disabled path carries no import-time weight and the
     # dependency surface for offline imports stays minimal.
@@ -395,7 +446,13 @@ def _build_default_app() -> FastAPI:
         services.set_executor(executor)  # late-bind (breaks the services↔executor cycle)
         trigger = WorkflowTrigger(
             services, agent_id=config.AGENT_ID, def_key=config.TRIGGER_DEF_KEY,
-            def_version=config.TRIGGER_DEF_VERSION, responder=responder,
+            def_version=config.TRIGGER_DEF_VERSION,
+            # salesperson-ui §4.3 part 4: with the fall-through off the trigger holds
+            # no responder at all, so a message matching no workflow reaches nothing.
+            # The M2 responder's retrieval is workspace-WIDE, which in a shared-
+            # workspace storefront would surface another participant's messages —
+            # made unreachable structurally, not merely improbable.
+            responder=responder if config.TRIGGER_RESPONDER_FALLTHROUGH else None,
         )
         # K-028 §3.6: the periodic sweep only ever starts alongside the executor
         # it depends on — same double-flag gate (`AGENTS.md`: `WORKFLOW_ENABLED`
@@ -406,11 +463,13 @@ def _build_default_app() -> FastAPI:
             services, trigger=trigger, embed_worker=worker,
             ingestion_pipeline=ingestion_pipeline,
             sweep_interval_s=config.WORKFLOW_SWEEP_INTERVAL_S,
+            mount_mcp=dev_surface, dev_surface=dev_surface,
         )
 
     return create_app(
         services, responder=responder, embed_worker=worker,
         ingestion_pipeline=ingestion_pipeline,
+        mount_mcp=dev_surface, dev_surface=dev_surface,
     )
 
 

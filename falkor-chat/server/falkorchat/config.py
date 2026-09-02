@@ -113,12 +113,38 @@ WORKFLOW_ENABLED: bool = _env_flag("FALKORCHAT_WORKFLOW_ENABLED", default=False)
 # (see `scripts/seed_workflows.sh`) or the trigger's @mention-to-start step never fires.
 TRIGGER_DEF_KEY: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_KEY", "triage")
 TRIGGER_DEF_VERSION: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_VERSION", "v1")
+# Whether `WorkflowTrigger` keeps the M2 responder for its step-4 fall-through
+# (`trigger.py` rule 4). **On by default** — every existing deployment keeps the
+# behaviour it has today. Off (`FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0`) wires
+# `WorkflowTrigger(responder=None)`, so a message that matches no workflow reaches
+# nothing at all. The storefront demo turns it off (`salesperson-ui.md` §4.3 part 4):
+# the responder's retrieval is workspace-WIDE (`services.hybrid_search` with
+# `channel_id=None`), which would let one participant's question surface another
+# participant's messages — so the fall-through is made structurally unreachable
+# rather than merely unlikely.
+TRIGGER_RESPONDER_FALLTHROUGH: bool = _env_flag(
+    "FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH", default=True
+)
 # K-028 — how often the in-process sweep tick runs (seconds), read only where
 # `WORKFLOW_ENABLED` is already read (`app._build_default_app`). `POST
 # /workflow-runs/due` (the manual/cron entry point) is unaffected by this value.
 WORKFLOW_SWEEP_INTERVAL_S: float = float(
     os.environ.get("FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S", "30")
 )
+
+# ── Salesperson storefront deployment (salesperson-ui §4.9) ──────────────────
+# Whether `falkorchat.app:app` is the *storefront* deployment rather than the dev
+# one. **Off by default**, so `uvicorn falkorchat.app:app` and the whole existing
+# test suite keep today's app shape. When on, `_build_default_app` derives BOTH
+# `create_app(mount_mcp=...)` and `create_app(dev_surface=...)` from it as
+# `not STOREFRONT_ENABLED`, so the unauthenticated surfaces — `api.build_router`,
+# the `/` static mount and `/mcp` — are not registered at all.
+#
+# Note what is deliberately absent: there is **no env var for `dev_surface`**. It is
+# a `create_app` parameter only (§4.9 move 1), so no operator setting can put the
+# legacy surface back while storefront participants exist — the dangerous
+# configuration is not expressible, rather than merely discouraged.
+STOREFRONT_ENABLED: bool = _env_flag("FALKORCHAT_STOREFRONT_ENABLED", default=False)
 
 
 @dataclass(frozen=True)
