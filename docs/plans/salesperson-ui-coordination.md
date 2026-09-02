@@ -119,8 +119,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U26** — Pass 8: final plan gate — is the class closed **enough to ship**? | `analyst` | `a4f0457bda1615d13` (resumed; asked to argue against its own Pass 7 prescription) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 4 major, 3 minor, 1 nit). **Confirmed the architect's own scoring by producing three mis-ruled instances inside the v1.16 delta itself** (P8-1/2/3): generalising F8 from "either reset" to "every write" extended C4's *domain* faster than its *content*, and the cross-cutting `504` row hid the cells that opened. **Argued against its own Pass 7 prescription** — C13 detects an *absent* rule, is silent on a rule that matches and is wrong, and that residual appears nowhere in the shipping document. **Gave the stopping rule teco asked for** (below) | `docs/reviews/salesperson-ui.md` `## Pass 8` — committed `0efc014` | — | 169k tok / 9 tools |
 | **U27** — Plan v1.17: the **one consolidating touch** — P8-1…P8-N1, no Pass 9 | `architect` (**fresh** — the v1.14-v1.16 architect was at 240k tok and this task is self-contained) | `a8e01a3759dafabd0` | in-flight (mid-run `SendMessage`: S6's landed env-var contradiction + S6's row unfrozen) | `docs/plans/salesperson-ui.md` **v1.17** | **none — plan gates stopped** | — |
 | **S6** — Storefront core: participant registry, join, token verify, turn-state map | `coder` (**fresh**) | `a5db169a0966bad59` | delivered — **committed `2f7938d`**, suite **2439** teco-verified **solo**. Mutation-tested both danger-zone assertions teco flagged at dispatch: a cache-first branch reddens the deleted-participant test, an in-process-authoritative registry reddens the restart-survival test. **Found a contradiction between the plan's prose and its own S6 env table** (`FALKORCHAT_PRESENTER_KEY` vs `FALKORCHAT_STOREFRONT_PRESENTER_KEY`) — relayed to U27 in flight. Pinned the `compare_digest("", "")` trap for S10 | `storefront.py` (new), `config.py` (+61/-0), `test_storefront.py` (new), `SERVER.md`, `HISTORY.md` | `analyst` Pass 6 → — | 202k tok / 66 tools |
-| **S6 gate** — Pass 6 on the storefront core: can the cache reach an auth decision? | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — the S3-gate reviewer, 109k tok, adjacent surface) | in-flight (**has the live DB to itself**; S7 held behind it so it can run mutations) | `docs/reviews/salesperson-ui-impl.md` `## Pass 6` | — | — |
-| **S7** — Storefront state, reset, catalog, images | `coder` | `a5db169a0966bad59` (to resume — same module, 202k tok, under both thresholds) | queued (**cleared by Pass 7; serialized behind the S6 gate — shared live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
+| **S6 gate** — Pass 6 on the storefront core: can the cache reach an auth decision? | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — the S3-gate reviewer, adjacent surface) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 2 minor) — committed `a38090a`. **Answered the auth question structurally, not by inspection**: all 8 `_records` touch sites enumerated, exactly 2 reads, `resolve_token` reaching the map only via write-side helpers, no caller outside the module, exception route **fail-closed**. **Found the pre-planted vacuous assertion again** (S6-3, 3rd time this reviewer has). **Disagreed with teco's routing of the `SERVER.md` §1.5 carry-forward and was right** → follow-up 15 | `docs/reviews/salesperson-ui-impl.md` `## Pass 6` + Appendix J | — | 175k tok / 23 tools |
+| **S6b** — close Pass 6: pin `_cache_put` (S6-1), give the package scan a control (S6-3), reshape the constant-time tripwire (S6-4) | `coder` | `a5db169a0966bad59` (resumed — its own review findings, same two files) | in-flight (**holds the live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
+| **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | — | queued (**cleared by Pass 7; serialized behind S6b — shared live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
 | **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
 | **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
 | **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
@@ -1019,6 +1020,33 @@ workspace, and pinning it would make it wrong for its purpose.
 §7's `Agent`-owned orphan residual is described more broadly than it is. Pass 3 established it only
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
+
+## Follow-up 15 — `SERVER.md` §1.5's layout block is five milestones stale (NOT S8's debt)
+
+The block is headed *"Layout (as built, M1)"* and lists **8 modules against the package's 27** — it
+omits nineteen modules across M2–M6. S6 proposed hanging the refresh on **S8**, since S8 adds
+`storefront_api.py`; teco relayed that to the architect, and the Pass 6 reviewer **overruled both of
+us with the better argument**: routing it to S8 makes S8 the owner of five milestones of debt it did
+not create, inside the largest remaining step. Teco reversed the instruction mid-run.
+
+Standalone item, outside this coordination. Owner: whoever next touches `falkor-chat/docs/SERVER.md`
+substantively. **Not** to be folded into any `salesperson-ui` step.
+
+## Why S7 dispatches fresh while S6b resumed the same agent
+
+Both decisions come from the same rule and land on opposite sides of it, which is worth recording
+because the rule is easy to apply mechanically and get wrong.
+
+**S6b resumed** `a5db169a0966bad59` (the S6 author, ~202k tok / 66 tools): the findings are *its own
+code*, in the two files it just wrote, and two of the three turn on reasoning it never wrote down —
+why three docstrings say the cache is never read, and what the tripwire was meant to catch. A cold
+agent would re-derive that at a cost exceeding what the resume spends.
+
+**S7 dispatches fresh**: it is a *new step* against a module that is now committed, reviewed and
+documented, specified by its own §5.1 row. That is self-contained by construction — the definition
+of work that does not need the incumbent's undocumented reasoning — and the incumbent will be past
+250k tokens once S6b closes, where continuing trades tokens and hallucination risk for no benefit a
+good brief cannot supply.
 
 ## The plan gates are stopped at Pass 8 — the stopping rule, and who set it
 
