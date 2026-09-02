@@ -31,7 +31,10 @@ or the whole thing (`cpg` = the modern full graph, `cpg14` = the legacy schema,
 > **Caveat (confirmed absent on `pysrc2cpg`-built graphs, re-verified 2026-08-18):**
 > `META_DATA`, `FILE`, `TYPE`, `NAMESPACE`, and `NAMESPACE_BLOCK` are listed above
 > as commonly-seen labels but are **not present at all** on either live
-> `pysrc2cpg`-built graph in this repo (`cpg_falkorchat`, `cpg_salesperson`) —
+> `pysrc2cpg`-built graph in this repo (`cpg_falkorchat`, `cpg_deprecated_salesperson`
+> — the graph was named `cpg_salesperson` when this was verified; renamed 2026-09-02
+> when the `salesperson/` component was retired to `deprecated/salesperson/`, finding
+> unchanged and re-confirmed on the renamed graph) —
 > `CALL db.labels()` on both returns none of the five. This list is apparently
 > frontend/export-configuration-dependent, not a universal guarantee; treat it
 > as illustrative for `pysrc2cpg` + default `--repr cpg`, not as a checklist to

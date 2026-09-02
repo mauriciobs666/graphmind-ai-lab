@@ -1,5 +1,5 @@
 # Graph Ontology Reference — cpg, kaizen_team, reference & ws:* graphs
-> **Status:** active · **Owner:** `tico` · **Tracks:** — (—)
+> **Status:** active · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-09-02
 
 ## Who this is for
 
@@ -37,7 +37,7 @@ today:
 
 | Family | Graph key pattern | Loaded right now | Who writes it | Who reads it |
 |---|---|---|---|---|
-| Code Property Graph | `cpg_<component>` | `cpg_falkorchat`, `cpg_salesperson` | `graph-dba`, on demand (Joern build) | `analyst`, `architect`, `qa-engineer`, `coder` via the `cpg-analysis` skill |
+| Code Property Graph | `cpg_<component>` | `cpg_falkorchat` — the repo's live CPG, and the one every example below runs against | `graph-dba`, on demand (Joern build) | `analyst`, `architect`, `qa-engineer`, `coder` via the `cpg-analysis` skill |
 | Kaizen working memory | `kaizen_team` | `kaizen_team` (single shared graph) | every Claude Code agent, appending its own notes | `cobb`, distilling |
 | Reference catalog | `reference` | `reference` (one, global) | `falkor-chat`'s server, on workflow-def publish | `falkor-chat`'s server, materializing into workspaces |
 | Workspace | `ws:<workspaceId>` | `ws:acme` (the demo workspace used throughout §4) | `falkor-chat`'s server, per workspace | `falkor-chat`'s server + its AI participant |
@@ -48,6 +48,14 @@ today:
 > the full list here. You may also see a graph key called **`identity`** mentioned in
 > `falkor-chat`'s design docs (global user identity/auth) — it is **designed but not
 > built**; nothing is currently loaded under that name, and it's out of scope here.
+
+> **A `cpg_*` key names the code that was scanned, not a directory that exists under
+> that name today.** Guessing `cpg_<component>` (the component-directory name with
+> hyphens stripped: `falkor-chat` → `cpg_falkorchat`) is the right *first* move, but it
+> is a guess, not a fact — always confirm the graph you landed on actually covers the
+> code you mean, because a component can be renamed or retired while a graph built from
+> its old contents keeps the old name. Reading `CpgBuildInfo.SOURCE_PATH` (§1) settles it
+> in one query, before you analyse the wrong codebase.
 
 **Two very different naming conventions.** This is the single most common mistake when
 switching between families:
@@ -83,8 +91,8 @@ Nodes are things like methods, call sites, parameters and literals; edges captur
 [`cpg-getting-started.md`](cpg-getting-started.md) for the build/query *process*; this
 section is the schema you'll actually query against.
 
-**Node labels** (verified live on `cpg_falkorchat`; `cpg_salesperson` matches, minus
-`CpgBuildInfo`, both built by the same `pysrc2cpg` frontend):
+**Node labels** (verified live on `cpg_falkorchat`, 2026-09-02 — 21 labels, built by the
+`pysrc2cpg` frontend):
 
 | Label | What it represents | Notable properties |
 |---|---|---|
@@ -107,11 +115,11 @@ section is the schema you'll actually query against.
 | `IMPORT` | An import statement | `CODE` |
 | `UNKNOWN` | A construct the frontend couldn't classify precisely | `CODE` |
 | `CpgNode` | A **second label every node also carries** — not a real category, just a shared index anchor so an edge can look up any node by `id` without knowing its real label | `id` |
-| `CpgBuildInfo` | One node per load, build provenance (`cpg_falkorchat` only — a newer transformer stamp) | `BUILT_AT`, `SOURCE_PATH` |
+| `CpgBuildInfo` | One node per graph, stamped by the loader with build provenance — **read it before you trust a graph**, it says which source tree this CPG actually covers and how fresh it is | `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` |
 
 > Joern's generic vocabulary also documents `FILE`, `TYPE`, `NAMESPACE`,
-> `NAMESPACE_BLOCK`, `META_DATA` — **confirmed absent** on both CPGs actually loaded
-> here (frontend/export-configuration-dependent). Don't build a query that assumes
+> `NAMESPACE_BLOCK`, `META_DATA` — **confirmed absent** on `cpg_falkorchat`
+> (frontend/export-configuration-dependent). Don't build a query that assumes
 > they're there.
 
 **Relationship types** (verified live on `cpg_falkorchat`):
@@ -467,6 +475,19 @@ RETURN r.status, s.key, s.type
 That graph name isn't currently loaded. The error message itself lists every graph that
 *is* loaded right now — check the spelling (`ws:acme`, not `ws_acme`; `reference`, not
 `ws:reference`).
+
+**I guessed `cpg_<component>`, the graph exists and my queries run — am I looking at the
+right code?** Not necessarily, and this is the one CPG mistake that gives you confident
+wrong answers instead of an error. A graph key is fixed when the graph is loaded; the
+directory it was built from can be renamed, moved or retired afterwards, so a key that
+matches today's component name is not proof its *contents* do. One query settles it:
+
+```cypher
+MATCH (b:CpgBuildInfo) RETURN b.SOURCE_PATH, b.BUILT_AT, b.SOURCE_COMMIT
+```
+
+`SOURCE_PATH` is the tree that was actually scanned — check it names the code you meant
+before you act on any answer the graph gives you.
 
 **I queried `m.name` on a `cpg_*` graph and got back nothing, even though the node
 clearly has a name.** Property keys on CPG graphs are `UPPER_CASE` — you want `m.NAME`.

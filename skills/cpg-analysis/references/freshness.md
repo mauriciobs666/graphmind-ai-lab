@@ -31,6 +31,19 @@ per-build history.
   pipeline run that built it failed its own verification and never reached the
   stamping step. Treat this the same as "stale": you have no freshness signal
   at all, which is itself a reason for caution, not an error to debug.
+- **One row, but `builtAt` is not a parseable timestamp** → a **hand-written
+  marker**, not a pipeline stamp. `graph-dba` writes one when a graph's
+  provenance is genuinely unrecoverable but the graph is still worth keeping —
+  a pre-M4 graph renamed rather than rebuilt, say. The tell is `BUILT_AT`
+  holding the literal string `unknown`, chosen so it fails ISO parsing
+  **loudly** rather than being coalesced into a plausible date. Such a marker
+  explains itself in properties the query above doesn't return, so read the
+  whole node (`MATCH (b:CpgBuildInfo) RETURN b`) — expect `STATUS`,
+  `MARKER_ORIGIN`, `RENAMED_FROM` and a `NOTE`. Treat it as **"stale, and not
+  rebuildable on demand"**: you have provenance but no date, so check 1 below
+  is unavailable and **check 2 must not be run** (see Limits). Live example:
+  `cpg_deprecated_salesperson`, the CPG of the retired Streamlit `salesperson/`
+  app whose source now sits at `deprecated/salesperson/`.
 
 **Judging staleness (a suggestion, not a rule).** Two escalating checks,
 cheapest first — the threshold is yours to set given the task at hand:
@@ -50,7 +63,8 @@ cheapest first — the threshold is yours to set given the task at hand:
    hand — `git log --oneline --since=2026-07-18 -- falkor-chat/server` → 8
    commits — to establish an M2-era CPG was stale before its M3 rebuild. This
    recipe just hands you the two inputs to run that check yourself instead of
-   guessing.)
+   guessing.) **Both forms need a real `builtAt`/`sourceCommit`** — skip this
+   check entirely for a hand-written marker; see Limits.
 
 **Surfacing the suggestion (FR-6).** When either check makes you doubt the
 graph, say so in whatever you hand back — don't silently keep using it as if
@@ -84,6 +98,22 @@ signal, not the threshold.
   pattern: running that literal straight through `git log` doesn't error, it
   silently returns zero commits, which reads as false "unchanged" confidence
   rather than "no signal available."
+- **A hand-written marker has no date, and check 2 fails silently against it.**
+  When `builtAt` is the literal `unknown`, `git log --oneline --since=unknown --
+  <sourcePath>` **does not error**: git accepts the unparseable approxidate and
+  returns **zero commits with exit 0** — verified 2026-09-02, and reproduced
+  against a path with heavy recent history (`--since=unknown -- skills/` → no
+  commits, while `--since=2026-08-01 -- skills/` → many). That is the same
+  silent failure the scratch-build bullet above describes, reached by a
+  different route: it reads as false "unchanged" confidence rather than "no
+  signal available." So don't run check 2 for this shape at all — and note that
+  the scratch-build escape hatch does **not** apply either, because there is no
+  `builtAt` to anchor a `--since` on even once you've confirmed the real path.
+  What you can still do is read the marker's `NOTE`/`STATUS`, and treat the
+  graph as a frozen snapshot: for a retired component that is the correct
+  reading, not a gap to close, and asking `graph-dba` for a rebuild is usually
+  the wrong next step (the source may no longer be maintained, or may not be
+  where the graph name suggests).
 - **Opt-in per build.** Any CPG built before this feature shipped, or by a
   pipeline run whose own load verification failed, has no marker — that's the
   "zero rows" case above, not an error.

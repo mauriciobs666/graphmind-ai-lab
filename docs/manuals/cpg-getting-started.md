@@ -1,6 +1,6 @@
 # Code Property Graph (Joern + FalkorDB) — Getting Started
 
-> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208, C-301…C-307 (M1–M3) ·
+> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208, C-301…C-307 (M1–M3) · **Last updated:** 2026-09-02 ·
 > **Reviews:** [`docs/reviews/cpg-getting-started.md`](../reviews/cpg-getting-started.md) (analyst, approve with suggestions) ·
 > [`docs/test-reports/cpg-getting-started-report.md`](../test-reports/cpg-getting-started-report.md) (qa-engineer, 1 defect fixed 2026-07-30)
 
@@ -21,8 +21,8 @@ Two things had to exist before any of this was useful, and they were built in th
    a **Code Property Graph (CPG)**: a graph where nodes are things like methods, call
    sites, parameters and literals, and edges capture relationships like "calls",
    "contains", and "this value flows into that one". That graph is exported and loaded
-   into **FalkorDB** — the same graph database `falkor-chat` and `salesperson` already
-   use — so it becomes a plain, queryable Cypher graph instead of a proprietary binary
+   into **FalkorDB** — the same graph database `falkor-chat` already uses — so it
+   becomes a plain, queryable Cypher graph instead of a proprietary binary
    only Joern itself can read.
 2. **A way to ask it questions without knowing its internals.** Once a CPG is sitting in
    FalkorDB, someone still has to know its schema (property names, edge types, the
@@ -61,7 +61,7 @@ prerequisites — but it helps to know what "ready" looks like:
 
 - **FalkorDB is running.** Everything downstream needs it reachable at `localhost:6379`.
   Start it with `./falkor-chat/scripts/start_falkordb.sh -d` if it's ever down — it's the
-  same shared container `falkor-chat` and `salesperson` use, so it's usually already up.
+  same shared container `falkor-chat` uses, so it's usually already up.
 - **The `cypher` MCP tool is connected**, if you're working inside Claude Code. Run
   `/mcp` in a session, or `claude mcp list` from a shell, and look for `cypher` — `✔
   Connected`. First run in a fresh clone may need `cypher-mcp/build.sh` once (it builds a
@@ -192,7 +192,7 @@ doesn't interfere with, or get confused with, one for another part.
 
 **What if FalkorDB itself is down?**
 Nothing above works without it. `./falkor-chat/scripts/start_falkordb.sh -d` brings up
-the shared container; it's shared with `falkor-chat` and `salesperson`, so it's rarely a
+the shared container; it's shared with `falkor-chat`, so it's rarely a
 CPG-specific problem.
 
 **I asked for "everything" and the row count looks too low for a graph this size — is that a bug?**
