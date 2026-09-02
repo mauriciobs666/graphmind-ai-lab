@@ -1,6 +1,6 @@
-# The one salesperson UI — Implementation Review (S1–S4)
+# The one salesperson UI — Implementation Review (S1–S4, S6)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S3, S4
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S3, S4, S6
 
 ## 1. Scope & verdict
 
@@ -1008,6 +1008,215 @@ wipes it with no teardown, so it is still empty now. `ws:s1v6`, `ws:s1v7`, `ws:p
 
 ---
 
+## Pass 6 — 2026-09-02 (S6: the storefront core)
+
+**Reviewed:** commit **`2f7938d`** — `falkorchat/storefront.py` (new, 518 lines), `config.py`
+(+61/−0), `tests/test_storefront.py` (new, 45 tests), `docs/SERVER.md` §1.3, `docs/HISTORY.md` —
+against §5.1's **S6** row **as it stands at `acb5a2a` (plan v1.16)**, quoted below, plus §4.3, §4.9
+and §4.10. An architect is producing v1.17 concurrently; if the row moves, this pass judged the
+v1.16 text. The working tree at these three paths is byte-identical to the commit (`git diff
+--quiet 2f7938d`), so tree and commit are the same review surface. Not reviewed: S7/S8/S9/S10 (not
+written), and the S4 repository methods this module calls (Passes 3–4).
+
+> **S6 done-condition (v1.16):** *Join provisions `User`+`Channel`+`Thread`+profile-name
+> idempotently; wrong/absent/malformed/deleted-participant tokens all resolve to `None`; **restart
+> survival: a `Storefront` rebuilt from scratch resolves a token minted by the previous
+> instance**.*
+
+**Verdict: approve with suggestions.** 0 blockers · 2 major (one in S6's tests, one a plan
+carry-forward) · 2 minor · 0 nits. **The security property S6 exists to hold, holds** — I can state
+it structurally, not just by inspection: `self._records` is touched at eight sites, all in this
+module; its only two *readers* are `lookup` and `cached_ids`; `resolve_token` reaches it solely
+through `_cache_put`/`_cache_drop`, both write-side; and no other module in the package calls
+`lookup`/`cached_ids`/`forget` yet. The diff is careful work and the two mutation claims in the
+commit message under-sell it — the cache-first mutant is killed by **five** tests, not one.
+
+CPG: considered, not relevant — `cpg_falkorchat` is loaded and reachable, but `storefront.py` is
+new in this commit and therefore absent from the graph; the reachability questions here ("can the
+cache reach an auth decision", "can a client influence `participant_id`") were answered by
+`grep`-complete enumeration of an 8-site private attribute plus live execution against `ws:test`.
+
+### S6-1 · **Major** · `resolve_token`'s cache refresh is load-bearing for S9 and pinned by nothing — the mutant survives all 2439 tests
+
+`storefront.py:~425` ends `resolve_token` with `self._cache_put(record)` before returning. Delete
+that one line and **every test in the repository still passes** (`2439 passed, 14 deselected`,
+Appendix J §2). Yet it is the only thing keeping `lookup` — the cache reader S9's turn workers and
+S7's post-reset profile write are told to use — fresh: with it, a record changed behind the
+storefront's back is visible to `lookup` on the next authenticated request; without it, `lookup`
+serves the join-time record indefinitely. Demonstrated live (Appendix J §3):
+
+```
+shipped:  resolve_token -> language 'es'   lookup() -> 'es'
+mutant:   resolve_token -> language 'es'   lookup() -> 'en'   # what an S9 worker sees
+```
+
+This is a deletion a *careful* reader is invited to make: the module docstring, the `resolve_token`
+docstring and the `_records` comment all say, correctly and three times, that the cache is **never
+consulted** by `resolve_token` — which reads as "so why is it writing to it?". S7 lands in this file
+next.
+
+**Suggested improvement** (`tdd-engineer`/S6's owner, before S9): one test —
+`test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`: join, resolve,
+`repo.set_participant_record(..., language="es")`, resolve again, then assert
+`shop.lookup(pid).language == "es"`. It is the `test_resolve_token_reads_the_graph_on_every_call`
+you already have, with `lookup` as the observer instead of `resolve_token`, and it kills this
+mutant. Add a clause to `_cache_put`'s call site saying why the write is there.
+
+### S6-2 · **Major** · the empty-presenter-key contract is written everywhere except where S10 will look
+
+`compare_digest("", "")` is `True`, `Storefront.presenter_configured` is the guard, and S6 states
+the rule in three places: the property's docstring, `config.py`'s `STOREFRONT_PRESENTER_KEY`
+comment, and `SERVER.md` §1.3's table. **None of them is the plan.** At v1.16 (`acb5a2a`):
+`grep -c 'presenter_configured'` → **0**; `grep -i 'unset key\|empty key\|unconfigured'` → **0**;
+§4.3's presenter paragraph, R6, OQ-5 and the S10 row all describe the key without the hazard, and
+S10's done-condition says *"a wrong key is refused and counted"* — never *an unset one*. S10's
+owner (`coder`, working from its §5.1 row and §5.2, in an isolated context) writes
+`hmac.compare_digest(self._presenter_key, submitted)`, that is correct-looking code, and an
+unconfigured deployment hands reset-everyone to whoever posts an empty key first. **S6 did its half
+right** — the guard exists, is tested both ways, and is documented; the gap is that the obligation
+to *call* it is not in the artifact S10 executes from.
+
+**Suggested improvement** (`architect`, in the v1.17 sweep — it is already open for the
+`FALKORCHAT_PRESENTER_KEY` → `FALKORCHAT_STOREFRONT_PRESENTER_KEY` spelling fix): add to S10's
+Done-condition column — *"an **unset** presenter key authenticates nobody: `presenter_configured`
+is checked **before** any `compare_digest`, asserted with a `presenter_key=""` storefront answering
+`403` to an empty submitted key."* One clause, in the column S10 is gated on.
+
+### S6-3 · **Minor** · the `FALKORCHAT_DEMO_WS` tripwire passes against a package directory that does not exist — this pass's pre-planted vacuity
+
+`test_no_second_workspace_variable_exists_anywhere_in_the_package` asserts `offenders == []` over
+`_PACKAGE_DIR.rglob("*.py")`. `Path.rglob` on a missing directory yields nothing and raises
+nothing, so the test is green whether it scanned 27 files or zero. I repointed `_PACKAGE_DIR` at
+`falkorchat_RENAMED` and the whole file stayed green (**45 passed**, Appendix J §2). The file's own
+docstring makes this the finding it is: it argues, correctly, that a scan asserting *emptiness*
+needs a positive control, and `test_join_stores_only_the_hash_of_the_token` duly carries one — this
+sibling scan, structurally identical, does not. Its neighbour `test_dev_surface_has_no_environment_variable`
+is safe by accident: it shares `_CONFIG_SOURCE` with the env-var test, which asserts a six-element
+set equality, so emptying that constant reddens *that* test (verified).
+
+**Suggested improvement:** two lines, either form — `scanned = list(_PACKAGE_DIR.rglob("*.py"));
+assert len(scanned) > 20, _PACKAGE_DIR`, or the same positive control the token scan uses (assert a
+string that *is* present, e.g. `FALKORCHAT_STOREFRONT_ENABLED`, is found by the identical scan).
+
+### S6-4 · **Minor** · the constant-time tripwire is brittle where it should be loose, and absent where S10 needs it
+
+The *decision* to pin `hmac.compare_digest` statically is right and I would not change it:
+constant-time comparison has no observable behaviour, and I confirmed the consequence — replacing
+it with `!=` reddens **exactly one test**, this one (Appendix J §2). Two problems with the form:
+
+1. **Over-tight.** `assert "hmac.compare_digest(stored_hash, hash_token(token))" in body` matches
+   exact call text; a formatter wrapping that line, or renaming the local `stored_hash`, reddens a
+   correct implementation. The clause doing the real work is `assert "==" not in body`.
+2. **Under-scoped.** It inspects `Storefront.resolve_token` only. The *other* `compare_digest` site
+   is S10's `presenter_login` — the one carrying S6-2's hazard — and this tripwire will not cover it.
+
+**Suggested improvement** (verified, Appendix J §4): a spy is strictly better on axis 1 —
+`monkeypatch.setattr(storefront.hmac, "compare_digest", spy)`, resolve a valid token, assert the
+spy was called **once** with `(stored_hash, hash_token(token))`. I ran it: 1 call, args exactly
+those, resolution still succeeds. It survives reformatting, and unlike the source read it also goes
+red if a future branch *skips* the comparison. Keep `assert "==" not in body` alongside it, and
+when S10 lands, extend the same pair to `presenter_login`.
+
+### Answers to the five questions in the brief
+
+1. **Can the cache reach an authorization decision? No — and structurally, not by inspection.**
+   `grep -n '_records' storefront.py` gives eight sites, all in this module: one init, one lock,
+   and six accesses. Exactly two are **reads** — `lookup:439` and `cached_ids:456`. `resolve_token`
+   reaches `_records` only through `_cache_put`/`_cache_drop`, both write-side, and
+   `grep -rn 'lookup(\|cached_ids(\|forget(' falkorchat/ | grep -v storefront.py` is **empty**, so
+   no module consumes them yet. The three routes you named: **S7/S9's `lookup`** — non-auth by
+   construction, since it takes a `participant_id` the caller must already have resolved and returns
+   no credential material; **an exception route** — `get_participant_record` is *not* wrapped in a
+   `try`, so a FalkorDB outage **raises out of `resolve_token`** rather than falling back to memory:
+   fail-closed, which is the right posture and worth keeping when S8 adds its error map; **a partial
+   write** — if `save_profile` raises after `ensure_participant`, `_cache_put` never runs and the
+   caller never receives the token, so the failure leaks an orphan participant node, not a
+   credential. The residual is a **typing** risk, not a control-flow one: `lookup` and
+   `resolve_token` return the identical `ParticipantRecord` with `token is None` in both cases, so a
+   future author who writes `record = shop.lookup(pid)` holds an object indistinguishable from an
+   authenticated one. Cheapest structural guard, and the same technique this suite already uses: a
+   source tripwire in S8's `test_storefront_api.py` asserting `storefront_api.py` never calls
+   `.lookup(`.
+2. **The tripwire's shape** — see S6-4. Right decision, wrong form on two axes, both fixable in the
+   test file alone.
+3. **The presenter-key contract's placement** — see S6-2. The guard is correct and correctly
+   tested; the contract is not in the artifact S10 executes from.
+4. **The idempotency/rotation reachability claim is true, and the write-through opens nothing.**
+   Two independent reasons, both checked: (a) `participant_id = self._id()` and
+   `_default_participant_id` is `"p-" + uuid4().hex` — `join(display_name, language)` never derives
+   the id from either argument, and no route accepts one, so the `else` branch needs a caller that
+   pins `id_gen`; (b) even reached, it cannot escalate, because `set_participant_record`'s
+   `MATCH … WHERE u.tokenHash IS NOT NULL` (`repository.py:3541`) means it can only overwrite an
+   **existing participant's** hash — it cannot stamp a `tokenHash` onto `seed_demo.sh`'s `u1` or the
+   lifespan's `config.USER_ID` node, and `ensure_participant` raises `MemberIdCollisionError` on
+   that id shape before the branch is even reached. So the worst a pinned `id_gen` buys is
+   overwriting a live participant's own credential with a fresh one the same caller just minted.
+   One thing to carry, not a finding: that whole argument rests on **no caller ever passing
+   `id_gen`**, and S8 is the one that will construct the `Storefront` in `create_app`.
+5. **The pre-planted one is S6-3** — a scan asserting emptiness with no control, in the same file
+   whose docstring explains why that is the trap. Everything else I probed holds: the negative
+   credential set is genuinely paired (`test_a_valid_token_resolves_to_that_participant`, plus
+   in-test controls on the two that matter); the two *transition* tests are real transitions; the
+   restart test asserts `cached_ids() == frozenset()` before it answers and builds its second
+   instance on its own `Repository` over its own `db.connect()`; and the token scan's control
+   (`"Ada"` is found, the token is not) does what it claims.
+
+### On the two carry-forwards you flagged
+
+- **`FALKORCHAT_PRESENTER_KEY` vs `FALKORCHAT_STOREFRONT_PRESENTER_KEY`: agreed, and S6 is not in
+  breach.** §5.1's S6 row lists it as `_PRESENTER_KEY` under the `FALKORCHAT_STOREFRONT_` elision it
+  shares with `_DIR`/`_TURN_WORKERS`, which is exactly what the code implements; only §4.3, R6 and
+  OQ-5's prose disagrees. Architect, v1.17 — right routing.
+- **`SERVER.md` §1.5: I'd route it differently.** The block is headed *"Layout (as built, M1)"* and
+  lists 8 modules; the package has **27**. It omits `trigger`, `responder`, `executor`, `llm`,
+  `modelconfig`, `ingestion`, `chunking`, `embedding`, `extraction`, `fusion`, `guards`, `pricing`,
+  `proof_defs`, `querygen`, `tools`, `transport`, `background` — nineteen modules, none of them
+  S6's, accumulated across M2–M6. Hanging it on S8 makes S8 the owner of five milestones of doc
+  debt it did not create, and the `(as built, M1)` label arguably makes the block an honest
+  historical snapshot rather than a false claim about now. Suggest a standalone `BACKLOG.md` item
+  ("refresh `SERVER.md` §1.5 to the current module set, or retitle it as an M1 snapshot") rather
+  than an S8 obligation.
+
+### What's solid (Pass 6)
+
+- **The invariant is stated once, in the module docstring, with both consequences named** —
+  restart survival and immediate revocation — and both are pinned by tests that go red under the
+  matching mutation. That docstring is the best thing in the diff.
+- **The cache-first mutant is killed by five tests**, not the one the commit message claims:
+  `…_idempotent_when_the_participant_id_repeats`, `…_wrong_token_for_a_real_participant…`,
+  `…_one_participants_token_never_resolves_under_anothers_id`, `…_deleted_participant_stops_resolving…`,
+  `…_reads_the_graph_on_every_call`. Defence in depth that happened rather than being designed.
+- **`resolve_token` is fail-closed on a DB error** (no `try` around the graph read) and
+  **fail-closed on a partial join** (no token reaches the caller if `save_profile` raises).
+- **`parse_bearer` returns `None`, never raises, for eleven malformed shapes**, and the
+  `presenter-credential` and `unknown-participant` params quietly cover two cases the plan words as
+  one — a credential that *looks* like S10's and an id that never existed.
+- **`_env_csv`'s empty-value fallback is a real design call, not defensive padding**: an operator
+  typo producing an empty locale tuple would reject every language a participant could pick, and the
+  test says exactly that.
+- **`set_participant_record`'s `tokenHash IS NOT NULL` anchor does the heavy lifting** for question
+  4, and S6 relies on it rather than re-checking in Python — the right side of the "two places that
+  can disagree" line.
+
+### Open questions (Pass 6)
+
+None blocking. **One sequencing call for `teco`:** S6-1's missing pin is cheap now (one test in a
+file S7 is about to edit anyway) and expensive later — S9 is the consumer that would be bitten, and
+by then `_cache_put` will look even more like a dead write. I would land it with S7 rather than
+carry it.
+
+**Environment left as found.** I ran the S6 file (45 tests) and the full suite twice serially —
+**2439 passed / 14 deselected** on the pristine tree, and once more under the S6-1 mutant to
+establish that it survives everything, not just `test_storefront.py`. Six mutations against
+byte-copies of `storefront.py` and `test_storefront.py`; both restored and `md5sum -c` verified
+after every one, and `git status --porcelain falkor-chat/` is clean. `ruff check` on
+`storefront.py`, `config.py` and `test_storefront.py`: **All checks passed**. My probe scripts
+wiped and re-populated `ws:test` (the suite's own fixture does this per test, so nothing was lost);
+`reference` is empty of node data, as the default run leaves it. I created no graph key and deleted
+none; `ws:s1v6`, `ws:s1v7`, `ws:probe-s0r3`, `ws:probe-s4b` are untouched.
+
+---
+
 ## Appendix
 
 ### Appendix A — F-1 causal chain (all links verified by execution or by document)
@@ -1282,3 +1491,55 @@ the one exact-list assertion.
 (16.8s). `ruff check falkorchat/app.py falkorchat/config.py tests/test_app.py` → **All checks
 passed** (the 34 errors a repo-wide `ruff check falkorchat/ tests/` reports are all in files S3 did
 not touch).
+
+### Appendix J — Pass 6 evidence (commit `2f7938d`, live `ws:test`, run serially)
+
+**§1 — the cache's readers, enumerated rather than eyeballed.**
+
+```
+$ grep -n '_records' falkorchat/storefront.py
+249,250  init + lock          438,439  lookup()      <- READ
+455,456  cached_ids()  <- READ 467,468  forget_all()
+471,472  _cache_put()         475,476  _cache_drop()
+$ grep -rn 'lookup(\|cached_ids(\|forget(' falkorchat/ | grep -v storefront.py
+(no output)
+```
+
+`resolve_token` appears at none of the six access sites; it reaches the map only through
+`_cache_put`/`_cache_drop`.
+
+**§2 — mutation battery.** `storefront.py` and `test_storefront.py` byte-copied aside, mutated,
+run, restored; `md5sum -c` clean after every row (`da2cb8cd…`, `3bfeb9f9…`). Baseline **45
+passed**.
+
+| # | Mutation | Result | Killed by |
+|---|---|---|---|
+| S6-a | `resolve_token` stops calling `_cache_put` | **45 passed — SURVIVES**; and **2439 passed / 14 deselected** across the whole repo | *nothing* → **S6-1** |
+| S6-b | `resolve_token` stops calling `_cache_drop` on a missing row | 1 failed | `test_a_deleted_participant_stops_resolving_immediately` |
+| S6-c | `hmac.compare_digest(…)` → `stored_hash != hash_token(token)` | 1 failed | `test_the_token_comparison_is_constant_time` **only** — no functional test sees it, exactly as its docstring says |
+| S6-d | cache-first `resolve_token` (the commit message's claim) | **5 failed** | `…_idempotent_when_the_participant_id_repeats`, `…_wrong_token_for_a_real_participant…`, `…_one_participants_token_never_resolves_under_anothers_id`, `…_deleted_participant_stops_resolving…`, `…_reads_the_graph_on_every_call` |
+| S6-e | `_PACKAGE_DIR` → `falkorchat_RENAMED` (nonexistent) | **45 passed — SURVIVES** | *nothing* → **S6-3**. `rglob` on a missing dir yields 0 files and raises nothing (27 files normally) |
+| S6-f | `_CONFIG_SOURCE = ""` (control for S6-3's neighbour) | 1 failed | `test_config_reads_exactly_the_documented_storefront_env_vars` — so `test_dev_surface_has_no_environment_variable` *is* controlled |
+
+**§3 — S6-1's consequence, executed.** Join → resolve → `repo.set_participant_record(…,
+language="es")` → resolve again → read `lookup()`, the accessor S9's workers and S7's post-reset
+write are pointed at:
+
+```
+shipped code:  resolve_token -> 'es'      lookup() -> 'es'
+S6-a mutant :  resolve_token -> 'es'      lookup() -> 'en'    (stale, and the suite is green)
+```
+
+**§4 — S6-4's suggested spy, executed.** `storefront.hmac.compare_digest` swapped for a recording
+wrapper, one valid token resolved: **1 call**, args exactly `(stored_hash, hash_token(token))`,
+resolution still succeeds. Behavioural, formatter-proof, and red if a branch ever skips the call.
+
+**§5 — plan greps behind S6-2** (against `git show acb5a2a:docs/plans/salesperson-ui.md`, v1.16):
+`presenter_configured` → **0 hits**; `unset key|empty key|unconfigured|compare_digest("", "")` →
+**0 hits**; `compare_digest` → 1 hit (line 372, the *participant* token). S10's Done-condition
+column names a *wrong* key, never an unset one.
+
+**§6 — suite and lint.** `pytest -q` on the pristine tree: **2439 passed, 14 deselected** (17.6 s),
+matching your solo run. `ruff check falkorchat/storefront.py falkorchat/config.py
+tests/test_storefront.py` → **All checks passed**. `git status --porcelain falkor-chat/` → clean,
+and all three S6 paths `git diff --quiet 2f7938d`-identical.
