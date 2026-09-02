@@ -18,10 +18,14 @@ from falkorchat.trigger import WorkflowTrigger
 CTX = CallContext(ws="test", actor="u1")
 
 
+_UNSET = object()          # "start_workflow_run was called without a `run_ctx` kwarg"
+
+
 class StubServices:
     def __init__(self, *, waiting=None):
         self._waiting = waiting
         self.calls: list[tuple] = []
+        self.start_run_ctx = _UNSET   # what step 3 forwarded, if it fired
 
     def find_waiting_run_for_thread(self, ctx, *, thread_id):
         self.calls.append(("find_waiting", thread_id))
@@ -31,8 +35,10 @@ class StubServices:
         self.calls.append(("resume", run_id))
         return {"runId": run_id, "status": "running"}
 
-    def start_workflow_run(self, ctx, *, def_key, version, trigger_msg_id, trace):
+    def start_workflow_run(self, ctx, *, def_key, version, trigger_msg_id, trace,
+                           run_ctx=_UNSET):
         self.calls.append(("start", def_key, version, trigger_msg_id, trace))
+        self.start_run_ctx = run_ctx
         return {"runId": "new-run", "status": "waiting"}
 
 
@@ -148,3 +154,57 @@ def test_mention_without_def_key_falls_through_to_responder():
     )
     assert out == {"responded": True}
     assert not any(c[0] == "start" for c in svc.calls)
+
+
+# ── `run_ctx` pass-through (salesperson-ui S2) ────────────────────────────────
+#
+# The storefront starts a `salesperson` run through the ordinary @mention path but
+# needs its own ctx keys on the run (`{"language": "pt-BR"}`). `maybe_trigger`
+# carries them to step 3 ONLY — a resume already has its ctx, and the responder
+# has no run at all.
+
+
+def test_run_ctx_is_forwarded_to_the_start_branch():
+    svc = StubServices(waiting=None)
+    out = _trigger(svc).maybe_trigger(
+        CTX, thread_id="t1", msg_id="m3", text="@bot help", role="user",
+        mentions=["assistant"], run_ctx={"language": "pt-BR"},
+    )
+    assert out == {"runId": "new-run", "status": "waiting"}
+    assert svc.start_run_ctx == {"language": "pt-BR"}
+
+
+def test_omitting_run_ctx_forwards_none_so_existing_callers_are_unchanged():
+    # background.py's `_safe_run_workflow` passes no `run_ctx`; step 3 must still
+    # call through with an explicit `None`, which the service treats as "no keys".
+    svc = StubServices(waiting=None)
+    _trigger(svc).maybe_trigger(
+        CTX, thread_id="t1", msg_id="m3", text="@bot help", role="user",
+        mentions=["assistant"],
+    )
+    assert svc.start_run_ctx is None
+
+
+def test_run_ctx_is_not_forwarded_to_the_resume_branch():
+    # a waiting run owns the reply and already carries its ctx — step 2 must not
+    # grow a ctx argument (the stub's `resume_workflow_run` would TypeError), and
+    # step 3 must not fire at all.
+    svc = StubServices(waiting={"runId": "r9", "status": "waiting"})
+    out = _trigger(svc).maybe_trigger(
+        CTX, thread_id="t1", msg_id="m2", text="my username is bob", role="user",
+        mentions=["assistant"], run_ctx={"language": "pt-BR"},
+    )
+    assert out == {"runId": "r9", "status": "running"}
+    assert svc.start_run_ctx is _UNSET      # start never called
+
+
+def test_run_ctx_is_not_forwarded_to_the_responder_fall_through():
+    svc = StubServices(waiting=None)
+    resp = StubResponder()
+    out = _trigger(svc, responder=resp).maybe_trigger(
+        CTX, thread_id="t1", msg_id="m4", text="just chatting", role="user",
+        mentions=["someone_else"], run_ctx={"language": "pt-BR"},
+    )
+    assert out == {"responded": True}
+    assert resp.calls[0]["text"] == "just chatting"
+    assert svc.start_run_ctx is _UNSET

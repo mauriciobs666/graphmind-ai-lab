@@ -1213,7 +1213,12 @@ A returned row = the move committed.
 
 ```cypher
 // $runId,$defKey,$defVersion,$startedAt,$triggerMsgId server-minted / caller-supplied
-// $ctx = opaque serialized state ("{}" at start); $trace = bool (debug instance?);
+// $ctx = opaque serialized state. On this chat path the service seeds the trigger
+//        message's thread as the §2.4 resume denorm anchor, MERGED with any caller
+//        `run_ctx` — {"threadId": …} alone when the caller supplies none, otherwise
+//        {"threadId": …, …caller keys}. Reserved keys (threadId/error/timerFired) are
+//        rejected service-side before this write ever runs, same rule as §12.12.
+// $trace = bool (debug instance?);
 // $maxSteps = run-level step budget (DS default 12, §7). A tripwire checked AFTER each
 //             recorded step, not a hard cap: a run executes at most maxSteps + 1 steps
 //             (see the §12.5 note).
@@ -1481,7 +1486,8 @@ empty-row-collapse class of bug entirely.
 ```cypher
 // $runId,$defKey,$defVersion,$startedAt server-minted / caller-supplied
 // $ctx = opaque serialized state ("{}" or the caller's initial run ctx — reserved keys
-//        threadId/error are rejected service-side, see plan §3.4 M-2)
+//        threadId/error/timerFired are rejected service-side, see plan §3.4 M-2. The
+//        SAME check now guards the §12.1 chat path too, hoisted ahead of both branches.)
 // $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24).
 //                A tripwire checked AFTER each step ⇒ at most maxSteps + 1 (§12.5 note).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
@@ -2976,3 +2982,610 @@ one shape), per the note's own §4, even though nothing in this requirements doc
 `Services.get_profile`/`save_profile`, `GetProfileTool`/`SaveProfileTool`, the `salesperson@v3`
 version bump (`falkorchat.proof_defs.SALESPERSON_DEF`), and seed/verify data
 (`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, default version bumped to `v3`).
+
+---
+
+## 18. Storefront participants & resets (salesperson-ui S4)
+
+Design: `docs/plans/salesperson-ui.md` §4.3/§4.6/§4.8 (architect) and
+`docs/plans/salesperson-ui-graph.md` **v1.2** (graph-dba — every query below is live-verified
+there, three review passes, §11 is its verification log). **This section transcribes that note
+verbatim; it does not re-derive it.** Workspace-scoped (`ws:{workspaceId}`); `reference` is never
+referenced by any query here, which is structural — `GRAPH.QUERY` operates on one named graph per
+call — not a convention.
+
+**Cypher comments in this section are `//`.** `--` is **not** a comment on this build: it fails to
+parse (`Invalid input 'G': expected '>' or '('`).
+
+**Schema — one new nullable, unindexed property on the existing `Channel` node, no new label:**
+```
+(:Channel {channelId, name, createdAt,
+            participantId})    // NULLable; written ONLY by §18.1 ensure_participant
+```
+No DDL: `bootstrap_schema.sh` is untouched and every existing workspace stays valid. A `UNIQUE`
+constraint on it was considered and declined on scope (§18.4 makes a duplicate marker fail loudly
+anyway); no new index either — the property is only ever a `Filter` on a `ch` already bound by a
+`MEMBER_OF` traversal from an index-anchored `u`.
+
+### 18.0 The two guards — the whole safety argument
+
+Both resets carry two independent guards, and **neither may be relaxed for readability**:
+
+| # | Guard | Where | What it stops |
+|---|---|---|---|
+| **G1** | `WHERE u.tokenHash IS NOT NULL` | the anchor, both resets | any non-participant `User` being used as a reset root — `config.USER_ID`'s lifespan node, `seed_demo.sh`'s `u1`, an operator account, an `Agent` id, an unknown id |
+| **G2** | `WHERE ch.participantId = u.userId` | the channel hop, both resets | any `Channel` **not minted by this participant's own join** — even one the participant is a genuine `MEMBER_OF` |
+
+**G2 is a provenance check, not an id check, and that distinction is the design.** The obvious
+formulation — `ch.channelId = u.channelId` against the `User.channelId` denormalization — is a
+*coincidence* check: it says two ids happen to be equal, and cannot tell "this channel was minted
+for this participant" from "this participant's `channelId` field happens to name a pre-existing
+channel". `Channel.participantId` is written **only** by §18.1. `seed_demo.sh`'s `demo-general` —
+and every channel created by any other code path, seed script or human — has no `participantId` at
+all, and `null = anything` evaluates to `null`, never `true`. Such a channel is **structurally
+unreachable** as a delete target regardless of what any `User` property says, who is a member of
+it, or how carelessly the repository method is called. `Repository.create_channel` writes a fixed
+three-property map with no caller-controlled extras, so the marker cannot be forged, and nothing
+in the codebase deletes a `MEMBER_OF` edge, so a participant's own channel cannot be detached
+either.
+
+**The governing rule is a *scoping* rule, not a label list** (`salesperson-ui.md` §4.8):
+
+> Every `Channel`, `Thread` and `Message` **not reachable from a participant `User`** survives
+> both resets — `demo-general`/`demo-welcome` and every message in them included. A participant
+> `User` is one carrying `tokenHash`.
+
+**A survivor assertion written by label cannot enforce it**, because victims and survivors share
+the labels `Channel`, `Thread` and `Message`. Live-reproduced with both guards ablated
+(`reset_participant('u2')`, where `u2` is a non-participant whose own `channelId` names
+`demo-general`): `demo-welcome`, its three messages and two read-cursors are destroyed and a
+replacement thread minted in their place, while the `Channel` and `Thread` label counts are
+**unchanged** (3 → 3 each) and every §4.8 survivor label is still present. Only a *positive*
+assertion naming `demo-general`/`demo-welcome` catches it, and it is the point of the whole
+section. **Each reset has its own such assertion and they are not interchangeable** — an ablation
+of one query leaves the other query's test green, so cite the one that matches the query you are
+changing. Stripping G1 **and** G2 reddens exactly five tests either way, all in
+`server/tests/test_repository.py` (live-verified, both directions):
+
+| Ablated query | Tests that go red |
+|---|---|
+| §18.4 `reset_participant` — the `u2` ablation described above | `test_reset_participant_is_a_no_op_for_non_participants[u2]` and `[u1]`, `…_of_a_cross_member_leaves_the_demo_channel_whole`, `…_keeps_a_cursor_on_a_surviving_thread`, `…_with_a_mismatched_marker_is_a_total_no_op` |
+| §18.5 `reset_all_participants` | `test_reset_all_leaves_the_non_participant_subgraph_intact`, `…_deletes_every_participant_subgraph`, `…_keeps_exactly_the_survivor_labels`, `…_reports_unscoped_participants_and_leaves_them_whole`, `…_is_idempotent_and_returns_an_all_zeros_row_when_clean` |
+
+**Two completeness dependencies this scoping inherits.** Neither is visible from the Cypher alone:
+
+1. **`WorkflowRun` completeness assumes the storefront deployment leaves `api.build_router`
+   unmounted** (`create_app(dev_surface=False)`, `salesperson-ui.md` §4.9). Runs are reached only
+   through `TRIGGERED_BY` from a thread message — the storefront's only run-creation path
+   (`trigger.maybe_trigger` → `start_workflow_run`). A run started through `api.py`'s untriggered
+   path carries **no `TRIGGERED_BY` edge**, so it and its `StepRun`s/`TraceEvent`s are unreachable
+   by both resets. **A deployment that re-mounts the dev surface alongside participants has
+   re-opened an under-delete here.**
+2. **Message completeness assumes the `HEAD`/`NEXT`/`TAIL` chain invariant.** Both resets reach
+   messages by the structural `HEAD` → `NEXT*0..` walk, never by `WHERE m.threadId = $tid`
+   (`Message.threadId` is a deliberately unindexed denormalization, `null` on any pre-backfill
+   row, and a `WHERE` on it would drag the plan onto a full `Message` label scan). §4's write
+   paths link the chain inside the same guarded `FOREACH` as the `CREATE`, so an off-chain message
+   is unproducible through the platform — but a hand-planted one **survives both resets**
+   (verified). A future writer that creates a `Message` before linking it breaks reset
+   completeness, not just thread reads.
+
+### 18.1 `ensure_participant` — provisioning, idempotent, one atomic write
+
+```cypher
+// $participantId $displayName $tokenHash $language $channelId $threadId
+// $threadTitle $agentId $now
+OPTIONAL MATCH (existing:User  {userId:  $participantId})
+OPTIONAL MATCH (clash:Agent    {agentId: $participantId})
+OPTIONAL MATCH (agent:Agent    {agentId: $agentId})
+WITH existing, clash, agent,
+     (existing IS NULL AND clash IS NULL AND agent IS NOT NULL) AS doCreate
+FOREACH (_ IN CASE WHEN doCreate THEN [1] ELSE [] END |
+  CREATE (u:User {userId:      $participantId,
+                  displayName: $displayName,
+                  tokenHash:   $tokenHash,
+                  language:    $language,
+                  channelId:   $channelId,
+                  threadId:    $threadId,
+                  joinedAt:    $now})
+  CREATE (c:Channel {channelId:     $channelId, name: $displayName,
+                     participantId: $participantId, createdAt: $now})
+  CREATE (t:Thread  {threadId:  $threadId,  title: $threadTitle,
+                     createdAt: $now, updatedAt: $now})
+  CREATE (c)-[:HAS_THREAD]->(t)
+  CREATE (u)-[:MEMBER_OF     {role: 'member',    joinedAt: $now}]->(c)
+  CREATE (agent)-[:MEMBER_OF {role: 'assistant', joinedAt: $now}]->(c)
+)
+RETURN doCreate                            AS created,
+       existing IS NOT NULL                AS existed,
+       existing.tokenHash IS NOT NULL      AS existedParticipant,
+       clash    IS NOT NULL                AS collided,
+       agent    IS NULL                    AS agentMissing,
+       CASE WHEN doCreate THEN $channelId ELSE existing.channelId END AS channelId,
+       CASE WHEN doCreate THEN $threadId  ELSE existing.threadId  END AS threadId,
+       CASE WHEN doCreate THEN $language  ELSE existing.language  END AS language
+```
+Shape follows §2's `ensure_user` **guarded-`CREATE`-inside-`FOREACH`** idiom, extended three ways:
+the whole join is **one query** (a partial join would leave an orphan `Channel` in a graph the
+presenter roster reads, and would create the unscoped shape §18.5 can only skip); the demo `Agent`
+is a **third precondition**; and the status row carries the resolved
+`channelId`/`threadId`/`language` so a replay is a read-through (restart survival,
+`salesperson-ui.md` §4.3).
+
+**Status-row contract** — exactly one row, always (three `OPTIONAL MATCH`es, no anchor `MATCH`, so
+it can never zero-row):
+
+| `created` | `existed` | `existedParticipant` | `collided` | `agentMissing` | Meaning | Caller action |
+|---|---|---|---|---|---|---|
+| `true` | `false` | `false` | `false` | `false` | fresh participant written (3 nodes, 3 rels) | success |
+| `false` | `true` | **`true`** | `false` | `false` | id already a participant — nothing written; the row returns the **stored** ids/language | idempotent success (restart-survival read-through) |
+| `false` | `true` | **`false`** | `false` | `false` | id exists but is **not** a participant (no `tokenHash`) — nothing written; ids/language all `NULL` | **refuse: member-id collision**, exactly like the `collided` row. Without `existedParticipant` a caller following this table builds a participant record out of three `NULL`s and a token the graph never stored |
+| `false` | `false` | `false` | `true` | `false` | id held by an `Agent` — nothing written | refuse: member-id collision (§2's locked namespace rule) |
+| `false` | `false` | `false` | `false` | `true` | the demo `Agent` is absent — nothing written | refuse: `503`, name `seed_demo.sh` |
+
+`Repository.ensure_participant` raises `MemberIdCollisionError` for both collision rows and returns
+the status row otherwise; `agentMissing` is returned rather than raised because "the demo isn't
+seeded" is a deployment-readiness answer, not a namespace violation.
+
+**Not a token-rotation path.** A replay carrying a *fresh* `$tokenHash` returns `existed=true` and
+the new hash is **not** written — correct for an idempotent ensure (§2's re-ensure never updates
+properties), and the reason `set_participant_record` (§18.3) exists.
+
+Notes: multi-`CREATE` inside `FOREACH` with cross-clause variable binding works on this build, and
+an outer-bound variable (`agent`) is a legal `CREATE` relationship endpoint inside the `FOREACH`
+body (contrast the known quirk that a map-projection or list-subscript expression is **not**).
+Idempotency comes from the **status logic**, not from `MERGE` — `MERGE` inside `FOREACH` is not
+standard OpenCypher; the `User.userId` UNIQUE constraint stays the same-label concurrency backstop
+and §2's residual cross-label race applies unchanged.
+
+### 18.2 `add_channel_member` — the label-agnostic membership write
+
+```cypher
+// $memberId $channelId $role $joinedAt
+MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId
+MATCH (c:Channel {channelId: $channelId})
+MERGE (mem)-[r:MEMBER_OF]->(c)
+  ON CREATE SET r.role = $role, r.joinedAt = $joinedAt
+RETURN r.role AS role
+```
+§2's "Add user to channel" generalized to either member kind via the same
+`userId OR agentId` anchor `advance_cursor` (§9.3) already uses, so one query covers the `User`
+and `Agent` sides (`seed_demo.sh` needs both). Idempotent: a re-add keeps the original
+`role`/`joinedAt`. Zero rows ⇒ one of the two anchors is missing and **nothing was written** — the
+caller must not read that as success.
+
+**Membership is not provenance.** This query cannot make a channel a participant's own: it never
+touches `participantId`, so a participant added to `demo-general` here is a genuine member of a
+channel that is still structurally unreachable by either reset (§18.0).
+
+### 18.3 The participant record — read, update, roster
+
+```cypher
+// get_participant_record — $participantId
+MATCH (u:User {userId: $participantId})
+WHERE u.tokenHash IS NOT NULL                       // G1
+RETURN u.userId AS participantId, u.displayName AS displayName,
+       u.tokenHash AS tokenHash, u.channelId AS channelId,
+       u.threadId AS threadId, u.language AS language, u.joinedAt AS joinedAt
+```
+Zero rows ⇒ unknown id **or** a `User` that is not a participant. The two collapse deliberately:
+both mean "not a participant" to a token check, and an already-reset-away participant is
+indistinguishable from an id that never existed. This read is what makes the **graph** the
+authoritative registry — the storefront's in-process map is a read-through cache, so a server
+restart is invisible to participants (`salesperson-ui.md` §4.3).
+
+```cypher
+// set_participant_record — $participantId $displayName $tokenHash $language
+MATCH (u:User {userId: $participantId})
+WHERE u.tokenHash IS NOT NULL                       // G1
+SET u.displayName = coalesce($displayName, u.displayName),
+    u.tokenHash   = coalesce($tokenHash,   u.tokenHash),
+    u.language    = coalesce($language,    u.language)
+RETURN u.userId AS participantId, u.displayName AS displayName,
+       u.tokenHash AS tokenHash, u.channelId AS channelId,
+       u.threadId AS threadId, u.language AS language, u.joinedAt AS joinedAt
+```
+Post-join updates only (a re-chosen language after "reset mine", a rotated token). Per-field
+`coalesce()`, the same caller contract as §17.1: an omitted field (`NULL`) means "not provided,
+leave unchanged", **never** "clear it" — a caller must never pass `''` to mean "no value".
+
+**G1 here is a guard, not a filter.** Without it this query would stamp a `tokenHash` onto
+`seed_demo.sh`'s `u1` and so mint a "participant" whose channel carries no `participantId` —
+exactly the unscoped shape §18.5 can only skip, and one nothing else in the shipped code can
+create.
+
+**Neither `channelId` nor `threadId` is settable here**, for the same reason. Together they are the
+server-resolved scope denorm the storefront reads from (`salesperson-ui.md` §4.3), and both are
+decided **in-query**: the channel a participant owns is decided once, by §18.1, together with the
+marker G2 reads; the thread is decided by §18.1 at join and re-decided by §18.4 at every "reset
+mine", which mints the replacement thread and repoints `u.threadId` in the same atomic write. A
+settable `$threadId` would be the one lever in §18 able to point one participant at *another*
+participant's thread — G1 proves the target is a participant, but this query cannot prove the
+thread lies inside that participant's own channel. If a caller ever needs to repoint it, the
+containment check belongs in the `MATCH` alongside G1/G2
+(`OPTIONAL MATCH (:Channel {channelId: u.channelId})-[:HAS_THREAD]->(t:Thread {threadId: $threadId})`,
+setting only when `$threadId IS NULL OR t IS NOT NULL`), never in the calling Python.
+
+```cypher
+// list_participants (the presenter roster) — $limit
+MATCH (u:User) WHERE u.tokenHash IS NOT NULL        // G1
+RETURN u.userId AS participantId, u.displayName AS displayName,
+       u.channelId AS channelId, u.threadId AS threadId,
+       u.language AS language, u.joinedAt AS joinedAt
+ORDER BY u.joinedAt ASC, u.userId ASC LIMIT $limit
+```
+`config.USER_ID`'s lifespan-created `User` and `seed_demo.sh`'s `u1` never appear. No `tokenHash`
+in the projection — the roster is presenter-facing.
+
+**Do NOT add a `u.userId > ''` conjunct** to "upgrade" the `Node By Label Scan` to an index scan.
+It matches every row, so it has **no selectivity** — both forms are O(|`User`|) and visit every
+record (measured: 52 records either way at 50 participants, sub-millisecond, with overlapping
+spreads in both directions across runs). And it is **wrong**: `42 > ''` evaluates to `null` on this
+build (as do `42.5 > ''`, `true > ''`, `null > ''`), so the conjunct silently drops any participant
+whose `userId` is not a string — live-reproduced, and in `reset_all` that participant survived the
+reset entirely while the status row reported success. The house `WHERE c.channelId > ''` pattern
+(§3) is sound where the property is reliably a non-empty string; it is not worth taking here, and
+in a **destructive** query it is actively dangerous. One bare predicate in all three places means
+there is no second form for a future editor to copy into a reset.
+
+### 18.4 `reset_participant` — "reset mine"
+
+```cypher
+// $participantId $newThreadId $threadTitle $now
+MATCH (u:User {userId: $participantId})
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH u, ch, collect(DISTINCT t) AS threads, collect(DISTINCT m) AS msgs
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH u, ch, threads, msgs, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH u, ch, threads, msgs, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds,
+     collect(DISTINCT rc) AS tcur
+
+OPTIONAL MATCH (u)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds, tcur,
+     collect(DISTINCT own) AS allOwn
+
+UNWIND (CASE WHEN allOwn = [] THEN [null] ELSE allOwn END) AS oc
+OPTIONAL MATCH (liveT:Thread) WHERE oc IS NOT NULL AND liveT.threadId = oc.threadId
+WITH u, ch, threads, msgs, runs, steps, traces, tcur,
+     collect(DISTINCT CASE WHEN oc IS NOT NULL
+                            AND (oc.threadId IN threadIds OR liveT IS NULL)
+                           THEN oc END) AS ocur
+WITH u, ch, threads, msgs, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer {customerId: $participantId})
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (:Customer {customerId: $participantId})-[:PLACED]->(o:Order)
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors, custs, carts, items,
+     collect(DISTINCT o) AS orders, collect(DISTINCT ol) AS lines
+
+FOREACH (c IN CASE WHEN ch IS NULL THEN [] ELSE [ch] END |
+  CREATE (c)-[:HAS_THREAD]->(:Thread {threadId:  $newThreadId,
+                                      title:     $threadTitle,
+                                      createdAt: $now, updatedAt: $now})
+)
+SET u.threadId = CASE WHEN ch IS NULL THEN u.threadId ELSE $newThreadId END
+
+WITH u, ch,
+     CASE WHEN ch IS NULL THEN []
+          ELSE threads + msgs + runs + steps + traces + cursors
+                       + custs + carts + items + orders + lines END AS victims,
+     size(threads) AS threadCount, size(msgs)    AS messageCount,
+     size(runs)    AS runCount,    size(steps)   AS stepRunCount,
+     size(traces)  AS traceCount,  size(cursors) AS cursorCount,
+     size(orders)  AS orderCount,  size(items)   AS cartItemCount
+FOREACH (v IN victims | DETACH DELETE v)
+WITH ch, u, victims, ch IS NOT NULL AS scoped,
+     threadCount, messageCount, runCount, stepRunCount, traceCount,
+     cursorCount, orderCount, cartItemCount
+RETURN scoped, u.threadId AS threadId, size(victims) AS deletedCount,
+       CASE WHEN scoped THEN threadCount   ELSE 0 END AS threadCount,
+       CASE WHEN scoped THEN messageCount  ELSE 0 END AS messageCount,
+       CASE WHEN scoped THEN runCount      ELSE 0 END AS runCount,
+       CASE WHEN scoped THEN stepRunCount  ELSE 0 END AS stepRunCount,
+       CASE WHEN scoped THEN traceCount    ELSE 0 END AS traceCount,
+       CASE WHEN scoped THEN cursorCount   ELSE 0 END AS cursorCount,
+       CASE WHEN scoped THEN orderCount    ELSE 0 END AS orderCount,
+       CASE WHEN scoped THEN cartItemCount ELSE 0 END AS cartItemCount
+```
+One atomic query: collect the victim set **structurally**, mint the replacement `Thread`, repoint
+`User.threadId`, then delete. The participant's `User` and `Channel` **survive**, so their token
+stays valid (`salesperson-ui.md` §4.8 — "reset mine" keeps the identity); their `Customer`, `Cart`,
+`CartItem`s, `Order`s and `OrderLine`s do not.
+
+**Every write is gated on `ch IS NOT NULL`**, so a participant whose own channel does not resolve
+is a total no-op rather than a half-reset.
+
+**Status row — three outcomes the caller must tell apart:**
+
+| Outcome | Meaning | Required behaviour |
+|---|---|---|
+| **zero rows** | G1 rejected the id — not a participant, or already deleted (indistinguishable) | the route's existing not-a-participant handling (`404`/`401`) |
+| **`scoped=false`** | G2 found no owned channel. Guaranteed no-op: empty victim list, no re-mint, `User.threadId` untouched, every per-class count forced to `0` so the row cannot read as a partial success | **`409 Conflict`** with a machine-readable code (e.g. `"unscoped_participant"`), **never `200`** — nothing was reset and nothing will be until the graph is repaired |
+| **`scoped=true`** | the reset ran; `deletedCount` is the authoritative field | `200` |
+
+**Two `Channel`s carrying the same marker make this query raise, permanently — and that is a
+fail-safe.** `WITH u, ch, collect(…)` groups by `ch`, so a duplicate marker yields two rows and the
+re-mint `FOREACH` fires twice with one `$newThreadId`, aborting on `Thread.threadId`'s UNIQUE
+constraint with **nothing written** (verified: old thread, messages and orders all intact, new
+thread absent). Propagate it as a `5xx`; **do not retry** — a retry re-raises forever and the graph
+needs repair. §18.5 still collects such a participant, because it never re-mints.
+
+**The delete is thread-scoped, not author-scoped** (`salesperson-ui.md` §4.8, locked). The
+`Agent`-authored reply living inside the participant's thread **is** deleted; the identical reply
+in another participant's thread is not. An author-scoped sweep would orphan those replies against a
+deleted `Thread` and, the moment the `Agent` is the author, cross participant boundaries.
+
+**`ReadCursor` is collected from two sources, and the second is narrower here than in §18.5.**
+There is no `Thread`→`ReadCursor` edge (`(member)-[:HAS_CURSOR]->(:ReadCursor {cursorId:
+"{memberId}:{threadId}"})`), so cursors for the threads being deleted *now* are found by a
+`ReadCursor` label scan filtered on `rc.threadId IN threadIds` — the one label scan in the plan
+(102 records / 0.02 ms at 50 participants), chosen for completeness over a structural walk from
+channel members, which would miss a cursor whose owner has left the channel. On top of it,
+`(u)-[:HAS_CURSOR]->(own)` sweeps the participant's own cursors — **but only those whose thread is
+being deleted now, or no longer exists.** Here the `User` survives, so a cursor it holds on a
+*surviving* thread (a cross-member participant's cursor on `demo-welcome`) is live read-state for a
+membership this operation was never asked to touch, and deleting it would silently reset their read
+position in a channel outside this reset's scope. §18.5 sweeps wide for the opposite reason.
+
+**One product consequence for the service layer, not a change here:** deleting the `Customer` also
+deletes the profile name the join wrote, while `User.displayName` survives — so after "reset mine"
+the profile panel shows an em-dash for a participant who typed their name at join. The service
+wrapper should re-call `services.save_profile(ctx, name=<User.displayName>)` immediately after the
+reset (no new Cypher).
+
+### 18.5 `reset_all_participants` — "reset everyone"
+
+```cypher
+MATCH (u:User)
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u END)        AS users,
+     collect(DISTINCT ch)                                          AS channels,
+     collect(DISTINCT t)                                           AS threads,
+     collect(DISTINCT m)                                           AS msgs,
+     collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u.userId END)  AS pids,
+     collect(DISTINCT CASE WHEN ch IS NULL THEN u.userId END)      AS unscopedIds
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH users, channels, threads, msgs, pids, unscopedIds, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     collect(DISTINCT rc) AS tcur
+
+UNWIND (CASE WHEN users = [] THEN [null] ELSE users END) AS uu
+OPTIONAL MATCH (uu)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur, collect(DISTINCT own) AS ocur
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer) WHERE cust.customerId IN pids
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (c2:Customer)-[:PLACED]->(o:Order) WHERE c2.customerId IN pids
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH users, channels, threads, msgs, unscopedIds, runs, steps, traces, cursors,
+     custs, carts, items, collect(DISTINCT o) AS orders,
+     collect(DISTINCT ol) AS lines
+
+WITH users + channels + threads + msgs + runs + steps + traces + cursors
+           + custs + carts + items + orders + lines AS victims,
+     unscopedIds, size(unscopedIds) AS unscopedCount,
+     size(users)   AS userCount,     size(channels) AS channelCount,
+     size(threads) AS threadCount,   size(msgs)     AS messageCount,
+     size(runs)    AS runCount,      size(steps)    AS stepRunCount,
+     size(traces)  AS traceCount,    size(cursors)  AS cursorCount,
+     size(custs)   AS customerCount, size(orders)   AS orderCount
+FOREACH (v IN victims | DETACH DELETE v)
+RETURN userCount, channelCount, threadCount, messageCount, runCount,
+       stepRunCount, traceCount, cursorCount, customerCount, orderCount,
+       unscopedCount, unscopedIds
+```
+Identical scoping, widened to every participant `User`, and additionally deleting the `User` and
+`Channel` nodes themselves — so **every participant token is invalidated** and every client is
+bounced to the join screen. No thread is re-minted; §18.1 mints a fresh subgraph on the next join.
+
+**Always exactly one status row**, including on a clean graph: the global `collect()` over an empty
+match produces one all-zeros row, which gives the caller an unambiguous "nothing to do" instead of
+an empty result to index into.
+
+**The anchor is the bare `tokenHash IS NOT NULL`** — see §18.3 for why the `u.userId > ''` conjunct
+is withdrawn on correctness, not just on measurement.
+
+**An unscoped participant is skipped whole, never beheaded.** `users` and `pids` are gated on
+`ch IS NOT NULL`; the skipped participants are returned as **`unscopedCount` + `unscopedIds`** and
+left **intact and collectable** (`User` + `Channel` + `Thread` + messages + run subtree + commerce
+all still there). Deleting such a `User` — it passes G1 — while G2 leaves its channel unmatched
+would strand the whole transcript with no anchor any future reset could reach: one participant's
+conversation left visible in a graph the presenter has just told a room is clean, reported as
+success. That is the worse failure, so this branch degrades gracefully and **counts** instead.
+
+**Response contract for the two anomaly signals** (they are a contract, not a logging preference):
+
+| Signal | Required behaviour |
+|---|---|
+| `unscopedCount > 0` | **`200` with `incomplete: true` and `unresolved: unscopedIds`** — the reset did everything it could, so it is not an error, but the response must not read as clean. `unscopedIds` names exactly whose state is still live |
+| `unscopedCount == 0` | `200`, no `incomplete` flag |
+
+**Reversal trigger.** The unscoped branch is **unreachable on a healthy graph** — §18.1 writes the
+`User`, `Channel`, marker and `MEMBER_OF` in one atomic query, `create_channel` cannot set the
+marker, and nothing in the codebase deletes a `MEMBER_OF` edge. If anything ever introduces a way
+to detach a participant from their own channel (a `MEMBER_OF`-deleting query, a channel-transfer
+feature, an admin tool that rewrites `participantId`), this branch stops being dead and the
+trade-off above must be re-made: a reachable "keeps a valid token" path is a materially different
+proposition from an unreachable one.
+
+**The `HAS_CURSOR` sweep here is wide — no liveness filter, unlike §18.4's.** The `User` is
+deleted, so any cursor it owns that survived would be **unowned**: a real orphan, including one on
+a surviving non-participant thread. Verified: after `reset_all`,
+`MATCH (rc:ReadCursor) WHERE NOT ()-[:HAS_CURSOR]->(rc) RETURN count(rc)` is `0`.
+**Collapse the `ReadCursor` `collect` with its own `WITH` *before* the `users` `UNWIND`** — the
+first cut left the scan un-collapsed, the 50-row `UNWIND` multiplied it to ~5 000 rows and
+`reset_all` cost ~690 ms instead of ~240 ms. That is the "collapse each block before the next
+`UNWIND` expands" rule, and it bites at scale only.
+
+**The `ReadCursor` orphan class, and the one residual deliberately left open.** `advance_cursor`
+(§9.3) `MERGE`s on the **member**, not the thread, so a turn racing a reset mints a `ReadCursor`
+naming a thread that no longer exists — it is the *only* in-flight write that orphans anything
+(`post_message`, `record_step_and_advance` and `append_trace_event` are all anchored on nodes the
+reset deleted, so they match zero rows and create nothing). Both resets' structural `HAS_CURSOR`
+sweep collects the **participant-owned** case. The **`Agent`-owned** case — `assistant:th-A`, the
+demo agent's cursor for a deleted participant thread — escapes both, because the `Agent` is a
+survivor and sweeping *its* cursors by owner would reach `assistant:demo-welcome`. A complete sweep
+exists and parses (`OPTIONAL MATCH (t:Thread {threadId: rc.threadId}) WITH rc, t WHERE t IS NULL`)
+but widens the contract from "everything reachable from a participant `User`" to "every dangling
+cursor in the workspace" — it also collects a *non-participant's* dangling cursor — so it is
+**declined** here and recorded for a future deliberate garbage-collection job. The residual is
+bounded (at most one per `(Agent, deleted thread)`), is produced only by the race the quiesce
+exists to prevent, and no read path is affected (§9.4 point-looks-up a cursor by `cursorId`, and a
+stale one simply never matches a live thread again).
+
+### 18.6 Keep/delete inventory — documentation, **not** the mechanism
+
+The mechanism is §18.0's two guards. This table lets a reader check that the guards produce the
+intended outcome; it is **not** what a test should assert on (§18.0's ablation is why). Every row
+was observed live.
+
+| Label | Reset mine | Reset everyone | How it is reached / why |
+|---|---|---|---|
+| `User` (participant, **scoped**) | **keeps** | **deletes** | the reset root itself; deleting it invalidates the token |
+| `User` (participant, **unscoped**) | keeps (total no-op) | **keeps**, counted in `unscopedCount`/`unscopedIds` | skipped whole rather than beheaded |
+| `User` (non-participant) | keeps | **keeps** | G1 — no `tokenHash` |
+| `Channel` (participant's own) | **keeps** | **deletes** | G2 |
+| `Channel` (any other) | keeps | **keeps** | G2 — no `participantId` |
+| `Thread` (in a participant channel) | **deletes**, one re-minted | **deletes** | `(ch)-[:HAS_THREAD]->` |
+| `Thread` (any other) | keeps | **keeps** | unreachable from a participant `User` |
+| `Message` (in a participant thread) | **deletes** | **deletes** | `HEAD` → `NEXT*0..` — incl. `Agent`-authored replies (thread-scoped, not author-scoped) |
+| `Message` (any other) | keeps | **keeps** | unreachable |
+| `Message` **off-chain** (has `threadId`, not in the `HEAD`/`NEXT` chain) | keeps | **keeps** | unreachable by the structural walk; unproducible through §4's write paths (§18.0 dependency 2) |
+| `ReadCursor` (for a thread being deleted now, any member) | **deletes** | **deletes** | `rc.threadId IN threadIds`; orphaned by the thread delete |
+| `ReadCursor` (participant-owned, naming an *already*-deleted thread) | **deletes** | **deletes** | the structural `(u)-[:HAS_CURSOR]->` sweep |
+| `ReadCursor` (participant-owned, on a **surviving non-participant** thread) | **keeps** | **deletes** | the one deliberate asymmetry — §18.4/§18.5 carry the reasoning |
+| `ReadCursor` (`Agent`-owned, naming an already-deleted thread) | keeps | **keeps** | documented residual, §18.5 |
+| `WorkflowRun` / `StepRun` / `TraceEvent` | **deletes** | **deletes** | `TRIGGERED_BY` → `HAS_STEP_RUN` → `TRACED` (subject to §18.0 dependency 1) |
+| `Customer` / `Cart` / `CartItem` | **deletes** | **deletes** | `customerId = participantId`, exact by construction |
+| `Order` / `OrderLine` | **deletes** | **deletes** | `(Customer)-[:PLACED]->` → `HAS_LINE` |
+| **`WorkspaceConfig`** | **keeps** | **keeps** | never matched by either query. Taking it would silently undo K-056's Ministral re-point — the single most expensive mistake available here. Positively asserted alive after both resets |
+| `Document` / `Chunk` / `Entity` | **keeps** | **keeps** | survivors of *both*; never matched |
+| `WorkflowDefSnapshot` / `Step` | **keeps** | **keeps** | never matched — `verify_salesperson.sh <ws>` exits 0 after `reset_all` |
+| `Agent` | **keeps** | **keeps** | never matched; its `MEMBER_OF` edges into deleted channels go with `DETACH DELETE`, the node does not |
+| `Product` | n/a | n/a | lives in `reference`, a different graph — structurally unreachable |
+
+Boundary edges, verified: a surviving `Chunk` that `DERIVED_FROM` a deleted participant `Message`
+keeps its `Document` and loses only that edge; a surviving `Message` with an `EMITTED` edge into a
+deleted one stays intact with its other `EMITTED` edges untouched.
+
+### 18.7 Atomicity and the failure boundary
+
+Each reset is **one `GRAPH.QUERY`**, therefore atomic — live-proved: a reset made to violate the
+`Thread.threadId` UNIQUE constraint mid-query raised and wrote **nothing** (node count identical
+before and after, `User.threadId` unchanged). There is no observable half-reset state.
+
+**The failure boundary is client-side, and it is not "nothing changed".** The module's
+`TIMEOUT` argument applies to **reads only**, so a slow `reset_all` is never truncated
+server-side; the real bound is `FALKORDB_SOCKET_TIMEOUT` (default **10 s**, `config.py` →
+`db.py`). At ~240 ms for 50 participants that is 40× headroom, but if a reset ever crosses it
+**the client raises `TimeoutError` while the server commits the delete**. A client-side timeout on
+a reset therefore means *unknown*, **never** "nothing changed": re-read state and report from the
+graph.
+
+**Atomicity is per query, not per turn**, so the quiesce is application-level: "reset mine" cancels
+that participant's queued turn and waits (bounded) for one in flight; "reset everyone" stops intake
+(`409`), drains, then runs the single query. **The order is not interchangeable** — deleting first
+and draining after produces turns that consume an LLM call and write nothing.
+
+### 18.8 `get_customer_current_order`
+
+```cypher
+// $customerId
+MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order)
+WITH o ORDER BY o.placedAt DESC, o.orderId DESC LIMIT 1
+OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine)
+RETURN o.orderId AS orderId, o.status AS status,
+       o.placedAt AS placedAt, o.updatedAt AS updatedAt,
+       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice,
+                quantity: l.quantity, lineTotal: l.lineTotal}) AS lines,
+       sum(l.lineTotal) AS total
+```
+**"Current" is the most recently *placed* order, whatever its status** — not "the most recent
+non-terminal order". A demo participant walks `placed → fulfilled → delivered` and the whole point
+is to *see* the status change; a non-terminal filter would make the order card vanish at the moment
+the demo is trying to show it. A subsequent `place_order` supersedes the card.
+
+- **Return shape deliberately mirrors §16.8's `get_order`**, so the repository's existing
+  row-shaping applies unchanged — including its two quirks: a **zero-line order** yields one
+  all-`NULL` placeholder entry from `collect()` rather than `[]` (filter client-side, as
+  `Repository.get_order` already does), and `sum()` returns a **float** (`0.0` on an empty
+  aggregation, never `NULL`) — a `float`-vs-`int` mismatch to expect wherever this feeds a response
+  model.
+- Zero rows means **either** no `Customer` **or** a `Customer` with no orders. That collapse is
+  deliberate: `GET /shop/api/state` renders "no order" identically for both. §17.2 preserves the
+  distinction for the profile if it is ever needed.
+- `collect()` and `sum()` over one fan-out are safe here for the same reason §16.8 gives: `LIMIT 1`
+  guarantees exactly one `o` for the whole aggregation.
+- **Tie-break.** Two orders sharing a `placedAt` millisecond resolve by `orderId DESC` — arbitrary
+  but *stable across polls*, which is what matters for a card that repaints every 2 s. One customer
+  placing two orders inside one millisecond is not reachable through `place_order` anyway.
+- Anchors on `Customer.customerId`'s existing index (`Node By Index Scan`, 1 record). No new index.
+
+### 18.9 `order_belongs_to_customer`
+
+```cypher
+// $customerId, $orderId
+OPTIONAL MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order {orderId: $orderId})
+RETURN o IS NOT NULL AS owned, o.status AS status
+```
+Always exactly one row — `owned` is never `NULL`, so the caller never has to distinguish "no row"
+from "not owned". Verified across all five cases: own order → `[true, 'placed']`; another
+participant's order, a non-participant's order, an unknown order and an unknown customer → 
+`[false, NULL]` in every case. `status` rides along free, letting the caller decide `404` (not
+theirs / no such order) before the CAS without a second round trip.
+
+**This ownership check is not optional.** `services.advance_order`'s CAS is keyed on `orderId`
+alone, so without this gate any participant who learned another's `orderId` could cancel their
+order. The storefront never exposes an `orderId` in a request body, so this is defence in depth —
+but it is the only thing standing between the two.
+
+**Implemented (salesperson-ui S4):** `Repository.ensure_participant`/`add_channel_member`/
+`get_participant_record`/`set_participant_record`/`list_participants`/`reset_participant`/
+`reset_all_participants`/`get_customer_current_order`/`order_belongs_to_customer`, plus the two
+thin service wrappers `Services.get_current_order`/`order_belongs_to_customer` (so `storefront.py`
+never holds Cypher). Integration tests: `server/tests/test_repository.py` §18.1–§18.6.

@@ -186,7 +186,11 @@ hot traversal needs to walk (e.g. an ontology fragment).
 (:Agent)-[:MEMBER_OF {role:'assistant'}]->(:Channel)   // AI is a first-class member
 
 // Channel → Thread → Message hierarchy
-(:Channel)-[:HAS_THREAD]->(:Thread {threadId, title, createdAt, updatedAt})
+(:Channel {channelId, name, participantId, createdAt})-[:HAS_THREAD]->(:Thread {threadId, title, createdAt, updatedAt})
+  // participantId: NULLable storefront provenance marker, written ONLY by
+  // `ensure_participant` (QUERIES.md §18.1). It is what makes a channel a reset
+  // target: both storefront resets match on `ch.participantId = u.userId`, and a
+  // channel without it (every seeded/legacy channel) is structurally unreachable.
 (:Thread)-[:HEAD]->(:Message)                          // first message in thread (set once)
 (:Thread)-[:TAIL]->(:Message)                          // last message (updated on each append)
 (:Message {msgId, text, role, createdAt, threadId})-[:NEXT]->(:Message)  // thread-scoped linked list
@@ -595,6 +599,19 @@ rather than a node property (`SAME_AS`, K-050):
 | `Entity` | `nameNormalized` | FR-8 exact-tier fusion `=` lookup; distinct real entities can share `(nameNormalized, type)` before fusion runs |
 
 > `Message.threadId` is **deliberately unindexed** (§5.1) — nav metadata, not an anchor.
+
+> `Channel.participantId` is **deliberately unindexed and deliberately un-constrained** (§5.1) —
+> the storefront provenance marker, and a load-bearing predicate in a *destructive* query
+> (`QUERIES.md` §18.4/§18.5). **No index:** it is only ever a filter on a `ch` already bound by a
+> `MEMBER_OF` traversal from an index-anchored `u`, so there is nothing for an index to anchor.
+> **No UNIQUE:** rejected **on scope, not on safety** — a `UNIQUE 1` here was built and
+> live-verified to work (FalkorDB exempts both an absent property and an explicit `null`, so no
+> legacy channel would need backfilling), but `ensure_participant` already prevents a second
+> channel per participant, §18.4's row-multiplication makes a duplicate marker fail loudly anyway,
+> and adding it costs a `bootstrap_schema.sh` change plus a DDL pass over every existing workspace
+> for no measured gain. **Reversal condition:** add it if a second writer of the marker is ever
+> introduced, or if §18.4's raise stops being an acceptable failure mode
+> (`docs/plans/salesperson-ui-graph.md` §9).
 
 **Full-text index (RediSearch):** `Message.text`, `Entity.name`, via
 `db.idx.fulltext.createNodeIndex('Message', 'text')` /

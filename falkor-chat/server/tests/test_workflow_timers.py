@@ -389,8 +389,24 @@ def test_sweep_faults_a_candidate_whose_merged_ctx_would_exceed_max_config_len(
             {"from": "park", "to": "activate", "on": "timeout", "order": 0,
              "guard": _escalation_guard("park")},
         ],
-        run_ctx={"seed": "y" * MAX_CONFIG_LEN},
+        # salesperson-ui S2 added a service-side `MAX_CONFIG_LEN` bound to
+        # `start_workflow_run` itself, so a run can no longer BE started with an
+        # already-oversized ctx (this test used to seed `"y" * MAX_CONFIG_LEN`).
+        # The sweep's own bound stays reachable at the boundary, which is now the
+        # only shape that can reach it: a ctx sitting exactly ON the bound, which
+        # the `timerFired` marker then pushes over. Sized so `ctx` == 8000 and
+        # `ctx + marker` == 8020; the two asserts below keep that honest, so this
+        # test cannot silently stop testing what it claims.
+        run_ctx={"seed": "y" * (MAX_CONFIG_LEN - 11)},
     )
+    _oversized_ctx = json.dumps(
+        {"seed": "y" * (MAX_CONFIG_LEN - 11)}, separators=(",", ":"), sort_keys=True
+    )
+    assert len(_oversized_ctx) <= MAX_CONFIG_LEN          # startable
+    assert len(json.dumps(                                 # …but not sweepable
+        {"seed": "y" * (MAX_CONFIG_LEN - 11), "timerFired": "park"},
+        separators=(",", ":"), sort_keys=True,
+    )) > MAX_CONFIG_LEN
     # A second, normal due run in the same sweep call — batch isolation must
     # hold exactly as it does for a drive-time fault (the test above).
     normal = _publish_and_start(

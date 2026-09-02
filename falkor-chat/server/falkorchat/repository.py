@@ -3122,7 +3122,651 @@ class Repository:
         row = res.result_set[0]
         return {"name": row[0], "deliveryAddress": row[1], "profileUpdatedAt": row[2]}
 
-    # ── §18 Structured natural-language query generation (K-055 M6) ───────────
+    # ── §18 Storefront participants & resets (QUERIES.md §18, salesperson-ui S4) ──
+    #
+    # `docs/plans/salesperson-ui-graph.md` (S0, v1.2, approved) §3/§4/§5/§10 —
+    # the storefront's participant provisioning, the two resets, and the two
+    # order reads. **Every query below is that note's text verbatim**, newlines
+    # and `//` comments included: they are the live-verified v1.2 blocks, not a
+    # sketch, and the two `//`-marked guard lines are the whole safety argument.
+    # This is the one place in this class where the Cypher is a triple-quoted
+    # multi-line constant rather than the house concatenated-string style —
+    # deliberately, because `//` is a line comment (`--` does not parse on this
+    # build) and joining the lines would comment out the rest of the query.
+    #
+    # **The two guards (note §1), which are provenance checks, not id checks:**
+    #   G1  `WHERE u.tokenHash IS NOT NULL` on the anchor — only a *participant*
+    #       `User` is ever a reset root. `seed_demo.sh`'s `u1`, `config.USER_ID`'s
+    #       lifespan node, an operator account and an `Agent` id are all rejected.
+    #   G2  `WHERE ch.participantId = u.userId` on the channel hop — only a
+    #       `Channel` minted by `ensure_participant` (the *only* writer of
+    #       `Channel.participantId`) is ever a delete target. `demo-general` has
+    #       no `participantId` at all, and `null = anything` is `null`, never
+    #       `true`, so it is **structurally unreachable** as a target regardless
+    #       of what any `User` property says or who is a member of it.
+    # Neither guard may be relaxed for readability: with G2 removed the same call
+    # destroys `demo-welcome` and its messages, and with both removed the label
+    # counts afterwards are byte-identical to a clean run (note §2.3 row B) — a
+    # survivor assertion written by label cannot see the difference, which is why
+    # `test_repository.py` asserts the non-participant survivors *by identity*.
+    #
+    # Two dependencies this scoping inherits, both named in the note and neither
+    # visible from this file alone:
+    #   * `WorkflowRun` completeness assumes the storefront deployment leaves
+    #     `api.build_router` unmounted (`dev_surface=False`) — a run started
+    #     through `api.py`'s untriggered path carries no `TRIGGERED_BY` edge and
+    #     is unreachable by both resets (note §4).
+    #   * Message completeness assumes every `Message` is linked into its
+    #     thread's `HEAD`/`NEXT`/`TAIL` chain, which QUERIES.md §4's write paths
+    #     do inside their own guarded `FOREACH`. A hand-planted off-chain message
+    #     survives both resets (note §4/§6).
+
+    _ENSURE_PARTICIPANT_CYPHER = """\
+// $participantId $displayName $tokenHash $language $channelId $threadId
+// $threadTitle $agentId $now
+OPTIONAL MATCH (existing:User  {userId:  $participantId})
+OPTIONAL MATCH (clash:Agent    {agentId: $participantId})
+OPTIONAL MATCH (agent:Agent    {agentId: $agentId})
+WITH existing, clash, agent,
+     (existing IS NULL AND clash IS NULL AND agent IS NOT NULL) AS doCreate
+FOREACH (_ IN CASE WHEN doCreate THEN [1] ELSE [] END |
+  CREATE (u:User {userId:      $participantId,
+                  displayName: $displayName,
+                  tokenHash:   $tokenHash,
+                  language:    $language,
+                  channelId:   $channelId,
+                  threadId:    $threadId,
+                  joinedAt:    $now})
+  CREATE (c:Channel {channelId:     $channelId, name: $displayName,
+                     participantId: $participantId, createdAt: $now})
+  CREATE (t:Thread  {threadId:  $threadId,  title: $threadTitle,
+                     createdAt: $now, updatedAt: $now})
+  CREATE (c)-[:HAS_THREAD]->(t)
+  CREATE (u)-[:MEMBER_OF     {role: 'member',    joinedAt: $now}]->(c)
+  CREATE (agent)-[:MEMBER_OF {role: 'assistant', joinedAt: $now}]->(c)
+)
+RETURN doCreate                            AS created,
+       existing IS NOT NULL                AS existed,
+       existing.tokenHash IS NOT NULL      AS existedParticipant,
+       clash    IS NOT NULL                AS collided,
+       agent    IS NULL                    AS agentMissing,
+       CASE WHEN doCreate THEN $channelId ELSE existing.channelId END AS channelId,
+       CASE WHEN doCreate THEN $threadId  ELSE existing.threadId  END AS threadId,
+       CASE WHEN doCreate THEN $language  ELSE existing.language  END AS language
+"""
+
+    _RESET_PARTICIPANT_CYPHER = """\
+// $participantId $newThreadId $threadTitle $now
+MATCH (u:User {userId: $participantId})
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH u, ch, collect(DISTINCT t) AS threads, collect(DISTINCT m) AS msgs
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH u, ch, threads, msgs, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH u, ch, threads, msgs, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds,
+     collect(DISTINCT rc) AS tcur
+
+OPTIONAL MATCH (u)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH u, ch, threads, msgs, runs, steps, traces, threadIds, tcur,
+     collect(DISTINCT own) AS allOwn
+
+UNWIND (CASE WHEN allOwn = [] THEN [null] ELSE allOwn END) AS oc
+OPTIONAL MATCH (liveT:Thread) WHERE oc IS NOT NULL AND liveT.threadId = oc.threadId
+WITH u, ch, threads, msgs, runs, steps, traces, tcur,
+     collect(DISTINCT CASE WHEN oc IS NOT NULL
+                            AND (oc.threadId IN threadIds OR liveT IS NULL)
+                           THEN oc END) AS ocur
+WITH u, ch, threads, msgs, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer {customerId: $participantId})
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (:Customer {customerId: $participantId})-[:PLACED]->(o:Order)
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH u, ch, threads, msgs, runs, steps, traces, cursors, custs, carts, items,
+     collect(DISTINCT o) AS orders, collect(DISTINCT ol) AS lines
+
+FOREACH (c IN CASE WHEN ch IS NULL THEN [] ELSE [ch] END |
+  CREATE (c)-[:HAS_THREAD]->(:Thread {threadId:  $newThreadId,
+                                      title:     $threadTitle,
+                                      createdAt: $now, updatedAt: $now})
+)
+SET u.threadId = CASE WHEN ch IS NULL THEN u.threadId ELSE $newThreadId END
+
+WITH u, ch,
+     CASE WHEN ch IS NULL THEN []
+          ELSE threads + msgs + runs + steps + traces + cursors
+                       + custs + carts + items + orders + lines END AS victims,
+     size(threads) AS threadCount, size(msgs)    AS messageCount,
+     size(runs)    AS runCount,    size(steps)   AS stepRunCount,
+     size(traces)  AS traceCount,  size(cursors) AS cursorCount,
+     size(orders)  AS orderCount,  size(items)   AS cartItemCount
+FOREACH (v IN victims | DETACH DELETE v)
+WITH ch, u, victims, ch IS NOT NULL AS scoped,
+     threadCount, messageCount, runCount, stepRunCount, traceCount,
+     cursorCount, orderCount, cartItemCount
+RETURN scoped, u.threadId AS threadId, size(victims) AS deletedCount,
+       CASE WHEN scoped THEN threadCount   ELSE 0 END AS threadCount,
+       CASE WHEN scoped THEN messageCount  ELSE 0 END AS messageCount,
+       CASE WHEN scoped THEN runCount      ELSE 0 END AS runCount,
+       CASE WHEN scoped THEN stepRunCount  ELSE 0 END AS stepRunCount,
+       CASE WHEN scoped THEN traceCount    ELSE 0 END AS traceCount,
+       CASE WHEN scoped THEN cursorCount   ELSE 0 END AS cursorCount,
+       CASE WHEN scoped THEN orderCount    ELSE 0 END AS orderCount,
+       CASE WHEN scoped THEN cartItemCount ELSE 0 END AS cartItemCount
+"""
+
+    _RESET_ALL_PARTICIPANTS_CYPHER = """\
+MATCH (u:User)
+WHERE u.tokenHash IS NOT NULL                       // G1
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(ch:Channel)
+  WHERE ch.participantId = u.userId                 // G2
+OPTIONAL MATCH (ch)-[:HAS_THREAD]->(t:Thread)
+OPTIONAL MATCH (t)-[:HEAD]->(h:Message)-[:NEXT*0..]->(m:Message)
+WITH collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u END)        AS users,
+     collect(DISTINCT ch)                                          AS channels,
+     collect(DISTINCT t)                                           AS threads,
+     collect(DISTINCT m)                                           AS msgs,
+     collect(DISTINCT CASE WHEN ch IS NOT NULL THEN u.userId END)  AS pids,
+     collect(DISTINCT CASE WHEN ch IS NULL THEN u.userId END)      AS unscopedIds
+
+UNWIND (CASE WHEN msgs = [] THEN [null] ELSE msgs END) AS mm
+OPTIONAL MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(mm)
+WITH users, channels, threads, msgs, pids, unscopedIds, collect(DISTINCT r) AS runs
+
+UNWIND (CASE WHEN runs = [] THEN [null] ELSE runs END) AS rr
+OPTIONAL MATCH (rr)-[:HAS_STEP_RUN]->(sr:StepRun)
+OPTIONAL MATCH (sr)-[:TRACED]->(te:TraceEvent)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs,
+     collect(DISTINCT sr) AS steps, collect(DISTINCT te) AS traces,
+     [x IN threads | x.threadId] AS threadIds
+
+OPTIONAL MATCH (rc:ReadCursor) WHERE rc.threadId IN threadIds
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     collect(DISTINCT rc) AS tcur
+
+UNWIND (CASE WHEN users = [] THEN [null] ELSE users END) AS uu
+OPTIONAL MATCH (uu)-[:HAS_CURSOR]->(own:ReadCursor)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur, collect(DISTINCT own) AS ocur
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces,
+     tcur + [x IN ocur WHERE NOT x IN tcur] AS cursors
+
+OPTIONAL MATCH (cust:Customer) WHERE cust.customerId IN pids
+OPTIONAL MATCH (cust)-[:HAS_CART]->(cart:Cart)
+OPTIONAL MATCH (cart)-[:HAS_ITEM]->(item:CartItem)
+WITH users, channels, threads, msgs, pids, unscopedIds, runs, steps, traces, cursors,
+     collect(DISTINCT cust) AS custs, collect(DISTINCT cart) AS carts,
+     collect(DISTINCT item) AS items
+
+OPTIONAL MATCH (c2:Customer)-[:PLACED]->(o:Order) WHERE c2.customerId IN pids
+OPTIONAL MATCH (o)-[:HAS_LINE]->(ol:OrderLine)
+WITH users, channels, threads, msgs, unscopedIds, runs, steps, traces, cursors,
+     custs, carts, items, collect(DISTINCT o) AS orders,
+     collect(DISTINCT ol) AS lines
+
+WITH users + channels + threads + msgs + runs + steps + traces + cursors
+           + custs + carts + items + orders + lines AS victims,
+     unscopedIds, size(unscopedIds) AS unscopedCount,
+     size(users)   AS userCount,     size(channels) AS channelCount,
+     size(threads) AS threadCount,   size(msgs)     AS messageCount,
+     size(runs)    AS runCount,      size(steps)    AS stepRunCount,
+     size(traces)  AS traceCount,    size(cursors)  AS cursorCount,
+     size(custs)   AS customerCount, size(orders)   AS orderCount
+FOREACH (v IN victims | DETACH DELETE v)
+RETURN userCount, channelCount, threadCount, messageCount, runCount,
+       stepRunCount, traceCount, cursorCount, customerCount, orderCount,
+       unscopedCount, unscopedIds
+"""
+
+    _CURRENT_ORDER_CYPHER = """\
+// $customerId
+MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order)
+WITH o ORDER BY o.placedAt DESC, o.orderId DESC LIMIT 1
+OPTIONAL MATCH (o)-[:HAS_LINE]->(l:OrderLine)
+RETURN o.orderId AS orderId, o.status AS status,
+       o.placedAt AS placedAt, o.updatedAt AS updatedAt,
+       collect({productId: l.productId, name: l.name, unitPrice: l.unitPrice,
+                quantity: l.quantity, lineTotal: l.lineTotal}) AS lines,
+       sum(l.lineTotal) AS total
+"""
+
+    _ORDER_OWNERSHIP_CYPHER = """\
+// $customerId, $orderId
+OPTIONAL MATCH (cust:Customer {customerId: $customerId})-[:PLACED]->(o:Order {orderId: $orderId})
+RETURN o IS NOT NULL AS owned, o.status AS status
+"""
+
+    def ensure_participant(
+        self, ws: str, *, participant_id: str, display_name: str,
+        token_hash: str, language: str, channel_id: str, thread_id: str,
+        thread_title: str, agent_id: str, now: int,
+    ) -> dict[str, Any]:
+        """Provision one storefront participant in a single atomic write. Note §3.
+
+        Writes `User` + `Channel` + `Thread` + both `MEMBER_OF` edges in one
+        `GRAPH.QUERY`, following QUERIES.md §2's guarded-`CREATE`-inside-
+        `FOREACH` idiom. **Atomicity is the point, not a nicety**: a partial
+        join would leave a `Channel` with no `participantId`-bearing owner —
+        exactly the "unscoped participant" state note §5 (F2) leaves *whole and
+        counted* rather than half-deleted, and which the note's own safety
+        argument depends on being unreachable through this code path.
+
+        This is the **only** writer of `Channel.participantId`, the provenance
+        marker G2 reads. Nothing else in this class can set it (`create_channel`
+        writes a fixed three-property map), which is what makes a pre-existing
+        channel structurally unable to become a delete target.
+
+        Returns the status row (exactly one, always — three `OPTIONAL MATCH`es
+        and no anchor `MATCH`, so it can never zero-row):
+
+        | `created` | `existed` | `existedParticipant` | meaning |
+        |---|---|---|---|
+        | `True`  | `False` | `False` | fresh participant written (3 nodes, 3 rels) |
+        | `False` | `True`  | `True`  | already a participant — nothing written; the
+          row carries the **stored** ids/language, so a replay is a
+          read-through (restart survival) |
+
+        `agentMissing=True` means the demo `Agent` (`agent_id`) is absent and
+        **nothing at all was written** — the caller maps that to a `503` naming
+        `seed_demo.sh` (note §3). It is not raised here because "the demo isn't
+        seeded" is a deployment-readiness answer, not a namespace violation.
+
+        Raises `MemberIdCollisionError` when the id is held by an `Agent`, or by
+        a `User` that is **not** a participant (no `tokenHash`) — both are the
+        same refusal as `ensure_user`'s, and the second one exists because
+        without it a caller following the status row would build a participant
+        record out of three `None`s and a token the graph never stored (note §3,
+        F7).
+
+        **Not a token-rotation path**: a replay carrying a fresh `token_hash`
+        returns `existed=True` and does not write the new hash — the same
+        "re-ensure never updates properties" contract as `ensure_user`.
+        """
+        res = self._graph(ws).query(
+            self._ENSURE_PARTICIPANT_CYPHER,
+            {
+                "participantId": participant_id, "displayName": display_name,
+                "tokenHash": token_hash, "language": language,
+                "channelId": channel_id, "threadId": thread_id,
+                "threadTitle": thread_title, "agentId": agent_id, "now": now,
+            },
+        )
+        row = res.result_set[0]
+        status = {
+            "created": bool(row[0]), "existed": bool(row[1]),
+            "existedParticipant": bool(row[2]), "collided": bool(row[3]),
+            "agentMissing": bool(row[4]), "channelId": row[5],
+            "threadId": row[6], "language": row[7],
+        }
+        if status["collided"]:
+            if status["existed"]:
+                raise MemberIdCollisionError(
+                    f"member-id namespace corrupted: {participant_id!r} exists as "
+                    f"both a User and an Agent — nothing written, manual repair "
+                    f"required"
+                )
+            raise MemberIdCollisionError(
+                f"member id {participant_id!r} is already held by an Agent — "
+                f"refusing to provision a participant (member ids are "
+                f"namespace-unique across User/Agent)"
+            )
+        if status["existed"] and not status["existedParticipant"]:
+            raise MemberIdCollisionError(
+                f"member id {participant_id!r} is already held by a non-participant "
+                f"User (no tokenHash) — refusing to provision a participant over it"
+            )
+        return status
+
+    def add_channel_member(
+        self, ws: str, *, member_id: str, channel_id: str, role: str,
+        joined_at: int,
+    ) -> bool:
+        """Add a `User`/`Agent` to a channel's roster. QUERIES.md §2 (§7 for the
+        `Agent` side) — the one documented, verified membership write that had
+        no repository method until now (`seed_demo.sh` and `test_queries.sh`
+        both fill the gap with raw Cypher).
+
+        Idempotent: `MERGE` on the edge with `ON CREATE SET`, so a re-add keeps
+        the original `role`/`joinedAt` rather than rewriting them. The member
+        anchor is label-agnostic (`userId OR agentId`, the same pattern
+        `advance_cursor` uses), so one method covers both member kinds.
+
+        `False` when either anchor is missing — the whole query then matches no
+        rows and writes nothing, which the caller must not read as success.
+
+        **This does not make a channel a participant's own.** Membership is not
+        provenance: `ensure_participant` writes `Channel.participantId`, and G2
+        reads that, never `MEMBER_OF` alone — a participant added to
+        `demo-general` with this method is a genuine member of a channel that is
+        still structurally unreachable by either reset (note §1.1).
+        """
+        res = self._graph(ws).query(
+            "MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId "
+            "MATCH (c:Channel {channelId: $channelId}) "
+            "MERGE (mem)-[r:MEMBER_OF]->(c) "
+            "  ON CREATE SET r.role = $role, r.joinedAt = $joinedAt "
+            "RETURN r.role AS role",
+            {
+                "memberId": member_id, "channelId": channel_id, "role": role,
+                "joinedAt": joined_at,
+            },
+        )
+        return bool(res.result_set)
+
+    def get_participant_record(
+        self, ws: str, *, participant_id: str
+    ) -> dict[str, Any] | None:
+        """Read one participant's record — the authoritative token/scope lookup.
+
+        `None` when the id is unknown **or** names a `User` that is not a
+        participant (G1: no `tokenHash`). The two collapse deliberately: both
+        mean "not a participant" to a token check, and an already-reset-away
+        participant is indistinguishable from an id that never existed.
+
+        The graph is the registry, not an in-process map (plan §4.3): this read
+        is what makes a participant's token survive a server restart.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (u:User {userId: $participantId}) "
+            "WHERE u.tokenHash IS NOT NULL "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.tokenHash AS tokenHash, u.channelId AS channelId, "
+            "       u.threadId AS threadId, u.language AS language, "
+            "       u.joinedAt AS joinedAt",
+            {"participantId": participant_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "participantId": row[0], "displayName": row[1], "tokenHash": row[2],
+            "channelId": row[3], "threadId": row[4], "language": row[5],
+            "joinedAt": row[6],
+        }
+
+    def set_participant_record(
+        self, ws: str, *, participant_id: str, display_name: str | None = None,
+        token_hash: str | None = None, language: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Update an **existing** participant's record in place (post-join
+        changes: a re-chosen language after "reset mine", a rotated token, a
+        renamed display name).
+
+        Per-field `coalesce($field, u.field)`, the same caller contract as
+        `upsert_profile`: an omitted field (`None`) means "not provided, leave
+        unchanged", **never** "clear it". A caller must not pass `""` to mean
+        "no value".
+
+        `None` (zero rows) when the id is unknown or is not a participant.
+        **The `tokenHash IS NOT NULL` anchor is a guard, not a filter**: without
+        it this method could stamp a `tokenHash` onto `seed_demo.sh`'s `u1` and
+        so mint a "participant" whose channel carries no `participantId` — the
+        unscoped shape note §5 (F2) is built to survive rather than behead, and
+        which nothing in the shipped code is otherwise able to create.
+        **Neither `channelId` nor `threadId` is settable here**, for the same
+        reason: together they are the server-resolved scope denorm the storefront
+        reads from (plan §4.3), and both are decided **in-query** — `channelId`
+        once, by `ensure_participant`, together with the marker G2 reads;
+        `threadId` by `ensure_participant` at join and re-decided by
+        `reset_participant` at every "reset mine", which mints the replacement
+        thread and repoints `u.threadId` inside the same atomic write. A settable
+        `threadId` would be the one lever in this surface able to point one
+        participant at *another* participant's thread, since G1 proves the target
+        is a participant but nothing here can prove the thread lies inside that
+        participant's own channel. If a caller is ever found that genuinely needs
+        to repoint it, the containment check belongs in the `MATCH` — the same
+        place G1/G2 live — not in Python.
+        """
+        res = self._graph(ws).query(
+            "MATCH (u:User {userId: $participantId}) "
+            "WHERE u.tokenHash IS NOT NULL "
+            "SET u.displayName = coalesce($displayName, u.displayName), "
+            "    u.tokenHash   = coalesce($tokenHash,   u.tokenHash), "
+            "    u.language    = coalesce($language,    u.language) "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.tokenHash AS tokenHash, u.channelId AS channelId, "
+            "       u.threadId AS threadId, u.language AS language, "
+            "       u.joinedAt AS joinedAt",
+            {
+                "participantId": participant_id, "displayName": display_name,
+                "tokenHash": token_hash, "language": language,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "participantId": row[0], "displayName": row[1], "tokenHash": row[2],
+            "channelId": row[3], "threadId": row[4], "language": row[5],
+            "joinedAt": row[6],
+        }
+
+    def list_participants(
+        self, ws: str, *, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """The presenter roster — every participant `User`, join order first.
+
+        Filtered on the bare `u.tokenHash IS NOT NULL` (G1), so
+        `config.USER_ID`'s lifespan-created `User` and `seed_demo.sh`'s `u1`
+        never appear. **Do not add a `u.userId > ''` conjunct** to "upgrade" the
+        label scan to an index scan: it has no selectivity (both forms visit
+        every `User`), and `42 > ''` evaluates to `null`, so the conjunct
+        silently drops any participant whose `userId` is not a string. The note
+        withdrew that tip on measurement *and* on correctness (§8/F5), and the
+        same bare predicate is what both resets anchor on — one predicate, so
+        there is no second form for a future editor to copy into a destructive
+        query.
+
+        No `tokenHash` in the projection: the roster is presenter-facing, and
+        the hash is only ever read by `get_participant_record`'s token check.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (u:User) WHERE u.tokenHash IS NOT NULL "
+            "RETURN u.userId AS participantId, u.displayName AS displayName, "
+            "       u.channelId AS channelId, u.threadId AS threadId, "
+            "       u.language AS language, u.joinedAt AS joinedAt "
+            "ORDER BY u.joinedAt ASC, u.userId ASC LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "participantId": row[0], "displayName": row[1],
+                "channelId": row[2], "threadId": row[3], "language": row[4],
+                "joinedAt": row[5],
+            }
+            for row in res.result_set
+        ]
+
+    def reset_participant(
+        self, ws: str, *, participant_id: str, new_thread_id: str,
+        thread_title: str, now: int,
+    ) -> dict[str, Any] | None:
+        """Reset mine — one atomic query. Note §4.
+
+        Collects the victim set structurally (never by `Message.threadId`),
+        mints the replacement `Thread`, repoints `User.threadId`, then deletes.
+        The participant's `User` and `Channel` **survive**, so their token stays
+        valid; their `Customer`/`Cart`/`Order` subgraph does not.
+
+        Three outcomes the caller must tell apart (note §12's response
+        contract):
+
+        * `None` (zero rows) — G1 rejected the id: not a participant, or already
+          deleted. The route's existing not-a-participant handling (`404`/`401`).
+        * `scoped=False` — G2 found no owned channel. **A guaranteed no-op**:
+          empty victim list, no re-mint, `User.threadId` untouched and every
+          per-class count forced to `0` so the row cannot read as a partial
+          success. The caller must treat this as an alarm — `409 Conflict` with
+          a machine-readable code, **never** `200`: nothing was reset and
+          nothing will be until the graph is repaired.
+        * `scoped=True` — the reset ran; `deletedCount` is the authoritative
+          field.
+
+        Raises `unique constraint violation on node of type Thread` — and writes
+        **nothing** — if two `Channel`s ever carry the same `participantId`
+        (the `WITH u, ch, collect(…)` groups by `ch`, so the re-mint `FOREACH`
+        fires twice with one `$newThreadId`). That is the duplicate-marker
+        fail-safe, not a defect: it fails loudly and non-destructively, and a
+        retry re-raises forever. Propagate it as a `5xx`; do not retry.
+
+        The delete is **thread-scoped, not author-scoped**: the `Agent`'s own
+        replies inside this participant's thread go with it, and no other
+        participant's do. An author-scoped sweep would orphan those replies and
+        cross participant boundaries the moment the `Agent` is the author.
+
+        `ReadCursor` handling is deliberately narrower here than in
+        `reset_all_participants`: this reset keeps the `User`, so a cursor it
+        holds on a thread that **survives** (a cross-member participant's cursor
+        on `demo-welcome`) is live read-state for a membership this operation
+        was never asked to touch, and is kept. Only cursors on a thread being
+        deleted now, or on a thread that no longer exists, go (note §4, P2).
+        """
+        res = self._graph(ws).query(
+            self._RESET_PARTICIPANT_CYPHER,
+            {
+                "participantId": participant_id, "newThreadId": new_thread_id,
+                "threadTitle": thread_title, "now": now,
+            },
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {
+            "scoped": bool(row[0]), "threadId": row[1], "deletedCount": row[2],
+            "threadCount": row[3], "messageCount": row[4], "runCount": row[5],
+            "stepRunCount": row[6], "traceCount": row[7], "cursorCount": row[8],
+            "orderCount": row[9], "cartItemCount": row[10],
+        }
+
+    def reset_all_participants(self, ws: str) -> dict[str, Any]:
+        """Reset everyone — the same scoping, widened to every participant
+        `User`, and additionally deleting the `User` and `Channel` nodes
+        themselves so every participant token is invalidated. Note §5.
+
+        No thread is re-minted: every participant is bounced to the join screen
+        and `ensure_participant` mints a fresh subgraph on their next join.
+
+        **Always exactly one status row**, including on a clean graph (the
+        global `collect()` over an empty match produces one all-zeros row) —
+        an unambiguous "nothing to do" rather than an empty result to index
+        into.
+
+        `unscopedCount`/`unscopedIds` name the participants G2 could **not**
+        resolve. They are left **whole and collectable** rather than beheaded
+        (note §5, F2: v1.0 deleted such a `User` while its channel, thread and
+        messages stayed stranded and unreachable — one participant's transcript
+        left live in a graph the presenter has just been told is clean). The
+        caller returns `200` with `incomplete: true` and `unresolved:
+        unscopedIds` — the reset did everything it could, so it is not an error,
+        but the response must not read as clean.
+
+        Survivors, positively: `Agent`; `WorkspaceConfig` (taking it would
+        silently undo K-056's Ministral re-point — the single most expensive
+        mistake available here); `Document`/`Chunk`/`Entity`;
+        `WorkflowDefSnapshot`/`Step`; `config.USER_ID`'s lifespan `User`; and
+        every `Channel`/`Thread`/`Message` not reachable from a participant
+        `User`, `seed_demo.sh`'s `demo-general`/`demo-welcome` included.
+        `reference` is a different graph and is never referenced by this query —
+        structural, not a convention.
+
+        The wide `HAS_CURSOR` sweep here has **no** liveness filter, unlike
+        `reset_participant`'s: the `User` is deleted, so any cursor it owns that
+        survived would be unowned — a real orphan (note §5, F3).
+        """
+        res = self._graph(ws).query(self._RESET_ALL_PARTICIPANTS_CYPHER)
+        row = res.result_set[0]
+        return {
+            "userCount": row[0], "channelCount": row[1], "threadCount": row[2],
+            "messageCount": row[3], "runCount": row[4], "stepRunCount": row[5],
+            "traceCount": row[6], "cursorCount": row[7], "customerCount": row[8],
+            "orderCount": row[9], "unscopedCount": row[10],
+            "unscopedIds": list(row[11] or []),
+        }
+
+    def get_customer_current_order(
+        self, ws: str, *, customer_id: str
+    ) -> dict[str, Any] | None:
+        """The customer's **current** order — the most recently *placed* one,
+        whatever its status. Note §10.1.
+
+        "Current" is deliberately not "the most recent non-terminal order": a
+        demo participant walks `placed → fulfilled → delivered` and AC-7
+        requires them to *see* the status change, so a non-terminal filter would
+        make the order card vanish at the moment the demo is trying to show it.
+        A subsequent `place_order` supersedes it.
+
+        `None` when there is no such `Customer` **or** the customer has placed
+        no orders — collapsed deliberately (`GET /shop/api/state` renders "no
+        order" identically for both).
+
+        Return shape mirrors `get_order`'s, including both of its quirks: a
+        zero-line order yields one all-`null` placeholder from `collect()`
+        (filtered out here, exactly as `get_order` does) and `sum()` returns a
+        float (`0.0` on an empty aggregation, never `None`) — a `float`-vs-`int`
+        mismatch to expect wherever this feeds a response model. `collect()` and
+        `sum()` over one fan-out are safe because `LIMIT 1` guarantees exactly
+        one `o` for the whole aggregation. Ties on `placedAt` break by
+        `orderId DESC` — arbitrary but *stable across polls*, which is what a
+        card repainting every 2 s needs.
+        """
+        res = self._graph(ws).ro_query(
+            self._CURRENT_ORDER_CYPHER, {"customerId": customer_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        lines = [line for line in row[4] if line["productId"] is not None]
+        return {
+            "orderId": row[0], "status": row[1], "placedAt": row[2],
+            "updatedAt": row[3], "lines": lines, "total": row[5],
+        }
+
+    def order_belongs_to_customer(
+        self, ws: str, *, customer_id: str, order_id: str
+    ) -> dict[str, Any]:
+        """Ownership gate for an order-lifecycle action. Note §10.2.
+
+        Always exactly one row, so `owned` is never `None` and the caller never
+        has to tell "no row" from "not owned": an unknown order, an unknown
+        customer and another participant's order all return
+        `{"owned": False, "status": None}`. `status` rides along free, letting
+        the caller decide `404` before the CAS without a second round trip.
+
+        **Not optional.** `services.advance_order`'s CAS is keyed on `orderId`
+        alone, so without this gate any participant who learned another's
+        `orderId` could cancel their order. The storefront never puts an
+        `orderId` in a request body, which makes this defence in depth — but it
+        is the only thing standing between the two.
+        """
+        res = self._graph(ws).ro_query(
+            self._ORDER_OWNERSHIP_CYPHER,
+            {"customerId": customer_id, "orderId": order_id},
+        )
+        row = res.result_set[0]
+        return {"owned": bool(row[0]), "status": row[1]}
+
+    # ── Structured NL query generation (K-055 M6) — no QUERIES.md section ─────
+    #    (compiler-produced Cypher, not a query 1:1-mapped to QUERIES.md)
     #
     # `docs/plans/workflow-nl-query-generation.md` §3.1 step 5. This is the
     # **only** repository method in this whole four-capability effort that

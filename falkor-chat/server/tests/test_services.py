@@ -17,11 +17,18 @@ from falkorchat import config
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
 from falkorchat.repository import DocumentWriteStatus, MessageWriteStatus
-from falkorchat.schemas import MAX_BATCH_SIZE, MAX_DIFF_PREVIEW, MAX_KEY_LEN
+from falkorchat.schemas import (
+    MAX_BATCH_SIZE,
+    MAX_CONFIG_LEN,
+    MAX_DIFF_PREVIEW,
+    MAX_KEY_LEN,
+)
 from falkorchat.services import (
+    CHAT_START_ANCHOR_KEYS,
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
     RAG_QUERY_TIMEOUT_MS,
+    RESERVED_CTX_KEYS,
     BatchTooLargeError,
     ChannelNotFoundError,
     DocumentTooLargeError,
@@ -36,6 +43,7 @@ from falkorchat.services import (
     UnknownMemberError,
     UnknownOrderTransitionError,
     WorkflowDefConflictError,
+    WorkflowInputRejectedError,
     WorkflowRunNotFoundError,
     _diff_structures,
     _structural_diffs,
@@ -389,6 +397,22 @@ class FakeRepo:
                     "stepCount": 0}
         return self.start_run_result
 
+    def start_run_untriggered(self, ws, *, run_id, def_key, def_version, started_at,
+                              ctx, trace, max_steps):
+        # §12.12's second, self-contained write path — no trigger message, no
+        # TRIGGERED_BY. Recorded into the SAME `started_runs` list as `start_run`
+        # so a test can assert "nothing was written" across both paths at once.
+        self.started_runs.append({
+            "ws": ws, "run_id": run_id, "def_key": def_key,
+            "def_version": def_version, "started_at": started_at,
+            "trigger_msg_id": None, "ctx": ctx, "trace": trace,
+            "max_steps": max_steps,
+        })
+        if self.start_run_result is _UNSET:
+            return {"runId": run_id, "startKey": "intake", "status": "running",
+                    "stepCount": 0}
+        return self.start_run_result
+
     def get_run(self, ws, *, run_id):
         self.calls.append(("get_run", ws, run_id))
         return self.runs.get(run_id)
@@ -534,6 +558,30 @@ class FakeRepo:
             "orderId": order_id, "status": order["status"], "placedAt": order["placedAt"],
             "updatedAt": order["updatedAt"], "lines": list(order["lines"]), "total": total,
         }
+
+    def get_customer_current_order(self, ws, *, customer_id):
+        self.calls.append(("get_customer_current_order", customer_id))
+        mine = [
+            (order_id, order) for order_id, order in self.orders.items()
+            if order["customerId"] == customer_id
+        ]
+        if not mine:
+            return None
+        # "current" = most recently placed, ties broken by orderId DESC
+        order_id, order = max(mine, key=lambda pair: (pair[1]["placedAt"], pair[0]))
+        return {
+            "orderId": order_id, "status": order["status"],
+            "placedAt": order["placedAt"], "updatedAt": order["updatedAt"],
+            "lines": list(order["lines"]),
+            "total": sum(line["lineTotal"] for line in order["lines"]),
+        }
+
+    def order_belongs_to_customer(self, ws, *, customer_id, order_id):
+        self.calls.append(("order_belongs_to_customer", customer_id, order_id))
+        order = self.orders.get(order_id)
+        if order is None or order["customerId"] != customer_id:
+            return {"owned": False, "status": None}
+        return {"owned": True, "status": order["status"]}
 
     def _order_cas(self, order_id, expected, new_status, now):
         self.calls.append(("order_cas", order_id, expected, new_status, now))
@@ -3157,6 +3205,181 @@ def test_start_workflow_run_mints_run_seeds_thread_ctx_and_drives():
     assert out["status"] == "waiting"
 
 
+# ── §12 chat-path `run_ctx` merge (salesperson-ui S2) ──────────────────────────
+#
+# The chat path seeds `{"threadId": …}` (the §2.4 resume denorm anchor). A caller
+# may now add its OWN keys alongside it — the storefront starts a `salesperson` run
+# carrying `{"language": "pt-BR"}` — while the engine-owned keys stay unspoofable
+# via the SAME `_reject_reserved_keys` rule the process path already applies (M-2).
+
+
+def test_chat_path_start_merges_a_caller_run_ctx_with_the_thread_anchor():
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    ex = StubExecutor(step_budget=12, run_status="waiting")
+    svc = make_service(repo, executor=ex)
+
+    svc.start_workflow_run(
+        CTX, def_key="triage", version="1", trigger_msg_id="trig1",
+        run_ctx={"language": "pt-BR"},
+    )
+
+    # BOTH keys ride in the initial ctx: the engine's anchor and the caller's own
+    assert json.loads(repo.started_runs[0]["ctx"]) == {
+        "threadId": "t1", "language": "pt-BR",
+    }
+
+
+def test_chat_path_start_without_a_run_ctx_is_byte_identical_to_before():
+    # back-compat pin: every existing chat-path caller (trigger.py step 3) passes
+    # nothing, and must keep getting exactly `{"threadId": …}`.
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    svc = make_service(repo, executor=StubExecutor())
+
+    svc.start_workflow_run(CTX, def_key="triage", version="1",
+                           trigger_msg_id="trig1")
+
+    assert repo.started_runs[0]["ctx"] == '{"threadId":"t1"}'
+
+
+def test_chat_path_run_ctx_cannot_shadow_the_thread_anchor_with_an_empty_thread():
+    # the merge must never let a caller key win over the engine's anchor — even
+    # when the trigger message is missing and the anchor is the empty string.
+    repo = FakeRepo()          # no message seeded ⇒ thread_id == ""
+    svc = make_service(repo, executor=StubExecutor())
+
+    svc.start_workflow_run(CTX, def_key="triage", version="1",
+                           trigger_msg_id="trig1", run_ctx={"language": "pt-BR"})
+
+    assert json.loads(repo.started_runs[0]["ctx"]) == {
+        "threadId": "", "language": "pt-BR",
+    }
+
+
+@pytest.mark.parametrize("reserved", ["threadId", "error", "timerFired"])
+def test_chat_path_reserved_key_is_rejected_before_any_write(reserved):
+    # M-2/F-6 on the chat path, reusing the process path's rule: the rejection
+    # happens BEFORE the run is started, so a rejected call leaves nothing behind
+    # — no run, no read of the trigger message, and no engine drive.
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    ex = StubExecutor()
+    svc = make_service(repo, executor=ex)
+
+    with pytest.raises(WorkflowInputRejectedError):
+        svc.start_workflow_run(
+            CTX, def_key="triage", version="1", trigger_msg_id="trig1",
+            run_ctx={reserved: "t1", "language": "pt-BR"},
+        )
+
+    assert repo.started_runs == []   # nothing written
+    assert repo.calls == []          # nothing even read
+    assert ex.run_calls == []        # never handed to the engine
+
+
+# ── F-3: the merge direction, as an invariant with teeth ──────────────────────
+#
+# `_reject_reserved_keys` makes a caller-supplied `threadId` unreachable through
+# `start_workflow_run`, so "the anchor wins the merge" cannot be provoked from the
+# public entry point — which is exactly why reversing the merge left the whole suite
+# green. These three reach the seam BELOW the guard, so the property has a test that
+# can actually fail:
+#   1. the anchor's key set really is what the module constant claims;
+#   2. every one of those keys is reserved (the invariant the guard's completeness
+#      rests on — it breaks the moment a non-reserved anchor key is added);
+#   3. the anchor wins a collision (it breaks the moment the merge is reversed).
+
+
+def test_chat_start_anchor_key_set_is_exactly_the_module_constant():
+    # keeps the constant honest, so the invariant test below is not vacuous.
+    assert set(Services._chat_start_ctx({}, thread_id="t1")) == CHAT_START_ANCHOR_KEYS
+
+
+def test_chat_start_anchor_keys_are_all_reserved():
+    # THE invariant: reserved membership is what makes `_reject_reserved_keys` a
+    # complete guard for the merge. Add a `channelId`/`locale` anchor key without
+    # reserving it and the merge direction silently becomes load-bearing.
+    assert CHAT_START_ANCHOR_KEYS <= RESERVED_CTX_KEYS
+
+
+def test_chat_start_ctx_anchor_wins_a_caller_key_collision():
+    # the last-resort ordering, asserted where it is reachable. Reversing the merge
+    # to `{"threadId": …, **caller_ctx}` must fail THIS test.
+    merged = Services._chat_start_ctx(
+        {"threadId": "hijacked", "language": "pt-BR"}, thread_id="t1"
+    )
+    assert merged["threadId"] == "t1"
+    assert merged["language"] == "pt-BR"   # caller's own keys still survive
+
+
+# ── F-2: the service-side `run_ctx` size bound ────────────────────────────────
+#
+# `submit_workflow_input` and the timer sweep already bound the ctx they write with
+# `MAX_CONFIG_LEN` in the SERVICE, for the reason `schemas.py` states outright: MCP
+# and direct service callers never see a pydantic model. `start_workflow_run` was
+# the one ctx-mutating entry point without it — and S2's `trigger.maybe_trigger`
+# pass-through is precisely such a direct caller. Oversized ctx is not just a fat
+# graph property: the executor re-emits the whole ctx as a `CONTEXT:` turn on every
+# LLM call, so it burns context window every turn for the life of the run.
+
+
+def test_chat_path_oversized_run_ctx_is_rejected_before_any_write():
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    ex = StubExecutor()
+    svc = make_service(repo, executor=ex)
+
+    with pytest.raises(WorkflowInputRejectedError):
+        svc.start_workflow_run(
+            CTX, def_key="triage", version="1", trigger_msg_id="trig1",
+            run_ctx={"blob": "y" * MAX_CONFIG_LEN},
+        )
+
+    assert repo.started_runs == []   # nothing written
+    assert repo.calls == []          # nothing even read
+    assert ex.run_calls == []        # never handed to the engine
+
+
+def test_process_path_oversized_run_ctx_is_rejected_before_any_write():
+    repo = FakeRepo()
+    ex = StubExecutor()
+    svc = make_service(repo, executor=ex)
+
+    with pytest.raises(WorkflowInputRejectedError):
+        svc.start_workflow_run(
+            CTX, def_key="access-request", version="1",
+            run_ctx={"blob": "y" * MAX_CONFIG_LEN},
+        )
+
+    assert repo.started_runs == []
+    assert repo.calls == []
+    assert ex.run_calls == []
+
+
+def test_a_run_ctx_exactly_on_the_bound_is_accepted_on_both_paths():
+    # the bound must reject the oversized, not everything large — a cap nothing can
+    # pass is indistinguishable from a broken feature. Sized to land EXACTLY on the
+    # bound rather than comfortably inside it, so an off-by-one (`>` becoming `>=`)
+    # fails here rather than incidentally in some other file's boundary fixture.
+    payload = {"blob": "y" * (MAX_CONFIG_LEN - 11)}
+    assert len(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    ) == MAX_CONFIG_LEN
+
+    repo = FakeRepo()
+    repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
+    svc = make_service(repo, executor=StubExecutor())
+    svc.start_workflow_run(CTX, def_key="triage", version="1",
+                           trigger_msg_id="trig1", run_ctx=payload)
+    svc.start_workflow_run(CTX, def_key="access-request", version="1",
+                           run_ctx=payload)
+
+    assert len(repo.started_runs) == 2
+    assert json.loads(repo.started_runs[0]["ctx"])["blob"] == payload["blob"]
+    assert json.loads(repo.started_runs[1]["ctx"]) == payload
+
+
 def test_start_workflow_run_missing_anchor_raises_nothing_driven():
     repo = FakeRepo()
     repo.messages["trig1"] = {"msgId": "trig1", "threadId": "t1"}
@@ -3989,3 +4212,73 @@ def test_run_structured_query_explicit_timeout_is_forwarded():
     svc.run_structured_query(CTX, "reference", compiled, timeout=999)
 
     assert repo.calls == [("run_readonly_query", "reference", compiled, 999)]
+
+
+# ── §18 Storefront order reads (salesperson-ui S4) ────────────────────────────
+
+
+def test_get_current_order_scopes_to_the_calling_actor():
+    """`ctx.actor` is `customerId` — the storefront never accepts a
+    client-supplied customer id, so this is the whole isolation seam for the
+    order card."""
+    repo = FakeRepo()
+    svc = make_service(repo, now=1000)
+    repo.customers.update({"u1", "u2"})
+    line = {"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+            "quantity": 1, "lineTotal": 5.0}
+    repo.place_order("test", customer_id="u1", order_id="o-mine", now=100, lines=[line])
+    repo.place_order("test", customer_id="u2", order_id="o-theirs", now=200, lines=[line])
+
+    current = svc.get_current_order(CTX)
+
+    assert current["orderId"] == "o-mine"
+    assert current["status"] == "placed"
+    assert current["total"] == 5.0
+    assert ("get_customer_current_order", "u1") in repo.calls
+
+
+def test_get_current_order_is_none_without_an_order():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_current_order(CTX) is None
+
+
+def test_get_current_order_follows_the_latest_placed_order():
+    """AC-7: "current" is the most recently *placed* order whatever its status,
+    so the card keeps rendering as the demo walks the lifecycle."""
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.customers.add("u1")
+    line = {"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+            "quantity": 1, "lineTotal": 5.0}
+    repo.place_order("test", customer_id="u1", order_id="o1", now=100, lines=[line])
+    repo.place_order("test", customer_id="u1", order_id="o2", now=200, lines=[line])
+    repo.orders["o2"]["status"] = "delivered"
+
+    assert svc.get_current_order(CTX)["orderId"] == "o2"
+    assert svc.get_current_order(CTX)["status"] == "delivered"
+
+
+def test_order_belongs_to_customer_refuses_another_actors_order():
+    """The gate `advance_order` does not have: its CAS is keyed on `orderId`
+    alone, so a participant who learned another's `orderId` could otherwise
+    cancel their order."""
+    repo = FakeRepo()
+    svc = make_service(repo)
+    repo.customers.update({"u1", "u2"})
+    line = {"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+            "quantity": 1, "lineTotal": 5.0}
+    repo.place_order("test", customer_id="u1", order_id="o-mine", now=100, lines=[line])
+    repo.place_order("test", customer_id="u2", order_id="o-theirs", now=100, lines=[line])
+
+    assert svc.order_belongs_to_customer(CTX, order_id="o-mine") == {
+        "owned": True, "status": "placed",
+    }
+    assert svc.order_belongs_to_customer(CTX, order_id="o-theirs") == {
+        "owned": False, "status": None,
+    }
+    assert svc.order_belongs_to_customer(CTX, order_id="no-such") == {
+        "owned": False, "status": None,
+    }
+    assert ("order_belongs_to_customer", "u1", "o-theirs") in repo.calls

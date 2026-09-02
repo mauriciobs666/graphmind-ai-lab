@@ -110,6 +110,16 @@ WAITING_STEP_TYPES: frozenset[str] = frozenset({"human", "wait"})
 TIMER_FIRED_CTX_KEY = "timerFired"
 RESERVED_CTX_KEYS: frozenset[str] = frozenset({"threadId", "error", TIMER_FIRED_CTX_KEY})
 
+# The keys `start_workflow_run`'s CHAT path writes into the initial run ctx itself
+# (salesperson-ui S2/F-3). Every one of them MUST be a member of `RESERVED_CTX_KEYS`
+# above: that membership is precisely what makes `_reject_reserved_keys` a complete
+# guard for the merge, and therefore what makes the merge *direction* a safety net
+# rather than the only thing standing between a caller and the §2.4 resume anchor.
+# Add a non-reserved anchor key here (a `channelId`, a `locale`) and the direction
+# becomes silently load-bearing. The invariant is pinned by test — see
+# `test_chat_start_anchor_keys_are_all_reserved` — not by this comment.
+CHAT_START_ANCHOR_KEYS: frozenset[str] = frozenset({"threadId"})
+
 # Statuses a run may legitimately hold after the executor's M-1 fault net has
 # stamped it (K-024 D-G / m-12). Anything else — notably a still-`running` zombie —
 # means the fault escaped before `fail_run` landed, and the service re-raises so the
@@ -1999,13 +2009,18 @@ class Services:
         Two self-contained start paths — the §4 first/subsequent doctrine, never a
         conditional write (K-024 D-B / plan F-2):
 
-          * **`trigger_msg_id` given** — the chat path, byte-identical to before:
-            `repo.start_run` (§12.1) with the `TRIGGERED_BY` edge, and the trigger
-            message's thread seeded into the run `ctx` (`{"threadId": …}`, the
-            §2.4 resume denorm anchor).
+          * **`trigger_msg_id` given** — the chat path: `repo.start_run` (§12.1)
+            with the `TRIGGERED_BY` edge, and the trigger message's thread seeded
+            into the run `ctx` (`{"threadId": …}`, the §2.4 resume denorm anchor).
+            A caller `run_ctx` is **merged alongside** that anchor (salesperson-ui
+            S2 — the storefront starts a chat run carrying `{"language": …}`);
+            omitted, the ctx is exactly `{"threadId": …}` as before.
           * **`trigger_msg_id is None`** — the process path (§12.12): no `Message`,
             no `Thread`, no `TRIGGERED_BY`. The initial ctx is the caller's
             `run_ctx` (default `{}`).
+
+        `run_ctx` is screened by the SAME reserved-key rule on both paths, hoisted
+        ahead of the branch so it runs before *anything* is read or written.
 
         `max_steps` lets a `process` def declare its own budget (D-H part c —
         `access-request@v1` passes 24); omitted ⇒ the executor's global default.
@@ -2016,6 +2031,33 @@ class Services:
         caller gets `{"status": "failed", "error": …}`, not a traceback.
         """
         executor = self._require_executor()
+
+        # M-2/F-6: reject engine-owned keys BEFORE anything is read or written, on
+        # BOTH paths. A caller-set `threadId` would park a process run against a
+        # real chat thread — and on the chat path would overwrite the very anchor
+        # `trigger.py` step 2 resumes by. One rule, one call site (salesperson-ui
+        # S2 folded the chat path into the process path's pre-existing check).
+        caller_ctx = run_ctx or {}
+        self._reject_reserved_keys(caller_ctx, where="run ctx")
+        # …and bound its size in the SERVICE too (F-2), for the same reason
+        # `submit_workflow_input` and the timer sweep already do and `schemas.py`
+        # states outright: MCP and direct service callers never see a schema, and
+        # `trigger.maybe_trigger`'s S2 pass-through is exactly such a caller. An
+        # oversized ctx is not merely a fat graph property — the executor re-emits
+        # the WHOLE ctx as a `CONTEXT:` turn on every LLM call, so it costs context
+        # window every turn for the life of the run.
+        # Bounds the CALLER's ctx, not the merged result: the chat path then adds
+        # its own `CHAT_START_ANCHOR_KEYS` anchor, so what that path writes may
+        # exceed this by the anchor's own ~20 characters. Deliberate — one call
+        # site ahead of BOTH paths (and ahead of any read) beats an exact bound
+        # duplicated into two branches that are self-contained by doctrine.
+        caller_ctx_json = self._dump_ctx(caller_ctx)
+        if len(caller_ctx_json) > MAX_CONFIG_LEN:
+            raise WorkflowInputRejectedError(
+                f"run ctx would be {len(caller_ctx_json)} characters, over the "
+                f"{MAX_CONFIG_LEN}-character bound"
+            )
+
         run_id = self._id()
         started_at = self._clock()
         budget = executor.step_budget if max_steps is None else max_steps
@@ -2023,8 +2065,8 @@ class Services:
         if trigger_msg_id is not None:
             msg = self._repo.get_message(ctx.ws, msg_id=trigger_msg_id)
             thread_id = msg["threadId"] if msg else ""
-            initial_ctx = json.dumps(
-                {"threadId": thread_id}, separators=(",", ":"), sort_keys=True
+            initial_ctx = self._dump_ctx(
+                self._chat_start_ctx(caller_ctx, thread_id=thread_id)
             )
             started = self._repo.start_run(
                 ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
@@ -2032,11 +2074,7 @@ class Services:
                 ctx=initial_ctx, trace=trace, max_steps=budget,
             )
         else:
-            # M-2/F-6: reject engine-owned keys BEFORE anything is written. A
-            # caller-set `threadId` would park this run against a real chat thread
-            # and let `trigger.py` step 2 advance it on the next ordinary message.
-            self._reject_reserved_keys(run_ctx or {}, where="run ctx")
-            initial_ctx = self._dump_ctx(run_ctx or {})
+            initial_ctx = self._dump_ctx(caller_ctx)
             started = self._repo.start_run_untriggered(
                 ctx.ws, run_id=run_id, def_key=def_key, def_version=version,
                 started_at=started_at, ctx=initial_ctx, trace=trace,
@@ -2164,6 +2202,25 @@ class Services:
     @staticmethod
     def _dump_ctx(value: dict[str, Any]) -> str:
         return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+    @staticmethod
+    def _chat_start_ctx(
+        caller_ctx: dict[str, Any], *, thread_id: str
+    ) -> dict[str, Any]:
+        """The chat path's initial run ctx: caller keys, engine anchor merged LAST.
+
+        Two contracts, both asserted directly at this seam because neither is
+        reachable through `start_workflow_run` once `_reject_reserved_keys` has run
+        (salesperson-ui F-3 — a guard that makes the behaviour below it unreachable
+        also makes it untestable from outside, so the seam is tested from inside):
+
+          1. the anchor **always wins** a key collision — the §2.4 resume denorm
+             anchor is the engine's, never a caller's;
+          2. the anchor's key set is exactly `CHAT_START_ANCHOR_KEYS`, which is what
+             lets that module constant stand in for this function in the
+             `CHAT_START_ANCHOR_KEYS <= RESERVED_CTX_KEYS` invariant test.
+        """
+        return {**caller_ctx, "threadId": thread_id}
 
     def _validate_against_parked_step(
         self, ctx: CallContext, run: dict[str, Any], input: dict[str, Any]
@@ -2864,7 +2921,47 @@ class Services:
         )
         return {"name": result["name"], "deliveryAddress": result["deliveryAddress"]}
 
-    # ── §18 Structured natural-language query generation (K-055 M6) ───────────
+    # ── §18 Storefront order reads (QUERIES.md §18, salesperson-ui S4) ────────
+    #
+    # `docs/plans/salesperson-ui-graph.md` §10, the two primitives the storefront
+    # needs and §16/§17 did not provide. Both are **thin on purpose**: they exist
+    # so `storefront.py` never holds Cypher (`falkor-chat/AGENTS.md` rule 1,
+    # `DESIGN.md` §14.2), and `ctx.actor` is `customerId` throughout — the same
+    # workspace-local `Customer` anchor §16/§17 already resolve it to. No
+    # `ensure_customer` call applies: both are reads.
+
+    def get_current_order(self, ctx: CallContext) -> dict[str, Any] | None:
+        """This customer's current order — the most recently *placed* one,
+        whatever its status (AC-7) — or `None` when they have placed none (or
+        have no `Customer` node at all; the two collapse, and the storefront
+        renders "no order" for both).
+
+        Not "the most recent non-terminal order": the demo walks
+        `placed → fulfilled → delivered` and the point is to *watch* the status
+        change, so a non-terminal filter would make the order card vanish mid-
+        demonstration (graph note §10.1).
+        """
+        return self._repo.get_customer_current_order(ctx.ws, customer_id=ctx.actor)
+
+    def order_belongs_to_customer(
+        self, ctx: CallContext, *, order_id: str
+    ) -> dict[str, Any]:
+        """`{"owned": bool, "status": str | None}` — always both fields, never
+        `None`: an unknown order, an unknown customer and another participant's
+        order are all `{"owned": False, "status": None}` (graph note §10.2).
+
+        **The ownership gate `advance_order` does not have.** That method's
+        guarded CAS is keyed on `orderId` alone, so a caller acting on behalf of
+        a participant must check this first — otherwise anyone who learned
+        another participant's `orderId` could cancel their order. `status` comes
+        back with it so the caller can decide `404` before attempting the CAS.
+        """
+        return self._repo.order_belongs_to_customer(
+            ctx.ws, customer_id=ctx.actor, order_id=order_id,
+        )
+
+    # ── Structured NL query generation (K-055 M6) — no QUERIES.md section ─────
+    #    (compiler-produced Cypher, not a query 1:1-mapped to QUERIES.md)
     #
     # `docs/plans/workflow-nl-query-generation.md` §3.1 step 5 / §4 step 3.
 

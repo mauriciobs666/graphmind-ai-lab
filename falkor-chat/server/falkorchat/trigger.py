@@ -52,13 +52,19 @@ class WorkflowTrigger:
 
     def maybe_trigger(
         self, ctx: CallContext, *, thread_id: str, msg_id: str, text: str,
-        role: str, mentions: list[str] | None,
+        role: str, mentions: list[str] | None, run_ctx: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Apply the §6 ordered rule; return the acting handler's result (or `None`).
 
         `text` is required for the step-4 responder fall-through (`maybe_respond` needs it);
         `start_workflow_run` does not use it — it reads the trigger message from the graph
         by `trigger_msg_id` (`msg_id`).
+
+        `run_ctx` (salesperson-ui S2) rides to **step 3 only** — the caller's own initial
+        run ctx, merged by the service alongside the `{"threadId": …}` anchor. Steps 2 and
+        4 never see it: a resuming run already carries its ctx, and the responder has no
+        run at all. Engine-owned keys are rejected by the service (`RESERVED_CTX_KEYS`).
+        Omitted ⇒ `None` ⇒ the pre-S2 chat ctx, exactly `{"threadId": …}`.
         """
         # 1. loop-guard — never act on an agent-authored message.
         if role == "assistant":
@@ -75,7 +81,7 @@ class WorkflowTrigger:
         if self._def_key and self._agent_id in (mentions or []):
             return self._services.start_workflow_run(
                 ctx, def_key=self._def_key, version=self._def_version,
-                trigger_msg_id=msg_id, trace=self._trace,
+                trigger_msg_id=msg_id, trace=self._trace, run_ctx=run_ctx,
             )
 
         # 4. fall-through — no workflow applies; hand off to the held M2 responder.

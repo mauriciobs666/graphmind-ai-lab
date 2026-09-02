@@ -186,6 +186,64 @@ def test_triggered_start_still_creates_the_trigger_edge(svc, wf_repo):
     assert edges[0][0] == "trig1"
 
 
+def _seed_trigger_message(repo):
+    """Channel → thread → user → first message `trig1` on thread `t1`."""
+    repo.create_channel("test", channel_id="c1", name="general", created_at=100)
+    repo.create_thread("test", channel_id="c1", thread_id="t1", title="x",
+                       created_at=110)
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.post_first_message(
+        "test", thread_id="t1", msg_id="trig1", author_id="u1", text="go",
+        role="user", created_at=120,
+    )
+
+
+def test_triggered_start_merges_the_callers_run_ctx_into_the_thread_anchor(
+    svc, wf_repo
+):
+    # salesperson-ui S2: the chat path now carries caller ctx alongside the §2.4
+    # anchor, live against the real graph.
+    _materialize(wf_repo, steps=APPROVAL_STEPS, transitions=APPROVAL_TRANSITIONS,
+                 start_key="approval")
+    _seed_trigger_message(wf_repo)
+
+    out = svc.start_workflow_run(
+        CTX, def_key="access-request", version="1", trigger_msg_id="trig1",
+        run_ctx={"language": "pt-BR"},
+    )
+
+    run = wf_repo.get_run("test", run_id=out["runId"])
+    assert json.loads(run["ctx"]) == {"threadId": "t1", "language": "pt-BR"}
+
+
+@pytest.mark.parametrize("reserved", ["threadId", "error", "timerFired"])
+def test_reserved_key_in_a_triggered_start_ctx_is_rejected_writing_nothing(
+    svc, wf_repo, reserved
+):
+    # M-2 on the chat path, reusing the process path's rule. "Before any write" is
+    # the load-bearing part: the graph must be untouched — no run, and the trigger
+    # message left exactly as it was.
+    _materialize(wf_repo, steps=APPROVAL_STEPS, transitions=APPROVAL_TRANSITIONS,
+                 start_key="approval")
+    _seed_trigger_message(wf_repo)
+    msgs_before = wf_repo._graph("test").ro_query(
+        "MATCH (m:Message) RETURN count(m)"
+    ).result_set[0][0]
+
+    with pytest.raises(WorkflowInputRejectedError):
+        svc.start_workflow_run(
+            CTX, def_key="access-request", version="1", trigger_msg_id="trig1",
+            run_ctx={reserved: "t1", "language": "pt-BR"},
+        )
+
+    assert wf_repo._graph("test").ro_query(
+        "MATCH (r:WorkflowRun) RETURN count(r)"
+    ).result_set[0][0] == 0
+    assert wf_repo._graph("test").ro_query(
+        "MATCH (m:Message) RETURN count(m)"
+    ).result_set[0][0] == msgs_before
+
+
 def test_untriggered_start_on_a_missing_snapshot_starts_nothing(svc, wf_repo):
     with pytest.raises(WorkflowRunNotFoundError):
         svc.start_workflow_run(CTX, def_key="ghost", version="1")

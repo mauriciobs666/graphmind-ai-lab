@@ -26,11 +26,13 @@ def _probe(conn, cypher: str):
 
 
 def _add_to_channel(conn, *, member_id: str, channel_id: str):
-    """Raw MEMBER_OF write (test-only; no repository method exists yet — QUERIES.md
-    §2 "Add user to channel" is a documented, verified query but not yet wrapped
-    by a repository method, same gap `seed_demo.sh` fills with raw Cypher). Anchors
-    on `mem` via the same label-agnostic `userId OR agentId` pattern
-    `advance_cursor` already uses, so one helper covers both User and Agent members.
+    """Raw MEMBER_OF write, test-only. `add_channel_member` (QUERIES.md §18.2)
+    now wraps this write, but this helper predates it and still has five callers
+    that seed fixtures older than §18; it is kept because it is a fixture tool,
+    not because the write is unwrapped. New fixtures should prefer
+    `repo.add_channel_member`. Anchors on `mem` via the same label-agnostic
+    `userId OR agentId` pattern `advance_cursor` already uses, so one helper
+    covers both User and Agent members.
     """
     db.workspace_graph(conn, "test").query(
         "MATCH (mem) WHERE mem.userId = $memberId OR mem.agentId = $memberId "
@@ -2794,7 +2796,7 @@ def test_list_snapshots_empty_when_none(wf_repo):
 # `Product` lives in the global `reference` graph (plan §3.1) — no repository
 # write method exists (the catalog is seed-script-only, `scripts/seed_catalog.sh`,
 # not built in this cluster), so fixtures are seeded with a raw, test-only write,
-# the same posture `_add_to_channel` already takes for an un-wrapped write. The
+# the same fixture-construction posture `_raw`/`_add_to_channel` take. The
 # `wf_repo` fixture wipes `reference`'s node data (schema — the Product indexes +
 # UNIQUE constraint from `bootstrap_schema.sh` — survives), so each test starts
 # from an empty-but-schemaed catalog.
@@ -3548,3 +3550,1027 @@ def test_compiled_query_type_only_accepted_by_run_readonly_query():
             if arg.annotation is not None and _mentions_compiled_query(arg.annotation):
                 accepting.append(node.name)
     assert accepting == ["run_readonly_query"]
+
+
+# ── §18 Storefront participants & resets (salesperson-ui S4) ──────────────────
+#
+# Integration fixture mirroring `docs/plans/salesperson-ui-graph.md` §2.1's own
+# probe fixture: a **non-participant survivor subgraph** (`seed_demo.sh`'s shape
+# — a `User` with no `tokenHash`, a `Channel`/`Thread`/`Message` chain, cursors,
+# `WorkspaceConfig`, corpus, snapshot, commerce) alongside participants
+# provisioned through `ensure_participant`.
+#
+# **Why the survivor assertions here are written by identity, not by label.**
+# Victims and survivors share the labels `Channel`, `Thread` and `Message`, so a
+# label-only survivor check is structurally incapable of catching an over-broad
+# delete: with both guards removed, the note's §2.3 row B run destroys
+# `demo-welcome`, its three messages and both its cursors while the label counts
+# afterwards are **byte-identical** to a clean run's. Every "survives" assertion
+# below therefore names the node.
+
+
+_AGENT = "assistant"
+
+
+def _raw(conn, cypher: str, params: dict | None = None):
+    """Test-only raw write into `ws:test` — fixture construction, never app
+    Cypher (same test-only carve-out as `_add_to_channel` above). Used for the
+    shapes no repository method can produce: an off-chain `Message`, a channel
+    carrying a *mismatched* `participantId`, and the corpus/snapshot survivors.
+    """
+    return db.workspace_graph(conn, "test").query(cypher, params or {}).result_set
+
+
+def _one(conn, cypher: str):
+    rows = _probe(conn, cypher)
+    return rows[0][0] if rows else None
+
+
+def _seed_survivors(repo, conn):
+    """Everything §4.8 says must survive **both** resets, `seed_demo.sh`'s
+    `demo-general`/`demo-welcome` included. Nothing here carries a `tokenHash`
+    (G1) and no channel here carries a `participantId` (G2).
+    """
+    repo.ensure_agent("test", agent_id=_AGENT, name="Demo agent", created_at=90)
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+    repo.ensure_user("test", user_id="u2", display_name="Adversarial human")
+    # u2 is adversarial: its own `channelId`/`threadId` *name the demo channel
+    # and thread*, so an id-equality "own channel" check would hand it
+    # `demo-general` as a delete target. G2 is a provenance check, so it does not.
+    _raw(
+        conn,
+        "MATCH (u:User {userId: 'u2'}) "
+        "SET u.channelId = 'demo-general', u.threadId = 'demo-welcome'",
+    )
+    repo.create_channel("test", channel_id="demo-general", name="general", created_at=100)
+    repo.create_thread(
+        "test", channel_id="demo-general", thread_id="demo-welcome",
+        title="Welcome", created_at=101,
+    )
+    for member, role in (("u1", "member"), ("u2", "member"), (_AGENT, "assistant")):
+        repo.add_channel_member(
+            "test", member_id=member, channel_id="demo-general", role=role,
+            joined_at=102,
+        )
+    repo.post_first_message(
+        "test", thread_id="demo-welcome", msg_id="dm1", author_id="u1",
+        text="hello", role="user", created_at=110,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="demo-welcome", msg_id="dm2", author_id=_AGENT,
+        text="hi there", role="assistant", created_at=111,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id="demo-welcome", msg_id="dm3", author_id="u1",
+        text="thanks", role="user", created_at=112,
+    )
+    repo.advance_cursor(
+        "test", me_id="u1", thread_id="demo-welcome",
+        cursor_id="u1:demo-welcome", now=113, now_msg_id="dm3",
+    )
+    repo.advance_cursor(
+        "test", me_id=_AGENT, thread_id="demo-welcome",
+        cursor_id=f"{_AGENT}:demo-welcome", now=113, now_msg_id="dm3",
+    )
+    # K-042's per-workspace model-override singleton — the single most expensive
+    # node to lose (§4.8: a sweep that takes it silently undoes K-056's
+    # Ministral re-point for every subsequent turn).
+    repo.write_model_overrides(
+        "test", agent="lmstudio/mistralai/ministral-3-3b", at=115, by="u1",
+    )
+    # GraphRAG corpus, incl. the boundary edge: a surviving Chunk DERIVED_FROM a
+    # participant Message that the reset deletes.
+    _raw(
+        conn,
+        "CREATE (d:Document {documentId: 'doc1', title: 'Handbook'}) "
+        "CREATE (c:Chunk {chunkId: 'chunk1', text: 'a chunk'}) "
+        "CREATE (e:Entity {entityId: 'ent1', name: 'Acme', type: 'org'}) "
+        "CREATE (d)-[:HAS_CHUNK]->(c) "
+        "CREATE (c)-[:ABOUT]->(e)",
+    )
+    # A materialized def snapshot + its steps — `verify_salesperson.sh`'s subject.
+    repo.materialize_snapshot(
+        "test", key="triage", version="1", name="Triage", kind="conversation",
+        start_key="intake", steps=RUN_STEPS, transitions=RUN_TRANSITIONS,
+    )
+    # The non-participant's own commerce subgraph (`customerId = 'u1'` is never
+    # in `pids`, so it is never in scope for either reset).
+    repo.ensure_customer("test", customer_id="u1", now=120)
+    repo.ensure_cart("test", customer_id="u1", now=120)
+    repo.add_to_cart("test", customer_id="u1", product_id="prod1", qty=1, now=120)
+    repo.place_order(
+        "test", customer_id="u1", order_id="u1-o1", now=121,
+        lines=[{"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+                "quantity": 1, "lineTotal": 5.0}],
+    )
+    repo.add_to_cart("test", customer_id="u1", product_id="prod2", qty=2, now=122)
+    # F9's off-chain message: carries `threadId` but is not in any HEAD/NEXT
+    # chain, so the structural walk cannot reach it. Documented to survive both.
+    _raw(
+        conn,
+        "CREATE (:Message {msgId: 'orphan-1', text: 'off-chain', role: 'user', "
+        "                  createdAt: 130, threadId: 'th-p-aaa'})",
+    )
+
+
+def _seed_participant(repo, conn, pid, *, at, orders=1, cursors=True):
+    """One participant in the shape `ensure_participant` mints, plus a full
+    turn's worth of state: three messages (the middle one **`Agent`-authored**),
+    read-cursors, a `WorkflowRun`/`StepRun`/`TraceEvent` trail and a
+    `Customer`/`Cart`/`CartItem`/`Order`/`OrderLine` subgraph.
+    """
+    status = repo.ensure_participant(
+        "test", participant_id=pid, display_name=f"P {pid}",
+        token_hash=f"hash-{pid}", language="en", channel_id=f"ch-{pid}",
+        thread_id=f"th-{pid}", thread_title="Chat", agent_id=_AGENT, now=at,
+    )
+    assert status["created"] is True
+    repo.post_first_message(
+        "test", thread_id=f"th-{pid}", msg_id=f"{pid}-m1", author_id=pid,
+        text="hi", role="user", created_at=at + 1,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id=f"th-{pid}", msg_id=f"{pid}-m2", author_id=_AGENT,
+        text="how can I help?", role="assistant", created_at=at + 2,
+    )
+    repo.post_subsequent_message(
+        "test", thread_id=f"th-{pid}", msg_id=f"{pid}-m3", author_id=pid,
+        text="a speaker please", role="user", created_at=at + 3,
+    )
+    if cursors:
+        repo.advance_cursor(
+            "test", me_id=pid, thread_id=f"th-{pid}", cursor_id=f"{pid}:th-{pid}",
+            now=at + 4, now_msg_id=f"{pid}-m3",
+        )
+        repo.advance_cursor(
+            "test", me_id=_AGENT, thread_id=f"th-{pid}",
+            cursor_id=f"{_AGENT}:th-{pid}", now=at + 4, now_msg_id=f"{pid}-m3",
+        )
+    repo.start_run(
+        "test", run_id=f"{pid}-r1", def_key="triage", def_version="1",
+        started_at=at + 5, trigger_msg_id=f"{pid}-m1",
+        ctx='{"threadId":"th-' + pid + '"}', trace=True, max_steps=12,
+    )
+    repo.record_step_and_advance(
+        "test", run_id=f"{pid}-r1", step_run_id=f"{pid}-sr1", step_status="ok",
+        started_at=at + 5, ended_at=at + 6, input="{}", output="{}",
+        to_step_uid=_uid("research"),
+    )
+    repo.append_trace_event(
+        "test", step_run_id=f"{pid}-sr1", trace_id=f"{pid}-te1", seq=0,
+        kind="step.start", at=at + 6, payload="{}",
+    )
+    repo.ensure_customer("test", customer_id=pid, now=at + 7)
+    repo.ensure_cart("test", customer_id=pid, now=at + 7)
+    repo.add_to_cart("test", customer_id=pid, product_id="prod1", qty=1, now=at + 7)
+    for n in range(orders):
+        repo.place_order(
+            "test", customer_id=pid, order_id=f"{pid}-o{n + 1}", now=at + 8 + n,
+            lines=[{"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+                    "quantity": 1, "lineTotal": 5.0}],
+        )
+        repo.add_to_cart(
+            "test", customer_id=pid, product_id="prod2", qty=1, now=at + 8 + n,
+        )
+    return status
+
+
+def _seed_storefront(repo, conn, *, participants=("p-aaa", "p-bbb")):
+    _seed_survivors(repo, conn)
+    for i, pid in enumerate(participants):
+        _seed_participant(repo, conn, pid, at=200 + 100 * i)
+
+
+def _assert_demo_subgraph_intact(conn):
+    """The assertion a label check structurally cannot make (note §2.3 row B):
+    the non-participant `Channel`/`Thread`/`Message` chain named by identity,
+    with its structure (HEAD/NEXT/TAIL/POSTED_BY) still whole."""
+    assert _one(conn, "MATCH (c:Channel {channelId: 'demo-general'}) RETURN c.name") == "general"
+    assert _one(conn, "MATCH (t:Thread {threadId: 'demo-welcome'}) RETURN t.title") == "Welcome"
+    chain = _probe(
+        conn,
+        "MATCH (t:Thread {threadId: 'demo-welcome'})-[:HEAD]->(h:Message)"
+        "-[:NEXT*0..]->(m:Message) RETURN m.msgId ORDER BY m.createdAt",
+    )
+    assert [row[0] for row in chain] == ["dm1", "dm2", "dm3"]
+    assert _one(
+        conn, "MATCH (t:Thread {threadId: 'demo-welcome'})-[:TAIL]->(m) RETURN m.msgId"
+    ) == "dm3"
+    authors = _probe(
+        conn,
+        "MATCH (m:Message)-[:POSTED_BY]->(a) WHERE m.msgId IN ['dm1','dm2','dm3'] "
+        "RETURN m.msgId, coalesce(a.userId, a.agentId) ORDER BY m.msgId",
+    )
+    assert authors == [["dm1", "u1"], ["dm2", _AGENT], ["dm3", "u1"]]
+    assert _one(conn, "MATCH (u:User {userId: 'u1'}) RETURN u.displayName") == "Demo human"
+    assert _one(conn, "MATCH (u:User {userId: 'u2'}) RETURN u.channelId") == "demo-general"
+    assert _one(conn, "MATCH (a:Agent {agentId: 'assistant'}) RETURN a.name") == "Demo agent"
+    # the demo channel's roster survives (its MEMBER_OF edges are not detached)
+    members = _probe(
+        conn,
+        "MATCH (mem)-[:MEMBER_OF]->(:Channel {channelId: 'demo-general'}) "
+        "RETURN coalesce(mem.userId, mem.agentId) AS id ORDER BY id",
+    )
+    # a superset check: a cross-member participant is a genuine member too, and
+    # survives "reset mine" (its `User` is kept). `reset_all` deletes that
+    # `User`, so the exact roster is pinned there instead.
+    assert {row[0] for row in members} >= {_AGENT, "u1", "u2"}
+
+
+def _assert_common_survivors(conn):
+    """§4.8's survivor column, by label — the *documentation* check. It is here
+    because the plan requires it, not because it is the safety net: see this
+    section's header for why identity assertions carry the weight."""
+    assert _one(
+        conn, "MATCH (w:WorkspaceConfig) RETURN w.agentModelOverride"
+    ) == "lmstudio/mistralai/ministral-3-3b"
+    assert _one(conn, "MATCH (d:Document {documentId: 'doc1'}) RETURN d.title") == "Handbook"
+    assert _one(conn, "MATCH (c:Chunk {chunkId: 'chunk1'}) RETURN c.text") == "a chunk"
+    assert _one(conn, "MATCH (e:Entity {entityId: 'ent1'}) RETURN e.name") == "Acme"
+    assert _one(
+        conn, "MATCH (s:WorkflowDefSnapshot {key: 'triage'}) RETURN s.version"
+    ) == "1"
+    assert _one(conn, "MATCH (s:Step) RETURN count(s)") == len(RUN_STEPS)
+    # the non-participant's commerce subgraph
+    assert _one(conn, "MATCH (c:Customer {customerId: 'u1'}) RETURN c.customerId") == "u1"
+    assert _one(conn, "MATCH (o:Order {orderId: 'u1-o1'}) RETURN o.status") == "placed"
+    assert _one(
+        conn, "MATCH (:Order {orderId: 'u1-o1'})-[:HAS_LINE]->(l:OrderLine) RETURN count(l)"
+    ) == 1
+    assert _one(conn, "MATCH (c:Cart {customerId: 'u1'}) RETURN count(c)") == 1
+    assert _one(
+        conn, "MATCH (:Cart {customerId: 'u1'})-[:HAS_ITEM]->(i:CartItem) RETURN count(i)"
+    ) == 1
+    # F9: the off-chain message the structural walk cannot reach
+    assert _one(conn, "MATCH (m:Message {msgId: 'orphan-1'}) RETURN m.text") == "off-chain"
+
+
+# ── §18.1 ensure_participant ─────────────────────────────────────────────────
+
+
+def test_ensure_participant_writes_the_whole_join_atomically(repo, conn):
+    repo.ensure_agent("test", agent_id=_AGENT, name="Demo agent", created_at=90)
+
+    status = repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Ada", token_hash="h1",
+        language="pt-BR", channel_id="ch-aaa", thread_id="th-aaa",
+        thread_title="Chat", agent_id=_AGENT, now=200,
+    )
+
+    assert status["created"] is True
+    assert status["existed"] is False
+    assert status["agentMissing"] is False
+    assert status["channelId"] == "ch-aaa"
+    assert status["threadId"] == "th-aaa"
+    assert status["language"] == "pt-BR"
+    record = repo.get_participant_record("test", participant_id="p-aaa")
+    assert record == {
+        "participantId": "p-aaa", "displayName": "Ada", "tokenHash": "h1",
+        "channelId": "ch-aaa", "threadId": "th-aaa", "language": "pt-BR",
+        "joinedAt": 200,
+    }
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-aaa'}) RETURN c.participantId") == "p-aaa"
+    assert _one(
+        conn, "MATCH (:Channel {channelId: 'ch-aaa'})-[:HAS_THREAD]->(t) RETURN t.threadId"
+    ) == "th-aaa"
+    members = _probe(
+        conn,
+        "MATCH (mem)-[r:MEMBER_OF]->(:Channel {channelId: 'ch-aaa'}) "
+        "RETURN coalesce(mem.userId, mem.agentId) AS id, r.role ORDER BY id",
+    )
+    assert members == [[_AGENT, "assistant"], ["p-aaa", "member"]]
+
+
+def test_ensure_participant_replay_reads_through_and_writes_nothing(repo, conn):
+    """The restart-survival path (plan §4.3): a replay returns the **stored**
+    ids/language, and a fresh `token_hash` is *not* written — this is an
+    idempotent ensure, never a token-rotation path."""
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+    repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Ada", token_hash="h1",
+        language="pt-BR", channel_id="ch-aaa", thread_id="th-aaa",
+        thread_title="Chat", agent_id=_AGENT, now=200,
+    )
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    status = repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Someone else",
+        token_hash="h-NEW", language="es", channel_id="ch-OTHER",
+        thread_id="th-OTHER", thread_title="Chat", agent_id=_AGENT, now=300,
+    )
+
+    assert status["created"] is False
+    assert status["existed"] is True
+    assert status["existedParticipant"] is True
+    assert status["channelId"] == "ch-aaa"
+    assert status["threadId"] == "th-aaa"
+    assert status["language"] == "pt-BR"
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+    assert _one(conn, "MATCH (u:User {userId: 'p-aaa'}) RETURN u.tokenHash") == "h1"
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-OTHER'}) RETURN count(c)") == 0
+
+
+def test_ensure_participant_refuses_an_agent_id(repo, conn):
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+
+    with pytest.raises(MemberIdCollisionError, match="already held by an Agent"):
+        repo.ensure_participant(
+            "test", participant_id=_AGENT, display_name="Ada", token_hash="h1",
+            language="en", channel_id="ch-x", thread_id="th-x",
+            thread_title="Chat", agent_id=_AGENT, now=200,
+        )
+
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-x'}) RETURN count(c)") == 0
+
+
+def test_ensure_participant_refuses_a_non_participant_user_id(repo, conn):
+    """F7: without `existedParticipant` this row reads as an idempotent success
+    and the caller builds a participant record out of three `None`s and a token
+    the graph never stored."""
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+
+    with pytest.raises(MemberIdCollisionError, match="non-participant"):
+        repo.ensure_participant(
+            "test", participant_id="u1", display_name="Ada", token_hash="h1",
+            language="en", channel_id="ch-x", thread_id="th-x",
+            thread_title="Chat", agent_id=_AGENT, now=200,
+        )
+
+    assert _one(conn, "MATCH (u:User {userId: 'u1'}) RETURN u.tokenHash") is None
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-x'}) RETURN count(c)") == 0
+
+
+def test_ensure_participant_without_the_demo_agent_writes_nothing(repo, conn):
+    status = repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Ada", token_hash="h1",
+        language="en", channel_id="ch-aaa", thread_id="th-aaa",
+        thread_title="Chat", agent_id="missing-agent", now=200,
+    )
+
+    assert status["agentMissing"] is True
+    assert status["created"] is False
+    assert _one(conn, "MATCH (n) RETURN count(n)") == 0
+
+
+# ── §18.2 add_channel_member ─────────────────────────────────────────────────
+
+
+def test_add_channel_member_is_idempotent_and_keeps_the_first_role(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+    repo.create_channel("test", channel_id="demo-general", name="general", created_at=100)
+
+    assert repo.add_channel_member(
+        "test", member_id="u1", channel_id="demo-general", role="member", joined_at=101
+    ) is True
+    assert repo.add_channel_member(
+        "test", member_id="u1", channel_id="demo-general", role="owner", joined_at=999
+    ) is True
+
+    edges = _probe(
+        conn,
+        "MATCH (:User {userId: 'u1'})-[r:MEMBER_OF]->(:Channel {channelId: 'demo-general'}) "
+        "RETURN r.role, r.joinedAt",
+    )
+    assert edges == [["member", 101]]
+
+
+def test_add_channel_member_reports_a_missing_anchor(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+
+    assert repo.add_channel_member(
+        "test", member_id="u1", channel_id="no-such", role="member", joined_at=101
+    ) is False
+    assert repo.add_channel_member(
+        "test", member_id="nobody", channel_id="no-such", role="member", joined_at=101
+    ) is False
+
+
+# ── §18.3 get/set/list participant records ───────────────────────────────────
+
+
+def test_get_participant_record_is_none_for_non_participants(repo):
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+
+    assert repo.get_participant_record("test", participant_id="u1") is None
+    assert repo.get_participant_record("test", participant_id=_AGENT) is None
+    assert repo.get_participant_record("test", participant_id="no-such") is None
+
+
+def test_set_participant_record_updates_only_the_provided_fields(repo):
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+    repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Ada", token_hash="h1",
+        language="en", channel_id="ch-aaa", thread_id="th-aaa",
+        thread_title="Chat", agent_id=_AGENT, now=200,
+    )
+
+    updated = repo.set_participant_record("test", participant_id="p-aaa", language="es")
+
+    assert updated["language"] == "es"
+    assert updated["displayName"] == "Ada"
+    assert updated["tokenHash"] == "h1"
+    assert updated["threadId"] == "th-aaa"
+    assert updated["channelId"] == "ch-aaa"
+
+
+def test_set_participant_record_refuses_a_non_participant(repo, conn):
+    """The `tokenHash IS NOT NULL` anchor is a guard, not a filter: without it
+    this call would mint a "participant" whose channel carries no
+    `participantId` — the unscoped shape both resets can only skip."""
+    repo.ensure_user("test", user_id="u1", display_name="Demo human")
+
+    assert repo.set_participant_record(
+        "test", participant_id="u1", token_hash="stolen", language="es"
+    ) is None
+
+    assert _one(conn, "MATCH (u:User {userId: 'u1'}) RETURN u.tokenHash") is None
+    assert _one(conn, "MATCH (u:User {userId: 'u1'}) RETURN u.language") is None
+
+
+def test_set_participant_record_cannot_repoint_the_scope_denorm(repo, conn):
+    """`channelId` and `threadId` together are the server-resolved scope denorm
+    the storefront reads from, and both are decided **in-query** —
+    `ensure_participant` at join, `reset_participant` at every "reset mine".
+    Neither is settable here: G1 proves the target *is* a participant, but this
+    query cannot prove a caller-supplied thread lies inside that participant's
+    own channel, so a settable `threadId` would be the one cross-participant
+    lever in §18. Pinned executably so a re-add has to arrive with the
+    containment check in the `MATCH`, next to G1/G2."""
+    _seed_storefront(repo, conn)
+
+    with pytest.raises(TypeError):
+        repo.set_participant_record("test", participant_id="p-aaa", thread_id="th-p-bbb")
+    with pytest.raises(TypeError):
+        repo.set_participant_record("test", participant_id="p-aaa", channel_id="ch-p-bbb")
+
+    updated = repo.set_participant_record(
+        "test", participant_id="p-aaa", display_name="Ada 2", token_hash="h2",
+        language="es",
+    )
+
+    assert updated["threadId"] == "th-p-aaa"
+    assert updated["channelId"] == "ch-p-aaa"
+    assert repo.get_participant_record(
+        "test", participant_id="p-bbb"
+    )["threadId"] == "th-p-bbb"
+
+
+def test_set_participant_record_is_idempotent(repo, conn):
+    repo.ensure_agent("test", agent_id=_AGENT, created_at=90)
+    repo.ensure_participant(
+        "test", participant_id="p-aaa", display_name="Ada", token_hash="h1",
+        language="en", channel_id="ch-aaa", thread_id="th-aaa",
+        thread_title="Chat", agent_id=_AGENT, now=200,
+    )
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    first = repo.set_participant_record("test", participant_id="p-aaa", language="es")
+    second = repo.set_participant_record("test", participant_id="p-aaa", language="es")
+
+    assert first == second
+    assert repo.get_participant_record("test", participant_id="p-aaa") == second
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+
+
+def test_list_participants_excludes_non_participants(repo, conn):
+    _seed_storefront(repo, conn)
+
+    roster = repo.list_participants("test")
+
+    assert [p["participantId"] for p in roster] == ["p-aaa", "p-bbb"]
+    assert roster[0]["displayName"] == "P p-aaa"
+    assert roster[0]["channelId"] == "ch-p-aaa"
+    assert "tokenHash" not in roster[0]
+    assert repo.list_participants("test", limit=1) == roster[:1]
+
+
+def test_list_participants_is_empty_on_a_graph_of_non_participants(repo, conn):
+    _seed_survivors(repo, conn)
+
+    assert repo.list_participants("test") == []
+
+
+# ── §18.4 reset_participant ("reset mine") ───────────────────────────────────
+
+
+def _reset_mine(repo, pid, *, new_thread_id=None, now=900):
+    return repo.reset_participant(
+        "test", participant_id=pid,
+        new_thread_id=new_thread_id or f"th-{pid}-2", thread_title="Chat", now=now,
+    )
+
+
+def test_reset_participant_clears_its_own_subgraph_and_remints_the_thread(repo, conn):
+    _seed_storefront(repo, conn)
+
+    result = _reset_mine(repo, "p-aaa")
+
+    assert result["scoped"] is True
+    assert result["threadId"] == "th-p-aaa-2"
+    assert result["threadCount"] == 1
+    assert result["messageCount"] == 3
+    assert result["runCount"] == 1
+    assert result["stepRunCount"] == 1
+    assert result["traceCount"] == 1
+    assert result["orderCount"] == 1
+    assert result["cartItemCount"] == 1
+    assert result["deletedCount"] > 0
+    # identity survives; the transcript and commerce do not
+    assert repo.get_participant_record("test", participant_id="p-aaa")["threadId"] == "th-p-aaa-2"
+    assert _one(conn, "MATCH (t:Thread {threadId: 'th-p-aaa'}) RETURN count(t)") == 0
+    assert _one(
+        conn, "MATCH (:Channel {channelId: 'ch-p-aaa'})-[:HAS_THREAD]->(t) RETURN t.threadId"
+    ) == "th-p-aaa-2"
+    assert _one(conn, "MATCH (m:Message) WHERE m.msgId STARTS WITH 'p-aaa' RETURN count(m)") == 0
+    assert _one(conn, "MATCH (r:WorkflowRun {runId: 'p-aaa-r1'}) RETURN count(r)") == 0
+    assert _one(conn, "MATCH (s:StepRun {stepRunId: 'p-aaa-sr1'}) RETURN count(s)") == 0
+    assert _one(conn, "MATCH (t:TraceEvent {traceId: 'p-aaa-te1'}) RETURN count(t)") == 0
+    assert _one(conn, "MATCH (c:Customer {customerId: 'p-aaa'}) RETURN count(c)") == 0
+    assert _one(conn, "MATCH (o:Order {orderId: 'p-aaa-o1'}) RETURN count(o)") == 0
+    assert _one(conn, "MATCH (c:Cart {customerId: 'p-aaa'}) RETURN count(c)") == 0
+
+
+def test_reset_participant_is_thread_scoped_not_author_scoped(repo, conn):
+    """§4.8, locked: the `Agent`'s reply inside the participant's own thread is
+    deleted with the thread; the identical `Agent` reply in another
+    participant's thread is not."""
+    _seed_storefront(repo, conn)
+
+    _reset_mine(repo, "p-aaa")
+
+    assert _one(conn, "MATCH (m:Message {msgId: 'p-aaa-m2'}) RETURN count(m)") == 0
+    assert _one(conn, "MATCH (m:Message {msgId: 'p-bbb-m2'}) RETURN m.role") == "assistant"
+    assert _one(
+        conn,
+        "MATCH (m:Message {msgId: 'p-bbb-m2'})-[:POSTED_BY]->(a:Agent) RETURN a.agentId",
+    ) == _AGENT
+    assert _one(conn, "MATCH (m:Message {msgId: 'dm2'}) RETURN m.role") == "assistant"
+
+
+def test_reset_participant_leaves_every_other_participant_untouched(repo, conn):
+    _seed_storefront(repo, conn)
+
+    _reset_mine(repo, "p-aaa")
+
+    assert repo.get_participant_record("test", participant_id="p-bbb")["threadId"] == "th-p-bbb"
+    msgs = _probe(
+        conn,
+        "MATCH (t:Thread {threadId: 'th-p-bbb'})-[:HEAD]->(h)-[:NEXT*0..]->(m:Message) "
+        "RETURN m.msgId ORDER BY m.createdAt",
+    )
+    assert [row[0] for row in msgs] == ["p-bbb-m1", "p-bbb-m2", "p-bbb-m3"]
+    assert _one(conn, "MATCH (r:WorkflowRun {runId: 'p-bbb-r1'}) RETURN r.status") == "running"
+    assert _one(conn, "MATCH (o:Order {orderId: 'p-bbb-o1'}) RETURN o.status") == "placed"
+    assert _one(conn, "MATCH (c:Customer {customerId: 'p-bbb'}) RETURN count(c)") == 1
+
+
+def test_reset_participant_leaves_the_non_participant_subgraph_intact(repo, conn):
+    _seed_storefront(repo, conn)
+
+    _reset_mine(repo, "p-aaa")
+
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+
+
+def test_reset_participant_of_a_cross_member_leaves_the_demo_channel_whole(repo, conn):
+    """G2 is provenance, not membership: `p-ccc` is a genuine `MEMBER_OF`
+    `demo-general`, which carries no `participantId` and so is structurally
+    unreachable as a delete target."""
+    _seed_storefront(repo, conn)
+    _seed_participant(repo, conn, "p-ccc", at=400)
+    repo.add_channel_member(
+        "test", member_id="p-ccc", channel_id="demo-general", role="member",
+        joined_at=401,
+    )
+
+    result = _reset_mine(repo, "p-ccc")
+
+    assert result["scoped"] is True
+    assert result["threadCount"] == 1
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+
+
+def test_reset_participant_keeps_a_cursor_on_a_surviving_thread(repo, conn):
+    """P2's deliberate asymmetry: "reset mine" keeps the `User`, so its cursor
+    on a thread that **survives** is live read-state for a membership this
+    operation was never asked to touch. A cursor naming a thread that no longer
+    exists is swept."""
+    _seed_storefront(repo, conn)
+    _seed_participant(repo, conn, "p-ccc", at=400)
+    repo.add_channel_member(
+        "test", member_id="p-ccc", channel_id="demo-general", role="member",
+        joined_at=401,
+    )
+    repo.advance_cursor(
+        "test", me_id="p-ccc", thread_id="demo-welcome",
+        cursor_id="p-ccc:demo-welcome", now=402, now_msg_id="dm3",
+    )
+    repo.advance_cursor(
+        "test", me_id="p-ccc", thread_id="th-gone", cursor_id="p-ccc:th-gone",
+        now=403, now_msg_id="x",
+    )
+
+    result = _reset_mine(repo, "p-ccc")
+
+    assert result["cursorCount"] == 3  # own thread's (x2 owners) + the dead one
+    assert repo.get_cursor("test", cursor_id="p-ccc:demo-welcome") is not None
+    assert repo.get_cursor("test", cursor_id="p-ccc:th-gone") is None
+    assert repo.get_cursor("test", cursor_id="p-ccc:th-p-ccc") is None
+    assert repo.get_cursor("test", cursor_id=f"{_AGENT}:th-p-ccc") is None
+    assert repo.get_cursor("test", cursor_id="u1:demo-welcome") is not None
+    assert repo.get_cursor("test", cursor_id=f"{_AGENT}:demo-welcome") is not None
+
+
+@pytest.mark.parametrize("member_id", ["u1", "u2", _AGENT, "no-such-id"])
+def test_reset_participant_is_a_no_op_for_non_participants(repo, conn, member_id):
+    """G1: zero rows, nothing deleted, nothing created — including for `u2`,
+    whose own `channelId` names `demo-general`."""
+    _seed_storefront(repo, conn)
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    assert _reset_mine(repo, member_id) is None
+
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+
+
+def test_reset_participant_is_idempotent(repo, conn):
+    _seed_storefront(repo, conn)
+
+    first = _reset_mine(repo, "p-aaa", new_thread_id="th-p-aaa-2")
+    second = _reset_mine(repo, "p-aaa", new_thread_id="th-p-aaa-3")
+
+    assert first["messageCount"] == 3
+    assert second["messageCount"] == 0
+    assert second["threadCount"] == 1  # the empty thread the first reset minted
+    assert second["deletedCount"] == 1
+    assert repo.get_participant_record("test", participant_id="p-aaa")["threadId"] == "th-p-aaa-3"
+    threads = _probe(
+        conn,
+        "MATCH (:Channel {channelId: 'ch-p-aaa'})-[:HAS_THREAD]->(t) RETURN t.threadId",
+    )
+    assert threads == [["th-p-aaa-3"]]
+
+
+def test_reset_participant_with_a_mismatched_marker_is_a_total_no_op(repo, conn):
+    """F2, way 1 of 2 that G2 can fail to resolve. Unreachable on a healthy
+    graph — `create_channel` cannot write the marker and `ensure_participant`
+    writes it atomically — so the behaviour is a deliberate decision about an
+    already-corrupt graph, not a live path."""
+    _seed_storefront(repo, conn)
+    _raw(conn, "MATCH (c:Channel {channelId: 'ch-p-aaa'}) SET c.participantId = 'someone-else'")
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    result = _reset_mine(repo, "p-aaa")
+
+    assert result["scoped"] is False
+    assert result["deletedCount"] == 0
+    assert result["threadCount"] == 0
+    assert result["messageCount"] == 0
+    assert result["orderCount"] == 0
+    assert result["threadId"] == "th-p-aaa"  # NOT repointed
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+    assert _one(conn, "MATCH (t:Thread {threadId: 'th-p-aaa-2'}) RETURN count(t)") == 0
+
+
+def test_reset_participant_without_a_member_edge_is_a_total_no_op(repo, conn):
+    """F2, way 2 of 2: a participant with no `MEMBER_OF` into its own correctly
+    marked channel."""
+    _seed_storefront(repo, conn)
+    _raw(
+        conn,
+        "MATCH (:User {userId: 'p-aaa'})-[r:MEMBER_OF]->(:Channel {channelId: 'ch-p-aaa'}) "
+        "DELETE r",
+    )
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    result = _reset_mine(repo, "p-aaa")
+
+    assert result["scoped"] is False
+    assert result["deletedCount"] == 0
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+
+
+def test_reset_participant_with_a_duplicate_marker_raises_and_writes_nothing(repo, conn):
+    """The §12 response contract with the worst *silent* failure mode, and the
+    reason `reset_participant` must not swallow the raise.
+
+    Two `Channel`s carrying the same `participantId` make G2 resolve to two
+    rows, so the re-mint `FOREACH` fires twice with one `$newThreadId` and the
+    whole query aborts on `Thread.threadId`'s UNIQUE constraint. That is a
+    fail-safe, not a defect: it raises **and writes nothing**, so an already-
+    corrupt graph is never left half-reset. The caller propagates it as a `5xx`
+    and does **not** retry — a retry re-raises until the duplicate marker is
+    repaired. `reset_all_participants` still collects such a participant,
+    because it never re-mints."""
+    _seed_storefront(repo, conn)
+    _raw(conn, "CREATE (:Channel {channelId: 'ch-dupe', participantId: 'p-aaa'})")
+    _raw(
+        conn,
+        "MATCH (u:User {userId: 'p-aaa'}), (c:Channel {channelId: 'ch-dupe'}) "
+        "MERGE (u)-[:MEMBER_OF]->(c)",
+    )
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    with pytest.raises(ResponseError, match="unique constraint violation"):
+        _reset_mine(repo, "p-aaa")
+
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+    assert repo.get_participant_record(
+        "test", participant_id="p-aaa"
+    )["threadId"] == "th-p-aaa"
+    assert _one(conn, "MATCH (t:Thread {threadId: 'th-p-aaa'}) RETURN count(t)") == 1
+    assert _one(conn, "MATCH (t:Thread {threadId: 'th-p-aaa-2'}) RETURN count(t)") == 0
+    assert _one(
+        conn, "MATCH (m:Message) WHERE m.msgId STARTS WITH 'p-aaa' RETURN count(m)"
+    ) == 3
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+
+
+# ── §18.5 reset_all_participants ("reset everyone") ──────────────────────────
+
+
+def test_reset_all_deletes_every_participant_subgraph(repo, conn):
+    _seed_storefront(repo, conn)
+
+    result = repo.reset_all_participants("test")
+
+    assert result["userCount"] == 2
+    assert result["channelCount"] == 2
+    assert result["threadCount"] == 2
+    assert result["messageCount"] == 6
+    assert result["runCount"] == 2
+    assert result["stepRunCount"] == 2
+    assert result["traceCount"] == 2
+    assert result["customerCount"] == 2
+    assert result["orderCount"] == 2
+    assert result["unscopedCount"] == 0
+    assert result["unscopedIds"] == []
+    assert repo.list_participants("test") == []
+    assert repo.get_participant_record("test", participant_id="p-aaa") is None
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-p-aaa'}) RETURN count(c)") == 0
+    assert _one(conn, "MATCH (m:Message) WHERE m.msgId STARTS WITH 'p-' RETURN count(m)") == 0
+    assert _one(conn, "MATCH (r:WorkflowRun) RETURN count(r)") == 0
+    assert _one(conn, "MATCH (s:StepRun) RETURN count(s)") == 0
+    assert _one(conn, "MATCH (t:TraceEvent) RETURN count(t)") == 0
+
+
+def test_reset_all_leaves_the_non_participant_subgraph_intact(repo, conn):
+    """**The assertion a label check structurally cannot make** (S4's
+    done-condition, note §2.3 row B). With both guards removed the reset
+    destroys `demo-general`'s thread, its messages and its cursors while the
+    label counts stay byte-identical to a clean run's — so this test names every
+    survivor, and it is the reason the section's other checks are not enough.
+
+    It also pins the `reset_all` half of P2's one deliberate asymmetry: the
+    cross-member participant's cursor on the **surviving** `demo-welcome` is
+    deleted here, where `reset_participant` keeps it
+    (`test_reset_participant_keeps_a_cursor_on_a_surviving_thread`). `reset_all`
+    deletes the `User`, so keeping it would strand an unowned cursor — hence the
+    wide `HAS_CURSOR` sweep rather than `reset_participant`'s liveness-filtered
+    one. Without this cursor in the fixture that widening is unwitnessed:
+    `test_reset_all_leaves_no_unowned_read_cursor` only covers the *dead*-thread
+    class."""
+    _seed_storefront(repo, conn)
+    _seed_participant(repo, conn, "p-ccc", at=400)
+    repo.add_channel_member(
+        "test", member_id="p-ccc", channel_id="demo-general", role="member",
+        joined_at=401,
+    )
+    repo.advance_cursor(
+        "test", me_id="p-ccc", thread_id="demo-welcome",
+        cursor_id="p-ccc:demo-welcome", now=402, now_msg_id="dm3",
+    )
+
+    repo.reset_all_participants("test")
+
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+    # P2's asymmetry: the departing participant's cursor on a surviving thread
+    # goes with its `User`; the surviving members' cursors on it do not.
+    assert repo.get_cursor("test", cursor_id="p-ccc:demo-welcome") is None
+    assert repo.get_cursor("test", cursor_id="u1:demo-welcome") is not None
+    assert repo.get_cursor("test", cursor_id=f"{_AGENT}:demo-welcome") is not None
+    assert _one(
+        conn, "MATCH (rc:ReadCursor) WHERE NOT ()-[:HAS_CURSOR]->(rc) RETURN count(rc)"
+    ) == 0
+    # the cross-member participant's own MEMBER_OF edge went with its deleted
+    # `User`; the demo channel's own roster is exactly the three survivors
+    roster = _probe(
+        conn,
+        "MATCH (mem)-[:MEMBER_OF]->(:Channel {channelId: 'demo-general'}) "
+        "RETURN coalesce(mem.userId, mem.agentId) AS id ORDER BY id",
+    )
+    assert [row[0] for row in roster] == [_AGENT, "u1", "u2"]
+
+
+def test_reset_all_keeps_exactly_the_survivor_labels(repo, conn):
+    """§4.8's survivor column asserted by label, `WorkspaceConfig` included —
+    the documentation check the plan asks for. Read it next to the identity
+    test above, never instead of it."""
+    _seed_storefront(repo, conn)
+
+    repo.reset_all_participants("test")
+
+    counts = {
+        row[0]: row[1]
+        for row in _probe(conn, "MATCH (n) RETURN labels(n)[0] AS l, count(*) ORDER BY l")
+    }
+    assert counts == {
+        "Agent": 1, "Cart": 1, "CartItem": 1, "Channel": 1, "Chunk": 1,
+        "Customer": 1, "Document": 1, "Entity": 1, "Message": 4, "Order": 1,
+        "OrderLine": 1, "ReadCursor": 2, "Step": 3, "Thread": 1, "User": 2,
+        "WorkflowDefSnapshot": 1, "WorkspaceConfig": 1,
+    }
+
+
+def test_reset_all_reports_unscoped_participants_and_leaves_them_whole(repo, conn):
+    """F2/P3: an unscoped participant is skipped **whole**, not beheaded, and
+    named in `unscopedIds` so the presenter can be told whose state is still
+    live rather than only that some is."""
+    _seed_storefront(repo, conn)
+    _raw(conn, "MATCH (c:Channel {channelId: 'ch-p-aaa'}) SET c.participantId = 'someone-else'")
+
+    result = repo.reset_all_participants("test")
+
+    assert result["unscopedCount"] == 1
+    assert result["unscopedIds"] == ["p-aaa"]
+    assert result["userCount"] == 1
+    # left whole and collectable — User, Channel, Thread, messages, commerce
+    assert repo.get_participant_record("test", participant_id="p-aaa") is not None
+    assert _one(conn, "MATCH (c:Channel {channelId: 'ch-p-aaa'}) RETURN count(c)") == 1
+    assert _one(conn, "MATCH (t:Thread {threadId: 'th-p-aaa'}) RETURN count(t)") == 1
+    assert _one(conn, "MATCH (m:Message) WHERE m.msgId STARTS WITH 'p-aaa' RETURN count(m)") == 3
+    assert _one(conn, "MATCH (o:Order {orderId: 'p-aaa-o1'}) RETURN count(o)") == 1
+
+
+def test_reset_all_is_idempotent_and_returns_an_all_zeros_row_when_clean(repo, conn):
+    _seed_storefront(repo, conn)
+
+    repo.reset_all_participants("test")
+    second = repo.reset_all_participants("test")
+
+    assert second == {
+        "userCount": 0, "channelCount": 0, "threadCount": 0, "messageCount": 0,
+        "runCount": 0, "stepRunCount": 0, "traceCount": 0, "cursorCount": 0,
+        "customerCount": 0, "orderCount": 0, "unscopedCount": 0,
+        "unscopedIds": [],
+    }
+    _assert_demo_subgraph_intact(conn)
+    _assert_common_survivors(conn)
+
+
+def test_reset_all_leaves_no_unowned_read_cursor(repo, conn):
+    """F3's real orphan class: `advance_cursor` MERGEs on the *member*, so a
+    turn racing the reset mints a cursor naming a dead thread. `reset_all`
+    deletes the `User`, so its wide `HAS_CURSOR` sweep is what keeps that cursor
+    from being left unowned."""
+    _seed_storefront(repo, conn)
+    _seed_participant(repo, conn, "p-ccc", at=400)
+    repo.advance_cursor(
+        "test", me_id="p-ccc", thread_id="th-gone", cursor_id="p-ccc:th-gone",
+        now=402, now_msg_id="x",
+    )
+
+    repo.reset_all_participants("test")
+
+    assert _one(
+        conn, "MATCH (rc:ReadCursor) WHERE NOT ()-[:HAS_CURSOR]->(rc) RETURN count(rc)"
+    ) == 0
+    assert repo.get_cursor("test", cursor_id="p-ccc:th-gone") is None
+
+
+def test_reset_all_never_touches_the_reference_graph(wf_repo, conn):
+    """`GRAPH.QUERY` operates on one named graph per call — structural, not a
+    convention — but `reference` is the catalog/def home the demo reads, so the
+    claim is pinned with a live before/after.
+
+    `reference` is **global**, and `Product` is the label `verify_catalog.sh`
+    counts, so the planted node is removed in a `finally`: the `wf_repo` fixture
+    wipes `reference` at *setup*, which keeps the suite self-consistent but would
+    leave this fixture behind for whichever run ends here — and a stray `Product`
+    reads as a real catalog mismatch (16, expected 15) to anyone running the
+    verifier afterwards."""
+    _seed_storefront(wf_repo, conn)
+    try:
+        db.reference_graph(conn).query(
+            "CREATE (:Product {productId: 'prod1', name: 'Widget', "
+            "                  nameNormalized: 'widget', category: 'Misc', "
+            "                  categoryNormalized: 'misc', price: 5.0})"
+        )
+        before = db.reference_graph(conn).ro_query("MATCH (n) RETURN count(n)").result_set
+
+        wf_repo.reset_all_participants("test")
+
+        assert db.reference_graph(conn).ro_query(
+            "MATCH (n) RETURN count(n)"
+        ).result_set == before
+        assert db.reference_graph(conn).ro_query(
+            "MATCH (p:Product {productId: 'prod1'}) RETURN p.name"
+        ).result_set == [["Widget"]]
+    finally:
+        db.reference_graph(conn).query(
+            "MATCH (p:Product {productId: 'prod1'}) DETACH DELETE p"
+        )
+
+
+def test_off_chain_message_survives_both_resets(repo, conn):
+    """F9, documented rather than fixed: the structural `HEAD`/`NEXT` walk
+    cannot reach a `Message` that was never linked into its thread's chain.
+    QUERIES.md §4's write paths link it inside the same guarded `FOREACH` as the
+    `CREATE`, so this is unproducible through the platform — a future writer
+    that creates a `Message` before linking it breaks reset completeness."""
+    _seed_storefront(repo, conn)
+
+    _reset_mine(repo, "p-aaa")
+    assert _one(conn, "MATCH (m:Message {msgId: 'orphan-1'}) RETURN count(m)") == 1
+
+    repo.reset_all_participants("test")
+    assert _one(conn, "MATCH (m:Message {msgId: 'orphan-1'}) RETURN count(m)") == 1
+
+
+# ── §18.6 the two order reads ────────────────────────────────────────────────
+
+
+def test_get_customer_current_order_is_the_latest_placed_whatever_its_status(repo, conn):
+    """"Current" is the most recently *placed* order, not the most recent
+    non-terminal one: the demo walks `placed → fulfilled → delivered` and AC-7
+    is about *seeing* that happen."""
+    _seed_survivors(repo, conn)
+    _seed_participant(repo, conn, "p-aaa", at=200, orders=2)
+    repo.fulfill_order("test", order_id="p-aaa-o2", now=500)
+    repo.deliver_order("test", order_id="p-aaa-o2", now=501)
+
+    current = repo.get_customer_current_order("test", customer_id="p-aaa")
+
+    assert current["orderId"] == "p-aaa-o2"
+    assert current["status"] == "delivered"
+    assert current["lines"] == [
+        {"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+         "quantity": 1, "lineTotal": 5.0}
+    ]
+    assert current["total"] == 5.0
+
+
+def test_get_customer_current_order_tie_breaks_by_order_id(repo, conn):
+    _seed_survivors(repo, conn)
+    repo.ensure_customer("test", customer_id="p-aaa", now=200)
+    for order_id in ("p-aaa-o2", "p-aaa-o3"):
+        repo.place_order(
+            "test", customer_id="p-aaa", order_id=order_id, now=300,
+            lines=[{"productId": "prod1", "name": "Widget", "unitPrice": 5.0,
+                    "quantity": 1, "lineTotal": 5.0}],
+        )
+
+    current = repo.get_customer_current_order("test", customer_id="p-aaa")
+
+    assert current["orderId"] == "p-aaa-o3"
+
+
+def test_get_customer_current_order_is_none_without_an_order(repo, conn):
+    _seed_survivors(repo, conn)
+    repo.ensure_customer("test", customer_id="p-aaa", now=200)
+
+    assert repo.get_customer_current_order("test", customer_id="p-aaa") is None
+    assert repo.get_customer_current_order("test", customer_id="no-such") is None
+
+
+def test_get_customer_current_order_filters_the_zero_line_placeholder(repo, conn):
+    """Same `collect()` quirk `get_order` documents: a zero-line order yields
+    one all-`null` placeholder entry, not `[]`."""
+    _seed_survivors(repo, conn)
+    repo.ensure_customer("test", customer_id="p-aaa", now=200)
+    repo.place_order("test", customer_id="p-aaa", order_id="p-aaa-o1", now=300, lines=[])
+
+    current = repo.get_customer_current_order("test", customer_id="p-aaa")
+
+    assert current["lines"] == []
+    assert current["total"] == 0.0
+
+
+def test_order_belongs_to_customer_gates_the_lifecycle_action(repo, conn):
+    """The gate `advance_order` does not have: its CAS is keyed on `orderId`
+    alone, so without this any participant who learned another's `orderId` could
+    cancel their order."""
+    _seed_survivors(repo, conn)
+    _seed_participant(repo, conn, "p-aaa", at=200)
+    _seed_participant(repo, conn, "p-bbb", at=300)
+
+    assert repo.order_belongs_to_customer(
+        "test", customer_id="p-aaa", order_id="p-aaa-o1"
+    ) == {"owned": True, "status": "placed"}
+    # another participant's order, the non-participant's order, an unknown
+    # order and an unknown customer are all indistinguishable to the caller
+    for customer_id, order_id in (
+        ("p-aaa", "p-bbb-o1"), ("p-aaa", "u1-o1"), ("p-aaa", "no-such"),
+        ("no-such", "p-aaa-o1"),
+    ):
+        assert repo.order_belongs_to_customer(
+            "test", customer_id=customer_id, order_id=order_id
+        ) == {"owned": False, "status": None}

@@ -5,6 +5,215 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-02 — salesperson-ui S1: `salesperson@v7` (per-participant language + order-time address)
+
+**What:** Step S1 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — the shared
+`SALESPERSON_DEF` scaffold bumped to **`v7`**, adding two `systemPrompt` sentences and nothing
+else. (1) §4.5, language: *reply in the language named by `language` in the CONTEXT block; if no
+language is named there, reply in English* — the storefront sets that key via S2's `run_ctx` at
+run start, and `executor._assemble_messages` re-sends the whole run ctx every LLM iteration, so
+the choice is durable data on the run rather than a def-per-locale fan-out. (2) §4.10, checkout:
+*before you place an order, confirm the delivery address on file… never invent one* — `v5`'s
+profile guidance is explicitly early-conversation, so order-time confirmation was genuinely
+absent. Both are prompt-adherence claims on a 3 B model and are **not** signed off by code
+review; §6.3 #5/#7 make each a measured live run, each with its own documented fallback.
+
+`config.tools` (all 11) and `config.model` (`lmstudio/mistralai/ministral-3-3b`) are republished
+**unchanged** — all three of tools/model/`systemPrompt` are create-only, so a version that omits
+`config.model` silently reverts K-056's Ministral re-point. Topology is byte-identical to `v5`
+(one `agent` step + `ended` + the one `ctx.endConversation` transition), so the K-034 409
+topology-conflict path is never approached. Both scripts' `FALKORCHAT_SALESPERSON_DEF_VERSION`
+fallbacks bumped.
+
+**`v6` is a burned version number.** S1 first shipped as `v6`; the `analyst` gate (F-1,
+`docs/reviews/salesperson-ui-impl.md`) found `ws:acme` already held a `salesperson@v6`
+`WorkflowDefSnapshot` — v5's prompt plus the K-060 synthesis-time lever that `BACKLOG.md` records
+as *"Reverted, never shipped"*, materialized from an uncommitted working tree and therefore
+invisible to `git log -S`. `config` is create-only, so that name denotes the reverted experiment
+in `ws:acme` permanently. Renumbering to `v7` sidestepped it with string edits only, no graph
+surgery. The `v5` → `v7` gap is deliberate and documented in `proof_defs.py`'s version chain and
+`AGENTS.md` row 82 so nobody "fixes" it later.
+
+**Tests:** the scaffold suite's version pin moved to `v7`, plus one new test
+(`test_salesperson_v7_carries_v5_tools_forward_and_adds_both_prompt_sentences`) asserting the
+shipped `config.tools` is a **superset** of a hard-coded `v5` baseline (not derived from the
+constant, so it is a real baseline), no duplicate tools, the pinned `config.model`, both added
+sentences, and unchanged topology. Mutation-tested with five deliberate breaks — deleting
+`config.model`, dropping `query_graph_data` from the cumulative tool set, removing each added
+sentence, and leaving the version at the previous value — each sent the matching test red before
+being restored; one assertion that failed via an incidental `IndexError` was rewritten to fail as
+a clean substring assertion and re-tested. Full offline suite 2330 passed / 14 deselected, ruff
+clean.
+
+**Docs & tooling:** `AGENTS.md` rows 82–83 extended to `v7` (script table version chain +
+`verify_salesperson.sh`'s expected version). `scripts/verify_salesperson.sh` gained a sixth check
+(review F-8): every stored step `config`, on **both** sides, is compared against the shipped
+`falkorchat.proof_defs` constant. `diff_def_snapshot` compares the two sides against each other,
+so it is structurally blind to a version whose config was stored from an earlier or uncommitted
+tree — both sides agree, topology is right, and the version name silently denotes something the
+file can no longer produce. That is exactly the shape the `ws:acme` `v6` orphan has, and exactly
+what the script's own *"do NOT re-seed"* advisory warns about with no way to detect it. The new
+check names the drifted config fields and says to bump the version, which is the only fix.
+
+## 2026-09-02 — salesperson-ui S2: chat-path `run_ctx` merge
+
+**What:** Step S2 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — a chat-triggered
+workflow run can now carry caller-supplied initial ctx alongside the engine's thread anchor.
+`Services.start_workflow_run` gained a `run_ctx` on the **chat** path (it already had one on the
+process path): the initial ctx is now `{**run_ctx, "threadId": <thread>}` instead of
+`{"threadId": <thread>}` alone, with the anchor written last so the engine's key always wins the
+merge. `WorkflowTrigger.maybe_trigger` gained `run_ctx: dict | None = None`, forwarded to the §6
+**step-3 start branch only** — step 2 (resume) and step 4 (responder) never see it. This is what
+lets the storefront start a `salesperson` run with `{"language": "pt-BR"}` over the ordinary
+`@mention` path, which `salesperson@v7`'s prompt then reads out of the CONTEXT block.
+
+The M-2/F-6 reserved-key rule (`threadId`/`error`/`timerFired` → `WorkflowInputRejectedError`) was
+**reused, not reimplemented**: the single existing `_reject_reserved_keys` call was hoisted out of
+the process-path `else` branch to sit directly after `_require_executor()`, so it now guards both
+paths from one call site and runs before *anything* is read or written — the "rejected before any
+write" ordering is load-bearing, since a caller-set `threadId` on the chat path would overwrite the
+very anchor `trigger.py` step 2 resumes by. The chat path's inline `json.dumps` was folded into the
+existing `_dump_ctx` helper (byte-identical output). Process-path behaviour is unchanged; both
+production callers (`api.py`'s `POST /workflow-runs`, `background.py`'s `_safe_run_workflow`) are
+unchanged by the `None` defaults (`api.py` calls `start_workflow_run`; `background.py` calls
+`maybe_trigger` — two different functions, both defaulted) — confirmed against the `cpg_falkorchat`
+CPG call graph.
+
+**Tests:** 14 new tests. `server/tests/test_services.py` (offline `FakeRepo`): the merge, a
+back-compat pin that no `run_ctx` still yields byte-identical `{"threadId":"t1"}`, the
+missing-trigger-message empty-anchor case, and a parametrized ×3 rejection test asserting the repo
+recorded **no call at all** and the executor was never driven. `server/tests/test_trigger.py`:
+forwarding to step 3, `None` when omitted, and non-forwarding on both the resume and responder
+branches. `server/tests/test_process_input.py` (live `ws:test` graph, reusing that file's existing
+chat-path harness): the merge end-to-end, plus a parametrized ×3 rejection test asserting zero
+`WorkflowRun` nodes and an unchanged `Message` count — the real-graph proof of "before any write".
+
+Confirmed red-first (9 unit + 4 live failures, each for its own reason — assertion mismatch or
+`DID NOT RAISE`, never an import error). Mutation-tested with six deliberate breaks: dropping the
+merge, removing the reserved-key check, **moving the check after `repo.start_run`**, dropping the
+trigger's forwarding, and forwarding `{}` instead of the caller's dict — each sent the matching
+tests red, the "after the write" one caught specifically by the live no-run/no-message assertion.
+Full offline suite 2316 passed / 14 deselected before → 2330 passed / 14 deselected after, ruff
+clean.
+
+**Review-gate amendments** (`docs/reviews/salesperson-ui-impl.md`, F-2/F-3):
+
+* **F-2 (Major) — `run_ctx` is now bounded service-side at start.** `start_workflow_run` was the
+  one ctx-mutating entry point relying solely on `schemas.py`'s pydantic cap, and S2's
+  `trigger.maybe_trigger` pass-through is a direct service caller that never sees a schema. A
+  `MAX_CONFIG_LEN` check now sits immediately after the `_reject_reserved_keys` call, guarding
+  **both** paths ahead of any read or write, matching the shape `submit_workflow_input`
+  (`services.py:2131`) and the timer sweep (`:2458`) already use — same constant, same
+  `WorkflowInputRejectedError`, same message shape. It bounds the *caller's* ctx rather than the
+  merged result, so the chat path may exceed it by its own ~20-character anchor; that tolerance is
+  deliberate and documented at the call site, chosen to keep one guard ahead of both branches
+  rather than duplicating an exact bound into two write paths that are self-contained by doctrine.
+* **F-3 (Minor) — the merge direction now has a test that can fail.** The reviewer verified that
+  reversing the merge left the full suite green, so the safety comment was doing work no test did.
+  The anchor build moved into a named seam, `Services._chat_start_ctx`, and its key set into a
+  module constant `CHAT_START_ANCHOR_KEYS`, pinned by three tests: the constant matches what the
+  seam actually writes, every anchor key is a member of `RESERVED_CTX_KEYS` (the invariant the
+  guard's completeness rests on, which breaks the moment a non-reserved anchor key is added), and
+  the anchor wins a caller collision. Reversing the merge now fails that third test.
+
+**One adjacent test resized.** `test_workflow_timers.py::test_sweep_faults_a_candidate_whose_
+merged_ctx_would_exceed_max_config_len` seeded its oversized state *through* `start_workflow_run`
+(`run_ctx={"seed": "y" * MAX_CONFIG_LEN}`) — the exact hole F-2 closes, so it could no longer be
+constructed. Its seed was resized to `MAX_CONFIG_LEN - 11`, which sits the ctx exactly **on** the
+bound (startable) while the `timerFired` marker still pushes the merge over it (sweepable). That is
+now the only shape that can reach the sweep's bound, so the test is narrower and more load-bearing
+than before; two asserts were added pinning both halves of that boundary so it cannot silently
+stop testing what it claims. The test's subject and assertions are otherwise untouched.
+
+**Docs:** `docs/QUERIES.md` §12.1's `$ctx` comment corrected — it claimed `"{}" at start`, which
+was already wrong for the chat path before this change and is now also incomplete; §12.12's
+reserved-key note gained the `timerFired` key it had been missing since K-028.
+
+## 2026-09-02 — salesperson-ui S4: storefront participant primitives + the two resets
+
+**What:** Step S4 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — S0's approved
+graph design note (`docs/plans/salesperson-ui-graph.md` v1.2) turned into repository code, plus the
+two thin service wrappers that keep `storefront.py` free of Cypher. Nine repository methods:
+`ensure_participant`, `add_channel_member`, `get_participant_record`, `set_participant_record`,
+`list_participants`, `reset_participant`, `reset_all_participants`, `get_customer_current_order`,
+`order_belongs_to_customer`; two `Services` wrappers: `get_current_order`,
+`order_belongs_to_customer`. Writes go through `.query()`, the two order reads and the three
+participant reads through `.ro_query()`.
+
+**The five queries from the note are shipped verbatim** — byte-for-byte, `//` guard comments and
+all — as multi-line class constants rather than the house concatenated-string style, because `//`
+is a line comment on this build (`--` does not parse) and joining the lines would comment out the
+rest of the query. The five constants and `QUERIES.md` §18's transcription were both diffed against
+the note's own fenced blocks, extracted with a parser that asserts **block count and maximum block
+length** — the tripwire the note asks for, after v1.1 shipped two glued closing fences that made
+`reset_all_participants` unextractable to a conformant parser.
+
+**The safety argument is two guards, and it is the whole unit.** G1 (`u.tokenHash IS NOT NULL`) on
+the anchor keeps every non-participant `User` from being a reset root; G2 (`ch.participantId =
+u.userId`) on the channel hop keeps every channel *not minted by that participant's join* from
+being a delete target. G2 is a **provenance** check, not `ch.channelId = u.channelId`:
+`Channel.participantId` (a new nullable, unindexed property — no DDL, `bootstrap_schema.sh`
+untouched) is written **only** by `ensure_participant`, `create_channel` writes a fixed
+three-property map that cannot carry it, and `null = anything` is `null` — so `demo-general` is
+structurally unreachable as a target regardless of who is a member of it.
+
+**Two scope decisions worth stating.** (1) `ensure_participant` is implemented **as one atomic
+query**, per the note's §3, rather than composed from `create_channel` + `create_thread` +
+`add_channel_member` + `set_participant_record`: a partial join would leave a `Channel` with no
+marker, which is precisely the "unscoped participant" state `reset_all` can only skip and count,
+and the note's own argument that that branch is dead rests on the join being atomic. It is also the
+only writer of the marker G2 reads. (2) `set_participant_record` refuses a non-participant
+(`tokenHash IS NOT NULL` as a **guard**, not a filter) and can set **neither `channelId` nor
+`threadId`** — a settable token could stamp `seed_demo.sh`'s `u1` and mint exactly that unscoped
+shape, and a settable `threadId` would be the one lever in §18 able to point one participant at
+another participant's thread (G1 proves the target is a participant; nothing in that query can
+prove the thread lies inside that participant's own channel). Both are decided in-query, by
+`ensure_participant` at join and `reset_participant` at every "reset mine".
+
+**Tests:** 41 new test nodes in `server/tests/test_repository.py` (§18.1–§18.6, live `ws:test`) and
+4 in `server/tests/test_services.py` (offline `FakeRepo`). The fixture mirrors the note's own probe
+graph: a non-participant survivor subgraph (`demo-general`/`demo-welcome`/3 messages/cursors/
+`WorkspaceConfig`/corpus/snapshot/commerce, plus an adversarial `u2` whose own `channelId` *names*
+`demo-general`), participants provisioned through `ensure_participant`, a cross-member participant,
+a mismatched-marker channel, a participant with no `MEMBER_OF`, and an off-chain `Message`.
+**Every survivor assertion is by identity**, because victims and survivors share the labels
+`Channel`/`Thread`/`Message`; the label-count assertion the plan also asks for is present and
+labelled as documentation, not as the safety net.
+
+Mutation-tested by patching the shipped Cypher constants in-process (repository.py never edited):
+dropping G2 from `reset_all` reddens the identity survivor test; dropping G1+G2 reddens five;
+dropping G2 from `reset_participant` reddens three; dropping G1 reddens the non-participant no-op
+tests; and making the message walk author-scoped instead of thread-scoped reddens the
+thread-scoping test; narrowing `reset_all`'s wide `HAS_CURSOR` sweep to `reset_participant`'s
+liveness-filtered form reddens the `reset_all` survivor test (P2's asymmetry); and swallowing the
+duplicate-marker `ResponseError`, or splitting the reset into two queries, each redden one half of
+§12's duplicate-marker contract. The note's §2.3 row B was reproduced in this fixture: with both guards removed,
+`reset_participant('u2')` destroys `demo-welcome`, its three messages and two cursors and re-mints
+a thread in their place, leaving the `Channel` and `Thread` label counts **unchanged** (3 → 3) and
+every §4.8 survivor label present — a label-presence survivor check passes while the identity check
+fails. That is why this section's assertions are written the way they are.
+
+**Live done-condition, all against `ws:test` — the same graph the tests use, passed explicitly:**
+after seeding the fixture plus `seed_catalog.sh` and `seed_salesperson.sh test` and running
+`reset_all_participants`, `./scripts/verify_salesperson.sh test` exits **0** (both defs in sync,
+snapshots and `Step`s untouched by the reset) and `./scripts/verify_catalog.sh` exits **0**. The
+argument to `verify_salesperson.sh` is load-bearing: unpinned it reads `ws:$FALKORCHAT_WS_ID`
+(i.e. `acme`) and would pass green while proving nothing about the graph under test. Suite: 2336
+passed / 14 deselected before → **2381 passed / 14 deselected** after.
+
+**Docs:** `docs/QUERIES.md` **§18** (new, append-only — §12.1/§12.12 are S2's and untouched): all
+nine queries, the keep/delete inventory, the two guards and why G2 is provenance rather than
+id-equality, the `dev_surface=False` dependency for `WorkflowRun` completeness, the `HEAD`/`NEXT`
+chain invariant, the `ReadCursor` orphan class with its deliberately-open `Agent`-owned residual,
+the `scoped=false` / `unscopedCount` response contracts, and the atomicity/socket-timeout failure
+boundary. `docs/DESIGN.md` §5.1's arrow notation gains `Channel {channelId, name, participantId,
+createdAt}` with a note on what the marker is for, and §7.1 records `Channel.participantId`'s
+"no index, no constraint" call next to the `Message.threadId` precedent, with the reversal
+condition for the declined `UNIQUE`. The pre-existing `§18 Structured natural-language query
+generation (K-055 M6)` section header in `repository.py`/`services.py` was **relabelled** (the
+file convention is §N = QUERIES.md §N, and K-055's `run_readonly_query` takes compiler-produced
+Cypher, so it has no QUERIES.md section) — `QUERIES.md` §18 is the storefront's.
+
 ## 2026-09-01 — K-035 closed: bare-call argument-key shadowing fixed in `_parse_content_tool_calls`
 
 **What:** K-035 (filed at the K-027 slice A analyst gate, finding M-2) is closed — a bare tool
