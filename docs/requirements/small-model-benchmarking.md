@@ -221,8 +221,10 @@ open, but neither is a first-delivery requirement):
 
 ## Open questions
 
-1. Where the tool lives and what it's called (a new top-level component?).
-2. Which task packs / roles exist at first delivery.
+_None. All settled with the stakeholder on 2026-09-02._
+
+_(This document lives at the repo root because the component it describes doesn't exist yet — same
+precedent as `docs/requirements/generic-cypher-mcp.md`, which preceded `cypher-mcp/`.)_
 
 ## Decision log
 
@@ -280,6 +282,12 @@ product's shape is one pack's settings, which also makes the replay style itself
 both ruled out. Two further candidates were offered and **declined**: cloud/hosted models, and
 subjective/LLM-as-judge quality scoring — recorded as "deliberately not ruled out" rather than as
 requirements.
+
+2026-09-02 — Where does the tool live? → **Its own top-level component**, a sibling of `falkor-chat/`
+(and of the now-deprecated `salesperson/`) at the repo root — not nested inside any component.
+Consistent with FR-23: it would not be standalone if it lived in falkor-chat's tree. It carries its
+own `docs/` per the repo's module-documentation convention. **Named `model-bench/`** — descriptive,
+and not narrower than the subject (it covers embedding models too, which "llm-" would strain).
 
 2026-09-02 — **Consult: `data-scientist`** (fast-track methodology question). Why: the stakeholder
 invited better indicators for embedding quality, and "tool-calling accuracy + speed" needed
