@@ -95,6 +95,21 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Parse a comma-separated env var into an order-preserving tuple.
+
+    An unset **or effectively empty** value (blank, `","`, all-whitespace) falls
+    back to `default`: the one consumer is the storefront's locale enum, and an
+    empty tuple there would reject every language a participant could pick,
+    turning a typo in the operator's shell into a demo where nobody can join.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    parts = tuple(part.strip() for part in raw.split(",") if part.strip())
+    return parts or default
+
+
 # Whether `falkorchat.app:app` wires the live LM-Studio-backed embedder + LLM +
 # responder. **Off by default** so importing the module (and the pytest baseline)
 # stays network-free — the served app turns it on via `FALKORCHAT_ENABLE_AGENT=1`
@@ -145,6 +160,52 @@ WORKFLOW_SWEEP_INTERVAL_S: float = float(
 # legacy surface back while storefront participants exist — the dangerous
 # configuration is not expressible, rather than merely discouraged.
 STOREFRONT_ENABLED: bool = _env_flag("FALKORCHAT_STOREFRONT_ENABLED", default=False)
+
+# The **served** SPA build directory, mounted at `/shop` by `create_app` and the
+# root of the product-image manifest (`<dir>/products/`, §4.7). `None` when unset
+# — deliberately not `""`, which `Path("")` turns into the process working
+# directory and would silently serve whatever the operator happened to `cd` into.
+# The storefront deployment must set it (`scripts/start_demo.sh`, S11); it is the
+# *built* output (`salesperson/dist/`), never the source tree, because the image
+# manifest is built from what is actually served (§4.7).
+STOREFRONT_DIR: str | None = os.environ.get("FALKORCHAT_STOREFRONT_DIR") or None
+
+# The single operator secret for the presenter surface (§4.3, OQ-5) — typed once
+# at `/shop/presenter` and exchanged for a presenter bearer token. It is demo-
+# session scoping, not authentication: no accounts, no per-user credentials.
+#
+# **Empty means "no presenter surface", and must never authenticate.** Every
+# check of it goes through `hmac.compare_digest`, and `compare_digest("", "")` is
+# `True` — so a presenter login path must reject an unset key *before* comparing,
+# or an unconfigured deployment hands the reset-everyone button to whoever sends
+# an empty key first.
+STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_KEY", "")
+
+# §4.4 measure 1: the size of the storefront's own bounded turn executor, sized to
+# LM Studio's configured parallelism. Agent turns run there instead of on
+# `BackgroundTasks`, so a deep turn queue never touches anyio's default thread
+# limiter and poll reads stay instant.
+STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS", "4"))
+
+# §4.8/§7 of the graph note: how long either reset waits for in-flight turns to
+# drain after intake stops, before giving up and changing nothing (`503`).
+# Comfortably under the 180 s agent timeout, so a stuck turn cannot hold the
+# reset past the point where the presenter gives up on it.
+STOREFRONT_QUIESCE_S: float = float(os.environ.get("FALKORCHAT_STOREFRONT_QUIESCE_S", "30"))
+
+# The languages a participant may join in (FR-3/AC-9) — the enum `POST
+# /shop/api/session` validates against and the set the SPA ships bundles for
+# (S12c). Comma-separated; order is the UI's offer order.
+STOREFRONT_LOCALES: tuple[str, ...] = _env_csv(
+    "FALKORCHAT_STOREFRONT_LOCALES", ("en", "pt-BR", "es")
+)
+
+# §4.4 measure 2: the anyio thread limiter the storefront raises **inside
+# `_lifespan`, before `yield`** (`to_thread.current_default_thread_limiter()` is
+# event-loop scoped and raises outside a running loop). Headroom for the poll
+# path, explicitly **not** load-bearing — measure 1 is what keeps turns off this
+# limiter in the first place.
+THREAD_LIMIT: int = int(os.environ.get("FALKORCHAT_THREAD_LIMIT", "100"))
 
 
 @dataclass(frozen=True)

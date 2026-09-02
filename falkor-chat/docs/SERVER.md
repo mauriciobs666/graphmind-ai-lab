@@ -114,6 +114,19 @@ a 404 — a 404 is returned both when a route is absent and when it exists but e
 |---|---|---|
 | `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
 | `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH` | **on** | **When cleared (`=0`)**, `WorkflowTrigger(responder=None)`: a message matching no workflow reaches nothing instead of the M2 responder, whose retrieval is workspace-**wide** (`hybrid_search` with `channel_id=None`) and would otherwise surface another participant's messages. Left on, the M2 fall-through behaves as it always has |
+| `FALKORCHAT_STOREFRONT_DIR` | unset (`None`) | The **served** SPA build directory (`salesperson/dist/`), mounted at `/shop` and the root of the product-image manifest (`<dir>/products/`). Unset resolves to `None`, never `""` — `Path("")` is the process working directory, which would silently serve whatever the operator happened to `cd` into. The manifest is built from what is *served*, never from the source tree |
+| `FALKORCHAT_STOREFRONT_PRESENTER_KEY` | `""` | The one operator secret for `/shop/presenter`, exchanged for a presenter bearer token. Demo-session scoping, not authentication. **Empty means "no presenter surface" and must never authenticate**: `hmac.compare_digest("", "")` is `True`, so a login path has to reject an unset key *before* comparing — `Storefront.presenter_configured` is that check |
+| `FALKORCHAT_STOREFRONT_TURN_WORKERS` | `4` | Size of the storefront's own bounded turn executor, sized to LM Studio's configured parallelism. Agent turns run there rather than on `BackgroundTasks`, so a deep turn queue never touches anyio's thread limiter and poll reads stay instant |
+| `FALKORCHAT_STOREFRONT_QUIESCE_S` | `30` | How long either reset waits for in-flight turns to drain after intake stops, before giving up and changing nothing (`503`). Comfortably under the 180 s agent timeout |
+| `FALKORCHAT_STOREFRONT_LOCALES` | `en,pt-BR,es` | The languages a participant may join in — the enum `POST /shop/api/session` validates against, in the UI's offer order. A blank or all-separator value falls back to the default rather than yielding an empty set, which would reject every language a participant could pick |
+| `FALKORCHAT_THREAD_LIMIT` | `100` | The anyio thread limiter the storefront raises **inside `_lifespan`, before `yield`** (`to_thread.current_default_thread_limiter()` is event-loop scoped). Headroom for the poll path, explicitly **not** load-bearing — the turn executor above is what keeps agent turns off this limiter |
+
+**There is no `FALKORCHAT_DEMO_WS`, and there never will be.** The storefront's workspace *is*
+`config.WS_ID` (`salesperson-ui.md` §4.9 move 2): a second workspace variable buys nothing once
+the unauthenticated surfaces are un-mounted, while creating the only thing that made the
+seed-the-wrong-graph trap possible — two variables that can disagree. `start_demo.sh` pins the one
+variable to a dedicated value; `tests/test_storefront.py` carries the tripwire against
+reintroducing the second.
 
 ### 1.4 REST surface → service → verified query
 

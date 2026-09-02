@@ -300,6 +300,77 @@ composing, the unclassifiable route silently skipped, and `provider()` back insi
 two headline S3 mutants were re-run and still die. Suite: **2391 → 2393 passed / 14 deselected**;
 `app.py` and `test_app.py` restored byte-identical after every mutation (md5 verified).
 
+## 2026-09-02 — salesperson-ui S6: storefront core (participant registry, join, token verify, turn map)
+
+**What:** Step S6 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — the new
+`falkorchat/storefront.py`: the participant registry, `join`, `resolve_token`, the read-through
+record cache and the per-participant turn-state map, plus the six storefront env vars in
+`config.py`. No Cypher lives in the module: every graph touch goes through S4's repository
+methods, reached once at construction through the `Services` the app already builds.
+
+**The invariant the module exists to hold — the graph is the registry, the in-process map is a
+cache.** `resolve_token` re-reads `User.tokenHash` on *every* call and never consults the cache.
+That is not a style choice: with an authoritative in-process map, the single file write that
+restarts uvicorn under `--reload` would invalidate every token and bounce every participant to a
+fresh `participantId`, losing their **cart and order** rather than just their session, because
+`customerId == participantId` (§4.3); and a participant deleted by either reset would keep
+authenticating out of stale memory. The cache has exactly one reader — `lookup(participant_id)`,
+documented as *not* an auth path — so it serves S7/S9's "who is `p-…`" without ever being able to
+answer "is this credential valid".
+
+**Join is two writes, deliberately** (graph note §3.1): `repository.ensure_participant` — the
+whole `User`+`Channel`+`Thread`+both `MEMBER_OF` edges in one atomic query, so no crash can leave
+a `Channel` without the `participantId` marker both resets scope on — then
+`services.save_profile(name=display_name)` (§4.10), which creates the `Customer` anchor eagerly so
+the profile panel never shows an em-dash for a name the participant just typed. `agentMissing`
+raises `DemoNotSeededError` naming `seed_demo.sh` (§4.9's readiness preflight failing late).
+Credentials are `secrets.token_urlsafe(32)`, stored only as `sha256` on `User.tokenHash` and
+compared with `hmac.compare_digest`; the bearer is `<participantId>.<token>` and neither half
+alone authenticates.
+
+One judgement call, recorded because it is not in the plan's text: `ensure_participant` is
+idempotent but is deliberately **not a token-rotation path** — a replay returns the stored ids and
+does *not* write the fresh hash. `join` therefore writes the replayed participant's new hash
+through `set_participant_record`, keeping the one contract every caller depends on (*the token
+`join` returns always resolves*) while provisioning stays idempotent: no second `User`, `Channel`
+or `Thread`, and the original `joinedAt` survives. The branch is unreachable in production —
+`participantId` is a server-minted `uuid4` no client can supply — and reachable only by pinning
+`id_gen`, which is how the idempotency done-condition is tested.
+
+**Tests (`tests/test_storefront.py`, +45).** Integration against the live `ws:test` graph, not a
+fake repository: every property here is a property of *the graph being the registry*, which a fake
+cannot tell you anything about. Both done-conditions sit in the danger zone this build has been
+bitten by — evidence that stays green while asserting nothing — so both are built against it. The
+eleven absent/malformed/wrong/deleted cases would all pass against a `resolve_token` that returned
+`None` unconditionally, so each is paired with a positive control, and the two that matter are
+written as **transitions**: the same credential resolving before a `reset_all` and not after, and
+each of two participants' credentials resolving under their own id and not under the other's.
+Restart survival builds the second `Storefront` on its own `Repository` over its own connection
+and asserts its cache is empty *before* it answers, so the two instances share nothing but the
+graph — the trivial-pass this done-condition invites.
+
+**Mutation-tested — five deliberate breaks, each killed by the intended test:** (1) `resolve_token`
+answering from the cache before the graph read — kills the deleted-participant test and three
+others, and is the exact defect the design forbids; (2) the registry made authoritative in-process
+(no graph read at all) — kills restart survival; (3) the §4.10 profile write removed; (4)
+`agentMissing` ignored; (5) the replay's fresh token not written through. `storefront.py` was
+restored from a byte-copy after every mutation (md5 verified). The `hmac.compare_digest`
+requirement has **no** observable behaviour — `==` passes every functional test — so it is pinned
+by an explicitly static source assertion rather than by a timing measurement a unit suite cannot
+make reliably; the test says so in its own docstring.
+
+Suite: **2394 passed / 14 deselected before → 2439 / 14 after**; ruff clean.
+
+**Docs:** `docs/SERVER.md` §1.3's env-var table (which S3 introduced) gains all six new variables
+with their defaults, plus a standing note that **there is no `FALKORCHAT_DEMO_WS` and never will
+be** — the storefront's workspace *is* `config.WS_ID` (§4.9 move 2), and a tripwire test asserts
+no module in the package mentions the deleted variable. The presenter key is spelled
+`FALKORCHAT_STOREFRONT_PRESENTER_KEY`, following S6's own env list (`_PRESENTER_KEY` elided under
+the same prefix as `_DIR`/`_TURN_WORKERS`, against `FALKORCHAT_THREAD_LIMIT` written out in full);
+the plan's §4.3/R6/OQ-5 prose says `FALKORCHAT_PRESENTER_KEY`, and S10/S11 must not split the
+difference. `README.md` and `AGENTS.md` are **deliberately untouched** — the plan assigns the
+storefront's narrative there to S16.
+
 ## 2026-09-01 — K-035 closed: bare-call argument-key shadowing fixed in `_parse_content_tool_calls`
 
 **What:** K-035 (filed at the K-027 slice A analyst gate, finding M-2) is closed — a bare tool
