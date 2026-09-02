@@ -3,6 +3,11 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-02 — Context-file convention added; repo-wide AGENTS.md bloat sweep
+- **What:** Root `AGENTS.md` gained a **Context-file convention** bullet (257w): an always-loaded context file is rewritten not appended to, history is not context and never a third copy of it, plus a checkable bar (line >700ch = a cell being used as a changelog; whole file ~2,500w — smells, not gates). Swept all 13 tracked `AGENTS.md`/`CLAUDE.md` files. `falkor-chat/AGENTS.md`: rewrote six Key-scripts rows (`seed_salesperson` 5,174→334ch with its live traps moved to a prose block under the table; `seed_workflows` 833→688; `verify_workflows` 547→303, dropping a "Before K-005 (fixed 2026-08-25)" history clause; `bootstrap_schema` 510→374; `test_queries` 607→552; `seed_catalog` 598→501). `claude/AGENTS.md`: split the 1,351-char L3 paragraph into four labelled bullets, no content cut. Nine other context files audited clean.
+- **Why:** User asked why `falkor-chat/AGENTS.md:82` was ~5,000 chars. Traced it: seven commits (2026-08-28→09-02), each *appending* one `SALESPERSON_DEF` version's story (931→1,621→2,257→2,713→3,037→4,972→5,174ch) — and the whole narrative was a duplicate of `proof_defs.py:170-250`'s comment block, which had itself gone stale (`v1→v4`, "FOUR sibling capabilities"). The existing "an open item is rewritten, not appended to" rule sat under **Module documentation convention**, scoped to `<module>/docs/**`; the compaction rule names `AGENTS.md` but triggers only at `teco`'s milestone close. So nothing governed a context file at the **per-edit** altitude — that gap, not any author, was the defect. User chose repo-wide sweep + rule-only prevention (no lint script, no hook).
+- **Plan items:** — (new items noted in `plan.md`: root `AGENTS.md` still 2,729w over its own budget; `proof_defs.py` comment block is stale)
+
 ## 2026-09-02 — U6 of `salesperson-ui`: agent-prompt correction pass + cross-agent sweep
 
 - **What:** `analyst` finding M9 (`docs/reviews/salesperson-ui.md`) routed the `frontend-engineer`

@@ -1,6 +1,23 @@
 # Claude agents — context for AI agents working here
 
-This directory (`claude/`) holds custom Claude Code subagents. Each agent is a folder: `<name>/<name>.md` (Markdown + YAML frontmatter) plus `<name>/kaizen/{plan,history}.md` — there is **no `inbox.md`**, and `audit-team.sh` check 1 requires only that pair. Every agent's raw learnings capture (durable environment facts discovered during runs) writes directly into one **shared** working-memory FalkorDB graph, `kaizen_team`, as `:KaizenEntry` nodes via `mcp__cypher__query`, so one query reaches every agent's raw learnings. An entry is tied to its producer by a `(:Agent {agentId})-[:PRODUCED]->(:KaizenEntry)` edge, plus an optional `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge when `cobb` tags it as being about a different agent during distillation; older entries instead carry a plain `author` string property and no edges — read both shapes, write only the edge shape. `cobb` distills the shared graph periodically per the `agent-maintenance` skill §5 (verify → route to prompt/knowledge base/project docs → log in the entry's own agent's `history.md` → clear, a curator-scoped `DETACH DELETE` through `mcp__cypher__query` against `kaizen_team`). **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards` skills are there.
+This directory (`claude/`) holds custom Claude Code subagents.
+
+- **Layout** — one folder per agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus
+  `<name>/kaizen/{plan,history}.md`. There is **no `inbox.md`**, and `audit-team.sh` check 1
+  requires only that pair.
+- **Learnings capture** — every agent writes its durable run-time discoveries directly into one
+  **shared** FalkorDB graph, `kaizen_team`, as `:KaizenEntry` nodes via `mcp__cypher__query`, so
+  a single query reaches every agent's raw learnings. An entry is tied to its producer by
+  `(:Agent {agentId})-[:PRODUCED]->(:KaizenEntry)`, plus an optional
+  `(:KaizenEntry)-[:MENTIONS]->(:Agent)` when `cobb` tags it as being about a different agent.
+  **Older entries carry a plain `author` string property and no edges — read both shapes, write
+  only the edge shape.**
+- **Distillation** — `cobb` periodically verifies each entry, routes it (agent prompt /
+  knowledge base / project docs / discard), logs the promotion in that agent's `history.md`, and
+  clears it with a curator-scoped `DETACH DELETE`. Procedure: `agent-maintenance` skill §5.
+- **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see
+  [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards`
+  skills are there.
 
 **The full agent catalog — what each does, when to use it, handoff contracts, hook enforcement — lives once, in [`README.md`](./README.md).** Each agent's frontmatter `description` is its routing contract and is auto-injected into sessions; each `<name>/<name>.md` is the source of truth for its behavior. This file keeps only the index plus directory-level conventions.
 

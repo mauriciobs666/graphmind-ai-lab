@@ -162,3 +162,22 @@
   what the parent session already did; your only output is findings on these N files."
 - Maintain a small catalog of agents/skills Cobb has authored, cross-linking their kaizen files.
 - The §7 prompt-lint is judgment-only by design; if a *deterministic* pre-check for a single artifact ever proves cheap (frontmatter valid, description non-empty, no personal identifiers), consider a small script assist — but keep the seven semantic dimensions in the skill, not a grep. *(Noted 2026-07-16 during the §7 build; the composition load-set enumerator the design floated was skipped as not-cheap-enough.)*
+- **Root `AGENTS.md` is 2,729w, over the ~2,500w budget its own new Context-file convention sets
+  (2026-09-02).** The cause is not the new rule (257w) but the **Module documentation
+  convention** bullet: **1,539w, 56% of the whole file**. Compacting it is a real judgment call
+  — it encodes the doc-family grammar, the closed `Status:` set and the by-kind owner table that
+  several agents depend on — so it needs its own scoped pass with the user, likely splitting the
+  reference tables (owner routing, status tokens, filename grammar) into a progressively-loaded
+  doc that the context file cites, keeping only the rules an agent must hold resident.
+- **Enforcement for the context-file convention was explicitly declined (2026-09-02).** User
+  chose rule-only over the offered `claude/scripts/audit-context-files.sh` + `PostToolUse` hook.
+  The rule ships with a one-line `awk` bar instead. This is the class of rule that already
+  failed seven consecutive times unenforced — if the bar is breached again, re-offer the script
+  (cheap: line-length + word budget + append-tell patterns over `git ls-files '*AGENTS.md'`).
+- **A duplicated narrative drifts in the copy nobody re-reads (2026-09-02).** `falkor-chat/
+  AGENTS.md`'s salesperson row and `proof_defs.py:170-250` held the same version history; the
+  *code* copy is the authoritative one and was the one that went stale (`v1→v4`, "FOUR sibling
+  capabilities", unaware of v5/v6/v7). The context-file sweep fixed the AGENTS.md side by
+  deleting it; **the `proof_defs.py` comment block is still stale and is `coder`/`teco`
+  territory, not mine** — flag it rather than edit it.
+

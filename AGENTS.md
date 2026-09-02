@@ -98,6 +98,25 @@ and OpenCode artifacts).
   `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
   `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents,
   `skills/README.md` for skills), and `claude/AGENTS.md` in the same change.
+- **Context-file convention** — an `AGENTS.md` / `CLAUDE.md` / `.kiro/steering/*.md` file is
+  **always loaded, in full, into every session in its scope**, so it is the most expensive prose
+  in the repo and the only documentation with a hard duty to stay small. It answers one question
+  — *what is true now, and what will bite me* — and nothing else.
+  - **It is rewritten, not appended to.** The `docs/` rule below ("an open item is rewritten")
+    applies here with more force: a context file never freezes, so it never sheds weight on its
+    own. When a change makes an entry wrong, **replace the entry** — never add your version's
+    paragraph after the previous author's. The failure is silent and cumulative:
+    `falkor-chat/AGENTS.md`'s `seed_salesperson.sh` row reached **5,174 characters over seven
+    commits**, each appending one version's story, before anyone read it whole.
+  - **History is not context, and never a third copy of it.** Version sequences, "as of K-0NN",
+    "fixed on `<date>`", "now fails loudly", rationale for a settled decision — all belong to
+    `<module>/docs/HISTORY.md`, the design doc, or the docstring on the constant concerned; a
+    context file **cites** that home in a clause. A fact earns a place here only by being a
+    **live constraint** — something that changes what the reader does next. Duplicated prose
+    drifts, and the always-loaded copy is the one that drifts unnoticed.
+  - **The bar:** `awk 'length($0)>700{print FILENAME": "NR}' $(git ls-files '*AGENTS.md')` —
+    a line past ~700 chars is a cell being used as a changelog. Whole file: **~2,500 words**.
+    Smells, not gates.
 - **Module documentation convention** — all of a module's documentation lives under
   `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
   change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
