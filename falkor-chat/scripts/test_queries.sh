@@ -1362,7 +1362,7 @@ gq "$REF" "CREATE (:Product {productId:'prod5', name:'Noise Cancelling Headphone
 out=$(gq "$REF" "CREATE (:Product {productId:'prod1', name:'Imposter'})" 2>&1)
 assert_contains "§15 constraint blocks duplicate productId" "unique constraint violation" "$out"
 
-LOOKUP='MATCH (p:Product {nameNormalized: $nameNormalized}) RETURN p.name AS name, p.category AS category, p.price AS price LIMIT 1'
+LOOKUP='MATCH (p:Product {nameNormalized: $nameNormalized}) RETURN p.productId AS productId, p.name AS name, p.category AS category, p.price AS price LIMIT 1'
 
 # §15.1 lookup_product — exact-name hit
 out=$(rq "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
@@ -1372,7 +1372,7 @@ assert_contains "§15.1 lookup_product hit returns its price"                   
 
 # §15.1 lookup_product — abstention (AC-3): no row for an unknown name
 out=$(rq "$REF" "CYPHER nameNormalized=\"nonexistent gadget\" $LOOKUP")
-assert_no_data_row "§15.1 lookup_product unknown name returns no row (abstention)" "$(printf 'name\ncategory\nprice')" "$out"
+assert_no_data_row "§15.1 lookup_product unknown name returns no row (abstention)" "$(printf 'productId\nname\ncategory\nprice')" "$out"
 
 # §15.1 PROFILE: anchors on Product.nameNormalized, no label scan
 prof=$(gp "$REF" "CYPHER nameNormalized=\"bluetooth speaker\" $LOOKUP")
