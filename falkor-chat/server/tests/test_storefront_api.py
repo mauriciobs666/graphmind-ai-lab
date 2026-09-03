@@ -51,19 +51,28 @@ even that, but only for a response some test happens to provoke.
 from __future__ import annotations
 
 import ast
+import gc
 import hmac
 import inspect
+import sys
 from pathlib import Path
+from typing import get_args
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from redis import exceptions as redis_exceptions
 from test_app import _FASTAPI_BUILTIN_PATHS, _route_entries
 
 from falkorchat import config, db, storefront, storefront_api
-from falkorchat.app import create_app
+from falkorchat.app import _register_error_handlers, create_app
 from falkorchat.config import CallContext
-from falkorchat.services import SearchNotAvailableError, ServiceError, Services
+from falkorchat.services import (
+    SearchNotAvailableError,
+    ServiceError,
+    Services,
+    ThreadNotFoundError,
+)
 from falkorchat.storefront_api import (
     API_PREFIX,
     CROSS_CUTTING_HANDLERS,
@@ -981,20 +990,25 @@ def test_the_gate_fails_when_a_route_declares_a_response_nobody_carries():
 def test_the_gate_sees_every_handler_the_app_carries():
     """The control for the handler half, and the fix for P10-1.
 
-    The count is asserted, not just the partition: the delivered gate computed
-    a difference against a baseline app and therefore saw **5** of these — the
-    twelve it subtracted included `ServiceError`, which is live on `/shop/api`
-    because the storefront calls the same `services` layer.
+    The delivered gate computed a difference against a baseline app and
+    therefore saw **5** of these — the twelve it subtracted included
+    `ServiceError`, which is live on `/shop/api` because the storefront calls
+    the same `services` layer.
+
+    **The literal count is deliberately not asserted** (P11-7): the equality
+    below already catches everything a `len(...) == 17` would, and §4.9 decided
+    the enumerated-vs-derived trade the other way for `_FASTAPI_BUILTIN_PATHS`
+    — "a framework upgrade must not red-fail an assertion about this app". The
+    failure message is no worse for it.
     """
     app = _gate_app()
     registered = registered_handlers(app)
-    assert len(registered) == 17, sorted(e.__name__ for e in registered)
     assert registered == (
         set(CROSS_CUTTING_HANDLERS)
         | set(ENVELOPE_HANDLERS)
         | set(RESHAPED_HANDLERS)
         | set(INHERITED_HANDLERS)
-    )
+    ), sorted(e.__name__ for e in registered)
     # the four buckets are a partition, not merely a cover — a handler with two
     # classifications is two claims about the same response
     buckets = [
@@ -1054,6 +1068,39 @@ def test_the_gate_fails_when_a_route_gains_a_parameter_fastapi_will_validate(
     monkeypatch.setattr(
         catalog.dependant, "query_params", list(borrowed.dependant.query_params)
     )
+
+    with pytest.raises(AssertionError, match="validating but undeclared"):
+        evaluate_gate(app)
+
+
+def test_the_gate_fails_when_a_dependency_gains_a_parameter_fastapi_will_validate(
+    monkeypatch,
+):
+    """The same mutation one level down — **and the control `_takes_params`'
+    recursion never had** (P11-8).
+
+    FastAPI validates a request iff the route *or any of its dependencies*
+    declares a body, query or path parameter, so `_takes_params` recurses. No
+    delivered route reaches that arm — the only dependency parameter the
+    storefront declares is `Authorization`, a header, which is deliberately
+    excluded — so replacing the recursive arm with `False` (mutation N-J) left
+    the file green and the derivation's own control could not tell.
+    """
+    app = _gate_app()
+    evaluate_gate(app)
+
+    catalog = _route_object(app, "GET", f"{API_PREFIX}/catalog")
+    borrowed = _route_object(app, "GET", f"{API_PREFIX}/messages")
+    assert not _takes_params(catalog.dependant)
+
+    monkeypatch.setattr(
+        catalog.dependant,
+        "dependencies",
+        [*catalog.dependant.dependencies, borrowed.dependant],
+    )
+    # the recursion, exercised: the parameter is on a sub-dependency, not here
+    assert not catalog.dependant.query_params and not catalog.dependant.path_params
+    assert _takes_params(catalog.dependant)
 
     with pytest.raises(AssertionError, match="validating but undeclared"):
         evaluate_gate(app)
@@ -2003,6 +2050,40 @@ def test_a_typed_handler_on_an_unclassified_route_is_loud_and_conservative():
     assert storefront_api._cross_cutting_json(_Health(), "graph_timeout").status_code == 504
 
 
+def test_the_service_error_re_shaper_answers_only_on_shop_api():
+    """**P11-3** — the re-shaper's `/shop/api` path scope, pinned by execution.
+
+    `if request.url.path.startswith(API_PREFIX)` → `if True` survived the whole
+    file (mutation N-A), because no delivered app carries both surfaces:
+    `create_app` refuses `storefront and dev_surface` together and registers
+    this handler only `if shop is not None`, so *absence* — not the path check
+    — is what keeps the legacy envelope byte-identical there.
+
+    The scope is nonetheless a real property of the handler, so it is asserted
+    against an app built to carry both: the same `ThreadNotFoundError`, raised
+    on each side, must answer the storefront's `401 invalid_token` inside
+    `/shop/api` and the incumbent's `404 {"error": "<class name>"}` outside it.
+    """
+    app = FastAPI()
+    _register_error_handlers(app)
+    storefront_api.register_storefront_error_handlers(app)
+
+    @app.get("/legacy/thing")
+    def _legacy() -> dict:  # pragma: no cover — raises on every call
+        raise ThreadNotFoundError("t1")
+
+    @app.get(f"{API_PREFIX}/thing")
+    def _shop() -> dict:  # pragma: no cover — raises on every call
+        raise ThreadNotFoundError("t1")
+
+    with TestClient(app) as client:
+        outside = client.get("/legacy/thing")
+        inside = client.get(f"{API_PREFIX}/thing")
+
+    assert (inside.status_code, inside.json()["error"]) == (401, "invalid_token")
+    assert (outside.status_code, outside.json()["error"]) == (404, "ThreadNotFoundError")
+
+
 def test_presenter_token_verification_compares_every_candidate_in_constant_time(
     monkeypatch,
 ):
@@ -2014,9 +2095,23 @@ def test_presenter_token_verification_compares_every_candidate_in_constant_time(
     a long prefix with a live one is rejected by the same call the right one
     would be accepted by. `any()` short-circuits, so a valid token costs fewer
     comparisons; that is stated in the docstring rather than asserted away.
+
+    **Two tokens, because "every candidate" over a set of size one is not a
+    measurement of anything** (P11-4). With one minted token, replacing the
+    loop with `compare_digest(candidates[0], token)` — the mutation this test
+    names — leaves it green, and dies only incidentally in the `ServiceError`
+    sweep, whose helper happens to log in twice. The property is real and about
+    to move: a presenter who logs in twice must not be locked out of the first
+    session, and S10 relocates this code to `Storefront.presenter_login`.
+
+    `self._tokens` is a `set`, so candidate order is arbitrary. The assertions
+    are written not to depend on it: each token verifies, and the *rejection*
+    of a non-member is what proves every candidate was compared, since that is
+    the path `any()` cannot short-circuit.
     """
     sessions = storefront_api._PresenterSessions()
-    minted = sessions.mint()
+    first, second = sessions.mint(), sessions.mint()
+    assert first != second
     seen: list[tuple[str, str]] = []
 
     class _Hmac:
@@ -2027,14 +2122,22 @@ def test_presenter_token_verification_compares_every_candidate_in_constant_time(
 
     monkeypatch.setattr(storefront_api, "hmac", _Hmac)
 
-    assert sessions.verify(minted) is True
-    assert seen == [(minted, minted)]
+    # both live sessions verify, whichever order the set yields them in
+    for token in (first, second):
+        seen.clear()
+        assert sessions.verify(token) is True
+        # every comparison made was against a live candidate, and the last one
+        # is the match `any()` stopped on
+        assert {known for known, _ in seen} <= {first, second}
+        assert seen[-1] == (token, token)
 
     seen.clear()
-    near_miss = minted[:-1] + ("A" if minted[-1] != "A" else "B")
+    near_miss = first[:-1] + ("A" if first[-1] != "A" else "B")
     assert sessions.verify(near_miss) is False
-    # the near miss went through the same comparison, not a membership test
-    assert seen == [(minted, near_miss)]
+    # the near miss went through the same comparison against **both** candidates,
+    # not a membership test and not just the first one
+    assert {known for known, _ in seen} == {first, second}
+    assert {presented for _, presented in seen} == {near_miss}
 
 
 def test_the_two_no_graph_routes_issue_no_query_at_all(storefront_config):
@@ -2142,6 +2245,46 @@ def test_a_reset_all_whose_re_read_also_times_out_is_still_504_with_no_roster(
     # and the application layer still did not retry either query
     assert repo.calls == 1
     assert roster.calls == 2
+
+
+def test_a_reset_all_whose_pre_drain_roster_read_times_out_never_enters_the_sweep(
+    seeded,
+):
+    """**P10-9's third pass** — the pre-drain roster read sits *outside* the
+    `try`, and this is the branch that says what that means.
+
+    The two branches are distinguishable from the wire, which is what makes
+    this an assertion rather than a restatement of the code: the `except` arm
+    answers `504` **with** a `participants` key (the roster it re-read, or
+    `null` when that re-read timed out too), while a failure before the `try`
+    reaches the typed handler, which answers `{"error": …}` and nothing else.
+    So moving the read inside the `try` reddens here.
+
+    Why it must not move is at the call site: the arm's `forget_all()` +
+    `clear_all_turns()` are correct only after a sweep that may have committed,
+    and running them before the drain would discard turn state that was never
+    waited on. Why `504` is nonetheless honest on a read that changed nothing
+    is the `_TIMEOUT` note above — the conservative of the two responses §5.3
+    gives a `writes` route, never the harmful direction.
+    """
+    repo = _FailingMethodRepo(
+        seeded, "list_participants", redis_exceptions.TimeoutError("timed out")
+    )
+    with TestClient(_build_app(repo)) as client:
+        _join(client, "Ada", "en")
+        response = client.post(
+            f"{API_PREFIX}/presenter/reset-all", headers=_presenter(client)
+        )
+
+    assert response.status_code == 504, response.text
+    body = response.json()
+    assert body["error"] == "reset_state_unknown"
+    # the discriminator: the typed handler carries no roster, because there was
+    # no sweep to report on
+    assert "participants" not in body
+    # the drain was never entered and the sweep was never issued — one attempt
+    # at one read, and no retry
+    assert repo.calls == 1
 
 
 @pytest.mark.parametrize(
@@ -2535,10 +2678,67 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     assert (family | {KeyError}) - (mapped | unreachable) == {KeyError}
 
 
+def test_the_only_behavioural_unreachability_claim_is_pinned_to_its_producer():
+    """**P11-6** — six of the seven "unreachable" reasons say *no storefront
+    route calls that layer*, which
+    `test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume`
+    now checks. The seventh is different in kind: it argues that
+    `UnknownOrderTransitionError` cannot be reached **because a `422` answers
+    first**, which is a claim about two declarations agreeing — and nothing
+    held them together. Widening `AdvanceOrderIn.transition`'s `Literal` by one
+    string left the file green (mutation N-H) and would put an unmapped
+    `ServiceError` on `POST /shop/api/order/advance`: `400 {"error":
+    "UnknownOrderTransitionError"}`, a Python class name where §5.3 expects a
+    plan token.
+    """
+    literal = storefront_api.AdvanceOrderIn.model_fields["transition"].annotation
+    assert set(get_args(literal)) == set(Services._ORDER_TRANSITIONS)  # noqa: SLF001
+
+
+def test_the_service_error_map_resolves_through_the_class_tree():
+    """**P11-10** — `service_error_response` walks `type(exc).__mro__`, and
+    replacing that with an exact-type lookup left the file green (mutation
+    N-B). Unexercised, the walk also quietly weakened its neighbour: a future
+    subclass of `ThreadNotFoundError` placed in `SERVICE_ERRORS_UNREACHABLE`
+    would still be *mapped*, so the partition guard would not mean what it says.
+
+    Both halves are pinned here rather than the walk being dropped, because the
+    walk is the fail-safe direction: an unclassified subclass answers §5.3's
+    token instead of a Python class name, which is the whole point of the
+    re-shaper. What it must not do is contradict the partition.
+    """
+    # the walk, exercised — a subclass inherits its parent's mapping
+    derived = type("_DerivedThreadNotFound", (ThreadNotFoundError,), {})
+    try:
+        assert service_error_response(derived("gone")) == (401, "invalid_token")
+    finally:
+        # `_subclasses` reads the live class tree, and two tests assert the
+        # family is exactly ten — so this one must not leak a member into it
+        del derived
+        gc.collect()
+    assert len(_subclasses(ServiceError)) == 10
+
+    # ...and it agrees with the partition: nothing declared unreachable
+    # inherits a mapping through that same walk
+    for klass in SERVICE_ERRORS_UNREACHABLE:
+        assert not set(klass.__mro__) & set(SERVICE_ERROR_RESPONSES), (
+            f"{klass.__name__} is declared unreachable but the MRO walk maps it"
+        )
+
+
 def test_every_inherited_handler_states_why_it_produces_no_row():
     """`INHERITED_HANDLERS` is an *exclusion rule*, and an exclusion rule that
-    says only "excluded" is the thing P10-1 was. Each entry carries the reason;
-    the sweep above is what checks the reasons are true."""
+    says only "excluded" is the thing P10-1 was. Each entry carries the reason.
+
+    **What checks the reasons are true is not the sweep** — this docstring said
+    it was, and the sweep arms three `ServiceError` faults and no workflow
+    fault, so it checked these eleven reasons in an empty intersection (P11-1).
+    Every excuse here has one of two shapes, and each has its own mechanism
+    below: *"no storefront route calls layer X"* is
+    `test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume`,
+    and *"no storefront route raises it"* is
+    `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`.
+    """
     assert all(reason.strip() for reason in INHERITED_HANDLERS.values())
     assert ServiceError not in INHERITED_HANDLERS
     assert ServiceError in RESHAPED_HANDLERS
@@ -2736,6 +2936,165 @@ def test_the_router_is_the_only_thing_between_a_token_and_the_graph():
     assert source.count("resolve_token(") == 1
 
 
+def _router_source() -> str:
+    return Path(storefront_api.__file__).read_text(encoding="utf-8")
+
+
+def _parse_router(source: str) -> ast.FunctionDef:
+    """`build_storefront_router`'s node, out of `source`.
+
+    Takes the source rather than reading it, so every reader below can be run
+    against a synthetic snippet as its own positive control — the thing
+    `_raised_refusals` had no way to do.
+    """
+    return next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "build_storefront_router"
+    )
+
+
+def _service_calls(source: str) -> set[str]:
+    """Every `services.<name>` the router body actually reaches.
+
+    Parsed, not grepped, for the reason `_caught_names` is: `advance_order`'s
+    docstring names `services.order_belongs_to_customer` in prose, which a
+    substring search reports as a fourth call and an AST walk does not see.
+    """
+    return {
+        node.attr
+        for node in ast.walk(_parse_router(source))
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "services"
+    }
+
+
+def _router_bindings(source: str) -> dict[str, str]:
+    """The `<name> = <expr>` bindings at the top of the router body."""
+    return {
+        target.id: ast.unparse(node.value)
+        for node in _parse_router(source).body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+
+
+def _raised_class_names(source: str) -> set[str]:
+    """Every exception class a `raise` inside the router names.
+
+    `raise Foo(...)`, `raise Foo` and `raise mod.Foo(...)` all resolve to
+    `"Foo"`; a bare `raise` (re-raise) names nothing and is skipped.
+    """
+    names: set[str] = set()
+    for node in ast.walk(_parse_router(source)):
+        if not isinstance(node, ast.Raise) or node.exc is None:
+            continue
+        exc = node.exc
+        if isinstance(exc, ast.Call):
+            exc = exc.func
+        if isinstance(exc, ast.Name):
+            names.add(exc.id)
+        elif isinstance(exc, ast.Attribute):
+            names.add(exc.attr)
+        else:  # pragma: no cover — a shape this reader cannot resolve
+            raise AssertionError(f"unresolvable raise: {ast.dump(node.exc)}")
+    return names
+
+
+# The `services` layer the router reaches **today**, spelled out so that the
+# step which adds a fourth call has to come back here. Deliberately *not*
+# forward-looking: §5.1's S9 row adds the trigger enqueue
+# (`services.start_workflow_run`) to `POST /shop/api/messages`, which makes
+# three of `INHERITED_HANDLERS`' eleven excuses falsifiable —
+# `WorkflowEngineDisabledError` (`_require_executor`),
+# `WorkflowInputRejectedError` and `WorkflowDefNotFoundError`. A set written to
+# accommodate that in advance would be a guard that cannot fail at the one
+# moment it is worth something (`docs/reviews/salesperson-ui-impl.md`
+# `## Pass 11`, P11-1).
+SERVICE_CALLS_TODAY = frozenset({
+    "read_messages", "post_message", "get_current_order",
+})
+
+
+def test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume():
+    """**The mechanism `INHERITED_HANDLERS`' eleven excuses never had** (P11-1).
+
+    Every one of those excuses has the form *"no storefront route calls layer
+    X"*, and the only test on them asserted that the reason strings are
+    non-empty. Its docstring credited "the sweep above", which arms three
+    `ServiceError` faults and no workflow fault at all — so it checked eleven
+    reasons in an empty intersection, and mutation N-F (a route raising
+    `WorkflowEngineDisabledError`) answered `503 {"error":"<class name>"}`
+    through it, colliding in status with `demo_not_seeded` on the token C9
+    dispatches on.
+
+    The excuses are AST-readable, so they are read: the router's whole
+    `services.<name>` surface is the three below. A fourth call reddens here
+    and its layer's exemption has to be re-derived rather than inherited.
+    """
+    source = _router_source()
+    # the control: this reads the binding the walk assumes, so a router that
+    # renamed it (or reached the layer through `shop._services` directly) fails
+    # here rather than silently measuring an empty set
+    assert _router_bindings(source).get("services") == "shop._services"
+
+    assert _service_calls(source) == set(SERVICE_CALLS_TODAY)
+
+    # and the reader really does resolve a call it is shown
+    assert _service_calls(
+        "def build_storefront_router(shop):\n"
+        "    services = shop._services\n"
+        "    services.start_workflow_run(ctx)\n"
+    ) == {"start_workflow_run"}
+
+
+def test_the_router_raises_only_the_two_classes_whose_handlers_re_shape():
+    """**P11-2, and P11-1's other half.**
+
+    `ENVELOPE_HANDLERS` are the two handlers that re-shape a response the route
+    itself declares; every other handler on the app either produces one of the
+    three cross-cutting rows or is excused by `INHERITED_HANDLERS`. So a route
+    body that raises anything else is an unruled `(route, response)` by
+    construction, and neither half of the gate can see it: the declaration half
+    compares declarations against the table, and the handler half only crosses
+    the cross-cutting three.
+
+    Two mutations proved the hole, both green through the whole file:
+    **N-E** — `raise HTTPException(status_code=410, detail="gone")` in `join`,
+    which answered `410 {"detail":"gone"}` with no `error` token at all
+    (`HTTPException` is imported here, and `_raised_refusals` collects only
+    `StorefrontHTTPError` calls, so it sees nothing). **N-F/N-F2** — a route
+    raising `WorkflowEngineDisabledError` / `SearchNotAvailableError`, which
+    reach the inherited handlers `INHERITED_HANDLERS` excuses.
+
+    This is what makes `INHERITED_HANDLERS[StarletteHTTPException]`'s reason
+    true rather than merely stated.
+    """
+    source = _router_source()
+    assert _raised_class_names(source) == {
+        klass.__name__ for klass in ENVELOPE_HANDLERS
+    } == {"StorefrontHTTPError", "RequestValidationError"}
+
+    # the bare `HTTPException` half, named separately because it is the one the
+    # reason string cites and the one a reflex reaches for
+    assert "HTTPException" not in _raised_class_names(source)
+
+    # the controls: the reader resolves both mutation shapes it is shown
+    assert _raised_class_names(
+        "def build_storefront_router(shop):\n"
+        "    def join(body):\n"
+        "        raise HTTPException(status_code=410, detail='gone')\n"
+    ) == {"HTTPException"}
+    assert _raised_class_names(
+        "def build_storefront_router(shop):\n"
+        "    def join(body):\n"
+        "        raise WorkflowEngineDisabledError('engine off')\n"
+    ) == {"WorkflowEngineDisabledError"}
+
+
 def _raised_refusals() -> dict[str, set[tuple[int, str]]]:
     """`{route function name: {(status, token)}}` — every `StorefrontHTTPError`
     the router can raise, read off the parsed source.
@@ -2743,14 +3102,13 @@ def _raised_refusals() -> dict[str, set[tuple[int, str]]]:
     Both argument shapes the router uses are resolved: a literal token, and
     `<StorefrontError subclass>.code`, whose value is the plan's own name for
     that response (`unscoped_participant`, `reset_state_unknown`).
+
+    It collects `StorefrontHTTPError` **only**, which is what it is for and is
+    also what made it unable to see a bare `HTTPException` (P11-2). That gap is
+    closed by `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`
+    above, not here.
     """
-    source = Path(storefront_api.__file__).read_text(encoding="utf-8")
-    builder = next(
-        node
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.FunctionDef)
-        and node.name == "build_storefront_router"
-    )
+    builder = _parse_router(_router_source())
     found: dict[str, set[tuple[int, str]]] = {}
     for function in builder.body:
         if not isinstance(function, ast.FunctionDef):
@@ -2864,12 +3222,32 @@ def test_every_row_of_the_table_was_produced_by_execution(request):
     fail here, and so does the next one — no tagging to keep in step, because
     the evidence is the response the server actually sent.
 
-    Skipped under a `-k` filter, where a subset of the file cannot cover the
-    whole table by construction; the full-suite run is where it does its work,
-    and the `⊆` direction above holds unconditionally either way.
+    Skipped whenever the caller ran a subset of this module, which cannot cover
+    the whole table by construction; the full run is where it does its work, and
+    the `⊆` direction above holds unconditionally either way.
+
+    **The predicate is what was collected, not how it was selected** (P11-9).
+    Keying on `-k` alone let a node-id selection through: `pytest <file>::<this
+    test>` — which is exactly what `pytest --lf` re-runs after any failure —
+    leaves `config.option.keyword` empty, so this ran against an almost-empty
+    `_OBSERVED` and reported all 57 rows as unproducible. Every selector
+    (`-k`, a node id, `--lf`, `--deselect`) shows up the same way here: a test
+    function of this module that pytest did not collect. Marker deselection
+    would too, and that is fine — `-m "not live"` is in this project's
+    `addopts` and deselects nothing in this file.
     """
-    if request.config.option.keyword:
-        pytest.skip("a -k subset cannot cover the whole table by construction")
+    module = sys.modules[__name__]
+    defined = {name for name in dir(module) if name.startswith("test_")}
+    collected = {
+        getattr(item, "originalname", None) or item.name.split("[")[0]
+        for item in request.session.items
+        if getattr(item, "module", None) is module
+    }
+    if collected != defined:
+        pytest.skip(
+            f"{len(defined - collected)} of this module's tests were not "
+            "collected, so the run cannot cover the whole table"
+        )
     missing = FLAT_TABLE - _OBSERVED
     assert missing == set(), (
         f"rows of §5.3's completeness table that no test in this file ever "

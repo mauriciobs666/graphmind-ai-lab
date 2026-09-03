@@ -429,14 +429,26 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # the reason. `ServiceError` is deliberately **not** here — it is the one that
 # provably fires, so the storefront overrides it (`RESHAPED_HANDLERS` below)
 # rather than excusing it.
+#
+# **Every reason below is a checked claim, not prose** — which is what P11-1
+# found it was not. The two shapes have two mechanisms, both AST-read off this
+# file by `tests/test_storefront_api.py`: *"no storefront route calls layer X"*
+# is `test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume`
+# (the router's whole `services.<name>` surface is three names, and a fourth
+# reddens), and *"no storefront route raises it"* is
+# `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape` (the
+# router raises `ENVELOPE_HANDLERS`' two classes and nothing else).
 INHERITED_HANDLERS: dict[type[BaseException], str] = {
     # FastAPI/Starlette defaults, on every app ever built.
     StarletteHTTPException: (
         "the framework default. No `/shop/api` route raises a bare "
         "`HTTPException` — they raise `StorefrontHTTPError`, whose own handler "
-        "wins the MRO walk (asserted by `_raised_refusals`) — and the `405` "
-        "Starlette raises for an unmatched method is not a `(METHOD, path)` "
-        "this table keys on"
+        "wins the MRO walk (asserted by "
+        "`test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`; "
+        "`_raised_refusals`, which this cited until P11-2, collects "
+        "`StorefrontHTTPError` calls only and so could not see a bare one) — "
+        "and the `405` Starlette raises for an unmatched method is not a "
+        "`(METHOD, path)` this table keys on"
     ),
     WebSocketRequestValidationError: (
         "the framework default; the storefront registers no websocket route"
@@ -553,6 +565,21 @@ def _make_service_error_handler(inherited):  # noqa: ANN001, ANN202
     log and still delegates: a class name reaching a participant is a defect,
     but inventing a token for a subclass nobody classified would be a worse
     one. The subclass guard in the tests is what keeps that branch dead.
+
+    **Which mechanism is load-bearing for which claim** (P11-3 — the commit
+    message and §5.3's third narrowing both credited the path check with
+    something it does not do). The delivered legacy surface is byte-identical
+    because this handler is *absent* from it: `create_app` refuses
+    `storefront and dev_surface` together (`app.py:278`) and registers this
+    only `if shop is not None`, so no app that mounts `api.build_router` ever
+    carries it — that, not the path check, is what
+    `test_the_default_deployment_is_untouched_by_the_storefront_parameters`
+    passes on. The path check is what makes the handler correct on an app that
+    carries **both** surfaces, which is a property of the handler rather than
+    of any deployment, so it is pinned by execution against exactly such an app
+    in `test_the_service_error_re_shaper_answers_only_on_shop_api` — without
+    which `startswith(API_PREFIX)` → `True` is a mutation the whole file
+    survives (N-A).
     """
 
     async def _handle_service_error(request, exc):  # noqa: ANN001
@@ -1227,6 +1254,21 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         subsumes stopping intake for *correctness* of the sweep and differs
         only in whether a post that lands mid-drain extends the wait.
         """
+        # **Outside the `try` below, and that is the decision** (P10-9, flagged
+        # twice). Moving it in would not be a widening, it would be wrong: the
+        # `except` arm calls `forget_all()` + `clear_all_turns()`, which are
+        # correct only *after* a sweep that may have committed. Run before the
+        # drain they would discard the turn state of turns still running and
+        # never waited on — manufacturing the divergence the arm exists to
+        # report — and the "re-read" they attach to the response would be a
+        # re-read of nothing that happened.
+        #
+        # Left here, a timeout on this read reaches the typed handler and
+        # answers `504 reset_state_unknown` on a `writes` route. That is
+        # honest, and it is the *conservative* of the two responses §5.3 gives
+        # this route rather than the exactly-true one — the argument is made
+        # once, at `_TIMEOUT` in `tests/test_storefront_api.py`, and pinned by
+        # `test_a_reset_all_whose_pre_drain_roster_read_times_out_never_enters_the_sweep`.
         roster = repo.list_participants(shop.ws)
         deadline = time.monotonic() + shop.quiesce_s
         while any(shop.turn_in_flight(row["participantId"]) for row in roster):
