@@ -11,19 +11,29 @@ The one thing this module exists to make decidable
 --------------------------------------------------
 **The error map is total by type**, so the set of responses the server can
 produce is bounded by construction rather than by anybody having enumerated it
-(§5.3's C13 residual paragraph). Two machine-readable constants carry that:
+(§5.3's C13 residual paragraph). Machine-readable constants carry that:
 
 * `ROUTE_CLASSES` — §5.3's route-class table, keyed on `(METHOD, path)` because
   `/shop/api/messages` is a `reads-only` route under `GET` and a `writes` route
   under `POST`. It is the **input** to the gate, not a nicety: without it the
   `{handlers} × {routes}` cross product is nonsense on the two routes that
   issue no query at all.
-* `CROSS_CUTTING_HANDLERS` / `ENVELOPE_HANDLERS` — every exception handler this
-  module registers, split by whether it *produces* one of §5.3's three
-  cross-cutting responses or merely re-shapes a response a route already
-  declares. `tests/test_storefront_api.py` asserts that the handlers actually
-  registered on the app are exactly these two sets, so a handler added without
-  a classification reddens rather than passing unnoticed.
+* `CROSS_CUTTING_HANDLERS` / `ENVELOPE_HANDLERS` / `RESHAPED_HANDLERS` /
+  `INHERITED_HANDLERS` — **every exception handler on the app**, split by
+  whether it *produces* one of §5.3's three cross-cutting responses, merely
+  re-shapes a response a route already declares, re-shapes an *inherited*
+  handler's response into a plan token on `/shop/api` only, or produces no row
+  at all. `tests/test_storefront_api.py` asserts that `app.exception_handlers`
+  is exactly the union of the four, so a handler with no classification reddens
+  rather than passing unnoticed.
+
+  The four exist because `create_app` builds **one** app: the framework's
+  defaults and `app.py`'s legacy error map are on the storefront deployment
+  too. The gate used to enumerate the *difference* against a baseline app,
+  which showed it five of seventeen handlers and hid the one that fires —
+  `POST /shop/api/messages` answered `404 {"error":"ThreadNotFoundError"}`, an
+  unruled `(route, response)` arriving from the server
+  (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-1).
 
 `cross_cutting_response()` is the **single seam** both the live handler and the
 gate read, so the gate cannot agree with a handler that has drifted from it —
@@ -54,6 +64,7 @@ Steps that extend this module
 from __future__ import annotations
 
 import hmac
+import inspect
 import logging
 import secrets
 import threading
@@ -61,15 +72,42 @@ import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import (
+    RequestValidationError,
+    WebSocketRequestValidationError,
+)
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from redis import exceptions as redis_exceptions
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import config
 from .db import FalkorDBUnreachableError
+from .guards import WorkflowConfigError
+from .services import (
+    BatchTooLargeError,
+    ChannelNotFoundError,
+    DocumentTooLargeError,
+    EmptyDocumentError,
+    InvalidSearchQueryError,
+    MatchNotFoundError,
+    SearchNotAvailableError,
+    ServiceError,
+    ThreadNotFoundError,
+    UnknownActorError,
+    UnknownMemberError,
+    UnknownOrderTransitionError,
+    WorkflowDefConflictError,
+    WorkflowDefNotFoundError,
+    WorkflowDefSpecError,
+    WorkflowEngineDisabledError,
+    WorkflowInputRejectedError,
+    WorkflowRunNotFoundError,
+    WorkflowRunNotWaitingError,
+)
 from .storefront import (
     QUIESCE_POLL_S,
+    DemoNotSeededError,
     OrderTransitionRefusedError,
     ParticipantRecord,
     QuiesceTimeoutError,
@@ -326,7 +364,20 @@ async def _handle_validation_error(_request, exc: RequestValidationError):  # no
 
 
 def _cross_cutting_json(request, handler_token: str) -> JSONResponse:  # noqa: ANN001
-    answer = cross_cutting_response(handler_token, request.method, request.url.path)
+    try:
+        answer = cross_cutting_response(
+            handler_token, request.method, request.url.path
+        )
+    except KeyError:
+        # An **unclassified** route, which is a different fault from a
+        # `no graph access` one but has the same right answer. Caught here
+        # rather than left to propagate, because propagating means raising
+        # inside an exception handler — Starlette's own `500`, with none of the
+        # log line below (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+        # P10-8). `cross_cutting_response` keeps raising, deliberately: the gate
+        # reads that seam and *wants* the `KeyError`, which is the route-table
+        # assertion firing from the inside.
+        answer = None
     if answer is None:
         # Unreachable by construction: a `no graph access` route issues no
         # query, and the route-table assertion keeps `ROUTE_CLASSES` exactly the
@@ -363,6 +414,168 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
     {StorefrontHTTPError, RequestValidationError}
 )
 
+# ── the handlers the storefront app carries but does not register ────────────
+#
+# `create_app` builds **one** FastAPI app, so the framework's own defaults and
+# `app.py`'s legacy error map are on the storefront deployment too. The gate
+# enumerates `app.exception_handlers` **whole** — it used to subtract a
+# baseline app's handlers, which hid twelve of the seventeen and with them the
+# one that provably fires (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+# P10-1: `POST /shop/api/messages` answered `404
+# {"error":"ThreadNotFoundError"}`, a `(route, response)` pair no rule covers).
+#
+# So every handler on the app must be classified. This bucket is the one that
+# produces **no** `(route, response)` row on a `/shop/api` route; the value is
+# the reason. `ServiceError` is deliberately **not** here — it is the one that
+# provably fires, so the storefront overrides it (`RESHAPED_HANDLERS` below)
+# rather than excusing it.
+INHERITED_HANDLERS: dict[type[BaseException], str] = {
+    # FastAPI/Starlette defaults, on every app ever built.
+    StarletteHTTPException: (
+        "the framework default. No `/shop/api` route raises a bare "
+        "`HTTPException` — they raise `StorefrontHTTPError`, whose own handler "
+        "wins the MRO walk (asserted by `_raised_refusals`) — and the `405` "
+        "Starlette raises for an unmatched method is not a `(METHOD, path)` "
+        "this table keys on"
+    ),
+    WebSocketRequestValidationError: (
+        "the framework default; the storefront registers no websocket route"
+    ),
+    # `app.py`'s `_register_error_handlers`, minus `ServiceError`. All eleven
+    # belong to the legacy REST router, which `dev_surface=False` does not
+    # mount and which no storefront route calls into.
+    WorkflowDefSpecError: "workflow authoring; no storefront route publishes a def",
+    WorkflowDefNotFoundError: "workflow authoring; no storefront route reads a def",
+    WorkflowDefConflictError: "workflow authoring; no storefront route publishes a def",
+    WorkflowRunNotFoundError: "run control; no storefront route addresses a run",
+    WorkflowRunNotWaitingError: "run control; no storefront route resumes a run",
+    WorkflowInputRejectedError: "run control; no storefront route submits run input",
+    WorkflowConfigError: "guard evaluation, inside the executor — off the request path",
+    WorkflowEngineDisabledError: (
+        "raised by the legacy `POST /workflow-runs`, which is not mounted here"
+    ),
+    SearchNotAvailableError: (
+        "raised by `search_documents`, which no storefront route calls"
+    ),
+}
+
+# The one inherited handler the storefront **overrides** instead of excusing,
+# because it is the one that provably fires: the storefront calls the same
+# `services` layer the legacy surface does, and `app.py`'s handler answers
+# `{"error": "<Python class name>"}` — which is not a contract. §5.3's client
+# rules dispatch on a plan token, so a class name reaching a participant is an
+# unruled `(route, response)` arriving from the server (P10-1).
+RESHAPED_HANDLERS: frozenset[type[BaseException]] = frozenset({ServiceError})
+
+# `ServiceError` subclass -> the storefront response it re-shapes into. Keyed
+# by **type**, not by route, so the mapping is total over the family wherever
+# it fires; which routes it can fire *on* is `SERVICE_ERROR_ROUTES` below.
+#
+# `ThreadNotFoundError`/`UnknownActorError` say the participant's own `Thread`
+# or `User` is gone — the reset window `Storefront._await_quiesce`'s docstring
+# names. Their honest answer is **C3's `401`**: the credential names nothing
+# live, and `resolve_token` (which re-reads the graph on every call) answers
+# `401` on the very next request anyway, so this converges the race with the
+# steady state instead of inventing a third outcome.
+#
+# `UnknownMemberError` is a different thing wearing the same class: the demo
+# `Agent` in `mentions=[agent_id]` is gone. That is not the participant's
+# session, it is §4.9's preflight condition failing *late* — the same operator
+# error `DemoNotSeededError` reports from `join`, so it takes the same token
+# and the same C9 rule ("nothing changed": `_validate_and_derive_role` raises
+# **before** any write).
+SERVICE_ERROR_RESPONSES: dict[type[ServiceError], tuple[int, str]] = {
+    ThreadNotFoundError: (401, "invalid_token"),
+    UnknownActorError: (401, "invalid_token"),
+    UnknownMemberError: (503, "demo_not_seeded"),
+}
+
+# Every other `ServiceError` subclass, with the reason no `/shop/api` route can
+# raise it. **The guard, not the list, is the mechanism**: the tests assert
+# that this dict plus `SERVICE_ERROR_RESPONSES` partition the subclasses of
+# `ServiceError` exactly, so an eighth subclass cannot join the family
+# unnoticed — the same structural shape `StorefrontError`'s guard has.
+SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
+    ChannelNotFoundError: (
+        "raised by `ensure_thread` from a `channel_id` the caller supplies; no "
+        "storefront route addresses a channel at all (§5.2's invariant)"
+    ),
+    InvalidSearchQueryError: "full-text search; no storefront route searches",
+    EmptyDocumentError: "document ingestion; no storefront route ingests",
+    DocumentTooLargeError: "document ingestion; no storefront route ingests",
+    BatchTooLargeError: "document ingestion; no storefront route ingests",
+    MatchNotFoundError: "entity-match confirmation; no storefront route touches it",
+    UnknownOrderTransitionError: (
+        "`services.advance_order`'s guard on an unknown transition string — "
+        "`AdvanceOrderIn.transition` is a `Literal` of exactly the three it "
+        "accepts, so `422 validation_failed` answers first and this is "
+        "unreachable from any client (§5.3 C11)"
+    ),
+}
+
+# The routes a `ServiceError` can actually be raised on, and therefore the
+# cross-product input for the handler above. **Derived by execution, not by
+# reading**: `test_only_post_messages_can_raise_a_service_error` arms each of
+# the three faults in turn and drives all eleven routes, so this set is a
+# measurement rather than a hand-list (`docs/reviews/salesperson-ui-impl.md`
+# `## Pass 10`, P10-11's objection to hand-maintained route sets). It is one
+# route because `POST /shop/api/messages` is the only route whose call reaches
+# `services._validate_and_derive_role`; every other route's service calls are
+# thin reads and writes over the repository, which raises no `ServiceError`.
+SERVICE_ERROR_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {("POST", f"{API_PREFIX}/messages")}
+)
+
+
+def service_error_response(exc: BaseException) -> tuple[int, str] | None:
+    """`(status, error token)` for one `ServiceError`, or `None` when the
+    storefront has no mapping for it.
+
+    The seam, in the same sense `cross_cutting_response` is one: the live
+    handler and the gate both read it, so a mapping the gate believes in and a
+    handler that has drifted from it cannot coexist. `None` is not a hole — it
+    is the answer the subclass guard exists to keep unreachable.
+    """
+    for klass in type(exc).__mro__:
+        if klass in SERVICE_ERROR_RESPONSES:
+            return SERVICE_ERROR_RESPONSES[klass]
+    return None
+
+
+def _make_service_error_handler(inherited):  # noqa: ANN001, ANN202
+    """The path-scoped `ServiceError` re-shaper (P10-1).
+
+    Two axes, both delegating rather than duplicating. **Off `/shop/api`** the
+    request belongs to whatever else this app serves, and the answer is
+    `inherited` — captured, not re-implemented, so the legacy envelope has one
+    definition and this cannot drift from it. **On `/shop/api` with no
+    mapping** the storefront has nothing honest to say, so it says so in the
+    log and still delegates: a class name reaching a participant is a defect,
+    but inventing a token for a subclass nobody classified would be a worse
+    one. The subclass guard in the tests is what keeps that branch dead.
+    """
+
+    async def _handle_service_error(request, exc):  # noqa: ANN001
+        if request.url.path.startswith(API_PREFIX):
+            answer = service_error_response(exc)
+            if answer is not None:
+                status, token = answer
+                return JSONResponse(
+                    status_code=status,
+                    content={"error": token, "detail": str(exc)},
+                )
+            _log.error(
+                "%s reached %s %s with no storefront mapping — the response "
+                "carries a Python class name where §5.3 expects a plan token",
+                type(exc).__name__, request.method, request.url.path,
+            )
+        result = inherited(request, exc)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    return _handle_service_error
+
 
 def register_storefront_error_handlers(app: FastAPI) -> None:
     """Register the storefront's error map on `app` (§5.1 S8).
@@ -372,7 +585,24 @@ def register_storefront_error_handlers(app: FastAPI) -> None:
     deployment only: the `503 graph_unavailable` half would be an improvement
     everywhere, but the `504 <op>_state_unknown` half is meaningless without
     `ROUTE_CLASSES`, and widening the map to the legacy surface is not S8's.
+
+    **Must run after `app.py`'s `_register_error_handlers`**, which is where
+    the `ServiceError` handler this one wraps comes from. Asserted rather than
+    assumed: an absent inherited handler raises here, at wiring time, instead
+    of surfacing as a `TypeError` inside an exception handler on the first
+    `ServiceError` a participant provokes.
     """
+    inherited_service_error = app.exception_handlers.get(ServiceError)
+    if inherited_service_error is None:
+        raise RuntimeError(
+            "register_storefront_error_handlers must run after "
+            "_register_error_handlers — the storefront's ServiceError handler "
+            "re-shapes on /shop/api and delegates to the inherited one "
+            "everywhere else, and there is nothing to delegate to"
+        )
+    app.add_exception_handler(
+        ServiceError, _make_service_error_handler(inherited_service_error)
+    )
     app.add_exception_handler(StorefrontHTTPError, _handle_storefront_http_error)
     app.add_exception_handler(RequestValidationError, _handle_validation_error)
     app.add_exception_handler(FalkorDBUnreachableError, _handle_graph_unavailable)
@@ -388,9 +618,18 @@ _STEP_10_INTERIM = """
 Everything below that S10 takes with it, listed once so the move is mechanical:
 
 * `_PresenterSessions` and the `presenter/session` route body  -> `Storefront.presenter_login`
-* `presenter/participants`' `_repo.list_participants` call -> `Storefront.list_participants`
+* `presenter/participants`' `repo.list_participants` call      -> `Storefront.list_participants`
 * the `presenter/reset-all` route body                          -> `Storefront.reset_all`
-* the three private reads in `build_storefront_router`          -> deleted with them
+* **two of the four** private reads in `build_storefront_router` -> deleted with
+  them: `repo` (read only at the three presenter routes and reset-all's re-read)
+  and `presenter_key` (read only by `presenter_session`).
+  **`services` and `agent_id` stay** — `services` is used by `GET /messages`,
+  `POST /messages` and `/order/advance`, and `agent_id` by `POST /messages`;
+  neither S9's row nor S10's moves `read_messages` or `get_current_order` onto
+  `Storefront`, so nothing in either step deletes their last use
+  (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-6 — the earlier
+  wording said "the three private reads", which was wrong on both the count and
+  the ownership).
 
 S8 implements them here because its gate is evaluated over **all eleven**
 routes (`{declared} ∪ {handler-produced} == §5.3's table`, read off
@@ -427,8 +666,13 @@ class _PresenterSessions:
         with self._lock:
             candidates = tuple(self._tokens)
         # `compare_digest` per candidate rather than a set membership test, so
-        # a wrong token costs the same time whatever prefix it shares with a
-        # live one — the same posture `resolve_token` takes.
+        # **each comparison** costs the same time whatever prefix the presented
+        # token shares with a live one — the same posture `resolve_token`
+        # takes. Per *call* it is not constant time and does not claim to be:
+        # `any()` short-circuits on the match, so a valid token costs fewer
+        # comparisons than an invalid one. Harmless — the response already
+        # reveals validity — and stated rather than overclaimed
+        # (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-10).
         return any(hmac.compare_digest(known, token) for known in candidates)
 
 
@@ -444,10 +688,11 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
     the route object, so the second half of S8's gate reads them back off
     `app.routes` instead of reading this file.
     """
-    # One documented coupling instead of three scattered ones, the same posture
+    # One documented coupling instead of four scattered ones, the same posture
     # `Storefront.__init__` takes towards `Services._repo` and for the same
-    # reason: `Storefront` exposes no accessor for these three, and S9/S10
-    # delete every use of them (`_STEP_10_INTERIM`). Read once, here.
+    # reason: `Storefront` exposes no accessor for these four. **Two of them go
+    # with S10** (`repo`, `presenter_key`); `services` and `agent_id` stay —
+    # see `_STEP_10_INTERIM` for which and why. Read once, here.
     repo = shop._repo  # noqa: SLF001 — see above
     services = shop._services  # noqa: SLF001 — the post/read/order service calls
     agent_id = shop._agent_id  # noqa: SLF001 — the mention every post carries
@@ -596,6 +841,12 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                                "`language` not in `locales` (UI-supplied) — C11",
                 "x-storefront-tokens": ["validation_failed"],
             },
+            503: {
+                "description": "the demo `Agent` is gone, so `ensure_participant` "
+                               "wrote **nothing** — §4.9's preflight condition "
+                               "failing late (C9)",
+                "x-storefront-tokens": ["demo_not_seeded"],
+            },
         },
     )
     def join(body: JoinIn) -> dict[str, Any]:
@@ -607,17 +858,17 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         delivered S6 to close a window that needs a FalkorDB socket timeout
         during the one write a participant makes before they hold any state.
 
-        **`DemoNotSeededError` is deliberately not caught, and it is not a
-        hole.** `storefront.py` documents it as a `503`, but §5.3's completeness
-        table has no such row for this route — and after `storefront_preflight`
-        has run, the condition it reports is structurally unreachable: the
-        preflight asks the identical `resolve_member_kinds` question at boot,
-        and the demo `Agent` is a **positive survivor of both resets**
-        (`repository.reset_all_participants`), so nothing the storefront does
-        can take it away afterwards. If it ever escaped it would propagate as a
-        `5xx`, which is §5.2's own stance on an unmapped graph error. Recorded
-        as a plan gap rather than papered over: adding a row is the plan's call,
-        not this step's.
+        **`DemoNotSeededError` is `503 demo_not_seeded`, and the argument that
+        it could be left unmapped was wrong** (`docs/reviews/salesperson-ui-impl.md`
+        `## Pass 10`, P10-2). S8 first argued it unreachable because
+        `storefront_preflight` asks the identical `resolve_member_kinds`
+        question at boot and the demo `Agent` survives both resets — but **the
+        preflight is a boot-time check, not an invariant**: deleting the
+        `Agent` out of band after a clean start reproduced a bare
+        `500 Internal Server Error`, in plain text, against the delivered app.
+        Nothing was written when it fires (`ensure_participant` reports
+        `agentMissing` having created nothing), so this is exactly C9's
+        *nothing changed* and the plan carries the row (§5.3, v1.20).
         """
         if body.language not in shop.locales:
             # The same `RequestValidationError` Pydantic would have raised, so
@@ -633,7 +884,10 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                     }
                 ]
             )
-        record = shop.join(body.displayName, body.language)
+        try:
+            record = shop.join(body.displayName, body.language)
+        except DemoNotSeededError as exc:
+            raise StorefrontHTTPError(503, "demo_not_seeded", str(exc)) from exc
         return {
             "participantId": record.participant_id,
             "token": record.token,

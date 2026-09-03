@@ -22,12 +22,30 @@ route with no declaration, a declared response nobody produces, a table row
 nobody declares, and a route reclassified out of `no graph access`. A gate that
 cannot be shown to fail is not a gate.
 
-**What neither half closes, stated because the residue ships** (§5.3 C13's own
+**Three things Pass 10 established the two halves do not close**
+(`docs/reviews/salesperson-ui-impl.md`), each repaired here rather than noted:
+
+1. **The handler half's *input* was a delta, not a set** (P10-1). It subtracted
+   a baseline app's handlers and so saw 5 of the 17 the storefront app carries.
+   `registered_handlers` now enumerates `app.exception_handlers` whole, and
+   `_assert_handler_ownership` checks that each of the four classifications is
+   a true claim about who registered the handler — which is the part the delta
+   was really buying.
+2. **`RequestValidationError` is an envelope handler whose route set is
+   derivable** (P10-3), so it is derived — `validating_routes` — and fed into
+   the produced set. A route that gains a query parameter now reddens instead
+   of producing an undeclared `422` in silence.
+3. **"Every declared entry is proved producible" was a convention, not a
+   mechanism** (P10-5). Every response every `TestClient` in this file receives
+   is recorded, and the two tests at the end assert the observed set and the
+   table agree in both directions. The `⊆` direction is what catches an unruled
+   response *arriving from the server* on a route nobody wrote a test for; the
+   `⊇` direction is what catches a declared row nothing produces.
+
+**What still does not close, stated because the residue ships** (§5.3 C13's own
 scoring): a route that `return`s a `JSONResponse(status_code=…)` never raises,
-so it is invisible to the handler set; and a declaration is an enumeration that
-can be wrong in both directions. What narrows it here is that every declared
-entry is proved *producible* by a contract test below, so the declaration and
-the implementation disagree loudly instead of agreeing by omission.
+so it is invisible to the handler set — the observation check above narrows
+even that, but only for a response some test happens to provoke.
 """
 
 from __future__ import annotations
@@ -45,14 +63,20 @@ from test_app import _FASTAPI_BUILTIN_PATHS, _route_entries
 from falkorchat import config, db, storefront, storefront_api
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
-from falkorchat.services import Services
+from falkorchat.services import SearchNotAvailableError, ServiceError, Services
 from falkorchat.storefront_api import (
     API_PREFIX,
     CROSS_CUTTING_HANDLERS,
     ENVELOPE_HANDLERS,
+    INHERITED_HANDLERS,
+    RESHAPED_HANDLERS,
     ROUTE_CLASSES,
+    SERVICE_ERROR_RESPONSES,
+    SERVICE_ERROR_ROUTES,
+    SERVICE_ERRORS_UNREACHABLE,
     StorefrontPreflightError,
     cross_cutting_response,
+    service_error_response,
 )
 
 WS = "test"
@@ -96,6 +120,10 @@ TABLE: dict[tuple[str, str], set[tuple[int, str]]] = {
     ("POST", f"{API_PREFIX}/session"): {
         (200, "ok"),
         (422, "validation_failed"),
+        # §5.3 (plan v1.20): the demo `Agent` is gone, so `ensure_participant`
+        # wrote nothing — C9's fourth source, not a new rule. Produced by the
+        # route (`except DemoNotSeededError`), not by a handler.
+        (503, "demo_not_seeded"),
         (503, "graph_unavailable"),          # [X]
         (504, "join_state_unknown"),         # [X] no re-read is possible (C4)
     },
@@ -117,6 +145,14 @@ TABLE: dict[tuple[str, str], set[tuple[int, str]]] = {
         (401, "invalid_token"),
         (409, "turn_in_progress"),
         (422, "validation_failed"),
+        # [X] `UnknownMemberError` — the demo `Agent` named in `mentions` is
+        # gone, and `_validate_and_derive_role` raises **before any write**, so
+        # this is the same condition, the same token and the same C9 rule as
+        # join's row above, arriving one route over. **The plan owes this row**;
+        # it is the only `(route, response)` pair S8b adds that v1.20 does not
+        # already carry. `ThreadNotFoundError`/`UnknownActorError` from the same
+        # handler land on `(401, invalid_token)`, which is already a row.
+        (503, "demo_not_seeded"),
         (503, "graph_unavailable"),          # [X]
         (504, "post_state_unknown"),         # [X] written but never enqueued
     },
@@ -181,39 +217,119 @@ FLAT_TABLE = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# The third half of the gate: every row proved producible, by observation
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# The two halves compare **declarations** — one against the table, one against
+# the handler set. Neither can tell whether a declared row is producible at
+# all, and the file's own claim that "every declared entry is proved producible
+# by a contract test below" was a *convention*: nothing linked a row to a test,
+# and two declared rows had no producer at all
+# (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-5, mutations M-D and
+# M-V, both survived).
+#
+# The link is mechanical here, and it is made by **observation rather than by
+# tagging**: every response every `TestClient` in this file receives is
+# recorded, and the two tests at the end of the file assert that the observed
+# set and §5.3's table agree. A tag is a claim about what a test proves and can
+# be wrong; a recorded response is what the server actually said.
+_OBSERVED: set[tuple[str, str, int, str]] = set()
+
+
+def _observed_token(response) -> str:
+    """The `(status, token)` key §5.3 uses, read off a real response.
+
+    `200` carries no `error` field, so it is `"ok"` — except reset-all's
+    `incomplete` body, which §5.2 makes a **different row** from its clean one.
+    A body with no JSON at all is `"unhandled"`, which is the token §5.3 gives
+    the `5xx` propagation row and is exactly what a bare `500` looks like.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if response.status_code < 300:
+        return "incomplete" if isinstance(body, dict) and body.get("incomplete") else "ok"
+    if isinstance(body, dict) and isinstance(body.get("error"), str):
+        return body["error"]
+    return "unhandled"
+
+
+class _RecordingTestClient(TestClient):
+    """A `TestClient` that records what it saw, and changes nothing else.
+
+    Subclassed and rebound over the imported name below, so every construction
+    site in this file is covered without editing any of them — including the
+    ones a later step adds.
+    """
+
+    def request(self, method, url, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        response = super().request(method, url, *args, **kwargs)
+        key = (str(method).upper(), str(url).split("?")[0])
+        if key in ROUTE_CLASSES:
+            _OBSERVED.add((*key, response.status_code, _observed_token(response)))
+        return response
+
+
+TestClient = _RecordingTestClient  # noqa: F811 — see the class docstring
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # The gate
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _handler_signature(app) -> dict:
-    """`{exception type: handler qualname}` for every handler on `app`.
+def registered_handlers(app) -> set:
+    """**Every** exception handler on the app object — the whole set.
 
-    Keyed on the qualname rather than the function object because two apps
-    built by two `create_app` calls hold two distinct closures for the same
-    registration — while an *override* of a handler FastAPI installs by default
-    (`RequestValidationError`) changes the value and not the key, and would be
-    invisible to a key-only diff.
+    This used to be a *difference* against `create_app(dev_surface=False)`, on
+    the reasoning that a baseline diff finds a handler nobody remembered. It
+    does — but `create_app` builds one app, so the eleven legacy workflow
+    handlers, the `ServiceError` handler and three framework defaults are on
+    the storefront deployment too, and subtracting them showed the gate **5**
+    of **17**. One of the twelve it subtracted provably fires: the delivered
+    app answered `POST /shop/api/messages` with
+    `404 {"error":"ThreadNotFoundError"}` — a `(route, response)` pair invisible
+    to both halves of the gate and to the AST refusal check
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-1).
+
+    §5.1 S8 asks for "the handlers **actually registered on the app object**",
+    which is this. What the baseline diff was really buying — noticing an
+    *override*, which changes a handler's value and not its key — is bought
+    instead by `_assert_handler_ownership` below, on the axis that actually
+    matters here: who registered it.
     """
-    return {
-        exc: getattr(handler, "__qualname__", repr(handler))
-        for exc, handler in app.exception_handlers.items()
-    }
+    return set(app.exception_handlers)
 
 
-def registered_storefront_handlers(app) -> set:
-    """The handlers this app carries that a non-storefront app does not.
+def _assert_handler_ownership(app) -> None:
+    """A classification is a claim about **who registered** the handler; check it.
 
-    Computed as a difference against a real baseline app rather than compared
-    against a hand-listed set, so a handler added anywhere in the storefront
-    branch — including one that shadows a FastAPI default — shows up here
-    whether or not anybody remembered to classify it.
+    Without this, the four buckets are keyed on the exception type alone, so
+    swapping a storefront handler onto an inherited key — or letting an
+    inherited handler answer where the storefront promised its own envelope —
+    changes only the value and passes. Both directions are asserted.
     """
-    baseline = _handler_signature(create_app(dev_surface=False))
-    return {
-        exc
-        for exc, qualname in _handler_signature(app).items()
-        if baseline.get(exc) != qualname
-    }
+    own = (
+        set(CROSS_CUTTING_HANDLERS)
+        | set(ENVELOPE_HANDLERS)
+        | set(RESHAPED_HANDLERS)
+    )
+    module = storefront_api.__name__
+    for exc in own:
+        handler = app.exception_handlers[exc]
+        if getattr(handler, "__module__", "") != module:
+            raise AssertionError(
+                f"{exc.__name__} is classified as the storefront's own but is "
+                f"handled by {getattr(handler, '__module__', '?')}"
+            )
+    for exc in INHERITED_HANDLERS:
+        handler = app.exception_handlers[exc]
+        if getattr(handler, "__module__", "") == module:
+            raise AssertionError(
+                f"{exc.__name__} is classified as inherited — 'produces no "
+                "row on a /shop/api route' — but the storefront registered it"
+            )
 
 
 def storefront_routes(app) -> dict[tuple[str, str], dict]:
@@ -260,29 +376,109 @@ def declared_pairs(app) -> set[tuple[str, str, int, str]]:
     return pairs
 
 
+def validating_routes(app) -> set[tuple[str, str]]:
+    """The routes that can produce a `422`, **derived from the route objects**.
+
+    `RequestValidationError` is an envelope handler, so it contributes nothing
+    to the `{handlers} × {routes}` cross product and the plan leaves it to "the
+    declaration half plus the per-route contract tests". For
+    `StorefrontHTTPError` that holds. For this one it does not: the framework
+    raises it, not a route body, so no AST check sees it, and the declaration
+    half then compares two hand-written enumerations that can be wrong together
+    — a route gaining a query parameter produces an undeclared, untabled `422`
+    and nothing reddens (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+    P10-3, mutation M-C).
+
+    It is the one handler whose route set is **mechanically derivable**: FastAPI
+    validates a request iff the route has a body model or any query/path
+    parameter, its own or a dependency's. So it is derived here and fed into the
+    gate's produced set like a cross-cutting handler, and the gate's symmetric
+    side then reddens on M-C instead of shrugging.
+    """
+    found: set[tuple[str, str]] = set()
+    for path, route in _raw_routes(app):
+        if not path.startswith(API_PREFIX):
+            continue
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        if getattr(route, "body_field", None) is None and not _takes_params(dependant):
+            continue
+        for method in getattr(route, "methods", None) or ():
+            if method not in {"HEAD", "OPTIONS"}:
+                found.add((method, path))
+    return found
+
+
+def _takes_params(dependant) -> bool:
+    """Query or path parameters on this dependant or any sub-dependency.
+
+    Header parameters are deliberately excluded: the only one the storefront
+    declares is `Authorization: str | None`, which cannot fail validation — a
+    bad credential is `get_participant`'s `401`, not a `422`.
+    """
+    if dependant.query_params or dependant.path_params:
+        return True
+    return any(_takes_params(sub) for sub in dependant.dependencies)
+
+
+def validation_pairs(app) -> set[tuple[str, str, int, str]]:
+    """`validating_routes` as `(method, path, 422, "validation_failed")` rows."""
+    return {(method, path, 422, "validation_failed")
+            for method, path in validating_routes(app)}
+
+
+def service_error_pairs(app) -> set[tuple[str, str, int, str]]:
+    """The re-shaping `ServiceError` handler × the routes it can fire on.
+
+    `SERVICE_ERROR_ROUTES` is a measurement, not a reading — see
+    `test_only_post_messages_can_raise_a_service_error`, which arms each fault
+    in turn and drives all eleven routes.
+    """
+    registered = set(storefront_routes(app))
+    unregistered = SERVICE_ERROR_ROUTES - registered
+    if unregistered:
+        raise AssertionError(
+            f"SERVICE_ERROR_ROUTES names routes this app does not carry: "
+            f"{sorted(unregistered)}"
+        )
+    return {
+        (method, path, status, token)
+        for method, path in SERVICE_ERROR_ROUTES
+        for status, token in set(SERVICE_ERROR_RESPONSES.values())
+    }
+
+
 def handler_produced_pairs(app) -> set[tuple[str, str, int, str]]:
     """The handler half's cross product: registered cross-cutting handlers ×
     the routes their class permits them on.
 
-    Raises before computing anything if a handler is registered that is neither
-    a cross-cutting producer nor an envelope — *a handler with no row fails the
-    step*, and this is where that is enforced.
+    Raises before computing anything if a handler is registered that carries no
+    classification at all — *a handler with no row fails the step*, and this is
+    where that is enforced, over the **whole** handler set.
     """
-    registered = registered_storefront_handlers(app)
-    classified = set(CROSS_CUTTING_HANDLERS) | set(ENVELOPE_HANDLERS)
+    registered = registered_handlers(app)
+    classified = (
+        set(CROSS_CUTTING_HANDLERS)
+        | set(ENVELOPE_HANDLERS)
+        | set(RESHAPED_HANDLERS)
+        | set(INHERITED_HANDLERS)
+    )
     unclassified = registered - classified
     if unclassified:
         raise AssertionError(
             "handler(s) registered on the storefront app with no classification "
             f"in `storefront_api`: {sorted(e.__name__ for e in unclassified)} — "
             "a handler must declare whether it produces one of §5.3's three "
-            "cross-cutting responses or merely re-shapes a declared one"
+            "cross-cutting responses, re-shapes a declared one, re-shapes an "
+            "inherited one on /shop/api, or produces no row at all"
         )
     missing = classified - registered
     if missing:
         raise AssertionError(
             f"classified but not registered: {sorted(e.__name__ for e in missing)}"
         )
+    _assert_handler_ownership(app)
 
     pairs: set[tuple[str, str, int, str]] = set()
     for handler_token in set(CROSS_CUTTING_HANDLERS.values()):
@@ -307,7 +503,24 @@ def evaluate_gate(app) -> None:
         )
 
     declared = declared_pairs(app)
-    produced = handler_produced_pairs(app)
+    produced = (
+        handler_produced_pairs(app)
+        | service_error_pairs(app)
+        | validation_pairs(app)
+    )
+
+    # (i.a) the `422` half, both directions. Derived from the route objects, so
+    # a route that *gains* a validating parameter and a route that declares a
+    # `422` it cannot produce both fail here rather than agreeing by omission.
+    derived_422 = validation_pairs(app)
+    declared_422 = {row for row in declared if row[2] == 422}
+    if derived_422 != declared_422:
+        raise AssertionError(
+            "the routes FastAPI will validate and the routes declaring a `422` "
+            f"disagree — validating but undeclared: "
+            f"{sorted(derived_422 - declared_422)}; declared but not "
+            f"validating: {sorted(declared_422 - derived_422)}"
+        )
 
     # (i) handler half
     orphan_handler_rows = produced - FLAT_TABLE
@@ -762,6 +975,154 @@ def test_the_gate_fails_when_a_route_declares_a_response_nobody_carries():
         evaluate_gate(app)
 
 
+# ── the gate's *input set*: every handler on the app, classified ─────────────
+
+
+def test_the_gate_sees_every_handler_the_app_carries():
+    """The control for the handler half, and the fix for P10-1.
+
+    The count is asserted, not just the partition: the delivered gate computed
+    a difference against a baseline app and therefore saw **5** of these — the
+    twelve it subtracted included `ServiceError`, which is live on `/shop/api`
+    because the storefront calls the same `services` layer.
+    """
+    app = _gate_app()
+    registered = registered_handlers(app)
+    assert len(registered) == 17, sorted(e.__name__ for e in registered)
+    assert registered == (
+        set(CROSS_CUTTING_HANDLERS)
+        | set(ENVELOPE_HANDLERS)
+        | set(RESHAPED_HANDLERS)
+        | set(INHERITED_HANDLERS)
+    )
+    # the four buckets are a partition, not merely a cover — a handler with two
+    # classifications is two claims about the same response
+    buckets = [
+        set(CROSS_CUTTING_HANDLERS), set(ENVELOPE_HANDLERS),
+        set(RESHAPED_HANDLERS), set(INHERITED_HANDLERS),
+    ]
+    assert sum(len(bucket) for bucket in buckets) == len(registered)
+    _assert_handler_ownership(app)
+
+
+def test_the_gate_fails_when_an_inherited_handler_stops_being_inherited():
+    """An `INHERITED_HANDLERS` entry says *this one produces no row*. Registering
+    a storefront handler on that key makes the claim false while leaving the key
+    set — and therefore a key-only classification — unchanged."""
+    app = _gate_app()
+    evaluate_gate(app)
+
+    async def _handle(_request, _exc):  # pragma: no cover — never invoked
+        raise NotImplementedError
+
+    _handle.__module__ = storefront_api.__name__
+    app.add_exception_handler(SearchNotAvailableError, _handle)
+
+    with pytest.raises(AssertionError, match="but the storefront registered it"):
+        evaluate_gate(app)
+
+
+def test_the_gate_fails_when_a_storefront_handler_is_left_to_the_inherited_one():
+    """The other direction, and the exact regression P10-1 reported: dropping the
+    storefront's `ServiceError` re-shaper leaves `app.py`'s handler answering
+    `{"error": "<Python class name>"}` on `/shop/api` — with the key set, and so
+    a key-only classification, still unchanged."""
+    app = _gate_app()
+    evaluate_gate(app)
+
+    async def _inherited(_request, _exc):  # pragma: no cover — never invoked
+        raise NotImplementedError
+
+    _inherited.__module__ = "falkorchat.app"
+    app.add_exception_handler(ServiceError, _inherited)
+
+    with pytest.raises(AssertionError, match="classified as the storefront's own"):
+        evaluate_gate(app)
+
+
+def test_the_gate_fails_when_a_route_gains_a_parameter_fastapi_will_validate(
+    monkeypatch,
+):
+    """P10-3's mutation M-C, which survived the delivered gate: give
+    `GET /shop/api/catalog` a query parameter and it produces a `422` that is
+    undeclared and untabled. Derived from the route object, so this reddens."""
+    app = _gate_app()
+    evaluate_gate(app)
+
+    catalog = _route_object(app, "GET", f"{API_PREFIX}/catalog")
+    borrowed = _route_object(app, "GET", f"{API_PREFIX}/messages")
+    monkeypatch.setattr(
+        catalog.dependant, "query_params", list(borrowed.dependant.query_params)
+    )
+
+    with pytest.raises(AssertionError, match="validating but undeclared"):
+        evaluate_gate(app)
+
+
+def test_the_gate_fails_when_a_route_declares_a_422_it_cannot_produce():
+    """The other direction of the same derivation — a `422` on a route that
+    takes no body, query or path parameter and so can never raise one."""
+    app = _gate_app()
+    route = _route_object(app, "GET", f"{API_PREFIX}/catalog")
+    route.responses = {
+        **route.responses,
+        422: {"description": "invented", "x-storefront-tokens": ["validation_failed"]},
+    }
+
+    with pytest.raises(AssertionError, match="declared but not validating"):
+        evaluate_gate(app)
+
+
+def test_the_derived_422_routes_are_the_five_that_declare_one():
+    """The derivation's own control: it reproduces the declared set exactly, in
+    both directions, on the delivered app — so the test above is measuring the
+    mutation and not a pre-existing disagreement."""
+    app = _gate_app()
+    assert validating_routes(app) == {
+        ("POST", f"{API_PREFIX}/session"),
+        ("GET", f"{API_PREFIX}/messages"),
+        ("POST", f"{API_PREFIX}/messages"),
+        ("POST", f"{API_PREFIX}/order/advance"),
+        ("POST", f"{API_PREFIX}/presenter/session"),
+    }
+
+
+def test_the_credential_route_sets_are_the_ones_the_dependencies_declare():
+    """`PARTICIPANT_ROUTES`/`PRESENTER_ROUTES` are hand-written and the AST
+    refusal check attributes `get_participant`'s `401` through them — so a route
+    that *gains* `Depends(get_participant)` while staying in `OPEN_ROUTES` would
+    be attributed nothing (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`,
+    P10-11). Derived from each route's own dependant instead, and the literals
+    are asserted against the derivation rather than trusted."""
+    app = _gate_app()
+    derived: dict[str, set[tuple[str, str]]] = {"participant": set(), "presenter": set()}
+    for path, route in _raw_routes(app):
+        if not path.startswith(API_PREFIX):
+            continue
+        names = _dependency_names(route.dependant)
+        for method in getattr(route, "methods", None) or ():
+            if method in {"HEAD", "OPTIONS"}:
+                continue
+            if "get_participant" in names:
+                derived["participant"].add((method, path))
+            if "get_presenter" in names:
+                derived["presenter"].add((method, path))
+
+    assert derived["participant"] == set(PARTICIPANT_ROUTES)
+    assert derived["presenter"] == set(PRESENTER_ROUTES)
+    # and the two are disjoint — §5.3 C1's route→credential bijection, which is
+    # what licenses C2/C3 being stated by route rather than by credential
+    assert not derived["participant"] & derived["presenter"]
+
+
+def _dependency_names(dependant) -> set[str]:
+    """Every dependency callable's name on a route, recursively."""
+    names = {getattr(dependant.call, "__name__", "")}
+    for sub in dependant.dependencies:
+        names |= _dependency_names(sub)
+    return names
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Contract tests — every declared response, proved producible
 # ═══════════════════════════════════════════════════════════════════════════
@@ -867,6 +1228,27 @@ def test_join_reports_the_first_violation_by_declaration_order(client):
     )
     assert response.status_code == 422
     assert response.json() == {"error": "validation_failed", "field": "displayName"}
+
+
+def test_a_configured_locale_with_no_greeting_gets_the_english_line(seeded, monkeypatch):
+    """§5.2's `welcome` fallback, which had no test — M-O (`WELCOME.get(...)` →
+    `WELCOME[...]`) left the whole file green.
+
+    `WELCOME` covers exactly `config.STOREFRONT_LOCALES`'s default, so the
+    fallback is unreachable through the default deployment and reachable only
+    through `FALKORCHAT_STOREFRONT_LOCALES` — a real operator knob, not a
+    hypothetical. Without the fallback a deployment that adds a locale answers
+    `500` on the first join in it.
+    """
+    monkeypatch.setattr(config, "STOREFRONT_LOCALES", ("en", "de"))
+    with TestClient(_build_app(seeded)) as client:
+        assert client.get(f"{API_PREFIX}/health").json()["locales"] == ["en", "de"]
+        body = _join(client, "Ada", "de")
+
+    assert body["language"] == "de"
+    assert body["welcome"] == storefront_api.WELCOME["en"].format(name="Ada")
+    # the control: a locale that *is* in the table does not take the fallback
+    assert storefront_api.WELCOME["pt-BR"] != storefront_api.WELCOME_FALLBACK
 
 
 def test_a_blank_display_name_is_a_422_not_a_participant_named_nothing(client):
@@ -1471,6 +1853,34 @@ class _FailingMethodRepo:
         return getattr(self._inner, name)
 
 
+class _FailingAfterNCalls:
+    """A real repository whose named method raises only **after** `after` calls.
+
+    `_FailingMethodRepo` fails one method for every call, which cannot reach a
+    branch that is itself a *retry* of that method: failing
+    `list_participants` there breaks reset-all's pre-drain roster read and the
+    request never gets as far as the re-read
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-4 — the third time
+    in this coordination that an over-general stub silently skipped the rule its
+    test named).
+    """
+
+    def __init__(self, inner, method: str, exc: BaseException, *, after: int) -> None:
+        self._inner, self._method, self._exc, self._after = inner, method, exc, after
+        self.calls = 0
+
+    def __getattr__(self, name):
+        if name == self._method:
+            def call(*args, **kwargs):
+                self.calls += 1
+                if self.calls > self._after:
+                    raise self._exc
+                return getattr(self._inner, self._method)(*args, **kwargs)
+
+            return call
+        return getattr(self._inner, name)
+
+
 def _broken_client(exc: BaseException, storefront_config):
     """A storefront over a repository that raises `exc` from everything.
 
@@ -1492,6 +1902,19 @@ def _broken_client(exc: BaseException, storefront_config):
 # rather than derived from `cross_cutting_response`, deliberately: the gate
 # already reads that seam, so a test that read it too would agree with a broken
 # seam. These are the answers §5.3's table asks for, spelled out.
+#
+# **Why a writing route answers `504` even when the failing query was a read
+# that ran before the write** (P10-9). Under `_RaisingRepo` *every* call raises,
+# so the one that actually fails on a writing route is usually the earliest —
+# `get_participant`'s `resolve_token`, or reset-all's pre-drain roster read —
+# at which point nothing was attempted and "nothing changed" would be the
+# stronger, truer report. `504 <op>_state_unknown` is nonetheless right, and
+# right by §5.3's own class map rather than by accident: the class is a
+# property of the **route**, not of which query inside it failed, and C4's
+# action for a `504` is a safe re-read whose answer on this branch is simply
+# "unchanged". Getting it the other way round is the one that harms — a write
+# that did commit reported as *nothing changed* is F8's defect exactly. The
+# conservative direction is the deliberate one.
 _UNAVAILABLE = {route: (503, "graph_unavailable") for route in ROUTE_CLASSES}
 _UNAVAILABLE[("GET", f"{API_PREFIX}/health")] = (200, None)
 _UNAVAILABLE[("POST", f"{API_PREFIX}/presenter/session")] = (200, None)
@@ -1545,6 +1968,73 @@ def test_every_route_answers_its_own_cross_cutting_response_and_never_a_bare_500
         assert response.status_code != 500, f"{route} answered a bare 500"
         if token is not None:
             assert response.json()["error"] == token, f"{route} -> {response.text}"
+
+
+def test_a_typed_handler_on_an_unclassified_route_is_loud_and_conservative():
+    """The `no graph access` / unclassified branch of `_cross_cutting_json`.
+
+    Unreachable by construction — the route-table assertion keeps
+    `ROUTE_CLASSES` exactly the registered set — but it is reached *from inside
+    an exception handler*, where the delivered code raised `KeyError` on an
+    unclassified path and Starlette turned that into a `500` with none of the
+    log line the branch exists for (P10-8). `cross_cutting_response` still
+    raises, deliberately: the gate reads that seam and the `KeyError` is the
+    route-table assertion firing from the inside.
+    """
+    with pytest.raises(KeyError):
+        cross_cutting_response("graph_timeout", "GET", f"{API_PREFIX}/nowhere")
+
+    class _Url:
+        path = f"{API_PREFIX}/nowhere"
+
+    class _Request:
+        method = "GET"
+        url = _Url()
+
+    response = storefront_api._cross_cutting_json(_Request(), "graph_timeout")
+    assert response.status_code == 504
+    assert b"state_unknown" in response.body
+
+    # and the classified `no graph access` route takes the same branch, which is
+    # the case that is *supposed* to be unreachable rather than merely absent
+    class _Health(_Request):
+        url = type("U", (), {"path": f"{API_PREFIX}/health"})()
+
+    assert storefront_api._cross_cutting_json(_Health(), "graph_timeout").status_code == 504
+
+
+def test_presenter_token_verification_compares_every_candidate_in_constant_time(
+    monkeypatch,
+):
+    """M-P: replacing the `compare_digest` loop with `token in candidates` left
+    the file green, so nothing pinned the property the docstring claims.
+
+    What is pinned is what is true — **per comparison**, not per call: every
+    candidate token reaches `hmac.compare_digest`, and a wrong token that shares
+    a long prefix with a live one is rejected by the same call the right one
+    would be accepted by. `any()` short-circuits, so a valid token costs fewer
+    comparisons; that is stated in the docstring rather than asserted away.
+    """
+    sessions = storefront_api._PresenterSessions()
+    minted = sessions.mint()
+    seen: list[tuple[str, str]] = []
+
+    class _Hmac:
+        @staticmethod
+        def compare_digest(a, b):  # noqa: ANN001
+            seen.append((a, b))
+            return hmac.compare_digest(a, b)
+
+    monkeypatch.setattr(storefront_api, "hmac", _Hmac)
+
+    assert sessions.verify(minted) is True
+    assert seen == [(minted, minted)]
+
+    seen.clear()
+    near_miss = minted[:-1] + ("A" if minted[-1] != "A" else "B")
+    assert sessions.verify(near_miss) is False
+    # the near miss went through the same comparison, not a membership test
+    assert seen == [(minted, near_miss)]
 
 
 def test_the_two_no_graph_routes_issue_no_query_at_all(storefront_config):
@@ -1617,6 +2107,43 @@ def test_a_reset_all_that_times_out_is_504_unknown_and_is_never_retried(seeded):
     assert repo.calls == 1
 
 
+def test_a_reset_all_whose_re_read_also_times_out_is_still_504_with_no_roster(
+    seeded,
+):
+    """§4.8 F8's **second** ordering, which S8 shipped as code with no test.
+
+    The re-read is another query against the same graph, and the stalled write
+    that produced the first timeout is precisely what stalls it — so a second
+    `TimeoutError` is the *likelier* second fault, not the exotic one. It must
+    still answer `504`: simply with no roster. A `500` here would report a
+    *possibly committed* sweep as a server fault, which is the exact
+    misattribution F8 exists to prevent.
+
+    **`list_participants` fails only on its second call**, because reset-all
+    reads the roster once before draining and once as the re-read; a stub that
+    failed it from the first call would break the pre-drain read and never reach
+    this branch at all (P10-4).
+    """
+    timeout = redis_exceptions.TimeoutError("timed out")
+    roster = _FailingAfterNCalls(seeded, "list_participants", timeout, after=1)
+    repo = _FailingMethodRepo(roster, "reset_all_participants", timeout)
+    with TestClient(_build_app(repo)) as client:
+        _join(client, "Ada", "en")
+        response = client.post(
+            f"{API_PREFIX}/presenter/reset-all", headers=_presenter(client)
+        )
+
+    assert response.status_code == 504, response.text
+    body = response.json()
+    assert body["error"] == "reset_state_unknown"
+    # the state block is a courtesy the response carries when it can, never the
+    # contract — so it is present and empty, not absent-and-therefore-clean
+    assert body["participants"] is None
+    # and the application layer still did not retry either query
+    assert repo.calls == 1
+    assert roster.calls == 2
+
+
 @pytest.mark.parametrize(
     ("method_name", "path"),
     [
@@ -1651,6 +2178,370 @@ def test_an_unmapped_graph_error_propagates_as_5xx_and_is_never_retried(
 
     assert response.status_code == 500
     assert repo.calls == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# The service layer's own refusals (P10-1) and the two family guards
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# `create_app` builds one app, so `app.py`'s `ServiceError` handler is on the
+# storefront deployment — and the storefront calls the same `services` layer
+# the legacy surface does. Left alone it answers `{"error": "<Python class
+# name>"}`, which is not a contract: §5.3's rules dispatch on a plan token.
+# Everything below is about that seam.
+
+
+def _delete_demo_agent(conn) -> None:
+    """Delete the demo `Agent` out of band, **after** the preflight has passed.
+
+    §4.9's preflight is a boot-time check, not an invariant — which is the whole
+    of P10-2: S8 argued `DemoNotSeededError` unreachable *because* the preflight
+    asks the identical question, and the argument holds only for the boot-time
+    snapshot. Done in the graph rather than with a stub for the same reason
+    `_unscope` is: the state is real, an operator can produce it, and the demo
+    `Agent` is not something the storefront itself can protect.
+    """
+    db.workspace_graph(conn, WS).query(
+        "MATCH (a:Agent {agentId: $id}) DETACH DELETE a", {"id": AGENT}
+    )
+
+
+def _delete_thread(conn, participant_id: str) -> None:
+    """Delete a participant's `Thread` while their `User` survives — the reset
+    window `Storefront._await_quiesce`'s docstring names, and the state that
+    produced P10-1's `404 {"error":"ThreadNotFoundError"}`.
+
+    `resolve_token` still resolves (it reads the `User`), so the request reaches
+    the route and `services._validate_and_derive_role` is the first thing to
+    notice. Real graph state again, not a stub."""
+    db.workspace_graph(conn, WS).query(
+        "MATCH (t:Thread {threadId: $id}) DETACH DELETE t",
+        {"id": f"th-{participant_id}"},
+    )
+
+
+def test_join_with_the_demo_agent_gone_is_503_and_never_a_bare_500(client, conn):
+    """P10-2, reproduced and closed. Before this, the same request answered
+    `500 Internal Server Error` — in plain text, not even JSON — because
+    `DemoNotSeededError` was the one `StorefrontError` of seven with no mapping,
+    against S8's own done-condition that *no route anywhere answers a bare
+    `500`*."""
+    _delete_demo_agent(conn)
+
+    response = client.post(
+        f"{API_PREFIX}/session", json={"displayName": "Ada", "language": "en"}
+    )
+
+    assert response.status_code == 503, response.text
+    assert response.json()["error"] == "demo_not_seeded"
+    # C9's "nothing changed" is the reason it is a `503` and not a `504`:
+    # `ensure_participant` reports `agentMissing` having written nothing
+    assert "seed_demo.sh" in response.json()["detail"]
+
+
+def test_a_post_into_a_swept_thread_is_401_not_a_python_class_name(client, conn):
+    """**The response that started P10-1.**
+
+    A participant whose `Thread` was swept out from under them posts. The
+    delivered app answered `404 {"error":"ThreadNotFoundError"}` — undeclared,
+    untabled, and invisible to both halves of the gate *and* to the AST refusal
+    check, because it came from an app-wide handler the gate subtracted.
+
+    `401 invalid_token` is the honest answer and not merely a tabled one: their
+    credential names nothing live, and `resolve_token` — which re-reads the
+    graph on every call — answers `401` on their very next request anyway. So
+    this converges the race with the steady state rather than inventing a third
+    outcome, and C3's action (clear the credential, rejoin) is right for both.
+    """
+    session = _join(client, "Ada", "en")
+    _delete_thread(conn, session["participantId"])
+
+    response = client.post(
+        f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": "hello"}
+    )
+
+    assert response.status_code == 401, response.text
+    body = response.json()
+    assert body["error"] == "invalid_token"
+    assert "ThreadNotFoundError" not in response.text
+
+
+def test_a_post_with_the_demo_agent_gone_is_503_demo_not_seeded(client, conn):
+    """The same operator error as join's, one route over: every storefront post
+    carries `mentions=[agent_id]`, and `_validate_and_derive_role` raises
+    `UnknownMemberError` **before any write** — so it is the same token and the
+    same C9 rule, not a new one.
+
+    This is the `(route, response)` pair S8b adds that §5.3 does not yet
+    carry."""
+    session = _join(client, "Ada", "en")
+    _delete_demo_agent(conn)
+
+    response = client.post(
+        f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": "hello"}
+    )
+
+    assert response.status_code == 503, response.text
+    assert response.json()["error"] == "demo_not_seeded"
+    assert "UnknownMemberError" not in response.text
+
+
+class _PatchedMethodRepo:
+    """A real repository with one method answering a fixed value.
+
+    The narrow sibling of `_FailingMethodRepo`: some declared rows are reached
+    not by a method *raising* but by one returning the graph's own "no rows"
+    answer, which a healthy graph will not produce on demand.
+    """
+
+    def __init__(self, inner, method: str, result) -> None:  # noqa: ANN001
+        self._inner, self._method, self._result = inner, method, result
+        self.calls = 0
+
+    def __getattr__(self, name):
+        if name == self._method:
+            def call(*_args, **_kwargs):
+                self.calls += 1
+                return self._result
+
+            return call
+        return getattr(self._inner, name)
+
+
+def test_resetting_a_participant_the_graph_no_longer_has_is_404(seeded):
+    """P10-5 / M-D: `(404, unknown_participant)` is declared on this route and
+    sits in §5.3's table, and **nothing produced it** — deleting the route's
+    `except UnknownParticipantError` left all 99 tests green.
+
+    The zero-row contract is `repository.reset_participant` returning `None`
+    (graph note §12's anomaly contract), which is what this pins. It is
+    indistinguishable from an already-deleted participant, by design — which is
+    why C3 routes it the same way as the `401`."""
+    repo = _PatchedMethodRepo(seeded, "reset_participant", None)
+    with TestClient(_build_app(repo)) as client:
+        session = _join(client, "Ada", "en")
+        response = client.post(f"{API_PREFIX}/reset", headers=_bearer(session))
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "unknown_participant"
+    assert repo.calls == 1
+
+
+def test_an_order_that_stops_being_theirs_mid_transition_is_404(seeded):
+    """P10-5 / M-V: `advance_order`'s `except UnknownOrderError` had no producer
+    either — and that escape is a `StorefrontError`, so deleting the branch
+    turned it into a **bare `500`**, P10-2's family one route over.
+
+    The state is a race the plan names: the participant held an order when
+    `get_current_order` answered, and `order_belongs_to_customer` says it is not
+    theirs by the time the CAS is attempted — a reset or a racing sweep landed
+    in between. §4.6 makes that indistinguishable from "no order of theirs", so
+    both are the same `404` (C10: an ordinary stale button, never an auth
+    failure)."""
+    repo = _PatchedMethodRepo(
+        seeded, "order_belongs_to_customer", {"owned": False, "status": None}
+    )
+    with TestClient(_build_app(repo)) as client:
+        session = _join(client, "Ada", "en")
+        _place_order(seeded, session["participantId"])
+        response = client.post(
+            f"{API_PREFIX}/order/advance",
+            headers=_bearer(session), json={"transition": "fulfill"},
+        )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "no_current_order"
+    # the branch under test is the `except`, not the `current is None` guard —
+    # so the ownership check must actually have been reached
+    assert repo.calls == 1
+
+
+def test_the_service_error_map_is_read_off_the_one_seam():
+    """`service_error_response` is the seam the live handler and the gate share,
+    in the same sense `cross_cutting_response` is — asserted directly because
+    `UnknownActorError` has no graph state that produces it without also
+    failing `resolve_token` first, so it is unreachable through the wire."""
+    assert service_error_response(storefront_api.ThreadNotFoundError("t")) == (
+        401, "invalid_token",
+    )
+    assert service_error_response(storefront_api.UnknownActorError("a")) == (
+        401, "invalid_token",
+    )
+    assert service_error_response(storefront_api.UnknownMemberError(["x"])) == (
+        503, "demo_not_seeded",
+    )
+    # ...and a subclass nobody mapped gets no invented answer
+    assert service_error_response(storefront_api.MatchNotFoundError("m")) is None
+
+
+class _ArmedRepo:
+    """A real repository whose service-layer pre-write check fails **once armed**.
+
+    Armed after startup deliberately: the preflight uses the same
+    `resolve_member_kinds` lookup, so a repo that failed from construction would
+    never get past the lifespan and the sweep would be measuring startup rather
+    than the request path.
+    """
+
+    def __init__(self, inner, mode: str) -> None:
+        self._inner, self._mode, self.armed = inner, mode, False
+
+    def __getattr__(self, name):
+        if self.armed and self._mode == "thread" and name == "thread_exists":
+            return lambda *_a, **_k: False
+        if self.armed and self._mode == "actor" and name == "resolve_member_kinds":
+            return lambda *_a, **_k: {}
+        if self.armed and self._mode == "member" and name == "resolve_member_kinds":
+            inner = self._inner.resolve_member_kinds
+            return lambda ws, *, ids: {
+                key: kind for key, kind in inner(ws, ids=ids).items() if key != AGENT
+            }
+        return getattr(self._inner, name)
+
+
+# What every route answers when the service layer refuses. Literals, for the
+# same reason `_UNAVAILABLE`/`_TIMEOUT` are: this file's expectations must not
+# be readable off the seam the gate reads, or a broken seam would satisfy both.
+_SERVICE_HEALTHY: dict[tuple[str, str], tuple[int, str]] = {
+    route: (200, "ok") for route in ROUTE_CLASSES
+}
+_SERVICE_HEALTHY[("POST", f"{API_PREFIX}/order/advance")] = (404, "no_current_order")
+
+_SERVICE_REFUSED = {
+    "thread": {**_SERVICE_HEALTHY,
+               ("POST", f"{API_PREFIX}/messages"): (401, "invalid_token")},
+    "actor": {**_SERVICE_HEALTHY,
+              ("POST", f"{API_PREFIX}/messages"): (401, "invalid_token")},
+    "member": {**_SERVICE_HEALTHY,
+               ("POST", f"{API_PREFIX}/messages"): (503, "demo_not_seeded")},
+}
+
+
+@pytest.mark.parametrize("mode", ["thread", "actor", "member"])
+def test_only_post_messages_can_raise_a_service_error(seeded, mode):
+    """**`SERVICE_ERROR_ROUTES` is this measurement, not a hand-list.**
+
+    Each of the three faults the storefront's service calls can hit is armed in
+    turn and all eleven routes are driven. Exactly one route's answer moves —
+    `POST /shop/api/messages`, the only route whose call reaches
+    `services._validate_and_derive_role`; every other route's service calls are
+    thin reads and writes over the repository, which raises no `ServiceError`.
+
+    The sweep is also the standing guard on P10-1: **every** response it sees
+    must be a row of §5.3's table, so an escape to `app.py`'s inherited handler
+    shows up as a Python class name where a plan token belongs — on any route,
+    including one added later.
+    """
+    repo = _ArmedRepo(seeded, mode)
+    moved: set[tuple[str, str]] = set()
+    with TestClient(_build_app(repo), raise_server_exceptions=False) as client:
+        for route in sorted(ROUTE_CLASSES):
+            session = _join(client, "Ada", "en")
+            headers = _presenter(client) if route in PRESENTER_ROUTES else _bearer(session)
+            repo.armed = True
+            try:
+                response = _call(client, *route, headers=headers)
+            finally:
+                repo.armed = False
+
+            token = _observed_token(response)
+            assert (response.status_code, token) == _SERVICE_REFUSED[mode][route], (
+                f"{route} -> {response.status_code} {response.text}"
+            )
+            assert (response.status_code, token) in TABLE[route], (
+                f"{route} answered {(response.status_code, token)}, which §5.3's "
+                "completeness table does not carry — an unruled (route, "
+                "response) arriving from the server"
+            )
+            if (response.status_code, token) != _SERVICE_HEALTHY[route]:
+                moved.add(route)
+
+    assert moved == set(SERVICE_ERROR_ROUTES)
+
+
+def _subclasses(root: type) -> set[type]:
+    found = set()
+    for sub in root.__subclasses__():
+        found.add(sub)
+        found |= _subclasses(sub)
+    return found
+
+
+def _caught_names(source: str) -> set[str]:
+    """Every exception name an `except` clause in `source` catches.
+
+    Parsed, not grepped, for the reason the `.lookup(` tripwire is: prose that
+    quotes a name even to disown it is invisible to an AST walk and is not to a
+    substring search — and this file's own docstrings name most of the family.
+    """
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ExceptHandler) or node.type is None:
+            continue
+        clauses = (
+            node.type.elts if isinstance(node.type, ast.Tuple) else [node.type]
+        )
+        for clause in clauses:
+            if isinstance(clause, ast.Name):
+                names.add(clause.id)
+            elif isinstance(clause, ast.Attribute):
+                names.add(clause.attr)
+    return names
+
+
+def test_every_storefront_error_subclass_is_mapped_to_a_response():
+    """**The structural close of P10-2**, so the eighth subclass cannot repeat it.
+
+    `DemoNotSeededError` was not a slip of attention — it was a family with no
+    membership check, and one member with a docstring saying `503` that nothing
+    honoured. A subclass is mapped when a route catches it or a classified
+    handler answers it; anything else is a bare `500` waiting for the graph to
+    reach the state its own docstring describes.
+    """
+    source = Path(storefront_api.__file__).read_text(encoding="utf-8")
+    caught = _caught_names(source)
+    handled = {
+        klass.__name__
+        for klass in set(CROSS_CUTTING_HANDLERS) | set(RESHAPED_HANDLERS)
+    }
+    family = {klass.__name__ for klass in _subclasses(storefront.StorefrontError)}
+    assert family, "the family is read off the live class tree, and it is empty"
+
+    assert family - caught - handled == set()
+
+    # the control: the reader really does find `except` clauses, and really does
+    # report a member nothing catches
+    assert "QuiesceTimeoutError" in caught
+    assert {"NeverCaughtError"} - caught - handled == {"NeverCaughtError"}
+
+
+def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
+    """The same guard on the family that actually crosses the layer boundary.
+
+    `SERVICE_ERROR_RESPONSES` and `SERVICE_ERRORS_UNREACHABLE` must **partition**
+    the subclasses of `ServiceError` — read off the live class tree, so a
+    subclass added in `services.py` lands in neither and reddens here rather
+    than reaching a participant as a Python class name.
+    """
+    family = _subclasses(ServiceError)
+    mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
+    assert len(family) == 10, sorted(k.__name__ for k in family)
+    assert family - (mapped | unreachable) == set()
+    assert not mapped & unreachable
+    assert (mapped | unreachable) - family == set()
+    # every "unreachable" claim carries its reason, not just a membership
+    assert all(reason.strip() for reason in SERVICE_ERRORS_UNREACHABLE.values())
+    # the control: a subclass in neither bucket is reported
+    assert (family | {KeyError}) - (mapped | unreachable) == {KeyError}
+
+
+def test_every_inherited_handler_states_why_it_produces_no_row():
+    """`INHERITED_HANDLERS` is an *exclusion rule*, and an exclusion rule that
+    says only "excluded" is the thing P10-1 was. Each entry carries the reason;
+    the sweep above is what checks the reasons are true."""
+    assert all(reason.strip() for reason in INHERITED_HANDLERS.values())
+    assert ServiceError not in INHERITED_HANDLERS
+    assert ServiceError in RESHAPED_HANDLERS
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1940,3 +2831,48 @@ def test_no_route_can_raise_a_refusal_it_does_not_declare():
             "it does not declare — an unruled response reaching the client "
             "from the server side, which neither half of the gate sees"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# The observed-response coverage check — last in the file, deliberately
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_no_response_this_file_observed_is_missing_from_the_table():
+    """`{observed} ⊆ §5.3's table`, over every response every test above saw.
+
+    This is the direction that catches an **unruled response arriving from the
+    server** — P10-1's `404 {"error":"ThreadNotFoundError"}` is a member of
+    `{observed}` and not of the table, so it fails here even on a route nobody
+    thought to write a contract test for. Safe under any `-k` or `-x` subset:
+    it only ever judges responses that were actually produced.
+    """
+    orphans = _OBSERVED - FLAT_TABLE
+    assert orphans == set(), (
+        f"responses observed in this file with no row in §5.3's completeness "
+        f"table: {sorted(orphans)}"
+    )
+
+
+def test_every_row_of_the_table_was_produced_by_execution(request):
+    """`§5.3's table ⊆ {observed}` — *every declared entry is proved producible*,
+    which the file claimed in prose and did not check.
+
+    Two declared rows had no producer at all: deleting `reset`'s
+    `except UnknownParticipantError` and `advance_order`'s
+    `except UnknownOrderError` both left the suite green (M-D, M-V). Both now
+    fail here, and so does the next one — no tagging to keep in step, because
+    the evidence is the response the server actually sent.
+
+    Skipped under a `-k` filter, where a subset of the file cannot cover the
+    whole table by construction; the full-suite run is where it does its work,
+    and the `⊆` direction above holds unconditionally either way.
+    """
+    if request.config.option.keyword:
+        pytest.skip("a -k subset cannot cover the whole table by construction")
+    missing = FLAT_TABLE - _OBSERVED
+    assert missing == set(), (
+        f"rows of §5.3's completeness table that no test in this file ever "
+        f"provoked: {sorted(missing)} — declared, tabled, and not proved "
+        "producible"
+    )

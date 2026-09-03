@@ -24,7 +24,7 @@ from falkorchat import config, db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
 from falkorchat.repository import Repository
-from falkorchat.services import MemberIdCollisionError, Services
+from falkorchat.services import MemberIdCollisionError, ServiceError, Services
 
 CTX = lambda: CallContext(ws="test", actor="u1")  # noqa: E731
 
@@ -1154,3 +1154,24 @@ def test_the_default_deployment_is_untouched_by_the_storefront_parameters():
     for exc_type in (*storefront_api.CROSS_CUTTING_HANDLERS,
                      storefront_api.StorefrontHTTPError):
         assert exc_type not in plain.exception_handlers
+    # `ServiceError` is the one handler the storefront *re-shapes* rather than
+    # adds, so the check on it is the other way round: the default deployment
+    # keeps `app.py`'s, untouched (`salesperson-ui-impl.md` `## Pass 10`, P10-1)
+    handler = plain.exception_handlers[ServiceError]
+    assert handler.__module__ == "falkorchat.app"
+
+
+def test_the_storefront_error_map_refuses_to_be_wired_before_the_app_wide_one():
+    """The storefront's `ServiceError` handler re-shapes on `/shop/api` and
+    **delegates** everywhere else, so it needs the inherited handler to already
+    be there — `create_app` registers them in that order.
+
+    Asserted as a loud refusal at wiring time rather than left as a comment:
+    the alternative failure mode is a `TypeError` raised *inside* an exception
+    handler, on the first `ServiceError` a participant provokes, in a
+    deployment that came up green.
+    """
+    from falkorchat import storefront_api
+
+    with pytest.raises(RuntimeError, match="must run after"):
+        storefront_api.register_storefront_error_handlers(FastAPI())
