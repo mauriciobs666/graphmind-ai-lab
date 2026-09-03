@@ -121,7 +121,7 @@ where the salesperson lives.
 - **FR-22a** — Each conversation *shape* is covered by **several distinct scripts, not one script
   repeated**. _(Rationale: replicates of a single script yield a confidence interval describing "this
   script again", not "a script of this kind". Raised by the architect as a disclosure; the plan sizes
-  it at 4 scripts × 4 replicates × 3 shapes.)_
+  it at 12 distinct scripts — 4 per shape across 3 shapes — run once each at temperature 0.)_
 
 ### What gets measured — inference models
 
@@ -247,6 +247,18 @@ _(This document lives at the repo root because the component it describes doesn'
 precedent as `docs/requirements/generic-cypher-mcp.md`, which preceded `cypher-mcp/`.)_
 
 ## Decision log
+
+2026-09-02 — **Three plan-gate questions answered; no requirement changed.** (a) Tool-caller
+sampling is **12 distinct conversation scripts × 1 run each at temperature 0**, not 4 scripts × 4
+replicates — same total run budget, taken on the argument that replicates of a deterministic run
+describe "this script again". FR-22a's illustration now names that sizing; the requirement it states
+is unchanged, and FR-18's temperature pinning is untouched (the rejected branch, replicates at
+temperature > 0, was the one that would have touched it). (b) **`guard-judge` reports no headline
+metric** — false-advance on the 40 `clear_suspend` items and false-suspend on the 30 `clear_advance`
+items, equal weight, no ranking between them; no FR or AC ever named a headline for that role.
+(c) The **embedder self-check is a diagnostic, never a gate** — a below-baseline result does not
+block the stage; the deviation and its investigation are written into the test report. Consistent
+with the existing out-of-scope ban on hard pass/fail gating.
 
 2026-09-02 — **Design pass returned** (`architect`, `docs/plans/small-model-benchmarking.md` plus a
 `-ml` companion method note). Four requirements were challenged as unbuildable-as-written; three

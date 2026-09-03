@@ -35,7 +35,7 @@ Stakeholder decisions, 2026-09-02:
 | U2 — S0 component skeleton | `coder` | `aa5b28bd14869593c` | accepted | `model-bench/**` (15 files), root `AGENTS.md` (+8 lines) | teco-verified — see note | 113k tok / 30 tools |
 | U3a — Revise the method note for B-1/M-1 + the new sampling design | `data-scientist` | `a394671cfc28bef87` | delivered | `docs/plans/small-model-benchmarking-ml.md` **v1.2** (+562/−130), new §3.4 stats contract | `analyst` re-gate (Pass 2) → — | 168k tok / 56 tools |
 | U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | in-flight (v1.3) | `docs/plans/small-model-benchmarking.md` **v1.2** — 3 blockers + 13 majors + 8 minors + 4 nits all dispositioned | `analyst` re-gate (Pass 2) → — | 184k tok / 40 tools |
-| U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | in-flight | `docs/requirements/small-model-benchmarking.md` | folded into the Pass 2 re-gate | — |
+| U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | accepted | `docs/requirements/small-model-benchmarking.md` (+13/−1) | folded into the Pass 2 re-gate | 88k tok / 12 tools |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
@@ -155,3 +155,19 @@ re-drawn against U4's actual delivery before dispatch.
   reversal trigger — *the first tool-caller comparison returning "not distinguishable" with an
   observed difference in the 15–50 pp band*. **Nothing in this pass is blocked on it**; the decision
   point is before S6, which is out of scope here.
+
+- **2026-09-02 — U3c accepted.** FR-22a's illustration now reads "12 distinct scripts — 4 per shape
+  across 3 shapes — run once each at temperature 0"; the requirement's substance is byte-identical.
+  `tico` swept the rest and reports FR-15/FR-16/FR-18/FR-20/FR-22 and AC-5 all still true, and that
+  **no FR or AC ever named a primary/headline metric for any role** — so stakeholder decision 2
+  needed no requirements change at all. It also names the near miss explicitly: the *rejected*
+  branch of the sampling question (replicates at temperature > 0) is the one that would have
+  changed what FR-18's pinning means.
+- **Deferred to the same pre-S6 decision as the sampling budget:** the Out-of-scope bullet
+  "Measuring small differences" still claims the lab resolves "differences of roughly 15 percentage
+  points and up" at "~20–40 runs per arm". The tool-caller pack now sits below that range
+  (floor 50.0 pp). `tico` deliberately did **not** edit it, on the reasoning that decision 1 did not
+  falsify it — the old 48-conversation design already had an effective *n* near 12, so the true
+  resolving power never changed and the decision only made it visible. Restating the range is a
+  scope change the stakeholder owns. **It belongs in the same packet as the 48-distinct-scripts
+  question**, not in a wording fix.
