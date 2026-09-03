@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.7 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.8 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-03 — v1.8: three changes forced by evidence gathered since v1.7 — the auto-captured fingerprint fields move off the `lms` CLI onto LM Studio's native `GET /api/v0/models`, with no substitute source, no fallback that can populate them and no default (new §2.5 and §3.4.4a, sweeping §3.2, §3.3, §3.4.2, §3.4.4, §3.4.5, §3.6, §3.6a, §3.7, §3.10, §4 S2, §5 test 15, §6 R-1/R-2, new R-15 and Appendix A); the runner gains an explicit un-timed warm-up call, a two-budget timeout and a per-item load-contamination guard for the measured 21.068 s JIT first call (§3.6, §4 S2, §5 test 15b, new R-14); and the `run.aggregates`-versus-`run.items` cross-check returns to **S1**, where the Pass 4 gate placed it (P4-4 — §4 S1 done-condition 10, §4 S2, §5's table and new test 11c).
 
 2026-09-03 — v1.7: the two Pass 3 findings routed here — §5 gains the stage-attribution table three gates had to re-derive (engineering Pass 3, "carried a third time"), and every remaining restatement of something `docs/plans/small-model-benchmarking-ml.md` owns is replaced by a citation: the α in §4 S1's `holm_steps`/`resolving_power` sketch (statistics Pass 3, n-ML-7), the `z` literal, the verdict string, the judge-gate thresholds and κ figures, §6 R-9's worked-case numbers, and the note's own rule count; plan and note re-pair at v1.7.
 
@@ -155,6 +157,8 @@ Verified by direct calls, not from documentation:
   `[]` when nothing is loaded — that is FR-7's "what else was resident". `lms server status --json`
   returns `{"running":true,"port":1234}`. `lms load` exposes `--context-length`, `--gpu`, `--ttl`,
   `--identifier`, `-y`, and `--estimate-only` (resource estimate **without** loading).
+  **Still true on 2026-09-03, and no longer a design input** — §2.5 re-probed it and §3.4.4a decides
+  against depending on it. Read this bullet as what the CLI *can* do, not as what the harness uses.
 - **Two FR-7 fields have no programmatic source** (§6 R-1): `lms version` prints only a *CLI commit*
   (`07b7252`), not the LM Studio application version; and no `lms load` flag or API field exposes
   the **KV-cache setting**, which is a GUI-side load option on this build.
@@ -172,6 +176,38 @@ Verified by direct calls, not from documentation:
   `urllib.request`**, no `httpx` at runtime. `numpy` appears nowhere in the repo.
 - `cypher-mcp/` establishes the **content-hash-as-identity** idea (its image tag is a hash of build
   inputs, "so a stale image is unrepresentable"). §3.3 applies the same idea to pack versions.
+
+### 2.5 The same surface, re-probed 2026-09-03 — and the CLI stops being a dependency
+
+§2.3 is the 2026-09-02 probe and stays as written. This is the second probe, run because the
+stakeholder's own 2026-09-03 pass found `lms` missing from `PATH`; every number below was
+re-measured here rather than taken on report. The design consequences are §3.4.4a's.
+
+- **`lms` is not on `PATH`** (`command -v lms` → exit 1). The Windows binary *is* still there and
+  still works when invoked by absolute path: `/mnt/c/Users/*/.lmstudio/bin/lms.exe ps --json`
+  returns `[]`, exit 0. So the honest statement is **not** "the source disappeared" — it is that the
+  only way to reach it is a globbed Windows path, which is a host-layout accident, not a contract.
+- **The CLI is ~150× more expensive than the HTTP surface for the same fact.** `lms.exe ps --json`
+  measured **0.30 s** on three consecutive runs; `GET http://localhost:1234/api/v0/models` measured
+  **1.6–2.3 ms** on five (4.2 ms on the first, cold-TCP call). The CLI figure is the same
+  WSL→Windows subprocess cost the gate measured for `powershell.exe` (0.18–0.54 s, gate Appendix
+  A.3) — it is the boundary, not the tool. That difference is what makes a *between-item* residency
+  probe affordable (§3.6) where a between-item `lms ps` would not be.
+- **`GET /api/v0/models` answers with everything the fingerprint's auto half needs**: 19 models,
+  each carrying `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`, `quantization`,
+  `state`, `max_context_length`, `capabilities` (plus `loaded_context_length` once a model is
+  loaded — §2.3). All 19 read `state: "not-loaded"` at probe time, so the clean-box case is real and
+  observable: the residency list is genuinely `[]`, from a probe that succeeded.
+- **`GET /v1/models` cannot substitute for it.** The OpenAI-compatible route returns exactly
+  `{id, object, owned_by}` per model — no `state`, no `quantization`, no `arch`, no `type`, no
+  `capabilities`. It can populate `modelKey` and nothing else in §3.4.2, which is why §3.4.4a uses
+  it as a **reachability discriminator only** and never as a degraded source.
+- **Auto-load (JIT) is on, and the first call to a model pays for it.** A cold
+  `POST /v1/chat/completions` against `mistralai/ministral-3-3b` at `temperature: 0`,
+  `max_tokens: 10` returned correctly in **21.068 s**, essentially all of it model load. The harness
+  pays this on its first call to **each arm**, which is a runner-design constraint, not a slow box:
+  see §3.6's warm-up rule. It also means the harness has **no way to force a cold state** — nothing
+  on either HTTP surface unloads a model.
 
 ---
 
@@ -290,8 +326,8 @@ model-bench/
   docs/{BACKLOG.md,HISTORY.md,requirements/,plans/,reviews/,test-plans/,test-reports/}
   modelbench/
     __init__.py  __main__.py  cli.py
-    lmstudio.py        # LM Studio adapter: catalog, chat, embeddings, load/unload, per-call stats
-    hostinfo.py        # lms.exe ps/version, host RSS sampling, attestation file
+    lmstudio.py        # LM Studio adapter: catalog, residency, chat, embeddings, warm-up, per-call stats
+    hostinfo.py        # residency/catalog probe (§3.4.4a), host RSS sampling, attestation file
     fingerprint.py     # Fingerprint dataclass, capture(), validate() — FR-7/AC-2
     packs.py           # manifest load, content hash, version compare — FR-5/FR-6/FR-9a
     convo.py           # multi-turn driver + pack-configured prompt assembly — FR-9a
@@ -488,7 +524,8 @@ Key decisions:
   is withdrawn.)* Two rules that make the AST check real rather than decorative: **`run` calls
   `validate_pack` first and fails closed**, so the check fires on a normal run and not only when
   someone remembers to type `model-bench validate`; and every subprocess launch in the tool
-  (`lms.exe`, `powershell.exe`) is `subprocess.run([...], shell=False)` with an argv list — model
+  (after §3.4.4a, `powershell.exe` is the only one left) is `subprocess.run([...], shell=False)`
+  with an argv list — model
   keys reach the argv verbatim (`mistralai/ministral-3-3b`) and a `shell=True` slip is the only
   injection surface in the tool. Pack code is part of the content hash, so a behavior change to a
   simulated tool is a version change like any other.
@@ -569,8 +606,9 @@ paired arm with an interval (§3.8.1). BM25 has no model, no quantization and no
 **Auto-captured** (`fingerprint.capture()`, no human input, cannot be wrong without the tool being
 wrong): `modelKey` (the literal LM Studio id, never normalized), `modelPublisher`, `arch`,
 `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `runtimeName`,
-`runtimeVersion`, `lmsCliCommit`, `residentModelsAtStart[]`, `residentModelsAtEnd[]` (both from
-`lms ps --json`), `modelType`, `modelCapabilities` and `modelCapabilitiesPresent` (the catalog's raw
+`runtimeVersion`, `residencySource`, `residentModelsAtStart[]`, `residentModelsAtEnd[]` (the last
+three from §3.4.4a's residency probe: the source token the probe answered on, and the two snapshots
+it produced), `modelType`, `modelCapabilities` and `modelCapabilitiesPresent` (the catalog's raw
 `type` and `capabilities` verbatim, plus the absent-vs-empty bit below — §3.6's gate decision must
 be auditable after the fact), `temperature`, `maxTokens`,
 `packId`, `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`, `pythonVersion`,
@@ -581,20 +619,37 @@ be auditable after the fact), `temperature`, `maxTokens`,
 a field added here is forbidden on a deterministic arm without a second edit anywhere, and no list
 elsewhere in this plan needs sweeping to keep up.
 
+**`lmsCliCommit` → `residencySource`: a one-for-one swap, not an addition** *(v1.8, §3.4.4a)*. The
+count is unchanged at 26 + 4 = 30. `lmsCliCommit` recorded *which `lms` build produced the residency
+snapshot*; after §3.4.4a nothing in the harness runs `lms`, so the field has no source and — under
+this section's own rule — could only be kept by defaulting it to `""`, which is precisely the
+silently-defaulted fingerprint field FR-7 exists to refuse. It is therefore **removed from
+`REQUIRED_BY_SCHEMA[1]["model"]`**, not blanked. `residencySource` replaces it with the same
+question honestly answered: a `REQUIRED_NONEMPTY` token naming the surface the residency and catalog
+data actually came from (`"lmstudio-api-v0"` is the only value this build emits), so a record read a
+year from now says how it was fingerprinted rather than leaving a reader to assume. Two consequences
+the implementer must action rather than infer: **this is an S1-local edit to a shipped module** —
+`fingerprint.REQUIRED_BY_SCHEMA[1]["model"]` and the independently-written literal that pins it (§4
+S1's M-4 test) both change, and §3.4.1's forbidden set follows for free because it is a derivation;
+and **it is free only now**, because `results/runs/` does not yet exist, so no stored record is
+being invalidated and no `migrate` step is owed (the same argument §7 makes for
+`BinaryMetric.unit`). Doing it one stage later would not be free.
+
 **Operator-attested** (§6 R-1 — no programmatic source exists): `lmStudioAppVersion`,
 `kvCacheSetting`, `hostRamGb`, `otherResidentWorkloads`. These live in a local, gitignored
 `model-bench/host.json` (§3.4.4) and are **copied into every run record**, so a record is
 self-contained and history stays readable when the box changes.
 
 **Validation distinguishes three states per field, not two.** v1.1 said `validate()` raises on
-"missing, empty, or `null`", which rejects legitimate values: `lms ps --json` returns `[]` when
-nothing is loaded, so `residentModelsAtStart: []` is the correct and informative value on a clean
+"missing, empty, or `null`", which rejects legitimate values: the residency probe returns `[]` when
+nothing is loaded — verified on this box, all 19 catalog entries at `state: "not-loaded"` (§2.5) —
+so `residentModelsAtStart: []` is the correct and informative value on a clean
 box; and the catalog omits the `capabilities` key entirely for several models rather than sending an
 empty list. So each required field is declared in one of two tiers:
 
 - **`REQUIRED_NONEMPTY`** — the key must be present *and* the value truthy: `modelKey`,
-  `quantization`, `runtimeName`, `runtimeVersion`, `packId`, `packVersion`, `packContentHash`,
-  `benchVersion`, `lmStudioAppVersion`, `kvCacheSetting`, …
+  `quantization`, `runtimeName`, `runtimeVersion`, `residencySource`, `packId`, `packVersion`,
+  `packContentHash`, `benchVersion`, `lmStudioAppVersion`, `kvCacheSetting`, …
 - **`REQUIRED_PRESENT`** — the key must be present; `[]`, `0`, `false` and `""` are all valid
   values: `residentModelsAtStart`, `residentModelsAtEnd`, `modelCapabilities`,
   `modelCapabilitiesPresent` (`false` is a real answer, and the whole reason the field exists),
@@ -607,11 +662,13 @@ never passed through as `null`, and `modelCapabilities` records the distinction 
 
 **Capture ordering is part of the contract, because two fields only exist at one point in time.**
 `loadedContextLength` appears in the catalog only once a model is loaded, and residency is the thing
-that changes across a run. So: `capture()` snapshots `residentModelsAtStart` **before** `lms load`,
-reads the **catalog after the load completes**, and snapshots `residentModelsAtEnd` after the last
+that changes across a run. So: `capture()` snapshots `residentModelsAtStart` **before the warm-up
+call** (§3.6 — under JIT auto-load the warm-up *is* the load), reads the **catalog after the warm-up
+returns**, and snapshots `residentModelsAtEnd` after the last
 scored call. A `capture()` that reads the catalog first produces a record with a null
 `loadedContextLength` and fails its own validation — which is correct behaviour, and is why the
-ordering is stated rather than left to the implementer.
+ordering is stated rather than left to the implementer. *(v1.8: the ordering is unchanged; only the
+event it is keyed to has a new name, because there is no `lms load` to key it to any more.)*
 
 #### 3.4.3 `benchSchemaVersion`, `benchVersion`, and not deleting history (M-4)
 
@@ -649,7 +706,7 @@ Local, gitignored, written by `model-bench attest` (§3.6a), read at the start o
 ```json
 {
   "schemaVersion": 1,
-  "lmsPath": "/mnt/c/Users/<user>/.lmstudio/bin/lms.exe",
+  "apiBaseUrl": "http://localhost:1234",
   "attested": {
     "lmStudioAppVersion": "0.3.31",
     "kvCacheSetting": "f16",
@@ -657,12 +714,103 @@ Local, gitignored, written by `model-bench attest` (§3.6a), read at the start o
     "otherResidentWorkloads": ["docker: falkordb-dev", "windows desktop session"]
   },
   "attestedAt": "2026-09-02T14:05:00Z",
-  "observedAtAttestation": {"runtimeName": "llama.cpp", "runtimeVersion": "…", "lmsCliCommit": "07b7252"}
+  "observedAtAttestation": {"runtimeName": "llama.cpp", "runtimeVersion": "…", "residencySource": "lmstudio-api-v0"}
 }
 ```
 
 `attested` is exactly the four FR-7 fields with no programmatic source; `observedAtAttestation` is
-what the staleness trip-wire compares against; `lmsPath` is §3.6's explicit path setting.
+what the staleness trip-wire compares against; `apiBaseUrl` is §3.4.4a's one endpoint setting and
+replaces v1.7's `lmsPath` — the file no longer names a filesystem path at all.
+
+#### 3.4.4a The source of truth for the auto-captured fields — and what happens when it is absent
+
+*(New in v1.8, forced by §2.5. This section owns the **source**; §3.4.2 owns the **field set**; §3.6
+owns the adapter that calls it.)*
+
+> **`GET {apiBaseUrl}/api/v0/models` — LM Studio's native catalog — is the single source of truth
+> for every auto-captured catalog and residency field. Nothing falls back to it and nothing falls
+> back from it. `GET /v1/models` is a *reachability discriminator only*: it decides which error the
+> harness prints, never the value of a field. When the native endpoint does not answer, a `model`
+> run refuses before its first model call and writes nothing.**
+
+**`residentModelsAtStart` / `residentModelsAtEnd`** are that catalog filtered on
+`state != "not-loaded"`, each surviving entry recorded as `{id, state}` with the **literal `state`
+string** kept. Not `state == "loaded"`, and not normalised to a boolean: the 2026-09-03 probe
+observed only the one value (§2.5), so any other state LM Studio can report is a value this plan has
+not seen, and a filter written against the value it *has* seen would silently reclassify it. `[]`
+remains the correct, informative clean-box answer — and it is `[]` *because a probe succeeded and
+found nothing*, which is a different fact from "no probe ran" and must stay distinguishable exactly
+as §3.4.2 requires (the same absent-versus-empty rule, one level up again).
+
+**Why this and not the three alternatives.** All three were considered explicitly, because this is
+the one decision in v1.8 with a real trade-off.
+
+- **Keep the `lms` CLI.** Rejected. It still works (§2.5), so this is not a provisioning gap and it
+  does not route to `devops` — it is that the *dependency* is bad on three axes at once: it is
+  reachable only through a globbed Windows path (`/mnt/c/Users/*/…`), which is a host-layout
+  accident rather than a contract; it costs **0.30 s against 1.7 ms** for the same fact, which is
+  what makes a between-item residency probe (§3.6) affordable in one design and not the other; and
+  it is a **second surface to keep honest** beside the HTTP one the adapter already targets, on a
+  box where the two can disagree. A benchmarking tool whose fingerprint depends on which machine's
+  `PATH` it runs on has a fingerprint that does not travel.
+- **Use only `/v1/models`, staying on the OpenAI-compatible surface.** Rejected, and this is the
+  one that looks principled until it is costed. `/v1/models` returns `{id, object, owned_by}` and
+  nothing else (§2.5). Choosing it means either **dropping nine of §3.4.2's model fields** —
+  `modelPublisher`, `arch`, `quantization`, `compatibilityType`, `maxContextLength`,
+  `loadedContextLength`, `modelType`, `modelCapabilities`, `modelCapabilitiesPresent`; `modelKey` is
+  the only one `/v1` can answer — which is most of FR-7's model identity and would also take §3.6's
+  tool-calling eligibility gate with it, or **defaulting them**, which is the exact failure this
+  component exists to refuse. Portability bought at the price of the value claim is not a
+  trade-off; it is the wrong side of it.
+- **`/api/v0/models` with a `/v1/models` fallback that populates what it can.** Rejected as a
+  *source*, kept as a *diagnosis*. As a source it buys nothing on the success path — a record
+  carrying `modelKey` and nothing else fails `validate()` and is refused anyway (§3.4.5 point 1) —
+  while inviting the one edit that would break the component: "the fallback already fills half the
+  record, let it fill the rest with reasonable values." As a diagnosis it is worth its ten lines,
+  because the two failure modes need different messages and only this call distinguishes them:
+  - **neither endpoint answers** → exit `3`, *"LM Studio is not reachable at `<apiBaseUrl>`"*;
+  - **`/v1/models` answers and `/api/v0/models` does not** → exit `3`, *"`<apiBaseUrl>` serves an
+    OpenAI-compatible API but not LM Studio's native `/api/v0` catalog. `model-bench` fingerprints
+    from that catalog and will not record a run it cannot fingerprint (§3.4.4a)."* — the message a
+    person pointing the tool at an older LM Studio, a proxy, or another server actually needs.
+
+**The proprietary-dependency question, answered rather than dodged.** `/api/v0` is
+LM-Studio-specific and this makes the harness depend on it. Three things make that the right call
+rather than a reluctant one. **(i)** The adapter is *already* on that surface for its hottest path:
+`POST /api/v0/chat/completions` has been the chat route since v1.1 (§3.6) because `stats`,
+`model_info` and `runtime` — FR-11's TTFT and FR-7's runtime identity — exist nowhere else. v1.8 adds
+no new *class* of dependency; it removes one (the CLI) and leaves a single surface instead of two.
+**(ii)** What the plan promises is one provider. §1 keeps cloud/hosted models out of scope and §3.3
+leaves the seam for a second provider in the pack's `environment.requires`, not in a
+lowest-common-denominator adapter. **(iii)** The reversal is designed for rather than hoped for: a
+second provider does **not** arrive by making these fields nullable — it arrives by making the
+required-field set a function of provider as well as `armKind`, which is §3.4.1's discriminator
+pattern applied a second time, with `residencySource` the field that keeps today's records readable
+once there is more than one answer. That is why `residencySource` is required now, while there is
+only one value it can take.
+
+**Absence, stated once for both halves of the record** — because the rule inverts at the fingerprint
+boundary and an implementer who carries one convention across it will get the other backwards:
+
+| Where | Representation of "not captured" | Consequence |
+|---|---|---|
+| **Inside the fingerprint** (§3.4.2's required set) | **Not representable.** `null` is invalid in both tiers, `""`/`[]` mean *captured and empty* | The run **refuses**: no partial record reaches `results/runs/`, because `store()` has no bypass (§3.4.5 point 1). Refusing to run is how this component records an absent fingerprint field |
+| **Outside it** (FR-11's speed block, `ItemResult.latencyMs`) | **`None`/`null`, mandatory** — never `0`, never omitted | The figure is excluded from its aggregate **and its denominator is printed** (§3.6): `latency n = 34 of 38`, never a p95 over an unstated subset |
+
+**One asymmetry the implementer must handle rather than discover.** The start-of-run probe fails
+*before* any model call, so refusing costs nothing. `residentModelsAtEnd`'s probe runs *after* the
+last scored call, where refusing costs the whole run. The rule does not bend for that — a record
+missing a required field is not stored — but the failure is made unlikely rather than merely
+accepted: the end-of-run probe **retries three times at one-second intervals** before the run is
+declared unfingerprintable, and the refusal message names what was lost and points at the retained
+transcript (`results/transcripts/<runId>.jsonl`, written as the run proceeds). A transient blip on a
+localhost GET should not cost twenty minutes of model calls; a genuinely gone endpoint should cost
+exactly that, rather than buying a record nobody can stand behind.
+
+**The one field that loses its source outright is `modelSizeBytes`** (loaded-weights size, previously
+`lms ps --json`): `/api/v0/models` does not carry a size, so it is recorded as absent under the
+second row above and never as `0`. It is not a fingerprint field, so nothing else follows; R-2 is
+amended to say so. `peakHostRssBytes` is unaffected — it was never a CLI reading.
 
 #### 3.4.5 Three enforcement points, all cheap
 
@@ -673,12 +821,21 @@ what the staleness trip-wire compares against; `lmsPath` is §3.6's explicit pat
    `benchSchemaVersion` and returns `(valid, invalid)`. `compare` merges only `valid` and prints an
    `INVALID RESULTS EXCLUDED` block naming each excluded record and why. This is AC-2's actual test
    surface — a hand-edited record must be excluded on *read*, not merely rejected on write.
-3. **Attestation staleness is detected, not trusted.** `host.json` records the `runtimeVersion` and
-   `lmsCliCommit` observed when it was last attested. If either differs at run time, the run stops
+3. **Attestation staleness is detected, not trusted.** `host.json` records the `runtimeName`,
+   `runtimeVersion` and `residencySource` observed when it was last attested. If any differs at run
+   time, the run stops
    with "LM Studio changed since you last attested `host.json` — re-check the app version and KV
    cache setting, then `model-bench attest`." That converts the weakest link (a human typing a
    value once and never revisiting it) into a loud failure at the moment it goes stale. A
    `deterministic` arm skips this check entirely — it attests nothing.
+
+   *(v1.8: `lmsCliCommit` was the third comparand and is gone with the CLI (§3.4.4a). The trip-wire
+   is therefore **narrower and stated as such**: it fires on an inference-runtime change or a
+   change of capture surface, and no longer on an `lms` CLI update. That is a smaller net, and
+   arguably a better-aimed one — the KV-cache setting is a property of the loaded runtime, which
+   `runtimeVersion` tracks directly, whereas the CLI commit only ever correlated with it. The
+   residual — an app update that changes the KV-cache default while keeping the same runtime
+   version — is now undetected, and R-1 says so rather than implying the trip-wire covers it.)*
 
 ### 3.5 D5 — Storage: JSON per run is the truth, CSV and markdown are derived
 
@@ -724,20 +881,61 @@ break under deadline pressure.
 
 | Operation | Endpoint / command | Notes |
 |---|---|---|
-| `catalog()` | `GET /api/v0/models` | Full per-model metadata (§2.3) — the fingerprint's auto half. |
+| `catalog()` | `GET /api/v0/models` | Full per-model metadata (§2.3, re-probed §2.5) — the fingerprint's auto half, and its **only** source (§3.4.4a). |
 | `chat(messages, tools=…, temperature=…)` | `POST /api/v0/chat/completions` | **`/api/v0`, not `/v1`** — the `stats`/`model_info`/`runtime` objects only exist on the v0 route, and they are FR-11's TTFT and FR-7's runtime identity. |
 | `embed(texts)` | `POST /api/v0/embeddings` | Batched; records dimension from the first vector (AC-5). |
-| `load` / `unload` / `ps` | `lms.exe` subprocess | `--context-length`, `--gpu`, `--ttl`, `-y`; `ps --json` for residency. |
+| `residency()` | `GET /api/v0/models`, filtered `state != "not-loaded"` | §3.4.4a. Measured at **1.7 ms**, which is what makes a between-item probe affordable — see the contamination guard below. |
+| `warm_up(model)` | `POST /api/v0/chat/completions`, minimal request | Under JIT auto-load this **is** the load (§2.5). There is no unload on either HTTP surface, so the harness cannot force a cold state. |
 
-- **`lms.exe` path resolution** is explicit config (`host.json: lmsPath`), defaulting to a glob of
-  `/mnt/c/Users/*/.lmstudio/bin/lms.exe`, with a clear error naming the setting when unresolved.
-  Never silently degrade to "no residency data" — that would put a hole in the fingerprint.
-- **Cold-load time (FR-11) is measured, not inferred**: `runner` optionally unloads, then times
-  `lms load` for the model under test, records `coldLoadSeconds` **once per run**, and excludes the
-  first `warmupTurns` requests from the steady-state percentiles. Cold-load and steady-state are
-  never averaged together.
+- **Endpoint resolution** is one explicit setting (`host.json: apiBaseUrl`, default
+  `http://localhost:1234`), and §3.4.4a's two-step probe decides the error when it does not answer.
+  Never silently degrade to "no residency data" — that would put a hole in the fingerprint, and
+  §3.4.4a makes the hole unrepresentable by refusing the run instead.
+- **The first call to each arm is an explicit warm-up: never timing data, never a scored item.**
+  *(v1.8. The measurement that forces it: a cold `POST /v1/chat/completions` at `max_tokens: 10`
+  took **21.068 s**, essentially all of it JIT load, against sub-second warm calls — §2.5. Any
+  single per-request timeout tuned to warm latency fires on the first call of every run and kills
+  it.)* Five parts, and the last three exist so the fix cannot contaminate what the benchmark
+  reports:
+  - **The warm-up is outside the item set.** `runner` issues exactly one warm-up request per arm
+    before the first scored call — the pack's system prompt plus a fixed, pack-independent probe
+    message at `temperature: 0`, `max_tokens: 10`. Its response is discarded: it is not an
+    `ItemResult`, it is not written to `results/transcripts/`, and it enters no aggregate.
+  - **Two timeout budgets, not one.** `firstCallTimeoutSeconds` (default **300**) governs the
+    warm-up; `requestTimeoutSeconds` (default **120**) governs every scored call. The first is an
+    order of magnitude above the measurement rather than a tight fit around it, because 21 s is a
+    3B model at a ten-token completion and a 27B at a long prompt takes the same load path; the
+    second is sized to warm generation and **is** meant to fire on a hung call. Neither is a
+    fingerprint field: they decide whether a run completes, never what it measures, and §3.4.2's
+    set is not extended for them.
+  - **`coldLoadSeconds` is the warm-up's wall clock, recorded only when the model was not resident
+    at start** (`residentModelsAtStart`, §3.4.4a). When the model was already loaded it is
+    **absent** — `None`, never `0` and never the warm number — because the harness can no longer
+    unload, so such a run has genuinely not measured a cold load. Cold-load and steady-state are
+    never averaged together.
+  - **The contamination guard, because a warm-up alone is not enough.** JIT can reload *mid-run* —
+    TTL expiry, or the operator loading another model — and a reload inside a timed call adds ~20 s
+    to that item's latency while leaving its correctness untouched. So `runner` calls `residency()`
+    **between items and never during a timed call** (1.7 ms; the same discipline the
+    `powershell.exe` sampler already follows for the same reason), and for any item whose preceding
+    snapshot did not show the model resident it sets **`ItemResult.latencyMs = None`**. The item is
+    still scored — only its *timing* is absent, which is exactly what §3.4.4a's second row is for.
+  - **A percentile is printed with its own denominator.** p50/p95 are computed over the non-`None`
+    latencies and rendered as `p95 = … (latency n = 34 of 38)`. An excluded item is therefore
+    visible in the report rather than silently improving the figure — the same refusal §3.5 applies
+    to blended metrics, applied to a blended *sample*.
+
+  Two rejected alternatives, both of which contaminate the data they are meant to protect. **One
+  widened timeout (300 s everywhere)**: it removes the only signal that a warm call has hung, and it
+  lets a mid-run reload pass unremarked into the percentiles — the contamination the guard exists
+  for. **v1.1's `warmupTurns` (drop the first *n* scored latencies)**: it discards real measurements
+  chosen by *position* rather than by evidence, and leaves *n* as a knob that moves the reported p50.
+  `--warmup <n>` survives only as *additional warm-up calls before the first item*, never as items
+  removed after the fact.
 - **Peak RAM (FR-11)** — see §6 R-2 for the honesty caveat. Captured as two separate, named fields:
-  `modelSizeBytes` (from `lms ps --json`, the loaded weights) and `peakHostRssBytes` (sampled from
+  `modelSizeBytes` (**no source as of v1.8** — it was `lms ps --json`'s loaded-weights figure and
+  `/api/v0/models` carries no size, so it is recorded absent per §3.4.4a and never as `0`) and
+  `peakHostRssBytes` (sampled from
   `powershell.exe Get-Process`, best-effort). Neither is presented as "the model's RAM cost" without
   its method label. **Sampling is suspended for the duration of every timed call**: the runner
   samples *between* turns, never during one, and each sample carries its timestamp so a reader can
@@ -750,12 +948,12 @@ break under deadline pressure.
 
   | Field | Source | Status |
   |---|---|---|
-  | `turnLatencyMsP50` / `P95` | **client wall clock**, measured around the HTTP call from just before the request to the last byte of the body | **headline** |
+  | `turnLatencyMsP50` / `P95` | **client wall clock**, measured around the HTTP call from just before the request to the last byte of the body, over items with a non-`None` `latencyMs`, printed with `latency n = X of Y` | **headline** |
   | `ttftMs` | `stats.time_to_first_token` (LM-Studio-reported) | reported |
   | `prefillMsPer1kPromptTokens` | `1000 × stats.time_to_first_token ÷ (usage.prompt_tokens ÷ 1000)`, per call, aggregated as median | reported (**new in v1.2 — FR-11 names it and v1.1 omitted it**) |
-  | `coldLoadSeconds` | timed `lms load`, once per run | reported separately, never averaged into steady state |
+  | `coldLoadSeconds` | the warm-up call's wall clock, once per run, **only** when the model was not resident at start | reported separately, never averaged into steady state; **absent** (not `0`) otherwise |
   | `tokensPerSecond` | `stats.tokens_per_second` | **diagnostic only** — FR-11 says so in words, and the report labels it so |
-  | `modelSizeBytes`, `peakHostRssBytes` | `lms ps --json`; sampled `Get-Process` | best-effort, method-labelled (R-2) |
+  | `modelSizeBytes`, `peakHostRssBytes` | **no source (v1.8, R-2)**; sampled `Get-Process` | first recorded absent, never `0`; second best-effort, method-labelled (R-2) |
 
   The headline being **client wall clock** and not `stats.generation_time` is a decision, not an
   oversight: FR-11 asks for *end-to-end turn latency*, which includes request assembly, transport
@@ -788,13 +986,14 @@ met — owned by no stage. One table, and each command is assigned to the stage 
 | `compare --pack <id>` | `--models a,b` · `--session <id>` · `--negative-control` · `--out <path>` | Reads `results/runs/`, renders the markdown comparison to `reports/` and stdout | **S1** |
 | `index rebuild` | — | Regenerates `results/index.csv` from `results/runs/` | **S1** |
 | `models --tested` | `--pack <id>` · `--role <role>` | Lists models with stored results (`armKind == "model"`); from S2 also intersects with the installed catalog | **S1**, catalog half **S2** |
-| `attest` | `--lms-path <path>` · non-interactive `--set k=v` | Prompts for the four operator-attested fields, probes LM Studio, writes `host.json` (§3.4.4) | **S2** |
+| `attest` | `--api-base-url <url>` · non-interactive `--set k=v` | Prompts for the four operator-attested fields, probes LM Studio (§3.4.4a's two-step probe), writes `host.json` (§3.4.4) | **S2** |
 | `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, `sampling` contract (§3.3 — `analysisUnit == pairingKey[0]`, row-count identity, `replicatesPerScript`), ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
-| `run --pack <id> --model <key>` | `--session <id>` · `--reference <key>` · `--warmup <n>` · `--no-cold-load` | One model × one pack; calls `validate` first and fails closed | **S2** plumbing, first usable **S3** |
+| `run --pack <id> --model <key>` | `--session <id>` · `--reference <key>` · `--warmup <n>` · `--no-cold-load` · `--first-call-timeout <s>` · `--request-timeout <s>` | One model × one pack; calls `validate` first and fails closed | **S2** plumbing, first usable **S3** |
 
 **Exit codes.** `0` whenever the tool ran and reported, *whatever the scores* — the requirements rule
 out pass/fail gating and §1 states that the only non-zero exits are operational. The closed set:
-`2` bad arguments or usage · `3` LM Studio unreachable or `lms.exe` unresolvable · `4` invalid pack
+`2` bad arguments or usage · `3` LM Studio unreachable **or reachable without its native `/api/v0`
+catalog** (§3.4.4a's two messages share this code) · `4` invalid pack
 (`validate` failure, load error, unmet `environment.requires`) · `5` fingerprint incomplete or
 `host.json` stale/absent. Nothing else. A `compare` that finds every stored record invalid still
 exits `0` and prints the `INVALID RESULTS EXCLUDED` block — that is a report, not an operational
@@ -814,7 +1013,7 @@ separating three ideas that the requirements use in one breath:
   exactly one model (FR-1).
 - **A session** (`--session <id>`, recorded in every run record) groups runs executed back to back
   on an undisturbed box. It is a *label with a meaning the tool enforces*: `runner` refuses to
-  reuse a session id if `lms ps` shows a different residency profile than the session's first run
+  reuse a session id if `residency()` (§3.4.4a) shows a different residency profile than the session's first run
   saw, or if more than a configurable gap has elapsed.
 - **Pairing is item-level and comes from the pack, not from the clock.** Both models see the same
   items in the same order with the same seed, because the pack pins them. So a paired comparison is
@@ -824,7 +1023,8 @@ separating three ideas that the requirements use in one breath:
   never silently mixes them.
 - **FR-17's reference arm** is `model-bench run --pack P --model CANDIDATE --reference INCUMBENT`,
   which runs both models in one session, sequentially (**block-level**, not item-interleaved: a
-  16 GB box cannot hold two models, and per-item load/unload would dominate runtime). The residual
+  16 GB box cannot hold two models, and per-item load/unload would dominate runtime — under JIT
+  auto-load, item-interleaving forces a reload per item at the measured ~21 s each, §2.5). The residual
   is named rather than hidden: within-session drift is bounded and recorded (both arms' timestamps
   and residency snapshots are in the records), not eliminated.
 - **FR-17a**: the candidate list offered by `model-bench models --tested` comes from
@@ -1274,7 +1474,12 @@ each one's arithmetic is at the cited section:
 | Clean build, re-draft the golden data | Discards 173 human-verified labels, which are the expensive part (FR-19). |
 | Score the embedder through FalkorDB's ANN index | Injects index approximation into a *model* comparison, and does not expose the irrelevant-document scores FR-12's score separation needs (§3.8.1). |
 | Seed a FalkorDB graph for the `nlq-generator` pack | Unnecessary: the model emits a structured spec, not Cypher, so an in-process executor is exact and dependency-free (§3.8.3). |
-| Item-level interleaving of paired arms | A 16 GB box cannot hold two models; per-item load/unload would dominate runtime (§3.7). |
+| Item-level interleaving of paired arms | A 16 GB box cannot hold two models; under JIT auto-load, interleaving forces a reload per item at ~21 s each (§2.5, §3.7). |
+| Keep the `lms` CLI as the host-info source | Reachable only through a globbed Windows path, 0.30 s against 1.7 ms for the same fact, and a second surface to keep honest beside the HTTP one the adapter already targets (§2.5, §3.4.4a). **v1.8.** |
+| Fingerprint from `/v1/models`, staying on the OpenAI-compatible surface | Returns `{id, object, owned_by}` only: it would cost nine of §3.4.2's model fields and §3.6's eligibility gate, or force the defaults FR-7 exists to refuse (§3.4.4a). **v1.8.** |
+| `/api/v0/models` with a `/v1/models` fallback that populates what it can | Buys nothing on the success path — a partial record fails `validate()` anyway — while inviting the "let it fill in the rest" edit. Kept as a *diagnosis* that selects the error message, never as a source (§3.4.4a). **v1.8.** |
+| One widened request timeout (300 s everywhere) for the 21 s JIT first call | Removes the only signal that a warm call has hung, and lets a mid-run reload pass unremarked into the percentiles (§3.6). **v1.8.** |
+| v1.1's `warmupTurns` — drop the first *n* scored latencies | Discards real measurements chosen by position rather than evidence, and leaves *n* as a knob that moves the reported p50. The warm-up call sits outside the item set instead (§3.6). **v1.8.** |
 | Store results only as CSV (stakeholder preference read literally) | Cannot represent per-turn × per-failure-kind breakdowns without becoming unreadable; JSON is the truth, CSV is the derived human view (§3.5). |
 | The original FR-15 marginal-CI-overlap rule as the decision instrument | Cannot fire at all at n ≤ 40 with baseline ≥ 0.90 — this lab's actual regime — and discards FR-16's pairing (`-ml` §3.1). **FR-15/AC-4 amended 2026-09-02** to the paired-difference interval (§6 R-9); the overlap check survives as a printed diagnostic. |
 | Pooling turn-level outcomes into one accuracy rate | Turns within a conversation are not independent; the prior experiment's 280 turns (§2.2) carried roughly the information of its 40 conversations (`-ml` §4.4). Per-turn slices over conversations. |
@@ -1601,6 +1806,38 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    `b = c = 0` by construction and it **cannot fail**: it proves the mode is wired, not that the
    harness is sound. The real negative control is two *independent* runs of the same model and is
    §5 test 19a, an acceptance step.
+10. **The `aggregates`-versus-`items` cross-check.** *(New in v1.8. The engineering gate's Pass 4
+   finding **P4-4** overturned the S1 fix round's deferral of this to S2, and the deferral's two
+   grounds were re-checked and do not hold: `_DESCRIPTIVE_NOTE` caveats the per-arm **interval**
+   ("descriptive, not the comparison instrument") and says nothing about the **rate**, which is the
+   thing that misreports; and `RunResult` carries `items` and `aggregates` as required fields side
+   by side, so the check needs nothing S2 produces. It is S1-local, and it is the net that catches
+   the first real scorer's first mistake — which is why it must exist before S3 produces any.)*
+
+   **The check.** In `compare_report`, for each arm and each `BinaryMetric` in the pack's
+   `verdictMetrics` family whose `unit` is the pack's analysis unit: `metric.n` must equal the
+   number of that arm's items for which `scored_outcome(metric) is not None`. Today's failing case
+   is an arm declaring `BinaryMetric(successes=0, n=10)` for a metric **no item declares
+   scoreable**, which still prints `0/10 = 0.000` in the Arms table beside a paired-rows section
+   saying *"No verdict: no paired data"* — one report making two mutually exclusive statements about
+   the same metric.
+
+   **On mismatch the arm is excluded from the comparison and named in the existing
+   `INVALID RESULTS EXCLUDED` block**, with the declared `n` and the counted one printed, and the
+   remaining arms still render. Two rejected alternatives, and each is rejected for a reason the
+   reviews already paid for: **raising** reproduces P4-5's shape — an exception thrown at report
+   time, outside `cli.py`'s closed exit-code set, taking the valid arm down with the invalid one —
+   whereas exclude-and-name is AC-2's own mechanism, already built and already tested; and
+   **suppressing just the offending metric's row** leaves a partially-trusted arm inside a
+   comparison, when what the mismatch has actually demonstrated is that this scorer's per-item and
+   aggregate paths disagree, which is no basis for trusting its other denominators. If exclusion
+   leaves fewer than two arms, the report prints the no-comparison case it already has.
+
+   **The test** builds two arms of ten items each with every item `scoreable={m: False}` and each
+   arm's stored aggregate declaring `BinaryMetric(m, successes=0, n=10, unit="item")` — the gate's
+   own reproduction — and asserts that no `0/10` row is rendered, that both arms are named in the
+   excluded block with `declared n=10, counted 0`, and that the report is still produced. §5 test
+   11c is the same requirement stated from the test side.
 
 This stage encodes the **amended** FR-15/AC-4 decision rule (§3.9 point 1) — the paired-difference
 interval, not marginal overlap.
@@ -1622,13 +1859,17 @@ def content_hash(root: Path) -> str: ...            # SHA-256, sorted paths, exc
 def validate_pack(pack: Pack) -> list[str]: ...
 
 # lmstudio.py
-class LMStudio:
-    def catalog(self) -> list[ModelInfo]: ...
-    def chat(self, messages, *, model, tools=None, temperature, max_tokens) -> ChatResult: ...
-    def embed(self, texts: Sequence[str], *, model) -> EmbedResult: ...
-    def load(self, model: str, *, context_length: int | None, gpu: str | None) -> LoadResult: ...
-    def unload(self, model: str) -> None: ...
-    def ps(self) -> list[ResidentModel]: ...
+class LMStudio:                                     # base_url from host.json apiBaseUrl (§3.4.4a)
+    def catalog(self) -> list[ModelInfo]: ...       # GET /api/v0/models — the only fingerprint source
+    def residency(self) -> list[ResidentModel]: ... # catalog filtered state != "not-loaded"; {id, state}
+    def chat(self, messages, *, model, tools=None, temperature, max_tokens,
+             timeout_s: float) -> ChatResult: ...   # timeout_s required, no default (§3.6's two budgets)
+    def embed(self, texts: Sequence[str], *, model, timeout_s: float) -> EmbedResult: ...
+    def warm_up(self, model: str, *, system_prompt: str, timeout_s: float) -> LoadResult: ...
+                                                    # one discarded call; under JIT this is the load
+    def probe(self) -> Literal["api-v0", "v1-only", "unreachable"]: ...   # §3.4.4a's two-step probe
+# No load/unload/ps: v1.7's three lms.exe operations are gone with the CLI (§2.5, §3.4.4a), and
+# nothing on either HTTP surface can unload — the harness cannot force a cold state.
 
 # tooling.py
 class ToolEnvironment(Protocol):
@@ -1670,10 +1911,38 @@ matching §3.4.4's schema and the staleness trip-wire fires when `runtimeVersion
 **one** `-m live` test confirms `catalog()` returns the real installed models and that `chat()`
 surfaces `stats.time_to_first_token`.
 
+**Three additions in v1.8, all in the adapter and the runner:**
+
+- **The host-info seam is §3.4.4a's, and `hostinfo` launches no subprocess for it.** `probe()`
+  returns each of its three values against stubbed HTTP — a v0 catalog; a server answering
+  `/v1/models` but 404 on `/api/v0/models`; nothing listening — `run` exits `3` with the
+  *distinguishing* message in the second case, and **no `model` record is written in either failure**;
+  `residency()` maps a stubbed catalog to `{id, state}` on `state != "not-loaded"` and returns `[]`
+  for an all-not-loaded payload (§2.5's captured 19-model response is the fixture).
+- **The timing discipline is tested offline against a stub clock and a stub LLM** (§5 test 15b): the
+  warm-up is issued exactly once per arm and produces no `ItemResult`; a stubbed 21 s first response
+  followed by sub-second ones completes under the two budgets where a single warm-sized budget would
+  not; `coldLoadSeconds` is set when start-residency was empty and **absent, not `0`,** when it was
+  not; an item whose preceding residency snapshot shows the model not resident gets
+  `latencyMs = None` and is **still scored**; and the percentile line prints `latency n = X of Y`
+  with `X < Y` in that case.
+- **S2's scorers derive `aggregates` from the same `items` they emit, in one pass** — this settles
+  the Pass 4 gate's open question 1, which routed the shape here. Every `BinaryMetric.n` a scorer
+  emits is *computed* as the count of items it marked `scored_outcome(metric) is not None`, never
+  counted along a second path. That makes S1's cross-check (S1 done-condition 10) unfalsifiable from
+  inside a correct scorer, which is precisely its job: it is the net under the seam, not a substitute
+  for getting the seam right, and it earns its place because the next scorer will be written by
+  someone who has not read this bullet. **S2 does not re-implement the check** — it is S1's, and it
+  has already landed by the time S2 runs.
+
 **R-1's probe is part of this done-condition, not a note** (§6 R-1 promised it "during S2" and v1.1
-gated nothing on it): with a model actually loaded, run `lms ps --json` and record in
-`model-bench/docs/HISTORY.md` whether it exposes the load configuration. **If it does,
-`kvCacheSetting` moves from operator-attested to auto-captured** and §3.4.2/§3.4.4 are updated in
+gated nothing on it). *(v1.8: same probe, new instrument — there is no `lms ps` any more.)* With a
+model actually loaded — issue one warm-up call, which under JIT auto-load *is* the load — re-read
+`GET /api/v0/models` and record in `model-bench/docs/HISTORY.md` whether the loaded entry exposes the
+KV-cache or load configuration. The 2026-09-03 probe saw only `not-loaded` entries and their ten
+keys (§2.5); `loaded_context_length` is known to appear on load (§2.3), and whether anything else
+does is exactly what this probe settles. **If it does, `kvCacheSetting` moves from operator-attested
+to auto-captured** and §3.4.2/§3.4.4 are updated in
 the same change; if it does not, the recorded negative result is what closes R-1. Either outcome
 satisfies the condition; silence does not.
 
@@ -1849,8 +2118,8 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 
 | Stage | Items it owes | Where an item splits across stages |
 |---|---|---|
-| **S1** — core | **1, 2, 3, 5, 6, 7b, 11b** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. |
-| **S2** — packs, adapter, host info, runner | **4, 10, 12, 12b, 13, 14, 15** | **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. |
+| **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (P4-4, v1.8 — S1 done-condition 10). |
+| **S2** — packs, adapter, host info, runner | **4, 10, 12, 12b, 13, 14, 15, 15b** | **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) despite sitting beside them, and its report half — the `latency n = X of Y` denominator — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
 | **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
 | **S4** — guard-judge, nlq-generator | **9, 16** | — |
 | **S5** — tool-caller scoring | **7**, **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. |
@@ -1907,6 +2176,13 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 11b. `report.py` structural refusals — a pack fixture with `headlineMetric: null` renders both
     verdict metrics and no headline; a manifest omitting the `headlineMetric` key fails
     `validate_pack`; a metric outside `verdictMetrics` always renders with the `exploratory` label.
+11c. **The `aggregates`-versus-`items` cross-check** *(new in v1.8; S1's, per P4-4 and S1
+    done-condition 10)*. Two arms of ten items, every item `scoreable={m: False}`, each arm's stored
+    aggregate declaring `BinaryMetric(m, successes=0, n=10, unit="item")`: no `0/10` row is
+    rendered, both arms appear in the `INVALID RESULTS EXCLUDED` block with their declared and
+    counted `n`, and the report is still produced rather than raising. Plus the positive case — an
+    arm whose declared `n` matches its scoreable-item count renders normally — so the check is shown
+    to discriminate rather than to exclude everything.
 12. **Pack integrity, per pack:** unique ids, required fields, per-item provenance present (with
     `originGitSha`), paraphrase rule for retrieval-style packs, every `expect` block referring to a
     tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3 — including
@@ -1930,8 +2206,22 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 13. `catalog()` returns installed models with `quantization`/`max_context_length` populated.
 14. `chat()` surfaces `stats.time_to_first_token` and a native `tool_calls` array on a
     tool-capable model, and `toolCallForm` correctly distinguishes native from prose.
-15. `load`/`ps`/`unload` round-trip: after `load`, `ps --json` names the model; `coldLoadSeconds` is
-    recorded; after `unload`, `ps --json` no longer names it.
+15. **JIT residency round-trip** *(rewritten in v1.8 — there is no `load`/`unload` to round-trip)*:
+    against a model `residency()` reports as not resident, one `warm_up()` call returns and
+    `residency()` then names it with a non-`"not-loaded"` `state`; `coldLoadSeconds` is recorded and
+    is of the measured order (§2.5's 21 s, not sub-second). The unload half is **not** testable and
+    is not asserted — nothing on either HTTP surface unloads (§3.4.4a) — so the honest complement is
+    the second run: repeating `warm_up()` against the now-resident model records **no**
+    `coldLoadSeconds`.
+15b. **The runner's timing discipline, offline** *(new in v1.8; stub clock + stub LLM, so it is a
+    default-suite test despite sitting among the live ones)*: exactly one warm-up call per arm and it
+    produces no `ItemResult`; a stubbed 21 s first response with sub-second successors completes
+    under the two budgets and fails under a single warm-sized one; `coldLoadSeconds` present when
+    start-residency was empty and **absent, not `0`,** otherwise; an item preceded by a
+    not-resident snapshot gets `latencyMs = None` and is still scored; and the percentile line
+    prints `latency n = X of Y` with `X < Y` in exactly that case. **The last two are the tests that
+    matter**: they are what stops the first-call fix from quietly becoming a way for slow items to
+    leave the sample.
 16. One full run per pack, end to end, producing a stored, valid result.
 
 **Acceptance (human-run, once, recorded in `docs/test-reports/`)**
@@ -1956,7 +2246,7 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 If this plan is executed by `tdd-engineer`, the red→green sequence is **per stage, not across the
 whole list**: take the stage's row from the table above, drive its items in numeric order, then
 close the stage against its §4 done-conditions. Items 13–16 follow the implementation they cover
-rather than driving it, and 17–20 are `qa-engineer`'s acceptance pass at the stage that owns each.
+rather than driving it (**15b does not** — it is offline and drives the runner's timing design), and 17–20 are `qa-engineer`'s acceptance pass at the stage that owns each.
 
 ---
 
@@ -1970,15 +2260,31 @@ invalidity rule still holds mechanically — a missing value is refused — but 
 is undetectable. Mitigations built in: the staleness trip-wire (§3.4 point 3) catches the common
 failure of attesting once and never revisiting; `runtime.version` is auto-captured from every call
 and is arguably the more reproducibility-relevant version anyway. **The probe is in S2's
-done-condition**, not left as prose here: run `lms ps --json` against a *loaded* model, record the
+done-condition**, not left as prose here: read `GET /api/v0/models` for a *loaded* model, record the
 outcome in `model-bench/docs/HISTORY.md`, and if the load configuration is exposed, move
 `kvCacheSetting` from attested to auto-captured in the same change. A mitigation nobody is gated on
 executing is a mitigation nobody executes.
 
+*(v1.8 — this risk is **unchanged in substance and narrowed in one mitigation**. Dropping the `lms`
+CLI (§3.4.4a) does not touch the claim: neither field had a programmatic source through the CLI
+either, and `lms version`'s CLI commit was never the app version. What does change is the staleness
+trip-wire, which loses `lmsCliCommit` as a comparand and now fires on a runtime or capture-surface
+change only (§3.4.5 point 3). The residual this leaves is specific and stated rather than implied
+away: **an LM Studio app update that changes the KV-cache default while keeping the same inference
+runtime version goes undetected.** The probe above is what would retire the whole risk; until it
+runs, this is the gap.)*
+
 **R-2 — FR-11's "peak RAM at the measured settings" is best-effort, not exact (medium).** There is
-no RAM endpoint. What is available: `lms ps --json`'s loaded-weights size, `lms load --estimate-only`'s
-pre-load estimate, and Windows-side process working set sampled through `powershell.exe`. The design
-records them as three separately named fields rather than one authoritative "peak RAM" (§3.6), and
+no RAM endpoint. What was available through the CLI: `lms ps --json`'s loaded-weights size and
+`lms load --estimate-only`'s pre-load estimate; what remains after §3.4.4a is Windows-side process
+working set sampled through `powershell.exe`. **This risk got worse in v1.8 and the plan says so:**
+`modelSizeBytes` has no source at all now — `/api/v0/models` carries no size — so it is recorded
+absent, never `0`, and FR-11's RAM answer rests on the single most fragile measurement in the tool.
+The reversal is cheap and named, not hypothetical: if the size figure turns out to matter, the
+options are the loaded entry's own keys (whatever S2's R-1 probe finds on a *loaded* model) or a
+deliberate, documented re-admission of one CLI call for that one field — not a silent default. The
+design still
+records what it has as separately named fields rather than one authoritative "peak RAM" (§3.6), and
 `README.md` states the method. A cross-WSL `powershell.exe` sample is also the most fragile thing in
 the tool; it degrades to "not captured" without failing the run — **but note that makes it the one
 FR-7-adjacent field that is not enforceable**, which is why it lives in FR-11's speed result rather
@@ -2053,6 +2359,34 @@ choose it here because a percentile definition is method, and §7 rule 2 gives m
 model" under different ids compare as two models — visibly, with both ids printed. That is the
 correct conservative behavior; a `notes` field lets a human record that they are the same weights.
 
+**R-14 — The harness can no longer force a cold state, and JIT can reload underneath it (medium,
+mitigated in output).** *(New in v1.8.)* Nothing on either HTTP surface unloads a model (§2.5), so
+two things follow. **(i)** `coldLoadSeconds` is only measurable when the operator happens to start a
+run against a non-resident model; otherwise it is absent, and FR-11's cold-load figure becomes an
+*opportunistic* measurement rather than a guaranteed one. Producing it deliberately is now a human
+action — stop the model in the LM Studio GUI, or wait out its TTL — documented in `README.md`, not a
+harness capability. **(ii)** A JIT reload can land *inside* a run: TTL expiry between items, or the
+operator loading something else. §3.6's between-item residency probe is the mitigation and it is
+honest rather than complete — it detects a reload that happened before an item and marks that item's
+latency absent, but it cannot detect one that begins and ends inside a single timed call. The
+residual is bounded by the same evidence that raises the risk: a reload costs ~21 s against ~1.3 s
+per turn, so a contaminated call is an outlier by an order of magnitude, and it corrupts **timing
+only** — the scored outcome of a slow call is the same scored outcome. The accepted position is that
+the tool reports fewer latency samples honestly rather than all of them optimistically, which is why
+§3.6 prints the latency denominator instead of quietly shrinking it.
+
+**R-15 — The fingerprint now depends on a vendor-proprietary endpoint (low, accepted with a named
+reversal).** *(New in v1.8.)* `GET /api/v0/models` is LM Studio's own API, not the OpenAI-compatible
+surface, and §3.4.4a makes it the only source for most of FR-7's model identity. Accepted for the
+reasons argued there — the chat path has been on `/api/v0` since v1.1 for the same reason, so this
+consolidates onto one proprietary surface rather than adding a second — and because the alternative
+costs nine of §3.4.2's model fields. The exposure is real: an LM Studio release that changes or removes
+`/api/v0/models` stops the tool, loudly (exit `3`, no record written), and stored records remain
+readable because `residencySource` says what produced them. The reversal trigger is a **second
+provider**, and its shape is decided in advance rather than improvised: the required-field set
+becomes a function of provider as well as `armKind` (§3.4.1's discriminator pattern, applied again),
+never a set of nullable fields.
+
 ### Requirement defects raised by this design pass — all amended and closed
 
 Three requirements were unbuildable as written. All three amendments were accepted on 2026-09-02
@@ -2087,7 +2421,8 @@ requirement now states the rule, not why the earlier one failed.
 all closed on 2026-09-02 — tool-caller sampling (§3.8.4), `guard-judge`'s absent headline (§3.8.2),
 and what S3 counts as done when the self-check fires (S3 done-condition 5). Two items remain, both
 verify-during-implementation and both now gated in a done-condition rather than left as prose:
-R-1's S2 probe of whether `lms ps --json` exposes the KV-cache setting on a loaded model, and S6's
+R-1's S2 probe of whether a **loaded** model's `/api/v0/models` entry exposes the KV-cache setting
+(v1.8 — same probe, new instrument), and S6's
 known-answer validation, which is recorded either way (S6, M-13's exit).
 
 **One thing this plan no longer claims.** §3.1 point 2's duplication mitigation is weaker than v1.1
@@ -2108,7 +2443,10 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.7** is aligned to the note **v1.7**. They share one vocabulary
+**Version pairing:** this plan **v1.8** is aligned to the note **v1.8** (`27501c9`). Nothing in this
+plan's v1.8 revision touches method — the three changes are a capture-surface decision, a runner
+timing contract and a stage re-attribution, all of them the plan's own by §7 rule 2 — so the pairing
+is a re-confirmation rather than a co-ordinated change. They share one vocabulary
 (`verdictMetrics` + `headlineMetric`, the plan's names), one `guard-judge` metric pair
 (`falseAdvanceRate` + `falseSuspendRate`, the note's), one `H` contract (pack-declared and validated
 `H ≤ min(script length)`, the plan's), and one analysis-unit rule (the outermost component of
@@ -2190,6 +2528,9 @@ state and the plan says so deliberately. Engineering gates:
 | second fix round | `95b4c88` | **314 tests**; the floor moves to the unadjusted α, McNemar becomes a veto |
 | statistics re-gate, pass 3 | `95b4c88` | **needs changes** — 0 blockers, 1 major, 2 minors, 4 nits; note revised to **v1.7** in the same pass |
 | engineering re-gate, pass 3 | `95b4c88` | **needs changes** — 1 blocker (P3-1), 6 majors, 5 minors, 3 nits |
+| third fix round | `d55f4d8` | **353 tests**; both gates' Pass 3 findings closed |
+| engineering re-gate, pass 4 | `e8bedce` | **approve with suggestions** — 0 blockers, 5 majors |
+| statistics re-gate, pass 4 | `27501c9` | **approve with suggestions** — 1 major (M-ML-8), 4 minors, 2 nits; note revised to **v1.8** |
 
 So: **S2 may start, S1 may not be marked done.** The statistics blocker that was open at pass 2 is
 closed — the note ruled in v1.7 — and both pass-3 rounds route to `tdd-engineer`, except the two
@@ -2200,6 +2541,17 @@ unaffected; if a fix moves a `verdict()` input, that is the `tdd-engineer` round
 change to what S2 hands the report (§7 rule 2). Read S0's and S1's own text before starting: they record
 what shipped rather than what v1.1 asked for, including the one real smoke test and the
 working-directory rule that every done-condition in §4 depends on.
+
+**Pass 4, and what it changed here** *(v1.8)*. Both gates returned **approve with suggestions** with
+**no blocker**, having each been asked directly whether their residue blocks S2; both said it does
+not, and both independently named the same constraint — land the two nets before **S3**, the first
+stage that produces real scored data. Exactly one Pass 4 finding was routed to this document:
+**P4-4**, which overturned the S1 fix round's deferral of the `aggregates`-versus-`items` cross-check
+to S2. It is closed here as **S1 done-condition 10** and **§5 test 11c**, and the gate's own open
+question 1 — whether S2's scorers compute `aggregates` from `items` in one pass — is answered in
+**§4 S2**: they do, and the S1 check stays anyway, as the net under that seam rather than a
+substitute for it. Everything else in Pass 4 is code, and none of it changes a signature S2 wires
+against.
 
 **What S2 inherits from the two gates**, stated here rather than left in the reviews:
 
@@ -2213,7 +2565,27 @@ working-directory rule that every done-condition in §4 depends on.
   done-condition; and `validate_pack` reuses `packs.check_sampling_contract` rather than
   re-implementing the rule.
 - **`_percentile`'s definition** (nearest-rank vs interpolated) must be decided and written into the
-  note **before** any latency figure is stored — a `data-scientist` call, open as §6 R-13.
+  note **before** any latency figure is stored — a `data-scientist` call, open as §6 R-13. **v1.8
+  adds a second input to that decision**: p50/p95 are now computed over a *possibly shorter* sample
+  than the item count, because a load-contaminated item's `latencyMs` is `None` (§3.6). The
+  definition and the denominator are decided together or not at all.
+
+**What S2 inherits from v1.8's own revision** (§2.5's probe, not a gate):
+
+- **There is no `lms` CLI anywhere in the tool.** `GET /api/v0/models` is the single source for the
+  auto-captured fingerprint fields, `/v1/models` decides only which error is printed, and a `model`
+  run that cannot reach the native catalog **writes nothing** (§3.4.4a). `hostinfo` launches no
+  subprocess for host info; `powershell.exe` is the only subprocess left in the tool.
+- **`lmsCliCommit` is out of `REQUIRED_BY_SCHEMA[1]["model"]` and `residencySource` is in** — a
+  one-for-one swap that keeps the set at 30 and is an **edit to shipped S1 code**, including the
+  independently-written literal that pins the set. Free only because `results/runs/` does not exist
+  yet (§3.4.2).
+- **The first call to each arm is a warm-up and is never timing data**, under a separate
+  `firstCallTimeoutSeconds` budget, with a between-item residency probe marking any
+  load-contaminated item's `latencyMs` as `None` and the report printing `latency n = X of Y`
+  (§3.6, §5 test 15b). The measured number this exists for is 21.068 s (§2.5).
+- **S1's `aggregates`-versus-`items` cross-check is not S2's to build** — S2 owes the scorer
+  contract that makes it unreachable, not a second copy of the check (§4 S2).
 
 Two items are already recorded in `model-bench/docs/BACKLOG.md` (seeded at S0, re-checked at S8):
 the **deferred judged-quality layer** for `chat-responder` (design preserved in §3.8.5 and
@@ -2243,9 +2615,9 @@ its rows here in the same pass.
 | `PairedOutcomes`, `ResolvingPower`, `Verdict`, `BootstrapResult` | `stats` | **`-ml` §3.4's, verbatim** — not restated here. `PairedOutcomes.from_units` is the only constructor and raises on a repeated analysis-unit id; `resolving_power()`'s inputs are keyword-only with no defaults. (v1.2's `PairedResult` was this plan's own invention and is withdrawn.) |
 | `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash: str \| None, role, metrics, pairingKey: tuple[str, ...], analysisUnit: str)` — pack identity as a *report* sees it, plus §3.3's two `sampling` declarations. **`contentHash` is `str \| None` (v1.6)**, `None` meaning "not loaded" and never "hashed to empty"; it is total only on `Pack.ref()`, and no report path may read it in place of a run's own `fingerprint.packContentHash` — §3.3's identity bullet carries the rule and the reasoning. **`pairingKey`/`analysisUnit` are v1.5's**: `report.py` resolves the analysis-unit id from `analysisUnit` and **no call site chooses it** (§3.3, DC-5(c)), so without them the resolution has nowhere to come from; the five-field form predated §3.3's v1.4 `sampling` block. Derived, not stored: `analysisUnitIndex = pairingKey.index(analysisUnit)`, which is `0` whenever `check_sampling_contract` has passed. |
 | `Pack` | `packs` | frozen dataclass, S2 |
-| `ModelInfo` | `lmstudio` | one catalog entry, verbatim: `id, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` |
+| `ModelInfo` | `lmstudio` | one `/api/v0/models` entry, verbatim: `id, object, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` — the ten keys the 2026-09-03 probe returned for every model, plus `loaded_context_length` once loaded (§2.5, §2.3) |
 | `ChatResult` | `lmstudio` | `message, tool_calls, toolCallForm, stats, model_info, runtime, usage, wallClockMs` |
-| `EmbedResult`, `LoadResult`, `ResidentModel` | `lmstudio` | vectors + dimension; timed load outcome; one `lms ps --json` row |
+| `EmbedResult`, `LoadResult`, `ResidentModel` | `lmstudio` | vectors + dimension; **`LoadResult` is the warm-up call's outcome** — `(wallClockMs, wasResidentBefore: bool, discardedResponse)`, with `coldLoadSeconds` derived from it only when `wasResidentBefore` is `False` (v1.8, §3.6); **`ResidentModel` is one `/api/v0/models` row surviving `state != "not-loaded"`** — `(id, state)`, the literal `state` string kept, not a boolean (v1.8, §3.4.4a; v1.7's "one `lms ps --json` row" is gone with the CLI) |
 | `PromptConfig` | `convo` | the manifest's `prompt` block, parsed: `systemPrompt, toolSchemas, historyReplay, representToolSchemasEachTurn, historyTurns, temperature, maxTokens` |
 | `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl` |
 | `ConversationTrace` | `convo` | per-turn `(messages_sent, ChatResult, dispatches, env_state, wallClockMs)` |
