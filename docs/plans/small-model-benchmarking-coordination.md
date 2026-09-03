@@ -51,9 +51,9 @@ Stakeholder decisions, 2026-09-02:
 | U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | delivered | commit `89e11e1` — note **v1.7**; `## Pass 3` **needs changes**: 1 major (M-ML-7), 2 minors, 4 nits | — (is the gate) | 200k tok / 54 tools |
 | U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | delivered | commit `d4d847b` — `## Pass 3` **needs changes**: 1 blocker (P3-1), 6 majors, 5 minors, 3 nits | — (is the gate) | 217k tok / 70 tools |
 | U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
-| U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | in-flight | `docs/plans/small-model-benchmarking.md` v1.7 | teco-verified | — |
-| U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
-| U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
+| U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
+| U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
+| U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
 | U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | `a5ca583515c0979f1` | accepted | `docs/plans/small-model-benchmarking.md` **v1.5** | teco-verified | 116k tok / 43 tools |
 | U6d — Adjudicate the declined floor-rounding finding | `data-scientist` (reviewer) | `a7fbf4d59bfa1d0da` (resumed) | accepted | ruling: **truncation upheld, reviewer's own ask withdrawn** | — | 179k tok / 2 tools |
@@ -616,3 +616,29 @@ re-drawn against U4's actual delivery before dispatch.
 - **A reviewer recorded that its own earlier premise was wrong** — Pass 2's P2-4 claimed three
   redundant entries; only one was. That correction is now in the review rather than only in my
   ledger, which is where it belongs.
+
+### U10 accepted — and the sweep found five more restatements than the finding named
+
+- **The finding was one stale α sketch; the sweep withdrew six restatements.** The `z` literal
+  `1.959963984540054` printed in full, the verdict string quoted as *the phrase to assert* in four
+  places at a different capitalisation from the note's own rendered sentence, the judge gate's
+  thresholds and both κ figures, §6 R-9's worked-case numbers — and **the note's own rule count**,
+  which the plan gave as six while the note is at seven. That last one is the class in miniature: a
+  count is a restatement, and it rots exactly like a constant. This is the third finding traced to
+  plan-restates-note, so the fix being *citation* rather than *corrected numbers* is the point.
+- **It corrected the reviewer's suggested split, and the correction checks out.** The engineering
+  gate put test item 4 in S1; `packs.content_hash` does not exist at S1 — the shipped module has
+  `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only, which I verified directly.
+  Item 7b moved the other way, into S1.
+- **The table declares §4 authoritative where the two disagree.** That is the lesson from N-3 applied
+  without being asked: a precedence rule pointing the wrong way is what turned a fixed finding back
+  into a live regression at v1.3, and the new table would have been a second copy of the same
+  hazard without it. Numbering was deliberately left unchanged so all three reviews' citations by
+  number still resolve.
+- **Two stale `queued` rows closed as `abandoned`** (U6e, U7c): both were folded into U8a/U8b when
+  those units were re-scoped, and neither was ever dispatched. A `queued` row for work that already
+  shipped is precisely what makes a resuming session re-spend it.
+- **One item left deliberately, and flagged for the gate rather than decided:** κ = 0.21/0.83 stays
+  in §2.1's data inventory and §6 R-4, attributed to `-ml` §6.1 — one attributed copy in the plan's
+  own inventory versus zero copies. The `architect` declined to rule on its own document and handed
+  it to the reviewer, which is the right instinct.
