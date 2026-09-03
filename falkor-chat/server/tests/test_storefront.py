@@ -65,6 +65,62 @@ WS = "test"
 AGENT = "assistant"
 LOCALES = ("en", "pt-BR", "es")
 
+# How long the stub turn in `test_the_reset_waits_for_an_in_flight_turn…` holds
+# the turn map before finishing. It only has to be long enough that the reset is
+# reliably issued *while* the turn is still in flight — nothing asserts a
+# duration, so this value carries no margin to get wrong (see that test).
+TURN_WORK_S = 0.15
+
+# The ceiling `_call_bounded` gives a `quiesce_s=0` reset. Three orders of
+# magnitude above the ~0.2 ms these actually take: it is not a performance
+# assertion, it is what turns a broken `_await_quiesce` deadline into a *failing
+# test* instead of a hang (review `docs/reviews/salesperson-ui-impl.md`
+# `## Pass 7`, S7-3).
+IMMEDIATE_S = 1.0
+
+
+def _call_bounded(fn, *args, seconds=IMMEDIATE_S, **kwargs):
+    """Call `fn` on a daemon thread and **fail** if it has not returned in
+    `seconds`.
+
+    Returns `{started_at, returned_at, seconds}` — monotonic instants either
+    side of the call, for tests that assert an *ordering* against another
+    thread — plus exactly one of `result` / `error`.
+
+    Why this and not the simpler `t0`/`assert elapsed < …` around a direct call:
+    the thing being bounded is `_await_quiesce`'s own deadline, so a test that
+    calls the reset inline inherits whatever budget the code under test
+    computes. When that arithmetic is wrong the call does not come back slowly,
+    it does not come back — and an assertion placed after it is never reached.
+    Measured: with `deadline` extended by an hour, the elapsed-assert form still
+    had to be killed at 30 s, exactly as the review's own run was killed at 25 s.
+
+    There is no `pytest-timeout` in this venv (and installing one is `devops`'s
+    call, not this test's), so the bound has to be one the test owns. The thread
+    is a daemon so a genuinely hung call cannot keep the interpreter alive.
+    """
+    box: dict = {}
+    started = time.monotonic()
+
+    def run():
+        try:
+            box["result"] = fn(*args, **kwargs)
+        except BaseException as exc:  # noqa: BLE001 — re-asserted by the caller
+            box["error"] = exc
+        finally:
+            box["returned_at"] = time.monotonic()
+
+    worker = threading.Thread(target=run, daemon=True)
+    box["started_at"] = started
+    worker.start()
+    worker.join(timeout=seconds)
+    box["seconds"] = time.monotonic() - started
+    assert not worker.is_alive(), (
+        f"{getattr(fn, '__name__', fn)!r} did not return within {seconds}s — "
+        "a wait bounded by the code under test hung instead of failing"
+    )
+    return box
+
 
 def _probe(conn, cypher: str, params: dict | None = None):
     """Read-only probe of `ws:test` — assertions about what actually landed."""
@@ -1338,6 +1394,33 @@ def test_resetting_a_non_participant_raises_rather_than_reporting_success(
         stocked.reset_participant(ghost)
 
 
+def test_a_reset_that_finds_no_participant_evicts_the_cached_record(stocked, conn):
+    """The eviction on the zero-row branch, pinned.
+
+    Written because it was not: removing `self._cache_drop(participant_id)` from
+    that branch left all 79 tests green, while the success path's `_cache_put`
+    reddened its own test — the asymmetry is the finding (Pass 7, S7-2). The
+    cache must not outlive the registry entry it mirrors, and this is the branch
+    that says the entry is gone.
+
+    The participant is deleted out from under a cached record, which is what
+    `reset_all` does to everyone (S10) — so the record is live in the cache and
+    the reset then finds nothing, in that order.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+    pid = record.participant_id
+    assert pid in stocked.cached_ids()
+    db.workspace_graph(conn, WS).query(
+        "MATCH (u:User {userId: $pid}) DETACH DELETE u", {"pid": pid}
+    )
+
+    with pytest.raises(UnknownParticipantError):
+        stocked.reset_participant(record)
+
+    assert pid not in stocked.cached_ids()
+
+
 def test_an_unscoped_participant_is_an_alarm_never_a_success(stocked, conn):
     """`scoped=false` (graph note §4's G2): the participant resolved but their
     own `Channel` did not, so the reset was a **guaranteed no-op**.
@@ -1426,7 +1509,7 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
         # Its own connection: this is a worker thread, exactly as S9's executor
         # will be.
         worker = Services(Repository(db.connect()))
-        time.sleep(0.15)
+        time.sleep(TURN_WORK_S)
         try:
             worker.post_message(
                 config.CallContext(ws=WS, actor=AGENT),
@@ -1439,15 +1522,43 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
             "MATCH (r:WorkflowRun {runId: 'turn-run'}) SET r.status = 'done'"
         )
         stocked.clear_turn(pid)
+        # The instant the turn left the map — i.e. the earliest moment
+        # `_await_quiesce` could possibly have stopped waiting.
+        turn_result["finished_at"] = time.monotonic()
 
     turn = threading.Thread(target=run_the_turn)
     turn.start()
     try:
-        result = stocked.reset_participant(record)
+        # Bounded well above this storefront's own 5 s `quiesce_s`, so a genuine
+        # refusal still surfaces as one rather than as a hang (S7-3).
+        outcome = _call_bounded(stocked.reset_participant, record, seconds=10)
     finally:
         turn.join(timeout=5)
+    assert "error" not in outcome, outcome.get("error")
+    result = outcome["result"]
+    finished_at = turn_result["finished_at"]
 
-    assert turn_result == {"posted": True}          # (b): the post did not raise
+    # **The wait itself**, as a pure ordering of two instants in this process —
+    # no duration, so no margin to be flaky about. Together the two lines say
+    # the reset was issued *before* the turn ended and returned *after* it,
+    # which is what "it waited" means:
+    #
+    #   worker:  ├─ in flight ─────────── finished_at ──┤
+    #   reset:      started_at ─────── (blocked) ─── returned_at
+    #
+    # Every other assertion in this test is also satisfied by the ordering in
+    # which the worker finishes *before* the reset starts — nothing to wait for
+    # — which the review ran and found kept all four of them green (Pass 7,
+    # S7-1). The first line is the one that ordering reddens; the second is what
+    # a reset that never waits reddens.
+    assert outcome["started_at"] < finished_at, (
+        "the reset was not issued while the turn was in flight — this test "
+        "proves nothing about waiting"
+    )
+    assert outcome["returned_at"] >= finished_at, "the reset did not wait"
+
+    assert turn_result["posted"] is True            # (b): the post did not raise
+    assert "error" not in turn_result, turn_result.get("error")
     assert at_delete["runStatus"] == "done"         # (a): terminal before the delete
     assert at_delete["messages"] == 2               # (c): the reply was written
     assert result["threadId"] != record.thread_id
@@ -1471,9 +1582,13 @@ def test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running(
     shop.set_turn_state(record.participant_id, TURN_THINKING)
     before = _one(conn, "MATCH (n) RETURN count(n)")
 
-    with pytest.raises(QuiesceTimeoutError):
-        shop.reset_participant(record)
+    # `_call_bounded`, not a bare call: a zero budget has nothing to wait for,
+    # so this must refuse at once — and a broken `_await_quiesce` deadline would
+    # otherwise block on a wall clock this test does not control, which is a CI
+    # job timeout naming no test at all rather than a failure (Pass 7, S7-3).
+    outcome = _call_bounded(shop.reset_participant, record)
 
+    assert isinstance(outcome.get("error"), QuiesceTimeoutError)
     assert _one(conn, "MATCH (n) RETURN count(n)") == before
     assert _thread_message_count(conn, record.thread_id) == 2
     assert shop.turn_in_flight(record.participant_id) is True
@@ -1491,7 +1606,10 @@ def test_an_idle_participant_is_not_made_to_wait(stocked, conn):
     shop = _storefront(stocked._services, quiesce_s=0)
     record, _ctx = _busy_participant(shop, conn)
 
-    assert shop.reset_participant(record)["threadId"] != record.thread_id
+    outcome = _call_bounded(shop.reset_participant, record)
+
+    assert "error" not in outcome, outcome.get("error")
+    assert outcome["result"]["threadId"] != record.thread_id
 
 
 def test_the_reset_leaves_no_dangling_cursor_owned_by_the_participant(stocked, conn):
@@ -1611,6 +1729,43 @@ def test_a_socket_timeout_on_the_re_read_too_is_still_unknown_never_a_500(
     assert not isinstance(exc.value, redis_exceptions.TimeoutError)
 
 
+@pytest.mark.parametrize("reread", ["succeeds", "times-out-too"])
+def test_a_reset_that_times_out_evicts_the_cached_record(
+    stocked, conn, monkeypatch, reread
+):
+    """The eviction on the F8/`504` branch — **the path where it matters most**,
+    and the one it was unpinned on (Pass 7, S7-2).
+
+    `_reset_state_unknown`'s own docstring gives the reason: the delete **may
+    have committed**, so the cached `threadId` is exactly as likely to be dead
+    as alive, and *unknown* is the one state in which serving a cached record is
+    a guess. Removing the `_cache_drop` left 79 tests green.
+
+    `resolve_token` refreshes on the participant's next authenticated request,
+    which bounds the damage — but the exposure is an S9 worker calling `lookup`
+    **between** the failed reset and that request, and this is the branch where
+    that window opens. Both orderings are parametrized because the eviction
+    happens before the re-read, so a re-read that also times out must not skip
+    it.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+    pid = record.participant_id
+    assert pid in stocked.cached_ids()
+
+    def timing_out(*args, **kwargs):
+        raise _Timeout("Timeout reading from socket")
+
+    monkeypatch.setattr(stocked._repo, "reset_participant", timing_out)
+    if reread == "times-out-too":
+        monkeypatch.setattr(stocked._repo, "get_profile", timing_out)
+
+    with pytest.raises(ResetStateUnknownError):
+        stocked.reset_participant(record)
+
+    assert pid not in stocked.cached_ids()
+
+
 def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypatch):
     """The pairing F8 exists to enforce, stated as one assertion: a quiesce
     timeout and a socket timeout are **not** the same refusal.
@@ -1627,8 +1782,11 @@ def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypa
 
     busy = _storefront(stocked._services, quiesce_s=0)
     busy.set_turn_state(record.participant_id, TURN_THINKING)
-    with pytest.raises(QuiesceTimeoutError):
-        busy.reset_participant(record)
+    # Bounded for the same reason as above (S7-3): fail, never hang.
+    assert isinstance(
+        _call_bounded(busy.reset_participant, record).get("error"),
+        QuiesceTimeoutError,
+    )
 
     monkeypatch.setattr(
         stocked._repo, "reset_participant",
