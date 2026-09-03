@@ -550,3 +550,170 @@ Re-run against the code's own expression: over `n <= 1000` naive truncation misf
 (17.5 pp) and the `clear_suspend` slice size in §7.3, so the guard is load-bearing on a cell the note
 prints, not defensive. `test_the_floor_truncation_is_guarded_against_the_bin_edge` pins it, and it
 should stay pinned by that expression rather than by an equivalent-looking one.
+
+---
+
+## Pass 3 — 2026-09-03, commit `95b4c88`, against note **v1.7**
+
+**Verdict: needs changes.** 1 major, 2 minor, 4 nits. **No blocker, and all three Pass 2 findings
+are properly closed** — B-ML-2's conjunction, M-ML-6's α split and m-ML-6's path split are each
+correct, each pinned by a test, and each survived a mutation I chose rather than the implementer.
+The verdict turns on one thing: a **printed sentence that is false on 17% of the tables that print
+it**, in the line whose only job is honesty. The decision is right everywhere it fires; the prose
+beside it is not.
+
+Fresh reviewer, nothing taken on faith. Suite re-run from `model-bench/`: **314 passed**, `ruff
+check .` clean. Every number below was re-derived in this run — exact `Fraction` arithmetic for
+McNemar and `b_min`, exhaustive verdict sweeps against the delivered module, and **26 mutations of
+my own** (24 killed, 1 equivalent, 1 a real gap — m-ML-8). Every mutation was applied in place and
+restored by rewriting the saved original; the working tree is as I found it. Note **v1.7** is the
+specification I gated against and I revised it in this run (Part 1 below).
+
+### Part 1 — the three note-side defects the implementer routed here
+
+All three **upheld**, all three fixed in `docs/plans/small-model-benchmarking-ml.md` **v1.7**, plus
+two I found while checking them.
+
+1. **§7.2's rendered line was stale against §7.1's v1.6 template — agreed.** The implementer
+   implemented §7.1 and said so in the test docstring; that is the right call and §7.2 is now on
+   the template, with one added rule: **§7.1's template is authoritative wherever the two diverge
+   again.** A worked example presenting itself as *"the string an implementer should test against"*
+   is a second home for a mandated string, and this is the second time it drifted.
+2. **Rule 4's three-α self-contradiction — agreed, and the two-field shape is what the note now
+   requires.** Their reasoning is the note's own: `ResolvingPower` is built *and rendered* before
+   the family is ranked, so a third field is `None` until it is not and the number acquires two
+   homes. v1.7 says two fields plus `verdict()`'s parameter, explicitly. **I did not ask for the
+   literal three-field shape.** While there I fixed the same defect one rule up: Rule 2's dataclass
+   sketch still showed a single `alpha` field and `mdd80: float`, both superseded by shipped code —
+   and I folded the shipped fifth precondition (`alpha_step ∈ [alpha_mdd, alpha_family]`) into Rule
+   4 as precondition 5, since it is the theorem's premise and the note should own it, not inherit it.
+3. **The α-split corner — agreed, and the arithmetic checks out.** Re-derived: at `k=2`,
+   `n_units=13`, `DEFF=2`, `n_eff=6.5`, `b_min(0.025)=7` exceeds the 6 floored units so `mdd80` is
+   `None`, while the floor at `alpha_family` is `6/6.5 = 92.3 pp` and **is attained** — `b=12, c=0`
+   on 13 units is a 92.3 pp difference at `p = 2·2⁻¹² = 0.00049`, which clears a rank-2 member's
+   0.05 Holm step. So the combined sentence would have been false, the split is correct, and §7.1
+   now carries the worked corner rather than leaving it to be rediscovered.
+
+Two more note-side items closed in v1.7: §3.2e verdict 2's closing clause (M-ML-7 below, the note
+half) and **n-ML-2**, Pass 1's last open item — the measured divergence is `3.0167 × 10⁻⁴ pp`, so
+the published *"at most 3.0 × 10⁻⁴ pp"* was below the value it bounds; it is now `3.1`.
+
+### New findings
+
+**M-ML-7 (major) — verdict 2's closing clause is printed unconditionally and is false whenever the
+observed difference exceeds the strict-dominance MDD.** `stats._mdd_clause` always appends
+`"; the observed X pp is below that."`, on **both** decision paths. That holds only when
+`|diff| < mdd80`, and the case where it fails is not a corner — it is §7.1's own *normal case for a
+model swap*, a candidate that wins more than it loses without strictly dominating. Rendered by the
+delivered module at `n=20, b=13, c=5`:
+
+> `Not distinguishable at this sample size. Observed difference +40.0 pp, 95% CI [-1.2, 69.0] pp
+> covers zero (b=13, c=5, McNemar exact p=0.096). This pack resolves differences of >=36.7 pp with
+> 80% power at n=20 effective items (20 units, design effect 1.00, by-construction, alpha=0.05);
+> **the observed 40.0 pp is below that.** Neither model is ranked above the other.`
+
+Exhaustive over the by-construction path at n ∈ {12, 15, 20, 30, 38, 40, 48} and every `(b, c)`:
+**1,580 tables print the clause and 268 of them (17.0%) print it falsely**; at k=2 the same sweep
+gives 112. Not a rounding artefact — the sentence contradicts two numbers inside itself, which is
+the same falsity class as the `15.8` withdrawn in Pass 1 and the α/k floor withdrawn in Pass 2, and
+the third time this review has ruled on it. The *decision* is correct and conservative in every one
+of the 268 (they are all `not distinguishable`, because the discordance mix is not strictly
+dominant — which is precisely the reason the two numbers point opposite ways).
+*Fix:* note **v1.7 §3.2e** now mandates a conditional clause and gives the alternate wording
+verbatim, including the discordance counts, which are what make the two numbers legible together.
+Route to implementation with a test at `(n=20, b=13, c=5)` and `(n=30, b=5, c=13)`.
+
+**m-ML-7 (minor) — `floor_clause`'s `> 1.0` boundary is load-bearing and untested.** Mutation
+`> 1.0` → `>= 1.0` **survived all 314 tests**. It is not equivalent: at `n_eff` exactly `b_min`
+(`n_eff = 6`, `alpha_family = 0.05`, floor `= 1.0`) the mutant prints *"no observed difference can
+reach significance … the floor of 6 net wins exceeds the 6 effective units available"* — both
+clauses false, since `b=6, c=0` on 6 units is a 100 pp difference at p = 0.031. The shipped `> 1.0`
+is right; nothing pins it. *Fix:* one test at `n_eff == b_min` asserting the *"differences below
+100.0 pp"* form, not the exceeds-the-units form.
+
+**m-ML-8 (minor) — the MDD sentence stem has two homes, against this module's own stated rule.**
+`stats.py:613` (`_mdd_clause`) and `report.py:184` (`resolving_power_line`) each spell
+`"This pack resolves differences of >={…} pp with 80% power at "` in full. `provenance`,
+`floor_clause` and `unattainable_clause` were all made public specifically so the report could not
+carry a second copy — the docstring on `provenance` says *"two copies of this string is one copy and
+one drift, and the copy is how `report.py` came to print `alpha=` from a field that no longer
+exists"* — and this stem was left behind. Nothing asserts the two agree, and **M-ML-7's fix edits
+exactly this string**, so the drift is scheduled rather than hypothetical. *Fix:* export an
+`mdd_clause`-style helper and have `report.py` call it, as it already does for the other three.
+
+### Nits
+
+- **n-ML-4** — `holm_steps(p_values, *, alpha: float = 0.05)` restates the literal that
+  `ALPHA_FAMILY` exists to be the single home of, in the same module whose constant docstring says
+  *"a second literal `0.05` is how they drift apart"*. `report.py` passes
+  `pack.metrics.alpha_family`, so the default is unreachable today — which is why it will rot
+  unnoticed. Use `ALPHA_FAMILY`, or drop the default.
+- **n-ML-5** — `resolving_power` accepts `design_effect < 1.0` (only `<= 0` is refused) although
+  Rule 2's sketch says `>= 1.0` and both `verdict()` and `paired_cluster_bootstrap` enforce it.
+  `DEFF = 0.5` *doubles* `n_eff` and shrinks **both** printed bounds; the refusal arrives a layer
+  later. In a module whose stated shape is *"the anti-conservative version does not typecheck"*, the
+  check belongs at construction.
+- **n-ML-6** — `"80% power"` is hard-coded in three rendered strings (and in the field name `mdd80`)
+  while `power` is a `resolving_power` parameter defaulting to `0.80`. Nobody passes another value;
+  a caller who did would get a sentence that lies. Render `{power:.0%}`, or drop the parameter at S1.
+- **n-ML-7** *(routes to `architect`, not to implementation)* — `docs/plans/small-model-benchmarking.md`
+  §4's surface sketch still shows `holm_steps(..., alpha: float = 0.05)` and describes
+  `resolving_power`'s `alpha` in the singular. The plan carries a statistics constant and a signature
+  the `-ml` note owns; fold it in when the plan next moves.
+
+### Dispositions — Pass 2
+
+- **B-ML-2** — **fixed, and the veto is uniformly conservative.** A conjunction can only remove
+  rejections, so no anti-conservative regime exists relative to either instrument alone; that is
+  logic, not measurement. Measured at DEFF = 1 over n ∈ {12, 20, 40}, `b ≤ 18`, `c ≤ 12`: **40**
+  tables where the bare percentile interval rejects and the exact test does not are now all vetoed
+  (including Pass 2's `(7,1)`, `(9,2)`, `(11,3)`), and **zero** where McNemar rejects while the CI
+  covers zero — so at DEFF = 1 the conjunction coincides with the exact test, as claimed. Consistent
+  with Rule 4 as v1.7 states it: Rule 4 forbids McNemar deciding *for* distinguishability under
+  clustering, and withholding is the opposite operation. Mutation `and` → `or` killed;
+  `alpha = alpha_family` instead of the Holm step killed.
+- **M-ML-6** — **fixed.** Floor at `alpha_family`, MDD at `alpha_mdd`, both keyword-only with no
+  default; `PackMetrics.alpha` and `report.py`'s inline `0.05 / len(family)` are gone and
+  `ALPHA_FAMILY` is the only literal. Mutations swapping either bound onto the other α, and
+  `PackMetrics.alpha_mdd` returning `alpha_family` undivided, all killed.
+- **m-ML-6** — **fixed, and the `mcnemar-exact` branch is genuinely a theorem.** Re-derived, not
+  re-read: `p(b, c)` is non-decreasing in `c` at fixed `d = b − c`, so the minimum p at any given
+  `|b − c|` is `p(d, 0) = 2·2⁻ᵈ`; hence `p ≤ α ⟹ d ≥ b_min(α)`. Confirmed by exact `Fraction`
+  arithmetic over **every** `(b, c)` with `b + c ≤ 1200` (the implementer checked 400): zero
+  violations at both αs. **The boundary, which is what matters:** at `|b−c| = b_min − 1` the
+  *smallest attainable* p is **0.0625** against α = 0.05 and **0.03125** against α = 0.025 — a 25%
+  margin, so the `1e-12` slack in precondition 5 cannot open the theorem, and on that path
+  `n_effective == n_units == n` exactly (precondition 1 plus `design_effect == 1.0`), so the floor
+  and the difference share a denominator. Equality (`|b−c| = b_min`) does not fire because the
+  comparison is strict; mutating `<` to `<=` is killed.
+- **The bin-edge guard, reclassified as defensive** — **correct, and I redid the sweep in the units
+  the code uses.** With `math.floor(x / 0.001 + 1e-12)` against the unguarded form over `n ≤ 2000`:
+  at `b_min = 6` the guard changes nothing, at `b_min = 7` it changes `n = 5, 10, 20, 40` — exactly
+  what note §3.4 Rule 3a says. The same sweep in percentage points (`x*100/0.1`) reports `b_min = 6`
+  misfiring at n = 125, 250, 500, 1000, 2000 and `b_min = 7` never — the opposite answer, and wrong.
+  Keeping the guard on the "any future α reopens it" argument is right; its test is no longer a
+  regression pin on a published cell and now says so.
+- **n-ML-2** — **closed in v1.7** (note-side): `3.0 × 10⁻⁴` → `3.1 × 10⁻⁴`, measured `3.0167 × 10⁻⁴`
+  on the `(34,6,0,0)` upper bound.
+
+### Mutation testing — 26 run by me, 24 killed
+
+The implementer reported 22 run / 21 killed; I did not use their list. Killed: the floor sharing the
+MDD's floored denominator (the declined `n-ML-1` harmonisation); the MDD denominator ceiling instead
+of flooring; the floor printer rounding to nearest; the veto as a disjunction; Rule 7 firing at
+equality; Holm collapsing to Bonferroni; the `sqrt` dropped from the cluster widening; precondition
+5 removed; the power region off by one; the floor sentence dropped when `mdd80` is `None`; each
+bound computed at the other α; `alpha_mdd` undivided by k; DEFF as the width ratio; the Holm
+step-down stop removed; the veto tested at the loosest α; the winner-orientation interval flip
+dropped; the `by-construction` check dropped from `mcnemar_may_decide`; the one-sided p; the Wilson
+continuity term; `report.py` taking the *smaller* design effect or the *stronger* basis;
+`holm_tested` ignored; the duplicate-unit guard removed. Survived: `_percentile` truncating instead
+of rounding (one index in 10 000 — equivalent in effect), and **m-ML-7**.
+
+### Routing
+
+- **M-ML-7**, **m-ML-7**, **m-ML-8**, **n-ML-4**, **n-ML-5**, **n-ML-6** → implementation
+  (`tdd-engineer`), against note **v1.7**; M-ML-7's wording is in v1.7 §3.2e and needs no invention.
+- **n-ML-7** → `architect`, in the plan's own next revision.
+- Note-side work is **done in this pass** — `docs/plans/small-model-benchmarking-ml.md` is at v1.7
+  and nothing in this review is waiting on it.

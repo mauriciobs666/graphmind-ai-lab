@@ -1,6 +1,14 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.6
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.7
+
+2026-09-03 (v1.7, `data-scientist`) — four stale or unhandled corners the v1.6 fix round surfaced:
+§3.4 Rule 2's dataclass sketch and Rule 4's precondition 3 now say **two** αs on `ResolvingPower`
+(not three) and Rule 4 gains its fifth precondition, §3.2e verdict 2's closing clause becomes
+conditional (it was false whenever the observed difference exceeded the strict-dominance MDD),
+§7.1 states that the floor sentence prints independently of the MDD's attainability, and §7.2's
+rendered example is brought onto §7.1's v1.6 template. §3.2a's `3.0 × 10⁻⁴ pp` becomes `3.1` (it
+was below the value it bounded — review n-ML-2, the last open Pass 1 item).
 
 2026-09-03 (v1.6, `data-scientist`) — the observable floor moves to the **unadjusted α** (review
 M-ML-6), §3.4 Rule 3 is generalised into the printed-bound principle that governs it, Rule 7 splits
@@ -152,8 +160,10 @@ same constant is written, not in which constant is meant. Implement it as a modu
 `z` **keyword-only**, exactly as `nlq_scoring` does.
 
 **What the precision is worth — measured, not asserted.** Recomputing §3.2c's five regression
-fixtures at both values moves every MOVER-D bound by **at most 3.0 × 10⁻⁴ pp** (largest divergence
-on the `34,6,0,0` row). That is invisible at the 0.1 pp the report prints and invisible at any
+fixtures at both values moves every MOVER-D bound by **at most 3.1 × 10⁻⁴ pp** (measured
+3.0167 × 10⁻⁴ pp, on the `34,6,0,0` row's **upper** bound; v1.2–v1.6 printed `3.0 × 10⁻⁴`, which is
+*below* the value it claims to bound — an *"at most"* bound rounds **up**, §3.4 Rule 3, review
+n-ML-2). That is invisible at the 0.1 pp the report prints and invisible at any
 tolerance looser than ~10⁻⁵. **So the fixtures pass under either constant, and M-1 is not a
 numerical defect.** The reason to pin the exact value is reproducibility of an *equality* assertion:
 two modules carrying two constants disagree in the fifth decimal forever, and the day someone
@@ -285,6 +295,19 @@ Three verdicts, exactly these strings:
    `A is better than B on <metric>: +15.0 pp (95% CI [3.2, 29.1] pp), n=40 paired items (unit: item, design effect 1.00), McNemar exact p=0.031 (b=6, c=0).`
 2. **Not distinguishable.**
    `Not distinguishable at this sample size. Observed difference +12.5 pp, 95% CI [-1.0, 26.9] pp covers zero (b=6, c=1, McNemar exact p=0.125). This pack resolves differences of >=19.1 pp with 80% power at n=40 effective items (40 units, design effect 1.00, by-construction, alpha=0.05); the observed 12.5 pp is below that. Neither model is ranked above the other.`
+
+   **The closing clause is conditional, not fixed prose (v1.7).** `the observed X pp is below that`
+   is only true when `|diff| < mdd80`, and the case where it is false is not exotic — it is §7.1's
+   own *normal case for a model swap*, a candidate that wins more than it loses without strictly
+   dominating. At n=30 with `b=5, c=13` the difference is 26.7 pp against an MDD₈₀ of 25.1 pp and
+   McNemar's p is 0.096, so the sentence as fixed prose reads *"resolves differences of >=25.1 pp
+   with 80% power; the observed 26.7 pp is below that"* — two numbers in one sentence that refute
+   it. When `|diff| >= mdd80`, render instead:
+
+   > `…; the observed 26.7 pp is above that, but the MDD assumes strict dominance and this comparison is not strictly dominant (b=5, c=13), so the difference required for 80% power at this discordance mix is larger (§7.1).`
+
+   The discordance counts are mandatory in that form: they are the reason the two numbers point
+   opposite ways, and without them the sentence looks like the instrument contradicting itself.
 3. **Instruments disagree** (MOVER-D excludes zero, McNemar does not — row 4 of the table above; real and not rare):
    `Not distinguishable at this sample size. The effect-size interval [0.2, 28.8] pp excludes zero but the exact paired test does not reach alpha=0.05 (b=8, c=2, p=0.109). Reported as not distinguishable: the exact test is the decision rule.`
 
@@ -412,15 +435,17 @@ McNemar no longer applies, which is the correct outcome, not an inconvenience.
 class ResolvingPower:
     n_units: int
     unit_kind: str
-    alpha: float                 # 0.05, or 0.05/k for a k-member verdictMetrics family (§3.3)
+    alpha_family: float          # unadjusted 0.05 — the FLOOR's alpha, whatever k is (Rule 3)
+    alpha_mdd: float             # 0.05/k for a k-member verdictMetrics family — the MDD's (§3.3)
     design_effect: float         # Kish; >= 1.0
     basis: Literal["by-construction", "measured", "assumed"]
     n_effective: float           # n_units / design_effect
-    observable_floor: float      # b_min(alpha, c=0) / n_effective
-    mdd80: float                 # exact, see rule 3
+    observable_floor: float      # b_min(alpha_family, c=0) / n_effective
+    mdd80: float | None          # exact, see rule 3; None when no effect size attains the power
 
-def resolving_power(n_units: int, *, unit_kind: str, design_effect: float,
-                    basis: str, alpha: float, power: float = 0.80) -> ResolvingPower: ...
+def resolving_power(n_units: int, *, unit_kind: str, design_effect: float, basis: str,
+                    alpha_family: float, alpha_mdd: float,
+                    power: float = 0.80) -> ResolvingPower: ...
 ```
 
 `design_effect`, `basis`, `unit_kind` and both αs are **keyword-only with no default value**. A
@@ -500,17 +525,29 @@ this rule is what makes the direction derivable rather than remembered.)*
 def verdict(outcomes: PairedOutcomes, *, resolving: ResolvingPower,
             metric_name: str, family: Sequence[str]) -> Verdict: ...
 ```
-Raises — never warns, never silently proceeds — unless all four hold:
+Raises — never warns, never silently proceeds — unless all five hold:
 1. `resolving.n_units == outcomes.n_units` (the printed resolving power belongs to *this* table);
 2. `resolving.unit_kind == outcomes.unit_kind`;
 3. `resolving.alpha_mdd == alpha_family / len(family)` and `metric_name in family` (§3.3's
    multiplicity). **This precondition is unchanged by v1.6 and must not be "fixed" to match the
    floor**: `alpha_mdd` is the *pre-registration* α — the tightest step, which is what makes the MDD
-   claim rank-independent. Three αs coexist deliberately, and `ResolvingPower` carries all three:
-   `alpha_family` (unadjusted, 0.05 — the **floor's** α, Rule 3), `alpha_mdd` (`α/k` — the **MDD's**),
-   and `alpha_step` (`α/(k−i)`, Holm's actual data-dependent threshold for this member at decision
-   time, which lies between the two and is known only after the family's p-values are ranked);
-4. `resolving.design_effect >= 1.0`.
+   claim rank-independent;
+4. `resolving.design_effect >= 1.0`;
+5. `alpha_step`, when supplied, lies in `[alpha_mdd, alpha_family]`. Holm's own steps are
+   `α/(k−i)`, which lie in that range by construction, so a step outside it is a caller defect —
+   and left unchecked it surfaces one module later as Rule 7's `mcnemar-exact` raise, which
+   announces a bug in the wrong place. Checking it here is what makes Rule 7's theorem a *checked*
+   premise rather than an assumed one *(v1.7: shipped with the m-ML-6 fix round and adopted here)*.
+
+**Three αs coexist deliberately; `ResolvingPower` carries two of them.** `alpha_family`
+(unadjusted, 0.05 — the **floor's**, Rule 3) and `alpha_mdd` (`α/k` — the **MDD's**) are both known
+when the object is built and rendered, so both are fields. The third, `alpha_step` (`α/(k−i)`,
+Holm's actual data-dependent threshold for this member at decision time), is **not** a field: it is
+known only after the family's p-values are ranked, which is *after* this object is built and
+printed, so a field would be `None` until it was not and the number would have two homes. It
+reaches the one function that uses it as `verdict()`'s parameter. *(v1.7 corrects v1.6, which said
+the dataclass carries all three in the same sentence that said the third is unknowable at
+construction time. The two-field shape is the one the note requires.)*
 
 And the decision rule branches on the design effect, which is the fix B-1 asks for:
 - **`design_effect == 1.0` and `basis == "by-construction"`** → McNemar exact decides, MOVER-D
@@ -1267,6 +1304,19 @@ only one cannot tell which bound it governs. The unit, the raw unit count, the d
 basis are what make the line auditable — a bare `n` is the shape gate B-1 rejected, because 48 turns, 48
 conversations and 12 scripts print the same sentence and mean three different things.
 
+**The two sentences are independent, and the second prints whatever happens to the first (v1.7).**
+When no effect size attains the power the MDD sentence is replaced by the *unattainable* wording
+(review M-ML-1), and it is tempting to let that one replacement speak for both bounds — *"no
+difference is resolvable, so nothing can reach significance."* **That combined sentence is false in
+a reachable corner**, and it is reachable for the same reason the two bounds take different αs: with
+`k >= 2` and `n_eff ∈ [6, 7)`, the rejection region at `alpha_mdd = 0.025` is empty (`b_min = 7`
+exceeds the 6 floored units), so `mdd80` is `None` — while at `alpha_family = 0.05` the floor is
+`6/n_eff ≤ 100 pp` and is *attained*. Worked, at `n_units = 13, DEFF = 2, n_eff = 6.5`: the floor
+prints 92.3 pp, and the attainable outcome `b=12, c=0` is a 92.3 pp difference at
+`p = 2·2⁻¹² = 0.00049`, which clears a rank-2 member's 0.05 Holm step. So the unattainable clause
+speaks **only for power**, the floor sentence prints **either way**, and where the floor itself
+exceeds 100 pp it says so in words rather than quoting an unreachable threshold.
+
 **One assumption behind every MDD above, and it is optimistic.** The power model is **strict
 dominance** (`π_c = 0`): every item on which the models differ favours the candidate. That is the
 most favourable case, so these are *lower bounds* on the difference actually needed. Measured
@@ -1310,11 +1360,17 @@ under the settled design, and the string an implementer should test against:**
 
 > `This pack resolves differences of >=57.8 pp with 80% power at n=12 effective conversations
 > (12 units, design effect 1.00, by-construction, alpha=0.05). Differences below 50.0 pp cannot
-> reach significance at any observed outcome. Best case — assumes the candidate wins every
-> conversation the models differ on; if it loses one for every two it wins, 80% power is not
-> reached at any effect size at this n. Inference is conditional on the 12 scripts in
-> <packId>@<packVersion>; generalization to unwritten scripts is not certified by any interval in
-> this report.`
+> reach significance at any observed outcome, at any Holm step (alpha <= 0.05). Best case —
+> assumes the candidate wins every conversation the models differ on; if it loses one for every
+> two it wins, 80% power is not reached at any effect size at this n. Inference is conditional on
+> the 12 scripts in <packId>@<packVersion>; generalization to unwritten scripts is not certified by
+> any interval in this report.`
+
+*(v1.7: the floor sentence gains `at any Holm step (alpha <= 0.05)`. §7.1's template mandated it
+from v1.6 and this rendering was left on the pre-v1.6 wording — a stale example presenting itself as
+"the string an implementer should test against" is worse than no example, so **§7.1's template is
+authoritative wherever the two ever diverge again.** This pack is k=1, so both αs are 0.05 and only
+the wording moves.)*
 
 Four sentences, all mandatory, none derivable from a bare `n` — which is the whole of gate B-1's
 fix. Compare what the plan's `min_detectable_difference(48)` would have printed: **16.7 pp**, a
@@ -1479,8 +1535,9 @@ module's own contract (§3.4) and are the ones that keep gate B-1 from recurring
    (b) `resolving_power` cannot be called without `design_effect` and `basis` (a `TypeError`, i.e.
    the absence of a default is itself the test); (c) `verdict` raises when
    `resolving.n_units != outcomes.n_units`, when the unit kinds differ, or when
-   `alpha != 0.05/len(family)`; (d) `verdict` refuses to let McNemar decide when
-   `design_effect > 1.0` and renders the bootstrap decision instead.
+   `alpha_mdd != alpha_family/len(family)`, or when `alpha_step` falls outside
+   `[alpha_mdd, alpha_family]` (Rule 4's fifth precondition); (d) `verdict` refuses to let McNemar
+   decide when `design_effect > 1.0` and renders the bootstrap decision instead.
 3. **The MDD computation itself**, three assertions: it reproduces §7.1's exact column
    (19.046 pp at n_eff=40, 57.794 at 12, 47.559 at 15); it **ceilings** to the printed precision, so
    n=40 prints 19.1 and never 19.0 (measured power at 19.0 pp is 0.798 — the test is that the
