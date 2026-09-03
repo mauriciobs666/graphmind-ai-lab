@@ -1112,7 +1112,7 @@ model. My own measurement, correctly demoted from a constant to an observation, 
 where I first stated it.
 
 
-## PAUSED — 2026-09-03, at `4d99504`
+## PAUSED (superseded — see the section below) — 2026-09-03, at `4d99504`
 
 Stakeholder called a pause. **Everything I verified is committed; nothing of mine is outstanding.**
 This section is the resume point — read it before the ledger, then reconcile the ledger against
@@ -1164,3 +1164,85 @@ stages. *Approve with suggestions, residue rides as follow-ups* is not an availa
 severity ranks order within a fix unit, never whether a finding is fixed. A gate returning a residual
 must be asked which kind it is, because "blocked on unbuilt work" and "deferred by choice" are
 treated differently and only the first is acceptable.
+
+
+## STOPPED CLEAN — 2026-09-03, at `bb0cacf` · **this is the resume point**
+
+Supersedes the pause record above, which was written before both in-flight agents were killed by a
+session rate limit. **Tree is clean, everything is committed, S1 is green (389 passed, `ruff` clean,
+re-verified at the stop).** The only uncommitted files in the repo belong to the *other* session
+(`falkor-chat/server/**`) and are not ours to touch.
+
+### What happened to the two in-flight units
+
+Both were killed by the session limit **after writing their deliverables but before returning them**.
+Their final emitted lines were *"All checks complete. Writing Pass 4"* and *"Now I'll write the
+ruling into the note"* — both **understated their own progress**: the documents were already on disk
+and structurally complete. Recovered by state, committed with the recovery stated in the commit
+message.
+
+**The lesson, and it is the second time this coordination has hit it:** a killed agent's last words
+describe what it was *about to do*, not what it had *done*. Assess the disk before believing the
+transcript — and before re-dispatching anything, which would have thrown away two substantial
+documents here.
+
+### The two recovered documents — committed but NOT accepted
+
+| Unit | Commit | State |
+|---|---|---|
+| **U18** — Rule 4 closed-form ruling | `a5f42f6` | note **v1.11**. Structurally complete; **headline claim verified by me**, rest unverified. |
+| **U19** — plan gate Pass 4 | `bb0cacf` | review `## Pass 4`, verdict **needs changes** (3 blockers, 5 majors, 5 minors, 1 nit). **Nothing verified.** |
+
+**Neither is an accepted deliverable.** Their authors never declared them finished, so the normal
+"delivered → verified → accepted" chain is broken at the first link. A fresh session must verify
+before acting, and must not treat the committed state as a gate having passed.
+
+**The one thing I did verify, because it is decisive:** U18's ruling that Rule 4's closed form is
+**binding**, on the grounds that the envelope's seed dependence reaches the **verdict** rather than
+just the printed digits. At `(a=1, b=25, c=12, d=2)`, n=40, DEFF=1.2 I reproduced it directly against
+the shipped `stats.conservative_envelope`: **86/64 across 150 seeds** and **92/58 across 150 row
+permutations at one fixed seed**. The note reports 80/70 and 85/65; the difference is `B` (I ran
+2 000), and the finding reproduces exactly in kind. **A seed decides whether the tool says
+*distinguishable* or *not distinguishable*.** That is M-ML-8's defect class escalated from the digits
+to the conclusion, and it settles the fork U14 returned: the closed form is not optional.
+
+### Where a fresh session picks up
+
+**S2 must not be dispatched.** The plan gate returned **needs changes** on v1.9, so the plan cannot
+yet carry S2. That is the gating decision and it has not been satisfied.
+
+Ordered, with dependencies:
+
+1. **Verify the two recovered documents** — re-gate or read them critically. Everything below assumes
+   they hold; if U19's blockers dissolve under scrutiny the order changes.
+2. **Plan v1.10** (`architect`): close Pass 4's 3 blockers and 5 majors. Includes the finding I can
+   independently corroborate — **the two shipped `_percentile` copies** (`results.py`, `stats.py`)
+   both use `int(round(p/100*(X−1)))`, precisely the estimator note §11.2 **rejects**, and **neither
+   appears in §3.4.2's edit table**. I confirmed both copies and that expression earlier in the
+   session. This is the second instance of one pattern: *a plan revision specifying S1 work with an
+   incomplete edit list.* Fix the pattern, not the instance.
+3. **S1 fix unit** (`tdd-engineer`), which now carries three things and should be one dispatch since
+   they share files: **U20**'s residency element-shape assertion (S1 DC-1, specified at plan v1.9,
+   still unimplemented — `tests/conftest.py:40` declares `{modelKey, sizeBytes}` against §3.4.4a's
+   `{id, state}`); the **single shared `_percentile`** per §11.2; and the **closed-form
+   implementation** now that v1.11 makes it binding — which **retires P3-5's delivered seed
+   contract** (`verdict`'s `bootstrap_seed`, `PackRef.seed`'s justification, the `decided by: … (seed
+   N)` line and four tests). That last one is a public signature S2 wires against, so it needs the
+   plan updated in step 2 first.
+4. **Re-gate both**, then reconsider S2.
+
+### Standing constraints a fresh session inherits
+
+- **The stakeholder principle: defects are not carried into later stages.** *Approve with
+  suggestions, residue rides as follow-ups* is **not** an available disposition. Severity ranks
+  order within a fix unit, never whether a finding is fixed. When a gate reports a residual, ask
+  which kind it is — **blocked on unbuilt work** is acceptable, **deferred by choice** is not. One
+  such residual is open and unruled: G3-6's pooled-metric case, where P4-4's defect stays printable
+  for turn- and call-pooled `BinaryMetric`s.
+- **Scope boundary: through S3, the first real end-to-end run**, then check back. S3's external
+  prerequisite is met — LM Studio reachable, auto-load on, fingerprint source settled.
+- **A second session commits to this repo continuously.** Never stage, revert or tidy anything
+  outside `model-bench/` and this coordination's documents.
+- **Read the shipped expression before re-deriving anything from it.** Three separate confident wrong
+  answers in this coordination came from re-deriving in the units a *document* prints rather than the
+  units the *code* uses. Twice they were mine.
