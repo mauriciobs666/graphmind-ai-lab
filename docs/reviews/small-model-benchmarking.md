@@ -4,8 +4,8 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is Pass 2's, below: **approve with suggestions** on plan v1.3 / note v1.3. Pass 1
-gated plan v1.1 and is kept intact — the two passes are meant to be read together, and Pass 2's
+*(Current verdict is Pass 3's, below: **needs changes** on plan v1.8 / note v1.8. Pass 2 gated plan
+v1.3 with **approve with suggestions**. Pass 1 gated plan v1.1 and is kept intact — the two passes are meant to be read together, and Pass 2's
 disposition table is only legible against the findings here.)*
 
 ### 1. Scope & verdict
@@ -540,6 +540,376 @@ tool-caller comparison that returns 'not distinguishable' with an observed diffe
 15–50 pp band"*, is a well-chosen one: it converts the question into evidence rather than a guess.
 
 ---
+
+## Pass 3 — 2026-09-03
+
+**Re-gated:** plan **v1.8** (`aebb611`) against note **v1.8** (`27501c9`, read as
+`git show aebb611:docs/plans/small-model-benchmarking-ml.md` because `data-scientist` may be editing
+the working-tree copy), the requirements as amended (`afe4aef`), and the **shipped S1 tree** where
+v1.8 asserts consequences for it. Weighted to v1.8's three changes — the fingerprint's source of
+truth (§2.5, §3.4.4a), the JIT warm-up and contamination guard (§3.6, R-14), and P4-4's return to S1
+(§4 S1 DC-10, §5 test 11c) — plus a sweep of every section v1.8's own revision line says it touched.
+Findings carry the prefix **`G3-`** (plan-gate Pass 3); `P3-*`/`P4-*` belong to
+`docs/reviews/small-model-benchmarking-impl.md` and are not reused here.
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists (`cpg_model_bench` is absent from the
+loaded-graph list; `cpg_falkorchat` is loaded but v1.8 makes no new structural claim about
+`falkor-chat`). The S1 grounding checks below were done by reading `model-bench/modelbench/*.py`
+directly, which is a 9-module tree.
+
+**Verified live, not assumed.** Every §2.5/§3.6 claim about the LM Studio surface was re-probed on
+this box today, read-only, with no model loaded or unloaded: `GET /api/v0/models` → 19 models,
+1.4–1.6 ms, all `state: "not-loaded"`, exactly ten keys and `capabilities` on 15 of 19;
+`GET /v1/models` → `{id, object, owned_by}` only; `command -v lms` → exit 1. All reproduce
+(Appendix, C.1). The `/api/v0/embeddings` response shape was checked against LM Studio's own v0 REST
+docs (C.2).
+
+**Verdict: needs changes.** 2 blockers, 6 majors, 4 minors, 1 nit.
+
+**Yes — something in v1.8 must change before S2 is dispatched**, and two of the findings land inside
+the P4-4 unit a `tdd-engineer` is executing *right now* (**G3-6**, **G3-7**): DC-10's selector as
+written cannot be evaluated, and its counting call has an uncaught raise path. Those two are the
+urgent ones. The two blockers (**G3-1**, **G3-2**) are S2/S3 scope and must be settled before S2 is
+briefed, not during it.
+
+The three v1.8 changes are, on their merits, right — the reasoning in §3.4.4a is the best-argued
+section in the document and I endorse its conclusion (see *Judgement*, below). The defects are not
+in the decisions; they are, again, in **what the instrument says it will do with data it will not
+have**: a fingerprint contract written as if one endpoint supplied fields that three sources supply,
+and a timing guard specified over one of four timing fields.
+
+### Judgement on the three questions put to this gate
+
+**1. Is "refuse the run" right when `/api/v0/models` is absent? Yes — and it costs less than the
+plan argues it does.** §3.4.4a's own third bullet is the decisive one: a `/v1`-populated record
+carries `modelKey` and fails `validate()` anyway, so "refuse" is not a policy choice layered on top
+of the design, it is what the design already does — the choice is only *where* the refusal happens
+and *what it says*. Refusing at the probe, before the first model call, converts a
+twenty-minute run into a two-millisecond error with a message that names the actual cause. I would
+have flagged the opposite decision. The `/v1/models` discriminator earns its ten lines for exactly
+the reason given: "reachable but not LM Studio" is the case a person hits and cannot diagnose.
+
+**What is *not* covered is the generalisation.** §3.4.4a is written as a source-of-truth section but
+governs one of the **four** sources the auto-captured half actually has: the catalog, the chat
+route's `runtime` object, `host.json`, and the process environment. The two blockers below are both
+instances of that gap, not disagreements with the rule.
+
+**2. Is the pre-designed reversal sufficient? The shape is right; the costing is not.** See **G3-8**.
+Making the required-field set a function of provider is the correct pattern, but as stated it hides
+three costs: the discriminator must be *declared*, not observed; eight of the nine fields have no
+analogue on a hosted provider, so provider B's required set collapses to roughly `/v1/models`'s
+three fields — the reversal **segregates** strong-fingerprint records from weak ones rather than
+preserving fingerprint strength; and nothing in §3.4.3 or `compare_report` labels or refuses a
+cross-provider comparison, where the `SCHEMA VERSIONS IN THIS COMPARISON` banner is the obvious
+precedent sitting one paragraph away.
+
+**3. Does the anti-contamination guard leave a path? Three.** R-14 names one of them honestly (a
+reload that begins and ends inside a single timed call) and I accept that disclosure. The other two
+are **G3-3** (the guard nulls `latencyMs` and nothing else, while three more timing figures come from
+the same contaminated response and print without denominators) and **G3-4** (the guard's first
+comparand is unspecified, and the literal reading drops item 1's latency on every cold-start run).
+**G3-5** is adjacent and arguably worse than any of them: a scored call that hits
+`requestTimeoutSeconds` has no specified disposition at all, so `latencyMs = 120000` is a legal
+implementation and would enter the p95 as a measurement.
+
+**On the drift check — clean.** I searched v1.8's new text for every restatement class v1.7
+withdrew: no α, no α count, no `z` literal, no verdict string, no judge threshold, no κ figure, no
+rule count, no reproduction of R-9's three numbers. The only `1.96` and `κ = 0.21` occurrences are
+the pre-existing negative statement in §4 S1 / §5 test 6 and §2.1's context finding, both cited to
+the note. §3.9 and §7's rule 2 are intact. The one drift that *did* occur is the mirror image and is
+minor: §7's recap was swept and its owning section (§6 R-13) was not — **G3-11**.
+
+**On the `lmsCliCommit` → `residencySource` claim — the arithmetic is right and the edit list is
+short.** I counted `_MODEL_SCHEMA_1` in `model-bench/modelbench/fingerprint.py`: 26 auto + 4 attested
+= 30, and the swap keeps it at 30, exactly as §3.4.2 says. "Free only because `results/runs/` does
+not exist yet" is **true** — `model-bench/results/` does not exist, nothing under it is tracked, and
+`git log --all -- 'model-bench/results/*'` is empty. The *number of edit sites* is understated —
+**G3-9**.
+
+### New findings
+
+**G3-1 (blocker) — the `embedder` arm cannot produce a storable fingerprint, and its warm-up call
+cannot be issued. S3, the plan's "first end-to-end result", is unbuildable as specified.**
+`runtimeName` and `runtimeVersion` are `REQUIRED_NONEMPTY` for every `model` arm (§3.4.2;
+`fingerprint.py:75-77`), and their only cited source is the `runtime` object on
+`POST /api/v0/chat/completions` (§2.3, §3.6's table). §3.8.1's embedder mechanism issues **only**
+`POST /api/v0/embeddings`, which returns no `runtime`, no `model_info` and no `stats` (LM Studio's
+own v0 REST docs — Appendix C.2). §3.4.4a forbids a fallback, a substitute and a default; §3.4.5
+point 1 makes `store()` refuse. So every embedder run refuses on write, and S3's done-condition ("a
+stored result with a complete fingerprint") is unreachable. §3.6's warm-up compounds it: it is
+specified as one chat completion carrying "the pack's system prompt plus a fixed probe message at
+`temperature: 0, max_tokens: 10`" — an embeddings model serves no such route and the embedder pack
+declares no system prompt, so the mandatory per-arm warm-up has no instantiation for the pack S2
+exists to unblock. *Fix, both halves in §3.6/§3.4.2:* make `warm_up` **call-surface aware** (one
+short `POST /api/v0/embeddings` for a `type: "embeddings"` arm, timed the same way), and make the
+required-field set a function of **call surface** as well as `armKind` — §3.4.4a already names that
+discriminator pattern for a second provider; this is the same pattern one level earlier, and it is
+what lets `runtimeName`/`runtimeVersion` be *required for a chat-surface arm and absent by contract
+for an embeddings-surface arm* instead of silently missing. Partly inherited from v1.7 — but v1.8 is
+the version that makes the warm-up mandatory for every arm and forbids every escape, so it is v1.8's
+to close.
+
+**G3-2 (blocker) — §3.6 says the catalog is the fingerprint's auto half "and its only source"; it is
+not, and no section says where the runtime identity comes from or when the staleness trip-wire
+fires.** I re-probed `GET /api/v0/models`: ten keys per entry, no `runtime`, no size, no
+`loaded_context_length` while nothing is loaded (Appendix C.1). §3.6's `catalog()` row nonetheless
+reads "the fingerprint's auto half, and its **only** source (§3.4.4a)" — the sentence an implementer
+of `fingerprint.capture()` reads. It is false for `runtimeName`/`runtimeVersion` (chat route),
+`temperature`/`maxTokens` (config), `pythonVersion`/`hostOs` (environment) and the four attested
+fields. Two live consequences, not stylistic ones. **(i)** §3.4.4a's guarantee is *"refuses before
+its first model call and writes nothing"*; its converse — "if the catalog answers, the fingerprint
+can be completed" — is what an implementer will assume, and it is untrue. **(ii)** §3.4.5 point 3's
+staleness trip-wire compares `runtimeName`/`runtimeVersion`, and §3.4.4 says `host.json` is "read at
+the start of every model run", but the earliest those two values exist is *after* the warm-up, whose
+response §3.6 says is "discarded" (Appendix A retains it as `LoadResult.discardedResponse`, without
+saying it is the runtime source). So the trip-wire either fires after the run has already paid the
+21 s load, or — if wired to the first scored call — after items have been consumed, which is the
+expensive-refusal case §3.4.4a took care to avoid for residency. *Fix:* one ordering paragraph in
+§3.4.4a naming all four sources and pinning the sequence: start probe → `residentModelsAtStart` →
+warm-up → read `runtime` from the warm-up response → **trip-wire check here** → catalog re-read for
+`loadedContextLength` → first scored item. Correct §3.6's table row to "the catalog half".
+
+**G3-3 (major) — the contamination guard nulls `latencyMs` and nothing else; three more timing
+figures come from the same contaminated response and print with no denominator.** §3.6's guard sets
+`ItemResult.latencyMs = None` for a load-contaminated item, and the p50/p95 line prints
+`latency n = X of Y`. But §3.6's own FR-11 table sources `ttftMs` from `stats.time_to_first_token`,
+`prefillMsPer1kPromptTokens` from that same figure over `usage.prompt_tokens`, and `tokensPerSecond`
+from `stats.tokens_per_second` — all read off the *same* response, none excluded by the guard, none
+printed with a denominator. Whether LM-Studio-side TTFT includes the JIT load is not established:
+§2.5 recorded the cold call's **wall clock** (21.068 s) and did not record what `stats` said on it,
+so the plan cannot currently claim either way. *Fix, and it is free:* the warm-up against a
+non-resident model **is** a known cold load, so record its `stats` beside its wall clock and settle
+the question in S2's R-1 probe (same call, one more assertion). If TTFT includes the load, the guard
+must null `ttftMs`/`prefill` on the same items and their aggregates need their own `n = X of Y`. The
+same measurement gives R-14's acknowledged residual a detector it currently lacks: a reload inside a
+single timed call shows up as `wallClockMs − (ttft + generation_time) ≈ 20 000 ms`, which is an order
+of magnitude outside anything else and needs no new probe.
+
+**G3-4 (major) — the guard's first comparand is unspecified, and the literal reading discards item 1's
+latency on exactly the runs the feature exists for.** §3.6 says `runner` probes `residency()`
+"between items" and nulls the latency of "any item whose preceding snapshot did not show the model
+resident". Item 1 has no *between-items* predecessor; the only snapshot preceding it is
+`residentModelsAtStart`, which §3.4.2 pins as taken **before the warm-up** — i.e. on any cold-start
+run it is `[]` **by construction**, because the warm-up is the load. Read as written, every
+cold-start run marks its first item `latencyMs = None` and prints `latency n = 37 of 38` with no
+cause a reader can recover, and §5 test 15b's `X < Y` assertion goes green on the wrong mechanism.
+*Fix, one clause in §3.6:* the guard's baseline for item 1 is a residency probe taken **after the
+warm-up returns**, never `residentModelsAtStart`; and test 15b asserts a full-length latency sample
+(`X == Y`) on a clean cold run with no mid-run reload, which is the case that currently fails.
+
+**G3-5 (major) — a scored call that hits `requestTimeoutSeconds` has no specified disposition, so a
+fabricated 120 000 ms is a conforming implementation.** §3.6 introduces `requestTimeoutSeconds`
+(120) and says it "**is** meant to fire on a hung call" — and the plan then never says what happens
+when it does. Grep of v1.8: seven occurrences of "timeout", none stating the item's outcome, its
+`latencyMs`, or whether the run continues. The three plausible readings differ materially in what the
+report *prints*: `latencyMs = 120000` puts a censored observation into the p95 as if it were a
+measurement (and it is the largest one, so it lands in exactly the statistic it corrupts);
+`latencyMs = None` is honest but silently widens the `Y − X` gap the guard is supposed to explain;
+aborting the run discards everything scored so far. *Fix:* state it in §3.6 — a timed-out scored call
+is scored per the pack's rule (a `fail`/`parse_failure`, not a skip), its `latencyMs` is **`None`**
+because a censored observation is not a measurement, and the report prints the timeout count as its
+own line beside `latency n = X of Y` so the two causes of exclusion stay distinguishable. State the
+warm-up's own timeout disposition too (exit `3`, nothing written, message naming
+`--first-call-timeout`).
+
+**G3-6 (major, in the unit being implemented now) — DC-10's metric selector names two different
+vocabularies and, taken literally, never matches, so the cross-check silently never fires.**
+§4 S1 DC-10 scopes the check to "each `BinaryMetric` in the pack's `verdictMetrics` family **whose
+`unit` is the pack's analysis unit**". Those are two disjoint namespaces in the shipped code:
+`BinaryMetric.unit` is a denominator noun — `"item"`, `"conversation"`, `"query"`, `"turn"`,
+`"call"` (`results.py:54-71`; `-ml` §3.4's `unit_kind` is the same set) — while `PackRef.analysisUnit`
+is a `pairingKey` **component name**, e.g. `"scriptId"` (`packs.py:87-100`, and DC-5(c)'s own
+fixture). `metric.unit == pack.analysisUnit` is therefore never true. The predicate the plan means
+already exists and is already used: `metric.unit == unit_kind_for_role(pack.role)`
+(`report.py:377`). *Fix, three clauses in DC-10 and test 11c:* (a) name that predicate literally;
+(b) the 11c fixture must pin a `PackRef.role` whose unit kind is `"item"` — `guard-judge`,
+`nlq-generator` or `chat-responder` — or the fixture's `unit="item"` metric is out of scope and the
+test passes while testing nothing, the DC-5(c) failure shape again; (c) say **explicitly** that a
+turn-pooled or call-pooled `BinaryMetric` is *not* cross-checked and why (its denominator is not an
+item count), because the P4-4 defect — a rate printed for a metric no item declares scoreable —
+remains printable for a pooled metric, without an interval but with the number.
+
+**G3-7 (major, same unit) — DC-10's counting call has an uncaught raise path that reproduces the
+P4-5 shape DC-10 explicitly rejects.** DC-10 counts items "for which `scored_outcome(metric) is not
+None`". `ItemResult.scored_outcome` does not return `None` for the sibling malformation: a metric
+declared `scoreable: True` with no entry in `counts` raises `IncompleteItemRecord`
+(`results.py:144-149`). Nothing catches it — `load_history` validates fingerprints, not
+item/aggregate consistency, and `cli.py:_cmd_compare` catches only `PackConfigError`
+(`cli.py:144-150`) — so it escapes `compare_report` as a traceback with exit 1, outside §3.6a's
+closed exit-code set `{0,2,3,4,5}`. That is precisely the failure DC-10 rejects "raising" for, arriving
+through the check's own implementation. *Fix:* DC-10 states that the cross-check treats
+`IncompleteItemRecord` as a **mismatch** — exclude the arm, name it in the `INVALID RESULTS EXCLUDED`
+block with the offending item and metric — and test 11c gains a third arm carrying that malformation.
+
+**G3-8 (major) — R-15's reversal is the right pattern with three costs it does not name.** "The
+required-field set becomes a function of provider as well as `armKind`" is correct in shape, and
+naming a reversal in advance is the right instinct. Three things it omits. **(i) The discriminator
+must be declared, not observed.** `residencySource` is *captured* — it is the token the probe
+answered on — so it cannot select the contract a record is validated against, because validation
+would depend on having already probed the provider. A record needs a **declared** `provider`
+(from `host.json` / the arm), with `residencySource` remaining the observation. **(ii) Provider B's
+required set is not a variation, it is a collapse.** Eight of the nine fields §3.4.4a costs out —
+`arch`, `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `modelType`,
+`modelCapabilities`, `modelPublisher` — have no analogue on a hosted API. So the reversal does not
+preserve fingerprint strength across providers; it **segregates** strongly-fingerprinted records
+from weakly-fingerprinted ones. That is defensible, and it is a different claim from the one R-15
+makes. **(iii) Nothing guards the comparison.** `compare_report` would put a provider-A and a
+provider-B arm in one table with no banner and no refusal, while `-ml`'s instruments assume the arms
+differ only in the model. §3.4.3's `SCHEMA VERSIONS IN THIS COMPARISON` line is the precedent.
+*Fix:* three sentences in R-15 saying (i), (ii) and (iii) — no design work owed now, since the
+trigger has not fired; the point is that the reversal's cost is a report-surface change, not a
+schema change, and R-15 currently implies the opposite.
+
+**G3-9 (minor) — §3.4.2's "two consequences the implementer must action" undercounts the S1 edit by
+two sites, one of which will ship silently wrong.** Three shipped sites carry `lmsCliCommit`, not
+two: `modelbench/fingerprint.py:79`, `tests/test_fingerprint.py:162` (the independently-written
+literal §3.4.2 does name), and **`tests/conftest.py:38`** — the shared `MODEL_FIELDS` fixture every
+blank-one-key test builds from. That third one is self-revealing (the missing `residencySource` fails
+`validate()`), so it costs minutes. The fourth is not: `tests/conftest.py:39` declares
+`residentModelsAtEnd: [{"modelKey": …, "sizeBytes": 2 << 30}]`, a `lms ps --json` element shape, while
+§3.4.4a now specifies `{id, state}` **and** v1.8 removes `sizeBytes`' only source. `residentModels*`
+are `REQUIRED_PRESENT`, which checks presence and never element shape, so the stale shape validates
+and travels into S2, where `residency()` emits `{id, state}` and the two disagree with nothing to
+catch it. *Fix:* name all four edits in §3.4.2's list, and add to S1 DC-1 an assertion on the
+residency **element** shape (`{id, state}`, `state` a non-empty string, no `sizeBytes`).
+
+**G3-10 (minor) — `--no-cold-load` survives in §3.6a's CLI table and has no possible meaning under
+v1.8.** It is listed on `run` and defined nowhere in v1.7 or v1.8. Its v1.7 sense was "skip the
+unload-then-timed-`lms load` step"; under v1.8 there is no unload, the warm-up is unconditional, and
+`coldLoadSeconds` is recorded iff the model was not resident at start (§3.6). The only meaning left
+to invent is "suppress the `coldLoadSeconds` record", i.e. a flag that hides a measurement — which
+this plan's philosophy refuses everywhere else. *Fix:* delete it from the table. If something is
+wanted here it is the opposite flag ("refuse to run unless the model is non-resident", for a
+deliberate cold-load measurement), and R-14 already routes that to a documented human action.
+
+**G3-11 (minor) — R-13's second input is recorded in §7's recap and not in R-13, which is §7 rule 4
+run backwards.** §7's "What S2 inherits" correctly states that p50/p95 are now computed over a
+possibly shorter sample than the item count and that "the definition and the denominator are decided
+together". §6 R-13 — the risk that *carries* the open decision, and the thing `data-scientist` will
+be handed — is **byte-identical to v1.7** (diffed). §7 rule 4 makes the owning section authoritative
+and the recap derived, so the sweep went the wrong way. *Fix:* fold the §7 sentence into R-13, and
+add the question v1.8 also opens and neither document asks: **is there a minimum surviving-sample
+size below which no p95 is printed at all?** Under the guard a bad run can leave four latencies, and
+a nearest-rank p95 over four points is the maximum — a number the report will print, honestly
+denominated, that means nothing. That floor is the note's call, alongside the definition.
+
+**G3-12 (minor) — test 15b is filed under the `-m live` heading while being the offline test the plan
+calls load-bearing.** §5 places 15b between items 15 and 16 in the **Integration (`-m live`, opt-in,
+real LM Studio)** block, flagging in its own text that it is offline "despite sitting among the live
+ones", and §5's closing paragraph has to carve it out again ("**15b does not**"). §2.4 copies
+falkor-chat's `addopts = '-ra -m "not live"'`, so a `live` marker applied by section-adjacency
+removes from `pytest -q` the two assertions §5 itself calls "the tests that matter". Two carve-outs
+for one item is the signal. *Fix:* move 15b into the unit block as 11d (or 12c) and leave a pointer
+where it is now.
+
+**G3-13 (nit) — §3.4.2's tier lists still end in `…` for both tiers, in the section that claims to
+own the field set.** §3.4.2 states "**This section owns the model field set**" and then gives
+`REQUIRED_NONEMPTY` and `REQUIRED_PRESENT` by example. Tier membership for the elided fields —
+`loadedContextLength`, `maxContextLength`, `modelType`, `maxTokens`, `hostRamGb`, the timestamps — is
+recoverable today only from `fingerprint.py`. That was tolerable while validation was a formality; it
+is less so now that a tier decides whether a run refuses. Low stakes (S1 shipped the table, and it is
+right), but an S2 author adding a field has no rule to follow. *Fix:* one sentence — every field not
+listed as `REQUIRED_PRESENT` is `REQUIRED_NONEMPTY`, and a new field states its tier in the same edit.
+
+### Disposition of carried findings
+
+Pass 1's fourteen and Pass 2's four were dispositioned in Pass 2's table against plan v1.3; the plan
+has since moved v1.3 → v1.8 through the engineering and statistics gates. Only the four still open at
+that point are re-checked here.
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **N-1** (analysis-unit id) | **Fixed** | §3.3's `sampling` contract (`analysisUnit == pairingKey[0]`, row-count identity); `PackRef.analysisUnit`/`analysisUnitIndex` shipped (`packs.py:87-100`); `report._unit_ids` resolves it with no caller parameter; DC-5(c) asserts *which key* with a negative control. All three fixes I asked for landed. **G3-6 is the residue in a different place** — the `unit`/`analysisUnit` vocabularies were never reconciled in prose. |
+| **N-2** (determinism probe) | **Fixed** | §3.8.4's probe exists, `RunResult.basis` is a required field with no dataclass default, `from_dict` carries the reader-side fallback only, `basis` degrades fail-safe and takes the weaker of two arms; §5 test 12b pins all four cases including "probe did not run → `assumed`". |
+| **N-3** (`-ml` §4.6's derived `H`) | **Fixed by the note** | Note v1.8 §4.6 line 1065: `H` is `metrics.cleanThroughTurnH.H`, "validated `H ≤ min(script length)`"; §4.4's revision line names N-3 as closed. Plan §3.8.4 and the note now state one contract. |
+| **N-4** (stale version-pairing token) | **Fixed** | §7 reads "this plan **v1.8** is aligned to the note **v1.8** (`27501c9`)"; `27501c9` is the note's v1.8 commit and the note's header reads `Version: 1.8`. The standing-obligation sentence beside it survives. |
+
+### What's solid
+
+- **§2.5 is a model of how to re-probe a premise.** Every number in it reproduces on this box today:
+  19 models, all `not-loaded`, ten keys, `capabilities` on 15 of 19, sub-2 ms; `/v1/models` returning
+  `{id, object, owned_by}`; `command -v lms` exit 1 with the Windows binary still reachable. The
+  correction of the framing — the CLI is rejected for being a host-layout accident, **not** for being
+  absent — is the right correction and it is stated in the plan rather than quietly applied.
+- **§3.4.4a's three-alternatives section is the strongest prose in the document.** The
+  `/v1`-only option is costed in fields rather than dismissed, and the fallback is rejected as a
+  *source* while being retained as a *diagnosis* with the two error messages spelled out. That is the
+  right shape for a decision with a real trade-off, and I would have approved the conclusion on this
+  argument alone.
+- **The warm-up's five parts are correctly ordered by what they protect.** Warm-up outside the item
+  set, two budgets, `coldLoadSeconds` conditional on start-residency, guard, printed denominator —
+  and both rejected alternatives are rejected for the contamination they cause rather than for cost.
+  `--warmup <n>` surviving only as *extra warm-up calls* and never as *items removed after the fact*
+  is exactly right: it keeps the knob and removes its ability to move the reported p50.
+- **P4-4's re-attribution is argued, not merely obeyed.** DC-10 re-checks the deferral's two grounds
+  and says why each fails, names the failing case in the report's own words ("one report making two
+  mutually exclusive statements about the same metric"), rejects both alternatives against prior
+  findings the reviews already paid for, and splits S1's net from S2's seam contract without letting
+  S2 build a second copy. The `1.7 ms` measurement carrying the between-item probe is the same
+  discipline: the design follows the number.
+- **The absent-versus-empty table (§3.4.4a) is the right two rows.** Naming that the rule *inverts*
+  at the fingerprint boundary — unrepresentable inside, mandatory `None` outside — is the kind of
+  thing an implementer gets backwards exactly once, and it is now impossible to read past.
+
+### Open questions
+
+1. **Does LM-Studio-reported `time_to_first_token` include a JIT load?** Nobody has recorded it. It
+   decides G3-3's scope and it is one extra assertion on a call S2's R-1 probe already makes. Not a
+   design question — a measurement nobody has taken.
+2. **R-13 stays `data-scientist`'s, with two inputs now** (definition + denominator), and I add a
+   third for that same decision in G3-11: the minimum surviving-sample size below which no p95 is
+   printed. Routed, not decided here.
+3. **Does the embedder arm's `loadedContextLength` appear on a loaded embeddings model?** §2.3's
+   evidence for `loaded_context_length` is a chat model. It is a `REQUIRED_NONEMPTY` field, so if it
+   does not appear, G3-1's call-surface discriminator must cover it too. S2's R-1 probe is already
+   the right place; it should read a loaded **embeddings** model as well as a loaded chat model.
+
+---
+
+## Appendix — Pass 3: what was probed and read
+
+**C.1 — LM Studio surface, re-probed 2026-09-03, read-only (no model loaded or unloaded).**
+
+```
+$ curl -s -w 'HTTP %{http_code} in %{time_total}s\n' http://localhost:1234/api/v0/models
+HTTP 200 in 0.002148s          # then 0.001566 / 0.001417 / 0.001542 on three repeats
+```
+
+| §2.5 / §3.6 claim | Result |
+|---|---|
+| 19 models installed | **19** |
+| all `state: "not-loaded"` at probe time | **19/19 `not-loaded`** |
+| catalog keys per entry | `id, object, type, publisher, arch, compatibility_type, quantization, state, max_context_length` on 19/19; `capabilities` on **15/19** — **no `runtime`, no size, no `loaded_context_length`** |
+| "the catalog omits `capabilities` for several models" | 4 omit it: `google/gemma-3-4b` (vlm), `google/gemma-3-12b` (vlm), `gemma-3-4b-vl-it-…` (llm), `text-embedding-nomic-embed-text-v1.5` (embeddings) |
+| an `embeddings` model advertising `tool_use` (§3.6's gate) | `text-embedding-qwen3-embedding-0.6b` → `capabilities: ["tool_use"]`. Both halves of M-7's gate still have live counter-examples on this box |
+| two catalog ids, same weights (R-8) | `mistralai/ministral-3-3b` (publisher `mistralai`) and `mistralai_ministral-3-3b-instruct-2512` (publisher `bartowski`), both `Q8_0` |
+| `GET /v1/models` returns `{id, object, owned_by}` only | confirmed verbatim |
+| `command -v lms` → exit 1 | confirmed (exit 1) |
+| `GET /api/v0/models` at ~1.7 ms | **1.4–2.1 ms**; plan's 1.6–2.3 ms band reproduces |
+
+**C.2 — `POST /api/v0/embeddings` response shape (G3-1).** From LM Studio's own v0 REST endpoint
+documentation: the embeddings response carries `object`, `data` (the vectors), `model` and `usage`,
+and **does not include `runtime`, `model_info` or `stats`**. The chat-completions response carries
+all three. Not probed live, because probing it would JIT-load an embeddings model, which this run was
+not authorised to do; the doc claim is consistent with §2.3, which attributes `runtime` to the chat
+route alone and never to the embeddings route.
+
+**C.3 — Shipped-S1 facts the v1.8 claims were checked against** (`model-bench/` at working tree;
+`modelbench/stats.py` and two test files were modified by a concurrent `tdd-engineer` and were not
+relied on):
+
+| Claim | Where | Result |
+|---|---|---|
+| swap keeps the model set at 30 | `modelbench/fingerprint.py:62-101` | 26 auto + 4 attested = **30**; removing `lmsCliCommit` and adding `residencySource` keeps 30 |
+| "free only because `results/runs/` does not exist yet" | filesystem + `git ls-files` + `git log --all -- 'model-bench/results/*'` | **true** — directory absent, nothing tracked, nothing ever committed |
+| §3.4.1's forbidden set "follows for free because it is a derivation" | `fingerprint.py:129-138` | **true** — `frozenset(_MODEL_SCHEMA_1) - frozenset(_DETERMINISTIC_SCHEMA_1)` |
+| `runtimeName`/`runtimeVersion` source | `fingerprint.py:75-77` comment | "free from the /api/v0 **chat** route's `runtime` object" — corroborates G3-2 |
+| sites carrying `lmsCliCommit` | `grep -rn` | **three**: `fingerprint.py:79`, `tests/test_fingerprint.py:162`, `tests/conftest.py:38` |
+| residency element shape in the shipped fixture | `tests/conftest.py:39` | `{"modelKey": …, "sizeBytes": 2 << 30}` — the `lms ps` shape, not §3.4.4a's `{id, state}` (G3-9) |
+| DC-10's selector vocabulary | `results.py:54-71`, `packs.py:87-100`, `roles.py:24-32`, `report.py:377` | `BinaryMetric.unit` ∈ {`item`,`conversation`,`query`,`turn`,`call`}; `PackRef.analysisUnit` is a `pairingKey` component name; the working predicate is `metric.unit == unit_kind_for_role(pack.role)` (G3-6) |
+| `scored_outcome`'s raise path | `results.py:123-149`, `cli.py:144-150` | raises `IncompleteItemRecord`; `_cmd_compare` catches only `PackConfigError` (G3-7) |
+| R-13 unchanged v1.7 → v1.8 | `diff` of the R-13 block across `aebb611^`/`aebb611` | **byte-identical** (G3-11) |
+| note-restatement sweep | `grep` for `1.96`, α literals, κ figures, verdict strings, rule counts in v1.8's new text | **none reintroduced**; the only hits are §2.1's cited κ and §4 S1 / §5 test 6's deliberate "**not** `1.96`" |
 
 ## Appendix — Pass 2: arithmetic, independently recomputed
 
