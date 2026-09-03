@@ -1,8 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.4 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.5 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md`
 
-2026-09-03 — v1.4: closes Pass 2's N-1 (the analysis unit is fixed by rule and enforced twice at pack validation), N-2 (the determinism probe is built, budgeted and wired to `basis`) and N-4; §7's precedence rule is narrowed after it propagated a stale clause. (v1.3 aligned the vocabulary to the `-ml` note; v1.2 closed the Pass 1 gate.)
+2026-09-03 — v1.5: the S1 implementation gate's plan-side corrections (`docs/reviews/small-model-benchmarking-impl.md` §4) — §3.4.1's forbidden-field list becomes a derivation over §3.4.2's now-complete field set, Appendix A's `PackRef` and `FieldProblem` catch up with §3.3 and the shipped code, §4 S1 records `RunResult.designEffect`/`basis` as required-with-no-default, §6 opens R-13 (`_percentile`'s definition), and §7 gains the intra-document half of its staleness rule plus S1's delivery status. (v1.4 closed Pass 2's N-1/N-2/N-4 and narrowed §7's precedence rule; v1.3 aligned the vocabulary to the `-ml` note; v1.2 closed the Pass 1 gate.)
 
 Design for [`../requirements/small-model-benchmarking.md`](../requirements/small-model-benchmarking.md)
 (Status: *Ready for design*, 23 FRs / 5 ACs). This plan covers the whole feature: the new top-level
@@ -482,19 +482,44 @@ paired arm with an interval (§3.8.1). BM25 has no model, no quantization and no
 "save anyway" flag. The resolution is a **discriminator, not an exemption**:
 
 - `Fingerprint.armKind: "model" | "deterministic"`, required on every record, and
-  `REQUIRED_BY_ARM_KIND` / `FORBIDDEN_BY_ARM_KIND` are two mappings keyed by it. `validate()`
-  branches on `armKind` and never on field presence.
+  the required and forbidden sets are both keyed by it — `REQUIRED_BY_SCHEMA[schema][armKind]`
+  (§3.4.3 adds the outer key) and `FORBIDDEN_BY_ARM_KIND[armKind]`. `validate()` branches on
+  `armKind` and never on field presence.
 - **`model`** requires the full auto-captured set below plus the four operator-attested fields.
-- **`deterministic`** requires `armKind`, `armId` (`"bm25"`), `armParametersHash` (SHA-256 over the
-  pack's declared arm parameters — tokenizer, stopword list, `k1`, `b`, IDF variant), `packId`,
-  `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`, `pythonVersion`, `hostOs`,
-  `startedAt`, `endedAt` — and **forbids** every model field (`modelKey`, `modelPublisher`, `arch`,
-  `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `runtimeName`,
-  `runtimeVersion`, `lmsCliCommit`, `residentModelsAtStart`, `residentModelsAtEnd`, `temperature`,
-  `maxTokens`) and the four operator-attested LM Studio fields. The forbid half is the point: it is
-  what makes `{"modelKey": "bm25", "quantization": "n/a"}` — the shortcut a time-pressed implementer
-  reaches for, and exactly the "invalid result reaching a report unlabelled" this design exists to
-  prevent — fail loudly on write instead of quietly becoming a sixth model in the history.
+- **`deterministic`** requires exactly eleven fields: `armId` (`"bm25"`), `armParametersHash`
+  (SHA-256 over the pack's declared arm parameters — tokenizer, stopword list, `k1`, `b`, IDF
+  variant), `packId`, `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`,
+  `pythonVersion`, `hostOs`, `startedAt`, `endedAt`. (`armKind` is the discriminator itself: present
+  on every record and checked before either mapping is consulted, so it is a member of **neither**
+  required set and can never appear in a derived forbidden set.)
+- **The forbidden set is a derivation, never a list.** *(v1.5 — see the note below.)* For each arm
+  kind, at each schema version, the rule is:
+
+  > **`FORBIDDEN_BY_ARM_KIND[k] = required(other kind at that schema) − required(k at that
+  > schema)`** — a record may not carry a field that only the *other* arm kind is required to have.
+
+  For `deterministic` that resolves to every model field, the sampling settings, and all four
+  operator-attested LM Studio fields — i.e. everything in §3.4.2 that is not one of the eleven
+  above; for `model` it resolves to exactly `{armId, armParametersHash}`. The implementer writes the
+  set difference (`frozenset(REQUIRED_BY_SCHEMA[v]["model"]) - frozenset(REQUIRED_BY_SCHEMA[v]["deterministic"])`),
+  not the resulting names, so adding a model field at schema 2 forbids it on deterministic arms for
+  free. The **test** pins the same sets against an independently written literal, so a set that
+  *shrinks* fails loudly rather than silently shrinking the suite (S1 impl-gate M-4).
+
+  The forbid half is the point of the whole discriminator: it is what makes
+  `{"modelKey": "bm25", "quantization": "n/a"}` — the shortcut a time-pressed implementer reaches
+  for, and exactly the "invalid result reaching a report unlabelled" this design exists to prevent —
+  fail loudly on write instead of quietly becoming a sixth model in the history.
+
+  *(Why a derivation. Through v1.4 this bullet carried a hand-typed list of fourteen model fields
+  beside the words "forbids every model field". The two never agreed: §3.6's eligibility-gate
+  decision put `modelType`, `modelCapabilities` and `modelCapabilitiesPresent` into the model set
+  (§3.4.2) and nobody swept the list here. The S1 implementer forbade all three anyway, following
+  the stated intent, and the implementation gate confirmed the plan was the stale side (§4 item 3).
+  Two review passes had certified the list before that — both read it against itself rather than
+  against the set it claims to complement, which is what a hand-maintained enumeration invites. A
+  set difference cannot drift from its own intent, so the intent is now the only thing written
+  down.)*
 - A `deterministic` arm is **reproducible from `(packContentHash, armParametersHash, benchVersion)`
   alone**, which is why host state is not merely optional for it but forbidden: recording a KV-cache
   setting beside a BM25 score would imply the score depends on it.
@@ -513,10 +538,16 @@ paired arm with an interval (§3.8.1). BM25 has no model, no quantization and no
 wrong): `modelKey` (the literal LM Studio id, never normalized), `modelPublisher`, `arch`,
 `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `runtimeName`,
 `runtimeVersion`, `lmsCliCommit`, `residentModelsAtStart[]`, `residentModelsAtEnd[]` (both from
-`lms ps --json`), `modelType` and `modelCapabilities` (the catalog's raw `type` and `capabilities`,
-verbatim — §3.6's gate decision must be auditable after the fact), `temperature`, `maxTokens`,
+`lms ps --json`), `modelType`, `modelCapabilities` and `modelCapabilitiesPresent` (the catalog's raw
+`type` and `capabilities` verbatim, plus the absent-vs-empty bit below — §3.6's gate decision must
+be auditable after the fact), `temperature`, `maxTokens`,
 `packId`, `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`, `pythonVersion`,
 `hostOs`, `startedAt`, `endedAt`.
+
+**This section owns the model field set.** The 26 names above plus the four below **are**
+`REQUIRED_BY_SCHEMA[1]["model"]`, 30 in total, and §3.4.1's forbidden set is derived from them — so
+a field added here is forbidden on a deterministic arm without a second edit anywhere, and no list
+elsewhere in this plan needs sweeping to keep up.
 
 **Operator-attested** (§6 R-1 — no programmatic source exists): `lmStudioAppVersion`,
 `kvCacheSetting`, `hostRamGb`, `otherResidentWorkloads`. These live in a local, gitignored
@@ -534,6 +565,7 @@ empty list. So each required field is declared in one of two tiers:
   `benchVersion`, `lmStudioAppVersion`, `kvCacheSetting`, …
 - **`REQUIRED_PRESENT`** — the key must be present; `[]`, `0`, `false` and `""` are all valid
   values: `residentModelsAtStart`, `residentModelsAtEnd`, `modelCapabilities`,
+  `modelCapabilitiesPresent` (`false` is a real answer, and the whole reason the field exists),
   `otherResidentWorkloads`, `temperature` (0.0 is the pinned value for four of the five packs), …
 
 `null` is invalid in **both** tiers — it is the shape of "we did not capture this", which is the one
@@ -1311,9 +1343,12 @@ class ItemResult:
 @dataclass(frozen=True) class GroundingAggregates: ...
 Aggregates = RetrievalAggregates | ToolCallAggregates | ClassificationAggregates | ExtractionAggregates | GroundingAggregates
 
+Basis = Literal["by-construction", "measured", "assumed"]   # -ml §3.4 Rule 4's input
+
 @dataclass(frozen=True) class RunResult:
     runId: str; sessionId: str | None; role: str; armKind: Literal["model", "deterministic"]
-    fingerprint: Fingerprint; items: list[ItemResult]; aggregates: Aggregates
+    fingerprint: Fingerprint; items: tuple[ItemResult, ...]; aggregates: Aggregates
+    designEffect: float; basis: Basis           # required, no defaults — see below
 
 @dataclass(frozen=True) class InvalidRecord:
     path: Path; runId: str | None; benchSchemaVersion: int | None
@@ -1357,6 +1392,29 @@ def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
   here.
 - **`compare_report` takes `invalid`.** `load_history` returns two lists and v1.1's signature had a
   parameter for one of them, while AC-2 requires the excluded record to be *named in the report*.
+
+**Two record fields added in v1.5, after S1 shipped them and the gate confirmed they were
+required.** `RunResult` carries `designEffect: float` and `basis: Basis`, and done-condition 5b is
+unsatisfiable without them: `-ml` §3.4 Rule 4 decides *which instrument may decide* from exactly
+these two, only the runner sees the determinism probe that sets `basis` (§5 test 12b, gate finding
+N-2), and `report.py` can recompute neither after the fact. Three rules go with them:
+
+- **Neither carries a default on the dataclass.** `designEffect = 1.0` is the anti-conservative
+  value, so a default rebuilds **plan-review B-1**'s "default by omission" at the record seam — the
+  caller who forgets clustering is exactly the caller that gate found — and it makes DC-5's clause "`report.py`
+  refuses to render one when the required input is absent" true only vacuously, because with a
+  default the input can never *be* absent. S2's runner must state both.
+- **`from_dict` is the one place a fallback belongs.** `d.get("designEffect", 1.0)` /
+  `d.get("basis", "assumed")` there mean "a record written before these fields existed" — a
+  *reader's* compatibility rule under §3.4.3, not a constructor's default.
+- **`basis` degrades fail-safe, in one direction only.** A probe that did not run, or that
+  disagreed, yields `"assumed"`, which moves the decision off McNemar and onto the cluster
+  bootstrap; a comparison takes the *weaker* of its two arms (`by-construction` only when both arms
+  are, and `max()` of the two design effects). That propagation is the mechanism N-2 asked for, so
+  it is a test target rather than an incidental line (impl-gate M-3).
+
+`items` is a `tuple`, not a `list`: `RunResult` is frozen, and a frozen record holding a mutable
+sequence is frozen in name only.
 
 **The clustering-aware and decision-making surface of `stats.py` is deliberately absent from this
 block.** `-ml` §3.4 is now a **binding six-rule contract** for exactly that surface — written, in its
@@ -1865,6 +1923,16 @@ if a real comparison lands inside the unresolvable band and the answer actually 
 **more distinct scripts** (a pack version bump, S6's authoring cost again) — never more replicates
 at temperature 0, which is what produced the problem.
 
+**R-13 — `_percentile`'s definition is undecided, and latency comparisons will be built on it
+(low, open — `data-scientist`'s call).** *(New in v1.5, from the S1 gate's open question 2.)* S1
+ships two copies of a nearest-rank `_percentile` (`stats.py`, `results.py`). For the bootstrap's
+B = 10 000 draws the choice of definition is invisible; for `latencyMsP95` over a handful of items
+it is not, and FR-11's p50/p95 are compared across runs stored months apart, so the definition is
+effectively frozen the moment the first latency figure is stored. Nothing in this plan or the `-ml`
+note pins it. **S2 must not store a p95 until the definition is chosen and written into the note**
+(nearest-rank vs linear interpolation, and whether the two call sites may differ); the plan does not
+choose it here because a percentile definition is method, and §7 rule 2 gives method to the note.
+
 **R-8 — Two LM Studio catalog ids for the same weights (low, designed for).** Confirmed on this box
 (§2.3). The fingerprint records the literal key and never normalizes, so two runs of "the same
 model" under different ids compare as two models — visibly, with both ids printed. That is the
@@ -1921,7 +1989,7 @@ verdict string in this feature**, plus the deferred judge design. It is not opti
 particular **§3.4, six binding rules that are `stats.py`'s contract**, and **§7.2's verbatim
 resolving-power string**, which is a test target.
 
-**Version pairing:** this plan **v1.4** is aligned to the note **v1.4**. They share one vocabulary
+**Version pairing:** this plan **v1.5** is aligned to the note **v1.5**. They share one vocabulary
 (`verdictMetrics` + `headlineMetric`, the plan's names), one `guard-judge` metric pair
 (`falseAdvanceRate` + `falseSuspendRate`, the note's), one `H` contract (pack-declared and validated
 `H ≤ min(script length)`, the plan's), and one analysis-unit rule (the outermost component of
@@ -1950,6 +2018,23 @@ trustworthy the senior document, the more efficiently it does so. So:
 3. **Neither document may resolve a disagreement by editing the other.** Raise it; the owner fixes
    it in their own file. That is what kept N-3 a one-clause fix rather than a merge conflict between
    two agents editing in parallel.
+4. **The same discipline applies *inside* each document — v1.4's three rules did not reach there,
+   and both of v1.5's defects lived in that gap.** *(New in v1.5.)* Appendices, recap tables and
+   enumerations are **derived surfaces**: where one disagrees with the section that owns the
+   contract, the owning section is right by construction and the derived surface is stale — never a
+   second opinion to be weighed, and never a reason for an implementer to build the weaker of the
+   two. §3.3 owns the `sampling` contract, so Appendix A's `PackRef` was simply behind it; §3.4.2
+   owns the model field set, so §3.4.1's hand-typed forbidden list was behind it the moment §3.6's
+   audit fields joined that set. Two consequences, both applied in v1.5:
+   - **A change to an owning section sweeps its derived surfaces in the same pass** — rule 1's
+     standing obligation, turned inward. The sweep is cheap and the omission is invisible: both
+     defects passed two review passes, because a reader checks an enumeration against its own prose
+     rather than against the set it claims to complement.
+   - **Where a derived surface can be a *derivation* rather than a transcription, it must be.**
+     §3.4.1's forbidden set is now a set difference over §3.4.2's names, and `PackRef`'s
+     `analysisUnitIndex` is a property over `pairingKey`, precisely so there is nothing left to keep
+     in sync. A list maintained by hand beside its own stated intent has already drifted once here;
+     state the rule and let the list follow from it.
 
 New standalone component `model-bench/`, zero runtime dependencies, Python 3.12, eight stages:
 S0 skeleton → S1 core (fingerprint/results/stats/report, no model calls; delivers AC-2/AC-3/AC-4) →
@@ -1970,9 +2055,16 @@ tool-caller scripts × 1 run at temperature 0** (§3.8.4), **`guard-judge` has n
 (§3.8.2, with §3.3 making a headline-less pack a first-class case), and **S3's self-check is a
 diagnostic, never a gate** (S3 done-condition 5).
 
-**S0 is delivered** (commit `0522ffd`); S1 is the next stage. Read S0's own text before starting —
-it records what shipped rather than what v1.1 asked for, including the one real smoke test and the
-working-directory rule that every done-condition in §4 depends on.
+**S0 is delivered** (commit `0522ffd`) and **S1 is delivered** (commit `ab91419`, gated at `d6c4997`
+— verdict *needs changes*: one blocker, six majors, all dispatched as fixes against the shipped
+code, not as design changes). Read S0's and S1's own text before starting — they record what
+shipped rather than what v1.1 asked for, including the one real smoke test and the working-directory
+rule that every done-condition in §4 depends on. **S2 is the next stage**, and it inherits three
+things from the S1 gate that this plan states rather than leaves in the review: `RunResult`'s two
+new fields must be set by the runner with no default (§4 S1), `validate_pack` calls the existing
+`packs.check_sampling_contract` rather than re-implementing the rule, and `_percentile`'s definition
+(nearest-rank vs interpolated) must be decided and written down before latency figures start being
+compared across runs — that last one is a `data-scientist` call, open as §6 R-13.
 
 Two items are already recorded in `model-bench/docs/BACKLOG.md` (seeded at S0, re-checked at S8):
 the **deferred judged-quality layer** for `chat-responder` (design preserved in §3.8.5 and
@@ -1986,14 +2078,19 @@ ceiling (§3.8.1).
 Named above and defined here so an implementer is not inferring them from usage. Everything in
 `stats.py` beyond this list — in particular the cluster-aware surface — is the `-ml` note's.
 
+**This appendix is a derived surface, not a second contract** (§7 rule 4). Where a row disagrees
+with the section that owns the type, the section is right and the row is stale — that is exactly how
+v1.4's five-field `PackRef` survived §3.3's `sampling` block. A change to an owning section sweeps
+its rows here in the same pass.
+
 | Type | Module | Shape |
 |---|---|---|
 | `FieldSpec` | `fingerprint` | `NamedTuple(tier: Literal["nonempty","present"])` — §3.4.2 |
-| `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden"])` |
+| `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a *discriminator this build cannot interpret* — an unrecognised `armKind`, or a `benchSchemaVersion` from the future (§3.4.3). Neither is absent, empty, null or forbidden, so the four-value set would have forced a mislabel; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2; `armKind` discriminates |
 | `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1 |
 | `PairedOutcomes`, `ResolvingPower`, `Verdict`, `BootstrapResult` | `stats` | **`-ml` §3.4's, verbatim** — not restated here. `PairedOutcomes.from_units` is the only constructor and raises on a repeated analysis-unit id; `resolving_power()`'s inputs are keyword-only with no defaults. (v1.2's `PairedResult` was this plan's own invention and is withdrawn.) |
-| `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash, role, metrics)` — the identity triple plus what the report must print |
+| `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash, role, metrics, pairingKey: tuple[str, ...], analysisUnit: str)` — the identity triple, what the report must print, and §3.3's two `sampling` declarations. **The last two are v1.5's**: `report.py` resolves the analysis-unit id from `analysisUnit` and **no call site chooses it** (§3.3, DC-5(c)), so without them the resolution has nowhere to come from; the five-field form predated §3.3's v1.4 `sampling` block. Derived, not stored: `analysisUnitIndex = pairingKey.index(analysisUnit)`, which is `0` whenever `check_sampling_contract` has passed. |
 | `Pack` | `packs` | frozen dataclass, S2 |
 | `ModelInfo` | `lmstudio` | one catalog entry, verbatim: `id, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` |
 | `ChatResult` | `lmstudio` | `message, tool_calls, toolCallForm, stats, model_info, runtime, usage, wallClockMs` |

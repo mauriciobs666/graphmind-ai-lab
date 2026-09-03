@@ -43,8 +43,9 @@ Stakeholder decisions, 2026-09-02:
 | U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
 | U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | — | queued (after U6b) | `model-bench/**` | `analyst` + `data-scientist` re-gate → — | — |
-| U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.5 | teco-verified | — |
-| U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | — | queued | `docs/plans/small-model-benchmarking.md` v1.5 | teco-verified | — |
+| U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
+| U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | `a5ca583515c0979f1` | accepted | `docs/plans/small-model-benchmarking.md` **v1.5** | teco-verified | 116k tok / 43 tools |
+| U6d — Adjudicate the declined floor-rounding finding | `data-scientist` (reviewer) | `a7fbf4d59bfa1d0da` (resumed) | in-flight | short ruling, no document | — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
 
@@ -352,3 +353,36 @@ re-drawn against U4's actual delivery before dispatch.
   note's republished fixtures to assert against them, so U6a depends on U6b's output — and
   dispatching the code fix alongside doc edits would recreate the read-write race this coordination
   has already been bitten by twice.
+
+- **2026-09-03 — U6b: the note's author *declined* a review finding, with numbers, and was right.**
+  The reviewer asked for `58.3 → 58.4`; the author showed that rounding a **floor** up makes its own
+  printed sentence false — at n=12, α=0.025 the exact floor is `7/12 = 58.333` pp and outcomes are
+  attainable only at multiples of `1/12`, so `58.4` puts an attainable **significant** outcome below
+  the printed floor and the report then contradicts itself. It conceded the reviewer had found
+  something real but misidentified the cells: one α column was ceiling-rounding while the other
+  truncated, and **three cells are corrected in the opposite direction** (15.8→15.7, 7.1→7.0,
+  46.7→46.6) — at n=38 the *existing* `15.8` was already making the false claim. Generalised as:
+  **round each printed bound in the direction that keeps its own claim true.**
+- **Rule 7 adopted into the note**, with two refinements that decide whether it works: compare
+  against the **exact** floor, never the display-rounded one (or the invariant inherits the
+  presentation layer's rounding), and **the converse is not an invariant** — above-floor does not
+  imply distinguishable. Routed to U6d for adjudication rather than settled on either author's
+  authority; both asked for that.
+- **2026-09-03 — U6c: the `architect` removed the enumeration rather than repairing it.**
+  `FORBIDDEN_BY_ARM_KIND` is now **derived** (`required(other kind) − required(this kind)`) instead
+  of hand-listed, with §3.4.2 declared the owning section — and doing so exposed that §3.4.2 was
+  itself missing `modelCapabilitiesPresent`, which the derivation would have inherited as a hole.
+  **Two review passes had certified the fourteen-name list** (Pass 2 says "enumerates all fourteen
+  model fields") **because each read it against its own adjacent prose rather than against the set
+  it complements** — a blind spot no amount of re-reading the same way would have closed.
+- **The v1.4 pairing rules could not have prevented this drift, and the `architect` said so plainly:**
+  rules 1–3 govern *plan↔note* disagreements, while both defects were **intra-document** (an
+  enumeration vs. its own prose; an appendix vs. §3.3). New **rule 4**: appendices, recap tables and
+  enumerations are **derived surfaces**, the owning section wins by construction, a change to an
+  owning section sweeps its derived surfaces in the same pass, and **where a derived surface can be
+  a derivation, it must be.**
+- **Flagged, not fixed (carried):** §5's numbered test list is not stage-scoped and nowhere says so
+  (both gates had to reason it out); §3.4.2's tier lists are still illustrative; and
+  `PackRef.contentHash` is always `""` at S1 while Appendix A still calls it part of the identity
+  triple — if the code fix makes it `str | None`, Appendix A must be swept in the same pass, which
+  is precisely what rule 4 exists to prevent.
