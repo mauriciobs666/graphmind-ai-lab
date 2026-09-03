@@ -1,6 +1,15 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.8
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.9
+
+2026-09-03 (v1.9, `data-scientist`) — plan R-13 closed on all three of its inputs: new **§11**
+settles the latency percentile as **Hyndman-Fan type 1** (inverse ECDF, integer-ceiling rank, one
+implementation shared by both call sites), fixes the denominator at the unnetted item count with the
+withholding applied per *item* across the whole FR-11 timing block (review G3-3), and sets **two
+floors** — an identity floor at X = 20 that **renames** a tail figure `max` where a p95 would be the
+maximum (review G3-11), and a level floor that makes a figure **absent** where its attained level
+falls more than 5 points below its nominal one. The report block is published as a verbatim clause
+grammar. §3.2d gains a pointer to the estimator; nothing else changes.
 
 2026-09-03 (v1.8, `data-scientist`) — the clustered path's four unowned or false sentences: §3.2e
 publishes the cluster-path label verbatim (it was prose invented in code) and stops it asserting
@@ -283,7 +292,8 @@ to be asserted against**. The delivered implementation was never the problem; it
 
 McNemar does not apply to MRR, score separation, or latency. Use a seeded paired bootstrap:
 resample the *items* (with replacement, n draws), recompute the mean per-item difference each
-time, B = 10 000, take the 2.5th/97.5th percentiles. ~15 lines of stdlib (`random.Random(seed)`).
+time, B = 10 000, take the 2.5th/97.5th percentiles (**the percentile estimator is §11's, and
+there is one of it**). ~15 lines of stdlib (`random.Random(seed)`).
 The seed goes into the environment fingerprint (FR-7) so a report is reproducible. Decision:
 **the CI excludes zero.** No separate significance test — for continuous metrics the CI *is* the
 test, and reporting both would be redundant, not extra rigour.
@@ -1764,3 +1774,490 @@ data cost, not method, and nothing is blocked on it:
   is not fundable, 12×1 is the right design and §4.5.3's trigger is the right way to revisit it —
   this question needs no answer before S1, and none before S6 either, but it should be asked out
   loud rather than settled by the phrase "same budget".
+
+
+---
+
+## 11. Q6 — The latency percentile: estimator, denominator, and the two floors (plan R-13)
+
+### 11.1 The question and the decision it serves
+
+Plan §6 R-13 asks for `_percentile`'s definition. Two further inputs arrived before it could be
+answered, and all three are settled here because each one moves the others:
+
+1. **The definition** — which estimator, precisely enough that two implementers cannot disagree at
+   n = 12, where this component actually operates.
+2. **The denominator** *(plan v1.8)*. Under LM Studio's JIT auto-load a **cold first call was
+   measured at 21.068 s** (plan §2.5) against sub-second warm calls, so plan §3.6 runs a residency
+   probe between items and sets **`ItemResult.latencyMs = None`** on any item a model load touched.
+   The latency sample is therefore a subset of the items, **missing exactly the slow ones, because
+   they were slow.**
+3. **A minimum surviving-sample floor** *(review Pass 3, G3-11)*: a bad run can leave four
+   latencies, and a nearest-rank p95 over four points is the maximum — "a number the report will
+   print, honestly denominated, that means nothing."
+
+What the caller does differently: S2 stores the first latency figure the day this is answered, and
+FR-11's p50/p95 are compared across runs stored months apart, so the definition freezes on first
+write.
+
+**The altitude this section takes, stated once.** Latency is **descriptive**: it appears in no
+pack's `verdictMetrics` (§3.3's table), it decides nothing, and no verdict rests on it. So the bar
+here is deliberately *not* §3.2's bar. The paired instrument refuses because a wrong verdict is a
+false claim about two models; the latency block refuses because a number labelled `p95` that is
+really a `p85` is a **false label on a true measurement**, and it travels into `index.csv` as a bare
+column where no qualifier can follow it. Those are different harms. The second is answered by a
+floor looser than §3.2's, by conditional strings that carry the qualifier, and — for the third input
+above — by **renaming rather than refusing**, which is a move the comparison instrument never has
+available to it.
+
+### 11.2 The estimator — the empirical quantile function (Hyndman–Fan type 1), one implementation
+
+**Recommendation: nearest-rank with ceiling, no interpolation.** For a sample of `X ≥ 1` values
+sorted ascending `x₍₁₎ ≤ … ≤ x₍X₎` and a percentile level `p`, the reported value is
+
+> `P_p = x₍r₎`,  `r = ceil(p·X/100)`, clamped to `[1, X]`.
+
+This is the **inverse of the empirical CDF** — `inf{ v : F̂(v) ≥ p/100 }` — and it is a named,
+externally documented definition rather than a house convention: **Hyndman–Fan type 1**, R's
+`quantile(type = 1)`, NumPy's `method = "inverted_cdf"`. Naming it is half the point: an
+implementer can check the implementation against a published definition instead of against this
+paragraph.
+
+Four reasons it is the right one *here*, in the order they decided it:
+
+1. **It returns a measurement that was actually taken.** Latency is right-tailed and the report's
+   job is "how slow was a slow call". An interpolated p95 at n = 38 is a value strictly between the
+   36th and 37th observed calls — a number no call took. For a descriptive statistic that is a
+   fabrication with a decimal point on it, and this note has spent four review passes removing
+   sentences that were not true of the numbers beside them.
+2. **It is the same functional §3.4 Rule 4 already computes in closed form.** Rule 4 (v1.8) replaces
+   the resampled bootstrap quantile with the exact quantile of the multinomial resample
+   distribution, i.e. `inf{ v : F(v) ≥ p }`. Type 1 applied to an empirical sample is that same
+   operator applied to the empirical distribution. So adopting it makes v1.8's closed form a
+   **substitution of computation, not of definition** — the two agree by construction rather than by
+   coincidence, and no third estimator enters the document.
+3. **It is total and exactly reproducible at every X including X = 1**, in integer arithmetic, with
+   no platform-dependent float rounding (§11.2.1).
+4. **Its bias direction is the safe one for this component.** Type 1's p95 is the smallest observed
+   value with at least 95% of the sample at or below it, so it is never *below* an interpolated
+   estimate. Against a missingness mechanism that already biases the tail **low** (§11.5), an
+   estimator that does not additionally shave it down is the one whose printed sentence survives.
+
+**Rejected: linear interpolation** (`statistics.quantiles`, NumPy's default, Hyndman–Fan type 7).
+It is the better estimator of a *population* quantile from a large sample, and that is not what is
+being reported: FR-11 asks what the calls cost, over 12–85 of them. It also fails reason 2 — a
+second quantile definition in a document whose Rule 4 already fixed one — and it makes the printed
+number depend on floating-point interpolation between two observations, reopening the
+reproducibility question R-13 exists to close.
+
+**Rejected: the shipped `int(round(p/100·(X−1)))`** (both copies, `stats.py:296` and
+`results.py:541`). Beyond being a third definition, `round` is half-to-even, so its tie-break
+direction **alternates with X**: measured this session, at X = 4 the p50 index is 2 (the *upper* of
+the two middle values) and at X = 6 it is 2 again (the *lower* of the middle pair). An estimator
+whose tie-break flips with the sample size is not a definition anyone can reason about.
+
+**One implementation, and the two call sites may not differ.** `stats.percentile` is the only copy;
+`results.py` imports it and keeps no private helper. The plan's own §3.9 says why — *two copies of a
+formula is one copy and one bug* — and the S1 implementation review is the evidence: a duplicated
+helper is exactly what let `index.csv` compute `latencyMsP95` at the 50th percentile and stay green
+(review M27). The function **sorts a copy of its input internally**; requiring a pre-sorted argument
+is a precondition a caller can silently violate, and `results.py`'s copy sorted while `stats.py`'s
+did not.
+
+```python
+def percentile(values: Iterable[float], *, permille: int) -> float:
+    """Hyndman-Fan type 1 (inverse empirical CDF). `permille` is the level x10: p95 is 950.
+
+    Raises ValueError on an empty input: whether a figure exists at all is decided by
+    `latency_summary` (§11.6), never by returning None from here.
+    """
+```
+
+#### 11.2.1 The rank is computed in integers, and this is the same hazard as Rule 3a
+
+`math.ceil(permille * X / 1000)` is a float expression and it is **wrong on real inputs**: measured
+this session, `0.28 * 25` is `7.000000000000001`, so the float form returns rank **8** where the
+exact rank is **7**. Same bin-edge class as Rule 3a's `(7/40)/0.001` case, one operation over. The
+binding form is integer ceiling division:
+
+```python
+r = max(1, min(X, -(-permille * X // 1000)))     # ceil(permille*X/1000), exactly
+```
+
+**Status of the guard, stated the way Rule 3a states its own.** Swept this session over the four
+levels this tool actually uses (`permille ∈ {25, 500, 950, 975}`) and `X ≤ 2000`: **zero divergence**
+between the float and integer forms. So on today's call sites the integer form is **defensive, not
+load-bearing** — exactly as Rule 3a's guard is under the v1.6 floor. It is mandated anyway for
+Rule 3a's reason: sweeping `permille = 1…999` over `X ≤ 3000` finds **1626** divergences, the first
+at `(X = 25, p = 28.0)`, so the hazard is one new call site away and the cost of the guard is one
+expression. **Pin the code's own expression, never an equivalent-looking one.**
+
+### 11.3 Floor 1 — the identity floor at X = 20, which renames rather than refuses
+
+At this component's sample sizes a "p95" is a near-maximum order statistic. Ranks computed this
+session with the integer expression above:
+
+| X (timed items) | rank of the tail figure | timed calls slower than it | rank of the p50 figure |
+|---|---|---|---|
+| 12 | 12 | **0** | 6 |
+| 19 | 19 | **0** | 10 |
+| 20 | 19 | 1 | 10 |
+| 38 | 37 | 1 | 19 |
+| 40 | 38 | 2 | 20 |
+| 85 | 81 | 4 | 43 |
+| 100 | 95 | 5 | 50 |
+
+**`r = X` — the tail figure *is* the sample maximum — for every `X ≤ 19`** (swept `X ≤ 200`), and the
+tool-caller pack's 12 conversations sit inside that range. Review G3-11 is right that printing that
+number under the name `p95` is meaningless; it is wrong only in the remedy, and the difference
+matters. The number itself is fine — the largest of 12 timed calls is a real measurement and a
+legitimate, low-biased estimator of the population 95th percentile (`E[F̂(max)] = 12/13 = 0.923`).
+What is false at `X ≤ 19` is the **label**: `p95` promises "one call in twenty was slower", and
+**no** timed call was slower. Refusing the number would discard a measurement the operator wants and
+can read out of the record anyway; refusing the *label* costs nothing.
+
+> **The ruling: when `r == X`, the report prints `max`, not `p95`, and `latencyMsP95` is `None`.**
+> The figure is the maximum, named as the maximum, carrying the same denominator and the same
+> level clause as any other tail figure.
+
+**This floor is derived, not chosen.** `X = 20` is not a convention: it is exactly the smallest `X`
+at which `ceil(0.95X) < X`, i.e. where a 95th percentile stops being the maximum. Nothing about it
+is tunable, which is what distinguishes it from §11.6's floor and is why the two are separate rules
+rather than one blended threshold.
+
+**Two consequences worth stating before someone rediscovers them.**
+- **`p50` here is not `statistics.median`.** At even X, type 1 returns the **lower** of the two
+  middle observations, not their mean. An implementer must not "fix" `latencyMsP50` to the median:
+  the mean of two observations is again a value no call took, and it would diverge from the same
+  document's Rule 4 quantile.
+- **Cross-run comparability is safe within a pack and only within a pack.** `Y` is fixed by the
+  pack, so at equal coverage both arms' tail figures are the *same order statistic* and the
+  comparison is like-for-like. Two packs' figures are different order statistics of different item
+  sets and are not comparable; nothing in the report may place them in one column.
+
+### 11.4 The denominator — `Y` is the item count, and the withholding is per *item*, not per field
+
+**`Y = len(run.items)`** — every item the run recorded — and **`X` = the count of items whose timing
+survived**. No item is removed from `Y` for any reason.
+
+The temptation is to net out items that were never timed, so that coverage reads better. Rule 3's
+question settles it: *which denominator keeps this sentence's claim true?* The sentence the
+denominator carries is a **refusal threshold** (§11.6), and a threshold is weakened by every item
+netted out of its base — a conditional denominator would let a run that timed 8 of 38 items report
+"8 of 8, full coverage", which is §4.3's laundering pattern with a different numerator. The
+unnetted, largest denominator is the conservative one *for this sentence*, the same way §3.4 Rule 3
+gives the observable floor the **unfloored** `n_effective`. It also keeps the latency line on the
+same base as every other rate in the report (§4.3's `k/n` discipline).
+
+**And the withholding is a property of the call, so it governs the whole FR-11 timing block —
+review G3-3, answered here rather than deferred.** `ttftMs`, the `prefillMsPer1kPromptTokens`
+input and `tokensPerSecond` are read off the **same response** as the discarded `latencyMs`. Whether
+LM-Studio-side TTFT includes the JIT load is, as G3-3 correctly says, **not established** — §2.5
+recorded the cold call's wall clock and not what `stats` reported on it. That is precisely why the
+rule goes the conservative way:
+
+> **A withheld item's *entire* timing block is withheld** — `latencyMs`, `ttftMs`, the prefill
+> figure and `tokensPerSecond` — and every aggregate over those fields carries the **same `X` of
+> `Y`** and the same floors as p50/p95. There is one coverage number per run, not four.
+
+The burden is on establishing that a field is *clean*, never on establishing that it is dirty: a
+per-field carve-out ("generation was after the load, so `tokensPerSecond` survives") cannot be
+verified from the response, and an unverifiable carve-out is how a confident wrong number gets
+printed. `tokensPerSecond` is FR-11 *diagnostic-only* and is still covered, because a diagnostic
+printed over an unstated subset is the same defect one severity down.
+**The evidence that would reopen this:** G3-3's own free measurement — record the warm-up's `stats`
+beside its wall clock on a known-cold load. If TTFT provably excludes the load, `ttftMs` and prefill
+may be carved back out with their own denominator; until that measurement exists, they are withheld.
+**The aggregates over `ttftMs` and prefill are medians**, so they take §11.6's **p50** gate, not the
+tail gate.
+
+### 11.5 The missingness is informative, and its direction is known exactly
+
+**Two producers of a withheld timing, and both are right-censoring** — which is what lets one rule
+cover them:
+
+- **Model-load contamination** (plan §3.6). The call ran with a JIT load inside it; a load costs
+  ~21 s against ~1.3 s for a warm turn (plan §2.5, §2.2).
+- **A scored call that hits `requestTimeoutSeconds`** (review G3-5, whose recommended disposition —
+  scored per the pack's rule, `latencyMs = None`, timeout count printed on its own line — this
+  section adopts and depends on; §11.9). A censored observation is **not a measurement**: storing
+  `latencyMs = 120000` would put the timeout *constant* into the p95, where it is by construction
+  the largest value, so the report would print a figure about the configuration rather than about
+  the model. That is the opposite bias to contamination and it is the more dangerous of the two,
+  because it arrives as a number rather than as a gap.
+
+Both share the one property the strings need: **the withheld call was slower than every timed call,
+and its true value is unknown.** Two exact consequences:
+
+- **`p50` is robust.** All withheld points sit above the median, so the reported median moves by
+  about `M/2` ranks in the densest part of the sample — the smallest displacement available anywhere
+  in the distribution.
+- **The tail figure is not, and the damage is computable rather than qualitative.** Since the `X`
+  timed items occupy full-run ranks `1 … X`, the printed figure sits at full-run rank `r`, so it is
+  — at worst — the quantile of the **whole run** at level
+
+  > **`L = r / Y`**, the **attained level**, with `r` the integer rank of §11.2.1.
+
+  `L` is a *lower bound* on the figure's true level (exactly `p` when nothing was withheld), so the
+  clause that prints it must **truncate**, never round to nearest — §3.4 Rule 3's rounding row,
+  applied to a new printed bound. The **gate compares the exact integer rank, never the
+  display-truncated level** (Rule 7's precedent: an invariant that inherits the presentation layer's
+  rounding fires or fails to fire by a display unit).
+
+Worked, exactly, at `Y = 38` — including plan §3.6's own `34 of 38` sketch:
+
+| X of 38 | r (tail) | L (tail) | r (p50) | L (p50) | printed |
+|---|---|---|---|---|---|
+| 38 | 37 | 97.3 | 19 | 50.0 | both |
+| 37 | 36 | 94.7 | 19 | 50.0 | both |
+| 36 | 35 | 92.1 | 18 | 47.3 | both |
+| 35 | 34 | **89.4** | 18 | 47.3 | **p50 only** |
+| **34** | 33 | **86.8** | 17 | **44.7** | **neither** |
+
+### 11.6 Floor 2 — the level floor, which refuses; and how the two floors divide the work
+
+**Yes, a latency figure is refused below a coverage threshold, and the refusal is at the *value*,
+not in the prose.** The reason it cannot be a prose qualifier is structural: `index.csv` carries
+`latencyMsP50` / `latencyMsP95` as **bare columns** and `compare` renders them in a summary table,
+so any qualifier living in a sentence is stripped the moment the number is read the way the tool
+intends it to be read. This component already has the right precedent — `coldLoadSeconds` is
+**absent, never `0`**, when it was not measured — and this is the same move.
+
+> A printed figure's **attained level may fall short of its nominal level by at most 5 percentage
+> points**. Below that the figure is **absent** — `None` in the record, an empty cell in
+> `index.csv`, and a refusal clause in the report.
+
+Evaluated in integers, with no float anywhere in the gate:
+
+```python
+print_p50  = (100 * r50 >= 45 * Y)      # nominal 50.0, floor 45.0
+print_tail = (100 * r95 >= 90 * Y)      # nominal 95.0, floor 90.0
+```
+
+**The 5-point tolerance is a chosen convention, and it is named as one.** Its basis is the band the
+headline figure's own name claims: `p95` names the top 5% of calls, so a figure whose attained level
+has slipped a further 5 points is sitting at the outer edge of a band **twice as wide as its name** —
+the last point at which the label still describes the number. The same 5 points serve `p50` rather
+than a second, level-scaled tolerance, for §3.2c's reason: two constants written in two sentences
+drift apart, and the tolerance's job — bounding how far the label may travel from the number — is
+measured in the same units at every level. *Reversal trigger:* a stakeholder who wants latency
+reported at any coverage moves this constant and nothing else; the strings, the ranks, the
+denominator and §11.3's identity floor are all unaffected by its value.
+
+**How the two floors divide the work — G3-11's question answered directly, with the numbers.**
+A ratio floor and a count floor do fail in different regimes, and here **neither dominates; they are
+complementary and only one of them refuses:**
+
+- The level floor implies a **count** floor, because `r ≤ X` forces `100·X ≥ 90·Y`, i.e.
+  **`X ≥ 0.9·Y`**. Every pack in §3.3's table has `Y ≥ 12`, so the level floor already requires
+  `X ≥ 11` on the tool-caller pack, `X ≥ 36` on the embedder's 38 and `X ≥ 81` on guard-judge's 85.
+  **G3-11's four-surviving-latencies case is refused outright at every declared pack** — it is not
+  merely renamed. A bare count floor would have to be re-chosen per pack to achieve that; the level
+  floor gets it for free because it is expressed against `Y`.
+- What the level floor **cannot** see is a *clean* small sample: at `X == Y == 12` the shortfall is
+  zero and the gate passes, correctly. That is exactly the regime §11.3's identity floor governs,
+  and it governs it by **renaming**, because the number is sound and only the label is not.
+
+So: **one floor for a sample that is short (refuse), one for a sample that is small (rename).** They
+are checked in that order, and the identity floor is evaluated first so that a refusal message names
+the figure the run would have had.
+
+**Four properties of the level floor, all checked this session, each falsifiable:**
+
+1. **It can never fire on a clean run.** At `X == Y`, `r/Y = ceil(p·X/100)/X ≥ p/100` by the
+   definition of `ceil`, so the shortfall is never positive. A run that timed every item always
+   prints both figures, at every X including X = 1.
+2. **A single withheld item never suppresses either figure at `Y ≥ 10`** (swept `Y ≤ 399`,
+   contiguous from 10). Every pack has `Y ≥ 12`, so the common disturbance — one TTL expiry — costs a
+   printed qualifier, not a printed number. **This is what makes the floor safe against G3-4:** if
+   the guard's first comparand is left as written and every cold-start run discards item 1, the floor
+   still prints both figures on every pack. The floor does not depend on G3-4 being fixed — but
+   G3-4 should be fixed anyway (§11.9), because a systematically absent item 1 is a missing
+   measurement dressed as a contamination event.
+3. **The two figures are gated independently, and the band between them is real.** `p50` survives to
+   lower coverage than the tail figure — at `Y = 38`, both print at `X ≥ 36`, `p50` alone at
+   `X = 35`, neither at `X ≤ 34`. That asymmetry is §11.5's robustness fact made visible rather than
+   averaged away, and it is why the p50-only string exists.
+4. **It bites on the plan's own example.** `latency n = 34 of 38` — §3.6's sketch — prints **no
+   figure at all** under this ruling. Four withheld items in one run is a disturbed run, and the
+   honest output is that it has no latency summary, not a summary of its fast calls.
+
+**What replaces the number.** Not silence: the refusal clause names the coverage, the mechanism and
+the direction of the bias, states that **the per-item timings remain in the run record — the summary
+is withheld, not the data** — and names the operator's remedy. The scored outcomes are untouched in
+every case and the report says so, because a reader who sees a refused latency block must not infer
+that the run's quality numbers are also suspect.
+
+### 11.7 The published block — the clause grammar, verbatim, with the condition selecting each
+
+**Why a grammar and not one string per case.** The block varies on three independent conditions
+(tail named `p95` or `max`; each of two figures printed or refused; anything withheld or not), which
+is twelve monolithic strings to keep in step — more surface than the defect they prevent, and this
+note has already paid once for two statements about the same thing drifting apart (§3.2c's trap). So
+the **slots and their order are fixed**, each variant is published verbatim, and §11.10 pins five
+fully rendered examples as test targets.
+
+**Substitutions.** `<X>` timed count · `<Y>` item count · `<M> = Y − X` · `<ML>` withheld for model
+load · `<MT>` withheld for timeout · `<TAIL>` = `max` when `r95 == X` (§11.3) else `p95` ·
+`<p50>`/`<tail>` in **milliseconds, rounded to the nearest integer** · `<s> = X − r95` ·
+`<L95>`/`<L50>` **truncated** to 1 dp.
+
+**The unit is milliseconds and the block never prints seconds.** `ItemResult.latencyMs` is a float
+in ms; `coldLoadSeconds` is the only latency field in this tool measured in seconds, it is reported
+separately (plan §3.6) and it never appears inside this block. **The values round to nearest**, not
+up and not down: unlike the MDD and the observable floor, a printed latency asserts no bound — it
+displays a measurement — so Rule 3's question returns "nearest" for this cell, and the direction
+must not be copied from the bounds beside it.
+
+**Slot 1 — the figures.** Exactly one variant, prefixed `Latency (client wall clock): `.
+
+- both printed → `p50 = 1284 ms, p95 = 3907 ms.`  *(or `max = 3907 ms` when `<TAIL>` is `max`)*
+- p50 only → `p50 = 1284 ms; no p95 is reported.`  *(`no max is reported` under `<TAIL>` = `max`)*
+- neither → `not reported for this run.`
+
+**Slot 2 — the denominator.** Always present. Two variants, on `M == 0`:
+
+> `latency n = 38 of 38 items; no timing was withheld.`
+
+> `latency n = 36 of 38 items; timings withheld: 2 (model load 2, request timeout 0).`
+
+The cause split is mandatory and both counts print even at zero: the two causes carry very different
+operator actions — a TTL reload is a re-run, a timeout is a hung model — and a reader who sees only
+the total cannot tell which run they have. Printing both at zero also makes the line's shape
+constant, so a reader who has learned it once reads every run the same way.
+
+**Slot 3 — the mechanism.** Present only when `M > 0`. One variant, true under both producers:
+
+> `Every withheld call was slower than every timed call — a model load costs about 21 s against a warm turn, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+
+**Slot 4 — the levels.** Omitted entirely when `M == 0` (nothing was withheld, so the levels are
+nominal and a clause restating that would be noise that drifts). Otherwise one variant:
+
+- both printed →
+  > `The p95 figure is at worst percentile 92.1 of the run's 38 items, and the p50 figure at worst percentile 47.3.`
+- p50 only →
+  > `The 95th percentile of the timed calls is at worst percentile 89.4 of the run's 38 items, more than 5 points below the level its name claims, so no p95 is reported for this run. The p50 figure stands as a lower bound: at worst percentile 47.3.`
+- neither →
+  > `The 95th percentile of the timed calls is at worst percentile 86.8 of the run's 38 items and the 50th at worst percentile 44.7, both more than 5 points below the level their names claim, so the 34 surviving timings are this run's faster calls rather than a sample of it. The per-item timings are in the run record — the summary is withheld, not the data. A latency summary for this model needs a re-run in which the model stays resident throughout, and the scored outcomes are unaffected either way.`
+- `X == 0` → replaces slots 2–4 entirely:
+  > `latency n = 0 of 38 items; no item's timing survived. The scored outcomes are unaffected; only the timing is absent.`
+
+*"at worst percentile 92.1"*, not *"the 92.1st percentile"*, deliberately: an ordinal suffix on a
+decimal is a rule an implementer has to encode and will get wrong, and the phrase carries no less.
+
+**Slot 5 — the tail figure's own reading.** Present only when a tail figure was printed. Two
+variants, and the condition is `<TAIL>`:
+
+- `p95` (i.e. `X ≥ 20`) → `Timed calls slower than the p95 figure: 1 of 36.`
+- `max` (i.e. `X ≤ 19`) → `At 12 timed calls the 95th percentile is the largest observation, so this run reports the maximum and no p95.`
+
+**Slot 6 — the standing label, on every render whatever the coverage.**
+
+> `Latency is descriptive: it is in no pack's verdictMetrics, it carries no verdict, no confidence interval and no Holm step, and no difference between two arms' latency figures is printed unless both arms report the same order statistic.`
+
+**Slot 7 — `compare`, per figure, when either arm has none.** Both arms' blocks always print in
+full, side by side; only the *difference* is withheld:
+
+> `No p95 comparison: qwen/qwen3-4b-2507 has no reportable p95 (latency n = 34 of 38 items).`
+
+**The condition on slot 6's last clause is `r_A == r_B`, not full coverage on both arms, and the
+difference matters.** The reason a difference is withheld is that at unequal coverage the two arms'
+figures are *different order statistics* (§11.3), so their difference is not a latency difference.
+Full coverage is a sufficient condition for equal rank, not the necessary one — and under G3-4 as
+written, no cold-start run reaches full coverage at all, so a full-coverage condition would suppress
+every latency difference this tool ever prints. The condition must be the one its own rationale
+names. **And no paired latency interval is printed on any path:** the intersection of two arms'
+timed items is doubly selected by the same informative mechanism, so §3.2d's paired bootstrap has no
+valid sample here even though latency is a continuous metric.
+
+### 11.8 Where the figures live
+
+- **`RunResult` / the record:** `latencyMsP50` and the tail figure are **`None` exactly when the
+  gate refuses them** (and `latencyMsP95` is additionally `None` whenever `<TAIL>` is `max`, §11.3),
+  never `0` and never a figure carrying a hidden qualifier. `X`, `Y`, `ML` and `MT` are stored beside
+  them, so every clause in §11.7 is reconstructible from the record alone.
+- **`index.csv`:** the cells are **empty exactly when the record's fields are `None`**. This is the
+  property that makes a qualifier-free column honest: *a populated `latencyMsP95` cell is always a
+  genuine 95th percentile whose attained level is within 5 points of its name.* That single sentence
+  is the whole argument for gating at the value rather than in the prose.
+- **`compare` and the per-run report:** §11.7's slots.
+
+### 11.9 What this needs from the plan — `architect`'s, and precisely scoped
+
+R-13 closes on the method side with this section. Four things it depends on are **plan-owned**
+(§7 rule 2 — the result schema and the harness surface are the plan's). The first three are review
+Pass 3 findings already routed there; they are restated here only as the *shape* this section needs,
+so one plan revision can serve both.
+
+1. **G3-5 — the timeout disposition, and it is load-bearing here, not merely adjacent.** §11.5
+   depends on a timed-out scored call yielding **`latencyMs = None`** (scored per the pack's rule,
+   run continues), which is G3-5's own recommendation. Under the alternative reading —
+   `latencyMs = 120000` stored as a measurement — **§11.5's mechanism inverts**: the tail figure is
+   then biased *high* by a configuration constant while the level clause claims it is a lower bound,
+   and §11.7's slot 3 becomes a false sentence. If the architect chooses to abort the run instead,
+   everything above still holds with `MT` pinned at 0.
+2. **G3-3 — the guard must null the whole timing block**, not `latencyMs` alone (§11.4). Without
+   that, the report prints one denominated figure beside three undenominated siblings drawn from the
+   same contaminated response, which is the defect §11.4 exists to prevent. G3-3's free measurement
+   (the warm-up's `stats` recorded beside its wall clock) is the evidence that could later carve
+   `ttftMs`/prefill back out; until it exists, they are withheld.
+3. **G3-4 — the guard's first comparand.** §11.6(2) shows the floor holds either way, so this is not
+   a blocker for R-13. It should still be fixed as G3-4 specifies (baseline = a probe taken *after*
+   the warm-up returns), because otherwise `MT`/`ML` count a systematically absent item 1 as a
+   contamination event and slot 2's line reports a mechanism that did not occur.
+4. **New, and this section's own ask: a `latencyMsMax` field and column.** §11.3 makes
+   `latencyMsP95` `None` for every run with `X ≤ 19` — which is *every* tool-caller run, the pack
+   that is the long pole. Without somewhere to put the maximum, the component's headline pack has no
+   tail figure in the record or in `index.csv` at all. The field's name is the plan's; the
+   requirement is that the number have a home. **Recommended alongside it:** columns carrying `X`
+   and `Y`, so coverage is visible to a CSV reader. That one is a readability improvement rather
+   than a correctness requirement — the gate is what makes the existing columns honest without it.
+
+Two consequences that are the standing sweep obligation of plan §7 rather than new asks:
+**§3.6's `latency n = X of Y` sketch and §5 test 15b's assertion are superseded by §11.7's slots** —
+the plan cites them, as §3.9 already cites §3.2e's verdict strings, and does not restate them; and
+**test 15b's scenario still renders a figure** (§11.6(2)), so the test remains satisfiable under
+either G3-4 disposition.
+
+### 11.10 Evaluation design — how to prove this implementation right
+
+Pure functions and rendered strings; no network, no model. Asserted **exactly** — every quantity
+here is an integer, a string, or a value copied from the input, so no tolerance is appropriate and
+any tolerance would hide the defect it was meant to catch.
+
+1. **Rank fixtures.** `rank(950, X)` for `X ∈ {1, 12, 19, 20, 38, 40, 85, 100}` equals
+   `{1, 12, 19, 19, 37, 38, 81, 95}`, and `rank(500, X)` equals `{1, 6, 10, 10, 19, 20, 43, 50}`.
+   Integer equality. This is §11.3's table and it is the one test that pins the estimator itself.
+2. **The bin-edge guard.** `percentile(range(25), permille=280)` returns the **7th** value; the float
+   form `math.ceil(0.28 * 25)` returns the 8th. The test asserts the integer form's answer, so a
+   "simplification" back to the float expression fails. Basis: `0.28 * 25 == 7.000000000000001`,
+   measured.
+3. **One implementation.** `modelbench.results` exposes no private percentile helper, and its
+   percentile *is* `stats.percentile` (identity, not equality of behaviour). This kills review M27's
+   defect class at the import boundary rather than at a call site.
+4. **The identity floor.** At `X = 19` the record's `latencyMsP95` is `None` and the rendered block
+   contains `max = ` and slot 5's `max` variant; at `X = 20` it contains `p95 = ` and
+   `Timed calls slower than the p95 figure: 1 of 20.` The boundary is asserted on both sides,
+   because a floor tested on one side is a floor with an untested inequality.
+5. **Level-floor boundaries, at `Y = 38`.** `X = 36` → both figures present; `X = 35` → `p50`
+   present and the tail `None`; `X = 34` → both `None`. Exactly §11.5's table, and it is the test
+   that fails if the 5-point tolerance is silently moved.
+6. **The clean-run invariant.** For every `X` in `1…200`, a run with `X == Y` has both figures
+   present. §11.6(1) is a theorem; a fire means the gate is wrong, not the data.
+7. **The whole-block rule.** An item withheld by the guard contributes to **none** of `latencyMs`,
+   `ttftMs`, prefill or `tokensPerSecond`, and all four aggregates print the **same** `X of Y`. A
+   test that asserts only `latencyMs` is the G3-3 defect written as a test.
+8. **String rendering.** Five blocks rendered against fixtures and asserted **verbatim**, the way
+   §7.2's resolving-power line is: `(X=Y=38)` · `(X=Y=12)`, the `max` case · `(X=36, Y=38)` ·
+   `(X=35, Y=38)`, p50 only · `(X=34, Y=38)`, both refused. Plus one with `MT > 0`, so the cause
+   split is exercised rather than assumed.
+9. **The unit guard.** Every printed figure in the block carries ` ms`, and no latency in the block
+   is printed in seconds. The ms/s boundary sits one field away from `coldLoadSeconds`, and a figure
+   printed in the wrong unit is a defect no reader can detect from the report.
+10. **Empty input.** `percentile([], permille=950)` raises; `latency_summary` over a run with no
+    timed item renders the `X == 0` variant. The absent-or-present decision lives in exactly one
+    place.
+
+**Acceptance:** all ten pass, and no stored record carries a `latencyMsP95` whose attained level is
+below 90.0 or whose rank equals its `X` — both checkable over `results/runs/` at any time, and
+together they are the invariant §11.8 sells.
