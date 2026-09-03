@@ -140,7 +140,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh** — S8b's author ended at 316k tok / 121 tools; the findings are self-contained) | `a213382761bc926ec` | in-flight (**holds the live DB**) | `storefront_api.py`, both test files | `analyst` (Pass 12) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
-| **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + a sweep of the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | in-flight | `docs/plans/salesperson-ui.md` v1.23 | teco-verified (step-row hashes) → — | — |
+| **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
 | **U30** — Plan v1.20: Pass 10's **three plan defects** + a ruling on whether `DemoNotSeededError` needs a table row | `architect` (**fresh**) | `a02d1c13201470da7` | **accepted — committed `c61b611`** (75/12). **Ruled by reading, not inferring** — one raise site, one calling route — and made it C9's *fourth source* rather than a new rule. **Closed two defects Pass 10 did not raise**: the reset-*mine* row was equally narrow, and the fix to reset-all's row creates a seven-instance question it answers in a new §5.3 block. **Recorded an alternative nobody proposed as considered-and-rejected**, so it is not re-opened silently. Hashes teco-verified: S8 held still under repair; only undispatched S13 moved | `docs/plans/salesperson-ui.md` **v1.20** | **none — plan gates stopped** | 140k tok / 49 tools |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
 | **U29** — Plan v1.19: **split Ruling 1 out of S8** into `S7c` ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed ×2) | **accepted — committed `732f5e0`** (27/19). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* and S8's now-vacuous tripwire recorded as the **correct** end state. **Self-reported a miss in its own v1.18 delivery** (§9 never received v1.18's map changes). Renamed off the `S7b` collision teco caught, and **argued for keeping two mentions as tombstones** rather than a clean grep — the sequence gap is otherwise unexplained plan-side, and closing it would recreate the collision | `docs/plans/salesperson-ui.md` **v1.19**; S7c `2f03c064`, S8/S9 unmoved by the rename | **none — plan gates stopped** | 181k tok / 3 tools (rename) |
@@ -1592,3 +1592,56 @@ output unchecked, which is me. And a tool that has produced a false positive is 
 tool — the correct response was to fix the counting rule and keep running it, not to stop trusting
 it. I nearly committed the ledger without re-running it, on the strength of having been burned by it
 before.
+
+## v1.23 — what the architect found that nobody asked for (teco, 2026-09-03)
+
+Two things in this delivery came from outside the brief, and both are the kind of finding that is
+cheap now and expensive later.
+
+**A delivered-code trap that would have silently defeated the design.** `set_turn_state(participant,
+'idle')` does not record `idle` — it **deletes** the `_turns` entry (`storefront.py:632`–`:646`,
+verified by me against `HEAD`). So a `lastTurn` latch stored inside the `TurnState` entry would be
+wiped by the worker on its way out, at the exact instant the latch is earned. The feature would have
+been unobservable, the tests would have been written against a mock that does not delete, and the
+symptom would have arrived at S15 as "the notice never shows." S9's row now carries a test that goes
+red if anyone stores it in the entry. Nothing in my brief pointed at this; it came from reading the
+code the contract lands on rather than the contract.
+
+**Survivorship bias in the risk measurement.** §6.4's Run B latency curve is computed over
+*completed* turns. A dead turn removes its own sample — so the slowest runs at the highest
+concurrencies delete themselves and **improve** the published number. R1 is the risk that curve
+exists to quantify, so this is a bias in the one measurement that matters, not a missing extra.
+`lastTurn` is what makes the failed turns countable at all; before it there was no wire signal. The
+harness already polls `/state`, so the count is nearly free. Accepted — it is argued, it is one
+clause in each of two places, and it is reversible.
+
+**And an argued absence I want on the record**, because the next reviewer will ask for it: no
+completeness-table row for `GET /shop/api/state` · `200 + lastTurn: 'failed'`. The table keys on
+`(route, response)` and `lastTurn` is always present on a `200`, so it distinguishes no response —
+unlike reset-all's `incomplete`, whose *absence* is load-bearing and is therefore a genuine shape
+difference between two `200`s. Adding the row would have put a pair in the table that today's app
+cannot produce, which is precisely what the gate's symmetric half ("a row with no producer fails the
+step") exists to catch. The architect would have been handing the next gate a false finding.
+
+**The convergence worth noting:** the architect hit the unescaped-pipe defect in its own draft
+(`'failed' | null` in a table cell), caught it with a pipe-aware check, and reported it unprompted —
+independently of my hitting the same defect in the ledger rows an hour earlier. Two agents, same
+construct, same hour, both self-caught. That is a property of the notation, not of either agent, and
+it is an argument for the check being run by whoever touches a table rather than by the integrator
+at the end.
+
+## The same check, wrong a second time — and why it stays (teco, 2026-09-03)
+
+Immediately after recording that the pipe-aware ledger check had caught a real defect, I ran it again
+and it reported **41 malformed rows**. All 41 were fine. The counting rule was right this time; the
+**scope** was wrong — I had dropped the break at the end of the ledger table, so it swept every other
+table in the document (the OQ decisions, the doc-impact list, the blocker table, the K-060 evidence
+grid) and measured each against the ledger's seven-column header.
+
+Three failures now from one small check: escaped pipes miscounted, a column silently dropped in rows
+I wrote, and a scope that ran past the table. Only the middle one was a defect in the document. The
+useful reading is not "the check is unreliable" — it is that **a check needs its own controls the
+same way the code under review does**, which is the exact standard Pass 10 and Pass 11 have been
+holding this build to (a positive control that finds a known defect, a negative one that stays
+quiet). Mine has had neither; it has been a one-liner I re-derive from memory each time, and it has
+been wrong twice out of three in a way that a two-line control would have caught instantly.
