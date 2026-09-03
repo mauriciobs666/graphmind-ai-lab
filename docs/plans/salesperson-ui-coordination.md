@@ -122,7 +122,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S6 gate** — Pass 6 on the storefront core: can the cache reach an auth decision? | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — the S3-gate reviewer, adjacent surface) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 2 minor) — committed `a38090a`. **Answered the auth question structurally, not by inspection**: all 8 `_records` touch sites enumerated, exactly 2 reads, `resolve_token` reaching the map only via write-side helpers, no caller outside the module, exception route **fail-closed**. **Found the pre-planted vacuous assertion again** (S6-3, 3rd time this reviewer has). **Disagreed with teco's routing of the `SERVER.md` §1.5 carry-forward and was right** → follow-up 15 | `docs/reviews/salesperson-ui-impl.md` `## Pass 6` + Appendix J | — | 175k tok / 23 tools |
 | **S6b** — close Pass 6: pin `_cache_put` (S6-1), give the package scan a control (S6-3), reshape the constant-time tripwire (S6-4) | `coder` | `a5db169a0966bad59` (resumed — its own review findings, same two files) | **accepted — committed `5594134`**, suite **2441** teco-verified solo; `storefront.py` +12/-0, comment only. **Probed for the *false* positive, not just the true one** — a benign local rename that the over-tight tripwire used to redden now passes, which is what "over-tight" actually means and almost nobody tests. Re-grounded the stale env-var docstring on something **executable** (the test reads `SERVER.md` and asserts all seven names appear), so a rename that misses the doc reddens instead of drifting | `storefront.py`, `test_storefront.py` | `analyst` Pass 6 → **closed** | 232k tok / 24 tools |
 | **S6c** — S6+S6b close-out in `falkor-chat/docs/HISTORY.md` (S3's "Review close-out" precedent) | `coder` | `a5db169a0966bad59` (resumed — **holds the observed figures**; a fresh agent would reconstruct them, which is the fabrication risk) | **accepted — committed `62aa638`**, +74/-0, one file; storefront files verified untouched and no suite run, so S7's DB window was never contended. **The resume-for-figures call paid off exactly as intended**: it attributed the three *pre-fix survival* counts to the review's Appendix J rather than claiming them, and **left pass counts out** where it only had them against a different test-count denominator — declining to reconstruct rather than producing a plausible total | `falkor-chat/docs/HISTORY.md` | — | 235k tok / 5 tools |
-| **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | `a26100cb193d95085` | in-flight (**holds the live DB**; carries the open `lookup` question as an explicit deliverable) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
+| **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | `a26100cb193d95085` | delivered — **committed `dd78e70`**, suite **2473** teco-verified solo; +465/-9 and +950, two files. **13 mutations killed, 4 benign refactors kept green** (S6b's false-positive discipline, adopted unprompted). **Found a delivered-code gap that blocks two of its own deliverables** — `services.filter_products` projects no `productId` (teco confirmed at `repository.py:2762`) — and shipped a documented `1+n` workaround rather than editing a delivered step's file. **Proved a plan statement false**: the post-reset profile re-write `MERGE`s the `Customer` back, so §4.8's delete inventory is true of the delete and false of the end state. **Answered the `lookup` question: no** | `storefront.py`, `test_storefront.py` | `analyst` Pass 7 → — | 227k tok / 81 tools |
+| **S7 gate** — Pass 7 on the largest impl diff + **three rulings** teco will not self-decide | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — reviewed S6 in this same module) | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 7` | — | — |
 | **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
 | **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
 | **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
@@ -1022,6 +1023,33 @@ workspace, and pinning it would make it wrong for its purpose.
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
 
+## Held: one consolidated plan touch (v1.18) — deliberately **not** dispatched yet
+
+Four corrections to `docs/plans/salesperson-ui.md` are known or pending. They are being **batched
+into one architect edit**, not dispatched as they arrive — the same discipline Pass 8 prescribed for
+the review findings, and for the same reason: a plan edited four times is four chances to move a
+step row that a dispatched agent is building against.
+
+Certain, from S7's delivery:
+1. **§4.8's delete inventory is false about the end state.** The post-reset profile re-write
+   `MERGE`s the `Customer` back, so it is deleted and then recreated carrying the name and nothing
+   else. (The S7 gate is ruling on whether the substitute assertion — the `PLACED`/`Cart` subgraph is
+   empty — is the right fact.)
+2. **S8 must pass `storefront_dir` from `create_app(storefront_dir=…)`** into the `Storefront`
+   constructor, or every `imageUrl` is `null` — an S7-introduced wiring obligation that exists in no
+   plan row.
+3. **§4.8's "reset mine cancels that participant's queued turn" is an S9 obligation**, and the
+   ordering matters: cancellation goes **in front of** S7's wait, never in place of it.
+
+Pending the gate's ruling:
+4. **The catalog-id gap** — whether §5.2's `productId` requirement is met by S7's `1+n` workaround or
+   by the one-line `repository.filter_products` fix, which has an LLM-context consequence
+   (`tools.FilterProductsTool` returns those rows verbatim to the salesperson agent).
+
+**Note that plan-gate closure does not mean plan-edit closure.** What Pass 8 stopped was commissioning
+another *review pass* per revision; a factual correction proved by an implementation still lands, and
+is verified by `diff` plus the step-row hashes rather than by a Pass 9.
+
 ## A `HISTORY.md` entry body is not corrected when a later step supersedes it (teco, 2026-09-02)
 
 S6c offered a one-line fix: the S6 entry body still says the constant-time property is "pinned by an
@@ -1052,6 +1080,20 @@ currently carries.
 would retire the `_cache_put` refresh S6b has just pinned. The step that answers it is S7, so S7's
 brief carries the question as an explicit deliverable: *did you need it?* — evidence from having
 written the code, not a prediction.
+
+**S7's answer, 2026-09-02: no — and the reasoning is better than the grep.** `grep '\.lookup('` over
+the package returns only the definition. But the interesting part is `reset_participant`, the one
+S7 method that *does* need `displayName` and `language`: `lookup` is the **wrong source** for them,
+because its cached `thread_id` is stale the instant the reset returns, so using it would require a
+`forget` first — a plain graph read with extra steps. It takes the authenticated `ParticipantRecord`
+instead, which S8 has just re-read via `resolve_token` on that same request, and whose two needed
+fields the reset does not touch. So **S7 writes *through* the cache and reads it never** (the
+post-reset `_cache_put` is pinned by mutation M6).
+
+**The decision therefore moves to S9's close, not S7's.** S9's `enqueue_turn(ctx, participant, posted)`
+receives the record from the route, so if it also needs nothing, `lookup` ends the build with no
+production caller at all — and S8's source tripwire would be guarding a method nothing calls. The
+S7 gate has been asked to verify the grep and the staleness argument before that decision is taken.
 
 **Why no type-level fix was taken instead** (S6b's argued "no", verified rather than asserted):
 nothing type-checks this repo — no mypy or pyright config anywhere, no pre-commit hook, ruff selects
