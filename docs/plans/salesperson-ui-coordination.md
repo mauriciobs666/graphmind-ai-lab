@@ -138,7 +138,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **v1.21** — §5.3's owed row, §4.9's false negative claim, §5.1's S10 clause | `architect` (fresh) | `ad81e9cdb12dfbb28` | **accepted — committed `ac6741c`** (54/10). **Killed by a 529 after the edits, before the report; resumed rather than respawned** — the work was on disk. **Derived the owed row from `services.post_message` rather than transcribing my brief.** Found the row falsifies two sentences v1.20 asserted twice (§5.2 *and* §5.3: "join is the only route that can produce this token") — **left alone, §5.3 would have carried the new row and a sentence denying it could exist**. Found the generation rule did not derive the row either, and added a third narrowing (a *measured* route set) so it is derived rather than remembered. **P10-12 named three FastAPI doc routes; there are four** — teco re-verified by enumerating `create_app(...).routes` | `docs/plans/salesperson-ui.md` **v1.21**; S10 the only moved row, teco-verified | **none — plan gates stopped** | 146k tok / 3 tools (resumed leg) |
 | **S8b gate** — Pass 11: is P10-1 closed? is `SERVICE_ERROR_ROUTES` a measurement? + S8b's three counter-claims against Pass 10 | `analyst` (**fresh, not Pass 10's author**) | `a6adcb0f5a590acce` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 4 minor, 4 nits), committed `a80a232`. **All six Pass 10 mutation survivors die**; 18 mutations on byte-copies, all five files md5-matched to `HEAD` after. **P10-1 is closed as reported and its class re-opens one bucket over** — `INHERITED_HANDLERS` excuses 11 of 17 handlers by prose and credits a sweep that arms only `ServiceError` faults (P11-1, N-F escaped), and `_raised_refusals` reads only `StorefrontHTTPError` calls while its own docstring and `StarletteHTTPException`'s exemption both claim it catches a bare `HTTPException` (P11-2, N-E escaped green). **Adjudicated S8b's three counter-claims: 1 upheld-with-correction (the escape count is *two*, not three — S8b's own docstring concedes `UnknownActorError` is unreachable through the wire), 1 upheld on half, 1 not sustained** (P10-1 asserted no blast radius, so the measurement strengthens an absence rather than fixing an error). Verified independently by me: `ws:acme` 14 labels / `Message` 52 / `Entity` 544 / `WorkflowRun` 21, unchanged; `falkor-chat/` tree clean; P11-2 and P11-5 reproduced at source. | `docs/reviews/salesperson-ui-impl.md` `## Pass 11` + Appendix P11-A | — | 198k tok / 86 tools |
 | **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh**) | `a213382761bc926ec` | **delivered — committed `2e27835`** | `storefront_api.py` (+45/−3), `test_storefront_api.py` (+434/−31, 7 tests) | `analyst` (Pass 12) → — | 196k tok / 77 tools |
-| **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` | — | — |
+| **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | **NEEDS CHANGES** (0 blockers, 1 major, 1 minor, 2 nits) — committed `fb11268` | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` + Appendix P12-A | — | 181k tok / 70 tools |
+| **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 8 of 8); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed — wrote the guard; 196k tok / 77 tools) | in-flight (**holds the live DB**) | `storefront_api.py`, `test_storefront_api.py` | `analyst` (Pass 13) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1709,3 +1710,64 @@ than waiting produces.
 It also does not need the live database, which makes it the one unit available to run in parallel
 during a gate. That is why it is tempting, and it is not a good enough reason. It gets dispatched as
 a single unit once the S8 chain closes.
+
+## My parallel dispatch was file-safe and semantically coupled (teco, 2026-09-03)
+
+I dispatched **S8c** and the **v1.22 plan touch** in the same turn, on the reasoning that S8c edits
+`falkor-chat/**` and the architect edits `docs/plans/**`, so there is no file overlap and no shared
+database. Both were true, and the dispatch was still wrong.
+
+v1.22's item 3 asked the architect to decide **where S9's workflow trigger runs**. It decided: inside
+the turn-queue worker, so the call S9 adds is `Storefront.enqueue_turn` doing
+`self._services.start_workflow_run(...)`, with the router calling `shop.enqueue_turn(...)`. S8c,
+running concurrently, was building the guard whose entire purpose is to **redden when S9 adds that
+call** — against my brief's instruction to pin "today's three-name `services.` set", which described
+the shape of the call under the placement that was still undecided when I wrote it.
+
+So the guard's target moved after the brief and before the deliverable, and Pass 12 measured the
+result: the two realistic spellings survive, and the only one that reddens is the spelling S9 has
+now decided against. §5.1's S9 row acquired a done-condition that cannot be met.
+
+**The rule I was applying** — serialize on shared files and shared database state, parallelize
+otherwise — is the one written into my own operating instructions, and it does not cover this. The
+coupling here is neither of those. It is that **one unit was deciding a fact the other unit's
+deliverable had to encode.** No file is shared; the *specification* is.
+
+**The test I should have applied, and will:** before dispatching two units in parallel, ask not only
+*do they touch the same files* but *does either one decide something the other must already know?*
+A unit whose brief contains a phrase like "today's X" or "the current shape of Y" is asserting a fact
+about the world; if a concurrent unit is authorised to change that fact, the two are sequential
+whatever their file sets say. Here the tell was in my own brief text — I told the architect the guard
+was being written against today's three names **in the same message** that asked it to decide the
+placement those names depend on. The dependency was legible in the words I wrote and I did not read
+them as a dependency.
+
+**Two things this does not mean.** It does not mean the override was wrong: Pass 12 explicitly
+upholds building the guard before S9 and recommends an S8d rather than folding the fix into S9,
+because fixing it inside S9 reproduces exactly the born-accommodating failure the split existed to
+prevent. And it does not mean S8c erred — its guard was under-scoped independently of the placement
+question (3 of a true reach of 8), but the *certainty* of the miss came from my sequencing, and I
+said so in its brief so it would not over-correct.
+
+## Pass 12 found the seventh instance inside the guard built to stop the sixth (teco, 2026-09-03)
+
+The signature defect of this build — **a test that cannot exercise the rule it names** — has now been
+found seven times, and the seventh was inside the mechanism constructed to close the sixth. The
+excuses in `INHERITED_HANDLERS` say *"no storefront route calls layer X"*. A route reaches that layer
+two ways: directly, and one hop through `shop.<method>`. The reader saw the first only. **Stated rule
+broader than implemented reach**, which is the same sentence that describes P10-5, P11-2 and P11-4.
+
+I confirmed it by construction rather than by mutation, which is worth recording as the cheaper
+method: the reader walks only the router function and matches `ast.Attribute` whose `.value` is a
+plain `Name` equal to `services`, so `shop._services.start_workflow_run(...)` — an Attribute on an
+Attribute — is invisible by parse shape, and anything inside `Storefront` is not in the parsed source
+at all. No execution needed; the claim is decided by reading fifteen lines. When a finding is about
+what a mechanism *can see*, the AST it walks answers faster than any mutation.
+
+**And a measurement lesson from the same pass, which I want kept.** Adjudicating S8c's dispute of
+Pass 11's N-K kill count, Pass 12 ran the mutant across `PYTHONHASHSEED` 0–7 and got
+**1, 2, 1, 2, 0, 1, 1, 3**. Pass 11 saw 2; S8c saw 1; both were faithful observations. **At seed 4
+the mutant survives the whole file.** A bare count in a mutation ledger is one draw from a
+distribution, and this build has been treating such counts as facts for twelve passes. Where a kill
+depends on `set` iteration order over `str`, the honest ledger entry is a distribution or a fixed
+seed — not a number.
