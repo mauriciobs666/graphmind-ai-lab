@@ -33,9 +33,9 @@ Stakeholder decisions, 2026-09-02:
 |---|---|---|---|---|---|---|
 | U1 — Plan gate: review plan v1.1 + `-ml` note against the requirements | `analyst` | `a0e3b74e34e1d4c40` | delivered | `docs/reviews/small-model-benchmarking.md` — **needs changes**: 3 blockers, 11 majors, 8 minors, 3 nits | — (is the gate) | 174k tok / 33 tools |
 | U2 — S0 component skeleton | `coder` | `aa5b28bd14869593c` | accepted | `model-bench/**` (15 files), root `AGENTS.md` (+8 lines) | teco-verified — see note | 113k tok / 30 tools |
-| U3a — Revise the method note for B-1/M-1 + the new sampling design | `data-scientist` | `a394671cfc28bef87` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.2 | `analyst` re-gate (Pass 2) → — | — |
-| U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan | `architect` | `a3e258f27b83e764d` | delivered | `docs/plans/small-model-benchmarking.md` **v1.2** — 3 blockers + 13 majors + 8 minors + 4 nits all dispositioned | `analyst` re-gate (Pass 2) → — | 184k tok / 40 tools |
-| U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | — | queued | `docs/requirements/small-model-benchmarking.md` | folded into the Pass 2 re-gate | — |
+| U3a — Revise the method note for B-1/M-1 + the new sampling design | `data-scientist` | `a394671cfc28bef87` | delivered | `docs/plans/small-model-benchmarking-ml.md` **v1.2** (+562/−130), new §3.4 stats contract | `analyst` re-gate (Pass 2) → — | 168k tok / 56 tools |
+| U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | in-flight (v1.3) | `docs/plans/small-model-benchmarking.md` **v1.2** — 3 blockers + 13 majors + 8 minors + 4 nits all dispositioned | `analyst` re-gate (Pass 2) → — | 184k tok / 40 tools |
+| U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | in-flight | `docs/requirements/small-model-benchmarking.md` | folded into the Pass 2 re-gate | — |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
@@ -120,3 +120,38 @@ re-drawn against U4's actual delivery before dispatch.
   constructible, and was replaced by `validate_pack`'s AST walk plus `run` failing closed. Recorded
   because a declined finding that is silently dropped is the failure mode the disposition table exists
   to prevent.
+
+- **2026-09-02 — U3a delivered, note v1.2, and it corrects two of its own v1.1 numbers.** New §3.4
+  fixes B-1 structurally rather than advisorily — `PairedOutcomes.from_units()` is the only
+  constructor and raises on a repeated unit id, `resolving_power()` takes its arguments keyword-only
+  **with no defaults** (a `1.0` default would rebuild B-1 by omission), and `verdict()` refuses to
+  let McNemar decide whenever `design_effect > 1.0`. Recomputed by exact search: the "fully
+  clustered ~65 pp" figure was a `8/n` mnemonic (exact **57.8 pp**), the boundary tier's "53 pp" is
+  **47.6 pp**, and v1.1 called the CI width ratio the design effect when Kish DEFF is that ratio
+  **squared** — an implementer following v1.1 would have overstated effective *n* by ~2.7×.
+  **M-1 is not a numerical defect:** `1.96` is a typographic rounding of the exact constant, moving
+  every fixture bound by ≤ 3×10⁻⁴ pp; it is pinned for equality-assertion reproducibility, not
+  correctness.
+- **2026-09-02 — integration defect caught by teco, not by a gate: the two parallel revisions
+  diverged.** Same two concepts, two vocabularies (`verdictMetrics`/`primaryMetric` in the plan vs
+  `primaryMetrics`/`headlineMetric` in the note), plus a **semantic** divergence on `guard-judge`'s
+  pair — the plan gave a verdict to `advanceRecall`, while the note requires both co-primaries be
+  error rates in the **same direction** (`falseAdvanceRate`/`falseSuspendRate`). Routed back to the
+  `architect` (resumed) with naming authority, since the manifest schema is the plan's; the note
+  will be aligned to whatever it picks. **The lesson is the dispatch's, not the agents':**
+  file-disjoint is not interface-disjoint — two units revising documents that reference each other's
+  vocabulary need the shared vocabulary pinned in both briefs, or serializing.
+- **2026-09-02 — a premise teco gave the stakeholder was wrong, and is being corrected to them.**
+  Option 1 of the sampling decision was presented as "same total run budget". It is not: 12×1 is
+  **~one quarter** of the previous inference budget (~80 turns per model against ~320). What is
+  unchanged is the *authoring* budget. The decision itself still stands on its own merits — the old
+  nominal 48 had DEFF = 4 and an effective *n* of 12, so the honest floor (50.0 pp) and MDD₈₀
+  (57.8 pp) are **identical before and after**; only the printed *n* changed, and the tool lost a
+  claim it could not support rather than losing power. But the stakeholder is owed the consequence:
+  the **15–50 pp band is dark**, so the ~30 pp ministral duplicate-instruction defect is not
+  resolvable at any observed outcome, and per-turn positions 5+ (n=8, then n=4) are descriptive
+  only. Buying it back means 48 distinct scripts × 1 run (floor 12.5 pp), whose binding constraint
+  is FR-19 human verification of 36 more scripts, not compute. Recorded in `-ml` §10 with a costed
+  reversal trigger — *the first tool-caller comparison returning "not distinguishable" with an
+  observed difference in the 15–50 pp band*. **Nothing in this pass is blocked on it**; the decision
+  point is before S6, which is out of scope here.
