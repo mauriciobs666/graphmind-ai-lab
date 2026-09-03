@@ -57,7 +57,7 @@ Stakeholder decisions, 2026-09-02:
 | U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | **accepted** — `aebb611` | `docs/plans/small-model-benchmarking.md` v1.8 (+434/−62) | U15 → — | 173k tok / 80 tools |
 | U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | **accepted** — `ff499d5` | `docs/reviews/small-model-benchmarking.md` `## Pass 3` | self → **needs changes** (2 blockers, 6 majors) | 174k tok / 55 tools |
 | U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed, `aee9ac26e4c41f8ea`) | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.9 | re-gate → — | — |
-| U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.9 | `analyst` → — | — |
+| U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | in-flight | `model-bench/**` | re-gate (both, fresh) → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
@@ -933,3 +933,53 @@ existed in any commit) — but the edit list was understated by a fourth site th
 silently wrong (`conftest.py:39` still declares residency elements as `{modelKey, sizeBytes}` against
 §3.4.4a's `{id, state}`, and `REQUIRED_PRESENT` never checks element shape). A verified claim and an
 incomplete one, in the same sentence.
+
+
+### R-13 closed, and the two floors are derived rather than chosen
+
+`460940c`. R-13 had been open across several plan revisions; v1.8 forced it by adding a second input
+(the latency sample can be shorter than the item count) and the plan gate added a third (a minimum
+surviving-sample floor). All three are answered in one new §11.
+
+**Every figure I could check, I checked, and all of it holds exactly:**
+
+- `0.28*25 == 7.000000000000001`, so `math.ceil` returns rank **8** where **7** is exact — the
+  motivation for integer ceiling division is a real float defect, not a stylistic preference.
+- `ceil(0.95*X) == X` for every `X <= 19`, with **20** the first divergence. So the identity floor's
+  boundary is **derived**: below it, "p95" *is* the maximum, the number is sound and the **label** is
+  false. That is this project's signature defect shape, found one document above the code.
+- The level floor implies `X >= 11 of 12`, `36 of 38`, `81 of 85`.
+- **The plan's own sketch `latency n = 34 of 38` prints no figure at all** (`r95 = 33`,
+  `3300 < 3420`). A ruling that contradicts the sketch that prompted it is a ruling that bit.
+
+**The units trap, third variant, and the cheapest one yet.** Checking the `round` half-to-even
+finding, I first wrote `0.5*X` and found no tie at all — which would have read as a clean refutation.
+The shipped expression is `int(round(pct/100 * (len-1)))`, and against **that** the claim reproduces
+exactly: order statistic 3 of 4 (upper middle), 3 of 6 (lower middle). The generalisation is now
+three-for-three: **read the shipped expression before re-deriving anything from it.** What made the
+correct check obvious on the second attempt was that the delegate had named the exact expression and
+the exact measured values — briefs should keep demanding that.
+
+**A seam the ruling exposes rather than creates:** there are **two** `_percentile` implementations,
+`results.py:541` and `stats.py:224`, with different signatures and different error behaviour. The
+ruling mandating one shared implementation is therefore a real change with a real seam. Two homes for
+one definition is the same drift this component has now hit for the note's strings, the plan's
+restatements, and now an estimator.
+
+**Four requirements routed to `architect` mid-revision**, the first of which retroactively constrains
+a fix already in scope: **G3-5 is load-bearing for §11.5, not adjacent to it.** §11.5 depends on a
+timed-out call yielding `latencyMs = None`; under `latencyMs = 120000` the mechanism **inverts** —
+the tail biased *high* by a config constant while the published clause claims it is a lower bound.
+So a finding filed as "an unspecified disposition" turns out to be one of exactly two admissible
+values. Also routed: whole-timing-block nulling (G3-3), G3-4 as fix-anyway-not-blocker (the floors
+hold either way at `Y >= 10`, but the cause counts would otherwise report a mechanism that did not
+occur), and a **new `latencyMsMax` field** — a consequence, not a preference, because the identity
+floor makes `latencyMsP95` `None` for *every* tool-caller run and the long-pole pack would otherwise
+carry no tail figure anywhere in the record.
+
+**One judgement call I made rather than escalating:** §11.7's rendering used illustrative millisecond
+values, because LM Studio held no resident model and a warm sample needed a load. I ruled republish
+with measured numbers. A method note publishing invented latencies — even labelled — is the same
+shape as the defect this component exists to refuse, one document up; and one ~21 s JIT load is
+exactly what the harness itself will pay. Cheap to fix, and expensive later to re-establish which
+numbers were real.
