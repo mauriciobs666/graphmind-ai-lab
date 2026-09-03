@@ -32,9 +32,12 @@ import hashlib
 import hmac
 import inspect
 import re
+import threading
+import time
 from pathlib import Path
 
 import pytest
+from redis import exceptions as redis_exceptions
 
 from falkorchat import config, db, storefront
 from falkorchat.repository import Repository
@@ -45,8 +48,15 @@ from falkorchat.storefront import (
     TURN_QUEUED,
     TURN_THINKING,
     DemoNotSeededError,
+    OrderTransitionRefusedError,
     ParticipantRecord,
+    QuiesceTimeoutError,
+    ResetStateUnknownError,
     Storefront,
+    StorefrontError,
+    UnknownOrderError,
+    UnknownParticipantError,
+    UnscopedParticipantError,
     hash_token,
     parse_bearer,
 )
@@ -686,3 +696,943 @@ def test_the_workspace_defaults_to_the_single_config_variable(services):
 
     assert shop.ws == config.WS_ID
     assert shop.locales == config.STOREFRONT_LOCALES
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# S7 — state, reset, catalog, images, order lifecycle
+# ═══════════════════════════════════════════════════════════════════════════
+
+# The catalog lives in the **global** `reference` graph (`docs/QUERIES.md` §15),
+# which has no repository write method — it is seed-script-only
+# (`scripts/seed_catalog.sh`). Fixtures are therefore a raw, test-only write,
+# the same posture `tests/test_repository.py::_seed_products` takes, and every
+# catalog test goes through `catalog_repo` so `reference`'s node data is wiped
+# (its schema — the `Product` index/constraint pair — survives a DETACH DELETE).
+
+
+def _catalog_rows(n: int) -> list[dict]:
+    """`n` synthetic products with `seed_catalog.sh`-shaped deterministic slugs,
+    priced so `price ASC` is `p-001 … p-0nn`."""
+    return [
+        {
+            "productId": f"widget-{i:03d}", "name": f"Widget {i:03d}",
+            "nameNormalized": f"widget {i:03d}", "category": "Accessories",
+            "categoryNormalized": "accessories", "price": float(10 + i),
+        }
+        for i in range(1, n + 1)
+    ]
+
+
+def _seed_catalog(conn, rows):
+    db.reference_graph(conn).query(
+        "UNWIND $rows AS row "
+        "CREATE (:Product {productId: row.productId, name: row.name, "
+        "                  nameNormalized: row.nameNormalized, "
+        "                  category: row.category, "
+        "                  categoryNormalized: row.categoryNormalized, "
+        "                  price: row.price})",
+        {"rows": rows},
+    )
+    return rows
+
+
+def _ticking_clock(start: int = 1_700_000_000_000):
+    """A strictly increasing ms clock for `Services`.
+
+    `Order.placedAt` ties break by `orderId DESC`, and `orderId` is a `uuid4`
+    — so two orders placed inside the same millisecond would make "the most
+    recently placed order" a coin flip. Every timestamp distinct removes the
+    tie rather than betting on the wall clock ticking between two calls.
+    """
+    counter = iter(range(start, start + 1_000_000))
+    return lambda: next(counter)
+
+
+@pytest.fixture()
+def catalog_repo(conn, wf_repo):
+    """`wf_repo`, plus a teardown that leaves `reference` **empty**.
+
+    `wf_repo` wipes `reference` on *setup* only, so whichever test touches it
+    last leaves its fixture products behind in a **global** graph — and
+    `scripts/seed_catalog.sh` `MERGE`s by `productId`, so a stray `widget-…`
+    survives the re-seed a default `pytest` run already obliges and then makes
+    `scripts/verify_catalog.sh` report a catalog mismatch (17 products,
+    expected 15) to whoever runs it next (`falkor-chat/AGENTS.md`).
+    """
+    yield wf_repo
+    db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
+
+
+@pytest.fixture()
+def stocked(conn, catalog_repo):
+    """A `Storefront` on a wiped `ws:test` **and** a wiped `reference`, with the
+    demo `Agent` registered. Catalog seeding is per-test."""
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    return _storefront(Services(catalog_repo, clock=_ticking_clock()))
+
+
+def _assets(root: Path, names) -> Path:
+    """A fixture asset directory in the served shape: `<root>/products/<file>`."""
+    products = root / "products"
+    products.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (products / name).write_bytes(b"\x00")
+    return root
+
+
+# ── get_state (§5.2) ─────────────────────────────────────────────────────────
+
+
+def test_get_state_reports_profile_cart_order_and_turn(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(3))
+    record = stocked.join("Ada", "pt-BR")
+    ctx = stocked.context_for(record.participant_id)
+    services = stocked._services
+    services.save_profile(ctx, delivery_address="12 Rua das Flores")
+    services.add_cart_item(ctx, product_name="Widget 001", quantity=2)
+    services.add_cart_item(ctx, product_name="Widget 002", quantity=1)
+    stocked.set_turn_state(record.participant_id, TURN_QUEUED, queue_position=2)
+
+    state = stocked.get_state(ctx)
+
+    assert set(state) == {"profile", "cart", "order", "turn"}
+    assert state["profile"] == {
+        "name": "Ada", "deliveryAddress": "12 Rua das Flores",
+    }
+    assert [line["name"] for line in state["cart"]["items"]] == [
+        "Widget 001", "Widget 002",
+    ]
+    assert state["cart"]["total"] == pytest.approx(11.0 * 2 + 12.0)
+    assert state["order"] is None
+    assert state["turn"] == {"state": TURN_QUEUED, "queuePosition": 2}
+
+
+def test_get_state_of_a_fresh_participant_is_the_join_shape(stocked, conn):
+    """The join name is already in the profile (§4.10) — everything else empty.
+
+    The positive control for the reset-parity test below: `name` is `"Ada"`
+    here *and* after a self-reset, and `None` only if the profile write is
+    missing.
+    """
+    _seed_catalog(conn, _catalog_rows(1))
+    record = stocked.join("Ada", "en")
+
+    state = stocked.get_state(stocked.context_for(record.participant_id))
+
+    assert state == {
+        "profile": {"name": "Ada", "deliveryAddress": None},
+        "cart": {"items": [], "total": 0},
+        "order": None,
+        "turn": {"state": TURN_IDLE, "queuePosition": 0},
+    }
+
+
+def test_get_states_order_block_is_the_repository_read_not_a_local_composition(
+    stocked, conn
+):
+    """§5.1's S7 row: the order block comes from `services.get_current_order`.
+
+    Written so a storefront-side reconstruction cannot pass. Two orders are
+    placed, the cart is refilled after each, and the frozen line of the
+    **older** order names a product the current cart no longer holds — so
+    anything composed here from cart/profile parts reports the wrong order, the
+    wrong lines, or both. The repository read answers "most recently *placed*,
+    whatever its status" (`docs/QUERIES.md` §18.8), which is the second order
+    with its own frozen line, while the live cart holds a third product.
+    """
+    _seed_catalog(conn, _catalog_rows(3))
+    record = stocked.join("Ada", "en")
+    ctx = stocked.context_for(record.participant_id)
+    services = stocked._services
+    services.add_cart_item(ctx, product_name="Widget 001", quantity=1)
+    first = services.place_order(ctx)
+    services.add_cart_item(ctx, product_name="Widget 002", quantity=3)
+    second = services.place_order(ctx)
+    services.add_cart_item(ctx, product_name="Widget 003", quantity=1)
+
+    order = stocked.get_state(ctx)["order"]
+
+    assert order is not None
+    assert order["orderId"] == second["orderId"]
+    assert order["orderId"] != first["orderId"]
+    assert order["status"] == "placed"
+    assert [(line["productId"], line["quantity"]) for line in order["lines"]] == [
+        ("widget-002", 3)
+    ]
+    assert order["total"] == pytest.approx(12.0 * 3)
+    # …and it is exactly what the repository read returns, field for field.
+    assert order == services.get_current_order(ctx)
+
+
+def test_get_state_is_scoped_to_the_calling_participant(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(2))
+    ada = stocked.join("Ada", "en")
+    bob = stocked.join("Bob", "es")
+    ada_ctx = stocked.context_for(ada.participant_id)
+    bob_ctx = stocked.context_for(bob.participant_id)
+    stocked._services.add_cart_item(ada_ctx, product_name="Widget 001", quantity=4)
+    stocked._services.place_order(ada_ctx)
+    stocked.set_turn_state(ada.participant_id, TURN_THINKING)
+
+    bob_state = stocked.get_state(bob_ctx)
+
+    assert bob_state["profile"] == {"name": "Bob", "deliveryAddress": None}
+    assert bob_state["cart"] == {"items": [], "total": 0}
+    assert bob_state["order"] is None
+    assert bob_state["turn"] == {"state": TURN_IDLE, "queuePosition": 0}
+    # …while Ada's own state is unaffected by having been read past.
+    assert stocked.get_state(ada_ctx)["order"]["total"] == pytest.approx(44.0)
+
+
+# ── list_catalog + the image manifest (§4.7) ─────────────────────────────────
+
+
+def test_list_catalog_returns_all_fifteen_rows(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(15))
+
+    rows = stocked.list_catalog()
+
+    assert len(rows) == 15
+    assert [row["productId"] for row in rows] == [
+        f"widget-{i:03d}" for i in range(1, 16)
+    ]
+    assert all(
+        set(row) == {"productId", "name", "category", "price", "imageUrl"}
+        for row in rows
+    )
+    assert rows[0] == {
+        "productId": "widget-001", "name": "Widget 001",
+        "category": "Accessories", "price": 11.0, "imageUrl": None,
+    }
+
+
+def test_list_catalog_carries_an_explicit_bound_past_the_delivered_default(
+    stocked, conn
+):
+    """§5.1's S7 row: `services.filter_products` defaults `limit=20` — correct
+    for 15 products, **silently wrong at 21**.
+
+    21 is the smallest catalog that can tell the two apart, and the failure it
+    guards is invisible: a truncated catalog raises nothing, logs nothing, and
+    simply stops offering the last products. Mutation-checked by dropping the
+    `limit=CATALOG_LIMIT` argument, which yields 20 rows here and 15 in every
+    other catalog test in this file.
+    """
+    _seed_catalog(conn, _catalog_rows(21))
+
+    rows = stocked.list_catalog()
+
+    assert len(rows) == 21
+    assert rows[-1]["productId"] == "widget-021"
+
+
+def test_the_image_manifest_is_non_empty_against_a_fixture_asset_directory(
+    conn, catalog_repo, tmp_path
+):
+    """§4.7's stated trap: the negative half of AC-11 ("no placeholder element")
+    passes unchanged when the manifest is **totally** empty, so the positive
+    half has to be asserted on its own.
+
+    Paired with `test_an_unset_storefront_dir_yields_an_empty_manifest` below,
+    which is the same code path producing the failure this one rules out.
+    """
+    _seed_catalog(conn, _catalog_rows(3))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    root = _assets(tmp_path / "dist", ["widget-001.webp", "widget-003.png"])
+    shop = _storefront(Services(catalog_repo), storefront_dir=root)
+
+    manifest = shop.build_image_manifest()
+
+    assert manifest == {
+        "widget-001": "/shop/products/widget-001.webp",
+        "widget-003": "/shop/products/widget-003.png",
+    }
+    assert [row["imageUrl"] for row in shop.list_catalog()] == [
+        "/shop/products/widget-001.webp", None, "/shop/products/widget-003.png",
+    ]
+
+
+def test_the_manifest_keeps_only_catalog_products_and_known_extensions(
+    conn, catalog_repo, tmp_path
+):
+    """Both halves of §4.7's intersection: an asset with no product never
+    becomes a URL, and a file outside `IMAGE_EXTENSIONS` is not an asset."""
+    _seed_catalog(conn, _catalog_rows(2))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    root = _assets(tmp_path / "dist", [
+        "widget-001.jpg",        # a real product
+        "widget-999.webp",       # an asset for no product in the catalog
+        "widget-002.svg",        # a real product, an extension we do not serve
+        "index.html",            # the SPA itself, sitting one level up in real life
+    ])
+    shop = _storefront(Services(catalog_repo), storefront_dir=root)
+
+    assert shop.build_image_manifest() == {
+        "widget-001": "/shop/products/widget-001.jpg"
+    }
+
+
+def test_extension_precedence_is_webp_first(conn, catalog_repo, tmp_path):
+    _seed_catalog(conn, _catalog_rows(1))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    root = _assets(tmp_path / "dist", [
+        "widget-001.png", "widget-001.jpeg", "widget-001.jpg", "widget-001.webp",
+    ])
+    shop = _storefront(Services(catalog_repo), storefront_dir=root)
+
+    assert shop.build_image_manifest() == {
+        "widget-001": "/shop/products/widget-001.webp"
+    }
+
+
+@pytest.mark.parametrize("layout", ["unset", "no-products-dir", "source-tree"])
+def test_a_manifest_with_no_served_assets_is_empty_rather_than_wrong(
+    conn, catalog_repo, tmp_path, layout
+):
+    """The negative control for the non-empty assertion above, in the three
+    shapes §4.7 names: no `FALKORCHAT_STOREFRONT_DIR` at all, a build output
+    with no `products/`, and the v1.0 defect — assets that exist only in the
+    **source tree** while the served directory is `dist/` alone.
+
+    Empty is the correct answer for all three: every `imageUrl` is `null` and
+    the client renders its text-only card. What must never happen is a URL for
+    a file the server does not serve.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    _assets(tmp_path / "salesperson" / "public", ["widget-001.webp"])
+    (tmp_path / "dist").mkdir()
+    served = {
+        "unset": None,
+        "no-products-dir": tmp_path / "dist",
+        "source-tree": tmp_path / "dist",
+    }[layout]
+    shop = _storefront(Services(catalog_repo), storefront_dir=served)
+
+    assert shop.build_image_manifest() == {}
+    assert [row["imageUrl"] for row in shop.list_catalog()] == [None, None]
+
+
+def test_the_manifest_is_built_once_not_per_catalog_call(conn, catalog_repo, tmp_path):
+    """§4.7's operational note, asserted rather than documented: the manifest is
+    a startup artifact, so an asset dropped in afterwards needs a restart.
+
+    The observable is `list_catalog`, which must not re-list the directory per
+    call — and the second half proves the manifest is genuinely rebuildable, so
+    "built once" is a policy rather than a one-shot bug.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    root = _assets(tmp_path / "dist", ["widget-001.webp"])
+    shop = _storefront(Services(catalog_repo), storefront_dir=root)
+    assert shop.build_image_manifest() == {
+        "widget-001": "/shop/products/widget-001.webp"
+    }
+
+    (root / "products" / "widget-002.webp").write_bytes(b"\x00")
+
+    assert [row["imageUrl"] for row in shop.list_catalog()] == [
+        "/shop/products/widget-001.webp", None,
+    ]
+    # …until the next restart, which is what `build_image_manifest` stands for.
+    assert shop.build_image_manifest() == {
+        "widget-001": "/shop/products/widget-001.webp",
+        "widget-002": "/shop/products/widget-002.webp",
+    }
+
+
+def test_list_catalog_builds_the_manifest_when_nobody_did(conn, catalog_repo, tmp_path):
+    """S8 calls `build_image_manifest` from the app's lifespan; a `Storefront`
+    built without that step must still serve image URLs rather than silently
+    answering `null` for every product."""
+    _seed_catalog(conn, _catalog_rows(1))
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
+    root = _assets(tmp_path / "dist", ["widget-001.webp"])
+    shop = _storefront(Services(catalog_repo), storefront_dir=root)
+
+    assert shop.list_catalog()[0]["imageUrl"] == "/shop/products/widget-001.webp"
+
+
+# ── advance_own_order (§4.6 / §5.2) ──────────────────────────────────────────
+
+
+def _with_order(shop, name="Ada"):
+    """A participant holding one `placed` order for one product."""
+    record = shop.join(name, "en")
+    ctx = shop.context_for(record.participant_id)
+    shop._services.add_cart_item(ctx, product_name="Widget 001", quantity=1)
+    order = shop._services.place_order(ctx)
+    return record, ctx, order["orderId"]
+
+
+def test_advance_own_order_walks_the_lifecycle(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(2))
+    _record, ctx, order_id = _with_order(stocked)
+
+    assert stocked.advance_own_order(ctx, order_id=order_id, transition="fulfill") == {
+        "orderId": order_id, "status": "fulfilled",
+    }
+    assert stocked.advance_own_order(ctx, order_id=order_id, transition="deliver") == {
+        "orderId": order_id, "status": "delivered",
+    }
+    assert stocked.get_state(ctx)["order"]["status"] == "delivered"
+
+
+def test_advancing_another_participants_order_is_refused_and_changes_nothing(
+    stocked, conn
+):
+    """The gate `services.advance_order` does not have: its CAS is keyed on
+    `orderId` alone (graph note §10.2).
+
+    The refusal is asserted **twice over** — the raise, and the victim's order
+    still `placed` afterwards — because a wrapper that advanced first and
+    checked second would raise here too, and only the second assertion can tell
+    the two apart.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    _ada, ada_ctx, ada_order = _with_order(stocked, "Ada")
+    _bob, bob_ctx, _bob_order = _with_order(stocked, "Bob")
+
+    with pytest.raises(UnknownOrderError):
+        stocked.advance_own_order(bob_ctx, order_id=ada_order, transition="cancel")
+
+    assert stocked.get_state(ada_ctx)["order"]["status"] == "placed"
+
+
+def test_the_ownership_gate_runs_before_the_cas(stocked, conn, monkeypatch):
+    """Order of operations, pinned as a call sequence.
+
+    The assertion above proves the *outcome*; this proves the *mechanism* —
+    `services.advance_order` is never reached at all for someone else's order.
+    Without it, an implementation that advanced and then rolled back would look
+    identical from outside, and would still be a window in which another
+    participant's order was cancelled.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    _ada, _ada_ctx, ada_order = _with_order(stocked, "Ada")
+    _bob, bob_ctx, _bob_order = _with_order(stocked, "Bob")
+    calls: list[str] = []
+    services = stocked._services
+    real_gate = services.order_belongs_to_customer
+    real_advance = services.advance_order
+
+    def gate(*args, **kwargs):
+        calls.append("gate")
+        return real_gate(*args, **kwargs)
+
+    def advance(*args, **kwargs):
+        calls.append("advance")
+        return real_advance(*args, **kwargs)
+
+    monkeypatch.setattr(services, "order_belongs_to_customer", gate)
+    monkeypatch.setattr(services, "advance_order", advance)
+
+    with pytest.raises(UnknownOrderError):
+        stocked.advance_own_order(bob_ctx, order_id=ada_order, transition="cancel")
+    assert calls == ["gate"]
+
+    stocked.advance_own_order(bob_ctx, order_id=_bob_order, transition="fulfill")
+    assert calls == ["gate", "gate", "advance"]
+
+
+def test_an_unknown_order_is_refused_exactly_like_someone_elses(stocked, conn):
+    """§5.3 C10: both are `404`, and the client cannot tell them apart — an
+    order id is not an oracle for whether an order exists."""
+    _seed_catalog(conn, _catalog_rows(2))
+    _record, ctx, _order_id = _with_order(stocked)
+
+    with pytest.raises(UnknownOrderError):
+        stocked.advance_own_order(ctx, order_id="no-such-order", transition="fulfill")
+
+
+def test_a_stale_transition_is_refused_with_the_orders_current_status(stocked, conn):
+    """The ordinary stale-button outcome: `deliver` pressed before `fulfill`
+    landed. `409`, carrying the status the client should repaint from."""
+    _seed_catalog(conn, _catalog_rows(2))
+    _record, ctx, order_id = _with_order(stocked)
+
+    with pytest.raises(OrderTransitionRefusedError) as exc:
+        stocked.advance_own_order(ctx, order_id=order_id, transition="deliver")
+
+    assert exc.value.status == "placed"
+    assert exc.value.transition == "deliver"
+    assert stocked.get_state(ctx)["order"]["status"] == "placed"
+
+
+# ── reset mine (§4.8, graph note §4/§7/§12) ──────────────────────────────────
+
+
+def _thread_message_count(conn, thread_id):
+    return _one(
+        conn,
+        "MATCH (:Thread {threadId: $tid})-[:HEAD]->(:Message)-[:NEXT*0..]->(m:Message) "
+        "RETURN count(m)",
+        {"tid": thread_id},
+    ) or 0
+
+
+def _dangling_cursors_owned_by(conn, participant_id):
+    """Graph note §7 (d), read **participant-scoped** — S7 has no global intake
+    stop, so the condition is over cursors owned by the reset participant."""
+    return _one(
+        conn,
+        "MATCH (:User {userId: $pid})-[:HAS_CURSOR]->(rc:ReadCursor) "
+        "OPTIONAL MATCH (t:Thread {threadId: rc.threadId}) "
+        "WITH rc, t WHERE t IS NULL RETURN count(rc)",
+        {"pid": participant_id},
+    )
+
+
+def _stub_run(conn, *, run_id, trigger_msg_id, status="running"):
+    """A `WorkflowRun` in the shape the reset sweeps — reached only through
+    `TRIGGERED_BY` from a thread message (graph note §4).
+
+    Written raw, as a fixture: `repository.start_run` additionally needs a
+    published `WorkflowDefSnapshot` with a START step, and none of that is what
+    these tests are about. Same posture as `_seed_catalog` above.
+    """
+    db.workspace_graph(conn, WS).query(
+        "MATCH (m:Message {msgId: $msgId}) "
+        "CREATE (:WorkflowRun {runId: $runId, status: $status, "
+        "                      defKey: 'salesperson', defVersion: 'v7', "
+        "                      startedAt: 1, stepCount: 0, maxSteps: 12, "
+        "                      trace: false, ctx: '{}', waitingThreadId: ''})"
+        "-[:TRIGGERED_BY]->(m)",
+        {"msgId": trigger_msg_id, "runId": run_id, "status": status},
+    )
+
+
+def _run_status(conn, run_id):
+    return _one(
+        conn, "MATCH (r:WorkflowRun {runId: $rid}) RETURN r.status", {"rid": run_id}
+    )
+
+
+def _busy_participant(shop, conn, name="Ada"):
+    """A participant with a transcript, a run trail, a cart and an order — the
+    full victim set `reset_participant` is supposed to take."""
+    record = shop.join(name, "pt-BR")
+    ctx = shop.context_for(record.participant_id)
+    services = shop._services
+    services.save_profile(ctx, delivery_address="12 Rua das Flores")
+    posted = services.post_message(ctx, thread_id=record.thread_id, text="hello")
+    services.post_message(
+        config.CallContext(ws=WS, actor=AGENT), thread_id=record.thread_id,
+        text="how can I help?",
+    )
+    _stub_run(
+        conn, run_id=f"{record.participant_id}-run", trigger_msg_id=posted["msgId"],
+        status="done",
+    )
+    services.add_cart_item(ctx, product_name="Widget 001", quantity=2)
+    services.place_order(ctx)
+    services.add_cart_item(ctx, product_name="Widget 002", quantity=1)
+    return record, ctx
+
+
+def test_reset_clears_the_participants_state_and_remints_their_thread(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(2))
+    record, ctx = _busy_participant(stocked, conn)
+    pid = record.participant_id
+    assert _thread_message_count(conn, record.thread_id) == 2
+
+    result = stocked.reset_participant(record)
+
+    assert set(result) == {"threadId", "language"}
+    assert result["language"] == "pt-BR"
+    assert result["threadId"] != record.thread_id
+    assert result["threadId"].startswith(storefront.THREAD_ID_PREFIX)
+    # the transcript, the run trail and the commerce subgraph are gone …
+    assert _one(conn, "MATCH (t:Thread {threadId: $t}) RETURN count(t)",
+                {"t": record.thread_id}) == 0
+    assert _thread_message_count(conn, result["threadId"]) == 0
+    assert _run_status(conn, f"{pid}-run") is None
+    assert _one(conn, "MATCH (:Customer {customerId: $p})-[:PLACED]->(o:Order) "
+                      "RETURN count(o)", {"p": pid}) == 0
+    assert _one(conn, "MATCH (c:Cart {customerId: $p}) RETURN count(c)",
+                {"p": pid}) == 0
+    # The `Customer` anchor itself is back, and deliberately: the profile
+    # re-write below runs `upsert_profile`, whose `MERGE` re-creates it. What
+    # matters is that it carries the name and nothing else — asserted whole in
+    # `test_the_profile_name_is_back_after_a_self_reset_not_an_em_dash`.
+    # … while the identity survives, token included (§4.8: reset-mine keeps it)
+    assert stocked.resolve_token(_bearer(record)) is not None
+    assert _one(conn, "MATCH (u:User {userId: $p}) RETURN u.displayName",
+                {"p": pid}) == "Ada"
+    assert _one(conn, "MATCH (:Channel {channelId: $c})-[:HAS_THREAD]->(t) "
+                      "RETURN t.threadId", {"c": record.channel_id}) == result["threadId"]
+    assert stocked.get_state(ctx)["cart"] == {"items": [], "total": 0}
+    assert stocked.get_state(ctx)["order"] is None
+
+
+def test_the_profile_name_is_back_after_a_self_reset_not_an_em_dash(stocked, conn):
+    """§2.4's FR-10 parity bar, and the one done-condition of this step that is
+    a *second* write rather than a property of the delete.
+
+    The `Customer` node goes with the reset while `User.displayName` survives,
+    so without the re-write the profile panel renders an em-dash for a name the
+    participant typed on the join screen and never withdrew. `deliveryAddress`
+    is asserted `None` in the same breath: it proves the `Customer` really was
+    deleted, so the name coming back is a re-write and not a survivor.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, ctx = _busy_participant(stocked, conn)
+    assert stocked.get_state(ctx)["profile"] == {
+        "name": "Ada", "deliveryAddress": "12 Rua das Flores",
+    }
+
+    stocked.reset_participant(record)
+
+    assert stocked.get_state(ctx)["profile"] == {
+        "name": "Ada", "deliveryAddress": None,
+    }
+
+
+def test_reset_is_participant_disjoint(stocked, conn):
+    _seed_catalog(conn, _catalog_rows(2))
+    ada, _ada_ctx = _busy_participant(stocked, conn, "Ada")
+    bob, bob_ctx = _busy_participant(stocked, conn, "Bob")
+
+    stocked.reset_participant(ada)
+
+    assert _thread_message_count(conn, bob.thread_id) == 2
+    assert _run_status(conn, f"{bob.participant_id}-run") == "done"
+    state = stocked.get_state(bob_ctx)
+    assert state["profile"] == {"name": "Bob", "deliveryAddress": "12 Rua das Flores"}
+    assert state["order"] is not None
+    assert state["cart"]["items"] != []
+    assert stocked.resolve_token(_bearer(bob)) is not None
+
+
+def test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread(
+    stocked, conn
+):
+    """The cached record's `threadId` is stale the instant the reset returns,
+    and `lookup` never re-reads a hit (S6) — so the reset has to write the new
+    one through itself. Without that, S9's worker would post into a thread that
+    no longer exists and raise `ThreadNotFoundError`.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+    assert stocked.lookup(record.participant_id).thread_id == record.thread_id
+
+    result = stocked.reset_participant(record)
+
+    cached = stocked.lookup(record.participant_id)
+    assert cached.thread_id == result["threadId"]
+    assert cached.display_name == "Ada"
+    assert cached.token is None
+
+
+def test_resetting_a_non_participant_raises_rather_than_reporting_success(
+    stocked, conn
+):
+    """Zero rows — not a participant, or already deleted (graph note §12)."""
+    _seed_catalog(conn, _catalog_rows(1))
+    ghost = ParticipantRecord(
+        participant_id="p-ghost", display_name="Ghost", language="en",
+        channel_id="ch-p-ghost", thread_id="th-p-ghost", joined_at=1,
+    )
+
+    with pytest.raises(UnknownParticipantError):
+        stocked.reset_participant(ghost)
+
+
+def test_an_unscoped_participant_is_an_alarm_never_a_success(stocked, conn):
+    """`scoped=false` (graph note §4's G2): the participant resolved but their
+    own `Channel` did not, so the reset was a **guaranteed no-op**.
+
+    `409` with a machine-readable code, never `200` — "a `200` here is the same
+    class of lie v1.0's partial delete told". The transcript is asserted intact
+    afterwards: this must be an alarm about a graph that needs repair, not a
+    quiet success over a subgraph that was never touched.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+    db.workspace_graph(conn, WS).query(
+        "MATCH (c:Channel {channelId: $cid}) SET c.participantId = 'p-someone-else'",
+        {"cid": record.channel_id},
+    )
+
+    with pytest.raises(UnscopedParticipantError) as exc:
+        stocked.reset_participant(record)
+
+    assert exc.value.code == "unscoped_participant"
+    assert _thread_message_count(conn, record.thread_id) == 2
+    assert _one(conn, "MATCH (c:Customer {customerId: $p}) RETURN count(c)",
+                {"p": record.participant_id}) == 1
+
+
+# ── the quiesce contract (`docs/plans/salesperson-ui-graph.md` §7 (a)–(d)) ───
+#
+# §7's four conditions **replace** v1.0's "a reset leaves no orphan
+# `StepRun`/`TraceEvent`/`Message`", which that note disproved as vacuous: all
+# three writes are anchored on nodes the reset deleted, so they create nothing
+# post-reset whether quiesce works or not. These four can fail.
+#
+# They are read **participant-scoped** here, which is what reset-mine is: S7 has
+# no global intake stop — that is S10's `reset_all`, and §7 (b)'s "(intake
+# stopped)" and (d)'s "after `reset_all`" are worded for it.
+
+
+def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
+                                                                 monkeypatch):
+    """§7 **(a)** and **(c)**, asserted at the moment of the delete rather than
+    after it.
+
+    (a) asks that the reset "completes only after that turn finishes — assert
+    the turn's `WorkflowRun` reached a terminal status *before* the delete".
+    So the observer is a spy wrapped around `repository.reset_participant`: it
+    reads the run's status and the thread's message count **at the instant the
+    single atomic delete is issued**. Asserting them afterwards proves nothing,
+    because the delete takes both away.
+
+    (c) — "no turn is silently dropped" — is the message count in the same
+    reading: the in-flight turn's reply was written before the delete, so the
+    turn ran to completion instead of being cut off mid-flight. Its reply is
+    then deleted with the transcript, which is what the participant asked for.
+
+    (b) rides along: the agent's post lands *during* the quiesce window and
+    must succeed, not raise `ThreadNotFoundError` against a vanished thread —
+    the failure mode §7.3 says quiesce-then-delete exists to prevent.
+
+    Mutation-checked by removing the `_await_quiesce` call from
+    `reset_participant`: the spy then fires while the run is still `running`
+    and the thread holds one message.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record = stocked.join("Ada", "en")
+    pid = record.participant_id
+    ctx = stocked.context_for(pid)
+    posted = stocked._services.post_message(
+        ctx, thread_id=record.thread_id, text="hello"
+    )
+    _stub_run(conn, run_id="turn-run", trigger_msg_id=posted["msgId"])
+    stocked.set_turn_state(pid, TURN_THINKING)
+
+    at_delete: dict = {}
+    real_reset = stocked._repo.reset_participant
+
+    def spy(*args, **kwargs):
+        at_delete["runStatus"] = _run_status(conn, "turn-run")
+        at_delete["messages"] = _thread_message_count(conn, record.thread_id)
+        return real_reset(*args, **kwargs)
+
+    monkeypatch.setattr(stocked._repo, "reset_participant", spy)
+
+    turn_result: dict = {}
+
+    def run_the_turn():
+        # Its own connection: this is a worker thread, exactly as S9's executor
+        # will be.
+        worker = Services(Repository(db.connect()))
+        time.sleep(0.15)
+        try:
+            worker.post_message(
+                config.CallContext(ws=WS, actor=AGENT),
+                thread_id=record.thread_id, text="how can I help?",
+            )
+            turn_result["posted"] = True
+        except Exception as exc:  # noqa: BLE001 — recorded, asserted below
+            turn_result["error"] = exc
+        db.workspace_graph(db.connect(), WS).query(
+            "MATCH (r:WorkflowRun {runId: 'turn-run'}) SET r.status = 'done'"
+        )
+        stocked.clear_turn(pid)
+
+    turn = threading.Thread(target=run_the_turn)
+    turn.start()
+    try:
+        result = stocked.reset_participant(record)
+    finally:
+        turn.join(timeout=5)
+
+    assert turn_result == {"posted": True}          # (b): the post did not raise
+    assert at_delete["runStatus"] == "done"         # (a): terminal before the delete
+    assert at_delete["messages"] == 2               # (c): the reply was written
+    assert result["threadId"] != record.thread_id
+
+
+def test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running(
+    stocked, conn
+):
+    """§4.8/§7.1's `503` branch, and the other half of §7 (c): the client saw a
+    refusal, so nothing was dropped.
+
+    `quiesce_s=0` is the whole waiting budget, so an in-flight turn cannot
+    drain and the reset must refuse. "Changes nothing" is asserted as the
+    node count before and after — the reset is one atomic query, so a partial
+    delete is not a shape the graph can be left in, but a reset that ran *at
+    all* would show up here.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    shop = _storefront(stocked._services, quiesce_s=0)
+    record, ctx = _busy_participant(shop, conn)
+    shop.set_turn_state(record.participant_id, TURN_THINKING)
+    before = _one(conn, "MATCH (n) RETURN count(n)")
+
+    with pytest.raises(QuiesceTimeoutError):
+        shop.reset_participant(record)
+
+    assert _one(conn, "MATCH (n) RETURN count(n)") == before
+    assert _thread_message_count(conn, record.thread_id) == 2
+    assert shop.turn_in_flight(record.participant_id) is True
+    assert shop.get_state(ctx)["order"] is not None
+
+
+def test_an_idle_participant_is_not_made_to_wait(stocked, conn):
+    """The control for the two above: with no turn in flight the reset does not
+    consult the clock at all, so a `quiesce_s=0` storefront resets normally.
+
+    Without this, "the reset waits" and "the reset refuses" would both be
+    satisfied by a `reset_participant` that always refused.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    shop = _storefront(stocked._services, quiesce_s=0)
+    record, _ctx = _busy_participant(shop, conn)
+
+    assert shop.reset_participant(record)["threadId"] != record.thread_id
+
+
+def test_the_reset_leaves_no_dangling_cursor_owned_by_the_participant(stocked, conn):
+    """§7 **(d)**, participant-scoped — the direct test for F3's one real orphan
+    class (`advance_cursor` `MERGE`s on the *member*, not the thread, so it can
+    mint a `ReadCursor` naming a thread that no longer exists).
+
+    The second participant is the false-positive control: a reset that swept
+    every cursor in the workspace would satisfy (d) just as well, and would be
+    a different, worse defect.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    ada, _ada_ctx = _busy_participant(stocked, conn, "Ada")
+    bob, _bob_ctx = _busy_participant(stocked, conn, "Bob")
+    repo = stocked._services._repo
+    for member, thread in ((ada, ada.thread_id), (bob, bob.thread_id)):
+        repo.advance_cursor(
+            WS, me_id=member.participant_id, thread_id=thread,
+            cursor_id=f"{member.participant_id}:{thread}", now=500, now_msg_id="x",
+        )
+    repo.advance_cursor(
+        WS, me_id=ada.participant_id, thread_id="th-long-gone",
+        cursor_id=f"{ada.participant_id}:th-long-gone", now=501, now_msg_id="x",
+    )
+    assert _dangling_cursors_owned_by(conn, ada.participant_id) == 1
+
+    stocked.reset_participant(ada)
+
+    assert _dangling_cursors_owned_by(conn, ada.participant_id) == 0
+    assert repo.get_cursor(
+        WS, cursor_id=f"{bob.participant_id}:{bob.thread_id}"
+    ) is not None
+
+
+# ── F8 — a socket timeout means *unknown*, never "nothing changed" ───────────
+
+
+class _Timeout(redis_exceptions.TimeoutError):
+    """A FalkorDB socket timeout, in the exact class `db.connect()` raises."""
+
+
+def test_a_socket_timeout_on_the_reset_is_unknown_with_a_fresh_state_read(
+    stocked, conn, monkeypatch
+):
+    """§4.8 F8 / `docs/QUERIES.md` §18.7, first ordering.
+
+    The module's `TIMEOUT` applies to reads only, so a slow reset is never
+    truncated server-side; if one crosses `FALKORDB_SOCKET_TIMEOUT` the client
+    raises **while the server commits the delete**. So this is `504
+    reset_state_unknown` after re-reading state — never the quiesce `503`,
+    whose whole meaning is "nothing changed".
+
+    The re-read is asserted to be a *real* read of the graph, not a
+    placeholder: this stub times out without deleting anything, so the state it
+    reports still carries the order and the cart.
+
+    `calls == 1` is the application half of §4.8's stated premise that nothing
+    retries a reset. (The library half is out of this test's reach by
+    construction, which is why the premise is written down.)
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+    calls: list[tuple] = []
+
+    def timing_out(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise _Timeout("Timeout reading from socket")
+
+    monkeypatch.setattr(stocked._repo, "reset_participant", timing_out)
+
+    with pytest.raises(ResetStateUnknownError) as exc:
+        stocked.reset_participant(record)
+
+    assert exc.value.code == "reset_state_unknown"
+    assert not isinstance(exc.value, QuiesceTimeoutError)
+    assert len(calls) == 1
+    assert exc.value.state is not None
+    assert set(exc.value.state) == {"profile", "cart", "order", "turn"}
+    assert exc.value.state["order"] is not None
+    assert exc.value.state["cart"]["items"] != []
+
+
+def test_a_socket_timeout_on_the_re_read_too_is_still_unknown_never_a_500(
+    stocked, conn, monkeypatch
+):
+    """§4.8 F8, second ordering — **the likelier fault, not the exotic one**.
+
+    The re-read is another query against the same graph, and FalkorDB
+    serialises writes per graph, so the stalled reset that produced the first
+    timeout is precisely what stalls the re-read for another
+    `FALKORDB_SOCKET_TIMEOUT`. A fake that times out on the reset and *succeeds*
+    on the re-read exercises only the easier half, which is why both orderings
+    are separately named.
+
+    The contract: still `504 reset_state_unknown`, simply with no state body.
+    The participant-facing meaning is identical either way — *unknown*, never
+    "nothing changed" — and a bare `TimeoutError` escaping as a `500` is the
+    failure this rules out.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+
+    def timing_out(*args, **kwargs):
+        raise _Timeout("Timeout reading from socket")
+
+    monkeypatch.setattr(stocked._repo, "reset_participant", timing_out)
+    monkeypatch.setattr(stocked._repo, "get_profile", timing_out)
+
+    with pytest.raises(ResetStateUnknownError) as exc:
+        stocked.reset_participant(record)
+
+    assert exc.value.code == "reset_state_unknown"
+    assert exc.value.state is None
+    assert exc.value.participant_id == record.participant_id
+    # …and it is the storefront's own refusal, not the raw client error.
+    assert isinstance(exc.value, StorefrontError)
+    assert not isinstance(exc.value, redis_exceptions.TimeoutError)
+
+
+def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypatch):
+    """The pairing F8 exists to enforce, stated as one assertion: a quiesce
+    timeout and a socket timeout are **not** the same refusal.
+
+    v1.8 read F8's "client" as the browser and mapped both to `503 … nothing
+    changed`. They are answered by two disjoint types here, so S8 cannot map
+    them to one status by accident.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+
+    assert not issubclass(ResetStateUnknownError, QuiesceTimeoutError)
+    assert not issubclass(QuiesceTimeoutError, ResetStateUnknownError)
+
+    busy = _storefront(stocked._services, quiesce_s=0)
+    busy.set_turn_state(record.participant_id, TURN_THINKING)
+    with pytest.raises(QuiesceTimeoutError):
+        busy.reset_participant(record)
+
+    monkeypatch.setattr(
+        stocked._repo, "reset_participant",
+        lambda *a, **k: (_ for _ in ()).throw(_Timeout("boom")),
+    )
+    with pytest.raises(ResetStateUnknownError):
+        stocked.reset_participant(record)
