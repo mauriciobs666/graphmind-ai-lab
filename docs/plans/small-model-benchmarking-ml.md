@@ -1,6 +1,10 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.4
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.5
+
+2026-09-03 (v1.5, `data-scientist`) — §3.2c's fixtures republished at 10 dp so the mandated 1e-9
+tolerance is assertable (review m-ML-1), the floor/MDD rounding directions separated and three §7.1
+floor cells corrected, and §3.4 gains Rule 7 (no `distinguishable` below the observable floor).
 
 2026-09-03 (v1.4, `data-scientist`) — §4.6 adopts the plan's `H` semantics (manifest-declared,
 validated `H ≤ min(script length)`, no longer *equal to* the minimum), closing review N-3; pairs
@@ -214,17 +218,20 @@ def paired_diff_ci(a, b, c, d, z=1.959963984540054):
 The `max(0.0, …)` clamps are required, not cosmetic: the radicand goes slightly negative under
 extreme `phi`. Worked outputs verified in this session:
 
-| a | b | c | d | n | diff | MOVER-D 95% CI (pp, 4 dp) | McNemar p |
-|---|---|---|---|---|---|---|---|
-| 34 | 6 | 0 | 0 | 40 | +15.0 pp | [3.1763, 29.0723] | 0.031250 |
-| 30 | 6 | 0 | 4 | 40 | +15.0 pp | [3.8507, 27.7027] | 0.031250 |
-| 33 | 6 | 1 | 0 | 40 | +12.5 pp | [−0.9865, 26.8582] | 0.125000 |
-| 20 | 8 | 2 | 10 | 40 | +15.0 pp | [0.1709, 28.7785] | 0.109375 |
-| 72 | 10 | 2 | 1 | 85 | +9.4 pp | [1.4800, 18.2131] | 0.038574 |
+| a | b | c | d | n | diff | MOVER-D lower (pp) | MOVER-D upper (pp) | McNemar p (exact rational) |
+|---|---|---|---|---|---|---|---|---|
+| 34 | 6 | 0 | 0 | 40 | +15.0 pp | 3.1762869443 | 29.0723243665 | 1/32 = 0.03125 |
+| 30 | 6 | 0 | 4 | 40 | +15.0 pp | 3.8506738324 | 27.7026867131 | 1/32 = 0.03125 |
+| 33 | 6 | 1 | 0 | 40 | +12.5 pp | −0.9864868353 | 26.8581964973 | 1/8 = 0.125 |
+| 20 | 8 | 2 | 10 | 40 | +15.0 pp | 0.1708978316 | 28.7785182732 | 7/64 = 0.109375 |
+| 72 | 10 | 2 | 1 | 85 | +9.4 pp | 1.4800198994 | 18.2130920778 | 79/2048 = 0.03857421875 |
 
-Use these five rows as the implementer's regression fixtures for the statistics module. All ten
-bounds and all five p-values were **recomputed in this session at `z = 1.959963984540054`** and
-agree with v1.1's 1-dp publication.
+Use these five rows as the implementer's regression fixtures for the statistics module. **Ten
+significant decimal places in percentage points, i.e. 1e-12 as a proportion** — three orders inside
+the tolerance below, which is the point (see the trap at the end of this subsection). All ten bounds
+were re-derived at 60-digit precision at `z = 1.959963984540054` in this session and agree with the
+independent re-derivation in `docs/reviews/small-model-benchmarking-ml.md`; the p-values are exact
+rationals and are published as rationals so no decimal expansion is load-bearing.
 
 **Assertion tolerance — settled, replacing both "exactly" and "3 decimal places" (gate m3).**
 - `mcnemar_exact` is rational arithmetic over `math.comb` and `0.5**m`: assert to **1e-12
@@ -234,6 +241,22 @@ agree with v1.1's 1-dp publication.
   trip it, and it is ~4 orders tighter than the z-constant divergence above — meaning **this
   tolerance is what makes M-1's constant load-bearing.** "Exact match" is not assertable across
   platforms; 3 decimal places is loose enough to pass a genuinely wrong Wilson.
+
+**The trap this note fell into, stated once because it generalises (review m-ML-1).** v1.2–v1.4
+published these bounds at 4 dp *in pp* and mandated a 1e-9 *proportion* tolerance in the same
+subsection. Those two statements are incompatible: 4 dp in pp is 1e-6 as a proportion, so the
+published `3.1763` sits 1.31e-7 from the true `3.1762869443…` — **131× the tolerance it was supposed
+to be asserted against**. The delivered implementation was never the problem; it agrees with the
+60-digit value to 1.44e-16, about 7×10⁶ *inside* the mandate. The table was under-precise, not wrong.
+
+> **A fixture table published for display cannot carry a tolerance tighter than its own printed
+> precision.** The two numbers are one decision, not two, and they are usually written in different
+> sentences by different people at different times — which is exactly how they drift apart. Whenever
+> a tolerance is tightened, the fixtures must be republished at a precision that clears it, and when
+> a table is published, the tolerance it can support is fixed at that moment. The safe default is to
+> publish **at least 2–3 orders finer than the tolerance** so a later tightening has headroom, and
+> to prefer **exact rationals** wherever the quantity has one (as the p-values above now do), since
+> a rational carries no precision claim to get out of step.
 
 **(d) Continuous metrics — paired percentile bootstrap on the per-item difference.**
 
@@ -339,7 +362,7 @@ conversation count and a replicate count identically, and `verdict()` accepts 48
 readily as 12 independent ones. A note that only says "be careful about clustering" reproduces the
 defect at the next pack. So the contract below is written so that **the anti-conservative version
 does not typecheck, and the honest one is the only one that runs.** Types are illustrative; the
-six rules are binding.
+seven rules are binding.
 
 **Rule 1 — the paired table is constructible only from independent analysis units.**
 
@@ -393,7 +416,8 @@ so passing a raw observation count is a visible mislabel at the call site rather
 one inside the function. `observable_floor` takes `alpha`, because the floor is `6/n` only at
 α=0.05 — at α=0.025 it is `7/n` (§7.3).
 
-**Rule 3 — MDD is computed exactly and rounded *up*; the `8/n` rule of thumb is not code.**
+**Rule 3 — MDD and floor are computed exactly and rounded in *opposite* directions; the `8/n` rule
+of thumb is not code.**
 `min_detectable_difference` bisects on δ for the smallest difference at which
 `P(reject) ≥ power` under the exact McNemar rejection region, then **rounds up to the printed
 precision**. Both halves matter, and this settles gate m3's "8/n gives 20.0 pp where the note says
@@ -401,8 +425,26 @@ precision**. Both halves matter, and this settles gate m3's "8/n gives 20.0 pp w
 - exact δ at n=40 is **19.046 pp**, and `8/n` = 20.0 pp — the rule of thumb is *conservative but
   wrong*, and printing two different numbers for the same quantity in the same report is the defect;
 - rounding **to nearest** would print 19.0 pp, at which measured power is **0.798** — below the
-  0.80 the sentence claims. Rounding up to 19.1 pp gives 0.8023. **Every figure in §7.1's table is
-  the exact value ceilinged to 0.1 pp**, which is why it reproduces v1.1's published table exactly.
+  0.80 the sentence claims. Rounding up to 19.1 pp gives 0.8023.
+
+**And the observable floor rounds the other way — *down*.** One principle, two directions: **round
+each printed bound in the direction that keeps its own claim true.**
+- MDD carries *"resolves differences ≥ X with 80% power"*, so X must round **up**: at the printed
+  value the power claim must hold.
+- The floor carries *"differences below Y cannot reach significance at any observed outcome"*, so Y
+  must **truncate**: at n=38 the exact floor is `6/38 = 15.789 pp`, and printing the ceiling 15.8
+  makes the sentence **false**, because the attainable observed difference `6/38 = 15.789` is below
+  15.8 and *does* reach significance (b=6, c=0, p=1/32). Truncating to 15.7 keeps it true.
+- The failure mode is not academic: at n=12, α=0.025 the exact floor is `7/12 = 58.333 pp`, which a
+  report displays as an observed `58.3`. Ceiling the floor to 58.4 produces a report whose verdict
+  line says *distinguishable* while its own honesty line says the difference cannot reach
+  significance. Truncation to 58.3 removes the contradiction.
+- Exact values (`6/40 = 15.0`) print exactly under either rule; only inexact ones diverge.
+
+*(v1.5 corrects three §7.1 cells where v1.2–v1.4 ceilinged an inexact floor — 15.8→15.7 at n=38 and
+7.1→7.0 at n=85 in the α=0.05 column, 46.7→46.6 at n=15 in the α=0.025 column. The note was
+internally inconsistent, ceiling-rounding the floor in one column and truncating it in the other;
+this rule is what makes the direction derivable rather than remembered.)*
 
 **Rule 4 — `verdict()` asserts its own preconditions and refuses when McNemar is invalid.**
 
@@ -438,6 +480,22 @@ within-conversation correlation ρ ≈ 1 and m = 7 turns each gives `DEFF = 1 + 
 ratio `√7 = 2.646` — v1.1's "≈2.6" — and `n_eff = 280/7 = 40`, which is exactly the conversation
 count. The identity is the check: **when ρ = 1, effective n must equal the cluster count.** Make
 that a unit test; it is the one assertion that catches a squaring error in either direction.
+
+**Rule 7 — no verdict path may return `distinguishable` when `|diff| < observable_floor`.** This is
+a **required property of the verdict path itself, asserted in `verdict()`**, not a test the
+implementer may or may not write. It costs one comparison and it is the only cheap check that ties
+together two quantities computed by completely independent routes — the floor comes from
+`b_min(α)/n_effective`, the verdict from McNemar's tail or the cluster bootstrap — so a defect in
+either surfaces as a contradiction rather than as a plausible number. It is what would have caught a
+bootstrap that silently resamples correlated rows i.i.d.: such a substitution changes the
+instrument's name and not its interval, and an interval alone cannot report that.
+
+Two details that decide whether it works:
+- Compare against the **exact** floor, never the display-rounded one (Rule 3) — otherwise the
+  invariant inherits the presentation layer's rounding and can fire or fail to fire by 0.05 pp.
+- **The converse is not an invariant.** `|diff| ≥ observable_floor` does *not* imply
+  `distinguishable`; the floor is necessary, never sufficient. Asserting the converse would be a
+  bug that hides the discordance structure McNemar exists to read.
 
 **Rule 6 — `cluster_bootstrap` is one-level, and a pack that needs two must fail validation.**
 
@@ -907,7 +965,9 @@ Two narrower uses that are genuinely valuable:
    cannot interpret must not hold a gate. Its job is to make a harness defect visible, and it does
    that by being printed and read, not by halting anything.
 2. **Implementation cross-check on the pure metric functions.** Feed `test_metrics.py`'s existing
-   fixtures through the new implementation and require byte-identical outputs. Cheap, and it
+   fixtures through the new implementation and require byte-identical outputs — assertable here,
+   unlike §3.2c's bounds, because recall@k and MRR are ratios of small integers and the values are
+   exactly representable. Cheap, and it
    removes "did we reimplement recall@k subtly differently" as an explanation for any future
    divergence.
 
@@ -984,7 +1044,7 @@ matching — the same move `nlq_scoring` already made for NL queries, and it is 
 defensible number today.
 
 *Why 30:* the McNemar floor means 6 net wins are needed regardless of n, so at n=30 the tool
-resolves 20 pp observed / 25 pp at 80% power. At n=20 that becomes 30/37 pp — too coarse to be
+resolves 20 pp observed / 25 pp at 80% power. At n=20 that becomes 30.0/36.7 pp — too coarse to be
 worth building. 30 is the smallest n where the role can distinguish anything the lab has cared
 about, against a human-verification cost of 30 items.
 
@@ -1075,20 +1135,22 @@ tool reliably *detects*. Both numbers follow from the McNemar exact floor and we
   holds only over n≈20–120 (recomputed: 7.33 at n=20 → 7.81 at n=120) and **breaks below it —
   6.94 at n=12** — which is exactly the range the tool-caller pack now lives in.
 
-**All figures recomputed in this session** by exact search over the McNemar rejection region,
-ceilinged to 0.1 pp (§3.4 rule 3); the exact values are shown so nobody re-derives them:
+**All figures recomputed in this session** by exact search over the McNemar rejection region.
+**MDD columns are ceilinged to 0.1 pp; floor columns are truncated** — opposite directions, for the
+reason in §3.4 Rule 3. The exact MDD values are shown so nobody re-derives them; the floors are
+exactly `b_min(α)/n` (`b_min` = 6 at α=0.05, 7 at α=0.025) and need no table of their own:
 
 | n_eff | floor, α=0.05 | MDD₈₀, α=0.05 | (exact) | floor, α=0.025 | MDD₈₀, α=0.025 |
 |---|---|---|---|---|---|
 | **12** | **50.0 pp** | **57.8 pp** | 57.794 | 58.3 pp | 65.6 pp |
-| 15 | 40.0 pp | 47.6 pp | 47.559 | 46.7 pp | 54.2 pp |
+| 15 | 40.0 pp | 47.6 pp | 47.559 | 46.6 pp | 54.2 pp |
 | 20 | 30.0 pp | 36.7 pp | 36.646 | — | — |
 | 30 | 20.0 pp | 25.1 pp | 25.075 | 23.3 pp | 28.7 pp |
-| 38 | 15.8 pp | 20.1 pp | 20.009 | — | — |
+| 38 | 15.7 pp | 20.1 pp | 20.009 | — | — |
 | 40 | 15.0 pp | 19.1 pp | 19.046 | 17.5 pp | 21.9 pp |
 | 48 | 12.5 pp | 16.0 pp | 15.972 | — | — |
 | 60 | 10.0 pp | 12.9 pp | 12.857 | — | — |
-| 85 | 7.1 pp | 9.2 pp | 9.142 | — | — |
+| 85 | 7.0 pp | 9.2 pp | 9.142 | — | — |
 | 120 | 5.0 pp | 6.6 pp | 6.509 | — | — |
 
 **Every report prints, computed from its own `n_effective` and its own α, never hardcoded:**
@@ -1198,6 +1260,11 @@ visible:
 | `clear_advance` | 30 | **`falseSuspendRate`** | **23.3 pp** | **28.7 pp** | 20.0 / 25.1 pp |
 | `boundary` (all expected-suspend) | 15 | false-advance on near-misses — **not a verdict metric** | — | — | 40.0 / 47.6 pp |
 
+*(Floors here are `b_min(α)/n` **truncated**, MDDs ceilinged — §3.4 Rule 3. `23.3` is not a typo for
+`23.4`: `7/30 = 23.333…` and the sentence the number carries is "differences below this cannot reach
+significance", which ceiling-rounding would make false. `17.5`, `15.0`, `20.0` and `40.0` are exact
+and unaffected.)*
+
 So: **the naive read "n=85 → ~9 pp" is wrong**, and the honest figures are now 21.9 / 28.7 pp
 rather than v1.1's 19.1 / 25.1 — the ~2.8–3.6 pp of resolving power that a second co-equal verdict
 metric costs. (v1.1's boundary-tier MDD of "53 pp" was the `8/n` rule of thumb; the exact value at n=15 is
@@ -1297,7 +1364,9 @@ module's own contract (§3.4) and are the ones that keep gate B-1 from recurring
    (α=0.05: c=0→b=6, c=1→b=8, c=2→b=10, c=3→b=12, c=4→b=13; **α=0.025: c=0→b=7, c=1→b=9,
    c=2→b=11**). Pure functions, no network. *Threshold:* **1e-12 on p, 1e-9 on MOVER-D bounds as
    proportions** (§3.2c) — not "exactly", which is not assertable, and not 3 decimal places, which
-   is loose enough to pass a wrong Wilson.
+   is loose enough to pass a wrong Wilson. **Assert against §3.2c's 10-dp table, which is the only
+   published form of these fixtures precise enough to carry that tolerance** (§3.2c's trap); assert
+   the p-values against the exact rationals, not their decimal expansions.
 2. **The four contract tests that keep gate B-1 fixed** (§3.4), each of which must fail loudly
    rather than degrade: (a) `PairedOutcomes.from_units` raises `DuplicateAnalysisUnit` on a repeated
    unit id — feed it 48 rows drawn from 12 script ids, which is the exact shape the gate rejected;
