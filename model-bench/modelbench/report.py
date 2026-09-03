@@ -26,7 +26,13 @@ from typing import NamedTuple, Sequence
 
 from modelbench import stats
 from modelbench.packs import PackConfigError, PackRef, check_sampling_contract
-from modelbench.results import BinaryMetric, InvalidRecord, ItemResult, RunResult
+from modelbench.results import (
+    BinaryMetric,
+    IncompleteItemRecord,
+    InvalidRecord,
+    ItemResult,
+    RunResult,
+)
 from modelbench.roles import unit_kind as unit_kind_for_role
 
 _DESCRIPTIVE_NOTE = (
@@ -152,6 +158,87 @@ def _paired_rows(a: RunResult, b: RunResult, metric: str, pack: PackRef) -> Pair
     )
 
 
+class AggregateMismatch(NamedTuple):
+    """One verdict-family rate an arm declares that its own items do not support.
+
+    `detail` is the diagnosis, already phrased for the excluded block: either the two denominators
+    that disagree, or the item whose own record could not be read at all (plan-gate G3-7).
+    """
+
+    metric: str
+    detail: str
+
+
+def _aggregate_item_mismatches(run: RunResult, pack: PackRef) -> list[AggregateMismatch]:
+    """Plan v1.8 §4 S1 done-condition 10 — the `aggregates`-versus-`items` cross-check (P4-4).
+
+    For each `BinaryMetric` in the pack's pre-registered `verdictMetrics` family whose denominator
+    is the analysis unit, `metric.n` must equal the number of the arm's items for which
+    `scored_outcome` yields an outcome.
+
+    **The selector is `metric.unit == unit_kind_for_role(pack.role)`, not
+    `metric.unit == pack.analysisUnit`** (plan-gate G3-6, which found DC-10's prose naming the
+    latter). Those are two disjoint vocabularies: `BinaryMetric.unit` is a *denominator noun*
+    (`item` / `conversation` / `query` / `turn` / `call`) while `PackRef.analysisUnit` is a
+    *`pairingKey` component name*, fixed by `packs.py` to `pairingKey[0]` — `itemId` where the
+    unit noun is `item`. The literal predicate is never true, so a check written from it selects
+    nothing and passes everything, invisibly. This is the predicate `report.py` already uses one
+    function over, for `-ml` §4.4's Wilson-interval suppression.
+
+    The reproduction is an arm declaring
+    `BinaryMetric(m, successes=0, n=10)` for a metric **no item declares scoreable**, which
+    rendered `0/10 = 0.000` — a claim that ten items were scored — in the same document as
+    *"No verdict: no paired data"*.
+
+    **Scoreability, never the score.** An arm that declares ten items scoreable and gets none of
+    them right is a consistent record and `0/10` is then a real measurement; a check written
+    against `successes` would throw away exactly the arm the tool exists to report on.
+
+    Scoped to the verdict family, because that is the set the comparison actually reads: an
+    exploratory metric carries no significance claim, so a disagreement there is not grounds for
+    discarding an arm whose pre-registered metrics are sound. The pooled counts are out for the
+    same reason `-ml` §4.4 suppresses their intervals — their denominator is not the analysis unit,
+    so there is no per-item count to compare them against.
+
+    The check is **S1's whole**: `RunResult` carries `items` and `aggregates` as required fields
+    side by side, so it needs nothing S2 produces. S2 owes only the *contract* — that a scorer
+    derives its aggregates from the same items in one pass — which is what makes this failure
+    unreachable rather than merely reported (plan v1.8 §4 S2).
+    """
+    unit = unit_kind_for_role(pack.role)
+    found: list[AggregateMismatch] = []
+    for metric in run.aggregates.named_metrics():
+        if not isinstance(metric, BinaryMetric) or metric.unit != unit:
+            continue
+        if metric.name not in pack.metrics.verdictMetrics:
+            continue
+        counted = 0
+        unreadable: str | None = None
+        for it in run.items:
+            try:
+                if it.scored_outcome(metric.name) is not None:
+                    counted += 1
+            except IncompleteItemRecord:
+                # **A mismatch, never a raise** (plan-gate G3-7). `scored_outcome` refuses the
+                # sibling malformation — a metric declared scoreable with no entry in `counts` —
+                # and that refusal is right at its own seam, but letting it out of *this* function
+                # turns an inconsistent record into a traceback at exit 1, outside §3.6a's closed
+                # exit-code set: the exact response this check exists to avoid, arriving through
+                # the check's own implementation. The arm is excluded and named, like every other
+                # disagreement between an arm's two paths. (`load_history` also quarantines such a
+                # record on read — review P4-5 — so the two nets sit at different seams and this
+                # one is what makes `compare_report` total rather than trusting its caller.)
+                unreadable = f"item {it.itemId!r} declares it scoreable and records no count"
+                break
+        if unreadable is not None:
+            found.append(AggregateMismatch(metric.name, unreadable))
+        elif counted != metric.n:
+            found.append(
+                AggregateMismatch(metric.name, f"declared n={metric.n}, counted {counted}")
+            )
+    return found
+
+
 def _pairing_tally(rows: PairedRows, unit_plural: str, a_label: str, b_label: str) -> str:
     """§4.3 rule 2's `n/a` tally, printed beside the rate it shaped — always, including when it is
     all zeros, because otherwise a reader cannot tell a shrunken `n` from a full one."""
@@ -263,10 +350,43 @@ def _comparison_kind(a: RunResult, b: RunResult) -> str:
     return "paired, cross-session"
 
 
-def _arm_label(run: RunResult) -> str:
+def _arm_names(runs: Sequence[RunResult]) -> dict[str, str]:
+    """A short, **distinguishing** name per arm, keyed by `runId` (review P4-10).
+
+    Plan §5 test 19a — *"the highest-value single test in the harness"* — is two independent runs
+    of one model, and on that comparison the report was unreadable: two identical `arm` cells, a
+    §4.3 tally reading *"0 scoreable for qwen/qwen3-4b-2507 only, 0 scoreable for
+    qwen/qwen3-4b-2507 only"*, and a significant verdict that would have said *"X is better than
+    X"*. Neither `runId` nor `sessionId` was printed anywhere.
+
+    The suffix is added **only where the model key is ambiguous**, so an ordinary comparison keeps
+    the bare key and grows no noise. Within an ambiguous group it must actually distinguish:
+    `sessionId` is preferred because §5 test 19a's two runs are two *sessions*, but two runs of one
+    model inside one session share it, and printing it twice would leave the arms exactly as
+    identical as the bare key did — so that case falls back to `runId`, which is unique by
+    construction (it is the record's own filename, `results.store`).
+    """
+    names: dict[str, str] = {}
+    for run in runs:
+        # Ambiguity is counted over **distinct records**, not over arm slots. `--negative-control`
+        # puts the same stored record in both arms deliberately, and there a suffix would
+        # disambiguate nothing while implying there were two records to tell apart — the banner
+        # above already says there is one.
+        group = [r for r in runs if r.modelKey == run.modelKey]
+        if len({r.runId for r in group}) == 1:
+            names[run.runId] = run.modelKey
+            continue
+        sessions = [r.sessionId for r in group]
+        by_session = run.sessionId is not None and sessions.count(run.sessionId) == 1
+        marker = f"session {run.sessionId}" if by_session else f"run {run.runId}"
+        names[run.runId] = f"{run.modelKey} ({marker})"
+    return names
+
+
+def _arm_label(run: RunResult, name: str) -> str:
     if run.armKind == "deterministic":
-        return f"{run.modelKey} — reference arm (deterministic given pack version)"
-    return run.modelKey
+        return f"{name} — reference arm (deterministic given pack version)"
+    return name
 
 
 #: Why no verdict is computed, keyed by cause. One explanation for two causes let a one-arm
@@ -283,6 +403,18 @@ _NO_VERDICT_REASON = {
         "them is a pack change, not a finding (§3.4.1)._"
     ),
 }
+
+
+def _excluded_reason(count: int) -> str:
+    """Why there is nothing to compare when the cross-check took the arms (S1 done-condition 10)."""
+    plural = "arm was" if count == 1 else "arms were"
+    return (
+        f"_None: fewer than two arms remain — {count} {plural} excluded above because their "
+        "stored aggregates disagree with their own items, so what is left cannot be compared. "
+        "That is a defect in how those records were written, not a scoring outcome: the arm's "
+        "per-item and aggregate paths report different denominators for a pre-registered verdict "
+        "metric, and neither can be trusted while they disagree (S1 done-condition 10)._"
+    )
 
 
 def _comparison_pair(
@@ -312,6 +444,25 @@ _NEGATIVE_CONTROL_BANNER = (
     "plan §5 test 19a)."
 )
 
+#: What the mode says when it had nothing to duplicate (review P4-1). The banner above describes
+#: *"the same stored record"*, and with no record selected there is no such subject: emitting it
+#: anyway produced a durable report opening with **cannot fail** and stating ten lines below, in
+#: the same document, that fewer than two arms were selected — P3-4's own failure mode (an artifact
+#: asserting something untrue of itself) re-entered through the case P3-4's fix did not cover.
+#:
+#: The banner is **replaced, never merely suppressed.** This document is filed beside real
+#: comparisons under a filename that differs only in its sequence number, so a reader who cannot
+#: see that the mode was requested and did not run would read it as an ordinary empty comparison
+#: and conclude nothing about the wiring — when what actually happened is that the check the
+#: operator asked for never executed.
+_NEGATIVE_CONTROL_UNAVAILABLE = (
+    "> **NEGATIVE CONTROL REQUESTED, NOT RUN** — the mode puts two copies of *one stored record* "
+    "in the two arms, and fewer than two arms reached this comparison, so there was nothing to "
+    "duplicate and no wiring was exercised. This document is **not** a negative control and says "
+    "nothing about whether the mode works; the reason no arms reached it is below (`-ml` §9, "
+    "plan §3.9(5))."
+)
+
 
 def compare_report(
     runs: Sequence[RunResult],
@@ -328,8 +479,25 @@ def compare_report(
         raise PackConfigError("headlineMetric is not a member of verdictMetrics")
 
     lines: list[str] = [f"# Comparison — {pack.label} ({pack.role})", ""]
+
+    # S1 done-condition 10 — an arm whose stored aggregates disagree with its own items is
+    # **excluded from the comparison, not repaired and not partly trusted**, and named below. The
+    # partition happens before any banner or table reads `runs`, because an excluded arm is not in
+    # the comparison at all: it must not colour the version/hash/schema banners either. If this
+    # leaves fewer than two arms, `_comparison_pair` renders the no-comparison case it already has.
+    inconsistent = [(r, _aggregate_item_mismatches(r, pack)) for r in runs]
+    excluded = [(r, m) for r, m in inconsistent if m]
+    runs = [r for r, m in inconsistent if not m]
+    arm_names = _arm_names(runs)
+
+    # The mode's banner is decided **after** the arms are known, not before (review P4-1): it
+    # describes "the same stored record", and whether there is such a record is exactly what
+    # `_select_arms` and the cross-check above have just settled.
     if negative_control:
-        lines += [_NEGATIVE_CONTROL_BANNER, ""]
+        lines += [
+            _NEGATIVE_CONTROL_BANNER if len(runs) >= 2 else _NEGATIVE_CONTROL_UNAVAILABLE,
+            "",
+        ]
 
     # --- banners: never silent, and never a reason to drop a record -----------------------------
     versions = {_fp(r, "packVersion") for r in runs}
@@ -359,13 +527,22 @@ def compare_report(
             "difference is visible, never silent, and never a reason to drop a record (§3.4.3).",
             "",
         ]
-    if invalid:
+    if invalid or excluded:
         lines += ["> **INVALID RESULTS EXCLUDED** (AC-2)", ">"]
         for record in invalid:
             detail = (
                 ", ".join(f"`{p.field}` ({p.reason})" for p in record.problems) or record.reason
             )
             lines.append(f"> - `{record.runId or record.path.name}` — {record.reason}: {detail}")
+        for run, mismatches in excluded:
+            # The same block, deliberately: exclude-and-name is AC-2's own mechanism, already built
+            # and already read as "this record did not enter the comparison, and here is why". Both
+            # counts are printed because the *direction* of the disagreement is the diagnosis a
+            # scorer author needs, and neither number alone carries it.
+            detail = ", ".join(f"`{m.metric}` ({m.detail})" for m in mismatches)
+            lines.append(
+                f"> - `{run.runId}` — aggregates disagree with items: {detail}"
+            )
         lines.append("")
 
     # --- per-arm descriptive table --------------------------------------------------------------
@@ -373,7 +550,18 @@ def compare_report(
     pooled_seen = False
     for run in runs:
         for metric in run.aggregates.named_metrics():
-            if isinstance(metric, BinaryMetric) and metric.n:
+            if isinstance(metric, BinaryMetric) and not metric.n:
+                # **Rendered, never silently dropped** (review P4-6). `and metric.n` was doing two
+                # jobs — suppressing the row *and* keeping `successes / n` away from a zero
+                # denominator — and a reader could not tell a dropped row from an arm that never
+                # declared the metric. `0/0` with no rate and no interval distinguishes them and
+                # is true; the division is simply not reached. Same call `_POOLED_FOOTNOTE` makes
+                # one column over: the count is never suppressed, only the precision claim is.
+                lines.append(
+                    f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | 0/0 | — | "
+                    "— (no observations) |"
+                )
+            elif isinstance(metric, BinaryMetric):
                 if metric.unit == unit_kind_for_role(pack.role):
                     lo, hi = stats.wilson_interval(metric.successes, metric.n)
                     interval = f"[{lo:.3f}, {hi:.3f}]"
@@ -385,12 +573,14 @@ def compare_report(
                     pooled_seen = True
                     interval = f"— (n is {metric.unit}s; not the analysis unit)"
                 lines.append(
-                    f"| {_arm_label(run)} | {metric.name} | {metric.successes}/{metric.n} | "
+                    f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | "
+                    f"{metric.successes}/{metric.n} | "
                     f"{metric.successes / metric.n:.3f} | {interval} |"
                 )
-            elif not isinstance(metric, BinaryMetric):
+            else:
                 lines.append(
-                    f"| {_arm_label(run)} | {metric.name} | n={metric.n} | {metric.mean:.4f} | — |"
+                    f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | n={metric.n} | "
+                    f"{metric.mean:.4f} | — |"
                 )
     lines += ["", _DESCRIPTIVE_NOTE, ""]
     if pooled_seen:
@@ -398,7 +588,16 @@ def compare_report(
 
     pair = _comparison_pair(runs)
     if isinstance(pair, str):
-        lines += ["## Verdicts", "", _NO_VERDICT_REASON[pair], ""]
+        # **Which** too-few-arms this is changes the remedy, and the two are not interchangeable
+        # (the same class M-6 split `_NO_VERDICT_REASON` for). Arms removed by the cross-check were
+        # *selected* and then thrown away, so pointing the reader at `--models`/`--session` sends a
+        # scorer author to their command line when the defect is in their record.
+        reason = (
+            _excluded_reason(len(excluded))
+            if pair == "too-few-arms" and excluded
+            else _NO_VERDICT_REASON[pair]
+        )
+        lines += ["## Verdicts", "", reason, ""]
         return "\n".join(lines) + "\n"
 
     a, b = pair
@@ -429,7 +628,9 @@ def compare_report(
         outcomes = stats.PairedOutcomes.from_units(
             unit_kind, list(zip(rows.unit_ids, rows.a_ok, rows.b_ok))
         )
-        tallies.append(_pairing_tally(rows, f"{unit_kind}s", a.modelKey, b.modelKey))
+        tallies.append(
+            _pairing_tally(rows, f"{unit_kind}s", arm_names[a.runId], arm_names[b.runId])
+        )
         # An empty intersection has no resolving power to describe — `n_effective` of zero is not a
         # small sample, it is no sample — so the metric gets no verdict rather than a figure
         # computed from nothing (review P3-1). It stays in the family: *k* is fixed by
@@ -476,8 +677,8 @@ def compare_report(
             resolving=rp,
             metric_name=metric,
             family=family,
-            a_label=a.modelKey,
-            b_label=b.modelKey,
+            a_label=arm_names[a.runId],
+            b_label=arm_names[b.runId],
             alpha_step=step.threshold,
             holm_tested=step.tested,
             # The pack's declaration, never a literal here: `sampling.seed` is a manifest field

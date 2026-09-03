@@ -12,7 +12,7 @@ import pytest
 from conftest import classification_aggregates, item, model_fields, run
 
 from modelbench.cli import main
-from modelbench.results import store
+from modelbench.results import ItemResult, store
 
 PACK = "guard-judge-understanding"
 
@@ -81,6 +81,45 @@ def test_a_same_day_rerun_does_not_overwrite_the_earlier_comparison(workspace) -
     names = sorted(p.name for p in (workspace / "reports").glob("*.md"))
     assert len(names) == 2
     assert names[0].endswith("-01.md") and names[1].endswith("-02.md")
+
+
+def test_an_incomplete_item_record_does_not_take_the_comparison_down_with_it(
+    workspace, capsys
+) -> None:
+    """Review P4-5 — one bad item aborted `compare` outside §3.6a's closed exit-code set.
+
+    `results.py` raises `IncompleteItemRecord` for an item that declares a metric scoreable and
+    records no count; `report.py` is its only caller, and `_cmd_compare` catches only
+    `PackConfigError`. Verified end-to-end before the fix: one such item in **one** of three
+    otherwise-valid stored records aborted with an uncaught traceback, **exit 1** — not one of
+    `0/2/3/4/5` — **no report written at all**, and the two good arms lost with it.
+
+    The comparison must survive: two valid arms still compare, the third is excluded and named in
+    the block AC-2 already owns, the exit code stays `0` (the tool ran and reported), and the
+    report is on disk.
+    """
+    _store_arm(workspace, "cand", correct=40)
+    _store_arm(workspace, "incumbent", correct=34)
+    broken = [item(f"g{i:02d}", correct=True, metric="falseAdvanceRate") for i in range(39)]
+    broken.append(
+        ItemResult(itemId="g39", pairingKey=("g39",), outcome="pass",
+                   scoreable={"falseAdvanceRate": True}, counts={}, latencyMs=1300.0, detail={})
+    )
+    store(
+        run("halfscored", items=broken, aggregates=classification_aggregates(40, 40),
+            fingerprint_fields=model_fields(modelKey="halfscored", packId=PACK)),
+        workspace,
+    )
+
+    code = main(["compare", "--root", str(workspace), "--pack", PACK])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "**INVALID RESULTS EXCLUDED** (AC-2)" in out
+    assert "`halfscored`" in out and "items[g39].counts.falseAdvanceRate" in out
+    assert "is better than" in out              # the two valid arms still compared
+    written = list((workspace / "reports").glob("*.md"))
+    assert len(written) == 1 and "halfscored" in written[0].read_text()
 
 
 def test_compare_exits_zero_even_when_every_record_is_invalid(workspace, capsys) -> None:
@@ -238,6 +277,77 @@ def test_the_negative_control_report_says_on_its_face_that_it_is_a_smoke_check(
     assert "NEGATIVE CONTROL (WIRING SMOKE CHECK)" in out
 
 
+def test_a_negative_control_with_no_stored_runs_does_not_claim_it_cannot_fail(
+    workspace, capsys
+) -> None:
+    """Review P4-1 — a durable report asserting something untrue of itself, P3-4's own failure mode
+    re-entered through the case P3-4's fix did not cover.
+
+    With no stored runs for the pack, `_select_arms`' `if negative_control and candidates` is false
+    and it returns `[]`, but the banner was emitted before `_comparison_pair` was ever consulted.
+    Verified end-to-end: **exit 0**, a report written to `reports/<packId>-<date>-01.md`, opening
+
+        both arms are the *same stored record*, so `b = c = 0 by construction` and this comparison
+        **cannot fail**
+
+    and stating ten lines below, in the same document, *"None: fewer than two arms were selected,
+    so there is nothing to compare."* No record was duplicated and no wiring was exercised, so the
+    banner's subject does not exist.
+
+    **The banner's substance is otherwise sound** and is not what changes here: with two copies of
+    one record `b = c = 0`, so `distinguishable` is unreachable on either path. The defect is the
+    zero-arm case emitting it at all.
+    """
+    code = main(["compare", "--root", str(workspace), "--pack", PACK, "--negative-control"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "cannot fail" not in out
+    assert "both arms are the *same stored record*" not in out
+    # ...and the durable artifact still says the mode was asked for and did not run
+    assert "**NEGATIVE CONTROL REQUESTED, NOT RUN**" in out
+    assert "fewer than two arms were selected" in out
+    written = list((workspace / "reports").glob("*.md"))
+    assert len(written) == 1 and "NOT RUN" in written[0].read_text()
+
+
+def test_a_negative_control_with_a_stored_run_still_carries_the_full_banner(
+    workspace, capsys
+) -> None:
+    """The other side of P4-1's gate: where the mode *did* duplicate a record, the banner that
+    tells a reader this comparison cannot fail is mandatory (review P3-4)."""
+    _store_arm(workspace, "cand", correct=40)
+    assert main(["compare", "--root", str(workspace), "--pack", PACK, "--negative-control"]) == 0
+    out = capsys.readouterr().out
+    assert "**NEGATIVE CONTROL (WIRING SMOKE CHECK)**" in out
+    assert "cannot fail" in out
+    assert "NOT RUN" not in out
+
+
+def test_the_negative_control_duplicates_the_first_arm_in_the_requested_order(
+    workspace, capsys
+) -> None:
+    """P4-13 — *which* record the mode duplicates was undocumented and untested.
+
+    `candidates[-1]` survived the suite, so the choice was neither pinned nor stated anywhere. It
+    is the **first arm in the order the operator asked for** — the same order every other part of
+    `compare` uses, so `--models X,Y` puts X in both arms exactly as it puts X in arm A of an
+    ordinary comparison. Pinning it is what makes the mode's output predictable enough to be a
+    smoke check at all.
+    """
+    _store_arm(workspace, "aaa", correct=40)
+    _store_arm(workspace, "zzz", correct=20)
+
+    assert main(["compare", "--root", str(workspace), "--pack", PACK, "--negative-control",
+                 "--models", "zzz,aaa"]) == 0
+    out = capsys.readouterr().out
+    assert "| zzz | falseAdvanceRate | 20/40 |" in out
+    assert "aaa" not in out.split("## Verdicts")[0]
+    # ...and the two arms carry no P4-10 disambiguating suffix: they are one record, not two arms
+    # that happen to share a model key, and the banner above already says so.
+    assert "(run zzz)" not in out and "(session " not in out
+
+
 def test_an_ordinary_comparison_carries_no_negative_control_banner(workspace, capsys) -> None:
     """The negative of P3-4: a banner that appears on every report says nothing."""
     _store_arm(workspace, "cand", 40)
@@ -303,3 +413,13 @@ def test_the_report_filename_is_the_manifests_pack_id_not_the_directory_name(
     assert len(names) == 1
     assert names[0].startswith(f"{PACK}-")
     assert not names[0].startswith("a-directory-with-another-name")
+
+    # Review P4-9 — the **sibling** call, `load_history(root, packId=pack.packId)`, is the other
+    # half of the same distinction and was the half left unpinned: re-pointing it at `args.pack`
+    # filtered out every stored record (each declares `packId` = the manifest's), leaving a
+    # zero-arm report that still passed every assertion above, since the filename half is
+    # independent of it. The arms have to be shown to have loaded, not just the file named.
+    body = (workspace / "reports" / names[0]).read_text()
+    assert "| cand | falseAdvanceRate | 40/40 |" in body
+    assert "| incumbent | falseAdvanceRate | 34/40 |" in body
+    assert "fewer than two arms were selected" not in body

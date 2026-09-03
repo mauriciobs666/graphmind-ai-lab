@@ -2,6 +2,106 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-03 — S1 fourth gate round: the nets that catch the first scorer's first mistake
+
+**What:** Closed every major and minor from the fourth gate round on S1 —
+`docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` (**P4-1**…**P4-10**, plus nits
+**P4-11**…**P4-13**) and `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4` (**M-ML-8**,
+**m-ML-9**…**m-ML-12**, nit **n-ML-8**) — against method note **v1.8** and plan **v1.8**.
+Test-first throughout; **353 → 389 tests**, and **49 mutations run against the fixes, 49 killed,
+no survivors**. `.venv/bin/ruff check .` clean.
+
+**The round's shape.** Six of the fifteen findings are *"a mutation survives the suite"* — code
+that was already right with nothing pinning it — so for those the test **is** the deliverable and
+the implementation did not move. The rest divide into one real statistical correction (M-ML-8),
+three note-published strings that were false on the path every comparison currently takes, and two
+report-level nets that had been deferred to S2 and were pulled back to S1 because a net added after
+the thing it protects has shipped is how all four of these rounds began.
+
+**M-ML-8 (major) — the fail-safe path quantified with the narrower of its two instruments.**
+B-ML-2's veto fixed what the non-`by-construction` path *decides* with two rounds ago and left what
+it *quantifies* with on the bare percentile bootstrap. Measured exactly, that interval covers 0.939
+at n=40 against MOVER-D's 0.976 while printing narrower bounds on **100%** of the probability mass,
+and it degenerates at the sparse discordant counts `-ml` §3.2b says this lab will see: at n=30 with
+`b=4, c=0` it returned `[3.3, 26.7] pp`, **excluding zero**, against an exact p of 0.125, because
+four non-zero rows make `P(no +1 drawn) = (26/30)³⁰ = 1.4% < 2.5%` and a 2.5th percentile of zero
+unreachable. Note v1.8 §3.4 Rule 4 replaces it with the **conservative envelope**
+(`stats.conservative_envelope`): the wider of the `√DEFF`-widened bootstrap and the `√DEFF`-widened
+MOVER-D, half-widths scaled about the same point estimate.
+
+*Read bound by bound, not by picking the wider interval whole* — Rule 4's own stated property is
+"uniformly at least as conservative as either alone", which choosing one interval does not deliver:
+at `(4, 5, 3, 0)`, the tool-caller pack's own n, the bootstrap is the wider interval while MOVER-D's
+lower bound is the more conservative one, so picking it whole would print a bound tighter than an
+instrument the rule says it dominates. Confirmation that the reading is right came from the
+rendered output: at DEFF 1.00 the guard-judge shape now prints
+`+15.0 pp (95% CI [3.2, 29.1] pp)`, which is `-ml` §3.2e verdict 1's published string exactly —
+Rule 4's "reduces to MOVER-D exactly at DEFF 1.00", observed rather than asserted.
+
+**Not done, and deliberately: v1.8's second half, the closed-form percentile.** The note also says
+the percentile "should" be computed in closed form rather than resampled, which removes the
+seed/row-order sensitivity of an atomic quantile. The envelope hides that wherever MOVER-D is the
+binding arm — measured, the overwhelming majority of tables — but not where the resample escapes it:
+at n=12 the rendered lower bound still moves between `-27.1` and `-33.3 pp` across seeds (11 of 19
+against 8 of 19, measured). Landing the closed form retires `-ml` §3.2d's seed from this decision
+and with it review **P3-5**'s delivered contract (`PackRef.seed`, `verdict`'s `bootstrap_seed`, and
+the report's `decided by: … (seed N)` line), which is a scope decision rather than a formula.
+Carried to the coordinator, not taken here.
+
+**Three note-published strings, all false on the default path** (m-ML-9, m-ML-10, m-ML-11). The
+equality boundary now reads *"is at or above that"* — one comparative true across the whole branch,
+and equality is reachable at this component's own n (`n_units=85, k=2, DEFF=1.9` gives
+`mdd80 = 20.0 pp`, and `|b−c| = 17` over 85 rows is exactly that). The cluster-path label is
+published verbatim in two variants keyed on the **design effect**, because the shipped sentence
+asserted *"under clustering McNemar rejects too readily"* on a comparison that declares no
+clustering — P3-3's defect surviving in the half P3-3 did not touch. The floor sentence gains an
+effective-unit qualifier wherever `design_effect > 1.0`, because the floor is `b_min/n_eff` while
+the McNemar p three clauses away is over the raw rows, and without it the line reads as a flat
+contradiction of the number beside it (30.0 pp of floor beside `p=0.008`).
+
+**P4-4 (major) → S1 done-condition 10 — the `aggregates`-versus-`items` cross-check.** An arm
+declaring `BinaryMetric(m, successes=0, n=10)` for a metric no item declares scoreable printed
+`0/10 = 0.000` — a claim that ten items were scored — in the same document as *"No verdict: no
+paired data"*. On mismatch the arm is **excluded and named** in the `INVALID RESULTS EXCLUDED`
+block: raising reproduces P4-5's shape, and suppressing one metric's row leaves a partly-trusted
+arm in the comparison. **Two defects in the done-condition's own text were caught by the plan gate
+mid-implementation and are recorded here because the code deviates from the written spec:**
+**G3-6** — DC-10's selector names two disjoint vocabularies (`BinaryMetric.unit` is a denominator
+noun, `PackRef.analysisUnit` a `pairingKey` component name), so the literal predicate is never true
+and would have checked nothing; the code uses `metric.unit == roles.unit_kind(pack.role)`.
+**G3-7** — DC-10 counts with `scored_outcome`, which *raises* for the sibling malformation; the
+check treats that as a mismatch and names the offending item instead.
+
+**P4-5 (major) — one bad item took the whole comparison down.** `IncompleteItemRecord` escaped
+`compare_report` as a traceback at **exit 1**, outside §3.6a's closed `{0,2,3,4,5}`, with no report
+written and the valid arms lost with it. `load_history` now quarantines such a record on read as an
+ordinary `field` failure naming the item and the metric, which is AC-2's actual mechanism.
+
+**The rest.** **P4-1** — a `--negative-control` run with nothing to duplicate wrote a durable report
+claiming *"both arms are the same stored record … cannot fail"* ten lines above *"fewer than two
+arms were selected"*; the banner is now decided after the arms are known and replaced, not merely
+suppressed, so the artifact still says the mode was requested and did not run. **P4-2**, **P4-3**,
+**P4-7**, **P4-8**, **P4-9**, **m-ML-12** — six surviving mutations pinned, of which m-ML-12's and
+P4-2's each **flip a printed verdict** (the veto tested at `alpha_family` instead of the Holm step;
+`holm_tested` hardcoded `True`, which reprints Pass 1's blocker verbatim — a significance claim
+beside its own *"not tested (Holm stops here)"* row). **P4-6** — a zero-denominator aggregate is
+rendered as `0/0 — no observations` rather than silently dropped. **P4-10** — two arms of one model,
+which is plan §5 test 19a, are told apart by session (falling back to `runId` where the session does
+not distinguish, and adding nothing where the model key already does). **n-ML-8** — Rule 7's raise
+is no longer gated on `holm_tested`, which is not one of the theorem's premises.
+
+**One defect found by rendering the output rather than by an assertion, as in every round so far.**
+The P4-4 exclusion path left two individually-true sentences contradicting each other: the block at
+the top said the arms were excluded, and the verdict line below still said *"fewer than two arms
+were **selected** … Check `--models` and `--session`"* — the wrong remedy, sending a scorer author
+to their command line when the defect is in their record. Split into its own reason.
+
+**Verification:** from `model-bench/`, `.venv/bin/python -m pytest -q -m "" -rsx` → `389 passed`,
+nothing skipped, xfailed or deselected; `.venv/bin/python -m pytest --collect-only -q -m ""` →
+`389 tests collected`, so collected equals run; `.venv/bin/ruff check .` → `All checks passed!`.
+Mutation testing was run by copying each source file aside and restoring from the copy, never
+through git.
+
 ## 2026-09-03 — S1 third gate round: absence is not an outcome, and five sentences that were false
 
 **What:** Closed the third round of gate findings on S1 —

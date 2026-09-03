@@ -185,12 +185,84 @@ def paired_cluster_bootstrap(
     if design_effect < 1.0:
         raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
     lo, hi = paired_bootstrap(diffs, B=B, seed=seed)
-    point = sum(diffs) / len(diffs)
-    scale = math.sqrt(design_effect)
+    return _widen((lo, hi), sum(diffs) / len(diffs), math.sqrt(design_effect))
+
+
+def _widen(interval: tuple[float, float], point: float, scale: float) -> tuple[float, float]:
+    """Scale an interval's two half-widths about `point`, clamped to a difference of proportions.
+
+    Shared by both arms of `conservative_envelope`, because Rule 4 requires them widened "the same
+    way": an envelope of two intervals scaled about two different centres, or by two different
+    factors, is not an envelope of the same quantity.
+    """
+    lo, hi = interval
     return (
         max(-1.0, point - (point - lo) * scale),
         min(1.0, point + (hi - point) * scale),
     )
+
+
+def conservative_envelope(
+    diffs: Sequence[float],
+    table: tuple[int, int, int, int],
+    *,
+    design_effect: float,
+    B: int,
+    seed: int,
+) -> tuple[float, float]:
+    """The interval printed on any non-`by-construction` path (`-ml` **v1.8** §3.4 Rule 4).
+
+    **This replaces the bare percentile interval, and the correction is about *width*, not about
+    the decision** (review M-ML-8). B-ML-2's veto fixed what this path *decides* with; what it
+    *quantifies* with was left on the resample, and the resample is the **narrower** of the two
+    available instruments: measured exactly at n=40 under strict dominance, MOVER-D covers 0.976
+    at a mean width of 25.63 pp against the bootstrap's 0.939 at 21.23 pp, and the bootstrap is
+    narrower on **100%** of the probability mass (n=30: 0.983/30.60 vs 0.942/24.57; n=85:
+    0.969/15.32 vs 0.940/13.56). At `design_effect == 1.0` — *every* comparison until S2's
+    determinism probe runs — `sqrt(1.0)` widens nothing, so a path taken **because less is known**
+    was printing a tighter effect size than the instrument §3.2c mandates.
+
+    The rule: the **wider** of the `sqrt(DEFF)`-widened percentile bootstrap (Rule 6) and the
+    `sqrt(DEFF)`-widened MOVER-D, half-widths scaled about the same point estimate the same way.
+
+    **"Wider" is taken bound by bound, and Rule 4's own stated property is what fixes that
+    reading:** the envelope is *"uniformly at least as conservative as either alone"*, which
+    picking whichever interval has the larger total width does not deliver — at `(4, 5, 3, 0)`,
+    the tool-caller pack's own n, the bootstrap is the wider interval while MOVER-D's lower bound
+    is the more conservative one, so choosing one interval whole would print a bound tighter than
+    an instrument it is supposed to dominate. Bound by bound it also can only ever *remove*
+    rejections, which is what leaves the veto and Rule 7 undisturbed.
+
+    Three consequences Rule 4 claims, and each is a test here rather than a docstring promise: it
+    reduces to MOVER-D at DEFF 1.00 wherever MOVER-D contains the resample (restoring §3.2c's
+    effect-size instrument on a path where nothing about clustering was ever declared); it stays
+    responsive to a declared design effect; and it removes the sparse-count degeneracy, because
+    MOVER-D covers zero exactly when the counts are too thin to support excluding it — at n=30
+    with `b=4, c=0` the resample returns `[3.3, 26.7] pp`, excluding zero against an exact
+    p of 0.125, since with four non-zero rows `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` makes a
+    2.5th percentile of zero unreachable.
+
+    **What this does not fix, and the note says so:** the resample arm remains a Monte-Carlo
+    estimate of an *atomic* quantile, so where the target percentile lands within Monte-Carlo error
+    of an atom boundary its bound flips by `1/n_units` with the seed and with the row order. The
+    envelope hides that wherever MOVER-D is the binding arm, which is the overwhelming majority of
+    tables measured — but not where the resample escapes MOVER-D. v1.8's second half is to compute
+    the percentile in closed form (the resample distribution of a paired **binary** table is
+    exactly multinomial), which is not done here: it retires `-ml` §3.2d's seed from this decision
+    and with it review P3-5's contract, and that is a scope call rather than a formula.
+    """
+    a, b, c, d = table
+    n = a + b + c + d
+    if n != len(diffs):
+        raise ValueError(
+            f"the table describes {n} rows and {len(diffs)} paired differences were given; the "
+            "envelope is two instruments on one table, not on two"
+        )
+    point = (b - c) / n
+    scale = math.sqrt(design_effect)
+    resample = paired_cluster_bootstrap(diffs, design_effect=design_effect, B=B, seed=seed)
+    newcombe = _widen(mover_d_interval(a, b, c, d), point, scale)
+    return min(resample[0], newcombe[0]), max(resample[1], newcombe[1])
 
 
 def cluster_bootstrap(
@@ -651,6 +723,15 @@ def _mdd_clause(resolving: ResolvingPower, unit_plural: str, diff: float, b: int
     print this clause printed it falsely. The alternate wording is v1.7's, verbatim, **discordance
     counts included** — they are the reason the two numbers point opposite ways, and without them
     the sentence looks like the instrument contradicting itself.
+
+    **The comparative is *"at or above"*, not *"above"* (v1.8 §3.2e, review m-ML-9).** The branch
+    is `|diff| < mdd80`, so **equality takes this wording** — the right branch, since the stem
+    claims the pack resolves differences of `>=` `mdd80`. But `mdd80` is ceilinged onto a 0.1 pp
+    grid while `|diff|` is `(b-c)/n`, so the two coincide wherever grid and lattice meet, and that
+    is reachable at this component's own sample sizes: `n_units=85, k=2, DEFF=1.9` gives
+    `mdd80 = 20.0 pp` and `|b-c| = 17` is exactly 20.0 pp — the guard-judge pack's own n. A strict
+    *"is above that"* is then false in the same way *"is below that"* was, one branch over. One
+    comparative true across the whole branch, never a third string to keep in step with two others.
     """
     if resolving.mdd80 is None:
         return unattainable_clause(resolving, unit_plural)
@@ -658,7 +739,7 @@ def _mdd_clause(resolving: ResolvingPower, unit_plural: str, diff: float, b: int
     if abs(diff) < resolving.mdd80:
         return f"{stem}; the observed {_pp(abs(diff))} pp is below that."
     return (
-        f"{stem}; the observed {_pp(abs(diff))} pp is above that, but the MDD assumes strict "
+        f"{stem}; the observed {_pp(abs(diff))} pp is at or above that, but the MDD assumes strict "
         f"dominance and this comparison is not strictly dominant (b={b}, c={c}), so the difference "
         f"required for {resolving.power:.0%} power at this discordance mix is larger (§7.1)."
     )
@@ -682,6 +763,23 @@ def floor_clause(resolving: ResolvingPower) -> str:
             f"no observed difference can reach significance {holm}: the floor of "
             f"{b_min(resolving.alpha_family)} net wins exceeds the {resolving.n_effective:g} "
             "effective units available"
+        )
+    if resolving.design_effect > 1.0:
+        # `-ml` v1.8 §7.1's qualifier, published verbatim (review m-ML-11). Above DEFF 1 this
+        # sentence and the McNemar p three lines from it live on **different denominators** — the
+        # floor on `n_eff`, the p on the raw rows — so the template alone reads as a flat
+        # contradiction of the number beside it: at n_units=12, DEFF=2 the floor prints 100.0 pp
+        # while `b=11, c=0` is 91.7 pp at p=0.00098. Both are *decided* right (Rule 7 demotes);
+        # the resolution — McNemar over raw rows is anti-conservative under clustering, so the
+        # floor over effective units governs — appeared nowhere in the rendered text. At DEFF 1.00
+        # the denominators coincide, the qualifier is noise, and §7.2's rendered line does not move.
+        return (
+            f"differences below {format_floor_pp(resolving.observable_floor)} pp cannot reach "
+            f"significance at any observed outcome over the {resolving.n_effective:g} effective "
+            f"{_plural(resolving.unit_kind)} this design supports, {holm} — the McNemar p printed "
+            f"beside it is computed over the {resolving.n_units} raw rows, where clustering makes "
+            "it anti-conservative, so it can fall below that alpha without lifting the difference "
+            "above this floor"
         )
     return (
         f"differences below {format_floor_pp(resolving.observable_floor)} pp cannot reach "
@@ -789,8 +887,12 @@ def verdict(
                 "the clustered decision path needs a bootstrap seed; it goes into the environment "
                 "fingerprint so the report is reproducible (-ml §3.2d)"
             )
-        ci = paired_cluster_bootstrap(
+        # **The envelope, not the resample alone** (`-ml` v1.8 §3.4 Rule 4, review M-ML-8). The
+        # veto below fixed what this path *decides* with; the interval it *quantifies* with was
+        # the narrower of the two available instruments, on a path taken because less is known.
+        ci = conservative_envelope(
             outcomes.unit_diffs(),
+            (a, b, c, d),
             design_effect=resolving.design_effect,
             B=10_000,
             seed=bootstrap_seed,
@@ -832,8 +934,14 @@ def verdict(
     # distinguishable, because significance depends on the discordance split rather than on
     # `b - c` (§3.2c row 4 is the counterexample).
     below_floor = abs(diff) < resolving.observable_floor
-    fired = raw_significant and holm_tested and below_floor
-    if fired and decided_by == "mcnemar-exact":
+    # **The raise and the demotion take different conditions** (review n-ML-8). One `fired` gated
+    # both on `holm_tested`, which is not one of the theorem's premises: the theorem is
+    # `p <= alpha_step <= alpha_family` implies `|b - c| >= b_min`, and it holds whether or not
+    # Holm reached this member — so a genuine module bug went undetected for every member past the
+    # stop. `holm_tested` belongs to the *demotion*, where "this member was not tested" is a real
+    # reason not to rank it; it has no business suppressing a contradiction between two numbers
+    # computed by independent routes.
+    if raw_significant and below_floor and decided_by == "mcnemar-exact":
         raise Rule7Violation(
             f"Rule 7 fired on the mcnemar-exact path: p={p:g} <= alpha_step={alpha:g} with "
             f"|diff|={abs(diff):g} below the observable floor {resolving.observable_floor:g} "
@@ -842,7 +950,7 @@ def verdict(
             f"|b - c| >= b_min={b_min(resolving.alpha_family)} — so one of the two routes that "
             "produced these numbers is wrong (-ml v1.6 §3.4 Rule 7)"
         )
-    floor_demoted = fired
+    floor_demoted = raw_significant and holm_tested and below_floor
     significant = raw_significant and holm_tested and not below_floor
 
     ci_excludes_zero = ci[0] > 0 or ci[1] < 0
@@ -924,21 +1032,30 @@ def verdict(
         # provenance parenthetical prints it three lines away, in the MDD's sentence, where a
         # reader has no reason to read it as the reason the instrument changed).
         if resolving.design_effect > 1.0:
-            widening = (
-                f"widened by sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared "
-                "clustering"
+            text += (
+                " Decided by the cluster-bootstrap CI on the paired difference, widened by "
+                f"sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared "
+                f"clustering, in conjunction with McNemar's exact test (p={p:.3f}) as a necessary "
+                "condition: under clustering McNemar rejects too readily, so it may withhold a "
+                "verdict but never carries one on its own."
             )
         else:
-            widening = (
-                "not widened (sqrt(DEFF)=1.00), because this comparison's design effect is "
-                f"{resolving.basis} rather than established by construction"
+            # **The rationale differs, not just the widening clause** (v1.8 §3.2e(f) variant 2,
+            # review m-ML-10). The shipped sentence kept *"under clustering McNemar rejects too
+            # readily"* on a comparison that declares **no** clustering — P3-3's own defect
+            # surviving in the half P3-3 did not touch, the rationale rather than the widening —
+            # and its `because` clause attached, on the nearest-attachment parse, to the widening
+            # instead of to the instrument choice. What displaced McNemar is the **basis**; what
+            # left sqrt(DEFF) at 1.00 is the **design effect**. Two different causes, so the
+            # published variant states each where it belongs.
+            text += (
+                " Decided by the cluster-bootstrap CI on the paired difference — the instrument "
+                f"here because this comparison's design effect is {resolving.basis} rather than "
+                "established by construction — with no widening applied (sqrt(DEFF)=1.00), in "
+                f"conjunction with McNemar's exact test (p={p:.3f}) as a necessary condition: a "
+                "design effect that was never established cannot license the exact test to carry "
+                "a verdict, so it may withhold one but never carries one on its own."
             )
-        text += (
-            f" Decided by the cluster-bootstrap CI on the paired difference, {widening}, in "
-            f"conjunction with McNemar's exact test (p={p:.3f}) as a necessary condition: under "
-            "clustering McNemar rejects too readily, so it may withhold a verdict but never "
-            "carries one on its own."
-        )
 
     return Verdict(
         metric_name=metric_name,

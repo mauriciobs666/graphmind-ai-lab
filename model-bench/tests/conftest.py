@@ -183,6 +183,7 @@ def tmp_root(tmp_path):
 
 __all__ = [
     "BinaryMetric",
+    "ClassificationAggregates",
     "ItemResult",
     "PackMetrics",
     "PackRef",

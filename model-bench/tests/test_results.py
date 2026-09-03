@@ -282,6 +282,45 @@ def test_a_fingerprint_dataclass_keeps_absent_distinct_from_null() -> None:
     assert [p.reason for p in nulled.validate()] == ["null"]
 
 
+def test_load_history_excludes_and_names_an_item_that_declares_a_count_it_does_not_carry(
+    tmp_root,
+) -> None:
+    """Review P4-5 — the refusal landed at the furthest possible point from its producer.
+
+    `store()` accepts the record (its validation is fingerprint-only) and `load_history` accepted
+    it too, so `IncompleteItemRecord` was raised at *report* time, from `report.py`'s only caller,
+    where `cli.py` catches nothing but `PackConfigError`. One bad item in one of two otherwise
+    valid records aborted the whole `compare` with an uncaught traceback, **exit 1** — outside
+    §3.6a's closed set of `0/2/3/4/5` — with **no report written at all** and the valid arm lost
+    with it.
+
+    AC-2's actual mechanism is *excluded on read **and named***, which is what this restores: the
+    record is a `field` failure like any other, the block prints which item and which metric, and
+    every other record still loads.
+    """
+    def ok(item_id: str) -> ItemResult:
+        return ItemResult(itemId=item_id, pairingKey=(item_id,), outcome="pass",
+                          scoreable={"m": True}, counts={"m": 1}, latencyMs=1.0, detail={})
+
+    store(_run("good", items=[ok("i1")]), tmp_root)
+    store(
+        _run("bad", items=[
+            ok("i1"),
+            ItemResult(itemId="i9", pairingKey=("i9",), outcome="pass",
+                       scoreable={"m": True}, counts={}, latencyMs=1.0, detail={}),
+        ]),
+        tmp_root,
+    )
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.runId for r in valid] == ["good"]
+    assert [r.runId for r in invalid] == ["bad"]
+    assert invalid[0].reason == "field"
+    assert [(p.field, p.reason) for p in invalid[0].problems] == [
+        ("items[i9].counts.m", "absent")
+    ]
+
+
 # --- M-1 / m-1: which records the pack filter may drop, and which are findings ------------------
 
 

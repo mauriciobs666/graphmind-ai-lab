@@ -26,6 +26,7 @@ from modelbench.stats import (
     UnattainablePower,
     b_min,
     cluster_bootstrap,
+    conservative_envelope,
     design_effect,
     effective_n,
     floor_clause,
@@ -179,6 +180,33 @@ def test_the_pinned_z_constant_is_load_bearing_at_this_tolerance() -> None:
         rounded_z = mover_d_interval(a, b, c, d, z=1.96)
         assert abs(rounded_z[0] - lo_pp / 100) > 1e-9
         assert abs(rounded_z[1] - hi_pp / 100) > 1e-9
+
+
+def test_mover_d_clamps_a_negative_radicand_and_a_bound_outside_a_probability() -> None:
+    """P4-11 — `mover_d_interval`'s three clamps were untested, the unclosed twin of P3-15.
+
+    The docstring calls them *"required, not cosmetic"*, and that was the only claim of its kind in
+    the module with no test: replacing `max(0.0, lo_rad)` with `abs(lo_rad)` and dropping the
+    `[-1, 1]` clamps both survived the suite. Both are reachable — swept here over every
+    `(a, b, c, d)` with `n <= 60`: **6** tables drive the lower radicand negative (magnitude
+    ~3e-17) and **14** produce a bound outside `[-1, 1]` (magnitude ~2e-16). Sub-display, exactly
+    P3-15's finding — and MOVER-D is no longer only the `mcnemar-exact` path's instrument: note
+    v1.8's conservative envelope puts it on **every** path, so its guards now carry more traffic
+    than when they were written.
+
+    Without the radicand clamp `math.sqrt` raises `ValueError`; without the `[-1, 1]` clamp the
+    interval reports a difference of proportions outside the range one can take.
+    """
+    lo, hi = mover_d_interval(1, 0, 0, 1)         # lower radicand is -2.78e-17 here
+    assert lo == 0.0 and hi == 0.0
+
+    lo, hi = mover_d_interval(0, 0, 25, 0)        # unclamped lower bound is -1.0000000000000002
+    assert lo == -1.0
+    lo, hi = mover_d_interval(0, 25, 0, 0)        # unclamped upper bound is +1.0000000000000002
+    assert hi == 1.0
+    # ...and the clamps are not flattening an ordinary interval on the way past
+    lo, hi = mover_d_interval(34, 6, 0, 0)
+    assert -1.0 < lo < hi < 1.0
 
 
 @pytest.mark.parametrize("a,b,c,d,diff_pp,lo_pp,hi_pp,p", REGRESSION_FIXTURES)
@@ -610,7 +638,8 @@ def test_an_observed_difference_above_the_mdd_renders_the_notes_alternate_clause
     assert (
         "This pack resolves differences of >=36.7 pp with 80% power at n=20 effective items "
         "(20 units, design effect 1.00, by-construction, alpha=0.05); the observed 40.0 pp is "
-        "above that, but the MDD assumes strict dominance and this comparison is not strictly "
+        "at or above that, but the MDD assumes strict dominance and this comparison is not "
+        "strictly "
         "dominant (b=13, c=5), so the difference required for 80% power at this discordance mix "
         "is larger (§7.1)."
     ) in v.text
@@ -620,7 +649,9 @@ def test_the_alternate_clause_names_the_discordance_split_of_the_losing_directio
     """The note's own second case, `(n=30, b=5, c=13)` — the candidate *loses* more than it wins,
     and the counts printed must be this table's, not the winning direction's."""
     v = verdict(_outcomes(6, 5, 13, 6), resolving=_rp(30), metric_name="m", family=["m"])
-    assert "the observed 26.7 pp is above that, but the MDD assumes strict dominance" in v.text
+    assert (
+        "the observed 26.7 pp is at or above that, but the MDD assumes strict dominance"
+    ) in v.text
     assert "not strictly dominant (b=5, c=13)" in v.text
 
 
@@ -656,6 +687,25 @@ def test_verdict_carries_the_marginal_overlap_diagnostic() -> None:
     v = verdict(_outcomes(34, 6, 0, 0), resolving=_rp(40), metric_name="m", family=["m"])
     assert v.marginal_overlap is True
     assert v.distinguishable is True
+
+
+def test_the_marginal_overlap_diagnostic_can_say_no() -> None:
+    """P4-8 — no test anywhere asserted the diagnostic is ever `False`.
+
+    `tests/test_report.py` asserted only that the label substring is present, and the single
+    `stats` assertion on the value was `is True`, so inverting the printed yes/no and computing
+    both margins from the **same arm** both survived the suite. `-ml` §3.1 says the rule is inert
+    in this lab's regime — which caps the severity and is exactly why the one number it does print
+    has to be right rather than merely present.
+
+    At 40/40 against 20/40 the two Wilson intervals are disjoint by a wide margin, so a diagnostic
+    computing both margins from one arm cannot reproduce it.
+    """
+    v = verdict(_outcomes(20, 20, 0, 0), resolving=_rp(40), metric_name="m", family=["m"])
+    a_lo, a_hi = wilson_interval(40, 40)
+    b_lo, b_hi = wilson_interval(20, 40)
+    assert b_hi < a_lo                       # genuinely disjoint, not a boundary case
+    assert v.marginal_overlap is False
 
 
 # --- Rule 4's branch: clustering moves the decision off McNemar -----------------------------------
@@ -704,10 +754,20 @@ def test_the_fail_safe_path_names_the_basis_and_not_a_widening_that_did_not_happ
         bootstrap_seed=20260902,
     )
     assert "for the declared clustering" not in v.text
+    # `-ml` v1.8 §3.2e(f) variant 2, published verbatim (review m-ML-10). The shipped wording was
+    # prose invented in code, and its rationale half still said *"under clustering McNemar rejects
+    # too readily"* on a comparison declaring **no** clustering — P3-3's own defect surviving in
+    # the half P3-3 did not touch. The published variant gives the reason that is true here and
+    # re-attaches the `because` clause to the instrument choice rather than to the widening.
     assert (
-        f"not widened (sqrt(DEFF)=1.00), because this comparison's design effect is {basis} "
-        "rather than established by construction"
+        "Decided by the cluster-bootstrap CI on the paired difference — the instrument here "
+        f"because this comparison's design effect is {basis} rather than established by "
+        "construction — with no widening applied (sqrt(DEFF)=1.00), in conjunction with "
+        "McNemar's exact test (p=0.031) as a necessary condition: a design effect that was never "
+        "established cannot license the exact test to carry a verdict, so it may withhold one but "
+        "never carries one on its own."
     ) in v.text
+    assert "under clustering McNemar rejects too readily" not in v.text
 
 
 def test_a_real_widening_still_names_the_clustering_it_corrected_for() -> None:
@@ -720,8 +780,14 @@ def test_a_real_widening_still_names_the_clustering_it_corrected_for() -> None:
         family=["m"],
         bootstrap_seed=20260902,
     )
-    assert "widened by sqrt(DEFF)=1.41 for the declared clustering" in v.text
-    assert "not widened" not in v.text
+    # `-ml` v1.8 §3.2e(f) variant 1, published verbatim — the clustering rationale is true here.
+    assert (
+        "Decided by the cluster-bootstrap CI on the paired difference, widened by "
+        "sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test "
+        "(p=0.031) as a necessary condition: under clustering McNemar rejects too readily, so it "
+        "may withhold a verdict but never carries one on its own."
+    ) in v.text
+    assert "no widening applied" not in v.text
 
 
 def test_a_measured_basis_at_deff_one_also_moves_the_decision_off_mcnemar() -> None:
@@ -855,10 +921,16 @@ def test_rule_7_is_what_catches_the_case_the_widened_interval_still_misses() -> 
     the rendered text has to say which one won. At DEFF 4 and 7 the widened interval already covers
     zero and the demotion is not needed — which is why the invariant, not the demotion, is the
     property asserted above.
+
+    **The table moved from `(34, 6, 0, 0)` to `(32, 8, 0, 0)` at note v1.8** (review M-ML-8): the
+    printed interval is now the conservative **envelope** of the resample and MOVER-D, and on the
+    old table the widened MOVER-D arm covers zero at DEFF 2, so nothing was left for Rule 7 to
+    catch. That is the envelope *removing* a rejection, which is exactly what Rule 4 says it may
+    do — and the demotion path it guards is still live one net win over, at the same floor.
     """
     rp = _rp(40, deff=2.0, basis="measured")
     v = verdict(
-        _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m", family=["m"],
+        _outcomes(32, 8, 0, 0), resolving=rp, metric_name="m", family=["m"],
         bootstrap_seed=20260902,
     )
     assert v.ci[0] > 0  # the interval on its own excludes zero
@@ -952,6 +1024,49 @@ def test_rule_7_raises_on_the_mcnemar_path_where_it_is_a_theorem() -> None:
     assert v.decided_by == "cluster-bootstrap"
     assert v.floor_demoted is True
     assert v.distinguishable is False
+
+
+def test_the_rule_7_raise_is_not_suppressed_by_a_metric_past_the_holm_stop() -> None:
+    """n-ML-8 — the theorem says nothing about Holm, so the raise must not be gated on it.
+
+    `fired = raw_significant and holm_tested and below_floor` put `holm_tested` in front of the
+    **raise** as well as the demotion. The theorem is `p <= alpha_step <= alpha_family` implies
+    `|b-c| >= b_min`; whether Holm tested this member is not one of its premises, so a genuine
+    module bug — the two independently computed numbers contradicting each other — went undetected
+    for every member past the stop. The two conditions are split: the raise takes
+    `raw_significant and below_floor`, the demotion keeps `holm_tested`, where it belongs.
+
+    Nothing visible changes for a well-formed input: the `not holm_tested` text branch already
+    precedes the `floor_demoted` one.
+    """
+    corrupted = dataclasses.replace(_rp(40), observable_floor=0.30)
+    for tested in (True, False):
+        with pytest.raises(Rule7Violation):
+            verdict(
+                _outcomes(34, 6, 0, 0), resolving=corrupted, metric_name="m", family=["m"],
+                holm_tested=tested,
+            )
+
+
+def test_a_metric_past_the_holm_stop_is_not_relabelled_as_below_the_floor() -> None:
+    """P4-12 — `holm_tested`'s effect on `floor_demoted` was untested.
+
+    Dropping it from the demotion condition is unreachable on `mcnemar-exact` (Rule 7 is a theorem
+    there and now raises regardless), but on the cluster path it relabels a Holm-untested member's
+    decision cell as *"below the observable floor"* — a reason that is not why it was not ranked.
+    Holm not having tested it is the reason, and the report has its own wording for that.
+    """
+    substitute = dataclasses.replace(
+        _rp(40), observable_floor=0.30, design_effect=1.0, basis="assumed"
+    )
+    v = verdict(
+        _outcomes(34, 6, 0, 0), resolving=substitute, metric_name="m", family=["m"],
+        bootstrap_seed=20260902, holm_tested=False,
+    )
+    assert v.floor_demoted is False
+    assert v.distinguishable is False
+    assert "Not tested: Holm–Bonferroni stops" in v.text
+    assert "observable floor" not in v.text
 
 
 def test_verdict_refuses_a_holm_step_outside_the_two_alphas() -> None:
@@ -1063,20 +1178,124 @@ def test_the_conjunction_still_ranks_a_table_both_instruments_accept(deff, basis
         assert "is better than" in v.text
 
 
-def test_at_deff_one_the_substitute_interval_is_narrower_than_the_mover_d_it_replaces() -> None:
-    """Why the veto is *needed* rather than merely permitted — B-ML-2's mechanism, in one number.
+def test_the_veto_is_tested_at_the_holm_step_and_not_at_the_family_alpha() -> None:
+    """m-ML-12 — the veto's alpha was untested on the path every comparison currently takes.
 
-    `sqrt(1.0) = 1.0`, so at the default basis the "widened" interval is the bare percentile one,
-    and it is **narrower** than the MOVER-D that McNemar's own path would have quantified with.
-    The interval cannot be what makes this path conservative, so something else has to be, and
-    that is the conjunction. Above DEFF 1 the widening takes over — the test below.
+    Testing the conjunction's second conjunct at `resolving.alpha_family` instead of the Holm step
+    `alpha` survived all 353 tests, and it is not an equivalent mutation: at n=40, k=2, DEFF=1.0,
+    `basis="assumed"`, `(b=6, c=0)` McNemar's exact p is 1/32 = 0.031, which the alpha/2 = 0.025
+    step refuses and the unadjusted 0.05 accepts. So the multiplicity correction could be removed
+    from the substitute path without a test noticing, and the verdict flips when it is.
+
+    Both directions are asserted: a veto that never lets anything through would pass the first
+    assertion and be useless.
+    """
+    rp = _rp(40, deff=1.0, basis="assumed", alpha_mdd=0.025)
+    assert mcnemar_exact(6, 0) == pytest.approx(1 / 32)
+    common = dict(resolving=rp, metric_name="m", family=["m", "other"], bootstrap_seed=20260902)
+    at_step = verdict(_outcomes(34, 6, 0, 0), alpha_step=0.025, **common)
+    at_family = verdict(_outcomes(34, 6, 0, 0), alpha_step=0.05, **common)
+    assert at_step.decided_by == "cluster-bootstrap"
+    assert at_step.alpha_used == 0.025
+    assert at_step.distinguishable is False
+    assert at_family.distinguishable is True
+
+
+def test_at_deff_one_the_printed_interval_is_never_narrower_than_the_mover_d_it_replaces() -> None:
+    """M-ML-8 — this test **inverted** at note v1.8, and its rationale survives the inversion.
+
+    It used to assert the opposite: that at `sqrt(1.0) = 1.0` the "widened" interval was the bare
+    percentile one and was **narrower** than the MOVER-D that McNemar's own path would have
+    quantified with. That was true of the delivered build, and it is exactly what M-ML-8 found
+    wrong — measured exactly, MOVER-D covers 0.976 at n=40 against the bootstrap's 0.939 while the
+    bootstrap prints narrower bounds on **100%** of the probability mass. A fail-safe that fires
+    because *less* is known must not tighten the interval.
+
+    Note v1.8 §3.4 Rule 4 replaces the resample-alone with the **conservative envelope**: the
+    wider of the sqrt(DEFF)-widened percentile bootstrap and the sqrt(DEFF)-widened MOVER-D. At
+    DEFF 1.00 that is MOVER-D, restoring §3.2c's effect-size instrument on the path where nothing
+    about clustering was ever declared.
+
+    **The rationale the old test carried is unchanged and still load-bearing:** the interval is not
+    what makes this path conservative — the conjunction is (B-ML-2). The envelope only stops the
+    interval from being *anti*-conservative while the veto does the deciding.
     """
     lo, hi = mover_d_interval(34, 6, 0, 0)
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=_rp(40, deff=1.0, basis="assumed"),
         metric_name="m", family=["m"], bootstrap_seed=20260902,
     )
-    assert (v.ci[1] - v.ci[0]) < (hi - lo)
+    assert v.ci[0] <= lo and v.ci[1] >= hi          # it contains MOVER-D, bound by bound
+    assert (v.ci[1] - v.ci[0]) >= (hi - lo)
+    assert v.ci == (pytest.approx(lo), pytest.approx(hi))   # at DEFF 1.00 it *is* MOVER-D here
+
+
+def test_the_envelope_covers_zero_where_the_counts_are_too_thin_to_exclude_it() -> None:
+    """M-ML-8(2) — the bare percentile interval **degenerates** at sparse discordant counts.
+
+    At n=30 with `b=4, c=0` the resample has four non-zero rows, so
+    `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` and the 2.5th percentile *cannot* be zero: the
+    delivered build printed `[3.3, 26.7] pp`, **excluding zero**, against McNemar's exact
+    p = 0.125 and MOVER-D's `[-0.6, 29.7]`. Under strict dominance at n=30 that fires on 20.3% of
+    the probability mass, each time rendering §3.2e verdict 3's *"the interval excludes zero but
+    the exact paired test does not"* on the strength of a degenerate interval rather than a real
+    disagreement. The veto kept every one of those verdicts right; the printed quantification was
+    not. MOVER-D covers zero exactly when the counts are too thin to support excluding it, so the
+    envelope removes the degeneracy.
+    """
+    v = verdict(
+        _outcomes(26, 4, 0, 0), resolving=_rp(30, deff=1.0, basis="assumed"),
+        metric_name="m", family=["m"], bootstrap_seed=20260902,
+    )
+    assert mcnemar_exact(4, 0) == pytest.approx(0.125)
+    assert mover_d_interval(26, 4, 0, 0)[0] < 0 < mover_d_interval(26, 4, 0, 0)[1]
+    assert v.ci[0] < 0 < v.ci[1]            # the printed interval no longer excludes zero
+    assert v.distinguishable is False
+    # ...so verdict 3's disagreement string is not printed on the strength of a degenerate interval
+    assert "excludes zero but the exact paired test does not" not in v.text
+    assert "covers zero" in v.text
+
+
+def test_the_envelope_takes_each_bound_from_whichever_arm_is_more_conservative() -> None:
+    """M-ML-8 / note v1.8 §3.4 Rule 4 — *"uniformly at least as conservative as either alone"*.
+
+    That property is what fixes the reading of *"the wider of"*: it holds bound by bound, not by
+    picking whichever of the two intervals has the larger total width. The tool-caller pack's own
+    shape is the case that separates them — at `(a=4, b=5, c=3, d=0)`, n=12, the bootstrap is the
+    wider interval overall while MOVER-D's **lower** bound is the more conservative one, so
+    choosing one interval whole would print a lower bound *tighter* than an instrument it is
+    supposed to dominate.
+    """
+    diffs = [1.0] * 5 + [-1.0] * 3 + [0.0] * 4
+    boot = paired_cluster_bootstrap(diffs, design_effect=1.0, B=10_000, seed=20260902)
+    mover = mover_d_interval(4, 5, 3, 0)
+    env = conservative_envelope(diffs, (4, 5, 3, 0), design_effect=1.0, B=10_000, seed=20260902)
+
+    assert mover[0] < boot[0] and boot[1] > mover[1]     # neither arm contains the other
+    assert (boot[1] - boot[0]) > (mover[1] - mover[0])   # the bootstrap is the wider interval...
+    assert env == (mover[0], boot[1])                    # ...and the envelope still takes both
+    assert env[0] <= min(boot[0], mover[0]) and env[1] >= max(boot[1], mover[1])
+
+
+def test_the_envelope_still_responds_to_a_declared_design_effect() -> None:
+    """Rule 4's third property — the envelope must not flatten the widening B-ML-1 installed.
+
+    Both arms are scaled about the same point estimate by the same `sqrt(DEFF)`, so the envelope
+    of the two is scaled with them.
+    """
+    diffs = [1.0] * 6 + [0.0] * 34
+    at_one = conservative_envelope(diffs, (34, 6, 0, 0), design_effect=1.0, B=10_000, seed=7)
+    at_four = conservative_envelope(diffs, (34, 6, 0, 0), design_effect=4.0, B=10_000, seed=7)
+    point = 6 / 40
+    assert at_four[0] < at_one[0] and at_four[1] > at_one[1]
+    assert at_four[0] == pytest.approx(point - (point - at_one[0]) * 2.0)
+    assert at_four[1] == pytest.approx(point + (at_one[1] - point) * 2.0)
+
+
+def test_the_envelope_refuses_a_table_that_does_not_describe_its_rows() -> None:
+    """The two arms must be two instruments on **one** table, or the envelope is meaningless."""
+    with pytest.raises(ValueError):
+        conservative_envelope([1.0, 0.0], (34, 6, 0, 0), design_effect=1.0, B=10, seed=1)
 
 
 def test_the_clustered_interval_is_not_narrower_than_the_mover_d_it_replaces() -> None:
@@ -1109,6 +1328,55 @@ def test_paired_cluster_bootstrap_scales_the_half_widths_by_sqrt_deff() -> None:
 def test_paired_cluster_bootstrap_refuses_a_design_effect_below_one() -> None:
     with pytest.raises(ValueError):
         paired_cluster_bootstrap([1.0, 0.0], design_effect=0.5, B=10, seed=1)
+
+
+def test_the_floor_sentence_names_its_denominator_where_it_differs_from_the_p_beside_it() -> None:
+    """m-ML-11 — above DEFF 1 the floor and the McNemar p live on **different denominators**.
+
+    `floor_clause` renders `b_min/n_eff` while the p three lines away is computed over the
+    `n_units` raw rows, so the line reads as a flat self-contradiction of the number beside it.
+    Measured: at `n_units = 12, DEFF = 2` the floor prints 100.0 pp while `b=11, c=0` is a 91.7 pp
+    difference at p = 0.00098; at `n_units = 40, DEFF = 2` it prints 30.0 pp beside `b=6, c=0` at
+    p = 0.031. Both are *decided* correctly — Rule 7 demotes them — and both print a p below alpha
+    underneath a sentence saying no observed outcome can reach significance.
+
+    Note v1.8 §7.1 publishes the qualifier, conditional on `design_effect > 1.0`. At DEFF 1.00 the
+    two denominators coincide, the qualifier is noise, and the template stands unchanged — which
+    is why §7.2's rendered line does not move.
+    """
+    clustered = _rp(40, deff=2.0, basis="measured")
+    assert floor_clause(clustered) == (
+        "differences below 30.0 pp cannot reach significance at any observed outcome over the 20 "
+        "effective items this design supports, at any Holm step (alpha <= 0.05) — the McNemar p "
+        "printed beside it is computed over the 40 raw rows, where clustering makes it "
+        "anti-conservative, so it can fall below that alpha without lifting the difference above "
+        "this floor"
+    )
+    # ...and at DEFF 1.00 the template is untouched, because the denominators coincide there
+    assert floor_clause(_rp(40, deff=1.0, basis="by-construction")) == (
+        "differences below 15.0 pp cannot reach significance at any observed outcome, at any Holm "
+        "step (alpha <= 0.05)"
+    )
+
+
+def test_the_qualifier_appears_beside_the_p_it_reconciles() -> None:
+    """The finding is about two sentences a reader sees together, so the rendered verdict is what
+    has to carry it: 30.0 pp of floor, and `p=0.031` three lines away, are only reconcilable if the
+    line says which denominator each is on."""
+    v = verdict(
+        _outcomes(32, 8, 0, 0), resolving=_rp(40, deff=2.0, basis="measured"),
+        metric_name="m", family=["m"], bootstrap_seed=20260902,
+    )
+    assert v.floor_demoted is True
+    assert (
+        "differences below 30.0 pp cannot reach significance at any observed outcome over the 20 "
+        "effective items this design supports, at any Holm step (alpha <= 0.05) — the McNemar p "
+        "printed beside it is computed over the 40 raw rows, where clustering makes it "
+        "anti-conservative, so it can fall below that alpha without lifting the difference above "
+        "this floor"
+    ) in v.text
+    # the p the qualifier reconciles is in the same rendered string, three clauses away
+    assert "McNemar's exact test (p=0.008)" in v.text
 
 
 # --- M-ML-1: no MDD exists when the rejection region is empty -------------------------------------
@@ -1390,5 +1658,32 @@ def test_an_observed_difference_exactly_at_the_mdd_takes_the_above_that_branch()
     )
     assert v.distinguishable is False
     assert abs(v.diff) == rp.mdd80  # the equality the sweep found
-    assert "the observed 10.0 pp is above that" in v.text
+    assert "the observed 10.0 pp is at or above that" in v.text
     assert "is below that" not in v.text
+
+
+def test_the_equality_wording_is_true_at_this_components_own_sample_size() -> None:
+    """m-ML-9 — *"is above that"* is false at exact equality, one branch over from M-ML-7.
+
+    The branch is `|diff| < mdd80`, so equality takes the **alternate** wording — the right branch,
+    since `mdd_clause` claims the pack resolves differences of **>=** `mdd80` and at equality the
+    difference is resolvable. But `mdd80` is ceilinged onto a 0.1 pp grid while an observed
+    difference is `(b-c)/n`, so the two coincide whenever the grid and the lattice meet, and note
+    v1.8 §3.2e records that as reachable **at this component's own sample sizes** rather than only
+    at the n=90/100/120 the earlier sweep found: `n_units = 85`, `k = 2`, `DEFF = 1.9` gives
+    `mdd80 = 20.0 pp`, and `|b-c| = 17` over 85 rows is exactly 20.0 pp. That is the guard-judge
+    pack's own n. At n=90 the equality is 2.4% of every table that reaches the clause.
+
+    v1.8's fix is **one comparative true across the whole branch**, not a third string to keep in
+    step with the other two.
+    """
+    rp = _rp(85, deff=1.9, basis="measured", alpha_mdd=0.025)
+    assert rp.mdd80 == 0.2
+    v = verdict(
+        _outcomes(44, 29, 12, 0), resolving=rp, metric_name="m", family=["m", "other"],
+        alpha_step=0.025, bootstrap_seed=20260902,
+    )
+    assert abs(v.diff) == pytest.approx(0.2) and abs(v.diff) == rp.mdd80
+    assert v.distinguishable is False
+    assert "the observed 20.0 pp is at or above that" in v.text
+    assert "is above that" not in v.text.replace("is at or above that", "")

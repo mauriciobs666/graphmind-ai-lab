@@ -53,14 +53,27 @@ substitute one.
   is the only place that decides, and it has three answers: `metric` absent from `scoreable`, or
   declared `False`, is **no outcome** (the row leaves the paired table and lands in the §4.3
   tally); declared `True` **must** carry a `counts` entry, and one that does not is refused
-  (`IncompleteItemRecord`), never read as a zero. **This is a contract on S2's scorers**: emit a
-  count for every metric you declare scoreable. `report.py` infers nothing — its two old defaults
+  (`IncompleteItemRecord`), never read as a zero. `report.py` infers nothing — its two old defaults
   (absent = scoreable, absent count = failure) turned an arm holding no data at all into
   *"+100.0 pp, p=0.002"*. A metric with an empty paired intersection gets an explicit refusal and
   no resolving power, because `n_effective` of zero is not a small sample.
+- **Two halves of one contract on S2's scorers**, both enforced at S1 so the net exists before the
+  first real scorer does: emit a `counts` entry for every metric you declare scoreable, **and
+  derive `aggregates` from the same `items` in one pass**. An arm whose declared `n` for a
+  pre-registered verdict metric disagrees with its own scoreable-item count is **excluded from the
+  comparison and named** in the `INVALID RESULTS EXCLUDED` block (`report._aggregate_item_mismatches`,
+  plan §4 S1 done-condition 10) — never raised, which would abort outside §3.6a's exit-code set,
+  and never suppressed per metric, which would leave a partly-trusted arm in the table. A record
+  carrying the sibling malformation is quarantined a seam earlier, on read
+  (`results._item_problems`); the report-time check catches it too rather than letting
+  `scored_outcome`'s refusal escape.
 - **A Wilson interval prints only over the analysis unit.** `-ml` §4.4: *"Never print a Wilson
   interval over a turn-pooled count."* `report.py` compares `BinaryMetric.unit` against the role's
-  unit kind; a pooled count prints its `k/n` and no interval.
+  unit kind; a pooled count prints its `k/n` and no interval. **`BinaryMetric.unit` and
+  `PackRef.analysisUnit` are different vocabularies** — a denominator noun (`item`, `turn`) against
+  a `pairingKey` component name (`itemId`) — so the predicate is always
+  `metric.unit == roles.unit_kind(pack.role)`; comparing against `analysisUnit` is never true and
+  fails silently.
 - **Holm needs two passes.** The step a metric is tested at depends on every other member's
   p-value, so `compare_report` computes every paired table first, then `stats.holm_steps`, then the
   verdicts, zipped `strict=True` so a short ladder cannot drop a metric.

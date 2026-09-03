@@ -10,6 +10,7 @@ import json
 import pytest
 from conftest import (
     BinaryMetric,
+    ClassificationAggregates,
     PackMetrics,
     PackRef,
     ToolCallAggregates,
@@ -26,6 +27,7 @@ from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import compare_report, resolving_power_line
 from modelbench.results import InvalidRecord, ItemResult
+from modelbench.roles import unit_kind as unit_kind_for_role
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
 METRIC = "falseAdvanceRate"
@@ -39,6 +41,19 @@ def _arm(run_id: str, correct: int, total: int = 40, **kwargs):
         "fingerprint_fields", model_fields(modelKey=run_id, packId=PACK_ID)
     )
     return run(run_id, items=items, aggregates=classification_aggregates(correct, total), **kwargs)
+
+
+def _agg_from(items, metric: str = METRIC):
+    """The aggregate a **consistent** scorer would emit for these items (S1 done-condition 10).
+
+    Every fixture that reaches `compare_report` has to satisfy the `aggregates`-versus-`items`
+    cross-check or it is excluded before the behaviour under test is reached, so the fixtures
+    derive their stored aggregate from the same items in one pass — which is exactly the contract
+    v1.8 §4 S2 puts on the real scorers.
+    """
+    scored = [it.scored_outcome(metric) for it in items]
+    scored = [outcome for outcome in scored if outcome is not None]
+    return classification_aggregates(sum(scored), len(scored), metric=metric)
 
 
 def _nested_arms(total: int = 40, a_correct: int = 40, b_correct: int = 34):
@@ -723,6 +738,80 @@ def test_a_metric_past_the_holm_stop_is_rendered_as_not_tested() -> None:
     assert "is better than" not in md
 
 
+def test_a_metric_past_the_holm_stop_never_carries_a_significance_claim() -> None:
+    """P4-2 — `report.py`'s `holm_tested=step.tested` wiring had no regression test at all.
+
+    Hardcoding it to `True` left the whole suite green. The existing stop fixture cannot catch it:
+    both its metrics land at p = 0.125, above the rank-2 step of 0.05 anyway, so nothing there
+    depends on the keyword. This fixture puts **both** metrics at b=8, c=1 -> p = 0.039, which is
+    above the alpha/2 = 0.025 step Holm tests the first at (so Holm stops) and **below** the 0.05
+    step the second would face if it were tested. Rendered under the mutation, the report printed
+
+        cand is better than incumbent on falseSuspendRate: +17.5 pp ... McNemar exact p=0.039
+
+    three paragraphs above its own family row reading `not tested (Holm stops here)` — Pass 1's
+    blocker verbatim, a significance claim for a metric Holm never tested, contradicted inside one
+    document. The sibling wiring `alpha_step=step.threshold` is pinned; this keyword was not.
+    """
+    second = "falseSuspendRate"
+    fields = model_fields(packId=PACK_ID)
+
+    def items(is_a: bool):
+        built = []
+        for i in range(40):
+            # both metrics: A wrong only on item 38, B wrong on 0..7 -> b = 8, c = 1, p = 0.039
+            ok = (i != 38) if is_a else (i >= 8)
+            built.append(
+                ItemResult(
+                    itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+                    scoreable={METRIC: True, second: True},
+                    counts={METRIC: int(ok), second: int(ok)},
+                    latencyMs=1300.0, detail={},
+                )
+            )
+        return built
+
+    a = run("cand", items=items(True), aggregates=classification_aggregates(39, 40),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=items(False), aggregates=classification_aggregates(32, 40),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=None, verdicts=(METRIC, second)))
+
+    # the fixture is at the boundary the finding needs: below the stopped member's own 0.05 step
+    assert stats.mcnemar_exact(8, 1) == pytest.approx(0.0390625)
+    assert "p=0.039" in md
+    row = next(ln for ln in md.splitlines() if ln.startswith(f"| {second} |"))
+    assert "| 0.0500 |" in row and "not tested (Holm stops here)" in row
+    section = md.split(f"### {second}")[1].split("### ")[0]
+    assert "Not tested: Holm–Bonferroni stops at the first non-rejection" in section
+    assert "is better than" not in section
+    # ...and nowhere else in the document either: the headline repeats the verdict text
+    assert "is better than" not in md
+
+
+def test_the_family_wise_paragraph_attaches_each_alpha_to_the_bound_it_governs() -> None:
+    """P4-3 — exchanging the two alphas inside the family-wise paragraph left the suite green.
+
+    The paragraph's whole job is to explain the pair, and under the swap it labels 0.05 the
+    family-adjusted alpha and 0.025 the unadjusted one — contradicting the provenance parenthetical
+    three paragraphs above, which still prints `alpha=0.025` beside the MDD. P3-6 pinned the
+    provenance parenthetical and the floor's own alpha and left this paragraph unpinned, which is
+    the third pass running that an alpha-attribution string was found unguarded. So both clauses
+    are asserted verbatim, each with the bound it governs.
+    """
+    arms, pack = _two_metric_arms(a_wins_first=8, a_wins_second=6)
+    md = compare_report(arms, pack=pack)
+
+    assert pack.metrics.alpha_mdd == 0.025 and pack.metrics.alpha_family == 0.05
+    assert "Every **MDD** above is computed at the family-adjusted alpha=0.025" in md
+    assert (
+        "every **observable floor** is computed at the unadjusted alpha=0.05, the loosest step a "
+        "member can face"
+    ) in md
+    # ...and the parenthetical the swap would contradict still names the MDD's alpha
+    assert "design effect 1.00, by-construction, alpha=0.025)" in md
+
+
 # --- M-ML-1: no MDD exists below b_min, and the line must not invent one --------------------------
 
 
@@ -793,7 +882,10 @@ def test_a_weaker_basis_in_either_arm_moves_the_report_off_mcnemar() -> None:
     # (review B-ML-2). At DEFF = 1.00 the widening is a no-op and the veto is the whole of the
     # path's conservatism, which is exactly the corner the blocker was about.
     assert "in conjunction with McNemar's exact test" in md
-    assert "may withhold a verdict but never carries one on its own" in md
+    # `-ml` v1.8 §3.2e(f) variant 2's closing — *"one"*, not *"a verdict"*: this path declares no
+    # clustering, so the rationale that is true here is the unestablished design effect (m-ML-10).
+    assert "so it may withhold one but never carries one on its own" in md
+    assert "under clustering McNemar rejects too readily" not in md
 
 
 def test_the_design_effect_is_the_max_of_the_two_arms() -> None:
@@ -867,9 +959,9 @@ def test_a_precondition_failure_is_dropped_from_the_pair_and_printed() -> None:
         for i in range(total)
     ]
     fields = model_fields(packId=PACK_ID)
-    a = run("cand", items=a_items, aggregates=classification_aggregates(40, total),
+    a = run("cand", items=a_items, aggregates=_agg_from(a_items),
             fingerprint_fields={**fields, "modelKey": "cand"})
-    b = run("incumbent", items=b_items, aggregates=classification_aggregates(34, total),
+    b = run("incumbent", items=b_items, aggregates=_agg_from(b_items),
             fingerprint_fields={**fields, "modelKey": "incumbent"})
     md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
 
@@ -921,10 +1013,17 @@ def _bare(item_id: str, *, scoreable: dict, counts: dict) -> ItemResult:
 
 
 def _pair_of_arms(a_items, b_items):
+    """Both arms' aggregates derived from their own items — see `_agg_from`.
+
+    These fixtures used to hard-code `n = len(items)` on both arms, which for an arm that declares
+    **nothing** scoreable is precisely review P4-4's inconsistent record: `0/10` rendered beside
+    *"no paired data"*. S1 done-condition 10 now excludes such an arm, so the fixture has to be a
+    record a scorer could honestly have written, or the P3-1 behaviour below is never reached.
+    """
     fields = model_fields(packId=PACK_ID)
-    a = run("cand", items=a_items, aggregates=classification_aggregates(len(a_items), len(a_items)),
+    a = run("cand", items=a_items, aggregates=_agg_from(a_items),
             fingerprint_fields={**fields, "modelKey": "cand"})
-    b = run("incumbent", items=b_items, aggregates=classification_aggregates(0, len(b_items)),
+    b = run("incumbent", items=b_items, aggregates=_agg_from(b_items),
             fingerprint_fields={**fields, "modelKey": "incumbent"})
     return a, b
 
@@ -984,6 +1083,57 @@ def test_a_metric_with_no_paired_rows_renders_a_refusal_rather_than_raising() ->
     assert "no paired data" in md.split(f"**Headline ({METRIC}):**")[1]
 
 
+def test_the_no_paired_data_refusal_points_at_the_tally_only_where_one_is_beside_it() -> None:
+    """P4-13 — the `_NO_PAIRED_DATA_TALLY` pointer sentence was untested.
+
+    The metric's own section has the §4.3 tally printed directly under the refusal, so it says
+    *"The tally below says where the rows went."* The **headline** repeats the same refusal with no
+    table beside it, and must not point at one: a reader sent looking for a tally that is not there
+    learns less than one who was told nothing.
+    """
+    a_items = [_bare(f"g{i:02d}", scoreable={METRIC: True}, counts={METRIC: 1}) for i in range(10)]
+    b_items = [_bare(f"g{i:02d}", scoreable={METRIC: False}, counts={}) for i in range(10)]
+    a, b = _pair_of_arms(a_items, b_items)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    section = md.split(f"### {METRIC}")[1].split("###")[0]
+    assert "The tally below says where the rows went." in section
+    headline = md.split(f"**Headline ({METRIC}):**")[1]
+    assert "No verdict: no paired data" in headline
+    assert "The tally below says where the rows went." not in headline
+
+
+def test_an_exploratory_metric_declared_by_both_arms_is_listed_once() -> None:
+    """P4-13 — the exploratory dedup was untested, so removing it was green.
+
+    The list is built from **both** arms' aggregates, and both arms normally declare the same
+    metrics — so without the dedup every exploratory metric prints twice, which reads as two
+    different metrics with one name rather than as one metric measured by two arms.
+    """
+    fields = model_fields(packId=PACK_ID)
+    exploratory = "latencyBudgetHits"
+
+    def arm(name: str, correct: int):
+        items = [item(f"g{i:02d}", correct=i < correct, metric=METRIC) for i in range(10)]
+        aggs = ClassificationAggregates(
+            perClass=(
+                BinaryMetric(name=METRIC, successes=correct, n=10, unit="item"),
+                BinaryMetric(name=exploratory, successes=3, n=10, unit="item"),
+            ),
+            parseFailures=0, n=10,
+        )
+        return run(name, items=items, aggregates=aggs,
+                   fingerprint_fields={**fields, "modelKey": name})
+
+    md = compare_report([arm("cand", 10), arm("incumbent", 4)],
+                        pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    listed = [
+        ln for ln in md.splitlines()
+        if ln == f"- `{exploratory}` — exploratory — no significance claim"
+    ]
+    assert len(listed) == 1
+
+
 def test_a_no_verdict_metric_is_named_as_such_in_the_family_table() -> None:
     """With k>1 the Holm table has a row per pre-registered member, and a member with no paired
     data must not print a p-value and a threshold as though a test had been run."""
@@ -1001,6 +1151,207 @@ def test_a_no_verdict_metric_is_named_as_such_in_the_family_table() -> None:
     assert row == [f"| {other} | — | 0.0500 | no verdict — no paired data |"]
 
 
+# --- P4-4 / S1 done-condition 10, §5 test 11c: aggregates must agree with items -----------------
+
+
+def _ten_items_declaring_nothing_scoreable():
+    return [
+        ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+                   scoreable={METRIC: False}, counts={}, latencyMs=1300.0, detail={})
+        for i in range(10)
+    ]
+
+
+def test_an_arm_whose_aggregate_disagrees_with_its_items_is_excluded_and_named() -> None:
+    """§5 test 11c / S1 done-condition 10 — review P4-4, the gate's own reproduction.
+
+    An arm declaring `BinaryMetric(m, successes=0, n=10)` for a metric **no item declares
+    scoreable** printed `0/10 = 0.000` in the Arms table — a claim that ten items were scored —
+    beside a paired-rows section reading *"No verdict: no paired data … An arm carrying no data
+    for a metric is not an arm that failed every item of it"*. One document, two mutually
+    exclusive statements about the same metric. `_DESCRIPTIVE_NOTE` does not cover it: it caveats
+    the **interval**, and says nothing about the **rate**, which is the half that misreports.
+
+    Plan v1.8 fixes the response: the arm is **excluded and named in the existing
+    `INVALID RESULTS EXCLUDED` block**, with the declared and the counted `n`, and the report is
+    still produced. Raising would reproduce P4-5's shape — an abort outside `cli.py`'s exit-code
+    set that takes the valid arm down with the invalid one — and suppressing only the offending
+    row would leave a partially-trusted arm inside the comparison, when the mismatch is evidence
+    that this scorer's per-item and aggregate paths disagree.
+    """
+    fields = model_fields(packId=PACK_ID)
+    arms = [
+        run(name, items=_ten_items_declaring_nothing_scoreable(),
+            aggregates=classification_aggregates(0, 10),
+            fingerprint_fields={**fields, "modelKey": name})
+        for name in ("cand", "incumbent")
+    ]
+    md = compare_report(arms, pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert "0/10" not in md            # the rate that claimed ten items were scored is gone
+    assert "0.000" not in md
+    assert "**INVALID RESULTS EXCLUDED** (AC-2)" in md
+    for name in ("cand", "incumbent"):
+        line = next(ln for ln in md.splitlines() if ln.startswith(f"> - `{name}`"))
+        assert f"`{METRIC}` (declared n=10, counted 0)" in line
+    # ...and the report is still produced, saying why the arms are gone rather than pointing the
+    # reader at the selection flags. Both sentences were individually true before this: the block
+    # above said the arms were excluded, and the verdict line said *"fewer than two arms were
+    # **selected**, so there is nothing to compare. Check `--models` and `--session`"* — which is
+    # the wrong remedy for arms that were selected and then thrown away, and sends a scorer author
+    # looking at their command line instead of at their record.
+    assert md.startswith("# Comparison — ")
+    assert "fewer than two arms were selected" not in md
+    assert "Check `--models`" not in md
+    assert (
+        "None: fewer than two arms remain — 2 arms were excluded above because their stored "
+        "aggregates disagree with their own items"
+    ) in md
+
+
+def test_a_genuinely_unselected_comparison_still_points_at_the_selection_flags() -> None:
+    """The other side: where nothing was excluded, too-few-arms really is a selection problem and
+    `--models` / `--session` really is the thing to check (review M-6's original reason)."""
+    md = compare_report(_nested_arms()[:1], pack=guard_pack(headline=METRIC))
+    assert "fewer than two arms were selected" in md
+    assert "Check `--models` and `--session`" in md
+    assert "excluded above" not in md
+
+
+def test_an_item_declaring_a_count_it_does_not_carry_is_a_mismatch_not_a_traceback() -> None:
+    """Plan-gate **G3-7** — DC-10's counting call reproduces the P4-5 shape DC-10 rejects.
+
+    DC-10 counts items "for which `scored_outcome(metric) is not None`", but `scored_outcome` does
+    not return `None` for the sibling malformation: a metric declared `scoreable: True` with no
+    entry in `counts` **raises `IncompleteItemRecord`**. Nothing on that path catches it —
+    `_cmd_compare` catches only `PackConfigError` — so a check written literally from DC-10 turns
+    an inconsistent record into a traceback at exit 1, outside §3.6a's closed set, which is exactly
+    the response DC-10 rejects raising for.
+
+    So the cross-check treats it as a **mismatch**: the arm is excluded and named, with the
+    offending item and metric. `load_history` also quarantines such a record on read (P4-5), and
+    the two nets sit at different seams — this one makes `compare_report` total on the input rather
+    than trusting its caller to have filtered.
+    """
+    fields = model_fields(packId=PACK_ID)
+    good = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    broken = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(9)]
+    broken.append(
+        ItemResult(itemId="g09", pairingKey=("g09",), outcome="pass",
+                   scoreable={METRIC: True}, counts={}, latencyMs=1300.0, detail={})
+    )
+    a = run("cand", items=good, aggregates=_agg_from(good),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("halfscored", items=broken, aggregates=classification_aggregates(10, 10),
+            fingerprint_fields={**fields, "modelKey": "halfscored"})
+
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    line = next(ln for ln in md.splitlines() if ln.startswith("> - `halfscored`"))
+    assert f"`{METRIC}` (item 'g09' declares it scoreable and records no count)" in line
+    assert "| cand | falseAdvanceRate | 10/10 |" in md      # the sound arm survives
+    assert "1 arm was excluded above" in md                 # singular, and not the selection flags
+    assert "Check `--models`" not in md
+
+
+def test_the_cross_check_selects_on_the_denominator_unit_not_the_pairing_key_name() -> None:
+    """Plan-gate **G3-6** — DC-10's written selector names two disjoint vocabularies.
+
+    `BinaryMetric.unit` is a *denominator noun* (`item` / `conversation` / `query` / `turn` /
+    `call`); `PackRef.analysisUnit` is a *`pairingKey` component name*, which `packs.py` constrains
+    to `pairingKey[0]` — `itemId` for this pack. So `metric.unit == pack.analysisUnit` is
+    **never** true, and a check written literally from DC-10 selects nothing and silently passes
+    everything. Measured here rather than asserted, so the two vocabularies are pinned as distinct
+    and this test cannot quietly become vacuous.
+
+    The working predicate, already in use one function over for the Wilson-interval suppression,
+    is `metric.unit == unit_kind_for_role(pack.role)`.
+    """
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))
+    assert unit_kind_for_role(pack.role) == "item"
+    assert pack.analysisUnit == "itemId"
+    assert unit_kind_for_role(pack.role) != pack.analysisUnit   # the two vocabularies are disjoint
+
+    # ...and a metric whose denominator is *not* the analysis unit is out of the check's scope,
+    # because there is no per-item count to compare a pooled denominator against (`-ml` §4.4).
+    fields = model_fields(packId=PACK_ID)
+    items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    aggs = ClassificationAggregates(
+        perClass=(
+            BinaryMetric(name=METRIC, successes=10, n=10, unit="item"),
+            BinaryMetric(name=METRIC, successes=3, n=70, unit="turn"),
+        ),
+        parseFailures=0, n=10,
+    )
+    a = run("cand", items=items, aggregates=aggs, fingerprint_fields={**fields, "modelKey": "cand"})
+    b_items = [item(f"g{i:02d}", correct=i >= 6, metric=METRIC) for i in range(10)]
+    b = run("incumbent", items=b_items, aggregates=_agg_from(b_items),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=pack)
+    assert "INVALID RESULTS EXCLUDED" not in md
+    assert "| cand | falseAdvanceRate | 3/70 |" in md
+
+
+def test_an_arm_whose_aggregate_matches_its_items_is_not_excluded() -> None:
+    """The positive half of §5 test 11c — the check has to discriminate, not exclude everything.
+
+    Without this, `_aggregate_item_mismatches` returning every metric it sees would pass the test
+    above and make the tool useless.
+    """
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "INVALID RESULTS EXCLUDED" not in md
+    assert "| cand | falseAdvanceRate | 40/40 |" in md
+    assert "| incumbent | falseAdvanceRate | 34/40 |" in md
+    assert "is better than" in md
+
+
+def test_the_cross_check_counts_scoreable_items_not_correct_ones() -> None:
+    """The denominator being cross-checked is *scoreability*, never the score.
+
+    An arm that declares ten items scoreable and gets none of them right is a perfectly consistent
+    record — `0/10` is then a real measurement — so a check written against `successes` instead of
+    the scoreable count would exclude exactly the arm the tool exists to report on.
+    """
+    fields = model_fields(packId=PACK_ID)
+    items = [item(f"g{i:02d}", correct=False, metric=METRIC) for i in range(10)]
+    a = run("cand", items=items, aggregates=classification_aggregates(0, 10),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=[item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)],
+            aggregates=classification_aggregates(10, 10),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "INVALID RESULTS EXCLUDED" not in md
+    assert "| cand | falseAdvanceRate | 0/10 |" in md
+
+
+def test_a_mismatch_on_a_metric_outside_the_verdict_family_is_not_the_checks_business() -> None:
+    """S1 done-condition 10 scopes the check to the pack's `verdictMetrics` family.
+
+    An exploratory metric carries no significance claim and no verdict, so a disagreement there is
+    not grounds for throwing away an arm whose pre-registered metrics are sound — and widening the
+    scope would make the check refuse records the comparison never reads.
+    """
+    fields = model_fields(packId=PACK_ID)
+    exploratory = "latencyBudgetHits"
+    items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    aggs = ClassificationAggregates(
+        perClass=(
+            BinaryMetric(name=METRIC, successes=10, n=10, unit="item"),
+            BinaryMetric(name=exploratory, successes=3, n=10, unit="item"),
+        ),
+        parseFailures=0, n=10,
+    )
+    a = run("cand", items=items, aggregates=aggs,
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b_items = [item(f"g{i:02d}", correct=i >= 6, metric=METRIC) for i in range(10)]
+    b = run("incumbent", items=b_items,
+            aggregates=classification_aggregates(4, 10),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "INVALID RESULTS EXCLUDED" not in md
+    assert f"`{exploratory}` — exploratory — no significance claim" in md
+
+
 # --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------
 
 
@@ -1013,6 +1364,24 @@ def test_fewer_than_two_arms_prints_its_own_reason(count: int) -> None:
     md = compare_report(arms, pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
     assert "fewer than two arms" in md
     assert "two deterministic arms" not in md
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_the_negative_control_banner_needs_the_two_arms_its_sentence_describes(count) -> None:
+    """P4-1's gate is `>= 2`, because that is what the banner's own sentence asserts.
+
+    *"Both arms are the same stored record"* has no subject at zero arms and is false at one, so
+    the gate belongs at the number the sentence needs rather than at the number `_select_arms`
+    happens to produce. Relaxing it to `>= 1` survives every CLI test, because `_select_arms`
+    returns `[]` or `[r, r]` and never one — but `compare_report` is the public seam S2 wires
+    against, and the cross-check above can now remove arms after selection, so the one-arm state
+    is a call away rather than a hypothesis.
+    """
+    md = compare_report(_nested_arms()[:count], pack=guard_pack(headline=METRIC),
+                        negative_control=True)
+    assert "**NEGATIVE CONTROL REQUESTED, NOT RUN**" in md
+    assert "cannot fail" not in md
+    assert "fewer than two arms were selected" in md
 
 
 # --- m-2: the unpaired label names what actually differed --------------------------------------
@@ -1054,6 +1423,141 @@ def test_pack_ref_content_hash_is_none_until_s2_computes_it(tmp_path) -> None:
     ref = pack_ref_from_manifest(manifest)
     assert ref.contentHash is None
     assert ref.label == "p@1.0.0"
+
+
+# --- P4-6 to P4-10: the Arms table, the tally's second half, and two arms of one model ---------
+
+
+def test_a_metric_declared_with_no_observations_is_rendered_not_dropped() -> None:
+    """P4-6 — `and metric.n` in the Arms-table guard does two jobs and was tested in neither.
+
+    Relaxing it to `metric.n >= 0` left the whole suite green, which means no fixture anywhere
+    constructed a zero-denominator aggregate — and the same clause is the only thing standing
+    between `metric.successes / metric.n` and a `ZeroDivisionError`. Rendered, a two-arm
+    comparison in which one arm declares the metric with `n=0` printed a **one-row** Arms table
+    with nothing saying the second arm was missing.
+
+    **The drop is not the decision.** The table is the report's descriptive half, and a reader
+    cannot tell a silently dropped row from an arm that never declared the metric at all — while
+    `0/0` with no rate and no interval is a true statement that distinguishes them. It is the same
+    call `_POOLED_FOOTNOTE` already makes one column over: *the count itself is never suppressed;
+    only the precision claim is.*
+    """
+    fields = model_fields(packId=PACK_ID)
+    scored = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    unscored = [
+        item(f"g{i:02d}", correct=False, metric=METRIC, scoreable=False) for i in range(10)
+    ]
+    a = run("cand", items=scored, aggregates=_agg_from(scored),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=unscored, aggregates=_agg_from(unscored),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert b.aggregates.named_metrics()[0].n == 0    # the fixture really is the zero-denominator
+    assert "| incumbent | falseAdvanceRate | 0/0 | — | — (no observations) |" in md
+    assert "| cand | falseAdvanceRate | 10/10 |" in md
+
+
+def test_the_pairing_tally_counts_the_rows_only_the_second_arm_carried() -> None:
+    """P4-7 — the tally's arm-B-only half was entirely untested.
+
+    `only_in_b = 0` and `considered = len(a_keys)` both survived the suite, while the printed
+    labels and the other four counters were all pinned. Asymmetric coverage caused by the
+    **second** arm is exactly what §4.3 rule 2's tally exists to surface, and with `only_in_b`
+    hardcoded to zero the denominator silently under-reports the rows the comparison never saw.
+    """
+    fields = model_fields(packId=PACK_ID)
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    b_items = [item(f"g{i:02d}", correct=i >= 4, metric=METRIC) for i in range(12)]
+    a = run("cand", items=a_items, aggregates=_agg_from(a_items),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=b_items, aggregates=_agg_from(b_items),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert "paired n: 10 of 12 items" in md      # the denominator is the union, not arm A's keys
+    assert "0 present in cand only, 2 in incumbent only" in md
+
+
+def test_the_marginal_overlap_line_renders_the_diagnostic_it_was_given() -> None:
+    """P4-8's rendered half — the existing assertion checked only that the label is present.
+
+    Inverting the printed `yes`/`no` left the suite green, so a declared FR-15 output could say
+    the opposite of the truth. The line is asserted whole, in both directions.
+    """
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))
+    overlapping = compare_report(_nested_arms(), pack=pack)
+    assert "- marginal Wilson intervals overlap: yes" in overlapping
+
+    fields = model_fields(packId=PACK_ID)
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(40)]
+    b_items = [item(f"g{i:02d}", correct=i >= 20, metric=METRIC) for i in range(40)]
+    a = run("cand", items=a_items, aggregates=_agg_from(a_items),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=b_items, aggregates=_agg_from(b_items),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    disjoint = compare_report([a, b], pack=pack)
+    assert "- marginal Wilson intervals overlap: no" in disjoint
+
+
+def test_two_arms_of_the_same_model_are_told_apart_everywhere_they_are_named() -> None:
+    """P4-10 — plan §5 test 19a is *two independent runs of one model*, and the report could not
+    render it.
+
+    Rendered on two runs of one `modelKey` in different sessions, the Arms table had two identical
+    `arm` cells, the §4.3 tally read *"0 scoreable for qwen/qwen3-4b-2507 only, 0 scoreable for
+    qwen/qwen3-4b-2507 only"*, and a significant verdict would have read *"X is better than X"*.
+    `runId` and `sessionId` were never printed anywhere. §5 test 19a is called the highest-value
+    single test in the harness, so the report being unreadable for it is the one comparison the
+    value claim rests on.
+
+    The suffix is only added where it is needed: an unambiguous comparison must not grow noise.
+    """
+    fields = model_fields(packId=PACK_ID, modelKey="qwen/qwen3-4b-2507")
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(40)]
+    b_items = [item(f"g{i:02d}", correct=i >= 6, metric=METRIC) for i in range(40)]
+    a = run("morning", items=a_items, aggregates=_agg_from(a_items),
+            session_id="s-morning", fingerprint_fields=fields)
+    b = run("evening", items=b_items, aggregates=_agg_from(b_items),
+            session_id="s-evening", fingerprint_fields=fields)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert "qwen/qwen3-4b-2507 (session s-morning)" in md
+    assert "qwen/qwen3-4b-2507 (session s-evening)" in md
+    # the verdict sentence must not read "X is better than X"
+    assert "qwen/qwen3-4b-2507 is better than qwen/qwen3-4b-2507" not in md
+    assert (
+        "qwen/qwen3-4b-2507 (session s-morning) is better than "
+        "qwen/qwen3-4b-2507 (session s-evening)"
+    ) in md
+    # ...and the tally's two halves name different arms
+    assert "0 scoreable for qwen/qwen3-4b-2507 (session s-morning) only" in md
+    assert "0 scoreable for qwen/qwen3-4b-2507 (session s-evening) only" in md
+
+
+def test_two_arms_sharing_a_model_and_a_session_fall_back_to_the_run_id() -> None:
+    """The suffix has to *distinguish*, not merely be present: two runs of one model inside one
+    session share their `sessionId`, so printing it twice would leave the two arms as identical as
+    the bare model key did. `runId` is unique by construction — it is the record's filename."""
+    fields = model_fields(packId=PACK_ID, modelKey="qwen/qwen3-4b-2507")
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(40)]
+    b_items = [item(f"g{i:02d}", correct=i >= 6, metric=METRIC) for i in range(40)]
+    a = run("first", items=a_items, aggregates=_agg_from(a_items), session_id="s1",
+            fingerprint_fields=fields)
+    b = run("second", items=b_items, aggregates=_agg_from(b_items), session_id="s1",
+            fingerprint_fields=fields)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "qwen/qwen3-4b-2507 (run first)" in md
+    assert "qwen/qwen3-4b-2507 (run second)" in md
+
+
+def test_an_unambiguous_comparison_carries_no_disambiguating_suffix() -> None:
+    """P4-10's other side — the label must stay the bare model key where it already identifies."""
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "| cand | falseAdvanceRate |" in md
+    assert "(session " not in md and "(run " not in md
+    assert "cand is better than incumbent" in md
 
 
 # --- M-ML-3: a Wilson interval is printed only over the analysis unit ---------------------------
@@ -1200,8 +1704,15 @@ def test_the_printed_seed_is_the_seed_the_interval_was_resampled_at() -> None:
     Most binary fixtures cannot show it: the percentile bootstrap over ±1/0 unit differences lands
     on a coarse lattice, and at n=40 the displayed bounds are identical at every seed tried
     (measured: one distinct rendered interval across seeds 1–39). At **n=12 with b=5, c=3** the
-    lattice is coarse enough for the percentile to move — seeds 1 and 5 render `[-25.0, 58.3]` and
-    `[-33.3, 58.3]` pp — which is what makes this assertion possible at all.
+    lattice is coarse enough for the percentile to move — which is what makes this assertion
+    possible at all.
+
+    **The lower bound moved at note v1.8** (review M-ML-8): the printed interval is the
+    conservative envelope of the resample and MOVER-D, and MOVER-D's −27.1 pp is the more
+    conservative of the two wherever the resample returns −25.0. Measured this session over seeds
+    1–19, the rendered interval is `[-27.1, 58.3]` on 11 of them and `[-33.3, 58.3]` on 8 — so the
+    seed still moves the printed bound on this table, which is precisely the residue M-ML-8(3)
+    describes and which only the closed-form percentile removes.
     """
     a_ok = [True] * 5 + [False] * 3 + [True] * 4
     b_ok = [False] * 5 + [True] * 3 + [True] * 4
@@ -1213,7 +1724,7 @@ def test_the_printed_seed_is_the_seed_the_interval_was_resampled_at() -> None:
 
     assert "(seed 1, from the pack's `sampling.seed`)" in one
     assert "(seed 5, from the pack's `sampling.seed`)" in five
-    assert "[-25.0, 58.3] pp" in one
+    assert "[-27.1, 58.3] pp" in one
     assert "[-33.3, 58.3] pp" in five
 
 

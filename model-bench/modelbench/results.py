@@ -439,6 +439,35 @@ def store(run: RunResult, root: Path) -> Path:
     return path
 
 
+def _item_problems(run: RunResult) -> list[FieldProblem]:
+    """The read-time half of `scored_outcome`'s contract (review P4-5).
+
+    `scored_outcome` **raises** for an item that declares a metric scoreable and records no count,
+    and that refusal is right: an absent count is not a zero. But `store()` accepts such a record
+    (its validation is fingerprint-only) and `load_history` accepted it too, so the refusal landed
+    at *report* time — from `report.py`, whose only CLI caller catches `PackConfigError` and
+    nothing else. Measured end-to-end: one bad item in one of three otherwise-valid records aborted
+    `compare` with an uncaught traceback, **exit 1** (outside §3.6a's closed `0/2/3/4/5`), **no
+    report written**, and the valid arms lost with it.
+
+    AC-2's mechanism is *excluded on read **and named***, so the record is quarantined here like
+    any other field failure, with the item and the metric in the field path — which is also the
+    half the exception message could not supply, since an `ItemResult` does not know its run.
+
+    **The truthiness test is `scored_outcome`'s own**, not `is True`: that function reads
+    `scoreable.get(metric, False)`, so a truthy non-bool declaration demands a count there and must
+    demand one here, or the two disagree about which records are readable.
+    """
+    found: list[FieldProblem] = []
+    for item in run.items:
+        for metric, declared in item.scoreable.items():
+            if declared and metric not in item.counts:
+                found.append(
+                    FieldProblem(field=f"items[{item.itemId}].counts.{metric}", reason="absent")
+                )
+    return found
+
+
 def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[InvalidRecord]]:
     """Read every stored run for **one** pack, re-validating each against its own schema.
 
@@ -504,7 +533,10 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
                 )
             )
             continue
-        problems = run.fingerprint.validate()
+        # Both halves are `field` failures and share one exclusion path: a record whose
+        # environment is incomplete and one whose items are internally self-contradictory are
+        # equally unreadable, and AC-2's block already says which fields failed (review P4-5).
+        problems = run.fingerprint.validate() + _item_problems(run)
         if problems:
             invalid.append(
                 InvalidRecord(
