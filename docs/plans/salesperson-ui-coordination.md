@@ -127,7 +127,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S7b** — close Pass 7: assert the wait (S7-1), pin the two error-path evictions (S7-2), stop a broken deadline hanging (S7-3) | `coder` | `a26100cb193d95085` (resumed — its own findings, same two files) | delivered — **committed `d9d2f2b`**, suite **2476** teco-verified solo; `storefront.py` **byte-identical** to `dd78e70`, so all three findings were about what the tests assert, not code defects. **Overrode the reviewer's suggested fix on two of three, with argument** — and on S7-3 **showed the reviewer's own fix does not catch the reviewer's own mutant** (a call that never returns is never followed by its assertion) | `test_storefront.py` only | `analyst` Pass 8 → — | 267k tok / 23 tools |
 | **S7b gate** — do the two overrides deliver what the findings asked, or only look more rigorous? | `analyst` (**fresh** — the Pass 7 reviewer ended at 253k tok; this check is self-contained) | `a893ac5083e24f334` | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 8` | — | — |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
-| **U29** — Plan v1.19: **split Ruling 1 out of S8** into its own step ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed) | in-flight | `docs/plans/salesperson-ui.md` **v1.19** | **none — plan gates stopped** | — |
+| **U29** — Plan v1.19: **split Ruling 1 out of S8** into its own step ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed) | in-flight — v1.19 delivered and hash-verified, but **held for one rename**: it named the new step `S7b`, an id already consumed by the test-only unit in `d9d2f2b`'s commit body (see below). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* | `docs/plans/salesperson-ui.md` **v1.19** | **none — plan gates stopped** | — |
 | **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
 | **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
 | **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
@@ -1026,6 +1026,23 @@ workspace, and pinning it would make it wrong for its purpose.
 §7's `Agent`-owned orphan residual is described more broadly than it is. Pass 3 established it only
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
+
+## Step ids and unit ids are one namespace — the `S7b` collision (teco, 2026-09-03)
+
+**A plan step id and a coordination unit id collide the moment either reaches a commit message**, and
+the `<step><letter>` carry-forward convention makes it likely rather than freak: the review document
+uses `S1b`, `S4b`, `S6b` for a fix against a step's own surface, so a *fix unit* consumes exactly the
+id a later plan revision would want for a *new step* in the same neighbourhood.
+
+That is what happened. While the architect was writing v1.19, `d9d2f2b` shipped with a body opening
+*"salesperson-ui S7b, closing Pass 7's three minors"*; two further commits reference it, this ledger
+carries two rows under it, and an `analyst` was mid-run writing a review section about it. The
+architect chose `S7b` for the new split-out step by sound reasoning from the same convention — and
+**could not have seen the clash**, because its brief scoped it to the plan file alone.
+
+**Commit messages are history and are not rewritten**, so the plan renames to `S7c`. The check that
+would have caught it costs nothing and is now the rule: **before accepting a new step id, `grep` the
+git log and this ledger, not just the plan.** The plan is the one place the id is *not* yet in use.
 
 ## The Ruling 1 split (teco, 2026-09-03) — one gate should judge one thing
 
