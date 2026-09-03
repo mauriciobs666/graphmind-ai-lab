@@ -52,8 +52,8 @@ Stakeholder decisions, 2026-09-02:
 | U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | delivered | commit `d4d847b` — `## Pass 3` **needs changes**: 1 blocker (P3-1), 6 majors, 5 minors, 3 nits | — (is the gate) | 217k tok / 70 tools |
 | U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | **killed by a platform 500 mid-run** — work preserved on disk (+428 lines, 6 files; 329 pass / 2 deliberate RED) | `model-bench/**`, uncommitted | — | — |
 | U11b — Resume U11 from disk state; close both gates' Pass 3 findings | `tdd-engineer` (fresh, state-recovery brief) | `a8dd64de4bab140c4` | **accepted** — `d55f4d8` | `model-bench/**` (14 files, +1103/−62) | Pass 4 (U12a/U12b) → — | 250k tok / 137 tools |
-| U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | — → — | — |
-| U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4` (+ note v1.8 if a string needs publishing) | — → — | — |
+| U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | **accepted** — `e8bedce` | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | self → **approve with suggestions** (0 blockers, 5 majors) | 213k tok / 64 tools |
+| U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | delivered — **approve with suggestions** (1 major M-ML-8, 4 minors, 2 nits); note revised to **v1.8**; one sub-claim sent back for reproduction, uncommitted until answered | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4`; `docs/plans/small-model-benchmarking-ml.md` v1.8 | self → approve w/ suggestions | 229k tok / 71 tools |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -752,3 +752,55 @@ not converging monotonically — Pass 3 found *more* than Pass 2 (1 blocker + 6 
 2's 1 new major), because its reviewers ran 86 mutations and read rendered output. Each Pass 4 gate
 must state whether its residue **blocks building S2 on this core** or can ride as follow-ups. That
 is the input to the decision I owe the human when U12a/U12b land.
+
+
+### Pass 4: both gates approve, and they converge on the same sequencing without having talked
+
+Neither gate saw the other's work. Both returned **approve with suggestions**, **no blocker**, and
+both were asked the stakeholder question directly. They answered it the same way — *the residue does
+not block S2* — and, more usefully, they independently named **the same shape of constraint**: land
+specific fixes before real scored data exists, not before S2 is dispatched.
+
+- `data-scientist` (M-ML-8): the conservative envelope **must land before the first
+  stakeholder-facing comparison is published**, because it changes printed intervals and two reports
+  over the same data must not disagree.
+- `analyst` (P4-2, P4-4): gate **S3** on those two specifically — they are the nets that catch the
+  first scorer's first mistake, and *"adding a net after the thing it protects has shipped is how
+  all four passes began."*
+
+Independent agreement on sequencing is much stronger evidence than either verdict alone, and it is
+the reason this is a proceed rather than a fourth fix-and-regate cycle.
+
+**Why the count stopped being the signal.** Pass 4's count is flat against Pass 3 (5 majors vs 6),
+but the *character* changed and that is what decides it: Pass 3 held a blocker that rendered
+`+100.0 pp, p=0.002` against an arm holding no data, plus four sentences that were false of the
+numbers beside them. **Nothing in Pass 4 is a wrong number.** Every Pass 4 major is either an
+unpinned string — a mutation that survives all 353 tests — or a missing refusal. `analyst` put the
+trend correctly: Pass 3 found more than Pass 2 because the *method* changed (render-and-read plus
+mutation campaigns), not because the code decayed; Pass 4 applied that same method to a wider
+surface and found no blocker. By severity the statistics side is monotone across four passes:
+1 blocker + 4 majors → 1 blocker + 1 major → 1 major → 1 major, each one a narrower layer of the
+same corner (decision → calibration → quantification).
+
+**Three Pass 4 findings I re-derived myself rather than accepting on report:**
+
+- **P4-2 reproduced exactly.** In a sandbox from `d55f4d8`, `report.py:482`
+  `holm_tested=step.tested` → `holm_tested=True` leaves **353 passed**. Pass 1's blocker verbatim,
+  with no test net under it.
+- **P4-4's overturning of U11b's deferral holds on both grounds.** `_DESCRIPTIVE_NOTE` reads *"Per-arm
+  intervals are Wilson score intervals … descriptive, not the comparison instrument"* — it caveats
+  the **interval**, and says nothing about the **rate**, which is the thing that misreports. And
+  `RunResult` carries `items` **and** `aggregates` as required fields side by side, so the
+  cross-check is **S1-local**; S2 owns the scorer contract, not the check. The deferral U11b argued
+  for is wrong, and the evidence is structural rather than a matter of taste.
+- **M-ML-8's headline case reproduced to the digit**, along with three other statistics figures
+  (see the U11b section for the equality boundary and the floor contradiction).
+
+**One sub-claim sent back rather than accepted.** The statistics gate states the bootstrap interval's
+last digit moves with row order at a fixed seed. Two constructions of mine left it stable, and the
+first provably **cannot** exhibit it (4 ones and 26 zeros row-shuffled is the same multiset, so the
+percentiles cannot move). Rather than call it wrong — the failure mode that has already cost this
+coordination twice — I asked for the exact reproduction. M-ML-8 does not depend on it; the note's
+**published rationale** does, and an unreproducible rationale is what a later pass rediscovers as a
+defect. `docs/plans/small-model-benchmarking-ml.md` v1.8 and its review are **held uncommitted**
+until that answer lands.
