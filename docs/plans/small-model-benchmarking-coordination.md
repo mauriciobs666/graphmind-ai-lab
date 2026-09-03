@@ -47,7 +47,9 @@ Stakeholder decisions, 2026-09-02:
 | U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | delivered | `## Pass 2` — **needs changes**: 1 blocker, 1 major, 1 minor (all new) | — (is the gate) | 237k tok / 13 tools |
 | U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.6** | teco-verified | 253k tok / 14 tools |
 | U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | `a5ca583515c0979f1` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.6** | teco-verified | 158k tok / 37 tools |
-| U8c — Code: B-ML-2, M-ML-6, m-ML-6, P2-1…P2-5 | `tdd-engineer` (fresh) | `accddcf5d6ef280aa` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
+| U8c — Code: B-ML-2, M-ML-6, m-ML-6, P2-1…P2-5 | `tdd-engineer` (fresh) | `accddcf5d6ef280aa` | accepted | commit `95b4c88` — 10 files, **314 tests**; 22 mutations, 1 survivor (equivalent by construction) | U9a + U9b → — | 285k tok / 95 tools |
+| U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 3` + `docs/plans/small-model-benchmarking-ml.md` v1.7 | — (is the gate) | — |
+| U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 3` | — (is the gate) | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
@@ -559,3 +561,25 @@ re-drawn against U4's actual delivery before dispatch.
 - **Pattern worth naming, since it has now bitten three times:** *a justification computed against a
   state that the same pass changed.* Each time it was caught only because someone re-derived rather
   than re-read.
+
+### U8c accepted — and the units trap caught me a second time
+
+- **Verified independently before committing** (`95b4c88`): `314 passed`, `ruff` clean, and `-m ""`
+  / `-rsx` confirm nothing is skipped, deselected or xfailed. The α split, `stats.ALPHA_FAMILY` as
+  the single home of the unadjusted 0.05, `Rule7Violation`, the McNemar veto and the `{"", ".."}`
+  guard were each read in the source rather than taken from the report.
+- **I re-ran the truncation sweep in percentage points and it appeared to refute the implementer**
+  — zero misfires at `b_min = 7`, five at `b_min = 6`, the exact inverse of its claim. Redone in
+  **proportions**, the units `format_floor_pp` actually computes in (`x / 0.001`, not `x * 100 /
+  0.1`), it reproduces the implementer exactly: `b_min = 7` misfires at n = 5, 10, 20, 40; `b_min =
+  6` never, to n = 2000. **Second time this coordination has produced a false refutation from the
+  same cause.** The rule is now in both re-gate briefs: *verify in the units the code uses, not the
+  units the document prints.* The code's own docstring names the same trap for the `floor(x*1000)`
+  form — "a sweep run against the expression the code does not use is how this was missed the first
+  time" — which is the same failure at a different layer.
+- **`Path("..").name == ".."`.** The implementer rejected one third of finding P2-4 on this, and it
+  is right: dropping `".."` from the guard would write `results/runs/..json`. Confirmed directly.
+  Both re-gate briefs carry the correction so the `analyst` records it against its own premise.
+- **Three note-side defects were routed to `data-scientist` rather than edited in place** by the
+  implementer — correct ownership behaviour, and they are Part 1 of U9a rather than a separate unit,
+  since the same agent must gate the code against whatever the note becomes.
