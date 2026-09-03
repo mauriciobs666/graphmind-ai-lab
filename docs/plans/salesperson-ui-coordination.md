@@ -128,7 +128,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S7b gate** — do the two overrides deliver what the findings asked, or only look more rigorous? | `analyst` (**fresh** — the Pass 7 reviewer ended at 253k tok; this check is self-contained) | `a893ac5083e24f334` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 0 major, 1 minor, 2 nits) — committed `6464b32`. **Both overrides upheld by execution**: it re-ran Pass 7's own suggested fix against Pass 7's own mutant and watched it **hang** (terminated 32 s, exit 143), and proved S7-1's substitute detects with the stub sleep set to **zero** (8/8), so detection genuinely does not depend on a duration. **S8-1: found the silent margin inside the fix that was justified by rejecting a margin** — `started_at` is stamped on the calling thread before `worker.start()` (teco confirmed at `test_storefront.py:103`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 8` + Appendix L | — | 113k tok / 52 tools |
 | **S7b2** — close Pass 8: stamp `started_at` on the worker thread (S8-1) + two nits | `coder` (**fresh** — the S7b author ended at 267k tok; the review fully specifies the work) | `a1af13ddaad935f25` | delivered — **committed `6fbe541`**, suite **2476** (baseline exactly) teco-verified solo; `storefront.py` byte-identical; 11 executable lines. **Reproduced the reviewer's false-green at HEAD, then killed it.** The adverse-ordering margin **grew** 54 µs → 142 µs, so the fix strengthens detection rather than merely not weakening it. **Rejected the suggested `expect_error` kwarg** for the literal `pytest.raises` idiom, deleting two bookkeeping asserts and a dead third notion of elapsed time. **Refused a widening that looked free** — a blind-sleep mutant showed `seconds=10` would turn the idle test green, trading a live detection for a flake that has never fired. **Sized a margin its own change created** (max thread-start skew 0.1446 ms vs 150 ms) | `test_storefront.py` only | **folded into the S7c gate** (same file; see note) | 119k tok / 38 tools |
 | **S7c** — Ruling 1's catalog projection + removal of S7's `1+n` workaround | `coder` (**fresh**) | `a0633c22b2d2eaba5` | delivered — **committed `f5291e6`**, suite **2478** teco-verified solo; five files, both test files **pure insertions**, S7's catalog tests green **unedited** as the plan predicted. **Caught a false negative in its own first-draft tripwire** — the fixture slugs were exactly `slugify(name)`, so a `_catalog_rows` fabricating ids would have passed; one row is now `opaque-sku-42`/`Widget 007`. **Found the query gate is structurally blind** (finding below) and **sharpened the plan's counterweight at the mechanism level**: no test in this repo *can* observe what `FilterProductsTool` hands the model | `repository.py`, `storefront.py`, `test_repository.py`, `test_storefront.py`, `QUERIES.md` §15.2 | `analyst` → — | 139k tok / 65 tools |
-| **S7c2** — the stale query-gate constant + §15.1's pre-existing drift (**teco-authorized scope widening**) | `coder` | `a0633c22b2d2eaba5` (resumed — it measured both fixes) | in-flight (**holds the live DB**; re-seeds `reference` on the way out) | `scripts/test_queries.sh`, `QUERIES.md` §15.1 | folded into the S7c gate | — |
+| **S7c2** — the stale query-gate constant + §15.1's pre-existing drift (**teco-authorized scope widening**) | `coder` | `a0633c22b2d2eaba5` (resumed — it measured both fixes) | **accepted — committed `8aaeca3`**. **Refused to treat 408/408 as the evidence** and proved fidelity by AST instead — extracting the code's real query text, so the code side is the string the engine receives rather than a re-typing. **Corrected teco's overstatement of the defect** (the script self-checks its own header; it is blind across the code boundary only) and **sized the whole-document audit**: 109 blocks, 66 matching, 43 leads. **Pushed back on teco's scope line and was right** → S7c3 | `scripts/test_queries.sh`, `QUERIES.md` §15.1 | folded into the S7c gate | 164k tok / 16 tools |
+| **S7c3** — `$LOOKUP`'s two coupled constants: the other half of the same K-053 instance | `coder` | `a0633c22b2d2eaba5` (resumed) | in-flight | `scripts/test_queries.sh` only | folded into the S7c gate | — |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
 | **U29** — Plan v1.19: **split Ruling 1 out of S8** into `S7c` ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed ×2) | **accepted — committed `732f5e0`** (27/19). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* and S8's now-vacuous tripwire recorded as the **correct** end state. **Self-reported a miss in its own v1.18 delivery** (§9 never received v1.18's map changes). Renamed off the `S7b` collision teco caught, and **argued for keeping two mentions as tombstones** rather than a clean grep — the sequence gap is otherwise unexplained plan-side, and closing it would recreate the collision | `docs/plans/salesperson-ui.md` **v1.19**; S7c `2f03c064`, S8/S9 unmoved by the rename | **none — plan gates stopped** | 181k tok / 3 tools (rename) |
 | **S7c** — Ruling 1's catalog projection + removal of S7's `1+n` workaround | `coder` | — | queued (**serialized behind the S7b gate — shared live DB**; no file in common with S8, so they *could* parallelize if the DB allowed) | `repository.py`, `storefront.py`, `test_repository.py`, `test_storefront.py`, `QUERIES.md` §15.2 | `analyst` → — | — |
@@ -1043,10 +1044,30 @@ This is not hypothetical: **it has already fired once, silently.** K-053 added `
 columns until S7c2. The gate reported green throughout. S7c hit the identical shape at §15.2 and
 `test_queries.sh:1387`, which is how it was noticed at all.
 
-**Fixed here:** the two §15.2 constants and §15.1's body (S7c2). **Not fixed here:** the property
+**The precise defect, corrected by the implementer after teco overstated it.** The script is *not*
+blind in general: `assert_no_data_row` compares the full returned header, and mutating either of
+S7c2's two edits without the other fails 407/408 in both directions — so it does self-check its own
+`RETURN` list. It is blind **across the code boundary specifically**. The accurate statement is:
+*the script verifies that its transcription is internally consistent and runs on the live engine;
+nothing verifies that the transcription is the query the code sends.* That is narrower, and
+actionable in a way "the gate is decorative" is not.
+
+**Fixed:** §15.2's two constants, §15.1's body (S7c2), and `$LOOKUP`'s two coupled constants (S7c3 —
+the other half of the same K-053 instance; see the scope note below). **Not fixed:** the property
 itself. A gate whose passing is independent of the code it gates will drift again, and the two
 candidate answers — generate the constants from the code, or execute the repository methods — are a
 design question for `graph-dba` and `architect`, not a patch. Outside this coordination.
+
+**The audit is bounded, and that is the useful part.** The implementer built a ~30-line AST
+comparator (extracting each `ro_query` literal, `literal_eval`-ing the concatenation, normalizing
+whitespace, comparing token by token) and ran it across the whole document: **109 fenced `cypher`
+blocks, 66 matching a `repository.py` literal exactly, 43 not — 3 of those DDL.** That 43 is a **lead
+count, not a defect count**: most will be legitimate (services-level composition, illustrative
+shapes, multi-statement examples). Triage is the audit. The same comparator is also the shape of a
+real code-vs-doc gate — the thing `test_queries.sh` structurally cannot be — so the open design
+question is its **false-positive discipline** (allowlist? fence marker? naming convention?), because
+a gate that cries wolf on forty legitimate blocks is abandoned in a week, which is precisely how this
+one came to be trusted for something it does not do.
 
 Discovered by the S7c implementer, which also filed it to `kaizen_team` (`entryId 16ab10b7-…`)
 because the property is durable and written down nowhere.
@@ -1064,6 +1085,16 @@ whole-document audit may well be worth doing; it is not worth doing inside a ste
 
 The line between them is not size — it is whether leaving it creates a *new* inconsistency in
 something this coordination just touched.
+
+**And teco then drew that line in the wrong place, and the implementer pushed rather than complied.**
+Capping S7c2 at two edits left `$LOOKUP` in `test_queries.sh` still three-column — so after `8aaeca3`,
+`repository.py` and `QUERIES.md` agreed about `lookup_product` while the script alone dissented:
+*exactly* the half-right state the widening was authorized to prevent, one file over. The
+report-don't-chase rule was aimed at **other** drift; applying it to the other half of the instance in
+hand was a misapplication. Fixed as **S7c3**.
+
+Worth keeping as the general form: **the unit of "one instance of drift" is the fact, not the file.**
+A rule that stops at a file boundary will keep splitting instances in half.
 
 ## S7b2's gate is folded into S7c's, not skipped (teco, 2026-09-03)
 
