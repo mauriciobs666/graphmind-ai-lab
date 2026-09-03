@@ -1,6 +1,13 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.7
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.8
+
+2026-09-03 (v1.8, `data-scientist`) — the clustered path's four unowned or false sentences: §3.2e
+publishes the cluster-path label verbatim (it was prose invented in code) and stops it asserting
+clustering at DEFF 1.00, verdict 2's alternate clause becomes *"at or above that"* (equality is
+reachable), §7.1's floor sentence gains its effective-unit qualifier where DEFF > 1, and §3.4
+Rule 4 replaces the bare percentile interval with the **conservative envelope** — review Pass 4
+(M-ML-8, m-ML-9, m-ML-10, m-ML-11).
 
 2026-09-03 (v1.7, `data-scientist`) — four stale or unhandled corners the v1.6 fix round surfaced:
 §3.4 Rule 2's dataclass sketch and Rule 4's precondition 3 now say **two** αs on `ResolvingPower`
@@ -304,10 +311,23 @@ Three verdicts, exactly these strings:
    with 80% power; the observed 26.7 pp is below that"* — two numbers in one sentence that refute
    it. When `|diff| >= mdd80`, render instead:
 
-   > `…; the observed 26.7 pp is above that, but the MDD assumes strict dominance and this comparison is not strictly dominant (b=5, c=13), so the difference required for 80% power at this discordance mix is larger (§7.1).`
+   > `…; the observed 26.7 pp is at or above that, but the MDD assumes strict dominance and this comparison is not strictly dominant (b=5, c=13), so the difference required for 80% power at this discordance mix is larger (§7.1).`
 
    The discordance counts are mandatory in that form: they are the reason the two numbers point
    opposite ways, and without them the sentence looks like the instrument contradicting itself.
+
+   ***"at or above", not "above" (v1.8, review m-ML-9).*** The branch is `|diff| < mdd80`, so
+   **equality takes this wording** — which is the right branch, since `mdd_clause` claims the pack
+   resolves differences of **≥** `mdd80` and at equality the difference is resolvable. But `mdd80`
+   is ceilinged onto a 0.1 pp grid while an observed difference is `(b−c)/n`, so the two coincide
+   exactly whenever the grid and the lattice meet, and **that is reachable at this component's own
+   sample sizes** — measured this session: `n_units = 85`, `k = 2`, `DEFF = 1.9` gives
+   `mdd80 = 20.0 pp` and `|b−c| = 17` gives exactly 20.0 pp; sweeping `6 ≤ n_eff ≤ 200`, equality
+   occurs at (n=90, 100, 120, 150, 180) for k=2 and (n=200) for k=1, and at n=90 it is 2.4% of
+   every table that reaches this clause. A strict *"is above that"* is then false in the same way
+   *"is below that"* was, one branch over. **Do not add a third wording for equality** — one
+   comparative that is true across the whole branch is worth more than a third string to keep in
+   step with the other two.
 3. **Instruments disagree** (MOVER-D excludes zero, McNemar does not — row 4 of the table above; real and not rare):
    `Not distinguishable at this sample size. The effect-size interval [0.2, 28.8] pp excludes zero but the exact paired test does not reach alpha=0.05 (b=8, c=2, p=0.109). Reported as not distinguishable: the exact test is the decision rule.`
 
@@ -322,6 +342,36 @@ the analysis unit contains correlated observations (design effect > 1), both are
 and the decision rule becomes *"the cluster-bootstrap CI on the paired difference excludes zero"*,
 with the strings rendered against the bootstrap instead of McNemar and the design effect and its
 basis printed. §3.4 makes this a property the code cannot get wrong by omission.
+
+**(f) The clustered-path label — published here, because Rule 4 required it printed and this note
+published no string for it (v1.8, review m-ML-10).** It is **appended to whichever of the three
+strings above was rendered**, on every verdict whose `decided_by` is `cluster-bootstrap` — not on
+two of them, because a reader who sees one verdict must still be told which instrument produced it.
+Two variants, and the condition is the **design effect**, never the basis:
+
+1. **A widening was applied (`design_effect > 1.0`):**
+
+   > `Decided by the cluster-bootstrap CI on the paired difference, widened by sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test (p=0.031) as a necessary condition: under clustering McNemar rejects too readily, so it may withhold a verdict but never carries one on its own.`
+
+2. **No widening was applied (`design_effect == 1.0`), which is *every* comparison until a
+   determinism probe establishes the basis:**
+
+   > `Decided by the cluster-bootstrap CI on the paired difference — the instrument here because this comparison's design effect is assumed rather than established by construction — with no widening applied (sqrt(DEFF)=1.00), in conjunction with McNemar's exact test (p=0.031) as a necessary condition: a design effect that was never established cannot license the exact test to carry a verdict, so it may withhold one but never carries one on its own.`
+
+   `assumed` is the `basis` field verbatim (`measured` is the other value that reaches this path).
+
+Two things the second variant fixes, both of them the same defect this note keeps ruling on — a
+clause that is true on the rare path and false on the common one:
+
+- **The reason clause must attach to the instrument choice, not to the widening.** What displaced
+  McNemar is the **basis**; what left `sqrt(DEFF)` at 1.00 is the **design effect**. A single
+  *"not widened …, because the design effect is assumed"* reads as the basis explaining the
+  widening, which is not the causal chain and is the nearest-attachment parse.
+- **Do not say *"under clustering"* where no clustering is declared.** At `design_effect == 1.00`
+  the comparison asserts none, so the rationale has to be the one that is actually true there: an
+  unestablished design effect cannot license the exact test to carry a verdict. The
+  clustering rationale is right in variant 1 and false in variant 2, and variant 2 is the default
+  path.
 
 **FR-15's literal marginal-overlap check should still be computed and printed as a diagnostic
 line** ("marginal Wilson intervals overlap: yes/no"), because the requirement asks for it and it
@@ -566,6 +616,72 @@ DEFF = 1 it restores the exact test's calibration exactly, and at DEFF > 1 the w
 remains the binding constraint it already was. What the rule forbids is McNemar deciding *for*
 distinguishability under clustering; using it to withhold that verdict is the opposite operation.
 
+**The interval printed on that path is the conservative envelope, not the resample alone (v1.8,
+review M-ML-8). This corrects v1.6–v1.7, whose *"the strings rendered against the bootstrap"*
+authorised a substitution it never checked the width of.** The veto fixed the **decision** on this
+path and left the **quantification** on the bare percentile interval, and that interval is the
+narrower of the two available — measured this session, exactly (every paired table enumerated, and
+every bootstrap resample outcome computed analytically rather than sampled):
+
+| n, regime | MOVER-D coverage / mean width | percentile bootstrap at DEFF 1.00 | narrower than MOVER-D on |
+|---|---|---|---|
+| 30, strict dominance δ=15 pp | 0.983 / 30.60 pp | **0.942** / 24.57 pp | **100%** of the probability mass |
+| 40, strict dominance δ=15 pp | 0.976 / 25.63 pp | **0.939** / 21.23 pp | **100%** |
+| 85, strict dominance δ=12 pp | 0.969 / 15.32 pp | **0.940** / 13.56 pp | **100%** |
+| 40, null | 0.962 / 29.55 pp | 0.956 / 26.80 pp | 91% |
+
+So on the path taken **because the design effect was never established** — i.e. every comparison
+until a determinism probe runs — the report prints a *tighter* effect size than the instrument
+§3.2c mandates, in the strict-dominance regime this tool exists to catch. Worse, the percentile
+bootstrap **degenerates at the sparse discordant counts §3.2b says this lab will actually see**:
+at n=30 with `b=4, c=0` it returns `[3.3, 26.7] pp`, excluding zero, where McNemar's exact p is
+**0.125** and MOVER-D is `[−0.6, 29.7]`. The mechanism is not subtle — with four non-zero rows,
+`P(no +1 drawn) = (26/30)³⁰ = 1.4% < 2.5%`, so the 2.5th percentile *cannot* be zero. At n=30
+that fires on **20.3%** of the probability mass under strict dominance, each time rendering
+verdict 3's *"the interval excludes zero but the exact paired test does not"* on the strength of a
+degenerate interval rather than a genuine disagreement.
+
+**The rule.** On any non-`by-construction` path the printed interval is the **wider** of
+
+- the `√DEFF`-widened percentile bootstrap (Rule 6), and
+- the `√DEFF`-widened MOVER-D interval, half-widths scaled about the point estimate the same way,
+
+which is uniformly at least as conservative as either alone, reduces to MOVER-D exactly at
+`DEFF = 1.00` (restoring §3.2c's effect-size instrument on a path where *nothing about clustering
+was ever declared*), keeps the interval responsive to a declared design effect where one exists,
+and removes the sparse-count degeneracy because MOVER-D covers zero exactly when the counts are
+too thin to support excluding it. It can only *remove* rejections, so it disturbs neither the veto
+nor Rule 7.
+
+**And the percentile itself should be computed in closed form, not resampled.** For a paired
+**binary** table the per-unit differences take three values, so the resample distribution is
+exactly multinomial and its quantiles are a ~30-line exact computation (verified this session
+against the shipped `B=10 000` resample). The resampled version is not merely slower — **it is a
+Monte-Carlo estimate of an *atomic* quantile, so whenever the target percentile lands within
+Monte-Carlo error of an atom boundary the printed bound flips by a whole atom, `1/n_units`.** State
+it precisely, because the loose version ("the bound moves with row order") is not reproducible on an
+arbitrary table and a rationale nobody can reproduce is a defect in waiting:
+
+- **The predictor is the exact CDF's distance from the target percentile.** At `(b=8, c=0, n=85)`
+  the exact bootstrap CDF is `0.97281` at `13/85` and `0.98738` at `14/85`, so the 97.5% quantile
+  is `14/85` by only **0.0022** of probability, against a Monte-Carlo standard error of
+  `sqrt(0.9728·0.0272/10 000) = 0.0016` — about a 9% chance per draw that the empirical CDF crosses
+  first and the bound prints `15.3` instead of `16.5`. Measured: **16 of 200 seeds** and **23 of 200
+  row permutations** at a fixed seed. Where the quantile is *not* near a boundary the bound is
+  perfectly stable — `(b=4, c=0, n=30)` is identical across 60 seeds.
+- **Row order matters for the same reason the seed does, and the reason is not obvious.**
+  `random.Random.choice` draws an **index**; a fixed seed fixes the index sequence, and a
+  permutation of the same multiset re-maps those indices onto different values. So "same multiset,
+  therefore same resample" is false.
+- **At the tool-caller pack's own n it is a coin flip, not a tail event.** `(b=5, c=3, n=12)`:
+  `paired_cluster_bootstrap(..., B=10 000)` prints a lower bound of `-25.0 pp` at seed 0 and
+  `-33.3 pp` at seed 5 — **8.3 pp apart**, at **107/93 of 200 seeds** and **102/97 of 200 row
+  permutations**. That is the last *two* digits of a bound printed to 0.1 pp, decided by the seed
+  and by the order rows happen to sit in.
+
+A bound at that mercy is not reproducible in the sense §3.2d's seed requirement is asking for, and
+the closed form removes both dependencies at no cost.
+
 **Rule 5 — design effect is a variance ratio, not a width ratio.** (A correction to v1.1 §4.4,
 which called the width ratio "the design effect"; an implementer following v1.1 literally would have
 divided by 2.6 where the truth was 7, over-stating effective *n* by ~2.7×.)
@@ -636,6 +752,10 @@ is `6/1.714 = 350 pp`, i.e. no difference is resolvable at all and the run says 
 mechanism is sufficient alone** — the widening handles variance the floor cannot see, the floor
 handles degeneracy the widening cannot — which is what makes the interim defensible until a pack
 with `replicatesPerScript > 1` makes the structural primitive buildable against real data.
+**A third mechanism was missing and v1.8 adds it:** neither the widening nor the floor sees the
+*sparse-discordant-count* degeneracy of a percentile interval — at four non-zero rows in thirty the
+2.5th percentile cannot be zero, whatever the design effect — and that is what Rule 4's
+conservative envelope with MOVER-D closes (review M-ML-8).
 
 ---
 
@@ -1303,6 +1423,21 @@ Every field is mandatory, **including both αs** — they differ whenever k > 1,
 only one cannot tell which bound it governs. The unit, the raw unit count, the design effect and its
 basis are what make the line auditable — a bare `n` is the shape gate B-1 rejected, because 48 turns, 48
 conversations and 12 scripts print the same sentence and mean three different things.
+
+**The floor sentence takes an effective-unit qualifier whenever `design_effect > 1.0` (v1.8, review
+m-ML-11).** The floor is `b_min/n_eff` while the McNemar p printed beside it is computed over the
+`n_units` raw rows, so above DEFF 1 the two quantities live on different denominators and the
+sentence as templated above reads as a flat contradiction of the number three lines from it.
+Measured: at `n_units = 12, DEFF = 2` the floor prints **100.0 pp** while `b=11, c=0` is a 91.7 pp
+difference at `p = 0.00098`; at `n_units = 40, DEFF = 2` the floor prints **30.0 pp** beside
+`b=6, c=0` at `p = 0.031`. Both are decided correctly — Rule 7 demotes them — and both *print* a
+p below α underneath a sentence saying no observed outcome can reach significance. Where
+`design_effect > 1.0`, render the floor sentence as:
+
+> `differences below 30.0 pp cannot reach significance at any observed outcome over the 20 effective items this design supports, at any Holm step (alpha <= 0.05) — the McNemar p printed beside it is computed over the 40 raw rows, where clustering makes it anti-conservative, so it can fall below that alpha without lifting the difference above this floor`
+
+At `design_effect == 1.00` the two denominators coincide, the qualifier is noise, and the template
+above stands unchanged — which is why §7.2's rendered line does not move.
 
 **The two sentences are independent, and the second prints whatever happens to the first (v1.7).**
 When no effect size attains the power the MDD sentence is replaced by the *unattainable* wording

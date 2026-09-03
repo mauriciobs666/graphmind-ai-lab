@@ -717,3 +717,233 @@ of rounding (one index in 10 000 — equivalent in effect), and **m-ML-7**.
 - **n-ML-7** → `architect`, in the plan's own next revision.
 - Note-side work is **done in this pass** — `docs/plans/small-model-benchmarking-ml.md` is at v1.7
   and nothing in this review is waiting on it.
+
+---
+
+## Pass 4 — 2026-09-03, commit `d55f4d8`, against note **v1.7** (revised here to **v1.8**)
+
+**Verdict: approve with suggestions.** 1 major, 4 minors, 2 nits. **No blocker, and every Pass 3
+finding is properly closed** — each rechecked against the delivered module, not against the fix
+round's report. The statistical core is sound: the three αs are separately load-bearing, Rule 3's
+two rounding directions and two denominators are each pinned, Rule 7's split by path is enforced
+and the theorem side genuinely raises, and B-ML-2's veto genuinely vetoes. **The residue is one
+corner that has been narrowed at every pass and has now reached its last layer** — the
+`cluster-bootstrap` substitute on the non-`by-construction` path. Pass 1 fixed what it *decided*
+with (B-ML-1), Pass 2 fixed its *calibration* (B-ML-2's veto), and what is left is what it
+*quantifies with*: the printed 95% CI. That is a follow-up, not a gate on S2 — see the judgement
+at the end.
+
+Fresh reviewer, nothing taken on faith. Suite re-run from a sandbox copy of `d55f4d8` outside the
+repository: **353 passed**; the repository working tree was never modified. **39 mutations of my
+own** (37 killed, 1 equivalent, 1 a real gap — m-ML-12); an exhaustive by-construction render sweep
+over n ∈ {12, 15, 20, 30, 38, 40, 48, 60, 85, 90, 100, 120} × k ∈ {1, 2} × every `(b, c)`; and an
+**exact** (not simulated) coverage computation for both paired-difference intervals — every paired
+table enumerated against its multinomial probability, and every bootstrap resample outcome computed
+analytically rather than sampled.
+
+### The three items handed to me — all three decided, all three note-side
+
+1. **The cluster-path decision sentence — adopted into §3.2e, with a correction (m-ML-10).** The
+   implementer was right to ship a sentence rather than a false one, and right to route it. It is
+   now published verbatim in v1.8 §3.2e(f), in **two variants keyed on the design effect**. The
+   shipped text is not adopted unchanged: at `design_effect == 1.00` it closes with *"under
+   clustering McNemar rejects too readily"* on a comparison that **declares no clustering**, which
+   is P3-3's own defect surviving in the half of the sentence P3-3 did not touch — the *rationale*
+   rather than the *widening*. The published variant 2 gives the reason that is true there (a
+   design effect that was never established cannot license the exact test to carry a verdict) and
+   re-attaches the `because` clause to the instrument choice, which the nearest-attachment parse of
+   the shipped text puts on the widening instead.
+2. **Pass 3's routed observation 1 — upheld, and it is worse than cosmetic (m-ML-11).** Resolved in
+   v1.8 §7.1 with a published qualifier, printed only where `design_effect > 1.0`.
+3. **The equality boundary — a defect, and the fix is one word, not a third wording (m-ML-9).** The
+   *branch* choice is right, for the reason given. But **equality is reachable at this component's
+   own sample sizes**, not only at the round's n = 90/100/120: measured this session, `n_units=85`,
+   `k=2`, `DEFF=1.9` gives `mdd80 = 20.0 pp` and `|b−c| = 17` is exactly 20.0 pp — the guard-judge
+   pack's own n. Sweeping `6 ≤ n_eff ≤ 200`, equality occurs at n = 90/100/120/150/180 (k=2) and
+   n = 200 (k=1), and at n=90 it is **2.4%** (82 of 3 444) of every table that reaches the clause.
+   v1.8 changes the published wording to **"is at or above that"** — one comparative true across
+   the whole branch, rather than a third string to keep in step with the other two.
+
+### New findings
+
+**M-ML-8 (major) — the fail-safe path fixed the decision and left the *quantification* on the
+narrower of the two available intervals.** `stats.verdict:792` prints
+`paired_cluster_bootstrap(...)` as the 95% CI on every non-`by-construction` path; at
+`design_effect == 1.0` — **every comparison until a determinism probe runs** — `sqrt(1.0)` widens
+nothing, so §3.2c's mandated MOVER-D is replaced by a bare percentile interval. Three measured
+consequences, in ascending order of seriousness:
+
+1. **It is narrower, systematically.** Exact coverage, every table enumerated: at n=40 under strict
+   dominance MOVER-D covers 0.976 at a mean width of 25.63 pp against the bootstrap's **0.939** at
+   21.23 pp, and the bootstrap is narrower on **100%** of the probability mass (n=30: 0.983/30.60
+   vs **0.942**/24.57; n=85: 0.969/15.32 vs **0.940**/13.56). The report rendered for the
+   guard-judge shape prints `95% CI [3.5, 15.3] pp` where MOVER-D on the same table `(77,8,0,0)`
+   gives `[3.1, 17.5]`. A fail-safe that fires because *less* is known must not tighten the
+   interval.
+2. **It degenerates at the sparse discordant counts §3.2b says this lab will see.** At n=30,
+   `b=4, c=0` it returns `[3.3, 26.7] pp`, **excluding zero**, against McNemar's exact p = **0.125**
+   and MOVER-D's `[−0.6, 29.7]`. The mechanism: with four non-zero rows
+   `P(no +1 drawn) = (26/30)³⁰ = 1.4% < 2.5%`, so the 2.5th percentile *cannot* be zero. Under
+   strict dominance at n=30 this fires on **20.3%** of the probability mass — each one rendering
+   §3.2e verdict 3's *"the interval excludes zero but the exact paired test does not"* on the
+   strength of a degenerate interval rather than a real disagreement. The veto keeps the *verdict*
+   right in all of them; §3.4 Rule 6's claim that the floor catches what the widening cannot does
+   **not** cover this, because the floor is about clusters and this is about non-zero rows.
+3. **It is a Monte-Carlo estimate of an *atomic* quantile, so where the target percentile lands
+   near an atom boundary the printed bound flips by a whole atom — with the seed *and* with the row
+   order.** At the tool-caller pack's own n it is a coin flip, not a tail event:
+   `paired_cluster_bootstrap([1.0]*5 + [-1.0]*3 + [0.0]*4, design_effect=1.0, B=10_000, seed=s)`
+   prints a lower bound of `-25.0 pp` at `s=0` and `-33.3 pp` at `s=5` — **8.3 pp apart**, split
+   **107/93** over 200 seeds and **102/97** over 200 row permutations at one fixed seed. At
+   `(b=8, c=0, n=85)` the split is **184/16** over seeds (`[3.5, 16.5]` vs `[3.5, 15.3]`), and the
+   exact CDF says why: `0.97281` at `13/85` against `0.98738` at `14/85`, so the 97.5% quantile
+   clears the boundary by 0.0022 of probability against a Monte-Carlo standard error of 0.0016.
+   Row order matters for the same reason the seed does, and it is not obvious: `Random.choice`
+   draws an **index**, so a permutation of the same multiset re-maps a fixed index sequence onto
+   different values. **Where the quantile is not near a boundary the bound is perfectly stable** —
+   `(b=4, c=0, n=30)` is identical across 60 seeds — which is why this needs the mechanism stated
+   rather than a flat "it moves with row order". P3-5 made the seed reproducible; the interval is
+   still not a function of the table.
+
+*The note authorised this and the note was wrong* — v1.6–v1.7 Rule 4 said "the strings rendered
+against the bootstrap" without ever checking the width. **v1.8 replaces it with the conservative
+envelope:** the wider of the `√DEFF`-widened bootstrap and the `√DEFF`-widened MOVER-D. It is
+uniformly at least as conservative as either alone, reduces to MOVER-D exactly at DEFF 1.00,
+stays responsive to a declared design effect, removes the degeneracy, and can only *remove*
+rejections — so it disturbs neither the veto nor Rule 7. Second half of the fix: for a paired
+**binary** table the resample distribution is exactly multinomial, so the percentile is a ~30-line
+closed form (I verified mine against the shipped `B=10 000` output); resampling buys nothing and
+costs the reproducibility in (3). `test_at_deff_one_the_substitute_interval_is_narrower_than_the_mover_d_it_replaces`
+(`tests/test_stats.py:1066`) inverts under this fix, and its stated rationale — the conjunction,
+not the interval, is what makes the path conservative — survives intact.
+
+**m-ML-9 (minor) — verdict 2's alternate clause prints a strict comparative on a reachable
+equality.** Item 3 above. `stats.py:658` is correct as a *branch*; `stats.py:661`'s wording is not.
+Note v1.8 §3.2e publishes `is at or above that`; a test at `(n_units=85, k=2, DEFF=1.9, |b−c|=17)`
+pins the case that already exists.
+
+**m-ML-10 (minor) — the cluster-path label, and its rationale clause on the default path.** Item 1
+above. `stats.py:926-941`. Note v1.8 §3.2e(f) publishes both variants verbatim.
+
+**m-ML-11 (minor) — the floor sentence and the McNemar p beside it live on different denominators
+above DEFF 1.** `stats.floor_clause` renders `b_min/n_eff` while the p three lines away is computed
+over `n_units` raw rows, so the line reads as a flat self-contradiction. Measured: at
+`n_units=12, DEFF=2` the floor prints **100.0 pp** while `b=11, c=0` is 91.7 pp at **p = 0.00098**;
+at `n_units=40, DEFF=2`, 30.0 pp beside `b=6, c=0` at p = 0.031. Both are *decided* correctly (Rule
+7 demotes), and the resolution — McNemar over raw rows is anti-conservative under clustering, so
+the floor over effective units governs — appears nowhere in the rendered text. Note v1.8 §7.1
+publishes the qualifier, conditional on `design_effect > 1.0`; §7.2's rendered line is DEFF 1.00
+and does not move.
+
+**m-ML-12 (minor) — the veto's α is untested on the path that always takes it.** Mutation: on the
+cluster branch, test the veto at `resolving.alpha_family` instead of the Holm step `alpha`
+(`stats.py:813`). **Survives all 353 tests.** It is not equivalent — at `n=40, k=2, DEFF=1.0,
+basis="assumed"`, `(b=6, c=0)`, `p=0.031`: at `alpha_step=0.025` the shipped code returns *not
+distinguishable*, at `alpha_step=0.05` it returns *distinguishable*. So the multiplicity correction
+can be removed from the substitute path without a test noticing, on the path every comparison
+currently takes. Pass 3's list reports "the veto tested at the loosest α" as killed; whatever that
+mutation was, it was not this one. *Fix:* one test at that table asserting both steps.
+
+### Nits
+
+- **n-ML-8** — Rule 7's `mcnemar-exact` **raise** is suppressed by `holm_tested=False`
+  (`stats.py:835`, `fired = raw_significant and holm_tested and below_floor`). The theorem is
+  `p ≤ alpha_step ≤ alpha_family ⟹ |b−c| ≥ b_min`; it says nothing about whether Holm tested this
+  member, so a genuine module bug goes undetected for every member past the stop. Verified: with an
+  inconsistent floor, `holm_tested=True` raises `Rule7Violation` and `holm_tested=False` returns
+  silently. Split the two conditions — raise on `raw_significant and below_floor`, keep
+  `holm_tested` in the demotion condition, where it belongs (nothing visible changes: the
+  `not holm_tested` text branch already precedes the `floor_demoted` one).
+- **n-ML-9** *(routes to `architect`)* — `docs/plans/small-model-benchmarking.md` §3.8.5 says
+  *"§2.1's inventory row above is the only place this plan repeats one"* of the note's κ figures,
+  and §6 R-9 then repeats `κ = 0.21` a second time. Both are attributed, so the drift risk is small
+  — but v1.7's withdrawal pass is one line short of its own claim. Otherwise the withdrawal holds:
+  the plan carries **no** note-owned literal for `z`, the verdict strings, the floors, the MDDs or
+  `b_min` (grepped).
+
+### Dispositions — Pass 3
+
+- **M-ML-7** — **fixed, and the sweep is clean.** Re-ran the render sweep that found it: over the
+  by-construction path at n ∈ {12,15,20,30,38,40,48,60,85,90,100,120} × k ∈ {1,2} × every `(b,c)`,
+  the *"is below that"* clause is now printed **0 times falsely**. The only residual falsity in that
+  sentence is the equality wording in the *other* branch — m-ML-9, a different string.
+- **m-ML-7** — **fixed and pinned.** At `n_eff == b_min` the *"differences below 100.0 pp"* form
+  prints, not the exceeds-the-units form; mutating `> 1.0` → `>= 1.0` is now **killed**.
+- **m-ML-8** — **fixed and pinned.** `report.py:191` calls `stats.mdd_clause`; editing the stem in
+  `stats.py` alone now fails a report test, which is the scheduled drift the finding predicted.
+- **n-ML-4** — **fixed.** `holm_steps(p_values, *, alpha: float)`, no default; `ALPHA_FAMILY` is the
+  only `0.05` literal in the module.
+- **n-ML-5** — **fixed, and the boundary and the error type are both right.** Verified:
+  `resolving_power` accepts 1.0 and refuses 0.0 / 0.5 / 0.999 / −1.0 / **NaN** (the guard is written
+  `not design_effect >= 1.0`, which is the NaN-safe form) with `ValueError` — the module's
+  convention for a caller-supplied value out of domain, correctly distinct from `Rule7Violation`'s
+  `AssertionError`, which is reserved for module bugs. `DEFF = inf` is still refused, one layer
+  down and with a message naming `n_effective`; not worth a change.
+- **n-ML-6** — **fixed.** `power` is a `ResolvingPower` field; `power=0.90` renders *"resolves
+  differences of >=22.0 pp with 90% power"* in all three strings.
+- **n-ML-7** — **fixed** (plan v1.7 §4 S1 carries the signature with no α default).
+
+### Mutation testing — 39 run by me, 37 killed
+
+I did not use the fix round's list. **Killed:** each printed bound computed at the other α (floor at
+`alpha_mdd`, MDD at `alpha_family`); `provenance` and `floor_clause` each naming the other's α;
+Holm run at `alpha_mdd`; `PackMetrics.alpha_mdd` undivided; `verdict`'s α default moved to
+`alpha_family`; precondition 3 disabled; `unattainable_clause`'s `b_min` at the wrong α; the MDD
+rounding to nearest and flooring; the floor printer ceiling-rounding, dropping its bin-edge guard,
+and switching to the `x*1000` form; the floor sharing the MDD's floored denominator;
+`_require_effective` ceiling instead of flooring; the Rule 7 raise removed, its comparison made
+non-strict, disabled, and pointed at the *printed* floor; the veto dropped, disjoined, and applied
+before the floor; `mcnemar_may_decide` losing its basis check; the MDD clause's conditional made
+non-strict and unconditional; the widening clause firing at DEFF 1.00; `sqrt(DEFF)` → `DEFF`; the
+power region off by one; the one-sided p; Holm's step-down stop; `report.py` taking the smaller
+design effect or the stronger basis; `holm_tested` dropped from the decision; `floor_clause`'s
+`> 1.0` boundary; the MDD stem re-duplicated in `report.py`. **Survived:** `b_min`'s loop condition
+`>` → `>=` (equivalent — `mcnemar_exact(b,0) = 2^(1−b)` is never exactly `0.05/k` for k ≤ 10; the
+engineering gate reached the same conclusion as its E8), and **m-ML-12**.
+
+I also re-ran the units trap before touching any numeric claim: `format_floor_pp` computes in
+proportions at `precision=0.001`, and both the `x*1000` substitution and the dropped `+1e-12` guard
+are killed by the suite, so the expression is pinned by the expression the code uses.
+
+**One claim of mine sharpened on challenge, before this pass was accepted.** M-ML-8(3) first read
+*"its last digit moves by one atom with row order at a fixed seed"*, which is true on the table I
+measured and **not reproducible on an arbitrary one** — the coordinator could not reproduce it at
+`(b=4, c=0, n=30)`, and was right not to be able to: that table's quantiles sit far from an atom
+boundary and are identical across 60 seeds. The finding survives with its mechanism stated (above)
+rather than as a flat behavioural claim, and its strongest case moved from n=85 (a ~10% flip) to
+n=12 (a ~50% flip, 8.3 pp wide). Two details worth keeping out of the next re-derivation: the
+effect needs **`B = 10 000`-scale sampling error compared against the exact CDF's distance to the
+nearest atom**, not a shuffle count — six shuffles on a 13%-rate table is under one expected hit —
+and a *reduced* `B` makes it **more** common, not less (`(b=4, c=2, n=30)` is stable across 60
+seeds at `B=10 000` and moves on 8 of 60 at `B=2 000`).
+
+### The judgement asked for: does this residue block S2?
+
+**No. It rides as follow-ups, and I would build S2 on this core.** The reasoning, so the stakeholder
+can weigh it rather than take it:
+
+- **Nothing in Pass 4 touches a seam S2 builds against.** Every finding lives inside two functions
+  of `stats.py` (`verdict`'s interval selection and its Rule 7 condition) plus four published
+  strings. No type, no signature, no stored-record shape, no pack-contract field, and no
+  `report.py` structure moves. S2's adapter, runner and scorers consume `ItemResult.scored_outcome`,
+  `BinaryMetric.unit`, `PackRef` and `RunResult` — none of which is implicated.
+- **Three fix rounds with Pass 3 finding more than Pass 2 is not a decaying core.** It is a
+  changing *technique*: passes 1–2 read formulas, pass 3 started rendering output and reading the
+  English, and that is where this component's defects have always been. By severity the trend is
+  monotone — Pass 1: 1 blocker + 4 majors; Pass 2: 1 blocker + 1 major; Pass 3: 1 major; Pass 4:
+  1 major, and that one is the last layer of a corner narrowed at each of the three previous passes
+  (decision → calibration → quantification).
+- **The one thing I would not defer past S2 is M-ML-8's landing *before the first stakeholder-facing
+  comparison is published*.** It changes printed intervals, and changing them after reports exist
+  means two reports over the same data disagree — which is the one failure a tool whose value claim
+  is "it refuses to report a number it cannot stand behind" cannot absorb. S2 produces no published
+  comparison, so the natural slot is the S2 round or immediately after it, on note v1.8.
+
+### Routing
+
+- **M-ML-8**, **m-ML-9**, **m-ML-10**, **m-ML-11**, **m-ML-12**, **n-ML-8** → implementation
+  (`tdd-engineer`), against note **v1.8**; every string M-ML-8, m-ML-9, m-ML-10 and m-ML-11 need is
+  published verbatim in v1.8 §3.2e, §3.4 Rule 4 and §7.1, and none needs inventing.
+- **n-ML-9** → `architect`, in the plan's own next revision.
+- Note-side work is **done in this pass** — `docs/plans/small-model-benchmarking-ml.md` is at
+  **v1.8** and nothing in this review is waiting on it.
