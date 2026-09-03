@@ -1,6 +1,19 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.10
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.11
+
+2026-09-03 (v1.11, `data-scientist`) — §3.4 Rule 4's closed-form percentile becomes **binding**, and
+the reason is not the one v1.8 gave: measured against the shipped `stats.conservative_envelope`
+(`5878014`), the envelope's seed dependence reaches the **verdict**, not only the printed digits —
+at `(a=1, b=25, c=12, d=2)`, n=40, DEFF=1.2, past both the McNemar veto and Rule 7's floor, the
+published sentence alternates between *distinguishable* and *not distinguishable* on 80/70 of 150
+seeds and on 85/65 of 150 row permutations **at one fixed seed**. Rule 4's *"the wider of"* is
+published as a **bound-by-bound** envelope, its *"reduces to MOVER-D exactly at `DEFF = 1.00`"* is
+withdrawn as false (the resample arm binds a bound on 83–87% of tables), the closed form's quantile
+levels are pinned at `permille` 25 and 975 in exact integer arithmetic, and the four printed strings
+that call the interval *"cluster-bootstrap"* are corrected — the interval is an envelope, and naming
+one of its two arms is M-ML-8's defect one layer over. `PackRef.seed` and `sampling.seed` **stay**;
+only their object moves, to §3.2d's continuous-metric bootstrap.
 
 2026-09-03 (v1.10, `data-scientist`) — §11.7's renderings are **measured** (50 warm calls against
 `qwen/qwen3-4b-2507`, following one cold load), and taking them reversed two of v1.9's own rulings:
@@ -659,19 +672,48 @@ that fires on **20.3%** of the probability mass under strict dominance, each tim
 verdict 3's *"the interval excludes zero but the exact paired test does not"* on the strength of a
 degenerate interval rather than a genuine disagreement.
 
-**The rule.** On any non-`by-construction` path the printed interval is the **wider** of
+**The rule.** On any non-`by-construction` path the printed interval is the **envelope**, taken
+**bound by bound**, of
 
 - the `√DEFF`-widened percentile bootstrap (Rule 6), and
-- the `√DEFF`-widened MOVER-D interval, half-widths scaled about the point estimate the same way,
+- the `√DEFF`-widened MOVER-D interval, half-widths scaled about the point estimate the same way:
 
-which is uniformly at least as conservative as either alone, reduces to MOVER-D exactly at
-`DEFF = 1.00` (restoring §3.2c's effect-size instrument on a path where *nothing about clustering
-was ever declared*), keeps the interval responsive to a declared design effect where one exists,
-and removes the sparse-count degeneracy because MOVER-D covers zero exactly when the counts are
-too thin to support excluding it. It can only *remove* rejections, so it disturbs neither the veto
-nor Rule 7.
+> **the printed lower bound is the more negative of the two lower bounds and the printed upper
+> bound is the more positive of the two upper bounds, each chosen independently of the other. It is
+> *not* "whichever of the two intervals is wider".**
 
-**And the percentile itself should be computed in closed form, not resampled.** For a paired
+*(v1.11 publishes that sentence because v1.8's "the wider of" does not state it. Read as a choice
+between two whole intervals — the more natural reading of the words — Rule 4's own claim below is
+**false**, and this note's own worked table is the separating case. At `(a=4, b=5, c=3, d=0)`,
+n=12, DEFF 1.00: the resample interval `[−25.0, 58.3]` is the wider of the two whole, 83.3 pp
+against MOVER-D's 80.8 pp, while MOVER-D's lower bound **−27.1 pp** is the more conservative one —
+so a whole-interval choice takes the resample and prints a bound tighter than an instrument the
+rule claims to dominate. Bound by bound each bound is conservative separately, which is exactly
+what makes "uniformly at least as conservative as either alone" true. Confirmed against the shipped
+`stats.conservative_envelope` at `5878014`, whose implementation already takes the bound-by-bound
+reading — this paragraph brings the note into line with it rather than the reverse, and the check
+that fixes the reading is the `(4, 5, 3, 0)` table, not a preference.)*
+
+It is uniformly at least as conservative as either instrument alone, keeps the interval responsive
+to a declared design effect where one exists, and removes the sparse-count degeneracy because
+MOVER-D covers zero exactly when the counts are too thin to support excluding it. It can only
+*remove* rejections, so it disturbs neither the veto nor Rule 7.
+
+**Withdrawn as false: "reduces to MOVER-D exactly at `DEFF = 1.00`"** *(v1.11, measured — every
+paired table enumerated at n = 12, 30 and 40, with the exact bootstrap quantiles computed
+analytically rather than sampled).* At DEFF 1.00 the **resample** arm binds at least one bound on
+**83.5%** of the 455 tables at n=12, **87.3%** of the 5 456 at n=30 and **87.4%** of the 12 341 at
+n=40. The envelope is a genuine mixture at every design effect, not a MOVER-D restoration with a
+dormant second arm. What is true is the weaker statement the construction actually delivers —
+**neither printed bound is ever tighter than MOVER-D's**, so §3.2c's instrument is a *floor on
+conservatism* rather than the interval itself. The correction matters beyond accuracy: the withdrawn
+sentence is what made the resample arm look inert on the default path, and that arm is the one
+carrying the seed dependence below.
+
+**And the percentile itself must be computed in closed form, not resampled.** *(v1.11 promotes this
+from v1.8's "should". v1.8 argued it on cost and purity, which is a preference; the three findings
+in the v1.11 block below make it binding, and the third of them was already spent by §11.2 before
+this paragraph was implemented.)* For a paired
 **binary** table the per-unit differences take three values, so the resample distribution is
 exactly multinomial and its quantiles are a ~30-line exact computation (verified this session
 against the shipped `B=10 000` resample). The resampled version is not merely slower — **it is a
@@ -699,6 +741,240 @@ arbitrary table and a rationale nobody can reproduce is a defect in waiting:
 
 A bound at that mercy is not reproducible in the sense §3.2d's seed requirement is asking for, and
 the closed form removes both dependencies at no cost.
+
+---
+
+**v1.11 — why the closed form is binding, and the residual it closes is bigger than the note said.**
+All three findings measured this session against the shipped `stats.conservative_envelope` at
+`5878014`. The seed distribution of the shipped bound was computed **exactly**, not simulated:
+`_percentile` selects the order statistic `ordered[int(round(pct/100·(B−1)))]`, so for `B = 10 000`
+the bound is the 251st (lower) and 9 750th (upper) order statistic of B draws from a known atomic
+distribution, and `P(X₍ₖ₎ ≤ x) = P(Binom(B, F(x)) ≥ k)` gives its full distribution over seeds in
+closed form. Cross-checked against 400 shipped seeds at `(4, 5, 3, 0)`: predicted 55.7%/44.3%,
+observed 228/172.
+
+**(1) The envelope did not absorb the instability; it narrowed it, and not by much.** The claim that
+MOVER-D binds "the overwhelming majority of tables" is the mirror image of the measurement — the
+resample arm binds a bound on 83–87% of tables (above). What limits the damage is not the envelope
+but the fact that the exact bootstrap CDF is usually far from the target level. Tables whose
+**printed** bound moves with the seed at DEFF 1.00, by the probability of the minority rendering:
+
+| n | tables | ≥ 1% | ≥ 5% | ≥ 20% | ≥ 40% |
+|---|---|---|---|---|---|
+| 12 | 455 | 69 (15.2%) | 61 (13.4%) | 47 (10.3%) | 27 (5.9%) |
+| 30 | 5 456 | 2 586 (47.4%) | 1 815 (33.3%) | 1 046 (19.2%) | 265 (4.9%) |
+| 40 | 12 341 | 6 815 (55.2%) | 5 168 (41.9%) | 2 915 (23.6%) | 956 (7.7%) |
+
+So at the two item-level pack sizes a **majority** of reachable tables print a bound decided by the
+seed. `(4, 5, 3, 0)` — where the rendered lower bound is `−27.1 pp` on 55.7% of seeds and
+`−33.3 pp` on 44.3% — is a representative member of that set, not an exotic corner.
+
+**(2) The seed reaches the *verdict*, not only the printed digits, and neither the veto nor Rule 7
+catches it.** This is the finding that makes the closed form mandatory on its own, and it is a
+different defect from M-ML-8. The envelope's zero-exclusion is a conjunct of `raw_significant`, so a
+seed-dependent bound is a seed-dependent **verdict** wherever the McNemar veto and the observable
+floor both pass. Two cases, both re-run through the shipped code:
+
+| table `(a,b,c,d)` | n | DEFF | \|diff\| | McNemar p | floor | verdict over 150 **seeds** | verdict over 150 **row permutations** at seed 20260902 |
+|---|---|---|---|---|---|---|---|
+| `(1, 25, 12, 2)` | 40 | 1.2 | 32.5 pp | 0.047 | 18.0 pp | **80 distinguishable / 70 not** | **85 / 65** |
+| `(2, 19, 7, 12)` | 40 | 1.5 | 30.0 pp | 0.029 | 22.5 pp | **101 / 49** | **97 / 53** |
+
+On the first, the report alternates between
+*"A is better than B on `<metric>`: +32.5 pp (95% CI [0.0, 62.6] pp) …"* and
+*"Not distinguishable at this sample size. Observed difference +32.5 pp, 95% CI [−0.4, 62.6] pp
+covers zero …"*. **The row-permutation column is the one that settles it:** the pack's declared
+`sampling.seed` is fixed, and the verdict still moves — so `sampling.seed` does not make this
+verdict reproducible, and P3-5's contract does not deliver what it claims on the path it governs.
+Row order is not a pack author's choice; it is result-file iteration order.
+
+**Reachability, stated exactly** (every table passing both the veto at the loosest Holm step
+α = 0.05 and Rule 7's floor, counting those whose verdict flips with probability ≥ 1%):
+
+| n | DEFF 1.00 | 1.2 | 1.5 | 2.0 | 3.0 |
+|---|---|---|---|---|---|
+| 12 | 0 | 0 | 0 | 0 | 0 |
+| 30 | 0 | 0 | 20 (worst 3.7%) | 0 | 0 |
+| 40 | 0 | 26 (worst **43.1%**) | 62 (worst 31.7%) | 0 | 0 |
+
+Read this honestly in both directions. **At DEFF 1.00 — today's default on every comparison until
+the determinism probe lands — no verdict flips** (worst minority probability over n ∈ {12, 30, 40}
+is 3.9 × 10⁻¹⁰), and at n=12 **no** reachable table flips at any design effect in the row above —
+78 tables clear the veto and the floor at DEFF 1.00 and none of them is seed-dependent, because the
+atoms there are 8.3 pp apart and the 50.0 pp floor removes the region where a bound could sit beside
+zero. The tool-caller pack's exposure is the printed digits only. The defect is **latent, not live**
+at the design effects in force today. It
+becomes live the moment any design effect above 1.0 is declared, and nothing gates that:
+`results.py` reads `designEffect` from a run record (defaulting to 1.0) and `report.py` propagates
+`max(a.designEffect, b.designEffect)` straight into `resolving_power`. A determinism probe that
+measures DEFF 1.2 on the guard-judge pack's 40-item slice lands directly in the worst row of that
+table. Under the standing principle that defects are not carried into later stages, a latent verdict
+flip that a *scheduled* deliverable activates is the case the principle exists for.
+
+**(3) §11.2 has already spent the closed form, in the present tense.** §11.2's second reason for
+Hyndman–Fan type 1 — one of four reasons that carried R-13's gated estimator ruling, and the one
+that rejects linear interpolation on the ground that "no third estimator enters the document" —
+reads: *"It is the same functional §3.4 Rule 4 already computes in closed form. Rule 4 (v1.8)
+replaces the resampled bootstrap quantile with the exact quantile of the multinomial resample
+distribution … So adopting it makes v1.8's closed form a **substitution of computation, not of
+definition**."* With Rule 4 left resampled, that sentence is false of the built system and §11.2's
+reason 2 has no referent. This is not an argument the closed form is *nice*; it is that a second,
+separately accepted ruling was already written on its existence.
+
+**Was `(4, 5, 3, 0)` sufficient on its own? No — and the honest answer matters.** Taken alone it is
+a printed-digit defect on a table whose verdict is *not distinguishable* on every seed, and a
+reviewer could reasonably grade it minor and defer it. Finding (2) is what makes the closed form
+mandatory, and finding (3) is an independent second reason. An implementer who stops at the
+`(4, 5, 3, 0)` residual has under-measured the problem, not over-measured it.
+
+**The closed form, pinned — an implementer must not have to choose any of this.**
+
+For a paired binary table `(a, b, c, d)` with `n = a+b+c+d`, the per-unit differences take exactly
+three values, so a resample of `n` rows with replacement gives
+`(N₊, N₀, N₋) ~ Multinomial(n, (b/n, (a+d)/n, c/n))` and the resample mean is `S/n` with
+`S = N₊ − N₋` on the integer support `[−n, n]`.
+
+- **The estimator is §11.2's, and there is one of it.** `Q(p) = inf{ s/n : F(s) ≥ p }` — Hyndman–Fan
+  type 1, the inverse CDF, applied to the **exact** distribution where §11.2 applies it to an
+  empirical sample. This is precisely what §11.2 reason 2 already claims, so the two agree by
+  construction.
+- **The levels are `permille = 25` and `permille = 975`, exactly — never the level the resample
+  happened to estimate.** The shipped `ordered[int(round(pct/100·(B−1)))]` picks the 251st and
+  9 750th of 10 000, which estimate levels `251/10 001` and `9 750/10 001`, not `0.025`/`0.975`.
+  Measured: the atom selected at those two level pairs differs on **2** `(b, c)` pairs at n=30,
+  **12** at n=40 and **113** at n=85 — one whole atom, `1/n`, on a printed bound each time. `B` is
+  an artefact of the resample and must not survive into a formula that has no `B`. `permille` 25 and
+  975 are already among the four levels §11.2.1's sweep names.
+- **Integer arithmetic, so there is no tolerance to choose and no bin edge to guard.** Every atom's
+  probability is a rational with denominator `n**n`:
+  `P(S = s) = Σ_{n₊−n₋ = s} multinomial(n; n₊, n₀, n₋)·b^n₊·(a+d)^n₀·c^n₋ / n**n`.
+  Accumulate the integer numerators in ascending `s` and select the first atom satisfying
+  `1000 · cum ≥ permille · n**n`. That is an exact integer comparison: **the atom is never chosen by
+  a float tie-break**, which is Rule 3a's and §11.2.1's hazard *removed* rather than guarded — the
+  third time this document meets it and the first time it can be deleted instead of pinned. Verified
+  against a float-CDF implementation on all 455 + 5 456 + 12 341 tables at n = 12/30/40: zero
+  disagreements.
+- **Cost, measured:** 3.2 ms at n=85 against 216 ms for the shipped `B = 10 000` resample — **68×
+  faster**, in pure stdlib, with `math.comb`. The enumeration is `O(n²)` terms.
+- **Degenerate input:** `b = c = 0` gives the single atom `0`, and both quantiles are `0`. Correct,
+  and it needs no special case.
+- **The boundary of applicability is three values, not "binary versus continuous".** The cost of the
+  exact enumeration is `C(n + v − 1, v − 1)` for `v` distinct per-unit difference values: `v = 3`
+  at n=85 is 3 741 terms and trivial; `v = 10` at n=38 is 1.6 × 10⁹ and infeasible. §3.2d's
+  continuous metrics are excluded by that arithmetic, and so is anything else with more than three —
+  **apply the closed form when and only when `v = 3`, which in this note is the paired binary table
+  and nothing else.** MRR is the trap worth naming: its per-item values are discrete (`0`, `1/r`),
+  so "it is not continuous" invites the wrong generalisation; its `v` is far above 3.
+
+**What retires, what stays, and what replaces P3-5's contract.**
+
+*Retires.* Nothing on the paired-binary path resamples any more, so:
+
+- `stats.verdict(..., bootstrap_seed=...)` — the parameter goes, and with it the raise that demands
+  one on the clustered path.
+- `stats.conservative_envelope(diffs, table, *, design_effect, B, seed)` collapses to
+  `conservative_envelope(table, *, design_effect)`. The `diffs` argument goes too: the exact
+  bootstrap distribution is a function of `(b, c, n)` alone and MOVER-D of `(a, b, c, d)`, so there
+  is no second argument left to disagree with the first — which **retires the
+  `n != len(diffs)` guard by making the error it catches unrepresentable**, the outcome this note
+  prefers to a guard every time.
+- `report.py`'s `- decided by: cluster-bootstrap (seed N, from the pack's `sampling.seed`)`
+  parenthetical, and the four tests that pin it (P3-5's three in `test_report.py` plus the
+  `bootstrap_seed=None` precondition-ordering test in `test_stats.py`).
+
+*Stays — `PackRef.seed` and `sampling.seed` are **not** removed, and no manifest field changes.*
+P3-5's finding was that *the pack's own declaration could not reach the decision it governs*; that
+finding is **satisfied, not reversed**, and only its object moves:
+
+- **§3.2d's continuous-metric bootstrap is untouched and stays seeded.** MRR, score separation and
+  latency have no closed form at any tolerable cost (the `v` arithmetic above), and the embedder
+  pack's `verdictMetrics = ["mrr"]` is decided by exactly that interval. `PackRef.seed` keeps its
+  no-default rule and `pack_ref_from_manifest`'s `sampling.seed` refusal stays; only the docstring's
+  justification moves from the paired table to §3.2d.
+- **Rule 6's `cluster_bootstrap` and `paired_bootstrap` stay seeded** — Rule 5's `design_effect`
+  measurement needs a bootstrap width, and the two-level resample arrives with
+  `replicatesPerScript > 1`.
+- **P3-5's rule is unchanged: the seed is named only where a resample actually decided.** The same
+  predicate, evaluated against a system with one fewer resample in it, now selects the continuous
+  verdicts and not the binary ones.
+- **The honest cost, named rather than hidden:** until §3.2d's continuous path is built, `sampling.seed`
+  is a required manifest field with no live consumer, which is the shape this codebase's P2-4
+  principle distrusts. It stays anyway, for a reason P2-4 does not cover: a seed chosen **after**
+  results exist is not a pre-registration, and a content-hashed manifest is where pre-registration
+  lives (plan §3.3(iii)). Removing and re-adding a required field churns every pack fixture twice
+  to buy one release of tidiness. **Discriminator, so this is checkable rather than asserted:** the
+  field stays only while the embedder pack's MRR verdict is a committed deliverable. If that is ever
+  cut, `sampling.seed` goes with it.
+- **Unrelated, flagged so it is not mistaken for collateral of this ruling:** §3.2d says *"the seed
+  goes into the environment fingerprint (FR-7)"* and it does not — `fingerprint.py` at `5878014`
+  contains no seed field (`git grep seed` finds it only in `stats.py`, `report.py`, `packs.py`).
+  That gap predates this change and is unaffected by it either way.
+- **For `architect`:** no field is added or removed, and `sampling.seed`'s semantics — which the
+  plan's §3.3 currently states only by appearing in a JSON example — should be written down there as
+  *the continuous-metric bootstrap seed*. The two signatures that change are `stats.verdict` and
+  `stats.conservative_envelope`, both above.
+
+**What the tool prints, which is where this project's defects have lived for five passes.**
+
+- **The CI digits move.** On every non-`by-construction` verdict where the resample arm binds and
+  the Monte-Carlo estimate missed the atom, the printed bound changes. Against the current *modal*
+  rendering the change is small — the closed form differs from the MC mode on 0 of 455 tables at
+  n=12, 46 of 5 456 at n=30 and 68 of 12 341 at n=40 — but against *a given seed's* rendering it is
+  the instability table above. Any fixture asserting a rendered interval on this path must be
+  re-derived, not adjusted.
+- **§3.2e verdict 1's published string does not move.** At `(a=0, b=6, c=0, d=34)`, n=40, DEFF 1.00
+  the closed-form envelope renders `[3.2, 29.1] pp` — MOVER-D's own interval, and verdict 1's
+  published string exactly. Checked because it is the one string a reader would notice.
+- **The knife-edge verdicts resolve deterministically, and not all to the same side.** The closed
+  form is exact, not conservative: at `(1, 25, 12, 2)` DEFF 1.2 it renders `[0.0, 62.6]` and
+  **distinguishable**; at `(6, 16, 35, 28)` n=85 DEFF 1.9 it renders `[−43.4, 0.4]` and **not
+  distinguishable**. An implementer expecting the closed form to be uniformly one way or the other
+  will mis-write the tests.
+- **Four printed strings call the interval "cluster-bootstrap" and must stop** *(v1.11, and this is
+  a defect in the shipped v1.8 envelope, independent of the closed form)*. The printed interval is
+  an envelope of two instruments; naming one arm is exactly M-ML-8's error one layer over, and it is
+  wrong today on the 12.6–16.5% of tables where MOVER-D binds both bounds. The strings are
+  Rule 7's floor-demotion sentence (*"The cluster-bootstrap interval …"*), §3.2e verdict 3's `named`
+  substitution, both variants of the trailing *"Decided by the cluster-bootstrap CI on the paired
+  difference …"* clause, and the `- decided by:` bullet. Each must name **the conservative envelope**
+  and, after the closed form, say what it is an envelope *of*. The `- decided by:` bullet loses the
+  seed parenthetical and has room for the audit that replaces it — **name which arm bound each
+  bound**, which is cheap, deterministic once the resample is gone, and makes Rule 4's mixture
+  legible to a reader instead of inferable only from the code:
+
+  > `- decided by: conservative envelope (lower bound: MOVER-D; upper bound: exact paired bootstrap, p=0.975)`
+
+  Whether the machine token `DecidedBy = "cluster-bootstrap"` is renamed with the prose is
+  `architect`'s call (27 occurrences across `stats.py`, `report.py` and two test modules).
+  **Recommended: rename it**, because a token naming a resample that no longer runs is precisely the
+  failure Rule 7's own docstring warns about — *"such a substitution changes the instrument's name
+  and not its interval, and an interval alone cannot report that"* — with the sign reversed. What is
+  **not** optional either way is the prose: a sentence naming an instrument that did not produce the
+  number beside it is the defect class this document exists to remove.
+
+**How to prove it — the acceptance the implementer inherits.**
+
+1. **Determinism, by construction and by test.** `conservative_envelope` takes no seed and no `B`,
+   so the property is structural; assert it anyway on the two tables above, over 20 row permutations
+   each — the test that would have failed before this change, and the only one that reproduces the
+   defect rather than the fix.
+2. **Agreement with the resample where the resample is stable.** For every table at n=12 whose exact
+   bootstrap CDF sits more than 5 Monte-Carlo standard errors from both target levels, the closed
+   form must equal `paired_bootstrap(..., B=10 000, seed=s)` at 0.1 pp for `s ∈ {0..9}`. This is the
+   substitution check: same definition, better arithmetic. **Run this session and it passes** — 21
+   `(b, c)` pairs qualify at n=12, over all their `a`/`d` splits and all ten seeds, zero
+   disagreements. Twenty-one pairs is thin coverage; widen to n=30 if the runtime is affordable.
+3. **The two published anchors, verbatim:** `(0, 6, 0, 34)` at DEFF 1.00 renders `[3.2, 29.1] pp`,
+   and `(4, 5, 3, 0)` at DEFF 1.00 renders `[−27.1, 58.3] pp` — the second being the case where
+   MOVER-D's lower bound is the more conservative one, so it also pins the bound-by-bound reading.
+4. **Rule 4's conservatism property, asserted rather than asserted-about.** Over every table at
+   n ≤ 40 and `DEFF ∈ {1.0, 1.2, 2.0}`: `envelope_lo ≤ mover_lo` and `envelope_hi ≥ mover_hi`, and
+   the same against the exact bootstrap arm. That is the property whose whole-interval reading is
+   false, so the test is what stops a future implementer taking it. **Run this session and it
+   passes** — 54 756 `(table, DEFF)` combinations at n ∈ {12, 30, 40}, zero violations.
+5. **Render the page and read the English.** Every one of the five verdict strings on this path,
+   printed and read, for the naming change above. Every defect in this document's five review passes
+   was found that way and none by reading assertions.
 
 **Rule 5 — design effect is a variance ratio, not a width ratio.** (A correction to v1.1 §4.4,
 which called the width ratio "the design effect"; an implementer following v1.1 literally would have
