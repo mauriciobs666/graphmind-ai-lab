@@ -994,56 +994,126 @@ def test_list_catalog_returns_all_fifteen_rows(stocked, conn):
     }
 
 
-def test_the_catalog_is_read_once_not_once_per_product(stocked, conn, monkeypatch):
+class _CountingReferenceGraph:
+    """A `Graph` proxy that records every Cypher string sent through it."""
+
+    def __init__(self, graph, log: list[str]) -> None:
+        self._graph = graph
+        self._log = log
+
+    def query(self, cypher, *args, **kwargs):
+        self._log.append(cypher)
+        return self._graph.query(cypher, *args, **kwargs)
+
+    def ro_query(self, cypher, *args, **kwargs):
+        self._log.append(cypher)
+        return self._graph.ro_query(cypher, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._graph, name)
+
+
+def _read_summary(log: list[str]) -> str:
+    """The read log as one entry per distinct query with its repeat count —
+    a `1 + n` shows up as `1x MATCH (p:Product) WHERE …; 15x MATCH (p:Product
+    {nameNormalized: …` rather than fifteen near-identical 200-char lines."""
+    counts: dict[str, int] = {}
+    for cypher in log:
+        key = " ".join(cypher.split())[:70]
+        counts[key] = counts.get(key, 0) + 1
+    return "; ".join(f"{n}x {query}…" for query, n in counts.items())
+
+
+@pytest.fixture()
+def reference_reads(monkeypatch) -> list[str]:
+    """Every Cypher string sent to the global `reference` graph, in order.
+
+    Patched at **`db.reference_graph`** — the single seam
+    `Repository._reference` resolves through (`repository.py:173`) — rather
+    than at a method or attribute on a particular object. So the count is of
+    real graph round trips, whoever issued them: `self._services`,
+    `self._repo`, or a `Repository` constructed on the spot. That is the whole
+    point of counting rather than patching a name; see
+    `test_the_catalog_is_read_once_not_once_per_product`.
+    """
+    log: list[str] = []
+    real = db.reference_graph
+    monkeypatch.setattr(
+        db, "reference_graph", lambda conn: _CountingReferenceGraph(real(conn), log)
+    )
+    return log
+
+
+def test_the_catalog_is_read_once_not_once_per_product(
+    conn, catalog_repo, reference_reads
+):
     """S7c's binding test: the `productId` projection and the removal of S7's
     `1 + n` workaround cannot ship apart (`docs/plans/salesperson-ui.md` §5.1
     S7c).
 
     S7 listed the catalog with `services.filter_products` — which projected no
-    `productId` — and recovered each row's id with a second
-    `services.lookup_product` point read, dropping any row that failed to
-    re-resolve. S7c widened the projection instead. Patching
-    `lookup_product` to raise makes the two halves inseparable in one
-    assertion:
+    `productId` — and recovered each row's id with a second `lookup_product`
+    point read, dropping any row that failed to re-resolve. S7c widened the
+    projection instead. Three assertions bind that, and none of them names a
+    method:
 
-    * revert the projection and this reddens with `KeyError: 'productId'`, in
-      `list_catalog`'s `manifest.get(row["productId"])`;
-    * revert only the projection's *consumer* — put the second read back —
-      and it reddens with the `_CatalogSecondRead` below.
+    * **The rows.** Revert the projection and `list_catalog` raises
+      `KeyError: 'productId'` at `manifest.get(row["productId"])`. One of the
+      15 products (`opaque-sku-42`) carries a `productId` that is **not** the
+      slug of its name, so a `_catalog_rows` that re-derived the id from
+      `row["name"]` — the name-slugify alternative S7's docstring weighed and
+      rejected — fails here too, even though `seed_catalog.sh` does slugify
+      names today and every other fixture row would let it pass.
+    * **The read count is real.** `1 <= reads` fails if the spy stops
+      observing anything, which is what makes the equality below meaningful
+      rather than vacuously `0 == 0`.
+    * **The read count does not grow with the catalog.** Listing 15 products
+      costs exactly what listing 3 costs. *This* is "read once, not once per
+      product", and unlike patching `services.lookup_product` to raise it does
+      not care which attribute the second read goes through — a `1 + n` routed
+      through `self._repo`, or through any method at all, moves the count.
 
-    The catalog is 15 rows because that is the demo's real size, and one of
-    them (`opaque-sku-42`) carries a `productId` that is **not** the slug of
-    its name. `seed_catalog.sh` happens to slugify names today, so a
-    `_catalog_rows` that re-derived the id from `row["name"]` — the
-    name-slugify alternative S7's docstring weighed and rejected — would
-    satisfy both a key-presence check and a `widget-{i:03d}` pattern check
-    against the ordinary fixture. It cannot satisfy this one: `productId` is
-    an opaque key that only the projection can supply.
+    **Why the bound is 2 and not 1:** `list_catalog` calls `_catalog_rows`
+    twice on a cold instance (once via `build_image_manifest`, once for the
+    rows), so the constant is 2 — known, out of S7c's scope, and S9's to
+    collapse when it takes `storefront.py` next. The equality is the load-
+    bearing assertion; the bound only pins the constant small and would
+    survive S9 tightening it to 1.
     """
+    catalog_repo.ensure_agent(WS, agent_id=AGENT, name="Demo agent", created_at=90)
 
-    class _CatalogSecondRead(Exception):
-        """Raised if the catalog route resolves ids one product at a time."""
+    def _cold_list_catalog(size: int):
+        """Seed a `size`-product catalog and list it on a fresh `Storefront`,
+        returning the seeded rows, the listing, and the `reference` read count.
+        """
+        db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")
+        seeded = _catalog_rows(size)
+        seeded[-1] = {**seeded[-1], "productId": "opaque-sku-42"}
+        _seed_catalog(conn, seeded)
+        shop = _storefront(Services(catalog_repo))
+        reference_reads.clear()
+        return seeded, shop.list_catalog(), len(reference_reads)
 
-    def _boom(*args, **kwargs):
-        raise _CatalogSecondRead(
-            "list_catalog must not call services.lookup_product per row"
-        )
+    _, _, reads_for_3 = _cold_list_catalog(3)
+    seeded, rows, reads_for_15 = _cold_list_catalog(15)
 
-    seeded = _catalog_rows(15)
-    seeded[6] = {**seeded[6], "productId": "opaque-sku-42"}
-    _seed_catalog(conn, seeded)
-    monkeypatch.setattr(stocked._services, "lookup_product", _boom)
-
-    rows = stocked.list_catalog()
-
-    assert [row["productId"] for row in rows] == [
-        product["productId"] for product in seeded
-    ]
-    assert rows[6]["productId"] == "opaque-sku-42"
-    assert rows[6]["name"] == "Widget 007"
+    assert [row["productId"] for row in rows] == [p["productId"] for p in seeded]
+    assert rows[-1] == {
+        "productId": "opaque-sku-42", "name": "Widget 015",
+        "category": "Accessories", "price": 25.0, "imageUrl": None,
+    }
     assert all(
         set(row) == {"productId", "name", "category", "price", "imageUrl"}
         for row in rows
+    )
+    assert 1 <= reads_for_15 <= 2, (
+        f"expected listing 15 products to cost 1-2 reads of `reference`, got "
+        f"{reads_for_15} — {_read_summary(reference_reads)}"
+    )
+    assert reads_for_15 == reads_for_3, (
+        f"the catalog read must not scale with the catalog: 3 products cost "
+        f"{reads_for_3} reads of `reference`, 15 products cost {reads_for_15} "
+        f"— {_read_summary(reference_reads)}"
     )
 
 

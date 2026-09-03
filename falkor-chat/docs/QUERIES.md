@@ -2587,8 +2587,16 @@ the `productId` a `CartItem` is keyed on (`docs/plans/workflow-cart-and-totals-g
 additive and backward-compatible, since the `Product` node always carried the property and no
 caller reads the row positionally. `LookupProductFactTool` returns the row verbatim, so the slug
 reaches the model's context — the precedent §15.2's own widening was judged against.
-*Transcribed here on 2026-09-03: the code changed at K-053 and this block did not, so §15.1
-documented a projection `Repository.lookup_product` had not used for two milestones.*
+*Transcribed here on 2026-09-03, and the gap it closes is checkable rather than approximate:*
+this block was written at **`14891c9`** (K-052, 2026-08-28 09:53) and the code widened at
+**`bcd2dcc`** (K-053, 2026-08-28 20:21) — ten hours later the same day — so §15.1 documented a
+projection `Repository.lookup_product` had already stopped using, until `8aaeca3` six days on.
+`scripts/test_queries.sh` reported **408/408 throughout**, and could not have done otherwise:
+its `LOOKUP` constant and its abstention header were both written at `14891c9` and stayed
+consistent **with each other**, which is the one state the gate cannot see — narrow either alone
+and it drops to 407/408. That is the lesson, not the six days: a transcription gate goes green on
+a wrong transcription, so the doc block and the shell constant have to be checked against the
+code, never against each other.
 
 ### 15.2 `filter_products` — category/price-range filter (FR-2/FR-3)
 
