@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.6 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.7 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-03 — v1.7: the two Pass 3 findings routed here — §5 gains the stage-attribution table three gates had to re-derive (engineering Pass 3, "carried a third time"), and every remaining restatement of something `docs/plans/small-model-benchmarking-ml.md` owns is replaced by a citation: the α in §4 S1's `holm_steps`/`resolving_power` sketch (statistics Pass 3, n-ML-7), the `z` literal, the verdict string, the judge-gate thresholds and κ figures, §6 R-9's worked-case numbers, and the note's own rule count; plan and note re-pair at v1.7.
 
 2026-09-03 — v1.6: the S1 fix round's seam changes (`3ad27d3`, engineering re-gate `8b7b60a`) — `PackRef.contentHash` becomes `str | None` with `Pack.ref()` as the totality boundary (§3.3, §4 S2, Appendix A), `stats.holm_steps`/`HolmStep`/`verdict(holm_tested=)` and `compare_report`'s two-pass structure replace `holm_thresholds` (§4 S1), §7 records S1's real state (not closed — the statistics re-gate has one open blocker), and the three places that restated the note's family-adjusted α (§3.3(ii), §3.8.2, §3.9) now cite it instead, ahead of the note's v1.6 ruling.
 
@@ -923,8 +925,8 @@ checks today.
   the labelled complement** of `falseSuspendRate`, so a reader looking for recall still finds it,
   but it carries no verdict.
 - **The two-member family costs resolving power, and the report says so.** Holm–Bonferroni is
-  mandatory here (§3.3(ii)), so each class's resolving-power line is computed at the family-adjusted
-  α the note specifies; `-ml` §7.3 carries that α and the recomputed figures for both slices, and
+  mandatory here (§3.3(ii)), so each class's resolving-power line is computed at the αs the note
+  assigns to its bounds; `-ml` §7.3 carries them and the recomputed figures for both slices, and
   the plan restates neither. `-ml` §7.3 also records a costed **reversal trigger**: if the
   stakeholder ever ranks the two errors, the loser moves out of `verdictMetrics` into the
   exploratory block, the family collapses to k=1, and resolving power improves measurably. That
@@ -1193,14 +1195,16 @@ picked up without re-deriving it.
   human-verified items, with the expensive half (30 further calibration items plus a judge harness)
   deferred by FR-21a.
 - **Deferred design, recorded so it is not re-derived** (backlog, `-ml` §6.1–§6.2): if judged
-  quality is funded later, it is **faithfulness only** — the copied calibration record puts
-  relevance agreement at κ = 0.21 (raw 0.70, inflated by skewed marginals: the judge called 2 of 3
-  gold-irrelevant answers relevant) against κ = 0.83 on faithfulness, and that figure is what
-  carried FR-21a. Two rules that must not be softened when it is built: the harness **errors out
-  when `judgeModel == candidateModel`** and suppresses every judge-mediated number rather than
-  caveating it; and the judge is gated on **class-conditional rates, not κ** —
-  `falsePassRate ≤ 2/20` on a **40-item** calibration set, `parseFailureRate ≤ 0.05`. A judge that
-  fails the gate produces no numbers.
+  quality is funded later, it is **faithfulness only** — the copied calibration record's relevance
+  axis is near-worthless once chance agreement is accounted for, while its faithfulness axis is
+  usable, and that contrast is what carried FR-21a. (`-ml` §6.1 recomputes both κ, the raw
+  agreements and the marginal skew that inflates the relevance figure; the numbers are its, and
+  §2.1's inventory row above is the only place this plan repeats one, attributed.) Two rules that
+  must not be softened when it is built: the harness **errors out when
+  `judgeModel == candidateModel`** and suppresses every judge-mediated number rather than caveating
+  it; and the judge is gated on **class-conditional rates, not κ**, at the thresholds and
+  calibration-set size `-ml` §6.2 computes — never at thresholds chosen here. A judge that fails
+  the gate produces no numbers.
 
 ### 3.9 D9 — Measurement and statistics
 
@@ -1222,15 +1226,18 @@ each one's arithmetic is at the cited section:
    discordant pairs) and a second **quantifies** (a confidence interval on the paired difference,
    derived from the same Wilson function used for per-arm reporting). They are never AND-ed into a
    single bloc, and when they disagree both component outcomes are printed in prose. **AC-4's
-   "not distinguishable at this sample size" fires exactly when the paired-difference interval
-   includes zero.** Continuous metrics use a seeded paired bootstrap. Per-arm Wilson intervals are
+   not-distinguishable verdict fires exactly when the paired-difference interval includes zero**;
+   the sentence it prints is `-ml` §3.2e's and is not quoted here. Continuous metrics use a seeded
+   paired bootstrap. Per-arm Wilson intervals are
    still printed, labelled *descriptive, not the comparison instrument*, and the superseded
    marginal-overlap check is retained as a **diagnostic line** with a footnote saying why it is not
    the verdict. Test names, the exact constants, the bootstrap parameters and the three verdict
    strings: `-ml` §3.2. Why the old rule could not fire: `-ml` §3.1.
 2. **Every report prints its own resolving power**, computed by `stats` from its own **effective**
-   *n*, its analysis unit, its design effect and its family-adjusted α — never quoted from the
-   requirements, never a literal in the codebase, and never derivable from a bare observation count.
+   *n*, its analysis unit, its design effect and the α the note assigns to each bound it prints
+   (`-ml` §3.4 Rules 2–4; the bounds do not share one α and this plan does not name either) — never
+   quoted from the requirements, never a literal in the codebase, and never derivable from a bare
+   observation count.
    The template, the mandatory sentences and every number in them are `-ml` §7.1/§7.2/§7.3's; the
    note carries the **tool-caller pack's rendered line verbatim** (`-ml` §7.2), and that string is
    what S1's report test asserts against. `min_detectable_difference` is the one function that must
@@ -1404,9 +1411,13 @@ def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[floa
 
 @dataclass(frozen=True) class HolmStep:      # one family member's rung on the ladder
     p: float; rank: int; threshold: float; tested: bool; rejected: bool
-def holm_steps(p_values: Sequence[float], *, alpha: float = 0.05) -> list[HolmStep]: ...  # len == k
+def holm_steps(p_values: Sequence[float], *, alpha: float) -> list[HolmStep]: ...  # len == k
 def verdict(..., alpha_step: float | None = None, holm_tested: bool = True) -> Verdict: ...
                                              # remaining inputs and all semantics: -ml §3.4
+# No α is named anywhere in this block, and none of these parameters gets a literal default here:
+# how many αs there are, which figure each governs, and where their single home is are -ml §3.3
+# and §3.4 Rules 2-4's. `alpha_step`'s `None` is a shape (it is knowable only after ranking),
+# not a value.
 
 # report.py
 def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
@@ -1416,11 +1427,12 @@ def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
 **Three deliberate changes from v1.1's signatures, each closing a gate finding:**
 
 - **`z` is keyword-only and defaults to a module-level `_Z_95` taken from the note**, not to a
-  literal `1.96`. v1.1 wrote `1.96` while the note mandates `1.959963984540054`
-  (`falkor-chat/server/tests/eval/nlq_scoring.py:59` defines exactly that, and the note's paired
-  interval is derived from Wilson) — so v1.1's default would have shifted every bound and failed
-  the note's own regression fixtures. The lab is genuinely split on this constant, which is why it
-  is pinned in one place and named here rather than left to inference.
+  literal `1.96`. v1.1 hardcoded the rounded form while the note settles the full-precision one
+  (`-ml` §3.2(a), "the constant, settled"; `falkor-chat/server/tests/eval/nlq_scoring.py:59` is the
+  existing pin it points at, and the note's paired interval is derived from Wilson) — so v1.1's
+  default would have shifted every bound and failed the note's own regression fixtures. The lab's
+  prose is genuinely split on how this constant is *written*, which is why it is pinned in one
+  place and cited here rather than restated (v1.7: the digits themselves are the note's).
 - **`ItemResult` and the aggregates are specified, not `…`.** They are the load-bearing shapes of
   two guarantees. Pairing (FR-16) needs a stable item identity across runs, which is `pairingKey`;
   `-ml` §4.3's paired-*n* intersection and `asymmetry` count are computed from `pairingKey` plus
@@ -1478,16 +1490,22 @@ an implementer must not re-derive:
   `strict=True`. `k` is `len(pack.metrics.verdictMetrics)` and nothing else — §3.3's pre-registration
   is what makes the correction honest rather than chosen after the fact.
 
-The **semantics** these types carry — which α each rung is tested at, how the floor interacts with a
-rung, and what may veto a verdict — are the note's, and the note's v1.6 revision governs them. This
-plan fixes the shape and the two-pass ordering; it deliberately names no α (§3.3(ii), §7 rule 2).
+The **semantics** these types carry — how many αs the module distinguishes, which one each rung,
+bound and sentence is computed at, how the floor interacts with a rung, and what may veto a verdict
+— are the note's, and its current revision governs them. This plan fixes the shape and the two-pass
+ordering; it deliberately names no α and no α *count* (§3.3(ii), §7 rule 2). *(v1.7, statistics
+review n-ML-7: this block previously printed a literal α default on `holm_steps` and described
+`resolving_power`'s α in the singular. Both were the note's to state and both had gone stale — the
+fix is the citation, not a corrected copy, because a corrected copy is what produced this finding
+and the two before it.)*
 
 **The clustering-aware and decision-making surface of `stats.py` is deliberately absent from this
-block.** `-ml` §3.4 is now a **binding six-rule contract** for exactly that surface — written, in its
+block.** `-ml` §3.4 is now a **binding rule contract** for exactly that surface — written, in its
 own words, so that "the anti-conservative version does not typecheck, and the honest one is the only
 one that runs" — and it is the single source of truth for `PairedOutcomes` (whose `from_units` is the
 *only* constructor and raises on a repeated analysis-unit id), `ResolvingPower`/`resolving_power()`
-(whose `design_effect`, `basis`, `unit_kind` and `alpha` are keyword-only **with no defaults**),
+(whose `design_effect`, `basis`, `unit_kind` and **every α parameter it takes** are keyword-only
+**with no defaults** — how many there are and which printed bound each governs is §3.4 Rules 2–4's),
 `min_detectable_difference` (which takes `n_effective: float`, never `n: int`), `verdict()` (which
 asserts four preconditions and refuses rather than warns), `design_effect` (a **variance** ratio —
 the width ratio *squared*), and `cluster_bootstrap` (one level only). Pinning any of these here is
@@ -1498,8 +1516,9 @@ S1's done-condition can detect a non-conforming implementation; see below.
 `compare_report` is where AC-2/AC-3/AC-4 become visible output: an excluded-invalid block naming
 each record and its problems, a pack version/hash mismatch banner, a `SCHEMA VERSIONS IN THIS
 COMPARISON` line when records span schema versions (§3.4.3), the resolving-power line (§3.9 point
-2), and the literal phrase **"not distinguishable at this sample size"** wherever the decision rule
-says so. It also carries the two-instrument disagreement case in prose (§3.9 point 1), and it
+2), and **the note's verdict-2 wording, taken from the note rather than quoted here** (`-ml` §3.2e),
+wherever the decision rule says so. It also carries the two-instrument disagreement case in prose
+(§3.9 point 1), and it
 renders a `deterministic` arm (§3.4.1) beside model arms without ever ranking two of them against
 each other.
 
@@ -1514,11 +1533,12 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    either tier is invalid.
 2. **AC-3** — two runs differing in `packVersion`, and separately in `packContentHash` only, both
    produce the mismatch banner and still render the comparison.
-3. **AC-4** — a paired-difference interval that includes zero renders the "not distinguishable at
-   this sample size" wording, **and the 40/40 vs 34/40 case does not** — that case's paired
-   difference excludes zero and the correct verdict is *distinguishable* (`-ml` §3.2; it is the
-   worked example that carried the FR-15 amendment, and the one the *old* marginal-overlap rule got
-   backwards). §5 test 6 states the same thing; these two must not diverge again.
+3. **AC-4** — a paired-difference interval that includes zero renders the note's verdict-2 wording
+   (`-ml` §3.2e, asserted against the note's string rather than a fragment quoted here), **and the
+   40/40 vs 34/40 case does not** — that case's paired difference excludes
+   zero and the correct verdict is *distinguishable* (`-ml` §3.1/§3.2; it is the worked example that
+   carried the FR-15 amendment, and the one the *old* marginal-overlap rule got backwards). §5 test
+   6 states the same thing; these two must not diverge again.
 4. **`stats` reproduces the note's `(a,b,c,d)` regression fixtures to the tolerance the note
    states** — the tolerance is the note's to set, and this plan does not restate it. Plus the two
    contract assertions `-ml` §3.4 calls out by name: `PairedOutcomes.from_units` **raises** on a
@@ -1817,6 +1837,27 @@ The harness is a measuring instrument, so the test strategy has an unusual centr
 tests that matter most are the ones that prove the instrument reports honestly when the data is
 bad**, not the ones that prove it reports a number when the data is good.
 
+### Which stage owes which test
+
+**Read this table before using the numbered list below.** The numbering is **stable and cited by
+number** from all three review documents, so the list is deliberately *not* re-ordered into stage
+order; this table is the mapping instead, and it exists because all three gate passes of this
+component had to derive the same split independently from §4 (engineering review Pass 3, "carried a
+third time"). **§4's stage blocks are its source: where the two disagree, §4 governs and this table
+is the stale one** (§7 rule 4). A stage is done when the items in its row pass **and** its own §4
+done-conditions hold — the two lists overlap on purpose and neither replaces the other.
+
+| Stage | Items it owes | Where an item splits across stages |
+|---|---|---|
+| **S1** — core | **1, 2, 3, 5, 6, 7b, 11b** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. |
+| **S2** — packs, adapter, host info, runner | **4, 10, 12, 12b, 13, 14, 15** | **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. |
+| **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
+| **S4** — guard-judge, nlq-generator | **9, 16** | — |
+| **S5** — tool-caller scoring | **7**, **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. |
+| **S6** — tool-caller scripts | **12** (the `H ≤ min(script length)` clause), **16**, **17**, **19** | **19a** must pass before **19b** is interpreted at all. §4 S6 gates on 19b being *run and recorded*, never on the contrast appearing. |
+| **S7** — chat-responder | **16** | — |
+| **S8** — close | **20** | The FR-23 audit is only meaningful once every stage has shipped; §4 S8's done-condition does not currently name it, and should record it at close. |
+
 **Unit (default suite, network-free, `pytest -q`)**
 
 1. `fingerprint.validate()` — one test per required field: blank it, assert it is named. Plus the
@@ -1837,9 +1878,10 @@ bad**, not the ones that prove it reports a number when the data is good.
 6. `stats` — Wilson against published worked examples, at the note's pinned `_Z_95` and **not**
    `1.96`; the paired instruments against the note's `(a,b,c,d)` regression fixtures, to the
    tolerance the note states; the exact test's small-sample floor as the note tabulates it; a
-   paired-difference interval containing zero produces the "not distinguishable at this sample size"
-   wording, and the 40/40 vs 34/40 case does **not** — the regression test that pins the amended
-   rule; the instruments-disagree case renders the both-components prose. The resolving-power
+   paired-difference interval containing zero produces the note's verdict-2 wording (`-ml` §3.2e,
+   asserted against the note's string, never against a fragment quoted in this plan), and the
+   40/40 vs 34/40 case does **not** — the regression test that pins the amended rule; the
+   instruments-disagree case renders the both-components prose. The resolving-power
    functions are computed from the run's own sampling structure and asserted never to return a
    constant, **and asserted to refuse a bare item count for a clustered pack** (S1 done-condition 5,
    the B-1 detector), and the rendered line is asserted against `-ml` §7.2's verbatim four-sentence
@@ -1911,8 +1953,10 @@ bad**, not the ones that prove it reports a number when the data is good.
     runtime code (`scripts/refresh_golden.py` is the one permitted exception and is not on any run
     path), and confirm `model-bench` runs correctly with `falkor-chat/` renamed away.
 
-If this plan is executed by `tdd-engineer`, tests 1–12 are the red→green sequence, in that order;
-13–16 follow the implementation they cover; 17–20 are `qa-engineer`'s acceptance pass.
+If this plan is executed by `tdd-engineer`, the red→green sequence is **per stage, not across the
+whole list**: take the stage's row from the table above, drive its items in numeric order, then
+close the stage against its §4 done-conditions. Items 13–16 follow the implementation they cover
+rather than driving it, and 17–20 are `qa-engineer`'s acceptance pass at the stage that owns each.
 
 ---
 
@@ -2016,13 +2060,16 @@ and are in `docs/requirements/small-model-benchmarking.md` (commit `afe4aef`). T
 because the *reason* each was wrong is what an implementer needs when they meet the code — the
 requirement now states the rule, not why the earlier one failed.
 
-- **R-9 — FR-15/AC-4's marginal-overlap rule could never fire. Amended.** At n ≤ 40 with a baseline
-  ≥ 0.90, **no result whatsoever separates two marginal Wilson intervals** (`-ml` §3.1), and the
-  rule discarded exactly the covariance FR-16's paired design pays for. Worked case: 40/40 vs
-  34/40, perfectly nested, marginal intervals overlap → old rule prints "not distinguishable", while
-  McNemar exact gives p = 0.031 and the paired difference is +15.0 pp, 95% CI [3.2, 29.1]. FR-15 and
-  AC-4 now read the interval as the one on the **paired difference**; §3.9 point 1 is the build.
-  The superseded overlap check remains a printed diagnostic.
+- **R-9 — FR-15/AC-4's marginal-overlap rule could never fire. Amended.** At this tool's sample
+  sizes and baselines, **no result whatsoever separates two marginal Wilson intervals** (`-ml` §3.1
+  shows the region is empty), and the rule discarded exactly the covariance FR-16's paired design
+  pays for. Worked case: 40/40 vs 34/40, perfectly nested, marginal intervals overlap → old rule
+  prints not-distinguishable, while both paired instruments separate the two arms. *(`-ml` §3.1
+  carries the case with its exact p, difference and interval; v1.7 withdraws this bullet's copy of
+  those three figures rather than re-deriving them — the numbers are the note's and the reason the
+  requirement was wrong survives without them.)* FR-15 and AC-4 now read the interval as the one on
+  the **paired difference**; §3.9 point 1 is the build. The superseded overlap check remains a
+  printed diagnostic.
 - **R-10 — FR-8(d)'s three-way split was not a partition. Amended.** *boundary/unit translation* is
   a **subset** of *wrong value*, not a sibling; coding them disjoint forces double-counting or an
   arbitrary priority rule, and two runs under different priority rules stop being comparable
@@ -2057,10 +2104,11 @@ diverge, and the two implementations' numbers are never compared to each other b
 source of truth for every formula, constant, threshold, tolerance, denominator, sample size and
 verdict string in this feature**, plus the deferred judge design. It is not optional background:
 `modelbench/stats.py` implements it and this plan cites it. Read it before starting S1 — in
-particular **§3.4, six binding rules that are `stats.py`'s contract**, and **§7.2's verbatim
-resolving-power string**, which is a test target.
+particular **§3.4, the binding rules that are `stats.py`'s contract** (their number is the note's
+too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
+target.
 
-**Version pairing:** this plan **v1.6** is aligned to the note **v1.6**. They share one vocabulary
+**Version pairing:** this plan **v1.7** is aligned to the note **v1.7**. They share one vocabulary
 (`verdictMetrics` + `headlineMetric`, the plan's names), one `guard-judge` metric pair
 (`falseAdvanceRate` + `falseSuspendRate`, the note's), one `H` contract (pack-declared and validated
 `H ≤ min(script length)`, the plan's), and one analysis-unit rule (the outermost component of
@@ -2138,13 +2186,18 @@ state and the plan says so deliberately. Engineering gates:
 | statistics gate, pass 1 | `6cfafaa` | *needs changes* |
 | fix round | `3ad27d3` | **296 tests**; all 18 engineering findings fixed, both gates addressed |
 | engineering re-gate, pass 2 | `8b7b60a` | **approve with suggestions** — 0 blockers, 1 major, 2 minors, 2 nits; **S2 may be dispatched** |
-| statistics re-gate | `d79acca` | **needs changes** — one blocker still open |
+| statistics re-gate, pass 2 | `d79acca` | **needs changes** — one blocker still open |
+| second fix round | `95b4c88` | **314 tests**; the floor moves to the unadjusted α, McNemar becomes a veto |
+| statistics re-gate, pass 3 | `95b4c88` | **needs changes** — 0 blockers, 1 major, 2 minors, 4 nits; note revised to **v1.7** in the same pass |
+| engineering re-gate, pass 3 | `95b4c88` | **needs changes** — 1 blocker (P3-1), 6 majors, 5 minors, 3 nits |
 
-So: **S2 may start, S1 may not be marked done.** The open statistics blocker is the note's to rule
-on and a `tdd-engineer` round follows it. It lands inside `stats.py` and `report.py` — neither of
-which S2 constructs — so S2's runner, packs and adapter are unaffected; if the ruling moves a
-`verdict()` input, that is the `tdd-engineer` round's work, not a change to what S2 hands the
-report (§7 rule 2). Read S0's and S1's own text before starting: they record
+So: **S2 may start, S1 may not be marked done.** The statistics blocker that was open at pass 2 is
+closed — the note ruled in v1.7 — and both pass-3 rounds route to `tdd-engineer`, except the two
+items routed here and closed by this revision (statistics n-ML-7; the engineering pass's
+stage-attribution item, now §5's table). Every open finding lands inside `stats.py`, `report.py`,
+`cli.py` and their tests — none of which S2 constructs — so S2's runner, packs and adapter are
+unaffected; if a fix moves a `verdict()` input, that is the `tdd-engineer` round's work, not a
+change to what S2 hands the report (§7 rule 2). Read S0's and S1's own text before starting: they record
 what shipped rather than what v1.1 asked for, including the one real smoke test and the
 working-directory rule that every done-condition in §4 depends on.
 
