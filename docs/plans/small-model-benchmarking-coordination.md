@@ -207,3 +207,12 @@ re-drawn against U4's actual delivery before dispatch.
   resolving power (α=0.017 rather than 0.025) for zero information. An implementer reading only
   "printed as a complement" could reasonably have added it to `verdictMetrics` to be thorough; that
   is now explicitly a defect.
+
+- **2026-09-02 23:50 — U3d killed by a platform rate limit (session cap, HTTP 429) before writing
+  anything.** Re-dispatched to the **same** `analyst` agent id rather than a cold spawn: a compact
+  Pass 2 depends on the reviewer holding its own Pass 1 reasoning, which a fresh agent would have to
+  reconstruct from the review document at full cost. State recovery was cheap and was verified
+  before re-dispatch — no `## Pass 2` section existed, and every document under review was already
+  committed (`5aa7c83`), so nothing was lost and nothing needed reconciling. The re-dispatch brief
+  carries the state-recovery instruction explicitly and asks for findings to be written
+  incrementally, so a second kill costs partial work rather than all of it.
