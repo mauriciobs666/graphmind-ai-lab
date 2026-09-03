@@ -134,7 +134,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S7c4** — close S9-1: make the tripwire pin the read *count*, not an attribute name; §15.1's date nit | `coder` | `a0633c22b2d2eaba5` (resumed) | **accepted — committed `f9ba659`**, suite **2478** (baseline held) teco-verified solo. **Declined the reviewer's one-liner and closed the class**: the spy sits at `Repository._reference`'s seam (`db.reference_graph`), so the count is of real round trips regardless of method, attribute or `Repository` instance — including one built on the spot, which no attribute patch catches. **Chose a size-invariant equality** (`reads_for_15 == reads_for_3`) over an absolute count *specifically so the test cannot obstruct S9's own fix* — proved by a forward probe. Verified the date nit independently: **ten hours, then six days, both M6** | `test_storefront.py`, `QUERIES.md` §15.1 | folded into S8's gate | 216k tok / 25 tools |
 | **S8** — the `/shop/api` router, the total-by-type error map, the mounts, the preflight | `coder` (**fresh**) | `a1a140f443d3ddfa2` | delivered — **committed `81a1268`**, suite **2582** teco-verified solo (+104); `storefront.py` byte-untouched. **Demonstrated both halves of the gate failing** — 8 mutations of a real app object, each on a distinct message. **Keyed `ROUTE_CLASSES` on `(METHOD, path)`**, catching that `/messages` is `reads-only` under `GET` and `writes` under `POST`. **Two first-pass mutation survivors, both *unreachability* rather than weak assertions**, found and fixed. **Took a scope fork without stopping** — built S10's presenter trio, reasoning the gate cannot be evaluated on a partial surface | `storefront_api.py` (new), `schemas.py`, `app.py`, `test_storefront_api.py` (new), `test_app.py` | `analyst` Pass 10 — **the gate Pass 8's stopping rule named** → — | 363k tok / 94 tools |
 | **S8 gate** — Pass 10: does the gate *fail*? + the S8/S10 boundary + six plan rulings | `analyst` (**fresh, clean budget**) | `a22e72491d00563b4` | **NEEDS CHANGES** (2 blockers, 3 major, 4 minor, 3 nits) — committed `8f2acf4`. **The gate mechanism held; its *input set* did not.** Ran all 8 demonstrations plus **21 of its own** mutations, and confirmed the shared seam is safe independently. **P10-1: the handler set is a delta against a baseline app — 17 registered, 5 seen** — so app-wide `ServiceError` produces a live, undeclared `404` invisible to both halves *and* the AST check; **teco reproduced the 17-vs-delta himself**. **P10-2: `DemoNotSeededError` answers a bare `500`**, reproduced by deleting the `Agent` after a clean preflight. **Ruled the S8/S10 boundary correct** on decisive negative evidence. Printed all 33 auth-matrix responses rather than trusting weak negatives | `docs/reviews/salesperson-ui-impl.md` `## Pass 10` + Appendix P10-A | — | 259k tok / 88 tools |
-| **S8b** — close Pass 10: the gate's input set (P10-1), `DemoNotSeededError` (P10-2), 3 majors, minors, `_STEP_10_INTERIM` | `coder` (**fresh** — S8's author ended at 363k tok / 94 tools) | `ae53c04f390f58db7` | in-flight (**holds the live DB**) | `storefront_api.py`, `app.py`, `schemas.py`, both test files | `analyst` → — | — |
+| **S8b** — close Pass 10: the gate's input set (P10-1), `DemoNotSeededError` (P10-2), 3 majors, minors, `_STEP_10_INTERIM` | `coder` (**fresh** — S8's author ended at 363k tok / 94 tools) | `ae53c04f390f58db7` | delivered `18b675a` | `storefront_api.py` (+310/−65), both test files (+~1030); `app.py` and `schemas.py` **untouched** | `analyst` (Pass 11) → — | 316k tok / 121 tools |
+| **v1.21** — §5.3's owed row, §4.9's false negative claim, §5.1's S10 clause | `architect` (fresh) | `ad81e9cdb12dfbb28` | in-flight (docs-only, no DB) | `falkor-chat/docs/plans/salesperson-ui.md` v1.21 | self → — | — |
 | **U30** — Plan v1.20: Pass 10's **three plan defects** + a ruling on whether `DemoNotSeededError` needs a table row | `architect` (**fresh**) | `a02d1c13201470da7` | **accepted — committed `c61b611`** (75/12). **Ruled by reading, not inferring** — one raise site, one calling route — and made it C9's *fourth source* rather than a new rule. **Closed two defects Pass 10 did not raise**: the reset-*mine* row was equally narrow, and the fix to reset-all's row creates a seven-instance question it answers in a new §5.3 block. **Recorded an alternative nobody proposed as considered-and-rejected**, so it is not re-opened silently. Hashes teco-verified: S8 held still under repair; only undispatched S13 moved | `docs/plans/salesperson-ui.md` **v1.20** | **none — plan gates stopped** | 140k tok / 49 tools |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
 | **U29** — Plan v1.19: **split Ruling 1 out of S8** into `S7c` ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed ×2) | **accepted — committed `732f5e0`** (27/19). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* and S8's now-vacuous tripwire recorded as the **correct** end state. **Self-reported a miss in its own v1.18 delivery** (§9 never received v1.18's map changes). Renamed off the `S7b` collision teco caught, and **argued for keeping two mentions as tombstones** rather than a clean grep — the sequence gap is otherwise unexplained plan-side, and closing it would recreate the collision | `docs/plans/salesperson-ui.md` **v1.19**; S7c `2f03c064`, S8/S9 unmoved by the rename | **none — plan gates stopped** | 181k tok / 3 tools (rename) |
@@ -1042,12 +1043,15 @@ rather than a dedicated unit. Owner: `graph-dba`.
 Batched rather than dispatched piecemeal, same discipline as v1.18: a plan edited three times is
 three chances to move a step row someone is building against.
 
-1. **§5.3 rows for whatever P10-1's fix produces.** The `ServiceError` family produces
-   `(route, response)` pairs on `POST /shop/api/messages` that §5.3 has no rows for — *a producer
-   with no row*, the exact failure the gate is specified to catch and the one v1.20 was dispatched to
-   close for `DemoNotSeededError`. **Deliberately not written yet**: the pairs depend on which fix the
-   `coder` takes, so writing them now would be guessing. The `coder` has been asked to report the
-   exact set; teco folds them in afterwards.
+1. **§5.3 owes exactly one row**, now that S8b has reported what its fix produces:
+   `POST /shop/api/messages` · `503 demo_not_seeded` · C9. The condition is `UnknownMemberError`
+   — the demo `Agent` named in `mentions` is gone — raised by `_validate_and_derive_role`
+   **before any write**, so it is v1.20's join row's condition, token and rule arriving one route
+   over, not a new rule. `ThreadNotFoundError`/`UnknownActorError` from the same handler land on
+   `(401, invalid_token)`, already a row on every participant route. The delivered `TABLE` in
+   `falkor-chat/server/tests/test_storefront_api.py` (~:117) already carries the row with a comment
+   saying the plan owes it — the divergence is flagged in code rather than hidden, which is the
+   right shape for a gap that has to exist for one dispatch.
 2. **§4.9's "the route table contains **only** …" is literally false** — `/openapi.json`, `/docs` and
    `/redoc` answer `200` on the storefront deployment (Pass 10, P10-12). One wording fix.
 3. **§5.1's S10 row needs a clause** saying the three presenter routes are *already delivered* by S8
@@ -1444,3 +1448,34 @@ construction, not by choice.
 
 The only work genuinely parallel to it is **document** work — the v1.17 plan touch is running
 concurrently with the S6 gate precisely because it touches no database and no source file.
+
+
+## S8b's method — measure the blast radius, don't reason about it
+
+Two things in S8b's return are worth keeping, because both are about *how* the answer was reached
+rather than what it was.
+
+**The reviewer undercounted its own evidence.** Pass 10 reported one escape to `app.py`'s inherited
+`ServiceError` handler, the `404 ThreadNotFoundError`. There were three, on two statuses — and the
+review's own probe 2 had **printed** the third (`400 UnknownMemberError`) before filing it as
+"P10-1's family from the same probe" without counting it. A fix keyed on the reported `404` would
+have shipped with two escapes still open. Independently confirmed: with the re-shaper removed, the
+gate names all three by route, status and token.
+
+**`SERVICE_ERROR_ROUTES` is an output, not a hand-list.** Rather than reason about which routes could
+raise, the coder armed each of the three reachable faults after lifespan and drove all eleven routes.
+Exactly one moves. That sweep is the constant — the frozenset is asserted to equal its result — so
+the plan owes **one row rather than a section**, and a route added later that escapes is caught by
+the same test without anyone remembering to extend it.
+
+**And the classification is checked on the right axis.** Four buckets keyed on the exception *type*
+are blind to an override, which changes a handler's value and leaves the key set identical — exactly
+what the deleted baseline-diff was buying. `_assert_handler_ownership` recovers it by asserting
+`__module__` in both directions: a storefront-classified handler that some other module registered
+fails, and an inherited-classified handler the storefront registered fails.
+
+One property I checked because it looked like a hole and is not: `test_no_response_this_file_observed_is_missing_from_the_table`
+passes vacuously under `-k` selection, since it judges only what the session actually observed. That
+is deliberate and documented — it is the ⊆ direction, sound on any subset. The ⊇ direction
+(`test_every_row_of_the_table_was_produced_by_execution`) is a separate test that needs the whole
+file. The two directions are split precisely so neither is weakened by how the suite is invoked.
