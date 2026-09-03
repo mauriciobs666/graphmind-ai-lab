@@ -1,6 +1,10 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.3
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.4
+
+2026-09-03 (v1.4, `data-scientist`) — §4.6 adopts the plan's `H` semantics (manifest-declared,
+validated `H ≤ min(script length)`, no longer *equal to* the minimum), closing review N-3; pairs
+with plan v1.4.
 
 2026-09-02 (v1.3, `data-scientist`) — `primaryMetrics` renamed **`verdictMetrics`** throughout
 (`architect`'s naming authority, plan v1.3); semantics unchanged, `headlineMetric` unchanged.
@@ -301,7 +305,7 @@ in a fixed declared order, with no summary line above them and no arithmetic com
 
 | Role | `verdictMetrics` | `headlineMetric` | Unit |
 |---|---|---|---|
-| tool-caller | `cleanThroughTurnH` (`H` pack-declared, default 4) | same | conversation |
+| tool-caller | `cleanThroughTurnH` (`H` manifest-declared, validated `≤ min(script length)`; 4 here) | same | conversation |
 | **guard-judge** | **`["falseAdvanceRate", "falseSuspendRate"]`** — scored on the 40 `clear_suspend` and 30 `clear_advance` items respectively | **`null`** | item |
 | nlq-generator | Layer-1 exact-match rate | same | item |
 | chat-responder | deterministic checklist pass rate | same | item |
@@ -651,6 +655,12 @@ variance: `DEFF = 1.00` **by construction, not by assumption**, `n_eff = 12`, th
 `cleanThroughTurnH` has 12 rows, and **McNemar exact becomes a valid decision rule rather than an
 anti-conservative one.** That is what the design bought. It did not buy precision — see §4.5.3.
 
+*(The "12 rows" is 12 only while `H ≤ min(script length)` holds — §4.6. That is a validated pack
+invariant, not an assumption of this section: violate it and the paired table silently loses the
+conversations too short to reach turn `H`, which would make both `n_eff` and the resolving-power
+line wrong in the optimistic direction. It is the only place `H` touches a denominator in this
+note.)*
+
 **Three things do not dissolve, and the implementer must handle all three.**
 
 **(i) Turn-level dependence inside a conversation.** Every statistic that pools turns — all seven
@@ -744,10 +754,32 @@ one and the headline becomes a weighted average of script lengths.
 **Recommended headline: a survival statistic at a pack-declared turn depth.**
 
 - Headline (`headlineMetric`): **`cleanThroughTurnH`** — the fraction of conversations with zero
-  failure of any kind through turn `H`, where `H = min(script length)` across all conditions in the pack (4 for the
-  A/B/C set). Every conversation of every condition contributes exactly one observation, so it is
-  length-independent by construction, it is a proper binomial over conversations, and it is the
-  statistic that would have caught `qwen3-4b` on the first run.
+  failure of any kind through turn `H`. **`H` is declared in the pack manifest
+  (`metrics.cleanThroughTurnH.H`) and validated `H ≤ min(script length)` across all conditions in
+  the pack**; it is *bounded by* the minimum, not *equal to* it. `H = 4` for the A/B/C set, whose
+  minimum is also 4. *(v1.4: v1.1–v1.3 defined `H = min(script length)`. The plan's semantics are
+  authoritative and are adopted here; the derived definition was the gate's M-11 — it let a future
+  pack version that adds a 3-turn script silently redefine the headline from `cleanThroughTurn4` to
+  `cleanThroughTurn3` under an unchanged name.)*
+
+  **The `≤` is not a formality — it is exactly the precondition that makes the denominator
+  honest.** Because every conversation in the pack is at least `H` turns long, every conversation
+  of every condition contributes exactly one observation, so the statistic is length-independent by
+  construction, is a proper binomial over the full 12 conversations, and is the statistic that
+  would have caught `qwen3-4b` on the first run. **If `H > min(script length)` the denominator
+  silently becomes selection-conditioned** — short scripts cannot reach turn `H`, so the headline
+  quietly turns into a rate over long conversations only, which is §4.3's laundering failure in the
+  one place the report calls its headline. That is the methodological reason `validate` must fail
+  the pack rather than clamp `H`, and it must fail rather than warn.
+
+  **What declaring `H` strictly below the minimum costs, since it is now allowed.** It is a
+  legitimate choice — it keeps the headline's meaning stable across pack versions, which is the
+  point of declaring it — but turns `H+1 … min` are then scored and excluded from the headline, so
+  a failure at turn 5 does not count against `cleanThroughTurn4`. The metric gets coarser, not
+  wrong. Two consequences, both cheap: **print `H` beside the metric name in every report** so
+  `cleanThroughTurn4` is never read as `cleanThroughTurn7`, and treat any gap between `H` and
+  `min(script length)` as discriminating information deliberately left on the table — worth a line
+  in the report when the gap is non-zero, and worth nothing when it is zero (as it is today).
 - Diagnostic, always printed: the **per-turn hazard** — `P(first failure at t | clean through
   t-1)`, denominator = conversations still clean entering `t`. Hazard is what distinguishes
   "gradual degradation" (flat, low hazard) from "deterministic collapse at a fixed position"
