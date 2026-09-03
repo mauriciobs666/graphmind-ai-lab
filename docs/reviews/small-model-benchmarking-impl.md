@@ -2,7 +2,13 @@
 
 > **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md` §4 S1
 
-## 1. Scope & verdict
+**Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gates `3ad27d3` — jump to
+[`## Pass 2`](#pass-2--2026-09-03) for the current verdict; Pass 1 below is kept intact because the
+two passes are meant to be read together.
+
+## Pass 1 — 2026-09-03
+
+### 1. Scope & verdict
 
 **Reviewed:** commit `ab91419` (`feat(model-bench): S1 core — fingerprint, results, stats, report`),
 the whole diff against `0522ffd` (S0) — 18 files, +3834 lines, all under `model-bench/`.
@@ -42,9 +48,9 @@ unit-id resolution — all hold under direct attack.
 
 Zero network imports in `modelbench/` (Appendix A.1). The git working tree was not mutated.
 
-## 2. Findings
+### 2. Findings
 
-### Blocker
+#### Blocker
 
 **B-1 — Holm–Bonferroni is printed but never applied; the family-wise table contradicts the
 verdicts it sits beside.**
@@ -87,7 +93,7 @@ threshold agree in the case above. *Note for `data-scientist`:* whether Holm's s
 Bonferroni is the intended decision is a methodology call the note already made — I am reporting the
 implementation's divergence from it, not re-opening it.
 
-### Majors
+#### Majors
 
 **M-1 — `load_history` silently drops a record whose `packId` is blank or absent: neither `valid`
 nor `invalid`.**
@@ -210,7 +216,7 @@ nothing.
 distinct line for "fewer than two arms selected"; in `cli.py`, exit `2` naming any `--models` key
 with no stored run; strengthen the CLI test to `assert "cand" not in out`.
 
-### Minors
+#### Minors
 
 **m-1 — a record belonging to a *different* pack is quarantined into this pack's exclusion block
 when its schema is unknown.** `results.py:394` short-circuits the pack filter on
@@ -258,7 +264,7 @@ They coincide by the §3.3 convention (`packs/<pack-id>/`), so this is latent, n
 reason, and a `runId` segment that happens to name an existing directory would write outside
 `runs/`. *Fix:* reject a `runId` containing a path separator in `store()`, citing §3.5's slug rule.
 
-### Nits
+#### Nits
 
 **n-1** — `tests/test_results.py:161` is a tautology:
 `assert "packId" not in inspect.signature(load_history).parameters or True` is `True` for every
@@ -280,7 +286,7 @@ the 40 items … generalization to unwritten scripts". `-ml` §7.2 publishes the
 tool-caller pack, so this is not a contract breach — but the `_SAMPLE_NOUN` map already exists two
 lines up and would carry it.
 
-## 3. Done-condition audit
+### 3. Done-condition audit
 
 I checked each condition by mutating the thing it claims to protect, not by reading the test name.
 
@@ -298,7 +304,7 @@ I checked each condition by mutating the thing it claims to protect, not by read
 | **8** `headlineMetric: null` | **yes** | Forcing the headline branch to `if True:` fails the test; omission-vs-null is pinned in `metrics_from_manifest`. |
 | **9** `--negative-control` smoke check | **yes** | Asserts `b=0, c=0` and is labelled a smoke check in its own docstring, as DC-9 requires. |
 
-## 4. The seven items the brief asked me to verify
+### 4. The seven items the brief asked me to verify
 
 1. **(→ `data-scientist`) The MOVER-D tolerance is genuinely unassertable as written — confirmed.**
    `-ml` §3.2c/§9.1 mandate 1e-9 absolute *on the proportion*, but the §3.2c table publishes bounds
@@ -369,7 +375,7 @@ I checked each condition by mutating the thing it claims to protect, not by read
    omission. The AC-3 banner S1 *does* ship reads each run's recorded `packContentHash`, which is the
    right source at this stage and is tested.
 
-## 5. What's solid
+### 5. What's solid
 
 - **DC-5(c) is the best-built test in the diff.** The spy captures the argument actually handed to
   `from_units`, so assertion (1) fails independently of the raise — I proved it by mutating the
@@ -392,7 +398,7 @@ I checked each condition by mutating the thing it claims to protect, not by read
   appended to; `HISTORY.md`'s entry states the two decisions, the defect and the exact verification
   commands; both stated non-features and the S2 boundary are asserted by a test rather than promised.
 
-## 6. Open questions
+### 6. Open questions
 
 1. **Does the Holm fix (B-1) belong to S1's re-gate or to S4?** No shipped pack has `k > 1` until
    `guard-judge` at S4, so a coordinator could reasonably defer it. My recommendation is to fix it
@@ -406,9 +412,9 @@ I checked each condition by mutating the thing it claims to protect, not by read
 
 ---
 
-## Appendix A — evidence
+### Appendix A — Pass 1 evidence
 
-### A.1 — verification performed
+#### A.1 — verification performed
 
 Working directory `model-bench/` throughout; the repo working tree was never modified. Mutation
 testing ran against a copy of `modelbench/` + `tests/` + `pyproject.toml` in the session scratchpad.
@@ -443,7 +449,7 @@ skipped (24); invalid block suppressed (2); hash banner removed; schema-span lin
 suppressed on version mismatch; `load_history` never re-validating (3); exploratory label dropped;
 marginal overlap forced `False`; same-day report sequence capped at `-01`.
 
-### A.2 — B-1 reproduction (k = 2, `guard-judge` shape)
+#### A.2 — B-1 reproduction (k = 2, `guard-judge` shape)
 
 Two hand-built arms over 40 paired items: `falseAdvanceRate` at b=8/c=0 (p = 0.0078125),
 `falseSuspendRate` at b=6/c=0 (p = 0.03125), pack `verdictMetrics = [falseAdvanceRate,
@@ -471,7 +477,7 @@ alpha=0.025.
 Under Holm, `0.008 ≤ 0.025` rejects and `0.031 ≤ 0.050` then rejects; the report declares the second
 metric not distinguishable while printing the threshold it cleared.
 
-### A.3 — M-1 / m-1 reproduction (`load_history`)
+#### A.3 — M-1 / m-1 reproduction (`load_history`)
 
 One valid `guard-judge` record stored via `store()`, then hand-edited on disk:
 
@@ -485,7 +491,7 @@ C  file truncated to half its bytes         -> invalid: [(None, 'unparseable')]
 Case B is a record belonging to a different pack, surfaced in this pack's exclusion block (m-1).
 Cases A/A2 are the silent drop (M-1).
 
-### A.4 — M-6 reproduction
+#### A.4 — M-6 reproduction
 
 ```
 ONE arm only  -> '_None: no verdict is computed between two deterministic arms — …'
@@ -493,8 +499,177 @@ ZERO arms     -> '_None: no verdict is computed between two deterministic arms �
 hash-only div -> 'Comparison kind: **unpaired (different pack version)** (§3.7).'   [m-2]
 ```
 
-### A.5 — M-2 verification
+#### A.5 — M-2 verification
 
 Removing both defaults from `RunResult` (`designEffect: float`, `basis: Basis`, no `= …`) and
 re-running the suite in the scratch copy: **233 passed in 0.49s**, unchanged. The defaults carry no
 load at S1 and can be dropped without touching a test.
+
+---
+
+## Pass 2 — 2026-09-03
+
+### Scope & verdict
+
+**Re-gated:** commit `3ad27d3` (`fix(model-bench): close both S1 gates — 296 tests, zero surviving
+mutations`), the whole diff against `ab91419` — 15 files, +1947/−169. Baseline: Pass 1's 18 findings
+(1 blocker, 6 majors, 7 minors, 4 nits), plus the concurrent `data-scientist` gate's findings, which
+this commit closes in the same pass and which I judged only where they changed a **seam or a test**.
+
+**Deferred to `data-scientist`, as briefed** — I did not re-derive any of them: Rule 7's
+construction, `paired_cluster_bootstrap`'s `sqrt(DEFF)` inflation, the floor truncation direction,
+and the α/k-versus-Holm-step question. One observation for that pass is at the end of this section.
+
+**CPG:** considered, not relevant — still no CPG for `model-bench/`; Pass 2 is a diff read plus
+execution, and every claim below comes from a command I ran.
+
+**Verdict: approve with suggestions.** — **0 blockers, 1 major, 2 minors, 2 nits**, all new; all 18
+Pass 1 findings are fixed, verified individually rather than accepted. **S2 can be dispatched.**
+
+**What I ran, from `model-bench/`:**
+
+| command | result |
+|---|---|
+| `.venv/bin/python -m pytest -q` | `296 passed in 2.08s`, exit 0 |
+| `.venv/bin/python -m pytest -q -m ""` | `296 passed` — nothing gated out, confirming the coordinator's check |
+| `.venv/bin/ruff check .` | `All checks passed!`, exit 0 |
+| **my 10 Pass 1 survivors, re-run** | **10/10 killed** |
+| 13 fresh mutations on the new code | 12 killed, 1 survived (P2-1) |
+| 11 further mutations on new guards/edges | 8 killed, 2 survived (P2-2, P2-4) |
+
+### New findings
+
+**P2-1 (major) — a `"measured"` basis at design effect 1.0 is untested at Rule 4's branch
+condition, and widening the branch to admit it survives the suite.**
+
+`modelbench/stats.py:610` is `mcnemar_may_decide = resolving.design_effect == 1.0 and
+resolving.basis == "by-construction"`, which is Rule 4 exactly. Mutating it to
+`resolving.basis in ("by-construction", "measured")` — letting a measured basis into the McNemar
+seat — leaves **296 passed**. `test_an_assumed_basis_also_moves_the_decision_off_mcnemar` covers
+`"assumed"`; the third enum value has no test at this boundary. The code is right and the gap is in
+the suite, but `"measured"` became live in *this* commit (`report.py:371`'s `min()` over
+`_BASIS_STRENGTH` now preserves it instead of collapsing to `"assumed"`), and S2's runner is what
+will start producing it. *Fix:* one `verdict()` test at `deff=1.0, basis="measured"` asserting
+`decided_by == "cluster-bootstrap"`, and one report test with both arms `"measured"` asserting the
+same — the mirror of the two tests that already exist for `"assumed"`.
+
+**P2-2 (minor) — `Fingerprint.validate()` and `load_history` disagree about
+`benchSchemaVersion: true`, so `store()` writes a record the reader immediately quarantines.**
+`load_history` gained `isinstance(schema, bool)` (`results.py:447`); `validate()` (`fingerprint.py`)
+did not, and `True in REQUIRED_BY_SCHEMA` is `True` because `True == 1`. Verified: `validate()`
+returns `[]`, `store()` writes the file, `load_history` returns it as `unknown_schema` — with
+`InvalidRecord.benchSchemaVersion=True` in a field typed `int | None`. Removing the `load_history`
+guard is also green, so neither side is tested. *Fix:* move the bool check into `validate()` beside
+the existing `benchSchemaVersion` / `reason="unknown"` branch, so both enforcement points agree;
+add one test.
+
+**P2-3 (minor) — `holm_steps`' `None`-filter plus an un-`strict` `zip` can drop a metric silently.**
+`stats.py:759` ends `return [s for s in steps if s is not None]` (a type narrowing — every index is
+assigned today), and `report.py:401` consumes it as `zip(tables, steps, tallies)`. If the ladder ever
+returns short, `zip` truncates and a pre-registered verdict metric vanishes from the report with no
+error. This is the public API S2 wires against. *Fix:* `assert len(steps) == k` (or build the list
+without a filter) in `holm_steps`, and `zip(..., strict=True)` in `report.py` — the component is
+3.12, so `strict=` is available.
+
+**P2-4 (nit) — two-thirds of `store()`'s runId guard is unreachable and none of it is tested.**
+`results.py:390`'s `run.runId in {"", ".", ".."}`: `Path(".").name` and `Path("..").name` are both
+`""`, so `"." != ""` and `".." != ""` are already caught by the first clause; only `""` needs the
+set. Dropping the whole clause is green. *Fix:* reduce to `or not run.runId`, and add the empty-id
+case to the existing runId test.
+
+**P2-5 (nit) — `packs.py:120`'s docstring still says `contentHash` "is left empty here" while the
+code now assigns `None`.** The sentence two lines below (`None` until S2's `load_pack`) is the
+correct one.
+
+### Disposition of Pass 1 findings — 18/18 fixed
+
+| # | Disposition | Evidence I rechecked |
+|---|---|---|
+| **B-1** Holm printed not applied | **Fixed, and more completely than asked** | Two-pass `compare_report`; `holm_steps` implements the step-down stop; `verdict(alpha_step=, holm_tested=)` is wired. Re-rendered my Pass 1 contradiction case (p=0.008 / 0.031, k=2): the family table now reads `distinguishable` / `not distinguishable — below the observable floor`, so no reader can reach the opposite conclusion from a bare threshold. Mutations M5, M6 now killed; 4 further Holm mutations (stop removed, `holm_tested` ignored, `_decision` collapsed, threshold constant) all killed. The added `decision` column is the right call — fixing the decision alone would have left the complaint half-open. |
+| **M-1** blank `packId` silently dropped | **Fixed** | Re-ran my reproduction: blanked → `invalid: [('cand','field')]`, deleted → same. The filter now drops only a record that *says* it belongs elsewhere (`results.py:445`). |
+| **M-2** `designEffect`/`basis` defaults | **Fixed** | Both required on the dataclass; legacy fallback moved to `from_dict` only. |
+| **M-3** basis/DEFF propagation untested | **Fixed** | M1 and M2 both killed, by three named tests including `test_the_design_effect_is_the_max_of_the_two_arms`. Residual: P2-1. |
+| **M-4** contracts parametrized over themselves | **Fixed, generally** | `EXPECTED_MODEL_SCHEMA_1` / `EXPECTED_DETERMINISTIC_SCHEMA_1` are hand-written literals **by name and by tier**; I checked their independence two ways — they are plain dict literals not derived from `modelbench`, and their 30 model names match plan §3.4.2's own "26 + 4 = 30" enumeration. Dropping a field (M18) fails; *relaxing a tier* `nonempty`→`present` (M18b, a mutation neither of us had tried) fails too; shrinking the forbidden set (M8) fails. The arm-kind and schema-key sets are pinned as well, so the class is closed rather than the two instances. |
+| **M-5** `scoreable` intersection untested | **Fixed** | M4 killed; and the fix went past the finding — `PairedRows` now tallies `asymmetry`/`only_in_*`/`unscoreable_both` and prints them beside every verdict, so a shrunken paired *n* is visible rather than merely honest. Swapping `asymmetry_a`/`asymmetry_b` and mis-attributing `only_in_a` are both killed. |
+| **M-6** false no-verdict reason + silent `--models` drop | **Fixed, both halves** | `_NO_VERDICT_REASON` keyed by cause; re-ran one-arm and zero-arm renders and got the "fewer than two arms were selected" text. CLI: `--models cand,incumbnet` now prints a named reason and returns **2**; the correct pair still returns 0. M3 killed. |
+| **m-1** cross-pack quarantine leak | **Fixed** | Another pack's schema-99 record no longer appears in this pack's exclusion block; still correctly *off* `unparseable`, as I recommended. |
+| **m-2** hash divergence mislabelled | **Fixed** | Now `unpaired (same pack version, different content hash)`. |
+| **m-3** `_unit_ids` dead, docstring false | **Fixed** | `_paired_rows` calls it (`report.py:106`); the module docstring names it correctly. |
+| **m-4** untested `--role` / p95 | **Fixed** | M27 and M28 both killed, by two new named tests. |
+| **m-5** vestigial `contentHash` | **Fixed** | Now `str \| None`, `None` at S1; see the seam note below. Residual doc drift: P2-5. |
+| **m-6** pack directory name vs `packId` | **Fixed** | `cli.py:134` passes `pack.packId`. |
+| **m-7** raw `FileNotFoundError` on an unslugged `runId` | **Fixed** | Now a named `ValueError` citing §3.5's slug rule; verified with `qwen/qwen3-4b-2507`. Residual: P2-4. |
+| **n-1** tautological assertion | **Fixed** | No `or True` remains anywhere in `tests/`. |
+| **n-2** mutable `fields`, name-only `__hash__` | **Fixed** | `MappingProxyType(dict(...))` in `__post_init__`; `__hash__` over a `json.dumps(sort_keys=True)` canonical form. Both mutations killed; the `default=repr` choice is right — `hash(tuple(sorted(items)))` would raise on the list-valued fields. |
+| **n-3** fabricated `ClassificationAggregates` | **Fixed** | `d["aggregates"]` and `d["kind"]`; the `KeyError` surfaces as `unparseable`. |
+| **n-4** "unwritten scripts" for every unit kind | **Fixed** | Renders "unwritten items" / "unwritten queries" via the existing `_SAMPLE_NOUN`. |
+| **OQ-2** `_percentile` definition | **Correctly left alone** | Opened as plan v1.5 §6 R-13 for `data-scientist`; the new index test pins p50 ≠ p95 without pinning a definition, which is exactly the right shape for an open methodological question. |
+
+### The new public API, judged as a seam (S2 wires against it)
+
+- **`holm_thresholds` → `holm_steps` returning `HolmStep(p, rank, threshold, tested, rejected)`** —
+  right shape, and a strict improvement: the old `list[float]` could not express the step-down at
+  all, which is why B-1 was possible. `rejected` and `tested` are separate rather than one tri-state,
+  which is what lets `report.py` print a threshold for a member past the stop (as §3.3 requires)
+  while saying it means nothing. No caller can now get the threshold without the stop. One caveat:
+  P2-3.
+- **`verdict(..., holm_tested: bool = True)`** — defaulting to `True` is the right default for a
+  k=1 family and keeps every existing call site valid. `Verdict` gained `floor_demoted` and
+  `holm_tested`, both of which `report.py` reads; no new caller can produce a "distinguishable"
+  without passing through Rule 7, because the check is inside `verdict()` on every path rather than
+  in the report.
+- **`BinaryMetric.unit`, required with no default** — the right call, and the docstring gives the
+  right reason (the value a forgetful caller wants is the one that licenses the interval). It does
+  make every S2 scorer state its denominator unit, which is the point. `_metric_from_dict` refusing
+  a `.get` fallback means a pre-`unit` stored record now fails to load; there are none in the repo
+  (`results/runs/` does not exist yet), so this is free **now** and would not have been one stage
+  later — worth noting in the S2 brief rather than fixing.
+- **`RunResult.designEffect` / `.basis`, now required** — as recommended; `from_dict` keeps the
+  legacy path.
+- **`PackRef.contentHash: str | None`** — **the code side is right and Appendix A should follow.**
+  `""` is indistinguishable from "a hash was computed and came back empty" in the one field whose
+  entire job is identity. Appendix A's `(packId, packVersion, contentHash)` triple describes a
+  *loaded* pack, which is S2's concern; `PackRef` at S1 is the reference handed to a report, and it
+  has no hash to carry because the AC-3 banner reads each run's own recorded
+  `fingerprint.packContentHash`. Suggested plan wording for the queued sweep: `contentHash` is
+  `str | None`, `None` meaning "not loaded", and a `PackRef` returned by S2's `load_pack` never has
+  it `None` — which keeps the triple total exactly where the triple is claimed.
+
+### One observation, routed to `data-scientist` rather than filed as a finding
+
+Rule 7 compares `|diff|` against `resolving.observable_floor`, which is computed at the
+family-adjusted `α/k`, while Holm tests a later-ranked member at its own looser step. The two
+interact: in my re-render of the Pass 1 case, `falseSuspendRate` (p=0.031) *cleared* its Holm step of
+0.05 and was then demoted by the α/k floor of 17.5 pp. The rendering is coherent — the decision
+column and the verdict text both name the floor as the reason — so nothing in my lane is wrong. But
+the consequence is that for k ≥ 2 at these n, Holm's step-down buys nothing on a binary metric that
+the α/k floor does not take back, which may or may not be the intended reading of `-ml` §3.3 + Rule
+7. That is the α/k-versus-Holm-step question the brief already routed to you; this is a concrete
+reproducible instance of it.
+
+### Appendix B — Pass 2 evidence
+
+**24 mutations, 3 survivors** (all against a scratch copy; the repo working tree was never
+modified). Survivors: `mcnemar_may_decide` widened to admit `"measured"` (P2-1, 296 passed);
+`load_history`'s `isinstance(schema, bool)` guard removed (P2-2, 296 passed); `store()`'s
+`{"", ".", ".."}` clause removed (P2-4, 296 passed).
+
+Killed, by area — **Holm/Rule 7 (6):** step-down stop removed · `holm_tested` ignored ·
+`threshold = alpha` for all · `alpha_step` ignored · floor check removed · floor check `<` → `<=`.
+**Statistics presentation (5):** `sqrt(DEFF)` inflation dropped · floor truncation → round ·
+truncation bin-edge guard dropped · `UnattainablePower` guard removed · unattainable clause
+bypassed. **Report (6):** pooled count given a Wilson interval · pooled footnote suppressed ·
+pairing tally not printed · `only_in_a`/`only_in_b` conflated · `asymmetry_a`/`asymmetry_b` swapped ·
+`_decision` collapsed. **Basis/DEFF (4):** `basis = a.basis` · `design_effect = 1.0` ·
+`_BASIS_STRENGTH` order flipped · `min` → `max`. **Fingerprint/results/CLI (5):** forbidden set
+shrunk · required field dropped · **tier relaxed `nonempty` → `present`** · `__hash__` value-blind ·
+mapping copy removed · `--models` filter removed · `--role` filter removed · index p95 → p50 ·
+`paired_cluster_bootstrap` DEFF guard removed.
+
+**P2-2 reproduction:**
+
+```
+validate() on benchSchemaVersion=True -> []          # accepted
+store() accepted: boolschema.json                    # written
+load_history -> valid: []  invalid: [('boolschema', 'unknown_schema', True)]
+```

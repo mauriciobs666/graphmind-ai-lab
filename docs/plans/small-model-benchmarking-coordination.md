@@ -43,7 +43,7 @@ Stakeholder decisions, 2026-09-02:
 | U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
 | U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | delivered | 14 files, +1909/−168, **296 tests**; 34 mutations, 0 survivors | U7a + U7b → — | 322k tok / 74 tools |
-| U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | in-flight | `docs/reviews/small-model-benchmarking-impl.md` | — (is the gate) | — |
+| U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | delivered | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 2` — **approve with suggestions**; 18/18 closed, 1 new major | — (is the gate) | 281k tok / 29 tools |
 | U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
@@ -450,3 +450,24 @@ re-drawn against U4's actual delivery before dispatch.
   follows the floor the report *prints*, so a verdict can never contradict the honesty line beside
   it — with the forgone Holm gain documented in a named test. Routed to `data-scientist` for a
   clause in §3.3/§7.1.
+
+- **2026-09-03 — U7a: `approve with suggestions`, 0 blockers, all 18 Pass 1 findings fixed.** The
+  reviewer re-ran its own Pass 1 mutation set — **10/10 now killed** — then ran **24 fresh
+  mutations on the new code, of which 3 survived**. That ratio is the argument for re-gating a fix
+  round at all: a clean fix of every named finding still left three untested paths behind it.
+- **M-4's class is closed generally, not just where it bit.** The reviewer verified the pinned
+  literals are genuinely independent (plain dicts, not derived from the module) and reconcile with
+  the plan's own 26 + 4 = 30 enumeration, then tried **a mutation neither side had thought of** —
+  *relaxing* a tier (`nonempty`→`present`) rather than deleting a field. Killed by 6 tests.
+- **New major P2-1 — a gap that becomes live in the very next stage.** Widening
+  `mcnemar_may_decide` to admit `basis == "measured"` into the McNemar seat **survives all 296
+  tests**: `"assumed"` is covered at Rule 4's branch, the third enum value is not. `"measured"`
+  became reachable *in this commit*, and **S2's runner is what will start producing it** — so this
+  is fixed before S2, not after.
+- **The `contentHash` seam: the code is right and the plan should follow.** `""` is
+  indistinguishable from "a hash was computed and came back empty" in the one field whose job is
+  identity; Appendix A's identity triple describes a *loaded* pack (S2's `Pack`), while `PackRef` at
+  S1 has no hash to carry, because the AC-3 banner reads each run's own
+  `fingerprint.packContentHash`. Suggested wording is in the review for U7c's sweep.
+- **Routing note:** `analyst` is now at ~281k cumulative tokens. The next engineering gate is a
+  **fresh** dispatch; this reviewer's reasoning is fully written into Pass 1 and Pass 2.
