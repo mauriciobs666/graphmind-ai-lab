@@ -1,9 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.1
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
 
-2026-09-02 — revised for the accepted amendments to FR-8(d), FR-15/AC-4, FR-21a and FR-22a
-(requirements commit `afe4aef`); nothing in this plan is blocked on a stakeholder answer.
+2026-09-02 — v1.2: revised against the Pass 1 gate, the three stakeholder decisions of the same day and S0's as-built findings; the statistics are now cited from the `-ml` note, never restated here.
 
 Design for [`../requirements/small-model-benchmarking.md`](../requirements/small-model-benchmarking.md)
 (Status: *Ready for design*, 23 FRs / 5 ACs). This plan covers the whole feature: the new top-level
@@ -19,7 +18,12 @@ helpers" option before rejecting it (§3.1 D1): every caller of `recall_at_k`, `
 `check_regression`, `score_pair`, `wilson_interval`, `layer2_contains`, `judge_triple`,
 `build_judge_prompt` lives inside `falkor-chat/server/tests/eval/` — 8 callees, 16 caller/callee
 pairs, 0 outside that directory. The graph covers `tests/` as well as `falkorchat/` (2 862 vs
-1 222 `METHOD` nodes), so that is a real absence, not an unindexed one.
+1 222 `METHOD` nodes), so that is a real absence, not an unindexed one. **The graph is stale**
+(built 2026-09-02T12:38:21Z at `4bb96e1`, `SOURCE_DIRTY = true`, several `falkor-chat/server`
+commits since), but the claim is directory-scoped and the `analyst` gate independently re-ran it
+against the current tree and reproduced it exactly. No CPG exists for `model-bench/` — it is a new
+component — so every structural claim about `model-bench` in this plan is a claim about what is to
+be built, not a graph answer.
 
 ---
 
@@ -209,11 +213,63 @@ metric implementations to keep honest". Three points:
    value of the tool is that "a new model's result lines up against models I tested months ago".
    A shared set would mean any edit made for falkor-chat's benefit silently invalidates every
    stored `model-bench` result. Divergence is the correct behavior, not drift to be prevented.
-2. **The metric duplication is discharged by a cross-check test, not by shared code.**
-   `model-bench/tests/test_metrics_agreement.py` asserts that `model-bench`'s `recall_at_k`/`mrr`
-   reproduce, to 1e-12, the values in the copied `retrieval_baseline.json` when fed the same
-   ranked lists. If either implementation drifts, that test fails. That is a stronger honesty
-   guarantee than a shared import (which guarantees only that both are wrong together).
+2. **The metric duplication is discharged by a transcribed behavioural fixture, and the residual
+   is stated rather than papered over.** *(Revised in v1.2. v1.1 claimed a cross-check "against the
+   values in `retrieval_baseline.json` when fed the same ranked lists"; the gate established that
+   **the ranked lists do not exist as an artifact** — `retrieval_baseline.json` holds four aggregate
+   numbers, and the ranked lists behind them are produced live by `services.hybrid_search` against
+   the seeded `ws:eval` graph, which FR-23 forbids `model-bench` from touching and which is
+   ANN-approximate anyway. That mechanism was not constructible. This is its replacement.)*
+
+   **(a) The fixture.** `model-bench/tests/fixtures/metrics_agreement.json` is a one-time,
+   hand-transcribed capture of **every assertion in
+   `falkor-chat/server/tests/eval/test_metrics.py` that exercises `recall_at_k` or `mrr`** — read
+   from the file, counted: **20 cases (18 value assertions + 2 `ValueError` cases)**, 13 for
+   `recall_at_k` and 7 for `mrr`. The count is stated here so an implementer who ships three cannot
+   call it done. Per case:
+
+   ```json
+   {"function": "recall_at_k", "case": "hit_outside_top_k_window",
+    "args": {"retrieved": ["x","y","z","w","v","a"], "relevant": ["a"], "k": 5},
+    "expected": 0.0}
+   ```
+
+   with `"expectedError": "ValueError"` in place of `expected` for the two raise cases. File header:
+   `sourcePath` (repo-root-relative), `sourceGitSha`
+   (`9650a3858b9d5c4e7e934f977839fc1a61c84b1b` at the time of writing), `sourceSha256` of the origin
+   file's bytes, `copiedAt`, `transcribedBy`, `verifiedBy`, and an `excluded` list. Transcription is
+   **manual, not extracted**: only 6 of the 20 cases live in `@pytest.mark.parametrize` tables; the
+   other 14 are literals inside individual test bodies, so a mechanical extractor would silently
+   capture a third of the surface and pass. `check_regression`'s 6 cases go in `excluded` with their
+   reason — `model-bench` deliberately does not implement a regression gate (the requirements put
+   zero-tolerance gating out of scope), so there is nothing to agree with.
+
+   **(b) The test.** `model-bench/tests/test_metrics_agreement.py` runs `model-bench`'s
+   implementation over every non-excluded case and requires equality to within `1e-12` absolute
+   (the values are small exact binary fractions plus `1/2` and `1/3`, which both implementations
+   reach by the same division), and `pytest.raises` for the two error cases. It reads only
+   `model-bench/tests/fixtures/`, so the default suite still passes with `falkor-chat/` renamed away
+   (§5 test 20).
+
+   **(c) The drift detector lives on the maintenance path, not in the suite.**
+   `scripts/refresh_golden.py --check-origins` re-reads and re-hashes every recorded origin file,
+   including `test_metrics.py`, and reports each one as unchanged or drifted against its
+   `sourceSha256`. It is the one component that may read `falkor-chat` (§1 out-of-scope, third
+   bullet), it is human-invoked, and it is never on a run path.
+
+   **The honest residual.** This proves behavioural agreement **on the cases falkor-chat itself
+   tests, as of the transcription** — not on untested inputs, and not automatically when the origin
+   moves. That is a weaker guarantee than v1.1 claimed, and it is stated here rather than implied
+   away. What carries the rest of the weight is **(i)** the shared numeric surface is deliberately
+   tiny — `recall_at_k`, `mrr`, `wilson_interval`, three textbook formulas — and each is *separately*
+   pinned to a reference outside falkor-chat: `wilson_interval` and the paired instruments to the
+   `-ml` note's own worked regression fixtures (§5 test 6), `recall_at_k`/`mrr` to the transcribed
+   cases plus their textbook definitions; and **(ii)** the two implementations' outputs are **never
+   compared to each other as numbers, by design** — `retrieval_baseline.json`'s pinned figures come
+   from a hybrid-ANN pipeline and `-ml` §5.4 already forbids reading a difference against them in
+   either direction (§3.8.1, S3's done-condition). So the duplication cost is bounded at "two places
+   to fix a formula bug", which a 20-case fixture detects, and never at "two numbers that silently
+   disagree in a report".
 3. **Copying is one-way and deliberate.** `model-bench/scripts/refresh_golden.py` (§4 S3) is a
    human-invoked, read-only importer that re-copies from a given `falkor-chat` path, rewrites the
    pack's `PROVENANCE.md` and **forces a pack-version bump**. It is never run automatically, and
@@ -245,9 +301,15 @@ model-bench/
   results/runs/<runId>.json        # committed
   results/index.csv                # committed, derived, regenerable
   results/transcripts/<runId>.jsonl  # gitignored — raw model output, not needed for comparison
-  reports/<pack-id>-<date>.md      # committed
+  reports/<pack-id>-<date>-<n>.md  # committed
   tests/
 ```
+
+**`results/` and `reports/` do not exist at S0.** They are created on first write by S1–S3, so the
+S0 tree is the top three lines plus `modelbench/` and `tests/`. S0's `.gitignore` nevertheless names
+`results/transcripts/` from the start, deliberately: a `.gitignore` entry for a path that does not
+exist yet is inert and free, whereas adding it only when the first transcript lands is one commit
+away from committing a megabyte of raw model output by accident.
 
 **Dependencies: none at runtime.** stdlib `urllib.request` for HTTP (falkor-chat's own precedent),
 stdlib `json`/`math`/`statistics`/`hashlib`/`subprocess`. Dev extras: `pytest`, `ruff` only. The
@@ -287,7 +349,12 @@ mismatches to be detectable after the fact.
   },
   "data": {"conversations": "conversations.jsonl", "catalog": "catalog.json"},
   "tools": {"module": "tools/sim.py", "entrypoint": "build_environment"},
-  "sampling": {"repeats": 15, "seed": 20260902},
+  "sampling": {"scripts": 12, "replicatesPerScript": 1, "seed": 20260902},
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "primaryMetric": "cleanThroughTurnH",
+    "cleanThroughTurnH": {"H": 4}
+  },
   "provenance": "PROVENANCE.md"
 }
 ```
@@ -302,6 +369,22 @@ Key decisions:
   falkor-chat's executor shape is then *one pack's settings*, and the settings themselves become a
   testable variable (two packs differing only in `historyReplay` answer "is the replay style what
   breaks at turn 4?").
+- **`metrics` pre-registers the verdict family, and a pack may legitimately have no headline.**
+  *(New in v1.2, from the stakeholder decision that `guard-judge` gets no `primaryMetric`.)*
+  `verdictMetrics` is the closed, pre-registered list of metrics that may receive a
+  better / not-distinguishable **verdict**; `primaryMetric` is an **explicit** pointer into that
+  list naming the headline, or an **explicit `null`**. Everything not in `verdictMetrics` prints
+  with `exploratory — no significance claim`. `validate_pack` fails when `verdictMetrics` is absent
+  or empty, when the `primaryMetric` **key** is absent (omission is not the same statement as
+  `null`, and only the latter is a decision), or when a non-null `primaryMetric` is not a member of
+  `verdictMetrics`. Two consequences the implementer must build rather than infer: **(i)** when
+  `primaryMetric` is `null`, `report.py` has **no code path that synthesises a headline** from
+  `verdictMetrics` — the same structural refusal FR-20 gets in §3.5 — and the report instead prints
+  the verdict metrics side by side under a sentence saying the pack deliberately has no headline
+  number and why; **(ii)** when `verdictMetrics` has more than one member, the family is multiple
+  comparisons and the note's own stated handling applies (`-ml` §3.3: Holm–Bonferroni across the
+  pre-declared family, adjusted threshold printed beside each p-value). Pre-registration in a
+  content-hashed manifest is what stops a headline being chosen after the results exist.
 - **Identity is `(packId, packVersion, contentHash)`.** `contentHash` = SHA-256 over the sorted
   relative paths and bytes of every file in the pack directory except `PROVENANCE.md`. Declared
   versions get forgotten; a hash cannot. `compare` flags a mismatch in **either** (AC-3), which
@@ -311,8 +394,17 @@ Key decisions:
   directory. That is a deliberate plugin seam, not an accident: FR-10 requires ground truth from a
   dispatched-call trace and resulting state, which needs a real (simulated) tool implementation.
   The alternative — a declarative mini-language for tool behavior — would be a worse, buggier
-  Python. Constraint: pack modules import only from stdlib and `modelbench.tooling`; a `ruff` check
-  and a review rule enforce it. Pack code is part of the content hash, so a behavior change to a
+  Python. Constraint: pack modules import only from stdlib and `modelbench.tooling`, enforced by
+  **one mechanism, `validate_pack`'s AST walk** over every `Import`/`ImportFrom` node in the pack's
+  Python files, checked against an allowlist. *(v1.1 also claimed "a `ruff` check … enforces it";
+  that is not constructible under this component's own `select = ["E","F","W","I"]` — banned-import
+  rules live in `TID`, which is unselected, and are a denylist rather than an allowlist. The claim
+  is withdrawn.)* Two rules that make the AST check real rather than decorative: **`run` calls
+  `validate_pack` first and fails closed**, so the check fires on a normal run and not only when
+  someone remembers to type `model-bench validate`; and every subprocess launch in the tool
+  (`lms.exe`, `powershell.exe`) is `subprocess.run([...], shell=False)` with an argv list — model
+  keys reach the argv verbatim (`mistralai/ministral-3-3b`) and a `shell=True` slip is the only
+  injection surface in the tool. Pack code is part of the content hash, so a behavior change to a
   simulated tool is a version change like any other.
 - **A pack declares its environment.** `environment.requires` lists capability tokens
   (`lmstudio-chat`, `lmstudio-embeddings`). A run against a pack whose requirements are unmet
@@ -324,34 +416,151 @@ Key decisions:
 ### 3.4 D4 — The environment fingerprint, made enforceable (FR-7 / AC-2)
 
 FR-7 says a result missing any part of its fingerprint is invalid and not merged into history. To
-make that mechanical rather than aspirational, the fingerprint is a **closed set of required
-fields, checked on write and again on read**, split by how each is obtained:
+make that mechanical rather than aspirational, the fingerprint is a **required-field set that is a
+function of `(benchSchemaVersion, armKind)`, checked on write and again on read**. Both keys are
+new in v1.2 and each closes a gate finding; take them in order.
+
+#### 3.4.1 `armKind` — a run is not always a model run (B-3)
+
+FR-13/AC-5 require **every** embedding run to carry a keyword-only reference arm, reported as a full
+paired arm with an interval (§3.8.1). BM25 has no model, no quantization and no runtime, so as a
+`RunResult` it fails a model-shaped validation on write — and §3.4.2's rule is that there is no
+"save anyway" flag. The resolution is a **discriminator, not an exemption**:
+
+- `Fingerprint.armKind: "model" | "deterministic"`, required on every record, and
+  `REQUIRED_BY_ARM_KIND` / `FORBIDDEN_BY_ARM_KIND` are two mappings keyed by it. `validate()`
+  branches on `armKind` and never on field presence.
+- **`model`** requires the full auto-captured set below plus the four operator-attested fields.
+- **`deterministic`** requires `armKind`, `armId` (`"bm25"`), `armParametersHash` (SHA-256 over the
+  pack's declared arm parameters — tokenizer, stopword list, `k1`, `b`, IDF variant), `packId`,
+  `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`, `pythonVersion`, `hostOs`,
+  `startedAt`, `endedAt` — and **forbids** every model field (`modelKey`, `modelPublisher`, `arch`,
+  `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `runtimeName`,
+  `runtimeVersion`, `lmsCliCommit`, `residentModelsAtStart`, `residentModelsAtEnd`, `temperature`,
+  `maxTokens`) and the four operator-attested LM Studio fields. The forbid half is the point: it is
+  what makes `{"modelKey": "bm25", "quantization": "n/a"}` — the shortcut a time-pressed implementer
+  reaches for, and exactly the "invalid result reaching a report unlabelled" this design exists to
+  prevent — fail loudly on write instead of quietly becoming a sixth model in the history.
+- A `deterministic` arm is **reproducible from `(packContentHash, armParametersHash, benchVersion)`
+  alone**, which is why host state is not merely optional for it but forbidden: recording a KV-cache
+  setting beside a BM25 score would imply the score depends on it.
+- Consequences downstream, all decided here in S1 because S3 consumes them: `runId` for a
+  deterministic arm is `<packId>-<armId>-<UTC-timestamp>`; the arm is computed and stored on **every**
+  embedding run (FR-13 says "every"), sharing the model run's `sessionId` so the pairing label in
+  §3.7 still applies; `compare_report` accepts model and deterministic runs in one
+  `Sequence[RunResult]` and labels the deterministic one `reference arm (deterministic given pack
+  version)`; two deterministic arms are **never** the subject of a verdict against each other; and
+  `models --tested` (FR-17a) filters to `armKind == "model"`, so BM25 can never be offered as a
+  reference model.
+
+#### 3.4.2 The fields, and *absent* versus *empty* (M-3)
 
 **Auto-captured** (`fingerprint.capture()`, no human input, cannot be wrong without the tool being
 wrong): `modelKey` (the literal LM Studio id, never normalized), `modelPublisher`, `arch`,
 `quantization`, `compatibilityType`, `maxContextLength`, `loadedContextLength`, `runtimeName`,
 `runtimeVersion`, `lmsCliCommit`, `residentModelsAtStart[]`, `residentModelsAtEnd[]` (both from
-`lms ps --json`), `temperature`, `maxTokens`, `packId`, `packVersion`, `packContentHash`,
-`benchVersion`, `benchSchemaVersion`, `pythonVersion`, `hostOs`, `startedAt`, `endedAt`.
+`lms ps --json`), `modelType` and `modelCapabilities` (the catalog's raw `type` and `capabilities`,
+verbatim — §3.6's gate decision must be auditable after the fact), `temperature`, `maxTokens`,
+`packId`, `packVersion`, `packContentHash`, `benchVersion`, `benchSchemaVersion`, `pythonVersion`,
+`hostOs`, `startedAt`, `endedAt`.
 
 **Operator-attested** (§6 R-1 — no programmatic source exists): `lmStudioAppVersion`,
 `kvCacheSetting`, `hostRamGb`, `otherResidentWorkloads`. These live in a local, gitignored
-`model-bench/host.json` and are **copied into every run record**, so a record is self-contained and
-history stays readable when the box changes.
+`model-bench/host.json` (§3.4.4) and are **copied into every run record**, so a record is
+self-contained and history stays readable when the box changes.
 
-Three enforcement points, all cheap:
+**Validation distinguishes three states per field, not two.** v1.1 said `validate()` raises on
+"missing, empty, or `null`", which rejects legitimate values: `lms ps --json` returns `[]` when
+nothing is loaded, so `residentModelsAtStart: []` is the correct and informative value on a clean
+box; and the catalog omits the `capabilities` key entirely for several models rather than sending an
+empty list. So each required field is declared in one of two tiers:
 
-1. **Write refuses.** `results.store(run)` calls `fingerprint.validate()` and raises on any missing,
-   empty, or `null` required field. There is no "save anyway" flag.
-2. **Read quarantines.** `results.load_history()` re-validates every record and returns
-   `(valid, invalid)`. `compare` merges only `valid` and prints an `INVALID RESULTS EXCLUDED` block
-   naming each excluded `runId` and the missing field. This is AC-2's actual test surface — a
-   hand-edited or older-schema record must be excluded on *read*, not merely rejected on write.
+- **`REQUIRED_NONEMPTY`** — the key must be present *and* the value truthy: `modelKey`,
+  `quantization`, `runtimeName`, `runtimeVersion`, `packId`, `packVersion`, `packContentHash`,
+  `benchVersion`, `lmStudioAppVersion`, `kvCacheSetting`, …
+- **`REQUIRED_PRESENT`** — the key must be present; `[]`, `0`, `false` and `""` are all valid
+  values: `residentModelsAtStart`, `residentModelsAtEnd`, `modelCapabilities`,
+  `otherResidentWorkloads`, `temperature` (0.0 is the pinned value for four of the five packs), …
+
+`null` is invalid in **both** tiers — it is the shape of "we did not capture this", which is the one
+thing FR-7 refuses. A field the catalog genuinely omits is captured as `[]` or `""` by `capture()`,
+never passed through as `null`, and `modelCapabilities` records the distinction it needs in
+`modelCapabilitiesPresent: bool` beside it.
+
+**Capture ordering is part of the contract, because two fields only exist at one point in time.**
+`loadedContextLength` appears in the catalog only once a model is loaded, and residency is the thing
+that changes across a run. So: `capture()` snapshots `residentModelsAtStart` **before** `lms load`,
+reads the **catalog after the load completes**, and snapshots `residentModelsAtEnd` after the last
+scored call. A `capture()` that reads the catalog first produces a record with a null
+`loadedContextLength` and fails its own validation — which is correct behaviour, and is why the
+ordering is stated rather than left to the implementer.
+
+#### 3.4.3 `benchSchemaVersion`, `benchVersion`, and not deleting history (M-4)
+
+**`benchVersion` = `modelbench.__version__`**, which S0 pinned to the installed distribution's
+metadata (`project.version` in `pyproject.toml`, asserted by `tests/test_package.py`). That
+assertion is load-bearing, not filler: a skew between the two would silently mislabel `benchVersion`
+in every stored record.
+
+**`benchSchemaVersion` is a separate integer constant in `modelbench/results.py`, starting at `1`**,
+never derived from `benchVersion` and never bumped by a release. It increments only when the
+required-field set or the on-disk record shape changes in a way a *reader* must branch on.
+
+v1.1 said an "older-schema" record is excluded on read. That is wrong as stated, and against FR-3
+directly: the first time a required field is added, every result stored before it would be
+quarantined out of every comparison, and the tool's entire value is that "a new model's result lines
+up against models I tested months ago". The rule instead:
+
+- `REQUIRED_BY_SCHEMA: Mapping[int, Mapping[str, FieldSpec]]` — an older record is validated against
+  **the contract it was written under**, and passes if it satisfied it.
+- `invalid` is reserved for a record that fails **its own** schema (hand-edited, truncated,
+  blanked field) or declares a `benchSchemaVersion` this build does not know — a record from the
+  *future*, which is the genuinely uninterpretable case.
+- A report comparing records across schema versions prints a `SCHEMA VERSIONS IN THIS COMPARISON`
+  line naming them, in the same spirit as AC-3's pack-version banner: visible, never silent, and
+  never a reason to drop the record.
+- `model-bench migrate` exists for a genuinely breaking change: it rewrites stored records forward,
+  in place, recording `migratedFrom` on each. `README.md` states that a schema bump is a deliberate
+  act — a new `REQUIRED_BY_SCHEMA` entry, a `HISTORY.md` line, and a decision about whether a
+  migration is needed — not a side effect of adding a field.
+
+#### 3.4.4 `host.json` — the operator-attested file (M-8)
+
+Local, gitignored, written by `model-bench attest` (§3.6a), read at the start of every `model` run:
+
+```json
+{
+  "schemaVersion": 1,
+  "lmsPath": "/mnt/c/Users/<user>/.lmstudio/bin/lms.exe",
+  "attested": {
+    "lmStudioAppVersion": "0.3.31",
+    "kvCacheSetting": "f16",
+    "hostRamGb": 16,
+    "otherResidentWorkloads": ["docker: falkordb-dev", "windows desktop session"]
+  },
+  "attestedAt": "2026-09-02T14:05:00Z",
+  "observedAtAttestation": {"runtimeName": "llama.cpp", "runtimeVersion": "…", "lmsCliCommit": "07b7252"}
+}
+```
+
+`attested` is exactly the four FR-7 fields with no programmatic source; `observedAtAttestation` is
+what the staleness trip-wire compares against; `lmsPath` is §3.6's explicit path setting.
+
+#### 3.4.5 Three enforcement points, all cheap
+
+1. **Write refuses.** `results.store(run)` calls `fingerprint.validate()` and raises on any field
+   that fails its tier, on any field forbidden for its `armKind`, and on a `null` anywhere in the
+   required set. There is no "save anyway" flag.
+2. **Read quarantines.** `results.load_history()` re-validates every record against its own
+   `benchSchemaVersion` and returns `(valid, invalid)`. `compare` merges only `valid` and prints an
+   `INVALID RESULTS EXCLUDED` block naming each excluded record and why. This is AC-2's actual test
+   surface — a hand-edited record must be excluded on *read*, not merely rejected on write.
 3. **Attestation staleness is detected, not trusted.** `host.json` records the `runtimeVersion` and
    `lmsCliCommit` observed when it was last attested. If either differs at run time, the run stops
    with "LM Studio changed since you last attested `host.json` — re-check the app version and KV
    cache setting, then `model-bench attest`." That converts the weakest link (a human typing a
-   value once and never revisiting it) into a loud failure at the moment it goes stale.
+   value once and never revisiting it) into a loud failure at the moment it goes stale. A
+   `deterministic` arm skips this check entirely — it attests nothing.
 
 ### 3.5 D5 — Storage: JSON per run is the truth, CSV and markdown are derived
 
@@ -361,21 +570,35 @@ without becoming unreadable, so:
 
 - **`results/runs/<runId>.json` — the record of truth.** One file per run: fingerprint, pack
   identity, per-item and per-turn scored records, aggregate counts, timings. Append-only in
-  practice: a run file is never rewritten. `runId` = `<packId>-<modelSlug>-<UTC-timestamp>`.
+  practice: a run file is never rewritten (`model-bench migrate` is the one exception, §3.4.3).
+  `runId` = `<packId>-<modelSlug>-<UTC-timestamp>`, where **`modelSlug` is the `modelKey` with every
+  character outside `[A-Za-z0-9._-]` replaced by `-`** — real keys contain `/`
+  (`qwen/qwen3-4b-2507` → `qwen-qwen3-4b-2507`) and a raw key would create a directory. The slug is
+  a filename convenience and is never the identity: `fingerprint.modelKey` keeps the literal id and
+  is what every comparison reads (§2.3, R-8). Timestamp is `YYYYMMDDTHHMMSSZ`. For a deterministic
+  arm the middle segment is `armId` (§3.4.1).
 - **`results/index.csv` — one row per run**, the human-openable summary: runId, date, role, packId,
   packVersion, packContentHash(8), modelKey, quantization, n, headline metric(s), p50/p95 latency,
   valid/invalid. **Derived and fully regenerable** (`model-bench index rebuild`), so it is never a
   second source of truth to keep honest — the same argument §3.1 makes about golden sets, applied
   internally.
-- **`reports/<pack-id>-<date>.md` — generated comparisons**, committed because they are the artifact
-  a human actually reads six months later. Never hand-edited.
+- **`reports/<pack-id>-<date>-<n>.md` — generated comparisons**, committed because they are the
+  artifact a human actually reads six months later. Never hand-edited. `<n>` is a two-digit
+  same-day sequence starting at `01`, chosen by scanning existing files — a same-day re-run is the
+  normal case while a pack is being developed, and silently overwriting the earlier comparison is
+  the one behaviour a tool built around durable history must not have.
 - **`results/transcripts/<runId>.jsonl` — raw model output**, gitignored. Useful for a post-hoc
   "why did it fail", not needed for any comparison, and large.
 
 **FR-20 is enforced structurally, not by convention.** `results.load_history()` takes a `packId`
 and there is no API to load across packs; `report.py` has no code path that aggregates two roles;
 `compare` requires `--pack`. There is deliberately no `model-bench leaderboard` command, and
-`README.md` says why.
+`README.md` says why. The same shape of refusal carries the two other "the report must not be able
+to say this" rules: no path emits a pooled 85-item guard accuracy (§3.8.2), no path emits a blended
+tool-calling percentage (§3.8.4), and no path synthesises a headline for a pack whose
+`primaryMetric` is `null` (§3.3). Each is a **missing function**, not a guarded one — §3.5's
+argument about `index.csv` applied to the report: a rule you cannot express is a rule you cannot
+break under deadline pressure.
 
 ### 3.6 D6 — Model access: LM Studio adapter
 
@@ -397,18 +620,80 @@ and there is no API to load across packs; `report.py` has no code path that aggr
   never averaged together.
 - **Peak RAM (FR-11)** — see §6 R-2 for the honesty caveat. Captured as two separate, named fields:
   `modelSizeBytes` (from `lms ps --json`, the loaded weights) and `peakHostRssBytes` (sampled from
-  `powershell.exe Get-Process` on an interval during the run, best-effort). Neither is presented as
-  "the model's RAM cost" without its method label.
-- **`tool_use` capability is checked before a tool-caller run**, from the catalog's `capabilities`
-  list, and a model lacking it is refused with a named reason rather than scored 0 — "this model
-  cannot do tool calls at all" is not the same measurement as "this model got them wrong".
+  `powershell.exe Get-Process`, best-effort). Neither is presented as "the model's RAM cost" without
+  its method label. **Sampling is suspended for the duration of every timed call**: the runner
+  samples *between* turns, never during one, and each sample carries its timestamp so a reader can
+  confirm no sample overlaps a timed window. This is not fastidiousness — a `powershell.exe`
+  round-trip across the WSL boundary was measured at **0.18–0.54 s** (gate Appendix A.3) against
+  ~1.3 s per turn in the prior experiment, so an interval sampler running beside the call would
+  perturb the very latency it sits next to by a double-digit percentage.
+- **The full FR-11 surface, with each field's source named.** FR-11 lists five things and v1.1
+  accounted for three; all five, plus the one thing FR-11 demotes:
+
+  | Field | Source | Status |
+  |---|---|---|
+  | `turnLatencyMsP50` / `P95` | **client wall clock**, measured around the HTTP call from just before the request to the last byte of the body | **headline** |
+  | `ttftMs` | `stats.time_to_first_token` (LM-Studio-reported) | reported |
+  | `prefillMsPer1kPromptTokens` | `1000 × stats.time_to_first_token ÷ (usage.prompt_tokens ÷ 1000)`, per call, aggregated as median | reported (**new in v1.2 — FR-11 names it and v1.1 omitted it**) |
+  | `coldLoadSeconds` | timed `lms load`, once per run | reported separately, never averaged into steady state |
+  | `tokensPerSecond` | `stats.tokens_per_second` | **diagnostic only** — FR-11 says so in words, and the report labels it so |
+  | `modelSizeBytes`, `peakHostRssBytes` | `lms ps --json`; sampled `Get-Process` | best-effort, method-labelled (R-2) |
+
+  The headline being **client wall clock** and not `stats.generation_time` is a decision, not an
+  oversight: FR-11 asks for *end-to-end turn latency*, which includes request assembly, transport
+  and the server's own queueing — everything the LM-Studio-side number excludes. Both are stored, so
+  the difference between them is itself readable, but only one is the headline.
+- **Tool-calling eligibility is gated before a tool-caller run**, so that "this model cannot do
+  tool calls at all" is never recorded as "this model got them wrong". The gate is **not** a
+  `"tool_use" in capabilities` test — that was v1.1's rule and it is wrong in both directions on
+  this box's actual catalog, which the gate re-probed: `text-embedding-qwen3-embedding-0.6b`, a
+  `"type": "embeddings"` model, advertises `"capabilities": ["tool_use"]` and would pass; while
+  `google/gemma-3-4b` and `gemma-3-4b-vl-it-…` have **no `capabilities` key at all** and would be
+  refused, though nothing establishes they cannot emit tool calls. The rule:
+
+  > eligible ⟺ `type ∈ {"llm", "vlm"}` **and** (`capabilities` is absent **or** contains
+  > `"tool_use"`).
+
+  A refusal names which half failed. The raw `type` and `capabilities` go into the fingerprint
+  (`modelType`, `modelCapabilities`, `modelCapabilitiesPresent` — §3.4.2), so the gate's decision on
+  any past run is auditable from the stored record rather than re-derived from a catalog that has
+  since moved.
+
+### 3.6a D6a — The CLI surface, consolidated (M-8)
+
+The CLI is the tool's entire user surface. v1.1 mentioned six commands across five sections and
+specified none of them, which left `model-bench attest` — required before S3's done-condition can be
+met — owned by no stage. One table, and each command is assigned to the stage that must ship it:
+
+| Command | Flags | Effect | Stage |
+|---|---|---|---|
+| `compare --pack <id>` | `--models a,b` · `--session <id>` · `--negative-control` · `--out <path>` | Reads `results/runs/`, renders the markdown comparison to `reports/` and stdout | **S1** |
+| `index rebuild` | — | Regenerates `results/index.csv` from `results/runs/` | **S1** |
+| `models --tested` | `--pack <id>` · `--role <role>` | Lists models with stored results (`armKind == "model"`); from S2 also intersects with the installed catalog | **S1**, catalog half **S2** |
+| `attest` | `--lms-path <path>` · non-interactive `--set k=v` | Prompts for the four operator-attested fields, probes LM Studio, writes `host.json` (§3.4.4) | **S2** |
+| `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
+| `run --pack <id> --model <key>` | `--session <id>` · `--reference <key>` · `--warmup <n>` · `--no-cold-load` | One model × one pack; calls `validate` first and fails closed | **S2** plumbing, first usable **S3** |
+
+**Exit codes.** `0` whenever the tool ran and reported, *whatever the scores* — the requirements rule
+out pass/fail gating and §1 states that the only non-zero exits are operational. The closed set:
+`2` bad arguments or usage · `3` LM Studio unreachable or `lms.exe` unresolvable · `4` invalid pack
+(`validate` failure, load error, unmet `environment.requires`) · `5` fingerprint incomplete or
+`host.json` stale/absent. Nothing else. A `compare` that finds every stored record invalid still
+exits `0` and prints the `INVALID RESULTS EXCLUDED` block — that is a report, not an operational
+failure.
+
+**Output.** Every command writes its human-readable output to stdout; `run` and `compare` also write
+their artifacts (`results/runs/<runId>.json`, `reports/<pack-id>-<date>-<n>.md`) and print the paths.
+No command writes outside `model-bench/`, ever (FR-23, §5 test 20).
 
 ### 3.7 D7 — Runs, sessions, pairing, and the reference arm (FR-1 / FR-16 / FR-17)
 
 FR-1 (one model per run) and FR-16 (paired, same session) read as a tension. They are reconciled by
 separating three ideas that the requirements use in one breath:
 
-- **A run** is one model × one pack × `n` repeats. Always exactly one model (FR-1).
+- **A run** is one model × one pack × the pack's declared sampling (`sampling.scripts ×
+  sampling.replicatesPerScript` for a conversation pack, one call per item otherwise). Always
+  exactly one model (FR-1).
 - **A session** (`--session <id>`, recorded in every run record) groups runs executed back to back
   on an undisturbed box. It is a *label with a meaning the tool enforces*: `runner` refuses to
   reuse a session id if `lms ps` shows a different residency profile than the session's first run
@@ -447,8 +732,14 @@ checks today.
   corpus extracted from `falkor-chat/scripts/seed_eval_corpus.py`'s `_CORPUS` literal →
   `corpus.jsonl` (`{docId, text, topic}`; `docId` keeps the original `msgId` so
   `relevant_msgIds` resolve inside the pack). Also copied: `retrieval_baseline.json` and
-  `golden_retrieval.embeddings.json` — the latter because it isolates "is my ranking code right"
-  from "is my embedding call right" at zero cost (`-ml` §5.4).
+  `golden_retrieval.embeddings.json` — the latter to isolate "is my ranking code right" from "is my
+  embedding call right" (`-ml` §5.4). **On its own it does not isolate that**, and v1.1 claimed it
+  did: inspected, the file holds **38 query vectors only** (`{gr-NN: {model, vector}}`), so the 121
+  corpus vectors are still computed live and a wrong `documentPrefix` or a truncated corpus
+  contaminates the self-test anyway. So S3 additionally writes the **121 corpus vectors** into the
+  pack once, from the same deterministic embed pass, as `corpus.embeddings.json` — giving the
+  ranking path a fully fixed input on both sides. Both files are inside the content hash, so a
+  re-embed is a pack version bump.
 - **Mechanism:** embed the 121 documents and 38 queries through `/api/v0/embeddings`, applying the
   pack's per-model `queryPrefix`/`documentPrefix` (FR-14 — a configuration field, never an
   assumption), **L2-normalize every vector and record the raw norm distribution** (`-ml` §5.2 — an
@@ -466,13 +757,18 @@ checks today.
   reported as a **full paired arm with a confidence interval**, labelled `reference arm
   (deterministic given pack version)`. Tokenization, stopwords, `k1`/`b`, and the always-positive
   IDF variant required at N=121 are specified in `-ml` §5.3 and are pack configuration, not
-  hardcoded.
+  hardcoded. **It is stored as its own `RunResult` with `armKind: "deterministic"`** (§3.4.1) —
+  that is the data shape that carries it to `compare_report`, and the reason `armKind` is decided in
+  S1 rather than improvised in S3. The pack's declared BM25 parameters are hashed into
+  `armParametersHash`, so changing `k1` invalidates the arm's comparability the same way changing a
+  golden item invalidates the pack's.
 - **Reported (FR-12/FR-14):** recall@k, MRR, **P@1** plus precision@k, and score separation as both
   `sep_raw` (within-model, actionable) and the corpus-sd-normalized `sep_z` (the cross-model
   comparable one), aggregated as median + p10 + fraction > 0 (`-ml` §5.2); plus output dimension,
   RAM cost, embedding throughput (texts/s and tokens/s), max input length and observed truncation
   behavior, and the prefix convention used.
-- **`primaryMetric` = MRR**, and the report carries two honesty lines the note requires
+- **`verdictMetrics = ["mrr"]`, `primaryMetric = "mrr"`**, and the report carries two honesty lines
+  the note requires
   (`-ml` §5.1, §7.4): precision@k is an exact rescaling of recall@k on this set (|R| = 1 for 36 of
   38 items) and is printed for FR-12 compliance with that footnote; and **recall@10 = 37/38 leaves
   one winnable item**, so this pack can detect a materially *worse* embedder but can never certify
@@ -491,18 +787,29 @@ checks today.
   reading: an unparseable reply is a **parse failure counted in the denominator**, never a
   fabricated verdict).
 - **Reported — class-conditional, and deliberately *not* a pooled 85-item accuracy figure**
-  (`-ml` §7.3): false-advance rate on the 40 `clear_suspend` items (`primaryMetric` — it is the
-  costly error for a bias-to-suspend judge), false-suspend rate on the 30 `clear_advance` items,
-  and the 15 `boundary` items **descriptive only** (n=15 resolves ~53 pp, which is not a
-  comparison). Split by evidence path (`understanding` / `turns`) as a diagnostic, plus a
-  parse-failure count in the denominator. `report.py` has no code path that emits a pooled
-  85-item accuracy number.
+  (`-ml` §7.3): **false-advance rate** on the 40 `clear_suspend` items, **advance-recall** on the 30
+  `clear_advance` items (the note's name for what v1.1 called "false-suspend rate" — the same
+  quantity under two names in two documents was a finding, and the note's name wins), and the 15
+  `boundary` items **descriptive only** at that n. Split by evidence path (`understanding` /
+  `turns`) as a diagnostic, plus a parse-failure count in the denominator. `report.py` has no code
+  path that emits a pooled 85-item accuracy number.
+- **This pack has no headline number, deliberately** *(stakeholder decision, 2026-09-02)*:
+  `verdictMetrics = ["falseAdvanceRate@clear_suspend", "advanceRecall@clear_advance"]`,
+  `primaryMetric = null`. Both class-conditional rates get a verdict, with equal weight and no
+  ranking between them — the stakeholder declined to declare which error is costlier in the product,
+  which is precisely the judgement `-ml` §10's open question 2 said could not be made by the
+  analyst. The report prints both side by side under a sentence saying so, and the multiplicity
+  handling for the two-member family is the note's (`-ml` §3.3). This is the pack that makes
+  §3.3's `primaryMetric: null` a first-class case rather than a special case; a future pack that
+  wants no headline needs no further harness work.
 - **Cost:** low.
 
 #### 3.8.3 `nlq-generator` — pack `nlq-structured-query`
 
 - **Data copied:** `nlq_golden_set.jsonl` (40 items) → `items.jsonl`; the 15-product catalog from
-  `falkor-chat/scripts/seed_catalog.sh`'s `CATALOG` literal, plus a **read-only snapshot** of
+  `falkor-chat/scripts/seed_catalog.sh`'s `CATALOG` literal — which is a **Python list of
+  `(name, category, price)` tuples inside a `<<'PY'` heredoc**, not a shell array, so copying it is
+  a Python parse rather than a shell one — plus a **read-only snapshot** of
   `ws:nlq-eval`'s `Entity`/`Document`/`Chunk` rows (§2.1 finding 2) → `tables.json`; the dataset
   schema from `falkorchat/querygen.py`'s `CATALOG_SCHEMA`/`KNOWLEDGE_BASE_SCHEMA` → `schema.json`;
   the generation prompt from `falkorchat/tools.py` → `prompts/querygen.md`. The snapshot is taken
@@ -513,10 +820,18 @@ checks today.
   applies a spec to the in-memory tables, implementing exactly the surface
   `querygen.DatasetSchema` declares — a label, property filters with the declared types and the
   same string→number coercion rule, returns, and the `count`/`avg`/`min`/`max` aggregates. Scoring
-  is exact-match after canonicalization against the item's `expected`, with the same numeric
-  epsilon and the same scalar/set shape rules `falkor-chat/server/tests/eval/nlq_scoring.py`
-  documents (re-implemented, cross-checked in tests against a copied sample of
-  `nlq_eval_results.json` records).
+  is **Layer 1** — exact match after canonicalization against the item's `expected`, with the same
+  numeric epsilon (`_NUMERIC_EPSILON = 0.01`) and the same scalar/set shape rules
+  `falkor-chat/server/tests/eval/nlq_scoring.py` documents (re-implemented, cross-checked in tests
+  against a copied sample of `nlq_eval_results.json` records). **Layer 1 is not uniformly
+  exact-match, and the exception must be built rather than discovered:**
+  `nlq_scoring.score_pair` scores `shape == "conflicting-facts"` by **subset containment**
+  (`expected_set.issubset(actual_set)`, `nlq_scoring.py:190`), not set equality — it affects 2 of
+  the 40 items, and a scorer that applies equality uniformly marks both wrong for every model,
+  turning them into a second silent floor beside the unanswerable bucket. `nlq_scoring`'s **Layer
+  2** (`layer2_contains`, containment against the *rendered* natural-language answer) is a
+  non-gating sanity signal in falkor-chat and is **not** copied: this pack scores the structured
+  result, which is what the model actually produced.
 - **Answerability must be established at pack-build time, not assumed.** The declared KB schema
   exposes node *properties* only — no relationship types — so the golden set's 4
   `relationship-traversal` items ("Who did Marlowe Robotics acquire?") are not answerable by any
@@ -529,12 +844,24 @@ checks today.
   items; and the report puts unanswerable items in a **separate, named bucket** excluded from the
   accuracy denominator. Keeping them is still worthwhile — they measure whether a model correctly
   abstains instead of fabricating — but as their own count, not as accuracy.
-- **Reported:** correct/incorrect split by `shape` (single-fact, filter-list, compound-filter,
-  not-found, aggregation, relationship-traversal, conflicting-facts) — the shape split is the
-  informative part at n=40; plus malformed-spec and schema-violation counts separately from wrong
-  answers, and the abstain-vs-fabricate count on the unanswerable bucket.
-- **Cost:** medium — the in-process executor and the reference specs are new work, but both are
-  small, pure, and unit-testable against the golden set's own expected values.
+- **Reported:** `verdictMetrics = ["layer1ExactMatchRate"]`, `primaryMetric =
+  "layer1ExactMatchRate"` — the note's choice for this role (`-ml` §3.3, §7.2), and v1.1 declared
+  none at all, which under §3.3's own rule would have labelled every number in this pack's report
+  `exploratory` and made a verdict impossible. Beside it, exploratory: correct/incorrect split by
+  `shape` (single-fact, filter-list, compound-filter, not-found, aggregation,
+  relationship-traversal, conflicting-facts) — the shape split is the informative part at n=40;
+  plus malformed-spec and schema-violation counts separately from wrong answers, and the
+  abstain-vs-fabricate count on the unanswerable bucket.
+- **Cost: medium-high, and v1.1 under-costed it.** Execution *is* small — `QueryRequest.matches` is
+  `min_length=1, max_length=1`, so there are no joins — but "malformed-spec and schema-violation
+  counts **separately** from wrong answers" means re-implementing `querygen`'s **validation**
+  surface too, in **stdlib only** (§3.3 forbids a pack module from importing pydantic): the
+  `QueryFilter`/`QueryMatch`/`QueryRequest` constraints (`extra="forbid"`, the six-operator
+  whitelist, `filters` max 4, `returns` 1–6 against the projection/aggregate regexes, the `order_by`
+  shape, `limit` 1–50) plus `compile()`'s allowlist and string→number coercion. That is the larger
+  half of `tools/exec.py` and it is what makes the three failure classes distinguishable rather
+  than pooled into "wrong". Still pure and unit-testable against the golden set's own expected
+  values — but sized as its own piece of work in S4, not as a rounding error.
 - **Scope note:** this measures *structured query generation against a declared schema*. It does
   not measure raw Cypher authorship; nothing in the requirements asks for that, and adding it would
   need a database and a much larger golden set.
@@ -545,7 +872,8 @@ checks today.
   multi-turn scripts. Each row:
 
   ```json
-  {"conversationId": "A", "description": "read-only catalog lookups",
+  {"scriptId": "A-02", "shape": "A", "replicate": 1,
+   "description": "read-only catalog lookups",
    "turns": [{"seq": 1, "user": "...",
               "expect": {"toolRequired": true, "tool": "lookup_product_fact",
                          "args": {"name": "Wireless Charging Pad"},
@@ -555,15 +883,39 @@ checks today.
    "provenance": {"draftedBy": "...", "verifiedBy": "...", "basedOn": "..."}}
   ```
 
+  `scriptId` is the **sampling unit** and the first component of `ItemResult.pairingKey` (S1);
+  `shape` ∈ `{A, B, C}` is the reporting stratum; `replicate` is `1` throughout under the current
+  sizing and exists so that raising `replicatesPerScript` later does not change the record shape.
+
   Three conversation **shapes**, reconstructed from
   `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §8.1 (§2.2): **A** 9 turns
   read-only, **B** 7 turns write-mutating, **C** 4 turns short. Then extended — §8.1's set was
   designed to characterize one defect, and this pack needs coverage of all seven FR-8 failure
   kinds, including "stopping when done" and "final reply matches what the tool returned".
-  **Sizing: 4 distinct scripts per shape × 4 replicates = 48 conversations** (`-ml` §7.2), which
-  satisfies **FR-22a**. The distinct scripts are not padding: replicating *one* script 15 times, as
-  the prior experiment did, produces a confidence interval that describes "this script again", not
-  "a script of this kind" — a narrow interval that could move tens of points on a fourth script.
+- **Sizing: 12 distinct scripts (4 per shape) × 1 run each = 12 conversations, at
+  `temperature: 0.0`** — *stakeholder decision, 2026-09-02, replacing v1.1's 4 scripts × 4
+  replicates × 3 shapes.* Same total run budget; the money moves from re-running scripts to writing
+  them, and the authoring cost lands in S6. It satisfies **FR-22a**, and it is taken on `-ml` §4.5's
+  own argument: at temperature 0, replicates of an identical prompt are near-duplicates that add
+  almost no information, so 48 conversations clustered in 12 scripts carried an effective *n* the
+  note put "closer to 12 than 48". Buying the 12 outright makes the honest number the real one
+  instead of a design effect the bootstrap has to discover. Two consequences that must be built,
+  not assumed:
+  - **The sampling unit is the script and there is exactly one observation per script**, so the
+    two-level cluster resample `-ml` v1.1 §4.5 specified no longer has an inner level. **The
+    clustering treatment under this design — what `stats.py` must implement for
+    `min_detectable_difference`, `verdict()` and any cluster-aware interval — is settled in the
+    `-ml` note, not here** (see §3.9). This plan does not restate it, and `stats.py` implements the
+    note's signatures verbatim.
+  - **The pack declares `replicatesPerScript: 1` in its manifest and the report prints it beside
+    every conversation-level *n***, with `temperature`, as `-ml` §4.5 requires. The field exists
+    precisely so that a future pack raising it above 1 cannot do so invisibly.
+- **Honest consequence, printed not buried:** twelve conversations is a small *n*, and the
+  resolving-power line computed from it (§3.9 point 2) will be a large number. That is the true
+  precision of the previous design too — it was simply hidden inside a design effect. The effects
+  this pack exists to catch are the near-total ones (`-ml` §7.1's reassurance: the qwen3-4b turn-4
+  collapse, the ministral duplicate-instruction defect), and the report says in words which
+  magnitudes it can and cannot resolve rather than leaving a reader to assume.
 - **Simulated tool environment (`tools/sim.py`)**, deterministic and stateful within a
   conversation: `lookup_product_fact`, `filter_products`, `view_cart`, `add_to_cart`,
   `remove_from_cart`, `clear_cart`, `place_order` — schemas re-declared in the pack as JSON Schema
@@ -595,10 +947,18 @@ checks today.
     conditional count downstream — the note names it as the harness's most likely way of lying
     (`-ml` §4.3). Paired *n* is the intersection of both arms' scoreable items, printed, with a
     one-model-only `asymmetry` count.
-- **Headline and diagnostic (`-ml` §4.6).** `primaryMetric` = **`cleanThroughTurnH`**, the fraction
-  of conversations with no failure through turn *H* (*H* = the shortest script length, 4 here):
-  one observation per conversation, length-independent by construction, and the statistic that
-  would have caught the incumbent model. The **per-turn hazard** — P(first failure at *t* | clean
+- **Headline and diagnostic (`-ml` §4.6).** `verdictMetrics = ["cleanThroughTurnH"]`,
+  `primaryMetric = "cleanThroughTurnH"` — the fraction of conversations with no failure through
+  turn *H*: one observation per conversation, length-independent by construction, and the statistic
+  that would have caught the incumbent model. ***H* is declared in `pack.json`
+  (`metrics.cleanThroughTurnH.H`, `4` for the A/B/C set), never derived from the data.** v1.1
+  derived it as the shortest script length, which means adding one 3-turn script to a future pack
+  version silently redefines the headline from `cleanThroughTurn4` to `cleanThroughTurn3` — the
+  primary metric changing meaning under a fixed name, which is the exact failure this tool exists
+  to prevent, and one AC-3's version banner would report as "the data changed" rather than "the
+  headline now measures something else". So: `H` is pack data, `validate` fails a pack where
+  `H > min(script length)`, and the report prints the resolved `H` beside the metric name every
+  time (`cleanThroughTurn4`, never `cleanThroughTurnH`). The **per-turn hazard** — P(first failure at *t* | clean
   through *t*−1) — is the required diagnostic, because it is the only statistic that separates
   "gradual degradation" from "deterministic collapse", which is the entire reason FR-9 exists.
   Turn-pooled rates are never the headline.
@@ -615,18 +975,37 @@ checks today.
 deferred, not cancelled — the deferred design is preserved below and in `-ml` §6.2 so it can be
 picked up without re-deriving it.
 
-- **Data: new. 30 items** derived from the copied 121-message corpus:
-  `{question, context[], referenceAnswer, mustContain[], mustNotContain[], mustAbstain}`, LLM-drafted
-  and **verified by a human, item by item** (FR-19). 30, not 20, because the paired floor
-  (`-ml` §7.1) means n=20 resolves only ~30 pp. **The 10-item `golden_judge_calibration.jsonl` is
-  not copied at first delivery** — it exists only to gate a judge, and there is no judge to gate.
+- **Data: new. 30 items** derived from the copied 121-message corpus, LLM-drafted and **verified by
+  a human, item by item** (FR-19). 30, not 20, because of the paired floor (`-ml` §7.1). **The
+  10-item `golden_judge_calibration.jsonl` is not copied at first delivery** — it exists only to
+  gate a judge, and there is no judge to gate. Item shape, aligned to `-ml` §6.2's **checklist
+  ground truth** (v1.1 carried a `referenceAnswer` field that the note's design does not have and
+  that nothing in this pack scores — an unscored free-text field beside a deterministic scorer is
+  an invitation to a future judge, so it is **dropped**):
+
+  ```json
+  {"itemId": "cr-07", "question": "...", "context": ["..."],
+   "mustContain": ["24.99"], "mustNotContain": ["19.99"], "mustAbstain": false,
+   "format": {"maxWords": 120, "mustBeSingleParagraph": true,
+              "forbiddenPatterns": ["^\\s*[-*]\\s", "```"]},
+   "provenance": {"draftedBy": "...", "verifiedBy": "...", "corpusVersion": "..."}}
+  ```
+
 - **Scoring — three deterministic families, no judge anywhere in the pack.** Mapping FR-21a's
   "latency, format, faithfulness to what the tool actually returned" onto a role that calls no
-  tools: **latency** is the standard FR-11 block; **format** is reply well-formedness and length
-  discipline as the pack declares them; and **grounding** — FR-21a's "faithfulness to what was
-  actually returned", here the retrieved context — is `mustContain` / `mustNotContain` /
-  `mustAbstain` containment, using the same canonicalization as the `nlq-generator` scorer.
-  Grounding is the `primaryMetric`.
+  tools — **all three ship, where v1.1 shipped two**:
+  - **latency** — the standard FR-11 block (§3.6).
+  - **format** — checked against the item's own `format` block, with pack-level defaults in
+    `pack.json` that an item may override. Three declared constraints, each a separate count and
+    never pooled with grounding: word count within `maxWords`, single-paragraph discipline when
+    `mustBeSingleParagraph`, and zero matches of `forbiddenPatterns`. The constraints are **pack
+    data**, not scorer heuristics — the same rule FR-8(d)'s `boundaryRule` follows, and for the
+    same reason: a format rule inferred by the harness is a rule two packs cannot agree on.
+  - **grounding** — FR-21a's "faithfulness to what was actually returned", here the retrieved
+    context: `mustContain` / `mustNotContain` / `mustAbstain` containment, using the same
+    canonicalization as the `nlq-generator` scorer.
+  - `verdictMetrics = ["groundingRate"]`, `primaryMetric = "groundingRate"`; the format counts and
+    the latency block are exploratory beside it.
 - **Cost: moderate, and it is now the *smallest* of the three data-bearing new assets** — 30
   human-verified items, with the expensive half (30 further calibration items plus a judge harness)
   deferred by FR-21a.
@@ -642,37 +1021,52 @@ picked up without re-deriving it.
 
 ### 3.9 D9 — Measurement and statistics
 
-Owned by [`small-model-benchmarking-ml.md`](./small-model-benchmarking-ml.md). Formulas, worked
-examples, regression fixtures and rationale live **only** there; `modelbench/stats.py` implements
-exactly that note and cites it in its module docstring. The five conclusions the rest of this plan
-is built on, stated once here so an implementer knows what they are building before opening the
-note:
+Owned by [`small-model-benchmarking-ml.md`](./small-model-benchmarking-ml.md). **This section cites
+that note; it no longer restates it.** *(Changed in v1.2. v1.1 paraphrased the note's formulas,
+constants, thresholds and sample sizes here, and the gate found the two documents had already
+silently diverged in three places — the `z` constant, the fixture tolerance, and
+`min_detectable_difference`'s coefficient. Two copies of a formula is one copy and one bug. So:
+every formula, constant, threshold, denominator, tolerance, bootstrap parameter, sample size and
+verdict string lives **only** in the note; `modelbench/stats.py` implements the note's signatures
+verbatim and cites it by section in its module docstring; and where this plan needs to name a
+number, it names the function that computes it instead.)*
+
+The five conclusions the rest of this plan is built on, as **statements of what is being built** —
+each one's arithmetic is at the cited section:
 
 1. **The comparison instrument is the paired difference — now what FR-15/AC-4 require** (amended
-   2026-09-02; the amendment is §6 R-9). Decision: **McNemar exact** (conditional binomial-sign) on
-   the discordant pairs. Effect size: a **Newcombe MOVER-D** confidence interval on the paired
-   difference, derived from the same Wilson function used for per-arm reporting; **AC-4's
-   "not distinguishable at this sample size" fires exactly when that interval includes zero.**
-   Continuous metrics (MRR, separation, latency) use a seeded **paired percentile bootstrap**,
-   B = 10 000. Per-arm Wilson intervals are still printed, labelled *descriptive, not the comparison
-   instrument*, and the superseded marginal-overlap check is retained as a **diagnostic line** with
-   a footnote saying why it is not the verdict. (`-ml` §3.2; why the old rule could not fire is
-   §3.1.)
-2. **Every report prints its own resolving power**, computed from its own *n*, never quoted from
-   the requirements: `This pack resolves differences of >= X pp with 80% power at n=N (paired).
-   Differences below Y pp (= 6/N) cannot reach significance at any observed outcome.`
-   (`-ml` §7.1.) `stats.min_detectable_difference` is the one function that must never be
-   hardcoded to 15.
-3. **Each pack pre-registers exactly one `primaryMetric`** in its manifest; every other number in
-   its report is printed with an `exploratory — no significance claim` label. (`-ml` §3.3.)
-4. **Per-turn-position rates are computed over conversations, never over turns**; anything pooled
-   across turn positions uses a **cluster bootstrap over conversations** and prints its **design
-   effect** beside the naive interval. (`-ml` §4.4.)
-5. **The negative control is a first-class feature, not a test fixture**: `model-bench compare` run
-   with the same model in both arms must report *not distinguishable*, with discordant counts
-   roughly equal and the difference interval centred on zero. It is wired as a CLI-reachable mode
-   (`--negative-control`) because it is the cheapest way to catch a whole class of harness bugs
-   that otherwise present as plausible model differences. (`-ml` §9.)
+   2026-09-02; the amendment is §6 R-9). One instrument **decides** (an exact paired test on the
+   discordant pairs) and a second **quantifies** (a confidence interval on the paired difference,
+   derived from the same Wilson function used for per-arm reporting). They are never AND-ed into a
+   single bloc, and when they disagree both component outcomes are printed in prose. **AC-4's
+   "not distinguishable at this sample size" fires exactly when the paired-difference interval
+   includes zero.** Continuous metrics use a seeded paired bootstrap. Per-arm Wilson intervals are
+   still printed, labelled *descriptive, not the comparison instrument*, and the superseded
+   marginal-overlap check is retained as a **diagnostic line** with a footnote saying why it is not
+   the verdict. Test names, the exact constants, the bootstrap parameters and the three verdict
+   strings: `-ml` §3.2. Why the old rule could not fire: `-ml` §3.1.
+2. **Every report prints its own resolving power**, computed by `stats` from its own actual *n* and
+   sampling structure — never quoted from the requirements, never a literal in the codebase. The
+   sentence template and both numbers in it are `-ml` §7.1's. `min_detectable_difference` is the one
+   function that must never be hardcoded, and S1's done-condition tests exactly that.
+3. **Each pack pre-registers its verdict family** — `verdictMetrics` plus an explicit
+   `primaryMetric` that may be `null` (§3.3). Only a `verdictMetrics` member can receive a verdict;
+   everything else prints `exploratory — no significance claim`. A family with more than one member
+   takes the note's multiplicity handling. (`-ml` §3.3. Note that v1.1's "exactly one
+   `primaryMetric`" is superseded by the 2026-09-02 stakeholder decision on `guard-judge`.)
+4. **Per-turn-position rates are computed over conversations, never over turns**, and no interval
+   is ever printed over a turn-pooled count. **Under the 12 × 1 sampling design (§3.8.4) the
+   clustering treatment is materially different from what `-ml` v1.1 assumed, and the note owns the
+   difference**: what `stats.py` must implement for `min_detectable_difference`, `verdict()` and any
+   cluster-aware interval — including whether a design-effect input is required and what
+   `report.py` must refuse to print without it — is specified there and is not restated, guessed at
+   or pinned by signature here. `stats.py` implements the note's surface as written.
+5. **The negative control is a first-class feature, not a test fixture**: `compare` run with the
+   same model in both arms — **two independent runs, not two copies of one record** — must report
+   *not distinguishable*, with discordant counts roughly equal and the difference interval centred
+   on zero. It is wired as a CLI-reachable mode (`--negative-control`) because it is the cheapest
+   way to catch a whole class of harness bugs that otherwise present as plausible model differences.
+   (`-ml` §9; the acceptance run is §5 test 19a.)
 
 ### 3.10 Alternatives considered and rejected
 
@@ -686,7 +1080,9 @@ note:
 | Item-level interleaving of paired arms | A 16 GB box cannot hold two models; per-item load/unload would dominate runtime (§3.7). |
 | Store results only as CSV (stakeholder preference read literally) | Cannot represent per-turn × per-failure-kind breakdowns without becoming unreadable; JSON is the truth, CSV is the derived human view (§3.5). |
 | The original FR-15 marginal-CI-overlap rule as the decision instrument | Cannot fire at all at n ≤ 40 with baseline ≥ 0.90 — this lab's actual regime — and discards FR-16's pairing (`-ml` §3.1). **FR-15/AC-4 amended 2026-09-02** to the paired-difference interval (§6 R-9); the overlap check survives as a printed diagnostic. |
-| Pooling turn-level outcomes into one accuracy rate | Turns within a conversation are not independent; the prior experiment's 280 turns (§2.2) carried roughly the information of its 40 conversations (`-ml` §4.4). Per-turn slices over conversations, cluster bootstrap for anything pooled. |
+| Pooling turn-level outcomes into one accuracy rate | Turns within a conversation are not independent; the prior experiment's 280 turns (§2.2) carried roughly the information of its 40 conversations (`-ml` §4.4). Per-turn slices over conversations. |
+| 4 distinct scripts × 4 replicates × 3 shapes for the tool-caller pack (v1.1's sizing) | At `temperature: 0` the replicates are near-duplicates, so 48 conversations carried an effective *n* the note put closer to 12 (`-ml` §4.5) — a real precision hidden inside a design effect. **Stakeholder decision, 2026-09-02:** spend the same budget on 12 distinct scripts × 1 run (§3.8.4). |
+| Replicates at `temperature > 0` instead of more scripts | Informative about run-to-run variance, but it adds a second variance source to a comparison whose subject is the *model*, and it weakens what FR-18's temperature pinning means. Declined with the same decision. |
 | `numpy`/`scipy` for the numerics | Zero runtime dependencies keeps old results reproducible years later; the workload is seconds of pure Python. Reversal trigger stated in §3.2. |
 | A declarative mini-language for simulated tools instead of pack Python | Would become a worse Python; pack code is content-hashed, so it is versioned data like everything else (§3.3). |
 
@@ -697,6 +1093,20 @@ note:
 Eight stages. Each leaves the tree buildable and the suite green, and each has a done-condition that
 does not depend on the next. Stages S1–S2 are the harness; S3–S7 are packs, ordered so the cheapest
 end-to-end proof lands first and the long pole starts as early as its prerequisites allow.
+
+**Every done-condition below runs with `model-bench/` as the working directory**, written here once
+so no stage restates it. This is not a formality: the repo has **no root `pyproject.toml`,
+`pytest.ini`, `setup.cfg` or `tox.ini`**, so invoking `model-bench/.venv/bin/python -m pytest -q`
+from the repo root makes `rootdir` the monorepo, ignores this component's `testpaths`, and walks
+into other components' suites — measured during S0 at 9 collected, 8 collection errors, exit 2. The
+canonical form, used verbatim in every stage:
+
+```bash
+cd model-bench && ./setup.sh && .venv/bin/python -m pytest -q && .venv/bin/ruff check .
+```
+
+`ruff check` takes an explicit `.` for the same reason: without a target it resolves from the
+current directory and its config discovery is not the same walk as pytest's.
 
 ### S0 — Component skeleton
 
@@ -714,8 +1124,25 @@ end-to-end proof lands first and the long pole starts as early as its prerequisi
 - Root `AGENTS.md` gains a `model-bench/` bullet in **Structure** and a row in **Component docs**;
   `docs/requirements/small-model-benchmarking.md` is left where it is (its own footnote says so).
 
-**Done when:** `model-bench/setup.sh && model-bench/.venv/bin/python -m pytest -q` runs and passes
-with zero tests collected, and `ruff check` is clean.
+**Done when:** the canonical command above passes from `model-bench/`, with **at least one test
+collected**.
+
+**S0 is delivered; this is what shipped** (commit `0522ffd`, `model-bench/docs/HISTORY.md`), and two
+points differ from v1.1's text:
+
+- **v1.1 asked for "zero tests collected", which is not a passing state.** pytest exits `5`
+  (`EXIT_NOTESTSCOLLECTED`) when nothing is collected, so the `&&` chain could never return 0. S0
+  ships **one real test** — `tests/test_package.py`, asserting `modelbench.__version__` equals the
+  installed distribution's metadata version — rather than configuring the exit code away. That was
+  the right call and this plan adopts it: a permanent "no tests ran is fine" setting would still be
+  in place at S5, where it would hide a collection breakage; and the assertion is load-bearing
+  rather than filler, because that version string is what stamps `benchVersion` into every run
+  record (§3.4.3).
+- **`.gitignore` names `results/transcripts/` before `results/` exists.** Deliberate — see §3.2.
+- `docs/BACKLOG.md` was **seeded at S0** with the two items §7 carries forward (FR-21a's judged
+  layer; the +22 harder retrieval queries). **Confirmed, not reversed:** a deferred item is recorded
+  when it is decided, not when the milestone closes, or it is one forgotten commit from
+  disappearing. S8 therefore *re-checks and extends* that file rather than creating it.
 
 ### S1 — Core: fingerprint, results, stats, report (no model calls at all)
 
@@ -726,56 +1153,147 @@ Key signatures:
 
 ```python
 # fingerprint.py
-REQUIRED_AUTO: tuple[str, ...]; REQUIRED_ATTESTED: tuple[str, ...]
+class FieldSpec(NamedTuple):
+    tier: Literal["nonempty", "present"]          # §3.4.2 — absent != empty
+REQUIRED_BY_SCHEMA: Mapping[int, Mapping[str, Mapping[str, FieldSpec]]]   # {schemaVersion: {armKind: {field: spec}}}
+FORBIDDEN_BY_ARM_KIND: Mapping[str, frozenset[str]]                       # §3.4.1
+BENCH_SCHEMA_VERSION: int = 1                                             # §3.4.3, lives in results.py
 @dataclass(frozen=True)
 class Fingerprint:
-    ...  # every field in §3.4
-    def validate(self) -> list[str]: ...        # names of missing/empty required fields
+    armKind: Literal["model", "deterministic"]
+    ...  # every field in §3.4.2, per arm kind
+    def validate(self) -> list[FieldProblem]: ...   # [] means valid; each problem names field + reason
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "Fingerprint": ...
     def to_dict(self) -> dict[str, Any]: ...
 
 # results.py
-@dataclass(frozen=True) class ItemResult: ...
+@dataclass(frozen=True)
+class ItemResult:
+    itemId: str                     # the pack's stable id — the pairing key's first component
+    pairingKey: tuple[str, ...]     # tool-caller: (scriptId, replicate, turnIndex); item roles: (itemId,)
+    outcome: Literal["pass", "fail", "n_a", "parse_failure"]
+    scoreable: Mapping[str, bool]   # per conditional count: was its precondition met? (-ml §4.3)
+    counts: Mapping[str, int]       # per-count numerator contributions
+    latencyMs: float | None
+    detail: Mapping[str, Any]       # scorer-specific, never read by report.py
+
+@dataclass(frozen=True) class RetrievalAggregates: ...      # recall@k, mrr, p@1, sep_raw, sep_z, …
+@dataclass(frozen=True) class ToolCallAggregates: ...       # per-turn table, hazard, funnel, restraint, …
+@dataclass(frozen=True) class ClassificationAggregates: ... # per-class rates + parse failures
+@dataclass(frozen=True) class ExtractionAggregates: ...
+@dataclass(frozen=True) class GroundingAggregates: ...
+Aggregates = RetrievalAggregates | ToolCallAggregates | ClassificationAggregates | ExtractionAggregates | GroundingAggregates
+
 @dataclass(frozen=True) class RunResult:
-    runId: str; sessionId: str | None; role: str
-    fingerprint: Fingerprint; items: list[ItemResult]; aggregates: dict[str, Any]
+    runId: str; sessionId: str | None; role: str; armKind: Literal["model", "deterministic"]
+    fingerprint: Fingerprint; items: list[ItemResult]; aggregates: Aggregates
+
+@dataclass(frozen=True) class InvalidRecord:
+    path: Path; runId: str | None; benchSchemaVersion: int | None
+    problems: list[FieldProblem]; reason: Literal["field", "unknown_schema", "unparseable"]
+
 def store(run: RunResult, root: Path) -> Path: ...        # raises on invalid fingerprint
 def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[InvalidRecord]]: ...
 def rebuild_index(root: Path) -> Path: ...
 
-# stats.py  — implements docs/plans/small-model-benchmarking-ml.md §3, §4.4, §7.1; no other source
-def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, float]: ...
+# stats.py  — implements docs/plans/small-model-benchmarking-ml.md; no other source
+_Z_95: float          # pinned to the note's constant (nlq_scoring.py's `_Z_95`), module-level
+def wilson_interval(successes: int, n: int, *, z: float = _Z_95) -> tuple[float, float]: ...
 def mcnemar_exact(b: int, c: int) -> float: ...              # conditional binomial, math.comb
-def mover_d_interval(a: int, b: int, c: int, d: int) -> tuple[float, float]:  ...  # Newcombe
-def paired_bootstrap(diffs: Sequence[float], *, B: int = 10_000, seed: int) -> tuple[float, float]: ...
-def cluster_bootstrap(clusters: Sequence[Sequence[bool]], *, B: int, seed: int) -> BootstrapResult: ...
-def design_effect(bootstrap_width: float, naive_width: float) -> float: ...
-def min_detectable_difference(n: int) -> float: ...          # ~8/n; never hardcoded to 15
-def observable_floor(n: int) -> float: ...                   # 6/n
-def verdict(paired: PairedResult) -> str: ...                # the three exact strings, -ml §3.2e
+def mover_d_interval(a: int, b: int, c: int, d: int) -> tuple[float, float]: ...   # Newcombe
+def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[float, float]: ...
+def verdict(paired: PairedResult) -> str: ...                # the note's exact verdict strings
 
 # report.py
-def compare_report(runs: Sequence[RunResult], *, pack: PackRef) -> str: ...  # markdown
+def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
+                   invalid: Sequence[InvalidRecord] = ()) -> str: ...   # markdown
 ```
 
-`compare_report` is where AC-2/AC-3/AC-4 become visible output: an excluded-invalid block, a pack
-version/hash mismatch banner, the resolving-power line (§3.9 point 2), and the literal phrase
-**"not distinguishable at this sample size"** wherever the decision rule says so. It also carries
-the disagreement case the note calls out (`-ml` §3.2e): when MOVER-D excludes zero but McNemar does
-not, the verdict is *not distinguishable* **and both component outcomes are printed in prose** —
-one instrument decides, one quantifies, and they are never AND-ed into a single bloc.
+**Three deliberate changes from v1.1's signatures, each closing a gate finding:**
 
-**Done when:** unit tests over hand-built `RunResult` fixtures cover AC-2 (a record with a blanked
-attested field is excluded on read and named in the report), AC-3 (two runs differing in
-`packVersion`, and separately in `packContentHash` only, both produce the mismatch banner and still
-render the comparison), and AC-4 (a paired-difference interval that includes zero renders the "not
-distinguishable at this sample size" wording — including the 40/40 vs 34/40 case, where the *old*
-marginal-overlap rule would have produced the opposite verdict);
-`stats` reproduces the five `(a,b,c,d)` regression fixtures in `-ml` §3.2c exactly; and
-`--negative-control` on two copies of the same run reports not-distinguishable with b ≈ c. No LM
-Studio involved. This stage encodes the **amended** FR-15/AC-4 decision rule (§3.9 point 1) — the
-paired-difference interval, not marginal overlap.
+- **`z` is keyword-only and defaults to a module-level `_Z_95` taken from the note**, not to a
+  literal `1.96`. v1.1 wrote `1.96` while the note mandates `1.959963984540054`
+  (`falkor-chat/server/tests/eval/nlq_scoring.py:59` defines exactly that, and the note's paired
+  interval is derived from Wilson) — so v1.1's default would have shifted every bound and failed
+  the note's own regression fixtures. The lab is genuinely split on this constant, which is why it
+  is pinned in one place and named here rather than left to inference.
+- **`ItemResult` and the aggregates are specified, not `…`.** They are the load-bearing shapes of
+  two guarantees. Pairing (FR-16) needs a stable item identity across runs, which is `pairingKey`;
+  `-ml` §4.3's paired-*n* intersection and `asymmetry` count are computed from `pairingKey` plus
+  `scoreable`. And "`report.py` has no code path that produces a blended figure" (§3.5) is only
+  *structural* if the aggregate is typed: with `dict[str, Any]` the report renders whatever a pack
+  put in it and the enforcement is back to convention. The per-role variants are a **closed union**,
+  so "no path emits a pooled figure" is a type fact a reviewer can check without running anything.
+  S1 is built before any pack exists to constrain these shapes, which is exactly why they are fixed
+  here.
+- **`compare_report` takes `invalid`.** `load_history` returns two lists and v1.1's signature had a
+  parameter for one of them, while AC-2 requires the excluded record to be *named in the report*.
+
+**The clustering-aware surface of `stats.py` is deliberately absent from this block.** Under §3.8.4's
+12 × 1 sampling design the clustering treatment changed, and the `-ml` note owns it: the exact
+signature and parameters of `min_detectable_difference`, whether a design-effect input is required,
+and any cluster-resampling function are **specified there and implemented verbatim**. Pinning a
+signature here is what produced the v1.1 divergence (`min_detectable_difference(n)` against a note
+that requires the sampling structure as an input), and this plan does not repeat it. What this plan
+*does* own is the requirement that S1's done-condition can detect a non-conforming implementation —
+see below.
+
+`compare_report` is where AC-2/AC-3/AC-4 become visible output: an excluded-invalid block naming
+each record and its problems, a pack version/hash mismatch banner, a `SCHEMA VERSIONS IN THIS
+COMPARISON` line when records span schema versions (§3.4.3), the resolving-power line (§3.9 point
+2), and the literal phrase **"not distinguishable at this sample size"** wherever the decision rule
+says so. It also carries the two-instrument disagreement case in prose (§3.9 point 1), and it
+renders a `deterministic` arm (§3.4.1) beside model arms without ever ranking two of them against
+each other.
+
+**CLI:** S1 ships `compare` (including `--negative-control`), `index rebuild`, and the
+stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run` are S2's.
+
+**Done when**, with unit tests over hand-built `RunResult` fixtures and no LM Studio involved:
+
+1. **AC-2** — a record with a blanked attested field is excluded on read and named, with its
+   problem, in the report. Plus the three states of §3.4.2: `residentModelsAtStart: []` is **valid**
+   (`REQUIRED_PRESENT`), an empty `modelKey` is **invalid** (`REQUIRED_NONEMPTY`), and a `null` in
+   either tier is invalid.
+2. **AC-3** — two runs differing in `packVersion`, and separately in `packContentHash` only, both
+   produce the mismatch banner and still render the comparison.
+3. **AC-4** — a paired-difference interval that includes zero renders the "not distinguishable at
+   this sample size" wording, **and the 40/40 vs 34/40 case does not** — that case's paired
+   difference excludes zero and the correct verdict is *distinguishable* (`-ml` §3.2; it is the
+   worked example that carried the FR-15 amendment, and the one the *old* marginal-overlap rule got
+   backwards). §5 test 6 states the same thing; these two must not diverge again.
+4. **`stats` reproduces the note's `(a,b,c,d)` regression fixtures to the tolerance the note
+   states** — the tolerance is the note's to set, and this plan does not restate it.
+5. **`min_detectable_difference` is verifiably not a constant, and verifiably not naive.** Two
+   tests: it returns different values for different *n*; and — the B-1 detector — **calling it with
+   only an item count, for a pack whose sampling unit is clustered, must fail rather than return a
+   number.** Whatever shape the note gives that input, the assertion is the same: a resolving-power
+   line for a clustered pack cannot be produced from a bare *n*, and `report.py` refuses to render
+   one when the required input is absent. This is the test that would have caught v1.1's
+   `min_detectable_difference(48)` printing a materially over-optimistic figure for the tool-caller
+   pack. **It needs a synthetic clustered pack fixture**, because under §3.8.4's sizing no shipped
+   pack is clustered any more — which is exactly why the guard must be tested rather than assumed
+   unreachable: the next conversation pack that raises `replicatesPerScript` reintroduces the case,
+   and by then S1 is long closed.
+6. **`armKind` (B-3)** — a `deterministic` fingerprint with no model fields **validates**; the same
+   record with `modelKey: "bm25"` added **fails on write** (forbidden field), as does a `model`
+   record missing `runtimeName`; and `compare_report` renders a model arm and a deterministic arm
+   in one report without ranking two deterministic arms against each other.
+7. **Schema versioning (M-4)** — a record written under `benchSchemaVersion: 1` still validates
+   after a hypothetical field is added at version 2, and a record declaring version 99 lands in
+   `invalid` with `reason == "unknown_schema"`.
+8. **`primaryMetric: null` (§3.3)** — a pack fixture with two `verdictMetrics` and a null
+   `primaryMetric` renders both verdicts and **no headline**; a fixture omitting the
+   `primaryMetric` key entirely fails validation.
+9. **`--negative-control` smoke check** — two copies of the same stored run report
+   not-distinguishable. Labelled a smoke check in the test's own docstring, because with two copies
+   `b = c = 0` by construction and it **cannot fail**: it proves the mode is wired, not that the
+   harness is sound. The real negative control is two *independent* runs of the same model and is
+   §5 test 19a, an acceptance step.
+
+This stage encodes the **amended** FR-15/AC-4 decision rule (§3.9 point 1) — the paired-difference
+interval, not marginal overlap.
 
 ### S2 — Packs, LM Studio adapter, host info, runner
 
@@ -799,7 +1317,7 @@ class LMStudio:
     def embed(self, texts: Sequence[str], *, model) -> EmbedResult: ...
     def load(self, model: str, *, context_length: int | None, gpu: str | None) -> LoadResult: ...
     def unload(self, model: str) -> None: ...
-    def ps(self) -> list[ResidentModel: ...]
+    def ps(self) -> list[ResidentModel]: ...
 
 # tooling.py
 class ToolEnvironment(Protocol):
@@ -818,9 +1336,26 @@ def drive(env: ToolEnvironment, script: Conversation, llm, cfg: PromptConfig) ->
 `toolCallForm` field distinguishing **native tool-call** from **prose that looks like a call**,
 which is FR-8(b) and must be decided at the transport boundary where the evidence is, not later.
 
+**CLI:** S2 ships `attest`, `validate`, `run`'s plumbing, and the installed-catalog half of
+`models --tested` (§3.6a). `attest` is assigned here and not later because S3's done-condition —
+"a stored result with a **complete** fingerprint" — is unreachable until `host.json` exists.
+
 **Done when:** `packs`/`convo`/`tooling` are unit-tested offline against a stub LLM and a fixture
-pack; `lmstudio` is unit-tested against recorded JSON payloads; and **one** `-m live` test confirms
-`catalog()` returns the real installed models and that `chat()` surfaces `stats.time_to_first_token`.
+pack; `validate_pack`'s AST import check rejects a fixture pack module that imports outside the
+allowlist, and `run` is shown to call it and fail closed (§3.3); `lmstudio` is unit-tested against
+recorded JSON payloads, including the §3.6 eligibility gate on the three real catalog entries that
+break the naive rule (an `embeddings` model advertising `tool_use` → refused; an entry with **no**
+`capabilities` key → admitted; an `llm` with `tool_use` → admitted); `attest` writes a `host.json`
+matching §3.4.4's schema and the staleness trip-wire fires when `runtimeVersion` changes; and
+**one** `-m live` test confirms `catalog()` returns the real installed models and that `chat()`
+surfaces `stats.time_to_first_token`.
+
+**R-1's probe is part of this done-condition, not a note** (§6 R-1 promised it "during S2" and v1.1
+gated nothing on it): with a model actually loaded, run `lms ps --json` and record in
+`model-bench/docs/HISTORY.md` whether it exposes the load configuration. **If it does,
+`kvCacheSetting` moves from operator-attested to auto-captured** and §3.4.2/§3.4.4 are updated in
+the same change; if it does not, the recorded negative result is what closes R-1. Either outcome
+satisfies the condition; silence does not.
 
 ### S3 — `embedder` pack + `refresh_golden.py` (first end-to-end result)
 
@@ -831,15 +1366,30 @@ Sequenced third on purpose: it is the cheapest path to a complete real run — t
 exists, the mechanism is pure arithmetic, and there is a pinned prior figure to sanity-check
 against. It proves the S1/S2 core end to end before the expensive packs are built on it.
 
-**Done when:** a real run against `text-embedding-qwen3-embedding-0.6b` produces a stored result
-with a complete fingerprint, `compare` renders it against the BM25 arm, and
-`test_metrics_agreement.py` passes (§3.1 point 2 — the note's stronger form: run
-`falkor-chat`'s own `test_metrics.py` fixtures through the copied implementation and require
-byte-identical output). The copied baseline is used as a **harness self-check, never a gate**: the
-same model on the same corpus and queries should land ≥ ~0.85 recall@10, and anything below that
-means a wrong prefix, unnormalized vectors, or a truncated corpus (`-ml` §5.4). It is not a metric
-target — hybrid-ANN vs exact-vector-only differ in two directions at once, so a *disagreement* in
-either direction is uninterpretable and must not be "explained".
+**Done when:**
+
+1. A real run against `text-embedding-qwen3-embedding-0.6b` produces a **stored result with a
+   complete `model` fingerprint** (which requires `attest` from S2 to have written `host.json`).
+2. The BM25 arm is stored as its own `armKind: "deterministic"` record sharing that run's
+   `sessionId`, and `compare` renders the two arms in one report with the deterministic one
+   labelled (§3.4.1, §3.8.1).
+3. `test_metrics_agreement.py` passes over all 20 transcribed cases (§3.1 point 2). *(v1.1's
+   done-condition asked for "byte-identical output" from running falkor-chat's own `test_metrics.py`
+   fixtures through the copied implementation — that mechanism does not exist; §3.1 point 2 explains
+   what replaced it and why.)* `scripts/refresh_golden.py --check-origins` runs clean, and
+   `metrics_agreement.json` carries its `sourceGitSha` and `sourceSha256`.
+4. `corpus.embeddings.json` (the 121 corpus vectors) is written into the pack and the ranking path
+   is shown to reproduce identical rankings from the two fixed vector files with no live embedding
+   call at all (§3.8.1) — that is what actually isolates "is my ranking code right".
+5. **The harness self-check is run and its outcome recorded — it is a diagnostic, never a gate**
+   *(stakeholder decision, 2026-09-02)*. The same model on the same corpus and queries is expected
+   to land near the copied baseline; **a below-expectation result does not block S3.** What is
+   required is that the deviation and the investigation of it are written into
+   `model-bench/docs/test-reports/`, naming which of the known causes (wrong prefix, unnormalized
+   vectors, truncated corpus — `-ml` §5.4) were checked and what was found. It is not a metric
+   target in either direction: hybrid-ANN vs exact-vector-only differ in two directions at once, so
+   a *disagreement* of either sign is uninterpretable and must not be "explained". v1.1 left this
+   silent, which is a done-condition that can be argued either way at the moment it matters most.
 
 ### S4 — `guard-judge` and `nlq-generator` packs
 
@@ -852,8 +1402,11 @@ new surface to two scorers plus one small executor. Do `guard-judge` first (no e
 **Done when:** both packs run end to end against one model; **every item is stamped
 `answerable: true|false`** by running its hand-written reference spec through the executor
 (§3.8.3 — this tests the executor, not the model, and is the step that keeps unanswerable items out
-of the accuracy denominator); `validate` passes on both packs; and the guard-judge report shows the
-three class-conditional rates with no pooled 85-item figure anywhere in it.
+of the accuracy denominator); the executor's **validation** half is covered too — a malformed spec,
+a schema violation and a wrong answer each land in their own count, in stdlib only (§3.8.3's cost
+note); the two `conflicting-facts` items score by subset containment, not set equality; `validate`
+passes on both packs; and the guard-judge report shows the two class-conditional verdict metrics
+side by side with **no headline number and no pooled 85-item figure anywhere in it** (§3.8.2).
 
 ### S5 — `tool-caller` pack, part 1: environment and scoring
 
@@ -882,18 +1435,31 @@ double-counted as two sibling failures, never classified by scorer heuristics.
 
 1. Reconstruct shapes A / B / C from
    `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §8.1 (§2.2), turn by turn.
-2. Extend to **4 distinct scripts per shape** — FR-22a's floor, sized in §3.8.4 — and cover the FR-8 failure
-   kinds §8.1's set was not designed to exercise — in particular "stopping when done", "final
-   reply matches the tool result", and turns where **no** tool is required (the restraint count).
-   Also draft the ~20 labelled replies the prose-vs-native detector is scored against.
+2. Extend to **4 distinct scripts per shape, 12 in total, each run once** (§3.8.4's sizing, revised
+   by the 2026-09-02 stakeholder decision) — and cover the FR-8 failure kinds §8.1's set was not
+   designed to exercise: in particular "stopping when done", "final reply matches the tool result",
+   and turns where **no** tool is required (the restraint count). **This is where the sampling
+   decision's cost lands** — 12 scripts to author and human-verify instead of 12 replicated runs of
+   4 — and it is why S6 remains the long pole. Also draft the ~20 labelled replies the
+   prose-vs-native detector is scored against.
 3. **Human verification of every turn's expectations** (FR-19): each `expect` block is checked by a
    person against the simulated environment's actual behavior, not against a model's output.
    `provenance.verifiedBy` is filled per conversation.
 4. Run the known-answer validation: `qwen/qwen3-4b-2507` vs `mistralai/ministral-3-3b`, and compare
    the per-turn profile to §8.2's recorded finding.
 
-**Done when:** step 4 reproduces the documented contrast, AC-1 holds on real output (per-failure-kind
-**and** per-turn-position, with no blended headline anywhere in the report), and the pack validates.
+**Done when:** step 4 is **run and its outcome recorded** in `model-bench/docs/test-reports/`;
+AC-1 holds on real output (per-failure-kind **and** per-turn-position, with no blended headline
+anywhere in the report); and the pack validates, including `H ≤ min(script length)`.
+
+**If the contrast does not appear**, the stage is still completable: R-3's bisect is executed and
+its result recorded, and the pack ships flagged `known-answer validation: not reproduced` in every
+report it generates until it is. *(v1.1 made the done-condition "step 4 reproduces the documented
+contrast" while R-3 itself states the reconstruction "will not be turn-for-turn identical" and the
+contrast may not appear — a gate on an empirical outcome the plan says may not occur, which under
+deadline pressure is resolved by editing the reconstruction until the contrast appears. That is
+fitting the instrument to the expected answer, and it is the one thing a measuring instrument must
+not be built by.)*
 
 **This is the long pole.** It is last among the data-bearing stages not because it is least
 important but because it is the only one whose *scoring* correctness cannot be checked against
@@ -910,20 +1476,26 @@ decision this stage used to wait on, so S7 could now run any time after S1, and 
 because it is the least valuable of the five packs until the judged half exists.
 
 **Done when:** the 30 items are human-verified and stamped with provenance; the grounding scorer
-covers containment, exclusion and correct abstention; the report prints grounding as
-`primaryMetric` alongside the standard latency block; and the report says in words that reply
-*quality* is not measured by this pack.
+covers containment, exclusion and correct abstention; **the format scorer covers all three declared
+constraints** — `maxWords`, `mustBeSingleParagraph`, `forbiddenPatterns` — read from pack data with
+per-item override, each a separate count never pooled with grounding (§3.8.5; v1.1 shipped two of
+FR-21a's three layers and this closes the third); the report prints `groundingRate` as
+`primaryMetric` alongside the format counts and the standard latency block; and the report says in
+words that reply *quality* is not measured by this pack.
 
 ### S8 — Documentation and close
 
 `model-bench/README.md` (how to run, what a pack is, how to add one, the three non-features, the
 exact-cosine scope note from §3.8.1), `model-bench/AGENTS.md` (working context: layout, live-test
 convention, the FR-23 rule stated as a hard rule for future agents, the operator-attested
-fingerprint fields and why), `model-bench/docs/HISTORY.md` first entry,
-`model-bench/docs/BACKLOG.md` seeded with the two deferred items named in §7 — the judged
-reply-quality layer (FR-21a) and the +22 harder retrieval queries — plus anything R-1's S2 probe
-left open. Root `AGENTS.md` rows added in
-S0 are re-checked against what actually shipped.
+fingerprint fields and why), `model-bench/docs/HISTORY.md` (an entry per stage, first written at S0),
+`model-bench/docs/BACKLOG.md` **re-checked and extended** — it was already seeded at S0 with the two
+deferred items named in §7 (the judged reply-quality layer, FR-21a; the +22 harder retrieval
+queries), so S8 adds whatever R-1's S2 probe and the S3/S6 test reports left open and removes
+anything since delivered. Root `AGENTS.md` rows added in S0 are re-checked against what actually
+shipped. `README.md` additionally states the two things §3.4.3 and §3.6a make into user-visible
+contracts: that a `benchSchemaVersion` bump is a deliberate act with a migration decision attached,
+and the closed exit-code set.
 
 ---
 
@@ -935,38 +1507,55 @@ bad**, not the ones that prove it reports a number when the data is good.
 
 **Unit (default suite, network-free, `pytest -q`)**
 
-1. `fingerprint.validate()` — one test per required field: blank it, assert it is named.
+1. `fingerprint.validate()` — one test per required field: blank it, assert it is named. Plus the
+   three tier cases (§3.4.2): `residentModelsAtStart: []` valid, `modelKey: ""` invalid, `null`
+   invalid in either tier; and the two `armKind` cases (§3.4.1): a `deterministic` record with no
+   model fields validates, the same record with `modelKey` added fails on a *forbidden* field.
 2. `results.store()` refuses an invalid fingerprint; there is no bypass flag (assert the absence by
    API surface, not by comment).
 3. `results.load_history()` quarantines: a hand-edited record with a missing attested field, a
-   record with an unknown `schemaVersion`, a truncated JSON file → all three appear in `invalid`,
-   none in `valid`. **(AC-2)**
+   record declaring a **future** `benchSchemaVersion`, a truncated JSON file → all three appear in
+   `invalid`, none in `valid`; **and a record written under an older, known `benchSchemaVersion`
+   validates against its own contract and appears in `valid`** (§3.4.3 — the FR-3 case v1.1's
+   "older-schema records are excluded" would have silently deleted). **(AC-2)**
 4. `packs.content_hash()` — stable across path order, changes when any byte in any pack file
    changes, unchanged when `PROVENANCE.md` changes.
 5. `compare_report` — version mismatch banner on differing `packVersion`; **also** on identical
    `packVersion` with differing `contentHash`; comparison still rendered in both cases. **(AC-3)**
-6. `stats` — Wilson against published worked examples; `mcnemar_exact` + `mover_d_interval` against
-   the five `(a,b,c,d)` regression fixtures in `-ml` §3.2c; the McNemar floor (no result at
-   c=0, b=5 reaches α=0.05; b=6 does); a paired-difference interval containing zero produces the
-   "not distinguishable at this sample size" wording, and the 40/40 vs 34/40 case does **not** —
-   the regression test that pins the amended rule; the MOVER-D-excludes-zero-but-McNemar-does-not case renders the
-   both-components prose. `min_detectable_difference` and `observable_floor` are computed from *n*,
-   asserted never to return a constant. **(AC-4)**
+6. `stats` — Wilson against published worked examples, at the note's pinned `_Z_95` and **not**
+   `1.96`; the paired instruments against the note's `(a,b,c,d)` regression fixtures, to the
+   tolerance the note states; the exact test's small-sample floor as the note tabulates it; a
+   paired-difference interval containing zero produces the "not distinguishable at this sample size"
+   wording, and the 40/40 vs 34/40 case does **not** — the regression test that pins the amended
+   rule; the instruments-disagree case renders the both-components prose. The resolving-power
+   functions are computed from the run's own sampling structure and asserted never to return a
+   constant, **and asserted to refuse a bare item count for a clustered pack** (S1 done-condition 5,
+   the B-1 detector). Every number in this test comes from the `-ml` note; none is a literal in this
+   plan. **(AC-4)**
 7. `scoring/toolcalls` — the synthetic-trace matrix from S5, one per failure kind, plus denominator
    edge cases (turn where no tool was required — the restraint count; turn where the model emitted
    nothing at all; conversation that ended early) and the **laundering test**: a trace that
    collapses at turn 2 must not out-score one that reaches turn 8 on any conditional count.
-7b. `cluster_bootstrap` / `design_effect` — a fixture where all conversations within a script are
-   identical must produce a design effect far above 1, and independent observations one near 1.
+7b. The note's cluster-aware surface — a fixture where all observations within a cluster are
+   identical must resolve to a far smaller effective sample than the raw count, and independent
+   observations to roughly the raw count. The exact functions and their expected values are the
+   note's; this test exists to prove `stats.py` implements them rather than a naive substitute.
 8. `scoring/retrieval` — recall@k/MRR/precision@k/score-separation on hand-built ranked lists with
    known answers, including multi-relevant items, fewer than *k* results, and zero relevant found.
 9. `scoring/extraction` — the scalar/set shape rules and numeric epsilon.
 10. `convo.assemble` — the three `historyReplay` modes produce the documented message sequences;
     `representToolSchemasEachTurn=false` really does drop the schemas after turn 1.
-11. `test_metrics_agreement.py` — §3.1 point 2.
-12. **Pack integrity, per pack:** unique ids, required fields, per-item provenance present,
-    paraphrase rule for retrieval-style packs, and every `expect` block referring to a tool the
-    pack's own `schemas.json` declares.
+11. `test_metrics_agreement.py` — all 20 transcribed cases from §3.1 point 2, reading only
+    `model-bench/tests/fixtures/`, including the two `ValueError` cases. A test that skips or
+    xfails any case is a failing test: the case count is the guarantee.
+11b. `report.py` structural refusals — a pack fixture with `primaryMetric: null` renders both
+    verdict metrics and no headline; a manifest omitting the `primaryMetric` key fails
+    `validate_pack`; a metric outside `verdictMetrics` always renders with the `exploratory` label.
+12. **Pack integrity, per pack:** unique ids, required fields, per-item provenance present (with
+    `originGitSha`), paraphrase rule for retrieval-style packs, every `expect` block referring to a
+    tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3), `H ≤ min(
+    script length)` for the tool-caller pack, and `validate_pack`'s AST import check rejecting a
+    pack module that imports outside stdlib + `modelbench.tooling`.
 
 **Integration (`-m live`, opt-in, real LM Studio)**
 
@@ -982,9 +1571,10 @@ bad**, not the ones that prove it reports a number when the data is good.
 17. **AC-1** on real output: a tool-caller report shows per-failure-kind **and** per-turn-position,
     and no blended "tool-calling accuracy" figure appears anywhere in it.
 18. **AC-5**: an embedding report shows the keyword-only arm and the model's output dimension.
-19. **The instrument-validation pair.** (a) **Negative control:** the same model in both arms, on
-    the tool-caller pack, must report *not distinguishable*, with b ≈ c and the difference interval
-    centred on zero — the note names this the highest-value single test in the harness, because it
+19. **The instrument-validation pair.** (a) **Negative control — two *independent* runs of the same
+    model** in the two arms, on the tool-caller pack (not two copies of one record: that is S1's
+    smoke check and cannot fail). It must report *not distinguishable*, with discordant counts
+    roughly equal and the difference interval centred on zero — the note names this the highest-value single test in the harness, because it
     catches a whole class of bugs that would otherwise present as plausible model differences
     (`-ml` §9). (b) **Known-answer:** `qwen/qwen3-4b-2507` vs `mistralai/ministral-3-3b` on the same
     pack reproduces the per-turn contrast recorded in
@@ -1009,9 +1599,11 @@ and `kvCacheSetting` are therefore **operator-attested** in `host.json` (§3.4),
 invalidity rule still holds mechanically — a missing value is refused — but a *wrong* attested value
 is undetectable. Mitigations built in: the staleness trip-wire (§3.4 point 3) catches the common
 failure of attesting once and never revisiting; `runtime.version` is auto-captured from every call
-and is arguably the more reproducibility-relevant version anyway. **Verify during S2:** if
-`lms ps --json` on a *loaded* model turns out to expose the load configuration (untestable without
-loading a model on a shared box), move `kvCacheSetting` from attested to auto-captured.
+and is arguably the more reproducibility-relevant version anyway. **The probe is in S2's
+done-condition**, not left as prose here: run `lms ps --json` against a *loaded* model, record the
+outcome in `model-bench/docs/HISTORY.md`, and if the load configuration is exposed, move
+`kvCacheSetting` from attested to auto-captured in the same change. A mitigation nobody is gated on
+executing is a mitigation nobody executes.
 
 **R-2 — FR-11's "peak RAM at the measured settings" is best-effort, not exact (medium).** There is
 no RAM endpoint. What is available: `lms ps --json`'s loaded-weights size, `lms load --estimate-only`'s
@@ -1020,7 +1612,10 @@ records them as three separately named fields rather than one authoritative "pea
 `README.md` states the method. A cross-WSL `powershell.exe` sample is also the most fragile thing in
 the tool; it degrades to "not captured" without failing the run — **but note that makes it the one
 FR-7-adjacent field that is not enforceable**, which is why it lives in FR-11's speed result rather
-than in the fingerprint.
+than in the fingerprint. It is also the most *invasive*: measured at 0.18–0.54 s per invocation
+across the WSL boundary against ~1.3 s per turn, so §3.6 confines sampling to the gaps between
+turns and stamps every sample with a timestamp. An implementer who "simplifies" this into an
+interval timer silently inflates the headline latency of every run.
 
 **R-3 — Reconstructed conversation scripts are a reconstruction (medium).** FR-22's asset is being
 rebuilt from a prose description (§2.2) because the originals were never committed. The reconstruction
@@ -1060,6 +1655,19 @@ is shared and its state is not controlled between sessions. §3.7's report label
 (`paired, same session` / `paired, cross-session`) is the disclosure; FR-17's reference arm is the
 remedy the tool *offers*, and the report says so wherever it prints a cross-session comparison.
 
+**R-12 — The tool-caller pack's *n* is small, and the report must say so rather than imply
+otherwise (medium, accepted by decision).** The 2026-09-02 sampling decision buys 12 independent
+conversations where v1.1 bought 48 clustered ones (§3.8.4). The precision is not worse — `-ml` §4.5
+put the old design's effective *n* near 12 anyway — but it is now *visible*, and the
+resolving-power line will print a large number. Accepted deliberately: an honest wide interval is
+worth more than a narrow one that a design effect would have had to walk back. The mitigations are
+all in output rather than in design — the resolving-power line computed from the real structure
+(§3.9 point 2), `replicatesPerScript` and `temperature` printed beside every conversation-level *n*,
+and the report naming the magnitudes it can and cannot resolve. The reversal trigger is explicit:
+if a real comparison lands inside the unresolvable band and the answer actually matters, the fix is
+**more distinct scripts** (a pack version bump, S6's authoring cost again) — never more replicates
+at temperature 0, which is what produced the problem.
+
 **R-8 — Two LM Studio catalog ids for the same weights (low, designed for).** Confirmed on this box
 (§2.3). The fingerprint records the literal key and never normalizes, so two runs of "the same
 model" under different ids compare as two models — visibly, with both ids printed. That is the
@@ -1086,19 +1694,34 @@ requirement now states the rule, not why the earlier one failed.
   data (`boundaryRule` in the pack's tool schemas) rather than a regex in the scorer — §3.8.4.
 - **R-11 — FR-9/FR-22 did not require distinct scripts per shape. Added as FR-22a.** Replicates of
   one script yield an interval describing "this script again", not "a script of this kind"
-  (`-ml` §4.5). §3.8.4's 4 scripts × 4 replicates × 3 shapes already satisfies it.
+  (`-ml` §4.5). §3.8.4's sizing satisfies it — **12 distinct scripts, 4 per shape, one run each**,
+  per the 2026-09-02 stakeholder decision. *(FR-22a's own text still cites the plan's earlier
+  4 × 4 × 3 sizing as an illustration; the requirement it states — several distinct scripts per
+  shape — is satisfied a fortiori, and the illustrative clause is `tico`'s to refresh, not this
+  plan's to contradict silently. Flagged, not amended.)*
 
-**Nothing in this plan is now blocked on a stakeholder answer.** The remaining open item is a
-verify-during-implementation check flagged in place: R-1's S2 probe of whether `lms ps --json`
-exposes the KV-cache setting on a loaded model.
+**Nothing in this plan is blocked on a stakeholder answer.** The gate's three open questions were
+all closed on 2026-09-02 — tool-caller sampling (§3.8.4), `guard-judge`'s absent headline (§3.8.2),
+and what S3 counts as done when the self-check fires (S3 done-condition 5). Two items remain, both
+verify-during-implementation and both now gated in a done-condition rather than left as prose:
+R-1's S2 probe of whether `lms ps --json` exposes the KV-cache setting on a loaded model, and S6's
+known-answer validation, which is recorded either way (S6, M-13's exit).
+
+**One thing this plan no longer claims.** §3.1 point 2's duplication mitigation is weaker than v1.1
+stated it, and it says so in its own text rather than here. D1 — copy the data, clean-build the
+code — still stands, and on a stronger argument than the mitigation: the two golden sets *must*
+diverge, and the two implementations' numbers are never compared to each other by design.
 
 ---
 
 ## 7. Ready to implement
 
 **Plan:** `docs/plans/small-model-benchmarking.md` (this document).
-**Method note:** `docs/plans/small-model-benchmarking-ml.md` (`data-scientist`) — statistics,
-denominators, metric definitions, sample sizes, and the deferred judge design.
+**Method note:** `docs/plans/small-model-benchmarking-ml.md` (`data-scientist`) — **the single
+source of truth for every formula, constant, threshold, tolerance, denominator, sample size and
+verdict string in this feature**, plus the deferred judge design. It is not optional background:
+`modelbench/stats.py` implements it, this plan cites it, and where the two ever appear to disagree
+the note is right. Read it before starting S1.
 
 New standalone component `model-bench/`, zero runtime dependencies, Python 3.12, eight stages:
 S0 skeleton → S1 core (fingerprint/results/stats/report, no model calls; delivers AC-2/AC-3/AC-4) →
@@ -1112,14 +1735,42 @@ nothing in falkor-chat** (§3.1), with the duplication risk discharged by a nume
 rather than by shared code — and on the observation that the two golden sets *must* diverge, because
 one tracks a live corpus and the other must freeze for results to stay comparable.
 
-**Nothing is blocked.** The four items this design pass raised were all settled on 2026-09-02
-(requirements commit `afe4aef`): FR-15/AC-4 amended to the paired-difference interval, FR-8(d)'s
-`boundary/unit` restated as a labelled subset of `wrong_value` with the rule supplied by pack data,
-FR-21a scoping `chat-responder` to its deterministic layer with judged quality deferred, and FR-22a
-requiring several distinct scripts per conversation shape. §6 keeps the reasoning; the plan is built
-to the amended text throughout.
+**Nothing is blocked.** The four requirement defects this design pass raised were settled on
+2026-09-02 (requirements commit `afe4aef`) and the plan is built to the amended text throughout
+(§6). The gate's three open questions were settled the same day and are folded in: **12 distinct
+tool-caller scripts × 1 run at temperature 0** (§3.8.4), **`guard-judge` has no `primaryMetric`**
+(§3.8.2, with §3.3 making a headline-less pack a first-class case), and **S3's self-check is a
+diagnostic, never a gate** (S3 done-condition 5).
 
-Two items carry forward into `model-bench/docs/BACKLOG.md` at S8 rather than into this delivery:
+**S0 is delivered** (commit `0522ffd`); S1 is the next stage. Read S0's own text before starting —
+it records what shipped rather than what v1.1 asked for, including the one real smoke test and the
+working-directory rule that every done-condition in §4 depends on.
+
+Two items are already recorded in `model-bench/docs/BACKLOG.md` (seeded at S0, re-checked at S8):
 the **deferred judged-quality layer** for `chat-responder` (design preserved in §3.8.5 and
 `-ml` §6.2) and the **+22 harder retrieval queries** that would lift the embedder pack's recall
 ceiling (§3.8.1).
+
+---
+
+## Appendix A — Types named in this plan
+
+Named above and defined here so an implementer is not inferring them from usage. Everything in
+`stats.py` beyond this list — in particular the cluster-aware surface — is the `-ml` note's.
+
+| Type | Module | Shape |
+|---|---|---|
+| `FieldSpec` | `fingerprint` | `NamedTuple(tier: Literal["nonempty","present"])` — §3.4.2 |
+| `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden"])` |
+| `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2; `armKind` discriminates |
+| `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1 |
+| `PairedResult` | `stats` | `(a, b, c, d, n_paired, asymmetry, metricName, armLabels)` — what `verdict()` consumes; the note owns any further fields its instruments need |
+| `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash, role, metrics)` — the identity triple plus what the report must print |
+| `Pack` | `packs` | frozen dataclass, S2 |
+| `ModelInfo` | `lmstudio` | one catalog entry, verbatim: `id, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` |
+| `ChatResult` | `lmstudio` | `message, tool_calls, toolCallForm, stats, model_info, runtime, usage, wallClockMs` |
+| `EmbedResult`, `LoadResult`, `ResidentModel` | `lmstudio` | vectors + dimension; timed load outcome; one `lms ps --json` row |
+| `PromptConfig` | `convo` | the manifest's `prompt` block, parsed: `systemPrompt, toolSchemas, historyReplay, representToolSchemasEachTurn, historyTurns, temperature, maxTokens` |
+| `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl` |
+| `ConversationTrace` | `convo` | per-turn `(messages_sent, ChatResult, dispatches, env_state, wallClockMs)` |
+| `DispatchRecord` | `tooling` | `(name, rawArguments, parsedArguments, returnValue, timestamp)` — FR-10's ground truth |
