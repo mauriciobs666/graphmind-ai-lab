@@ -54,7 +54,10 @@ Stakeholder decisions, 2026-09-02:
 | U11b — Resume U11 from disk state; close both gates' Pass 3 findings | `tdd-engineer` (fresh, state-recovery brief) | `a8dd64de4bab140c4` | **accepted** — `d55f4d8` | `model-bench/**` (14 files, +1103/−62) | Pass 4 (U12a/U12b) → — | 250k tok / 137 tools |
 | U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | **accepted** — `e8bedce` | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | self → **approve with suggestions** (0 blockers, 5 majors) | 213k tok / 64 tools |
 | U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | delivered — **approve with suggestions** (1 major M-ML-8, 4 minors, 2 nits); note revised to **v1.8**; one sub-claim sent back for reproduction, uncommitted until answered | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4`; `docs/plans/small-model-benchmarking-ml.md` v1.8 | self → approve w/ suggestions | 229k tok / 71 tools |
-| U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.8 | `analyst` → — | — |
+| U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | **accepted** — `aebb611` | `docs/plans/small-model-benchmarking.md` v1.8 (+434/−62) | U15 → — | 173k tok / 80 tools |
+| U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | in-flight | `docs/reviews/small-model-benchmarking.md` next `## Pass N` | — → — | — |
+| U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.9 | `analyst` → — | — |
+
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | in-flight | `model-bench/**` | re-gate (both, fresh) → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
@@ -832,3 +835,46 @@ suggestions*, not *proceed and track them*. Brief future gates accordingly: thei
 severity-rank, and the severity ranking drives **order within a fix unit**, not whether a finding
 gets fixed at all. Four passes of evidence support the stakeholder here — P4-2 is Pass 1's blocker
 returning **verbatim** after being fixed once, which is precisely what a deferred defect does.
+
+
+### The architect corrected my brief, and the correction inverted the argument
+
+I briefed U13 with the premise *"`lms` is not on PATH, so `residentModelsAtStart` cannot come from
+`lms ps --json`."* The architect re-probed instead of accepting it, and **half of it was wrong**:
+`command -v lms` does exit 1, but `/mnt/c/Users/mauri/.lmstudio/bin/lms.exe ps --json` runs fine and
+returns `[]`. **I verified both myself**, along with the timing that actually decides it — **0.307 s**
+for the CLI against **under 10 ms** for the HTTP call returning the same fact.
+
+So the CLI is not unavailable; it is **bad**, on three measured axes (a globbed Windows path is a
+host-layout accident rather than a contract, 175× slower for the same fact, and a second surface to
+keep honest beside the HTTP one the adapter already targets). The conclusion I had reached is the
+one the plan adopts, but **my stated reason for it would not have survived the first implementer who
+typed `lms.exe`** — and an implementer discovering that a plan's premise is false has every reason
+to doubt the conclusion too.
+
+This is the *"coordinator brief is the least-reviewed input in the pipeline"* failure with a happy
+ending: no gate reads briefs, and an isolated-context delegate has no cheap way to doubt a
+coordinator's factual premise. What saved it was that the brief handed over the **raw probe evidence**
+alongside the conclusion, which is what made re-probing natural rather than insubordinate. Keep doing
+that — state the observation, not just the inference drawn from it.
+
+### Two same-file hazards handled by pinning rather than serializing
+
+Three agents are live and two of them read documents a third may be mid-edit. Rather than serialize
+(which would cost a full dispatch each), every reader was pinned to a **commit**, not to `HEAD` and
+not to the working tree: U15 reads the note at `git show aebb611:…`, U16 reads the plan at
+`git show aebb611:…`.
+
+**`HEAD` was not good enough, and U14 is why.** Its brief said *"read the plan as
+`git show HEAD:docs/plans/small-model-benchmarking.md`"* — correct when written, when `HEAD` was
+`27501c9` and the plan was v1.7. `HEAD` has since moved to `aebb611` and that same command now yields
+**v1.8**, a different document. A relative ref in a brief is a **dangling reference the moment the
+coordination continues**, which is exactly the class of bug the pinned-commit convention exists to
+prevent. U14 was re-pinned by `SendMessage` to `aebb611` explicitly.
+
+That message did double duty: v1.8's new **S1 done-condition 10** *specifies* the P4-4 behaviour my
+own brief had told U14 to decide for itself (exclude-and-name in the existing
+`INVALID RESULTS EXCLUDED` block — because raising reproduces P4-5's shape, the very defect U14 is
+fixing two findings over, and per-metric suppression leaves a partially-trusted arm in the
+comparison). Left alone, two units in flight would have shipped a plan and an implementation that
+disagreed about the same check.
