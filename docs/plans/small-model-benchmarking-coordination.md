@@ -42,10 +42,11 @@ Stakeholder decisions, 2026-09-02:
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | delivered | commit `ab91419` — 8 modules + 6 test files, **233 tests**, offline | U5a + U5b → — | 258k tok / 70 tools |
 | U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
-| U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | — | queued (after U6b) | `model-bench/**` | `analyst` + `data-scientist` re-gate → — | — |
+| U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | in-flight | `model-bench/**` | `analyst` + `data-scientist` re-gate → — | — |
+| U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
 | U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | `a5ca583515c0979f1` | accepted | `docs/plans/small-model-benchmarking.md` **v1.5** | teco-verified | 116k tok / 43 tools |
-| U6d — Adjudicate the declined floor-rounding finding | `data-scientist` (reviewer) | `a7fbf4d59bfa1d0da` (resumed) | in-flight | short ruling, no document | — | — |
+| U6d — Adjudicate the declined floor-rounding finding | `data-scientist` (reviewer) | `a7fbf4d59bfa1d0da` (resumed) | accepted | ruling: **truncation upheld, reviewer's own ask withdrawn** | — | 179k tok / 2 tools |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
 
@@ -386,3 +387,29 @@ re-drawn against U4's actual delivery before dispatch.
   `PackRef.contentHash` is always `""` at S1 while Appendix A still calls it part of the identity
   triple — if the code fix makes it `str | None`, Appendix A must be swept in the same pass, which
   is precisely what rule 4 exists to prevent.
+
+- **2026-09-03 — U6d: the reviewer ran the tie-breaker and ruled against itself.** A counterexample
+  exists for **every** cell it had asked to ceiling, and it is always the same one — the exact floor
+  itself. The general statement is stronger than the note author's framing: **the floor is an
+  *attained* bound.** `b = b_min, c = 0` is always realisable and always reaches α by construction,
+  so `b_min/n` is not merely a threshold below which nothing fires — it is an outcome that fires.
+  Ceiling therefore has **no correct case**, rather than being the wrong trade-off. Truncation and
+  the three corrected cells upheld; `58.3` and `23.3` stand.
+- **The principle sharpened, and the sharpening matters:** direction is set by **which side of the
+  bound can falsify the sentence it appears in** — not by conservatism. Up for MDD (power increases
+  in δ, so rounding down under-delivers the promised 80%), down for the floor. That the two coincide
+  with the conservative direction here is *a coincidence, not a theorem*, and a future printed bound
+  may not oblige. The operative acceptance test is the **tie-breaker itself** — *is any attainable
+  `k/n` a counterexample to the printed sentence?* — which is decidable, cheap, and catches a
+  mis-signed rounding rule that the rounding rule cannot.
+- **The adjudication also caught that teco's dispatch instruction was incomplete.** The named test
+  carries only one of the three corrected cells; the other two live in a **second file**, and
+  dispatching as stated would have landed the α=0.05 fix red. It added two further conditions:
+  change the assertion *mechanism* rather than the literals (re-rounding inside the test reproduces
+  the defect being fixed), and truncate **at print only**, leaving the field exact so Rule 7's guard
+  is not weakened. **Routing a fix instruction back through the specialist who raised it caught an
+  error in the instruction itself.**
+- **Rule 7's converse confirmed non-invariant with a fixture already in the suite:** `(20, 8, 2, 10)`
+  — n=40, `|diff| = 15.0 pp` exactly at the α=0.05 floor, `p = 0.109375`, not distinguishable.
+  Significance depends on the discordance **split**, not on `b − c`. Asserting the converse would
+  have failed against an existing fixture.
