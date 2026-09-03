@@ -51,7 +51,9 @@ Stakeholder decisions, 2026-09-02:
 | U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | delivered | commit `89e11e1` — note **v1.7**; `## Pass 3` **needs changes**: 1 major (M-ML-7), 2 minors, 4 nits | — (is the gate) | 200k tok / 54 tools |
 | U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | delivered | commit `d4d847b` — `## Pass 3` **needs changes**: 1 blocker (P3-1), 6 majors, 5 minors, 3 nits | — (is the gate) | 217k tok / 70 tools |
 | U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | **killed by a platform 500 mid-run** — work preserved on disk (+428 lines, 6 files; 329 pass / 2 deliberate RED) | `model-bench/**`, uncommitted | — | — |
-| U11b — Resume U11 from disk state (P3-3 mid-cycle; P3-1 + M-ML-7 appear landed) | `tdd-engineer` (fresh, state-recovery brief) | `a8dd64de4bab140c4` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
+| U11b — Resume U11 from disk state; close both gates' Pass 3 findings | `tdd-engineer` (fresh, state-recovery brief) | `a8dd64de4bab140c4` | **accepted** — `d55f4d8` | `model-bench/**` (14 files, +1103/−62) | Pass 4 (U12a/U12b) → — | 250k tok / 137 tools |
+| U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | — → — | — |
+| U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4` (+ note v1.8 if a string needs publishing) | — → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -697,3 +699,56 @@ stands — if anything the missing CLI reinforces it.
 
 **Net effect on scope:** S3's live-run prerequisite is met and needs nothing further from the
 stakeholder. S2 gains one design question to settle before its runner unit is briefed.
+
+
+### U11b accepted — the fix round closed 21 findings, and the recovery cost nothing
+
+`d55f4d8`. The state-recovery brief worked: U11b resumed from disk rather than restarting, and
+the platform 500 that killed U11 cost **no delivered work** — only the wall-clock of one dispatch.
+
+**Verified by me, not accepted on report:** 353 passed / 353 collected, nothing skipped, deselected
+or xfailed; `ruff check .` clean; `IncompleteItemRecord`, `scored_outcome`, `_NO_PAIRED_DATA`,
+`negative_control` and `PackRef.seed` all present in the source. Two numeric claims re-derived
+independently — `resolving_power` does refuse `design_effect` of 0.0/0.5/0.999 and accept 1.0
+(n-ML-5), and the `|diff| == mdd80` boundary **is** reachable at k=2, which I swept to n=200 and
+found at n = 90, 100, 120 (the round's own three) **plus 125, 150, 180**. Consistent with the
+round's claim, which stopped its sweep at 120 — a wider sweep, not a contradiction.
+
+**One thing I found while verifying that neither gate raised.** The comparison is strict, so exact
+equality takes the *"is above that"* branch. The branch is right — `mdd_clause` claims the pack
+resolves differences **`>=` mdd80**, so at equality the difference is resolvable and the
+"not strictly dominant" wording is the correct one. But the sentence then prints *"the observed
+10.0 pp is above that"* when it is exactly equal. That is a **published string §3.2e mandates
+verbatim**, so it is the note's to change, not the code's: routed to `data-scientist` in U12b's
+brief rather than fixed. The recurring shape of this coordination held one more time — the defect,
+if it is one, is in what the instrument *says*.
+
+**Carried forward into U12a/U12b as seeded checks rather than trusted claims:** the round's
+*equivalent by construction* mutation survivor (m-ML-8's identical-copy form — an equivalent mutant
+is the standard hiding place for a real gap); the `--negative-control` banner's claim that the mode
+"cannot fail"; and the **one exposure U11b deliberately left open** — the Arms table is driven by
+`run.aggregates` rather than the paired rows, so an arm declaring `BinaryMetric(successes=0, n=10)`
+for a metric no item declared scoreable still prints `0/10 = 0.000`. The round argues that is the
+*arm* misreporting rather than the reporter inferring, that the table is labelled descriptive, and
+that the aggregates-vs-items cross-check is S2 scope because S2's scorer produces both. **Plausible,
+and exactly the shape of deferral a fresh gate should judge rather than inherit** — so U12a judges
+it.
+
+**Also settled here, and recorded in `model-bench/AGENTS.md` as a contract on S2's scorers:**
+`ItemResult.scored_outcome` is the only decider of whether a row has an outcome. Absent or `False`
+in `scoreable` → no outcome, routed to the §4.3 tally. `True` → a `counts` entry is **mandatory**,
+and its absence raises rather than reading as a zero. Every scorer must emit a count for each metric
+it declares scoreable, and a manifest must declare `sampling.seed`. S2's dispatch inherits this.
+
+**Dispatch note:** U12a and U12b run in parallel, but each was briefed to build its own sandbox
+outside the repo (`git archive d55f4d8 | tar -x` into a uniquely-suffixed `/tmp` dir) and mutate
+only there. Pass 3's scratchpad collision — two reviewers writing a mutation driver to the same
+session-scoped temp path, one silently overwriting the other — was caused by my own parallel
+dispatch, and my serialize-on-shared-file rule could not see it because the shared file was outside
+the repo. Sandboxing per reviewer closes that axis without serializing the gates.
+
+**The stakeholder question both gates were asked explicitly:** S1 has had three fix rounds and is
+not converging monotonically — Pass 3 found *more* than Pass 2 (1 blocker + 6 majors against Pass
+2's 1 new major), because its reviewers ran 86 mutations and read rendered output. Each Pass 4 gate
+must state whether its residue **blocks building S2 on this core** or can ride as follow-ups. That
+is the input to the decision I owe the human when U12a/U12b land.
