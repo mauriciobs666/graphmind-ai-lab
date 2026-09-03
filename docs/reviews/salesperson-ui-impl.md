@@ -3011,3 +3011,325 @@ reset-all's two `200` rows). No drift found.
   class name where the token belongs.
 - *`storefront.py`/`app.py` drifted.* **No.** `md5sum` matches `HEAD` at start and end;
   `git status` on `falkor-chat/` is clean.
+
+---
+
+## Pass 12 — 2026-09-03 (S8c: does the mechanism reach the case it was built for?)
+
+**Reviewed:** commit **`2e27835`** — `falkorchat/storefront_api.py` (+45/−3) and
+`tests/test_storefront_api.py` (+434/−31, 7 new tests) — against `docs/plans/salesperson-ui.md`
+**v1.23** §4.9, §5.1 S8/S9/S10, §5.2, §5.3, and against `## Pass 11`'s ten findings plus P10-9.
+Not reviewed: S9/S10/S12 content, the SPA, and the five facts the coordinator verified
+independently and asked me not to re-spend on (the three byte-unchanged files, the AST equivalence,
+the full-suite 2615/14, `ruff`, `ws:acme`) — I re-checked `ws:acme` anyway because I hold the
+instance: 14 labels, `Message` 52, `Entity` 544, `WorkflowRun` 21, unchanged.
+
+**I reviewed Pass 11 as a document, not as prior reasoning of my own** — I did not write it, and its
+two disputed calls are adjudicated below on evidence I generated.
+
+**CPG: considered, not relevant — `cpg_falkorchat` models neither `storefront.py` nor
+`storefront_api.py` (`MATCH (f:File) WHERE f.name CONTAINS 'storefront'` → 0, per the brief), so
+every claim below is from direct read, AST analysis, or source mutation against the live suite.**
+
+**Verdict: needs changes** — **0 blockers, 1 major, 1 minor, 2 nits**. Nine of the eleven closures
+are real and I could not weaken them: every mutation Pass 11 left surviving now dies, N-K dies
+*deterministically* where it used to die by luck, and P10-9 is pinned from the wire after two passes
+open. **The major is the one that matters: P11-1's guard — the artifact the coordinator overrode
+Pass 11 to build *before* S9, precisely so it could fire — does not redden on the shape S9 has
+decided to take.** It reddens only on the shape S9 has decided *against*. The fix is ~15 lines in
+one test and no source change, but it must land before S9 is dispatched, because a guard widened
+during S9 is the "born accommodating" artifact the whole sequencing decision existed to avoid.
+
+### What I ran (all of it, solo, serially)
+
+Two-file baseline **183 passed** (`tests/test_storefront_api.py` + `tests/test_app.py`), matching
+S8c's claim. **Fifteen mutations**, each applied to byte-copies held outside the repo and restored
+from them, `md5sum` re-verified after every run (`storefront_api.py` `7415e5df…`, `storefront.py`
+`a713e2c5…`, `app.py` `e6bf735a…`, `test_storefront_api.py` `1dba4209…`, `test_app.py` `fcf877ac…`
+— all matching `HEAD` at the end; `git status` on `falkor-chat/` clean). Two throw-away probes,
+appended and removed. **Sixteen extra suite runs across eight `PYTHONHASHSEED` values** on both the
+Pass-11 and the fixed tree, to settle disagreement 2. No `git` tree-mutating command at any point.
+Ledger and transcripts: **Appendix P12-A**.
+
+**Database.** `ws:test` and `reference` only. `ws:acme` untouched (above). `reference` re-seeded at
+the end — `seed_catalog.sh` → `verify_catalog.sh` exit **0**, "OK — product catalog in sync (15
+products)". `seed_workflows.sh`/`seed_salesperson.sh` never run.
+
+### Major
+
+#### P12-1 · **Major** · the P11-1 guard fires on the `services.` shape S9 has *ruled out*, and stays green on the two it will actually take — so S9's own done-condition is unmeetable as written
+
+`test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume` pins
+`{node.attr for node ∈ build_storefront_router if node is services.<attr>}` to three names. I applied
+S9's decided shape — §5.1 S9's own `Storefront.enqueue_turn(ctx, participant, posted)` on
+`storefront.py`, whose worker body calls `self._services.start_workflow_run`, plus
+`shop.enqueue_turn(...)` in the router behind `services.post_message` — and the file stayed
+**green, 183 passed**. So did `shop._services.start_workflow_run(...)` written directly in the
+router (**183 passed**), a spelling the same file already uses at `storefront_api.py:1360`. Only
+`services.start_workflow_run(...)` through the alias reddens (**1 failed**) — and that is the one
+placement S9 explicitly rejects, because the trigger runs on the worker, not the request thread.
+
+The root cause is the guard's name outrunning its assertion — this build's signature defect, **the
+seventh instance**. The excuses it stands in for say *"no storefront route **calls layer X**"*, but
+a route reaches that layer two ways. Measured off the AST: the router's direct `services.<name>`
+surface is `{read_messages, post_message, get_current_order}`, while `shop.<method>` reaches
+`{advance_order, get_cart, get_current_order, get_profile, order_belongs_to_customer, save_profile}`
+one hop down and `filter_products` two. **The router's true one-hop reach is eight methods; the
+guard measures three** — and S9's fourth call lands in the five it cannot see.
+
+The blast radius is `docs/plans/salesperson-ui.md` §5.1's S9 row, which now states as a
+done-condition that *"S8c's `services.` access assertion goes red on this step, and re-deriving it
+is a required piece of work"*. On the delivered guard that is false: the S9 implementer will see
+green and the eleven `INHERITED_HANDLERS` excuses revert to prose at exactly the moment three of
+them (`WorkflowEngineDisabledError`, `WorkflowInputRejectedError`, `WorkflowDefNotFoundError`)
+become falsifiable.
+
+**Suggested fix (~15 lines, one test, no source change).** Widen the reader to the union it claims:
+`services.<name>` **and** `shop._services.<name>` inside `build_storefront_router`, **plus**
+`self._services.<name>` inside each `Storefront` method the router calls (the `shop.<attr>` set is
+readable off the same walk). Pin that union — today the eight above, plus `filter_products` — with
+`start_workflow_run` still deliberately absent. The `services = shop._services` control stays and is
+genuinely live (renaming the binding reddens: mutation N-CTRL, 1 failed), it simply controls a
+rename rather than an added path. Then re-run S9-REAL as the acceptance check: it must go red.
+
+### Minor
+
+- **P12-2 · the bare-`HTTPException` check is scoped to `raise` statements lexically inside the
+  router, so one indirection escapes it.** `_raised_class_names` walks `build_storefront_router`
+  only. **Mutation N-M, survived (183 passed):** a module-level `_refuse_retired_name(name)` in
+  `storefront_api.py` that raises `HTTPException(410)`, called from `join`. Driven through the wire
+  it answers `410 '{"detail":"gone"}'` — no `error` token, no row, green through both halves of the
+  gate. That is P11-2's escape reproduced exactly, one call out; and
+  `INHERITED_HANDLERS[StarletteHTTPException]`'s reason still reads "*No `/shop/api` route raises a
+  bare `HTTPException`*", which is broader than what is checked. Materially smaller than P11-2 (the
+  reflexive shape is now caught, and the reason cites a test that does something), which is why it
+  is a minor. **Fix, checked not guessed:** parse the whole module rather than the router node and
+  allowlist the three non-route raises — a module-wide walk today reports exactly
+  `{RuntimeError, StorefrontPreflightError, ValueError}` outside the router, all at wiring/boot
+  time. `_raised_class_names` already takes source rather than reading it, so its synthetic controls
+  carry over unchanged.
+
+### Nits
+
+- **P12-3** · P11-9's new predicate self-disables on marker deselection, and S8c's docstring calls
+  that "fine". It is *visible* rather than silent — `addopts = '-ra -m "not live"'` prints the skip
+  reason — but adding one `@pytest.mark.live` test to this module turns the `⊇` direction off in
+  every default run: I appended one and got `1 skipped … 1 of this module's tests were not
+  collected`, `182 passed, 1 deselected`. Today there are **zero** `mark.live` uses in either file
+  and the 14 deselected tests are elsewhere, so this is latent. One line closes it: subtract the
+  marker-deselected items (`request.session.config.hook`-free version:
+  `defined - {n for n in defined if _is_live_marked(n)}`) or, simpler, allowlist names carrying a
+  `live` marker.
+- **P12-4** · `test_the_service_error_map_resolves_through_the_class_tree` mutates process-global
+  state — it mints a real `ServiceError` subclass into the live class tree — and relies on
+  `del` + `gc.collect()` to undo it, because **two other tests assert the family is exactly ten**.
+  It passes on pytest 9.1.1. If the reclaim ever fails (an assertion-rewrite temporary or a
+  traceback holding the instance across a *failing* run) two unrelated tests go red with a
+  confusing message. Cheaper and version-proof: have `_subclasses` skip classes whose `__module__`
+  is not `falkorchat.services`, and drop the GC dance.
+
+### Disposition of Pass 11's findings (re-derived, not inherited)
+
+| # | Disposition | What I rechecked |
+|---|---|---|
+| P11-1 | **Mechanism built, but it cannot fire on S9's shape** → **P12-1** | S9-REAL **survived** (183), S9-ALT **survived** (183), S9-NAIVE **1 failed**; N-CTRL **1 failed** (the control is real); router's true layer reach measured at 8 vs the 3 asserted |
+| P11-2 | **Fixed for the reflexive shape; scope gap remains** → P12-2 | N-E **1 failed**, N-F **1 failed**, N-F2 **1 failed**, all on the new test; N-M **survived**, wire `410 '{"detail":"gone"}'` |
+| P11-3 | **Fixed** | N-A (`startswith(API_PREFIX)` → `True`) → **1 failed**, `test_the_service_error_re_shaper_answers_only_on_shop_api`; the two-surface app really does discriminate (`401 invalid_token` inside, `404 ThreadNotFoundError` outside) |
+| P11-4 | **Fixed, and the finding is *stronger* than Pass 11 stated** | N-K → **1 failed**, the test that names the rule, on **all eight** seeds tried. See ruling 2 |
+| P11-5 | **Fixed in the plan (v1.22/v1.23)** | §5.2's `POST /shop/api/messages` row now carries `503 demo_not_seeded` with the `UnknownMemberError` producer; the `401` omission is licensed by a named fourth-omission paragraph citing P11-5 |
+| P11-6 | **Fixed** | N-H (`Literal` widened by `"refund"`) → **1 failed**, `test_the_only_behavioural_unreachability_claim_is_pinned_to_its_producer` |
+| P11-7 | **Fixed** | `len(registered) == 17` is gone; the partition equality carries the `sorted(...)` message instead |
+| P11-8 | **Fixed; the keep-rather-than-delete call is right** | N-J → **1 failed**. The new control borrows `GET /messages`' dependant onto `/catalog`'s and asserts the parameter is on the sub-dependency, so it reaches the recursive arm rather than the base case |
+| P11-9 | **Fixed, and Pass 11's example was wrong** → ruling 1 | Full evidence below |
+| P11-10 | **Fixed; keeping the walk is defensible** | N-B (MRO walk → exact-type lookup) → **1 failed**. The second half (nothing in `SERVICE_ERRORS_UNREACHABLE` is mapped through the walk) is a static cross-check rather than a behavioural one — correct, just weaker than its neighbour, and see P12-4 |
+| P10-9 | **Fixed after two passes open** | Moving the roster read + drain inside the `try` → **1 failed**, `test_a_reset_all_whose_pre_drain_roster_read_times_out_never_enters_the_sweep`. The wire discriminator is real: the `except` arm always carries a `participants` key, the typed handler carries none |
+
+### The two disagreements, ruled
+
+**Ruling 1 — P11-9's reproduction. S8c is right, on both halves; Pass 11's finding stands but its
+example and its suggested fix do not.**
+
+- Pass 11's literal command against the **Pass-11 tree** (`git show 2e27835^`): `1 passed`. A single
+  node id collects only that node, so the check is never collected and cannot run. **Does not
+  reproduce.**
+- S8c's reproducer against the same tree: selecting the check itself → `1 failed`, all 57 rows
+  reported unproducible. **Reproduces.**
+- And it is reachable by accident, not only on purpose. With an ordinary regression on the Pass-11
+  tree (`if shop.turn_in_flight(...)` → `if False:` — the `409` gate lost), the full run gives
+  **2 failed**: the real one, plus the check, because the failing test never recorded its row. Both
+  land in `lastfailed`, so `pytest --lf` re-runs exactly those two and the check explodes with a
+  **55-row** wall. One real failure, two reported, the second spurious. On the **fixed** tree the
+  same regression gives the same honest `2 failed`, and `--lf` gives **`1 failed, 1 skipped`** with
+  an informative reason. The fix works and is better than what Pass 11 asked for.
+- Pass 11's suggested fix would not have caught it: under `--lf` I measured
+  `config.option.file_or_dir=[]` and `keyword=''` (transcript in P12-A), so a predicate keyed on
+  `file_or_dir` carrying `::` never fires there. S8c's "covers only half" is exact.
+
+**Ruling 2 — the N-K count. S8c's attribution is right, and the truth is worse than either document
+says: the number is `0`–`3` depending on `PYTHONHASHSEED`, and at seed 4 the mutant survives the
+entire file.** On the Pass-11 tree, N-K's kill count across seeds 0–7 was
+`1, 2, 1, 2, 0, 1, 1, 3`. Pass 11's "2" and S8c's "1" are both faithful observations of an
+uncontrolled variable — neither document is *wrong* about what it saw, and there is no fault to
+assign beyond this: **a mutation ledger that reports a bare count is reporting one draw from a
+distribution, and Pass 11 should have said "seed-dependent" rather than "2".** `_PresenterSessions._tokens`
+is a `set` of `str`, so candidate order is `PYTHONHASHSEED`-dependent, and no `pytest-randomly` is
+installed (pytest 9.1.1, plain) — the variance is genuine string-hash randomisation, not plugin
+shuffling. **P11-4 is thereby strengthened, not softened:** the incidental kill was not merely luck,
+it was luck that fails outright one seed in eight. On the fixed tree the same mutant dies on every
+seed tried, and `test_presenter_token_verification_compares_every_candidate_in_constant_time` is
+red in all eight — the near-miss assertion (`{known for known, _ in seen} == {first, second}`) is
+order-independent by construction, which is the right way to have written it.
+
+### What's solid
+
+**Nine of eleven closures are genuine, and three of them are better than what Pass 11 asked for.**
+P11-4's two-token rewrite is order-independent *by construction* rather than by pinning a seed.
+P11-8's control borrows a real `dependant` onto another route rather than synthesising one, so it
+exercises the recursion against FastAPI's own object graph. P11-3's two-surface app is the only way
+to test a property that no deployment exhibits, and it correctly records that the delivered legacy
+surface is byte-identical **by absence** — the mechanism/claim separation P11-3 asked for, written
+at the call site where the next reader meets it.
+
+**P10-9's resolution is the right kind of answer to a finding that was twice "not fixed".** The
+decision is defended at the call site (`forget_all`/`clear_all_turns` are correct only after a sweep
+that may have committed) *and* pinned from the wire on a discriminator that exists independently of
+the reasoning — the `participants` key. Two passes of prose became one mutation-killing test.
+
+**The AST-over-grep argument is load-bearing and true.** `advance_order`'s docstring names
+`services.order_belongs_to_customer` in prose, so a substring search reports a fourth call; the walk
+does not see it. That is a real reason to parse, not a stylistic preference.
+
+**Restraint on P11-7.** Dropping `len(registered) == 17` and moving the `sorted(...)` message onto
+the partition equality is exactly the enumerated-vs-derived trade §4.9 already decided, applied
+consistently rather than argued again.
+
+### Open questions (need `teco`'s call)
+
+1. **Does P12-1's fix go in as an S8d, or as the first done-condition of S9?** My recommendation:
+   **S8d, before S9 is dispatched.** The coordinator's own argument decides it — a guard authored
+   inside the step it guards is born accommodating. Fixing it inside S9 reproduces exactly the
+   failure mode the S8c/S9 split existed to prevent, and the fix is ~15 lines in one test file that
+   S9 will also touch, so serialising costs one short round rather than a merge.
+2. **Does §5.1's S9 row need a wording change once the guard is widened?** It currently says
+   "S8c's `services.` access assertion goes red on this step". After P12-1's fix the assertion is
+   about the router's *service-layer reach*, not its `services.` alias — the obligation is
+   unchanged but the sentence names the wrong thing, and the S9 implementer reads that sentence.
+   That is an `architect` edit, not mine.
+
+### Appendix P12-A — mutation ledger and transcripts (Pass 12)
+
+**Method.** Every mutation applied from a byte-copy held outside the repo and restored from that
+copy after each run, `md5sum` re-verified each time. Command:
+`.venv/bin/python -m pytest tests/test_storefront_api.py tests/test_app.py -q`.
+**Baseline: 183 passed.** No `git` tree-mutating command was used at any point.
+
+| # | Mutation | Result |
+|---|---|---|
+| **S9-REAL** | `Storefront.enqueue_turn` (worker calls `self._services.start_workflow_run`) + `shop.enqueue_turn(...)` in the router — **§5.1 S9's decided shape** | **survived, 183 passed** → P12-1 |
+| **S9-ALT** | `shop._services.start_workflow_run(...)` written directly in the router body | **survived, 183 passed** → P12-1 |
+| S9-NAIVE | `services.start_workflow_run(...)` through the router's alias | **1 failed** — the guard (the one shape S9 rejects) |
+| N-CTRL | the `services = shop._services` binding renamed to `svc` throughout the router | **1 failed** — the guard's control is live |
+| N-A | `_handle_service_error`: `startswith(API_PREFIX)` → `True` | **1 failed** (P11-3's new test) |
+| N-B | `service_error_response`: MRO walk → `SERVICE_ERROR_RESPONSES.get(type(exc))` | **1 failed** (P11-10's new test) |
+| N-E | `join` raises `HTTPException(410)` on an unexercised branch | **1 failed** (P11-2's new test) |
+| N-F | `join` raises `WorkflowEngineDisabledError` on an unexercised branch | **1 failed** |
+| N-F2 | `join` raises `SearchNotAvailableError` on an unexercised branch | **1 failed** |
+| **N-M** | a **module-level** `_refuse_retired_name` raises `HTTPException(410)`; `join` calls it | **survived, 183 passed** → P12-2 |
+| N-H | `AdvanceOrderIn.transition` `Literal` widened by `"refund"` | **1 failed** (P11-6's new test) |
+| N-J | `_takes_params`: recursive arm → `False` (test-file mutation) | **1 failed** (P11-8's new test) |
+| N-K | `_PresenterSessions.verify` → `compare_digest(candidates[0], token)` | **1 failed**, deterministic across seeds 0–7 (P11-4's rewritten test) |
+| N-G | `GET /state` gains a `services.list_thread_participants` call | **2 failed** — the sweep `[thread]` **and** the new guard |
+| P10-9-MOVE | the pre-drain roster read + drain loop moved inside the `try` | **1 failed** (P10-9's new test) |
+
+**Probe 1 — N-M driven through the wire.** Mutation in place, one throw-away test appended to
+`tests/test_storefront_api.py`, run under `-k`, then both files restored from the byte-copies:
+
+```
+N-M  POST /shop/api/session -> 410 '{"detail":"gone"}'
+```
+
+**Probe 2 — the router's true service-layer reach, read off the AST.**
+
+```
+router -> services.<name> : ['get_current_order', 'post_message', 'read_messages']
+Storefront.<method> -> self._services.<name>:
+  _catalog_rows:     ['filter_products']
+  advance_own_order: ['advance_order', 'order_belongs_to_customer']
+  get_state:         ['get_cart', 'get_current_order', 'get_profile']
+  join:              ['save_profile']
+  reset_participant: ['save_profile']
+union (one hop from the router): ['advance_order', 'get_cart', 'get_current_order',
+  'get_profile', 'order_belongs_to_customer', 'post_message', 'read_messages', 'save_profile']
+```
+
+Eight, against the three `SERVICE_CALLS_TODAY` asserts. Module-wide `raise` walk, for P12-2's fix:
+router `{RequestValidationError: 1, StorefrontHTTPError: 17}`, outside the router
+`{RuntimeError: 1, StorefrontPreflightError: 1, ValueError: 1}`.
+
+**Probe 3 — N-K across `PYTHONHASHSEED`** (`tests/test_storefront_api.py` + `tests/test_app.py`):
+
+| seed | Pass-11 tree | fixed tree |
+|---|---|---|
+| 0 | 1 failed | 3 failed |
+| 1 | 2 failed | 2 failed |
+| 2 | 1 failed | 1 failed |
+| 3 | 2 failed | 3 failed |
+| 4 | **176 passed — survived** | 2 failed |
+| 5 | 1 failed | 1 failed |
+| 6 | 1 failed | 2 failed |
+| 7 | 3 failed | 2 failed |
+
+On the fixed tree the named test is red at every seed (spot-checked at seeds 2 and 5, where the
+count is 1 and that one failure *is* `test_presenter_token_verification_compares_every_candidate_in_constant_time`).
+
+**Probe 4 — the P11-9 cascade, both trees.** Regression: `if shop.turn_in_flight(...)` → `if False:`.
+
+```
+Pass-11 tree, full run : FAILED …test_a_second_post_while_a_turn_is_in_flight_is_409_with_nothing_written
+                         FAILED …test_every_row_of_the_table_was_produced_by_execution
+                         2 failed, 174 passed
+Pass-11 tree, --lf     : 2 failed, 978 deselected  (the check re-fails with 55 rows)
+fixed tree,   full run : same 2 failed, 181 passed
+fixed tree,   --lf     : 1 failed, 1 skipped, 978 deselected
+                         SKIPPED … 94 of this module's tests were not collected
+option state under --lf: file_or_dir=[]  keyword=''  lf=True
+```
+
+`file_or_dir=[]` is the measurement that settles the second half of ruling 1.
+
+**Probe 5 — the latent marker self-disable (P12-3).** One `@pytest.mark.live` test appended to
+`tests/test_storefront_api.py`, nothing else changed:
+
+```
+SKIPPED [1] …:3247: 1 of this module's tests were not collected, so the run cannot cover the whole table
+182 passed, 1 skipped, 1 deselected
+```
+
+Visible under the project's own `addopts = '-ra -m "not live"'`, which is why it is a nit and not a
+minor. Zero `mark.live` uses exist in either file today; the suite's 14 deselected tests are
+elsewhere (`2615/2629 collected`).
+
+**Hypotheses ruled out** (so the next pass does not re-walk them):
+
+- *The `services = shop._services` control is decorative.* **No.** N-CTRL (rename the binding
+  throughout the router) reddens the guard on the control assertion, ahead of the set comparison —
+  it does not silently measure an empty set. The control is real; it simply controls a *rename*, not
+  an *added* access path, which is P12-1.
+- *S9 might still add `services.start_workflow_run` through the alias, so the guard fires after
+  all.* **No.** §5.1 S9 pins `Storefront.enqueue_turn(ctx, participant, posted)` as the interface and
+  places `trigger.maybe_trigger` → `services.start_workflow_run` **on the worker**; the worker body
+  belongs to `storefront.py`, which the guard does not read. The router gains `shop.enqueue_turn`,
+  not a `services.` attribute.
+- *P11-9's new predicate breaks the full-suite run because the 14 deselected tests hide in this
+  module.* **No.** `pytest tests/test_storefront_api.py tests/test_app.py -q` reports no deselection
+  at all, and `grep -c "mark.live"` is `0` in both files.
+- *The N-K disagreement is a methodological error by one of the two documents.* **No.** Both counts
+  reproduce, at different seeds, on the same tree. The variable is `PYTHONHASHSEED`.
+- *`test_the_service_error_map_resolves_through_the_class_tree` leaks its synthetic subclass and
+  makes the two "family is exactly ten" tests order-dependent.* **Not today** — the in-test
+  `len(_subclasses(ServiceError)) == 10` passes on pytest 9.1.1, so the reclaim happens. Recorded as
+  P12-4 because it is a GC-timing dependency, not a guarantee.
+- *S8c changed behaviour under cover of a test-only commit.* **No.** Independent of the
+  coordinator's AST check: N-A, N-B, N-H, N-K and P10-9-MOVE all reproduce the *pre-S8c* behaviour
+  descriptions exactly, and the two-file baseline moved 176 → 183 on exactly seven new test
+  functions.
