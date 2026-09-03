@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import api, config, db
+from . import api, config, db, storefront_api
 from . import mcp as mcp_mod
 from .config import CallContext
 from .guards import WorkflowConfigError
@@ -51,6 +51,7 @@ from .services import (
     WorkflowRunNotFoundError,
     WorkflowRunNotWaitingError,
 )
+from .storefront import Storefront
 
 _log = logging.getLogger(__name__)
 
@@ -187,6 +188,8 @@ def create_app(
     context_provider: Callable[[], CallContext] | None = None,
     mount_mcp: bool = True,
     dev_surface: bool = True,
+    storefront: bool = False,
+    storefront_dir: Path | str | None = None,
     web_dir: Path | None = None,
     responder: object | None = None,
     embed_worker: object | None = None,
@@ -251,7 +254,39 @@ def create_app(
     tick itself is `_sweep_loop`, started/cancelled by the lifespan below.
     `sweep_limit` is the per-tick `limit` passed to
     `Services.sweep_due_workflow_runs`.
+
+    `storefront=True` (salesperson-ui S8) mounts the authenticated `/shop/api`
+    router, the storefront's typed error map and the SPA build at `/shop`, and
+    runs §4.9's readiness preflight in the lifespan. It is **mutually exclusive
+    with `dev_surface`** and says so by raising, not by preferring one: the two
+    surfaces must not coexist however the app was constructed, and the guard is
+    keyed on this **parameter** rather than on `config.STOREFRONT_ENABLED`
+    because `config.py` resolves every flag at *import* time — a guard on the
+    module constant would be dead in exactly the configuration the suite tests.
+
+    `storefront_dir` is the **served** SPA build directory, and `create_app`
+    resolves it once and hands the same value to both consumers: the
+    `Storefront` (which builds the product-image manifest from
+    `<dir>/products/`) and the `/shop` static mount. Forwarding it to only one
+    of the two is the §4.7 failure this parameter exists to prevent — the
+    manifest keyed on one tree while the assets are served from another, which
+    yields `null` `imageUrl`s in the benign case and *wrong* ones in the worse
+    one, and AC-11's negative branch masks both. `None` falls back to
+    `config.STOREFRONT_DIR`, **here**, so the fallback is also one value rather
+    than two independent reads.
     """
+    if storefront and dev_surface:
+        # §4.9's route-table assertion, as a startup failure rather than a
+        # convention: with participants on the LAN, the legacy router, the `/`
+        # static catch-all and `/mcp` are an unauthenticated workspace-wide
+        # transcript read, full-text search and post box. Raising here makes the
+        # dangerous shape unbuildable instead of merely undocumented.
+        raise ValueError(
+            "create_app(storefront=True) requires dev_surface=False — the "
+            "storefront deployment must not mount the unauthenticated legacy "
+            "surface (salesperson-ui §4.9 move 1)"
+        )
+
     if services is None:
         # DEF-2: a deferred connection handle — building the app must never
         # touch the network (this function runs at import time via the
@@ -266,6 +301,33 @@ def create_app(
     # same unauthenticated seam as the REST router — is absent from the storefront
     # route table however the app was constructed.
     mount_mcp = mount_mcp and dev_surface
+
+    shop: Storefront | None = None
+    if storefront:
+        # **One value, resolved once, reaching both consumers.** See the
+        # docstring: the mount below and the manifest inside this `Storefront`
+        # must be the same directory or every `imageUrl` is wrong rather than
+        # merely absent.
+        served_dir = (
+            config.STOREFRONT_DIR if storefront_dir is None else storefront_dir
+        )
+        shop = Storefront(
+            services,
+            presenter_key=config.STOREFRONT_PRESENTER_KEY,
+            turn_workers=config.STOREFRONT_TURN_WORKERS,
+            quiesce_s=config.STOREFRONT_QUIESCE_S,
+            # The storefront's workspace is the app's own (§4.9 move 2 collapsed
+            # it onto one variable, so there is no second value to get wrong) —
+            # taken from `provider()` rather than from `config.WS_ID` directly,
+            # so an injected `context_provider` pins the storefront too instead
+            # of leaving it on the module constant.
+            ws=provider().ws,
+            agent_id=config.AGENT_ID,
+            storefront_dir=served_dir,
+            # `id_gen` is deliberately **not** passed: S6's participant-id
+            # collision argument rests on no caller ever pinning it, and this is
+            # the first caller.
+        )
 
     if mount_mcp:
         mcp_mod.configure(
@@ -294,6 +356,14 @@ def create_app(
         # id colliding with an existing Agent aborts loudly
         # (MemberIdCollisionError) instead of silently shadowing it (DEF-1).
         services.ensure_actor(provider())
+        # §4.9's readiness preflight, plus §4.7's "the manifest is built at
+        # startup only". Before `yield`, so a mis-seeded demo refuses to start
+        # naming the fix command instead of coming up green and dead.
+        if shop is not None:
+            app_.state.storefront = shop
+            app_.state.storefront_preflight = storefront_api.storefront_preflight(
+                shop
+            )
         # K-028 §3.6: the periodic sweep task, opt-in (`sweep_interval_s is
         # None` starts nothing — the plain M1/M2 app and the disabled-engine
         # default both leave it `None`, see `_build_default_app`). Held on
@@ -354,6 +424,24 @@ def create_app(
 
     _register_error_handlers(app)
 
+    if shop is not None:
+        # Registered **inside** `create_app`, and before the `/` catch-all
+        # below: Starlette matches routes in registration order, so a mount
+        # added after this function returns would be unreachable.
+        storefront_api.register_storefront_error_handlers(app)
+        app.include_router(
+            storefront_api.build_storefront_router(shop),
+            prefix=storefront_api.API_PREFIX,
+        )
+        if served_dir is not None and Path(served_dir).is_dir():
+            # The **same** `served_dir` the `Storefront` above built its image
+            # manifest from — never a second read of `config.STOREFRONT_DIR`.
+            app.mount(
+                storefront_api.SHOP_MOUNT,
+                StaticFiles(directory=str(served_dir), html=True),
+                name="shop",
+            )
+
     if mount_mcp:
         app.mount("/mcp", mcp_app)
         # Serve the documented slash-less spelling too (QA DEF-1).
@@ -393,8 +481,18 @@ def _build_default_app() -> FastAPI:
     # the `/` static catch-all, `/mcp`); off — the default — this is exactly the
     # app shape that shipped before, since both parameters take their own default.
     dev_surface = not config.STOREFRONT_ENABLED
+    # §4.9 move 1: one flag, two switches — and the storefront's own directory
+    # is read **once**, here, then forwarded as a single value (`create_app`
+    # hands it to both the `Storefront` and the `/shop` mount).
+    storefront_kwargs = {
+        "storefront": config.STOREFRONT_ENABLED,
+        "storefront_dir": config.STOREFRONT_DIR,
+    }
     if not config.ENABLE_AGENT:
-        return create_app(services, mount_mcp=dev_surface, dev_surface=dev_surface)
+        return create_app(
+            services, mount_mcp=dev_surface, dev_surface=dev_surface,
+            **storefront_kwargs,
+        )
 
     # Imported lazily so the disabled path carries no import-time weight and the
     # dependency surface for offline imports stays minimal.
@@ -464,12 +562,14 @@ def _build_default_app() -> FastAPI:
             ingestion_pipeline=ingestion_pipeline,
             sweep_interval_s=config.WORKFLOW_SWEEP_INTERVAL_S,
             mount_mcp=dev_surface, dev_surface=dev_surface,
+            **storefront_kwargs,
         )
 
     return create_app(
         services, responder=responder, embed_worker=worker,
         ingestion_pipeline=ingestion_pipeline,
         mount_mcp=dev_surface, dev_surface=dev_surface,
+        **storefront_kwargs,
     )
 
 

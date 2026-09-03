@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import warnings
+from typing import NamedTuple
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -682,8 +683,22 @@ def test_judge_prompt_survives_a_condition_with_no_evidence_at_all():
 # evidence that proves less than it appears to (plan §4.9, §6.1).
 
 
-def _route_paths(app) -> list[str]:
-    """Every path registered on `app`, flattened and fully prefixed, duplicates kept.
+class RouteEntry(NamedTuple):
+    """One registered route: its methods, its fully-prefixed path, and the
+    per-route `responses={…}` declaration FastAPI keeps on the route object.
+
+    `methods` is empty for a `Mount`. `responses` is `{}` for anything that
+    carries none — which is what makes "every storefront route declares its own
+    returns" an assertion rather than a reading exercise (salesperson-ui S8).
+    """
+
+    methods: frozenset[str]
+    path: str
+    responses: dict
+
+
+def _route_entries(app) -> list[RouteEntry]:
+    """Every route registered on `app`, flattened and fully prefixed, duplicates kept.
 
     Two FastAPI 0.139 facts this has to get right, both of which produce an
     assertion that cannot fail if it gets them wrong:
@@ -706,7 +721,7 @@ def _route_paths(app) -> list[str]:
     same failure mode it exists to catch. `starlette.routing.Host` is exactly that
     shape; `create_app` registers none today.
     """
-    found: list[str] = []
+    found: list[RouteEntry] = []
 
     def walk(routes, prefix: str = "") -> None:
         for route in routes:
@@ -722,10 +737,21 @@ def _route_paths(app) -> list[str]:
                     "neither a nested router nor a `.path`, so it would vanish "
                     "from the table this helper exists to assert on"
                 )
-            found.append(prefix + path)
+            found.append(
+                RouteEntry(
+                    methods=frozenset(getattr(route, "methods", None) or ()),
+                    path=prefix + path,
+                    responses=dict(getattr(route, "responses", None) or {}),
+                )
+            )
 
     walk(app.routes)
     return found
+
+
+def _route_paths(app) -> list[str]:
+    """`_route_entries`, projected to just the paths (the S3-era view)."""
+    return [entry.path for entry in _route_entries(app)]
 
 
 # `/openapi.json`, `/docs`, `/docs/oauth2-redirect`, `/redoc` — FastAPI's own,
@@ -999,3 +1025,132 @@ def test_trigger_responder_fall_through_defaults_to_on():
 
 def test_storefront_is_disabled_by_default():
     assert config.STOREFRONT_ENABLED is False
+
+
+# ── salesperson-ui S8: the storefront wiring (plan §4.7, §4.9, §5.1) ─────────
+#
+# Route-table assertions again, never 404 probes: a 404 passes when a route is
+# absent *and* when it exists but errors.
+
+
+def _storefront_app(tmp_path=None, **kwargs):
+    return create_app(
+        context_provider=CTX, mount_mcp=False, dev_surface=False,
+        storefront=True, **kwargs,
+    )
+
+
+def test_storefront_and_dev_surface_together_are_not_expressible():
+    """§4.9's route-table assertion, keyed on the **parameter** rather than on
+    `config.STOREFRONT_ENABLED`.
+
+    Keying it on the module constant would have made the guard dead in exactly
+    the configuration the suite tests: `config.py` resolves every flag at
+    *import* time, so every `create_app(storefront=True, dev_surface=False)`
+    here leaves `config.STOREFRONT_ENABLED` `False` and would skip it.
+    """
+    with pytest.raises(ValueError, match="dev_surface=False"):
+        create_app(context_provider=CTX, storefront=True)
+    with pytest.raises(ValueError, match="dev_surface=False"):
+        create_app(context_provider=CTX, storefront=True, dev_surface=True)
+
+
+def test_the_storefront_route_table_is_the_eleven_api_routes_and_liveness():
+    """The whole route table, exactly. Two things it pins that a probe cannot:
+    that the router landed at `/shop/api` and not at `/` (the helper threads the
+    prefix), and that §4.9's un-mounted surfaces really are absent.
+    """
+    app = _storefront_app()
+
+    assert sorted(_registered_paths(app)) == sorted([
+        "/health",
+        "/shop/api/health",
+        "/shop/api/session",
+        "/shop/api/state",
+        "/shop/api/messages",   # GET
+        "/shop/api/messages",   # POST — one path, two routes
+        "/shop/api/catalog",
+        "/shop/api/order/advance",
+        "/shop/api/reset",
+        "/shop/api/presenter/session",
+        "/shop/api/presenter/participants",
+        "/shop/api/presenter/reset-all",
+    ])
+    # no legacy router, no `/` static catch-all, no `/mcp`
+    assert "/channels" not in _registered_paths(app)
+    assert [r.path for r in app.routes if isinstance(r, Mount)] == []
+
+
+def test_the_shop_mount_is_registered_inside_create_app_and_shadows_nothing(tmp_path):
+    """`/` is a catch-all registered last and Starlette matches in registration
+    order, so a mount added after `create_app` returns is unreachable — the
+    mount therefore lives inside `create_app`, and this asserts it is there
+    when the function returns rather than after a caller remembers to add it.
+    """
+    served = tmp_path / "dist"
+    (served / "products").mkdir(parents=True)
+    (served / "index.html").write_text("<!doctype html><title>shop</title>")
+
+    app = _storefront_app(storefront_dir=served)
+
+    # The mount is on the route table the moment `create_app` returns — which
+    # is the claim, and the one a caller-side `app.mount("/shop", ...)` after
+    # the fact would satisfy only by luck of registration order.
+    assert [r.path for r in app.routes if isinstance(r, Mount)] == ["/shop"]
+
+    # No lifespan: §4.9's readiness preflight is asserted in
+    # `test_storefront_api.py` against a seeded workspace, and entering it here
+    # would make this test about seeding rather than about mount ordering.
+    client = TestClient(app)
+    # `/shop` shadows neither the bare liveness probe nor the storefront's own
+    assert client.get("/health").status_code in (200, 503)
+    assert client.get("/shop/api/health").status_code == 200
+    assert client.get("/shop/").status_code == 200
+
+
+def test_create_app_never_pins_the_participant_id_generator(tmp_path):
+    """S6's participant-id collision argument rests on **no caller ever pinning
+    `id_gen`**, and `create_app` is the first caller.
+
+    Asserted at the construction seam rather than by reading `app.py`: a source
+    grep would pass if the parameter were set anywhere else, and would fail on
+    a comment that merely mentions it.
+    """
+    import falkorchat.app as app_module
+    from falkorchat.storefront import Storefront as RealStorefront
+
+    seen: list[dict] = []
+
+    class _Recording(RealStorefront):
+        def __init__(self, *args, **kwargs):
+            seen.append(kwargs)
+            super().__init__(*args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(app_module, "Storefront", _Recording)
+        _storefront_app(storefront_dir=tmp_path)
+
+    assert len(seen) == 1
+    assert "id_gen" not in seen[0]
+    # the positive control: the recorder really did see the construction, and
+    # the parameters that *are* forwarded arrived
+    assert seen[0]["storefront_dir"] == tmp_path
+    assert seen[0]["ws"] == "test"
+
+
+def test_the_default_deployment_is_untouched_by_the_storefront_parameters():
+    """§4.9: "Consequence for the non-storefront deployment: none."
+
+    `FALKORCHAT_STOREFRONT_ENABLED` is off by default, so the legacy router,
+    `/mcp` and `web/index.html` at `/` all keep the shape that shipped — and
+    none of S8's typed error handlers is registered on it.
+    """
+    from falkorchat import storefront_api
+
+    plain = create_app(context_provider=CTX, mount_mcp=False)
+
+    assert "/channels" in _registered_paths(plain)
+    assert not [p for p in _registered_paths(plain) if p.startswith("/shop")]
+    for exc_type in (*storefront_api.CROSS_CUTTING_HANDLERS,
+                     storefront_api.StorefrontHTTPError):
+        assert exc_type not in plain.exception_handlers

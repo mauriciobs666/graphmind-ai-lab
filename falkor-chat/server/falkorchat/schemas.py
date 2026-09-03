@@ -253,8 +253,12 @@ class StartWorkflowRunIn(BaseModel):
 
     defKey: str = Field(min_length=1, max_length=MAX_KEY_LEN)
     version: str = Field(min_length=1, max_length=MAX_KEY_LEN)
-    # The run's initial state. Reserved keys (`threadId`, `error`) are rejected by
-    # the SERVICE (M-2/F-6) — not here — because MCP and direct callers bypass this.
+    # The run's initial state. Reserved keys (`services.RESERVED_CTX_KEYS` —
+    # `threadId`, `error`, `timerFired`) are rejected by the SERVICE (M-2/F-6) —
+    # not here — because MCP and direct callers bypass this. Cited by name as
+    # well as listed: this comment fell a whole key behind the constant between
+    # K-028 and `docs/reviews/salesperson-ui-impl.md` F-6, and a name that
+    # cannot drift is what stops the next one.
     ctx: dict[str, Any] | None = None
     trace: bool = False
     # `maxSteps` is a tripwire checked *after* each recorded step, not a hard cap:
