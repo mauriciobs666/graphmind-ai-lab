@@ -1556,6 +1556,142 @@ None. S8-1 is a one-line change with a verified before/after; S8-2 and S8-3 are 
 
 ---
 
+## Pass 9 — 2026-09-03 (S7b2 + S7c + S7c2 + S7c3: the catalog projection and the query gate)
+
+**Reviewed:** four commits, oldest first — **`6fbe541`** (S7b2, test-only, `storefront.py`
+byte-identical), **`f5291e6`** (S7c: `productId` on `filter_products`, S7's `1 + n` workaround and
+its silent-drop branch removed, `QUERIES.md` §15.2), **`8aaeca3`** (S7c2: the `FILTER` constant and
+§15.1's pre-existing K-053 drift), **`83af07c`** (S7c3: the `LOOKUP` constant) — against
+`docs/plans/salesperson-ui.md` §5.1's **S7c** row at plan **v1.19** (`732f5e0`), and against Pass 8's
+three findings. Everything below was executed. Not reviewed: S8 (not written), the untouched S7
+surface.
+
+**Verdict: approve with suggestions.** 0 blockers · 0 major · 1 minor · 2 nits. **This surface is
+ready to build S8 on** — the projection is correct at every layer I could reach, the four §15 cells
+(code, `QUERIES.md`, shell constant, ×2 queries) agree exactly under my own independent comparator,
+and the third override in a row is right for the third time.
+
+CPG: considered, not relevant — `cpg_falkorchat` predates `storefront.py` and is stale for
+`repository.py` (established by five prior units); the consumer enumeration this pass needed was
+answered by grep-complete search plus live execution.
+
+### S9-1 · **Minor** · the S7c tripwire pins one *method name*, not "read once" — a `1 + n` through `self._repo` is invisible to it
+
+`test_the_catalog_is_read_once_not_once_per_product` patches `stocked._services.lookup_product` and
+asserts nobody calls it. That binds the three drift routes it was built for — all three verified red
+(§M §2) — but not the property its name claims. Reproduced (§M §2, M-F): restore `_catalog_rows` to
+a per-row loop *plus the silent-drop `continue`*, routed through `self._repo.lookup_product` instead
+of `self._services.lookup_product`, projection left intact → **348 passed**, `test_storefront.py`
+and `test_repository.py` both entirely green. The `1 + n` and the silent drop are back, and the
+done-condition's own tripwire says nothing.
+
+This is regression breadth, not a defect: the shipped code is correct and S7c's actual two halves
+*are* bound. It matters because this test is the plan's single named guard against exactly this
+regression, and S9 owns `storefront.py` next.
+
+**Suggested improvement:** one line, verified — add
+`monkeypatch.setattr(stocked._repo, "lookup_product", _boom)` beside the existing patch. Reddens
+M-F, and 83 passed with no mutant.
+
+### S9-2 · **Nit** · §15.1's new note dates the drift by milestones it can't support
+
+`QUERIES.md` §15.1: *"§15.1 documented a projection `Repository.lookup_product` had not used for two
+milestones."* The verified span is six days inside one milestone plus the current un-numbered work:
+the code widened at **`bcd2dcc`** (2026-08-28, K-053) and the shell constant was last touched at
+**`14891c9`** (2026-08-28, K-052), not again until S7c3 (2026-09-03) — with `test_queries.sh`
+reporting **408/408 throughout**. **Suggested improvement:** cite the two commits and the 408/408,
+which is a sharper indictment than the milestone count and is checkable.
+
+### S9-3 · **Nit** · (pre-existing, outside this unit) `tests/test_repository.py` is not ruff-clean
+
+`ruff check tests/test_repository.py` → **E741** at `3216` (`for l in order["lines"]`), present since
+**`f020f90`** (K-053 cluster 1) and untouched by S7c — confirmed by linting the pre-S7c blob. Raised
+only because lint has been reported per-file for the S7 files and this file has never been in that
+set, so "lint clean" should not be read as covering it.
+
+### The two claims, verified rather than accepted
+
+- **"No test in this repo can observe what `FilterProductsTool` hands the model." — true.** The three
+  `test_tools.py` tests drive `StubServices.filter_products`, which returns `list(self._filter_result)`
+  — the test's own literal — and assert `out == {"items": rows}`: an identity check that passes under
+  any projection. `FilterProductsTool.run` is `json.dumps({"items": rows})`, verbatim
+  (`falkorchat/tools.py:499`), so the slug does reach the model. The only real wiring is
+  `build_builtin_registry`, whose two callers are `app.py:440` and `tests/test_workflow_live.py:210`;
+  `pytest -m live --collect-only` lists **14**: one AC-5 grounding, twelve querygen NLQ, one triage.
+  None is a catalog conversation. The plan's counterweight stands as written.
+- **"There is no third consumer of `filter_products`." — true.** `services.filter_products`: exactly
+  two production callers, `tools.py:492` and `storefront.py:731`. `repository.filter_products`:
+  exactly one, `services.py:2649`. A repo-wide sweep of `falkor-chat/` outside
+  `server/falkorchat`, `server/tests` and `docs/` returns nothing.
+
+### The four things you asked about
+
+1. **S7b2's third override — nothing is lost, and it is stronger than what I suggested.** Re-raising
+   beats the `expect_error` kwarg on the two checks that matter, both executed (§M §1): under the
+   hang mutant the bound's `AssertionError` **escapes** `pytest.raises(QuiesceTimeoutError)` — 2
+   failed in 3.31 s, no hang, so S7-3's protection survives the change; and when the bounded call
+   both raises *and* overruns, the bound wins and is reported as a bound breach rather than
+   swallowed. A site can no longer say nothing. My S8-3 suggestion was the weaker of the two.
+2. **The refusal to widen the write site is right, on evidence I reproduced.** With `_await_quiesce`
+   mutated to sleep a blind 2 s and report idle: at `IMMEDIATE_S = 1.0` the idle test **reddens**;
+   widening that one call to `seconds=10` makes it **pass** (§M §1). The tightness is load-bearing.
+   And naming *is* adequate for the hazard I raised: `conn` wipes `ws:test` on the **setup** of every
+   test, so a straggler's commit is absorbed unless it lands after the next test's setup — and my own
+   Pass 8 probe, which tripped exactly the writing site, contaminated nothing.
+3. **The tripwire — closed against what it was built for, open on S9-1.** M-D reproduces the false
+   negative the implementer caught: strip the `opaque-sku-42` override and the id-fabricating mutant
+   goes **green**, so the override is load-bearing and the fix is real.
+4. **The removed silent-drop branch — nothing depends on it, and there is no regression.** `Product`
+   carries **UNIQUE, not MANDATORY**, on `productId` (`db.constraints()` live), so a node without the
+   property is representable; such a row yields `{"productId": null, …, "imageUrl": null}` silently
+   today — and produced the **identical row** under the reconstructed S7 code (§M §3). The deleted
+   branch fired only when a row's *name* failed to re-resolve **between the two reads**, a condition
+   that cannot arise now that there is no second read. Removing it with the read is correct.
+5. **Any new assertion that proves nothing? No.** Every new assertion is mutation-backed (§M §2, §4),
+   including the two key-set assertions, which a widened projection reddens. One is strictly
+   subsumed — `rows[6]["productId"] == "opaque-sku-42"` is already covered by the id-list equality two
+   lines above — deliberate emphasis, no cost.
+
+### Disposition of Pass 8's findings
+
+- **S8-1** — **fixed.** `started_at` is now the first statement of `run()`. Pass 8's own probe (no
+  wait at all + 300 ms injected before the stamp) now **reddens**, and the adverse-ordering detection
+  margin grew **54 µs → 142 µs**, exactly as claimed (§M §1).
+- **S8-2** — **addressed by naming, and the refusal to bound is justified** — see (2). The constant's
+  comment now carries the measured 0.2 ms / 2.5 ms split and names the writing site at both ends.
+- **S8-3** — **fixed by a better substitute than I proposed** — see (1).
+- **S7-4** (Pass 7's nit) — **reduced, not eliminated, and Pass 7 overstated its own fix.** Pass 7
+  wrote that it "vanishes entirely if Ruling 1's fix is taken"; it does not. `list_catalog` still
+  calls `_catalog_rows()` twice on the first call — once inside `build_image_manifest()` — so the
+  count went from `2 × (1 + n)` = 32 to **2**, not 1. Harmless (first call only, S8 builds the
+  manifest in the lifespan), and no action is asked for; recorded because the earlier claim is now
+  demonstrably wrong.
+
+### What's solid (Pass 9)
+
+The §15 alignment is the strongest part and I checked it the hard way rather than accepting it: my
+own AST comparator — independent of the implementer's and of `teco`'s — extracts each method's real
+query text from `repository.py`, and **all four cells agree exactly** for both `lookup_product` and
+`filter_products` (§M §5). The gate's internal coupling is real in three directions I mutated
+(407/408 each), `./scripts/test_queries.sh` is **408/408** on my own run, and S7c's test diffs are
+**pure insertions** (31/0 and 53/0), so S7's catalog tests really did stay green unedited. The
+implementer found and fixed its own tripwire's false negative before shipping, and M-D confirms both
+the negative and the fix.
+
+### Open questions (Pass 9)
+
+None. S9-1 is one verified line; the two nits are optional.
+
+### Database state (read this before the next run)
+
+**`reference` was not seeded when I started** — the coordinator's premise was already stale: the
+first `pytest` run of this session emptied it (the `catalog_repo` fixture's teardown), and
+`./scripts/test_queries.sh` deletes it outright at teardown. I ran `./scripts/seed_catalog.sh test`
+at the end and `./scripts/verify_catalog.sh` reports **OK — in sync (15 products)**. Any default
+`pytest` run empties it again.
+
+---
+
 ## Appendix
 
 ### Appendix A — F-1 causal chain (all links verified by execution or by document)
@@ -2031,3 +2167,72 @@ the failure confined to `test_an_idle_participant_is_not_made_to_wait`, no downs
 the new ordering assertions — and would satisfy the duration floor too — but the file catches it
 anyway: `2 failed, 80 passed in 9.14 s`, the two `quiesce_s=0` tests, because a reset that sleeps
 blindly then succeeds never raises `QuiesceTimeoutError`. Not a finding.
+
+### Appendix M — Pass 9 evidence (commits `6fbe541` … `83af07c`, live `ws:test` + `reference`)
+
+Every mutation was applied from a byte-copy and reverted; `falkorchat/repository.py`,
+`falkorchat/storefront.py`, `tests/test_storefront.py`, `tests/test_repository.py` and
+`falkor-chat/scripts/test_queries.sh` all `md5sum -c` OK afterwards and `git status --porcelain` is
+empty apart from this review. No tree-mutating git. Clean baselines: `test_storefront.py` +
+`test_repository.py` + `test_tools.py` → **408 passed**; `./scripts/test_queries.sh` → **408/408**.
+The whole-suite figure (2478 / 14 deselected) is taken as given from the dispatch.
+
+**§1 — S7b2, the three claims about `_call_bounded`.**
+
+| Probe | Result |
+|---|---|
+| Pass 8's own probe: `_await_quiesce → return True` + 300 ms injected before the (now in-thread) stamp | **red** on the first assertion, `56861.034 < 56860.896` false — S8-1 fixed |
+| adverse ordering (worker joined before the reset) | **red**, `56849.45616648 < 56849.456024078` — margin **142 µs** (Pass 8 measured 54 µs) |
+| hang mutant (`deadline + 3600`), whole file, with the two sites now `with pytest.raises(QuiesceTimeoutError):` | **2 failed in 3.31 s** — the bound's `AssertionError` escapes `pytest.raises`; S7-3 intact |
+| bounded call **raises *and* overruns** (`sleep(2.0)` before `raise QuiesceTimeoutError`, bound 1.0 s) | **red on the bound**, "did not return within 1.0s" — the breach wins, the exception is not swallowed |
+| blind-sleep mutant (`time.sleep(2.0); return True`) at `IMMEDIATE_S = 1.0` | **3 failed**, incl. `test_an_idle_participant_is_not_made_to_wait` |
+| same mutant, idle site widened to `seconds=10` | **1 passed** — the detection is lost; the refusal to widen is correct |
+
+**§2 — S7c, the tripwire under six mutants** (`test_storefront.py` + `test_repository.py`):
+
+| # | Mutant | Result |
+|---|---|---|
+| M-A | projection reverted to `{name, category, price}` (both halves of `repository.filter_products`) | **12 failed** — incl. the tripwire and the new repo key-set test |
+| M-B | projection kept, S7's `1 + n` loop restored via `services.lookup_product` | **1 failed** — the tripwire **alone**, on `_CatalogSecondRead` |
+| M-C | projection kept, `_catalog_rows` fabricates the id as `name.lower().replace(" ", "-")` | **1 failed** — the tripwire alone, on the id-list equality |
+| M-D | M-C **plus** the tripwire's own first draft (no `opaque-sku-42` override) | **6 passed — SURVIVES**, reproducing the false negative the implementer found and fixed |
+| M-E | projection reverted **and** the `1 + n` restored through `self._repo.lookup_product` | `test_storefront.py` **83 passed**; caught only by `test_repository.py`'s key-set test |
+| M-F | projection **kept**, `1 + n` **and** the silent-drop `continue` restored through `self._repo.lookup_product` | **348 passed — SURVIVES entirely** → **S9-1** |
+
+S9-1's fix, verified: adding `monkeypatch.setattr(stocked._repo, "lookup_product", _boom)` reddens
+M-F and leaves 83 passed with no mutant.
+
+**§3 — the removed silent-drop branch.** `CALL db.constraints()` on `reference` returns
+`['UNIQUE', 'Product', ['productId'], 'NODE', 'OPERATIONAL']` — unique, **not** mandatory, so a
+`Product` without `productId` is accepted. Created one live and called `list_catalog()`:
+
+```
+shipped: [{'productId': None, 'name': 'Ghost Widget', ..., 'imageUrl': None}, {'productId': 'real-1', ...}]
+S7 code: [{'productId': None, 'name': 'Ghost Widget', ..., 'imageUrl': None}]
+```
+
+Byte-identical row for the same node under the reconstructed S7 code (M-A + M-B applied together),
+so the null-`productId` exposure is pre-existing and untouched, and the deleted branch guarded a
+different condition (a *name* that failed to re-resolve between two reads) that no longer exists.
+
+**§4 — a widened projection is caught.** Adding `p.categoryNormalized` to `filter_products`'s
+`RETURN` → **3 failed**: `test_list_catalog_returns_all_fifteen_rows`, the tripwire's key-set
+assertion, and the new repo key-set test. Neither key-set assertion is decoration.
+
+**§5 — §15 fidelity, checked with an independent comparator.** A comparator written for this pass
+(not the implementer's, not `teco`'s) parses `repository.py` with `ast`, walks each method for its
+`ro_query`/`query` call and `literal_eval`s the concatenated first argument, then whitespace-
+normalizes and compares against the `LOOKUP`/`FILTER` shell constants and against the fenced
+`cypher` block under each `### 15.x` heading (comment lines stripped):
+
+```
+lookup_product   code==shell: True   code==docs: True
+filter_products  code==shell: True   code==docs: True
+ALL FOUR CELLS AGREE: True
+```
+
+Coupling, three directions, each a full gate run: `FILTER` constant narrowed alone → **407/408**;
+`FILTER` abstention header narrowed alone → **407/408**; `LOOKUP` constant narrowed alone →
+**407/408**. The gate does self-check its own `RETURN` list — and, as follow-up 16 says, cannot see a
+constant and header that are wrong *together*, which is exactly the state `LOOKUP` sat in from
+`bcd2dcc` (2026-08-28) to S7c3 while reporting 408/408.
