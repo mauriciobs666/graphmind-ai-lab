@@ -1384,7 +1384,7 @@ assert_index_scan "§15.1 lookup_product anchors on Product.nameNormalized index
 # rather than the raw, differently-cased Product.category (K-052 M6 live-discovered fix,
 # 2026-08-28: an LLM call passed a lowercased "audio" against seeded Title-Case "Audio"
 # and the old exact p.category = $category comparison silently returned zero rows).
-FILTER='MATCH (p:Product) WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) AND p.price >= coalesce($minPrice, -1.0) AND p.price <= coalesce($maxPrice, 1000000000.0) RETURN p.name AS name, p.category AS category, p.price AS price ORDER BY p.price ASC LIMIT $limit'
+FILTER='MATCH (p:Product) WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) AND p.price >= coalesce($minPrice, -1.0) AND p.price <= coalesce($maxPrice, 1000000000.0) RETURN p.productId AS productId, p.name AS name, p.category AS category, p.price AS price ORDER BY p.price ASC LIMIT $limit'
 
 # §15.2 filter_products — unfiltered lists the whole catalog, price ascending
 out=$(rq "$REF" "CYPHER categoryNormalized=null minPrice=null maxPrice=null limit=20 $FILTER")
@@ -1422,7 +1422,7 @@ assert_not_contains "§15.2 filter_products audio+minPrice=100 excludes Bluetoot
 
 # §15.2 filter_products — abstention (AC-3): nonexistent category returns no row
 out=$(rq "$REF" "CYPHER categoryNormalized=\"nonexistent\" minPrice=null maxPrice=null limit=20 $FILTER")
-assert_no_data_row "§15.2 filter_products nonexistent category returns no row (abstention)" "$(printf 'name\ncategory\nprice')" "$out"
+assert_no_data_row "§15.2 filter_products nonexistent category returns no row (abstention)" "$(printf 'productId\nname\ncategory\nprice')" "$out"
 
 # §15.2 PROFILE: every combination anchors on Product.price, no label scan — see
 # QUERIES.md §15.2's "Deviation from the plan's illustrative Cypher" note for why

@@ -2570,7 +2570,8 @@ on directly.
 // caller (services.lookup_product) via extraction.normalize_name — same convention as
 // $nameNormalized elsewhere in this file (§14.5's create_entity/find_fuzzy_candidates).
 MATCH (p:Product {nameNormalized: $nameNormalized})
-RETURN p.name AS name, p.category AS category, p.price AS price
+RETURN p.productId AS productId, p.name AS name,
+       p.category AS category, p.price AS price
 LIMIT 1
 ```
 Anchors on the `Product.nameNormalized` range index — a single `Node By Index Scan`, no label
@@ -2578,6 +2579,16 @@ scan. Zero rows back means "no such product" (AC-3 abstention); the service maps
 `{"found": false}`, never a fabricated row. `LIMIT 1` is belt-and-suspenders: `nameNormalized`
 carries no uniqueness constraint (see DDL note above), so a future data quirk that produced two
 same-named products in different categories still returns exactly one row rather than erroring.
+
+**`productId` in the projection (K-053 M6).** K-052's original shape projected
+`{name, category, price}` only — a pure fact lookup, with no cart concept yet to key on an id.
+K-053 added `p.productId` so `services.add_cart_item` could resolve a customer-named product to
+the `productId` a `CartItem` is keyed on (`docs/plans/workflow-cart-and-totals-graph.md` §2);
+additive and backward-compatible, since the `Product` node always carried the property and no
+caller reads the row positionally. `LookupProductFactTool` returns the row verbatim, so the slug
+reaches the model's context — the precedent §15.2's own widening was judged against.
+*Transcribed here on 2026-09-03: the code changed at K-053 and this block did not, so §15.1
+documented a projection `Repository.lookup_product` had not used for two milestones.*
 
 ### 15.2 `filter_products` — category/price-range filter (FR-2/FR-3)
 
@@ -2658,17 +2669,17 @@ anchors on `Node By Index Scan | (p:Product)` via `Product.price` — the regres
 already documents once was not reintroduced.
 
 **`productId` in the projection (`salesperson-ui` S7c, 2026-09-03).** The `RETURN` above
-originally projected `{name, category, price}` only. `Repository.lookup_product` had already
-widened the same way at K-053 (it selects `p.productId` for `services.add_cart_item`); this is the
-identical additive change on the list side — the `Product` node always carried the property, it
-just wasn't selected, and the scan anchor (`Product.price`) is untouched, so none of the
+originally projected `{name, category, price}` only. **This is §15.1's K-053 widening applied on
+the list side** — the same additive change, for the same reason, with the same consequence for the
+model's context (§15.1's note above): the `Product` node always carried the property, it just
+wasn't selected, and the scan anchor (`Product.price`) is untouched, so none of the
 `GRAPH.PROFILE` findings above change. What it buys: the storefront catalog route
 (`docs/plans/salesperson-ui.md` §5.2 `GET /shop/api/catalog`, §4.7's image manifest) is keyed on
 `productId`, and without it `Storefront._catalog_rows` had to resolve each listed row's id with a
 second `lookup_product` point read — a `1 + n` plus a silent-drop branch for a row that failed to
 re-resolve, both deleted by this projection. `FilterProductsTool` returns these rows verbatim to
-the model, so the slug now reaches the LLM's context: deliberate, and consistent with
-`LookupProductFactTool`, which has returned it verbatim since K-053.
+the model, exactly as `LookupProductFactTool` has since K-053, so the two sibling catalog tools
+now put the same kind of thing in front of the model rather than one of them a new kind.
 
 **Fully implemented (K-052 M6, plan §4 steps 3-9):** `Repository.lookup_product`/
 `filter_products`, `Services.lookup_product`/`filter_products`,
