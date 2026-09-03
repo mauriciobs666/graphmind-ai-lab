@@ -39,7 +39,9 @@ Stakeholder decisions, 2026-09-02:
 | U3d — Pass 2 re-gate over plan v1.3 + note v1.3 + the amended requirements | `analyst` | `a0e3b74e34e1d4c40` (resumed) | delivered | `docs/reviews/small-model-benchmarking.md` `## Pass 2` — **approve with suggestions**; 3 blockers + 11 majors closed, 3 new findings | — (is the gate) | 250k tok / 29 tools cumulative |
 | U3e — Close N-1, N-2, N-4 in the plan | `architect` | `a3e258f27b83e764d` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.4** | teco-verified | 254k tok / 12 tools cumulative |
 | U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.4** | teco-verified | 194k tok / 5 tools cumulative |
-| U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | in-flight | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
+| U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | delivered | commit `ab91419` — 8 modules + 6 test files, **233 tests**, offline | U5a + U5b → — | 258k tok / 70 tools |
+| U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` | — (is the gate) | — |
+| U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
 
@@ -270,3 +272,29 @@ re-drawn against U4's actual delivery before dispatch.
   `analyst` at ~250k. Per teco's own rule, a further *small, self-contained* follow-up to either
   should be a **fresh dispatch**, not a resume — resuming buys their undocumented reasoning at a
   cost that no longer pays for itself.
+
+- **2026-09-03 — U4 delivered; teco re-ran everything rather than accepting the report.** 233 passed,
+  `ruff` clean, `pytest --collect-only` = 233 and `pytest -m live` = 233 **deselected** (so no
+  `live`-marked test exists yet and nothing was quietly making real calls under the default run),
+  and `grep` over `modelbench/` finds **no** `urllib`/`requests`/`http` import, independently
+  confirming S1 is offline.
+- **The mutation testing earned its place.** Eleven deliberate breaks, ten killed on the first try —
+  and **the one that survived exposed a test passing for the wrong reason**: the older-schema test
+  kept `BENCH_SCHEMA_VERSION` at 1, which made "validate against the record's own schema" and
+  "validate against the current schema" indistinguishable. Rewritten to move the current schema to 2
+  and assert both directions in one load. A reject-everything mutation of `validate()` fails 117
+  tests, so the refusal assertions are not passing trivially.
+- **A defect no test caught, found by reading rendered output instead of assertions:** when arm B
+  won, `verdict()` re-oriented the difference to the winner (`+66.7 pp`) but left the CI in A−B
+  orientation (`[-86.2, -29.9]`) — a plausible-looking, internally contradictory line that nothing
+  raised on. Fixed test-first. **Worth generalising: for a reporting instrument, "the assertions
+  pass" and "the output is coherent" are different questions.**
+- **Both gates dispatched fresh rather than resumed**, and for two different reasons: `analyst`'s
+  prior instance is at ~250k tokens with its whole reasoning already written into the review, and a
+  fresh `data-scientist` **re-deriving** the figures is stronger evidence than the note's own author
+  confirming them. Both were told to write findings incrementally, since a gate in this coordination
+  was already killed once by a platform rate limit.
+- **All doc edits are held until both gates land**, deliberately: three defects the implementer
+  found (an unassertable tolerance in the note, and two stale enumerations in the plan) all route to
+  documents the two reviewers are **reading right now**. Editing under a reader is the read-write
+  race version of the mistake that produced the v1.2 divergence.
