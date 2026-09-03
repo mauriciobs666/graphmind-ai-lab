@@ -41,7 +41,10 @@ Stakeholder decisions, 2026-09-02:
 | U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.4** | teco-verified | 194k tok / 5 tools cumulative |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | delivered | commit `ab91419` — 8 modules + 6 test files, **233 tests**, offline | U5a + U5b → — | 258k tok / 70 tools |
 | U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
-| U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
+| U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
+| U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | — | queued (after U6b) | `model-bench/**` | `analyst` + `data-scientist` re-gate → — | — |
+| U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.5 | teco-verified | — |
+| U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | — | queued | `docs/plans/small-model-benchmarking.md` v1.5 | teco-verified | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
 
@@ -319,3 +322,33 @@ re-drawn against U4's actual delivery before dispatch.
   code's. **DC-5(c) was judged the best-built test in the diff:** mutating the pairing index to
   `pairingKey[-1]` still raises, so assertion (2) stays green and assertion (1) is the only thing
   that catches it — the three-assertion structure was load-bearing exactly as specified.
+
+- **2026-09-03 — U5b delivered: `needs changes`, and the arithmetic came back clean three ways.**
+  The reviewer re-derived everything from scratch (60-digit `decimal` Wilson/MOVER-D, exact
+  `Fraction` McNemar, independent rational-power bisection for MDD) and got **three-way agreement**
+  between its own derivation, the note's published table and the module: all ten MOVER-D bounds, all
+  five p-values bit-exact, both `b_min` floor tables, §7.1's exact MDD column, the ρ=1 identity.
+  Rules 1, 2, 3 and 5 are genuinely binding in code rather than conventional. **Dispatching this
+  fresh rather than resuming the note's author is what made that evidence worth having.**
+- **Blocker B-ML-1 — B-1's shape, one layer in.** Rule 4's clustered branch *substitutes* a paired
+  bootstrap over the **rows** of the paired table — an i.i.d. resample of observations the design
+  effect says are correlated — so it **changes the instrument's name, not its interval**. Measured:
+  the CI is identical at DEFF 2, 4 and 7, and is *narrower* than the MOVER-D it replaced; at DEFF=7
+  the report calls a 15.0 pp difference distinguishable while its own mandatory line says nothing
+  below 105.0 pp can reach significance. Root cause is a **missing primitive**: `cluster_bootstrap`
+  computes a single-arm pooled rate, not a paired difference over clusters, and **has no caller**.
+- **The reviewer supplied the invariant that catches the whole class**, which is worth more than the
+  fix: *no verdict may be `distinguishable` when |diff| < `observable_floor`*. It verified the
+  McNemar path satisfies this exhaustively and the clustered path violates it in every row. That is
+  a property, not a case — it closes defects nobody has thought of yet.
+- **Both gates independently found the Holm defect** (printed but not applied). Independent
+  agreement from two reviewers with different briefs is stronger evidence than either alone.
+- **Tolerance adjudicated — the defect is the note's, and the implementer was right.** The published
+  table is **under-precise, not wrong**: `(34,6,0,0)`'s lower bound is 0.031762869443 against a
+  published 0.031763 — a 1.31e-7 gap, 131× the mandated 1e-9 — while the delivered float sits within
+  1.44e-16 of truth. Resolution: **keep 1e-9 and republish the fixtures at 10 dp**; the reviewer
+  computed the full-precision ten-bound table into the review for the fold-in.
+- **Sequencing decision: the two document fixes go first, alone.** The implementer must read the
+  note's republished fixtures to assert against them, so U6a depends on U6b's output — and
+  dispatching the code fix alongside doc edits would recreate the read-write race this coordination
+  has already been bitten by twice.
