@@ -9,16 +9,36 @@ for the full design.
 
 ## Current state
 
-**Stage S0 — skeleton only.** `modelbench/` holds `__init__.py` and nothing else; the suite is one
-install smoke test; there is no CLI, so `run.sh` fails loudly with a named reason instead of
-`exec`-ing into a traceback. `docs/plans/small-model-benchmarking.md` §4 sequences S1–S8; build them
-in order, and delete `run.sh`'s S0 guard block when `modelbench/__main__.py` lands in S1.
+**Stage S1 — the harness core is built; nothing calls a model yet.** `modelbench/` holds
+`fingerprint`, `results`, `stats`, `report`, `packs`, `roles`, `cli` and `__main__`; the CLI ships
+`compare` (with `--negative-control`), `index rebuild` and `models --tested`. **S2 owns everything
+that touches the outside world** — `lmstudio.py`, `hostinfo.py`, the real pack loader
+(`load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count identity),
+`convo.py`, `tooling.py`, `runner.py`, and the `attest`/`validate`/`run` commands. A test asserts
+those three commands are still absent, so the stage boundary is checked rather than promised.
+`docs/plans/small-model-benchmarking.md` §4 sequences S2–S8.
 
-**`tests/test_package.py` is deliberately the whole suite at S0**, not a placeholder — it pins
-`modelbench.__version__` to the installed distribution metadata, which is what stamps `benchVersion`
-into every run record (plan §3.4). Keep it as real tests arrive. It also exists because pytest exits
-5 (`EXIT_NOTESTSCOLLECTED`) on an empty suite: never restore green by configuring that exit code
-away, since a permanent "no tests ran is fine" setting hides a collection breakage later.
+**`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` and no other source.** Every
+formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
+plan deliberately does not restate them, and neither should this file. Its shape is §3.4's six
+binding rules, written so the anti-conservative version does not typecheck: `resolving_power`'s
+`design_effect`/`basis`/`unit_kind`/`alpha` are keyword-only **with no defaults**, and
+`min_detectable_difference` takes `n_effective: float` so a raw observation count raises.
+
+**The analysis unit is pack data, never a call-site choice.** `report.py` resolves it from
+`PackRef.analysisUnit` (§3.3 fixes it by rule as `pairingKey[0]`). `PairedOutcomes.from_units`
+raising on a repeated unit id is a **backstop, not the mechanism** — it only fires when the id it
+is handed is the *cluster* key, and 48 conversation ids drawn from 12 scripts are all unique.
+`tests/test_report.py`'s DC-5(c) fixture asserts the captured argument itself for this reason.
+
+**`tests/test_package.py` is not a placeholder** — it pins `modelbench.__version__` to the
+installed distribution metadata, which is what stamps `benchVersion` into every run record (plan
+§3.4). Keep it. It also exists because pytest exits 5 (`EXIT_NOTESTSCOLLECTED`) on an empty suite:
+never restore green by configuring that exit code away, since a permanent "no tests ran is fine"
+setting hides a collection breakage later.
+
+**A public name starting with `test` is collected by pytest as a test** in every module that
+imports it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
 
 ## Hard rules (they are design constraints, not preferences)
 
@@ -51,11 +71,16 @@ away, since a permanent "no tests ran is fine" setting hides a collection breaka
 
 ## Commands
 
+All of these need `model-bench/` as the working directory — the repo has no root pytest config, so
+from the repo root pytest ignores this component's `testpaths` and walks the whole monorepo
+(measured: 8 collection errors, exit 2).
+
 ```bash
-model-bench/setup.sh                             # create/refresh .venv (idempotent; --recreate)
-model-bench/.venv/bin/pytest model-bench -q      # default suite, network-free
-model-bench/.venv/bin/pytest model-bench -m live # real LM Studio, opt-in
-model-bench/.venv/bin/ruff check model-bench
+./setup.sh                                       # create/refresh .venv (idempotent; --recreate)
+./run.sh compare --pack <id>                     # the CLI (S1: compare, index rebuild, models)
+.venv/bin/python -m pytest -q                    # default suite, network-free
+.venv/bin/python -m pytest -m live               # real LM Studio, opt-in (none exist until S2)
+.venv/bin/ruff check .
 ```
 
 ## Documentation map

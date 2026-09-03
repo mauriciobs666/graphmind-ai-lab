@@ -32,17 +32,40 @@ dependency.
 
 ## Status
 
-**Stage S0 — component skeleton only.** The layout, the packaging and the test/lint loop exist;
-there is no CLI, no pack, and no harness code yet. `model-bench/run.sh` says so and exits non-zero
-rather than pretending. Stages S1–S8 are specified in `docs/plans/small-model-benchmarking.md` §4.
+**Stage S1 — the harness core is built; nothing calls a model yet.** What exists is the part that
+decides whether a number may be printed: the environment fingerprint and its validation, the run
+store and its quarantine-on-read, the statistics module, the markdown comparison, and three
+commands. What does not exist yet is anything that produces a number: the LM Studio adapter, the
+pack loader and the five task packs are stages S2–S7 of
+`docs/plans/small-model-benchmarking.md` §4. The whole current suite runs offline.
 
 ## Quick start
 
+Run everything with `model-bench/` as the working directory — the repo has no root pytest
+configuration, so from the repo root pytest ignores this component's `testpaths` and walks into
+other components' suites.
+
 ```bash
-model-bench/setup.sh                             # create .venv, install the package + dev extra
-model-bench/.venv/bin/pytest model-bench -q      # the suite
-model-bench/.venv/bin/ruff check model-bench     # lint
+./setup.sh                        # create .venv, install the package + dev extra
+.venv/bin/python -m pytest -q     # the suite (network-free)
+.venv/bin/ruff check .            # lint
+./run.sh --help                   # the CLI
 ```
+
+## What the CLI does today
+
+```bash
+./run.sh compare --pack <pack-id> [--models a,b] [--session <id>] [--negative-control] [--out <path>]
+./run.sh index rebuild            # regenerate results/index.csv from results/runs/
+./run.sh models --tested          # models with stored results (never a deterministic arm)
+```
+
+`compare` reads `results/runs/`, renders the markdown comparison to `reports/` **and** stdout, and
+never overwrites an earlier same-day comparison — the filename carries a two-digit sequence. It
+exits `0` whatever the scores, including when every stored record turns out to be invalid: that is
+a report, not an operational failure, and the excluded records are named in it with their reasons.
+
+`attest`, `validate` and `run` are stage S2 and are deliberately not wired yet.
 
 Python 3.12, matching every other component. **Zero runtime dependencies** — stdlib only, on
 purpose: a benchmarking tool whose own dependency tree can rot is a tool whose old results stop
