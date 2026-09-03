@@ -123,7 +123,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S6b** — close Pass 6: pin `_cache_put` (S6-1), give the package scan a control (S6-3), reshape the constant-time tripwire (S6-4) | `coder` | `a5db169a0966bad59` (resumed — its own review findings, same two files) | **accepted — committed `5594134`**, suite **2441** teco-verified solo; `storefront.py` +12/-0, comment only. **Probed for the *false* positive, not just the true one** — a benign local rename that the over-tight tripwire used to redden now passes, which is what "over-tight" actually means and almost nobody tests. Re-grounded the stale env-var docstring on something **executable** (the test reads `SERVER.md` and asserts all seven names appear), so a rename that misses the doc reddens instead of drifting | `storefront.py`, `test_storefront.py` | `analyst` Pass 6 → **closed** | 232k tok / 24 tools |
 | **S6c** — S6+S6b close-out in `falkor-chat/docs/HISTORY.md` (S3's "Review close-out" precedent) | `coder` | `a5db169a0966bad59` (resumed — **holds the observed figures**; a fresh agent would reconstruct them, which is the fabrication risk) | **accepted — committed `62aa638`**, +74/-0, one file; storefront files verified untouched and no suite run, so S7's DB window was never contended. **The resume-for-figures call paid off exactly as intended**: it attributed the three *pre-fix survival* counts to the review's Appendix J rather than claiming them, and **left pass counts out** where it only had them against a different test-count denominator — declining to reconstruct rather than producing a plausible total | `falkor-chat/docs/HISTORY.md` | — | 235k tok / 5 tools |
 | **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | `a26100cb193d95085` | delivered — **committed `dd78e70`**, suite **2473** teco-verified solo; +465/-9 and +950, two files. **13 mutations killed, 4 benign refactors kept green** (S6b's false-positive discipline, adopted unprompted). **Found a delivered-code gap that blocks two of its own deliverables** — `services.filter_products` projects no `productId` (teco confirmed at `repository.py:2762`) — and shipped a documented `1+n` workaround rather than editing a delivered step's file. **Proved a plan statement false**: the post-reset profile re-write `MERGE`s the `Customer` back, so §4.8's delete inventory is true of the delete and false of the end state. **Answered the `lookup` question: no** | `storefront.py`, `test_storefront.py` | `analyst` Pass 7 → — | 227k tok / 81 tools |
-| **S7 gate** — Pass 7 on the largest impl diff + **three rulings** teco will not self-decide | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — reviewed S6 in this same module) | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 7` | — | — |
+| **S7 gate** — Pass 7 on the largest impl diff + **three rulings** teco will not self-decide | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — reviewed S6 in this same module) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, **0 major**, 3 minor, 1 nit) — committed `e9b0363`. **Dissolved Ruling 1's blocker instead of weighing it** (below). **S7-1: proved the quiesce tests don't assert the wait** by running the worker-finishes-first ordering — all four stayed green; safety was timing, not assertion. Verified the `lookup` grep and found the **sharper** reason not to delete (below) | `docs/reviews/salesperson-ui-impl.md` `## Pass 7` + Appendix K | — | 253k tok / 36 tools |
+| **S7b** — close Pass 7: assert the wait (S7-1), pin the two error-path evictions (S7-2), stop a broken deadline hanging (S7-3) | `coder` | `a26100cb193d95085` (resumed — its own findings, same two files) | in-flight (**holds the live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
+| **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | in-flight | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | — |
 | **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
 | **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
 | **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
@@ -1023,28 +1025,53 @@ workspace, and pinning it would make it wrong for its purpose.
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
 
-## Held: one consolidated plan touch (v1.18) — deliberately **not** dispatched yet
+## Ruling 1 was dissolved, not weighed — and that is the reusable lesson
+
+Teco asked the gate to weigh a trade-off: take a one-line fix inside a **delivered** file and accept
+that `tools.FilterProductsTool` would start feeding product slugs into the salesperson agent's LLM
+context, or keep S7's correct `1+n` workaround.
+
+**The reviewer refused the framing and checked the premise instead.** `services.lookup_product` has
+projected `productId` since **K-053**, and `LookupProductFactTool.run` returns `{"found": True,
+**row}` — so the agent's context **already contains product slugs today**, from the sibling catalog
+tool. The fix does not introduce a new exposure; it makes two sibling tools consistent. Teco verified
+both facts independently (`repository.py:2681`, `tools.py:428`).
+
+The trade-off teco spent a ruling on **did not exist**. The general form, worth carrying: *before
+weighing a cost, check whether the system already pays it.* A cost that is already being paid is not
+a cost of the change.
+
+**What keeps this honest rather than merely clever** is that the reviewer then argued *against* its
+own conclusion, on the record: applying the fix live gave 2473 passed with zero test edits, but zero
+test breakage measures **code, not model behaviour** — and the 14 deselected `live` tests are AC-5
+grounding, querygen NLQ and triage, **none of them a salesperson catalog conversation**. So no
+harness observes this either way, and the evidence for "safe" is the K-053 precedent, not a passing
+test. That distinction is now in the plan, not just in the review.
+
+## Held: one consolidated plan touch (v1.18) — now dispatched
 
 Four corrections to `docs/plans/salesperson-ui.md` are known or pending. They are being **batched
 into one architect edit**, not dispatched as they arrive — the same discipline Pass 8 prescribed for
 the review findings, and for the same reason: a plan edited four times is four chances to move a
 step row that a dispatched agent is building against.
 
-Certain, from S7's delivery:
-1. **§4.8's delete inventory is false about the end state.** The post-reset profile re-write
-   `MERGE`s the `Customer` back, so it is deleted and then recreated carrying the name and nothing
-   else. (The S7 gate is ruling on whether the substitute assertion — the `PLACED`/`Cart` subgraph is
-   empty — is the right fact.)
+All four are now adjudicated, so v1.18 lands them in one edit:
+
+1. **§4.8 gets a footnote, not a correction** (Ruling 2). The post-reset profile re-write `MERGE`s a
+   name-only `Customer` back — but §4.8's column is *Deletes*, and the delete does delete. The gate
+   also corrected teco's reading of which assertion is load-bearing: it is **not** the `PLACED`/`Cart`
+   emptiness but `profile == {"name": "Ada", "deliveryAddress": None}` — the `None` address is what
+   proves the name is a **re-write and not a survivor**, which is exactly what the inventory stood for.
 2. **S8 must pass `storefront_dir` from `create_app(storefront_dir=…)`** into the `Storefront`
    constructor, or every `imageUrl` is `null` — an S7-introduced wiring obligation that exists in no
-   plan row.
-3. **§4.8's "reset mine cancels that participant's queued turn" is an S9 obligation**, and the
-   ordering matters: cancellation goes **in front of** S7's wait, never in place of it.
-
-Pending the gate's ruling:
-4. **The catalog-id gap** — whether §5.2's `productId` requirement is met by S7's `1+n` workaround or
-   by the one-line `repository.filter_products` fix, which has an LLM-context consequence
-   (`tools.FilterProductsTool` returns those rows verbatim to the salesperson agent).
+   plan row, and precisely the §4.7 failure where AC-11 passes with everything null.
+3. **Cancellation is an S9 obligation, in front of S7's wait, never in place of it** (Ruling 3) —
+   plus the half S7 did not state: `quiesce_s` is 30 s against a 180 s agent timeout, so a slow turn
+   turns reset-mine into a `503` where cancellation would have succeeded. That is *why* §4.8 wanted
+   cancellation, and it is what gets forgotten at S9.
+4. **S8 takes the `productId` fix** (Ruling 1 — see the section above for why the objection
+   dissolved) and drops `_catalog_rows`'s second read with it, deleting the `if product is None:
+   continue` silent-drop branch.
 
 **Note that plan-gate closure does not mean plan-edit closure.** What Pass 8 stopped was commissioning
 another *review pass* per revision; a factual correction proved by an implementation still lands, and
