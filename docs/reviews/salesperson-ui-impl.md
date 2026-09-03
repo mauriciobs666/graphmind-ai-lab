@@ -1,6 +1,6 @@
-# The one salesperson UI — Implementation Review (S1–S4, S6)
+# The one salesperson UI — Implementation Review (S1–S4, S6, S7)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S3, S4, S6
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M<n> TBD) · **Reviews:** `docs/plans/salesperson-ui.md` §5.1 rows S1, S2, S3, S4, S6, S7
 
 ## 1. Scope & verdict
 
@@ -1217,6 +1217,224 @@ none; `ws:s1v6`, `ws:s1v7`, `ws:probe-s0r3`, `ws:probe-s4b` are untouched.
 
 ---
 
+## Pass 7 — 2026-09-03 (S7: state, reset, catalog, images)
+
+**Reviewed:** commit **`dd78e70`** — `falkorchat/storefront.py` (+465/−9) and
+`tests/test_storefront.py` (+950, 79 tests in the file) — against §5.1's **S7** row at plan
+**v1.17** (`0ba772b`), §4.7, §4.8, and `docs/plans/salesperson-ui-graph.md` §7 (a)–(d) and §12.
+Baseline: `git show dd78e70`, the working tree at both paths byte-identical to it. Not reviewed:
+S8/S9/S10 (not written); the S4 repository methods (Passes 3–4); S6 (Pass 6, whose three findings
+S6b closed at `5594134`).
+
+**Verdict: approve with suggestions.** 0 blockers · 0 major · 3 minor · 1 nit, plus the three
+rulings below. This is the largest diff in the build and the most carefully evidenced: the two
+failure shapes that have bitten this build repeatedly — an assertion that cannot go red, and a
+"nothing changed" that conflates two meanings — are both attacked head-on and mostly beaten. The
+catalog workaround, which I expected to be the weak point, **verifies correct against the real
+15-product catalog**: 15/15 rows resolved, 15 unique ids, **zero mis-bindings, zero drops**
+(Appendix K §1).
+
+CPG: considered, not relevant — `cpg_falkorchat` is loaded, but `storefront.py`'s S7 half is new
+in this commit and absent from the graph; the reachability questions here (who calls `.lookup(`,
+what the one-line `filter_products` fix breaks, whether the quiesce spy has teeth) were answered
+by grep-complete enumeration plus live execution against `ws:test` and `reference`.
+
+### Ruling 1 — take the one-line fix, at S8. The workaround is correct, and its stated blocker is already moot.
+
+**The workaround is not a defect.** Its join key is `normalize_name(row["name"])` →
+`Product.nameNormalized`, and both sides call the *same* `extraction.normalize_name`
+(`scripts/seed_catalog.sh:75` imports it), so the round trip is exact by construction. Verified
+live against the real catalog, not the fixture: **15 of 15 rows resolved, zero mis-bindings, zero
+drops** (Appendix K §1). It could ship.
+
+**But the second reason for declining the fix is already false.** `LookupProductFactTool.run`
+returns `json.dumps({"found": True, **row})` (`tools.py:428`), and `services.lookup_product` has
+projected `productId` since **K-053** — so the salesperson agent's context **already contains
+product slugs**, from the sibling catalog tool, today. Adding `productId` to `filter_products`
+makes the two tools consistent; it does not introduce a new category of thing into the prompt. The
+def's own system prompt already names only "(name, category, price)" while `lookup_product_fact`
+already returns four fields, so that drift exists now and this does not widen it.
+
+**And the first reason costs nothing.** I applied the fix (projection + row mapping, 4 lines in
+`repository.filter_products`) and ran the whole suite: **2473 passed, 14 deselected — zero
+failures, zero test edits** (Appendix K §2). `test_repository.py` projects `[r["name"] for r in
+rows]`, and `test_tools.py` drives a stub whose rows the caller supplies, so neither sees the extra
+key.
+
+**The honest counterweight, which I want on the record:** *zero test breakage measures code, not
+model behaviour.* None of the 14 `live`-marked tests exercises a salesperson catalog conversation
+(they are AC-5 grounding, querygen NLQ, and triage) — so **no harness in this repo would observe an
+LLM regression either way**. The evidence for "safe" is the K-053 precedent, not a passing test.
+
+**Recommendation:** take the fix as part of **S8** — which already reaches `app.py`/`schemas.py`,
+is the next step in this area, and can drop `_catalog_rows`'s second read in the same change
+(removing the `1+n` reads *and* the `if product is None: continue` silent-drop branch, the only
+unbounded failure path on the catalog route). **If you'd rather not reach into a delivered file at
+all, the workaround may ship unchanged** — but then add the tripwire it is missing: nothing asserts
+`normalize_name(p.name) == p.nameNormalized` for the *real* seed, because `_catalog_rows(n)`'s
+fixture satisfies it by construction.
+
+### Ruling 2 — the substituted assertion is right, and stronger than reported. §4.8 needs a note, not a correction.
+
+The author did not merely swap in "the `PLACED`/`Cart` subgraph is empty". The load-bearing
+assertion is in `test_the_profile_name_is_back_after_a_self_reset_not_an_em_dash`:
+`profile == {"name": "Ada", "deliveryAddress": None}` — and its docstring says exactly why that is
+the right fact: *"`deliveryAddress` is asserted `None` in the same breath: it proves the `Customer`
+really was deleted, so the name coming back is a re-write and not a survivor."* That is precisely
+the fact §4.8's inventory was standing in for, and it survives the `MERGE` that made the naive
+assertion false. Together with the `PLACED`/`Cart` counts and the anchor comment left at the
+deleted assertion's site, this is better evidence than the plan asked for.
+
+**§4.8 is not wrong.** Its column is headed *Deletes*, and the delete does delete the `Customer`.
+What is missing is that the row reads as a post-reset inventory, and the post-reset graph holds a
+**name-only `Customer`** again. So: a **note**, in the Survives column or as a footnote on the
+reset-mine row — *"(a name-only `Customer` is re-created immediately afterwards by §4.10's profile
+re-write; `deliveryAddress` does not come back)"* — not a correction. Fold into v1.18.
+
+### Ruling 3 — "waiting subsumes cancelling" is sound for correctness, and explicitly not for availability. State that second half in S9's row.
+
+**Sound.** A queued turn reaches a worker, completes, and clears its own entry; `_await_quiesce`
+returns only once the map says idle; the delete follows. There is no ordering in which cancelling
+would have made the *result* different — only sooner. And the author's refusal to drop the turn-map
+entry as a stand-in is exactly right: that would report idle while the job was still queued and let
+the delete race the turn quiesce exists to prevent. The docstring states the S9 constraint
+correctly ("cancellation belongs *there*, in front of this wait, never in place of it").
+
+**The boundary it does not state, and should.** Waiting subsumes cancelling for correctness but
+**not for availability**. `STOREFRONT_QUIESCE_S` is 30 s and a turn may run to the 180 s agent
+timeout, so a slow turn converts reset-mine into a `503` — a refusal, with nothing reset — where
+cancellation would have dropped the queued work and let the reset succeed. That is a designed
+outcome, not a defect (the `503` contract is explicit and tested), but it is the *reason* §4.8
+wanted cancellation, and it is the thing that will be forgotten when S9 lands. **Suggested:** one
+clause in §5.1's S9 row — *"cancellation of a queued turn runs in front of `_await_quiesce`, never
+in place of it; without it a turn outliving `quiesce_s` turns reset-mine into a `503`."*
+
+### S7-1 · **Minor** · the quiesce test asserts the post-conditions, not that the reset waited — and degrades to green, not red, under an adverse scheduler
+
+The spy is real and has teeth: dropping the `_await_quiesce` call reddens two tests
+(Appendix K §3, M1), and if the spy never ran, `at_delete["runStatus"]` would `KeyError`. So it
+proves more than "the spy ran". But every assertion it makes —
+`runStatus == "done"`, `messages == 2`, `posted: True` — is **also satisfied by the ordering in
+which the worker finished before the reset even started**, i.e. with nothing to wait for. I ran
+that ordering (joined the worker before calling `reset_participant`) and **all four quiesce tests
+stayed green**. The safety today is timing, not assertion: the worker's `time.sleep(0.15)` against
+a 5 s budget, and I measured the reset genuinely blocking **0.189 s / 0.189 s / 0.190 s** across
+three runs. Non-flaky — 20 consecutive runs of the file, 79 passed every time — but "non-flaky" and
+"asserts the wait" are different claims, and only the second one survives a loaded CI box.
+
+**Suggested improvement:** two lines, and the floor is the worker's own sleep so it cannot be
+tight — `t0 = time.monotonic()` before the reset, and after it
+`assert time.monotonic() - t0 >= 0.15, "the reset did not wait"`. Measured margin 0.189 vs 0.15.
+
+### S7-2 · **Minor** · the reset's two *error-path* cache evictions are unpinned, while the success path is
+
+`reset_participant`'s success path writes the refreshed record through (`_cache_put`) and **is**
+pinned — removing it reddens `test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread`
+(Appendix K §3, A6). Its two error paths are not: removing `self._cache_drop(participant_id)` from
+`_reset_state_unknown` (the F8/`504` path, where the delete **may have committed**, which is the
+docstring's own stated reason for the line) and from the `status is None` branch both leave **79
+passed**. Same shape as Pass 6's S6-1, on the paths where the cached `threadId` is *most* likely
+wrong.
+
+Honest mitigation, which is why this is minor and not major: `resolve_token` refreshes the cache on
+every authenticated request and S8 calls it before anything else, so the stale window closes on the
+participant's next request. The exposure is an S9 worker calling `lookup` **between** a failed
+reset and that next request.
+
+**Suggested improvement:** one test per path, using the existing A6 test as the template — after a
+`ResetStateUnknownError`, assert `participant_id not in shop.cached_ids()`.
+
+### S7-3 · **Minor** · a broken quiesce deadline hangs the suite instead of failing it
+
+There is no `pytest-timeout` in the project. I extended `_await_quiesce`'s deadline by an hour and
+`test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running` **never returned** — it had to
+be killed at 25 s (Appendix K §3, M3). The mutant is "caught", but as a hang: on CI that is a
+job-level timeout with no failing test name, and locally it blocked my own battery for two minutes.
+This is the only test in the suite that can wait on a wall clock it does not control.
+
+**Suggested improvement:** bound it at the test rather than the module — either
+`@pytest.mark.timeout(10)` (needs the `pytest-timeout` dev dependency) or, dependency-free and
+sufficient here, assert the elapsed time: the `quiesce_s=0` storefront must refuse in well under a
+second, so `t0`/`assert time.monotonic() - t0 < 1.0` turns the hang into a failure.
+
+### S7-4 · **Nit** · `list_catalog`'s first call reads the catalog twice
+
+When the manifest has not been built, `list_catalog` calls `build_image_manifest()` (which calls
+`_catalog_rows()`) and then `_catalog_rows()` again — `2 × (1 + n)` reads, 32 against the real
+catalog. Harmless in production, where S8 builds the manifest in the lifespan, and
+`test_list_catalog_builds_the_manifest_when_nobody_did` covers the fallback. Vanishes entirely if
+Ruling 1's fix is taken. Mentioned only so it isn't mistaken for the `1 + n` the call-site comment
+documents.
+
+### The other four things you asked about
+
+1. **Does the spy prove what it claims?** — S7-1. It proves the delete is issued *after* the run
+   reached `done` and the reply was written; it does not prove the reset *waited* for that. Both
+   halves matter and only the first is asserted.
+2. **`reset_participant(ParticipantRecord)` vs S8's route.** Correct, and the argument holds.
+   §5.2's `POST /shop/api/reset` takes **no body**, and S8's `get_participant()` dependency resolves
+   the bearer through `resolve_token`, which re-reads the graph — so the handler holds a
+   graph-fresh `ParticipantRecord` at exactly that moment. The three fields the reset consumes
+   (`participant_id`, `display_name`, `language`) are precisely the three the reset does not touch,
+   so there is no window in which the record can be stale *for this use*. Passing a `ctx` plus a
+   name would indeed be two sources that can disagree.
+3. **The `catalog_repo` teardown cannot break another test file.** `wf_repo` wipes `reference` on
+   **setup**, so every test that needs reference data seeds it inside its own test; a teardown wipe
+   can therefore only remove data no later test relies on. The fixture's load-bearing claim — that
+   the schema survives — I verified live: `reference` holds **4 indexes before and 4 after** a
+   `MATCH (n) DETACH DELETE n`. And the problem it fixes is real: `seed_catalog.sh` `MERGE`s by
+   `productId`, so a stray `widget-…` survives a re-seed and makes `verify_catalog.sh` report 17
+   against 15.
+4. **Did S7 need `Storefront.lookup`? Grep verified — no.** `grep -rn '\.lookup(' falkorchat/
+   tests/` returns **eight hits, all in `tests/`**, none in the package; the production callers are
+   zero. The staleness argument is also right, and `test_reset_refreshes_the_cached_record…` is its
+   proof. **But do not delete `lookup` yet, and here is the sharper reason:** if it goes, the cache
+   has no reader at all — `cached_ids()` is diagnostics — and `resolve_token`'s `_cache_put` (Pass
+   6's S6-1) plus `reset_participant`'s `_cache_put` become writes into a map nobody reads. The
+   right end state would then be deleting **`_records` entirely**, not just `lookup`; half-doing it
+   leaves a write-only map, which is worse than either end. That is one decision — *does S9's
+   executor want a per-participant record cache?* — and it belongs at **S9**, made once, not
+   inferred from S7's silence.
+
+### What's solid (Pass 7)
+
+- **`get_state`'s order block is asserted to be the repository read** with a third product live in
+  the cart, so a locally-composed block reports the wrong order and the test says so. That is a
+  test written against a specific wrong implementation, not against the right one.
+- **The four reset outcomes are four distinct exception types**, and F8's two orderings are both
+  tested — including the one that matters more (`state=None` when the re-read *also* times out),
+  with the reasoning for why that is the *likelier* fault, not the exotic one.
+- **§7 (d) carries a false-positive control** (Bob's cursor), which rules out the "swept every
+  cursor in the workspace" implementation that would satisfy (d) and be a worse defect.
+- **`test_an_idle_participant_is_not_made_to_wait` is named as the control it is** — without it,
+  "the reset waits" and "the reset refuses" are both satisfied by a reset that always refuses.
+- **`_ticking_clock` removes a real coin flip** (`placedAt` ties broken by `orderId DESC`, and
+  `orderId` is a `uuid4`) rather than betting on the wall clock ticking between two calls.
+- **Four benign refactors of my own stayed green** (Appendix K §3, B1/B2 plus the two I folded in),
+  so the suite is pinned to behaviour, not to source text — the failure mode Pass 6's S6-4 warned
+  about.
+- **The declined fix was documented at the call site with both alternatives and their costs**,
+  which is what made this ruling a twenty-minute measurement instead of an archaeology exercise.
+
+### Open questions (Pass 7)
+
+None blocking. Ruling 1 is the only one needing your decision before S8 is dispatched; Rulings 2
+and 3 are documentation touches for v1.18 and the S9 row.
+
+**Environment.** Full suite pristine, serially: **2473 passed / 14 deselected** (18.1 s), matching
+your solo run; `ruff check` on both S7 files: **All checks passed**; `test_storefront.py` run 20×
+(5 whole-file, 15 single-test) with **79 passed** every time. Eleven mutations against byte-copies
+of `storefront.py`, `test_storefront.py` and `repository.py`; all three restored and `md5sum -c`
+verified, `git status --porcelain` clean at every falkor-chat path. **One deliberate change of
+state, reported rather than restored:** `reference` was empty of node data when I began (as Pass 6
+left it); I ran `./scripts/seed_catalog.sh` to test the workaround against the real catalog, and
+**re-seeded it after my last suite run**, so `reference` now holds the clean 15-product catalog and
+`./scripts/verify_catalog.sh` reports **OK — in sync (15 products)**. That is strictly better than
+I found it, but it is a change: the next default `pytest` run will empty it again. I created no
+graph key and deleted none; `ws:s1v6`, `ws:s1v7`, `ws:probe-s0r3`, `ws:probe-s4b` untouched.
+
+---
+
 ## Appendix
 
 ### Appendix A — F-1 causal chain (all links verified by execution or by document)
@@ -1543,3 +1761,88 @@ column names a *wrong* key, never an unset one.
 matching your solo run. `ruff check falkorchat/storefront.py falkorchat/config.py
 tests/test_storefront.py` → **All checks passed**. `git status --porcelain falkor-chat/` → clean,
 and all three S6 paths `git diff --quiet 2f7938d`-identical.
+
+### Appendix K — Pass 7 evidence (commit `dd78e70`, live `ws:test` + `reference`, run serially)
+
+**§1 — the catalog workaround against the *real* 15-product catalog.** `./scripts/seed_catalog.sh`
+→ 15 products, `verify_catalog.sh` **OK**. Then `Storefront.list_catalog()` on the live
+`reference`, with each row's `productId` compared against `MATCH (p:Product) RETURN p.name,
+p.productId`:
+
+```
+rows resolved by the name-join workaround: 15 of 15
+unique ids: 15
+name->id mis-bindings: []
+products dropped by the join: []
+ids: gaming-mouse-pad-xl, wireless-charging-pad, wireless-mouse-pro, laptop-stand-aluminum,
+     usb-c-hub-7-in-1, bluetooth-speaker-mini, webcam-hd-1080p, fitness-tracker-band,
+     smart-home-hub, mechanical-keyboard-k200, portable-ssd-1tb, action-camera-4k,
+     noise-cancelling-headphones-x3, smartwatch-series-5, 27-inch-4k-monitor
+```
+
+The join is exact because both sides call the same function: `seed_catalog.sh:75`
+`from falkorchat.extraction import normalize_name`, written to `nameNormalized` at seed time and
+re-applied by `services.lookup_product` at read time. The fixture `_catalog_rows(n)` satisfies that
+by construction (`"Widget 001"` / `"widget 001"`), which is why this live check was needed.
+
+**§2 — blast radius of Ruling 1's one-line fix, measured.** Applied to
+`repository.filter_products`: `RETURN p.productId AS productId, p.name AS name, …` plus the
+matching row-mapping shift. Full suite, serially:
+
+```
+2473 passed, 14 deselected, 1 warning in 19.09s     # zero failures, zero test edits
+```
+
+`test_repository.py` asserts `[r["name"] for r in rows]` / `{r["name"] for r in rows}` — key
+projections, not exact-dict equality; `test_tools.py` drives `FilterProductsTool` against a stub
+whose rows the caller supplies. Neither sees the added key. `repository.py` restored, `md5sum -c`
+OK.
+
+**§3 — mutation battery** (byte-copies aside; `md5sum -c` clean after every row;
+`storefront.py` `da2…`-family, restored). Baseline **79 passed**.
+
+| # | Mutation | Result | Killed by |
+|---|---|---|---|
+| M1 | `reset_participant` drops the `_await_quiesce` call entirely | 2 failed | `…_waits_for_an_in_flight_turn_before_it_deletes`, `…_quiesce_timeout_changes_nothing…` |
+| M2 | **vacuity probe** — worker `join()`ed *before* the reset, so nothing is left to wait for | **4 passed — SURVIVES** | *nothing* → **S7-1** |
+| M3 | `_await_quiesce` deadline extended by an hour | **hangs** (killed at 25 s) | detected, but as a hang, not a failure → **S7-3** |
+| A5 | `_reset_state_unknown` stops dropping the stale cached record | **79 passed — SURVIVES** | *nothing* → **S7-2** |
+| A6 | success path stops refreshing the cached record | 1 failed | `test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread` |
+| A7 | `status is None` path stops dropping the cache | **79 passed — SURVIVES** | *nothing* → **S7-2** |
+| A9 | `CATALOG_LIMIT` 500 → 20 | 1 failed | `…_carries_an_explicit_bound_past_the_delivered_default` |
+| B1 | *benign* — extract a local for the image URL | 79 passed | (correctly green) |
+| B2 | *benign* — quiesce loop rewritten as `while True`, same semantics | 79 passed | (correctly green) |
+
+**§4 — is the quiesce test flaky, or does it actually wait?** Instrumented the reset without
+changing its behaviour:
+
+```
+RESET BLOCKED FOR 0.190s / 0.189s / 0.189s      # worker sleeps 0.15s; budget is 5s
+```
+
+So it genuinely waits, with a ~33× margin to the budget and a 0.039 s margin over the worker's
+sleep. Stability: `test_storefront.py` **79 passed** on 5 consecutive whole-file runs (random
+order, as the default run uses) and the quiesce test alone **passed 15/15**. Non-flaky — but M2
+shows the wait is not what the assertions test.
+
+**§5 — the `catalog_repo` teardown's load-bearing claim, verified live.**
+
+```
+reference indexes before/after MATCH (n) DETACH DELETE n:  4 / 4     nodes now: 0
+```
+
+Schema survives the data wipe, so the teardown cannot strand a later test needing the `Product`
+index/constraint pair.
+
+**§6 — `lookup` callers, grep-complete.** `grep -rn '\.lookup(' falkorchat/ tests/` → **8 hits, all
+in `tests/`** (lines 391, 396, 399, 458, 464, 487, 1317, 1321); **zero in the package**. The
+definition is `storefront.py:567`.
+
+**§7 — the LLM-context claim behind Ruling 1.** `tools.py:428` —
+`return json.dumps({"found": True, **row})`, where `row` is `services.lookup_product`'s output,
+which has projected `productId` since K-053 (`repository.py:2681`). `pytest -m live --collect-only`
+lists the 14 deselected tests: AC-5 chat grounding, 10 × querygen NLQ, and one triage workflow —
+**none is a salesperson catalog conversation**, so no harness observes this either way.
+
+**§8 — suite and lint.** Pristine tree, serially: **2473 passed, 14 deselected** (18.1 s).
+`ruff check falkorchat/storefront.py tests/test_storefront.py` → **All checks passed**.
