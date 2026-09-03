@@ -36,7 +36,9 @@ Stakeholder decisions, 2026-09-02:
 | U3a — Revise the method note; **resumed** for the `verdictMetrics` rename | `data-scientist` | `a394671cfc28bef87` | delivered | `docs/plans/small-model-benchmarking-ml.md` **v1.3** — §3.4 stats contract, then the rename | `analyst` re-gate (Pass 2) → — | 184k tok / 9 tools cumulative |
 | U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | delivered | `docs/plans/small-model-benchmarking.md` **v1.3** — 3 blockers + 13 majors + 8 minors + 4 nits dispositioned, then vocabulary reconciled | `analyst` re-gate (Pass 2) → — | 216k tok / 13 tools cumulative |
 | U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | accepted | `docs/requirements/small-model-benchmarking.md` (+13/−1) | folded into the Pass 2 re-gate | 88k tok / 12 tools |
-| U3d — Pass 2 re-gate over plan v1.3 + note v1.3 + the amended requirements | `analyst` | `a0e3b74e34e1d4c40` (resumed) | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 2` | — (is the gate) | — |
+| U3d — Pass 2 re-gate over plan v1.3 + note v1.3 + the amended requirements | `analyst` | `a0e3b74e34e1d4c40` (resumed) | delivered | `docs/reviews/small-model-benchmarking.md` `## Pass 2` — **approve with suggestions**; 3 blockers + 11 majors closed, 3 new findings | — (is the gate) | 250k tok / 29 tools cumulative |
+| U3e — Close N-1, N-2, N-4 in the plan | `architect` | — | queued | `docs/plans/small-model-benchmarking.md` v1.4 | teco-verified (gate findings, already reviewed) | — |
+| U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.4 | teco-verified | — |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3d) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
@@ -216,3 +218,26 @@ re-drawn against U4's actual delivery before dispatch.
   committed (`5aa7c83`), so nothing was lost and nothing needed reconciling. The re-dispatch brief
   carries the state-recovery instruction explicitly and asks for findings to be written
   incrementally, so a second kill costs partial work rather than all of it.
+
+- **2026-09-02 — U3d delivered: `approve with suggestions`.** All 3 blockers and all 11 majors
+  closed; every minor and nit closed or explicitly withdrawn. The reviewer re-derived **every**
+  changed figure from scratch (nine MDD₈₀ values, `b_min` at both alphas, guard-judge's four bounds,
+  McNemar p at b=12, Rule 5's ρ=1 identity) and both `data-scientist` self-corrections reproduce.
+- **B-1 is closed, but narrower than it reads — the most valuable finding of the pass.** Rules 2–5
+  genuinely make the wrong thing not typecheck, but **Rule 1 is not the mechanism it appears to
+  be**: `from_units` raising on a repeated unit id only fires if the caller passes the *cluster*
+  key as the unit id — 48 distinct *conversation* ids drawn from 12 scripts are unique and would be
+  accepted. What actually closes B-1 is Rule 6 (`validate` failing `replicatesPerScript > 1`).
+  Hence **N-1**, whose part (c) is the one that matters: S1's synthetic clustered fixture must
+  assert the unit id is the **cluster** key, or the test passes while testing nothing.
+- **N-3 — the residual third divergence, and not one teco predicted.** `-ml` §4.6 still defines `H`
+  as *equal to* `min(script length)` where the plan makes it manifest-declared and validated `≤`.
+  On its own that is a stale clause; combined with the plan's own new precedence rule (*where the
+  two disagree, the note is right*) it becomes a **live regression of M-11**. The version-pairing
+  block that was added to prevent recurrence is what makes this one bite — a precedence rule
+  propagates staleness instead of containing it.
+- **N-2 (S5/S6 scope) — `basis: "by-construction"` is an unverified attestation.** `-ml` §4.5.1(iii)
+  prescribes the determinism probe as its evidence, and a grep of the plan finds **zero**
+  occurrences under any name: no stage, no done-condition, no budget for its two conversations.
+  Closing it needs no new statistics — a non-identical probe degrades `basis` to `assumed`, which
+  via Rule 4 automatically moves McNemar out of the decision seat.

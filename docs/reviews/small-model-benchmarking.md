@@ -2,7 +2,13 @@
 
 > **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md`
 
-## 1. Scope & verdict
+## Pass 1 — 2026-09-02
+
+*(Current verdict is Pass 2's, below: **approve with suggestions** on plan v1.3 / note v1.3. Pass 1
+gated plan v1.1 and is kept intact — the two passes are meant to be read together, and Pass 2's
+disposition table is only legible against the findings here.)*
+
+### 1. Scope & verdict
 
 **Reviewed:** `docs/plans/small-model-benchmarking.md` (v1.1, `architect`, 1 125 lines) against
 `docs/requirements/small-model-benchmarking.md` (Ready for design, 23 FRs / 5 ACs) and
@@ -34,9 +40,9 @@ blockers are not disagreements with the design; they are three places where a gu
 
 ---
 
-## 2. Findings
+### 2. Findings
 
-### Blockers
+#### Blockers
 
 **B-1 — The tool-caller's decision instrument and its resolving-power line ignore clustering, which
 the `-ml` note calls the feature's largest methodological risk.**
@@ -99,7 +105,7 @@ distinct required-field set per kind (`deterministic` requires `packId`/`packVer
 `packContentHash`/`benchVersion`/`arm parameters hash`, and *forbids* the model fields), and state it
 in §3.4 so `validate()` branches on it rather than on presence. Decide it in S1 — S3 consumes it.
 
-### Majors
+#### Majors
 
 **M-1 — `wilson_interval`'s default `z` diverges from the `-ml` note's mandated constant.**
 Plan S1: `def wilson_interval(successes: int, n: int, z: float = 1.96)`. `-ml` §3.2(a): "Reuse
@@ -241,7 +247,7 @@ recorded in `docs/test-reports/`; if the contrast does not appear, the bisect in
 its result recorded, and the pack ships flagged `known-answer validation: not reproduced` in every
 report it generates until it is." That keeps the honesty and unblocks the stage.
 
-### Minors
+#### Minors
 
 **m1 — S0's done-condition is unsatisfiable as a shell chain (actionable now, U2 is in flight).**
 "`model-bench/setup.sh && model-bench/.venv/bin/python -m pytest -q` runs and passes with **zero
@@ -301,7 +307,7 @@ prior experiment's replicate count that §3.8.4 explicitly criticises; the desig
 4 scripts × 3 shapes. There is also no `replicatesPerScript` field, which `-ml` §4.5 requires printed
 next to every conversation-level *n*, and no `H` field (M-11). Fix the example and add both fields.
 
-### Nits
+#### Nits
 
 - `def ps(self) -> list[ResidentModel: ...]` (S2, `lmstudio.py`) is not valid Python.
 - Several types are named but never defined: `PairedResult` (which determines whether `verdict()` can
@@ -314,7 +320,7 @@ next to every conversation-level *n*, and no `H` field (M-11). Fix the example a
 
 ---
 
-## 3. What's solid
+### 3. What's solid
 
 - **Grounding is exceptional.** Every checkable claim about `falkor-chat/server/tests/eval/` is
   correct to the item: golden-set sizes (38/85/10/40), guard tiers (40/30/15) and label marginals
@@ -343,7 +349,7 @@ next to every conversation-level *n*, and no `H` field (M-11). Fix the example a
 
 ---
 
-## 4. Open questions
+### 4. Open questions
 
 These need the stakeholder or `data-scientist`, not a plan edit.
 
@@ -365,7 +371,232 @@ These need the stakeholder or `data-scientist`, not a plan edit.
 
 ---
 
-## Appendix
+## Pass 2 — 2026-09-02
+
+**Re-gated:** plan **v1.3** (`e69d687`), `-ml` note **v1.3** (`5aa7c83`), requirements as amended
+(`aec25c0`), coordination ledger. Baseline: my Pass 1 findings above (3 blockers, 11 majors,
+8 minors, 3 nits). Tree confirmed clean at re-dispatch; `dd78e70` is an unrelated session's
+falkor-chat commit and was not read.
+
+**CPG:** considered, not relevant — Pass 2 is a document-to-document consistency and arithmetic
+re-gate against the two revised specs; no new structural claim about `falkor-chat` was made, and the
+one Pass 1 relied on (§preamble's blast radius) was already independently re-run and is unchanged.
+
+**Verdict: approve with suggestions.** All 3 blockers and all 11 majors are closed with mechanisms I
+verified rather than accepted; every minor and nit is closed or explicitly withdrawn. Three new
+findings, all bounded; **N-1 must go into the S1 dispatch brief**, and neither it nor the other two
+justifies another plan revision cycle before S1 starts.
+
+The quality of this revision is high in a specific way worth naming: the `data-scientist` corrected
+two of its own published figures and one latent defect by exact search, and the `architect`
+withdrew a claim (the ruff enforcement) and downgraded another (B-2's guarantee) rather than
+defending them. I re-derived every number both documents changed, from scratch, and **all of them
+reproduce exactly** (Appendix B).
+
+### What I tested, on the coordinator's five points
+
+**1. B-1's guard: structural for the shape the gate found, advisory for a caller who mislabels — and
+the real closure is at pack validation, not in `stats.py`.** Verified `-ml` §3.4's six rules and the
+plan's deferral to them (plan S1 restates none of the cluster-aware surface — the right call, since
+restating it is what produced v1.1's divergence). Rules 2, 3, 4 and 5 are genuinely structural:
+no-default keyword-only inputs, `n_effective: float` never `n: int`, `verdict()` raising on four
+preconditions, and DEFF as a squared ratio. Rule 1 is narrower than it reads — `from_units` raising
+on a repeated unit id fires only if the caller passes the **cluster** key as the unit id; 48 distinct
+*conversation* ids from 12 scripts are unique and would be accepted. What actually closes that is
+Rule 6 (`validate` fails a pack declaring `replicatesPerScript > 1`), which is why N-1 below is about
+the pack contract rather than about `stats.py`. Judgement: the specific defect B-1 named is now
+unbuildable; the general class is guarded, with one reachable gap.
+
+**2. B-2's re-argued D1 stands, and the concession is correctly scoped.** I counted
+`test_metrics.py` myself: **13 `recall_at_k` + 7 `mrr` = 20 cases, 18 value assertions + 2
+`ValueError`**, of which exactly **6 are parametrize rows and 14 are literals in test bodies**, and
+`check_regression` contributes exactly **6** excluded cases — the plan's numbers are right to the
+case, including the "an implementer who ships three cannot call it done" count. `sourceGitSha`
+`9650a385…` is the correct last-touching commit for that path. On D1 itself: my Pass 1 finding was
+that the agreement test was the *only* mitigation. It no longer is, and the load is now carried by
+the right thing — §3.1's point (ii), that the two implementations' outputs are **never compared to
+each other as numbers by design**, since `-ml` §5.4 already forbids reading a difference against
+`retrieval_baseline.json` in either direction. That reduces the duplication risk from "two numbers
+that could silently disagree in a report" to "two places to fix a formula bug", which a 20-case
+fixture plus `--check-origins` detects. D1 stands, and it now says what it can prove.
+
+**3. B-3's forbid half does what it claims.** `FORBIDDEN_BY_ARM_KIND` enumerates all fourteen model
+fields plus the four attested ones for `deterministic`; `validate()` branches on `armKind` and never
+on presence; S1 done-condition 6 pins the exact shortcut case (`modelKey: "bm25"` added to an
+otherwise-valid deterministic record → **fails on write**). The downstream consequences are decided
+in the same place rather than deferred — `runId` segment, `models --tested` filtering to
+`armKind == "model"`, never ranking two deterministic arms, skipping the attestation trip-wire.
+Closed.
+
+**4. Vocabulary is aligned — I found one residual divergence, and it is not the one you caught.**
+Independently swept both documents: `verdictMetrics` (21/14), `headlineMetric` (24/9),
+`falseAdvanceRate`/`falseSuspendRate` (4/4), `replicatesPerScript` (8/7) — consistent. All six
+surviving `primaryMetric` occurrences are deliberate *retirement* references, not stale usage.
+`advanceRecall` is handled identically in both (printed complement, carries no verdict). The α=0.025
+consequence of guard-judge's two-member family propagated correctly into `-ml` §7.3's table
+(17.5/21.9 and 23.3/28.7 pp — I recomputed both). The residual is **N-3**: `-ml` §4.6 still defines
+`H` as *equal to* `min(script length)` where the plan makes it manifest-declared and validated
+`≤ min` — and §7's "where the two disagree the note is right" rule turns that stale sentence into a
+live regression of M-11.
+
+**5. M-1: confirmed, your reading is right and mine was wrong on the severity.** Computed the five
+MOVER-D fixtures under both constants: the worst bound shift across all ten endpoints is
+**3.02 × 10⁻⁴ pp** (Appendix B.2), and all five reproduce the note's published 1-dp bounds under
+either. So `1.96` was a typographic rounding, not a numerical defect, and my "breaks the fixtures"
+framing was wrong. The pin is still worth having for exactly the reason v1.3 gives — equality
+assertions at 1e-12 — and v1.3 makes it a module-level `_Z_95` with keyword-only `z`, which is the
+right shape. Disposition below reflects the corrected rationale.
+
+### New findings
+
+**N-1 (major) — the analysis-unit id is unspecified, which is the one reachable gap in B-1's
+closure.** `PairedOutcomes.unit_ids` is "the cluster keys, one per row" (`-ml` §3.4 Rule 1) and
+`ItemResult.pairingKey` for the tool-caller is `(scriptId, replicate, turnIndex)` (plan S1) — but
+**nothing in either document says which component becomes the unit id for a given verdict metric.**
+At 12×1 `scriptId` and conversation id are 1:1 so no shipped pack can expose it. A later pack that
+raises replicates is the reachable case, and it has two independent ways through: `validate_pack`'s
+stated failure conditions (`verdictMetrics`, `headlineMetric`, `H ≤ min(script length)`, import
+allowlist) do **not** include a cross-check that `conversations.jsonl` actually contains
+`scripts × replicatesPerScript` rows with each `scriptId` appearing exactly that many times — so a
+pack can declare `replicatesPerScript: 1` and ship four conversations per script — and if the unit id
+is then the conversation id, `from_units` sees 48 unique ids and accepts. Rule 1's guard is bypassed
+by a naming choice nobody was told to make. *Fix, all three in the S1 brief:* (a) the manifest
+declares the analysis unit per verdict metric (or once, as `sampling.analysisUnit`), and `stats`
+takes it from there rather than from the caller; (b) `validate_pack` asserts the row-count identity
+above; (c) S1 done-condition 5's synthetic clustered fixture asserts that the unit id used is the
+**cluster** key — otherwise that fixture passes while testing nothing.
+
+**N-2 (major) — `basis: "by-construction"` is an unverified attestation, and the note's own
+evidence-producing mechanism for it is built by no stage.** `-ml` §3.4 Rule 4 makes McNemar valid
+*only* when `design_effect == 1.0 and basis == "by-construction"`, and §4.5.1 grants that basis to
+12×1 because each script contributes one observation. But §4.5.1(iii) states that the same design
+makes run-to-run variability **unmeasurable**, that LM Studio at temperature 0 is "near-deterministic
+but not guaranteed bit-deterministic", and prescribes the fix: "**a determinism probe — re-run 2 of
+the 12 scripts a second time, once per model, and report whether the outcome vector is identical …
+Cheap mitigation, and it should be built.**" It is not built. Grep of the plan: **zero** occurrences
+of the probe under any name; no stage creates it, no done-condition mentions it, and §3.8.4's budget
+does not carry its two extra conversations. So the one input that decides whether McNemar may
+decide the feature's flagship metric is asserted rather than measured. *Fix:* assign the probe to
+S6 (data) with S5's scorer, keep it diagnostic and outside `n` as the note requires, and wire the
+outcome to `basis` — a non-identical probe degrades `basis` from `by-construction` to `assumed`,
+which via Rule 4 automatically moves McNemar out of the decision seat and the cluster-bootstrap CI
+into it. That closes the loop with no new statistics.
+
+**N-3 (major) — `-ml` §4.6 still derives `H` from the data, and §7's conflict rule makes the note
+authoritative.** Plan §3.8.4 fixes M-11 correctly and emphatically: `H` is
+`metrics.cleanThroughTurnH.H`, "never derived from the data", `validate` fails
+`H > min(script length)`, and the report prints the resolved name (`cleanThroughTurn4`). But `-ml`
+§4.6's bullet still reads "where `H = min(script length)` across all conditions in the pack". Those
+are different contracts — declared-and-bounded versus derived — and plan §7 says "where the two ever
+appear to disagree **the note is right**". An implementer applying that rule lands back on derived
+`H`, which is precisely M-11: adding one shorter script silently redefines the headline from
+`cleanThroughTurn4` to `cleanThroughTurn3` under an unchanged metric name. The plan's version is the
+correct one; the fix is one clause in `-ml` §4.6 (`H` is pack-declared and validated
+`H ≤ min(script length)`), owner `data-scientist`.
+
+**N-4 (minor, already known to the coordinator, folded in for whoever revises next)** — plan §7's
+version-pairing block says "this plan **v1.3** is aligned to the note **v1.2**"; the note is v1.3.
+The standing-obligation sentence beside it is the right instrument, so the stale token undercuts
+exactly the mechanism it introduces.
+
+### Disposition of Pass 1 findings
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **B-1** | **Fixed** | `-ml` §3.4's six binding rules; plan S1 defers the whole cluster-aware surface to them and adds DC-4/DC-5 to detect a non-conforming implementation — including a synthetic clustered fixture kept precisely because no shipped pack is clustered any more. Residual: N-1. |
+| **B-2** | **Fixed, with the guarantee honestly downgraded** | 20-case sha-pinned fixture; I re-counted the origin and got 13+7 = 20 = 18+2, 6 parametrized / 14 inline, 6 excluded — exact. D1 re-argued on §3.1(ii); stands. |
+| **B-3** | **Fixed** | `FORBIDDEN_BY_ARM_KIND`; S1 DC-6 pins the `modelKey: "bm25"` case failing on write. |
+| **M-1** | **Fixed; my rationale was wrong** | Module-level `_Z_95`, keyword-only `z`. Numerically it was a ≤3.02×10⁻⁴ pp rounding (Appendix B.2), not a defect — the pin is for equality-assertion reproducibility. |
+| **M-2** | **Fixed** | S1 DC-3 now states the 40/40 vs 34/40 verdict correctly *and* names §5 test 6 as the thing it must not diverge from again. |
+| **M-3** | **Fixed** | `REQUIRED_NONEMPTY` / `REQUIRED_PRESENT` tiers, `null` invalid in both, and capture ordering made contractual (residency before load, catalog after). DC-1 tests all three states. |
+| **M-4** | **Fixed** | `REQUIRED_BY_SCHEMA` keyed by `benchSchemaVersion`; `invalid` reserved for a record failing *its own* schema or declaring a future one; `SCHEMA VERSIONS IN THIS COMPARISON` banner; `model-bench migrate`. DC-7. |
+| **M-5** | **Fixed** | `compare_report(runs, *, pack, invalid=())`; `InvalidRecord` fully specified with a `reason` enum. |
+| **M-6** | **Fixed** | `ItemResult` specified incl. `pairingKey`/`scoreable`; `Aggregates` is a closed per-role union, so the no-blended-figure claim is a type fact. (N-1 is the one part of the pairing contract still open.) |
+| **M-7** | **Fixed** | Gate is now `type ∈ {llm, vlm}` **and** (`capabilities` absent **or** contains `tool_use`); `modelType`/`modelCapabilities`/`modelCapabilitiesPresent` recorded in the fingerprint; S2's done-condition tests all three real catalog entries that break the naive rule. |
+| **M-8** | **Fixed** | §3.6a consolidated CLI table with per-command owning stage; `host.json` schema in §3.4.4; `attest` assigned to S2 *with the reason* (S3's completeness depends on it). |
+| **M-9** | **Fixed** | `prefillMsPer1kPromptTokens` added with its formula; `tokensPerSecond` labelled diagnostic; headline pinned to **client wall clock** as a stated decision. |
+| **M-10** | **Fixed** | Item gains a `format` block (`maxWords`, `mustBeSingleParagraph`, …) scored separately and never pooled with grounding; `referenceAnswer` removed as diverging from `-ml` §6.2. |
+| **M-11** | **Fixed in the plan; reopened by the note** | See N-3. |
+| **M-12** | **Fixed** | `verdictMetrics = ["layer1ExactMatchRate"]`, `headlineMetric` set, using the note's Layer-1 name. |
+| **M-13** | **Fixed** | S6 now completable either way: the bisect is executed and recorded, and the pack ships flagged `known-answer validation: not reproduced`. The added rationale ("fitting the instrument to the expected answer") is the right reason. |
+| **m1** | **Fixed** | S0 ships `tests/test_package.py` asserting `modelbench.__version__` against `project.version` — one real test, so the `&&` chain no longer exits 5, and the assertion is load-bearing for `benchVersion`. |
+| **m2** | **Fixed** | DC-9 labels the two-copies control a smoke check *in the test's own docstring* and names §5 test 19a as the real control. |
+| **m3** | **Fixed, and better than asked** | Rule 3 replaces `8/n` with exact bisection ceilinged to 0.1 pp. I reproduced the entire §7.1 table and the 0.798-vs-0.8023 rounding argument exactly (Appendix B.1). |
+| **m4** | **Fixed** | R-1's probe is now inside S2's done-condition with both outcomes acceptable and "silence does not" stated. |
+| **m5** | **Fixed** | §3.8.3 names Layer 1, the `conflicting-facts` subset-containment exception, and the stdlib-only re-implementation of the pydantic validation surface. |
+| **m6** | **Fixed** | `corpus.embeddings.json` written into the pack from the same deterministic pass; S3 done-condition 4. |
+| **m7** | **Fixed** | Ruff claim **withdrawn** explicitly; single mechanism is `validate_pack`'s AST walk; `run` calls it and fails closed; `shell=False` stated. |
+| **m8** | **Fixed** | `sampling: {scripts: 12, replicatesPerScript: 1, seed}`; `repeats: 15` gone; `H` in the `metrics` block. |
+| Nits | **Fixed** | `def ps(self) -> list[ResidentModel]`; Appendix A defines every named type (and withdraws v1.2's invented `PairedResult`); `modelSlug` rule and timestamp format given. Report-filename same-day collision: still unaddressed, and I am content to drop it. |
+
+### Open questions carried forward
+
+Pass 1's OQ-1 (temperature/replicates) and OQ-2 (guard-judge metric) were both taken to the
+stakeholder and settled — 12×1, and two co-equal verdict metrics with no headline. OQ-3 (what S3
+does when the self-check fires) is settled as diagnostic-never-a-gate. Nothing from Pass 1 remains
+open. The two items parked for before S6 (48 distinct scripts; the requirements' "~15 pp") are the
+coordinator's and out of my scope — I note only that `-ml` §4.5.3's reversal trigger, *"the first
+tool-caller comparison that returns 'not distinguishable' with an observed difference in the
+15–50 pp band"*, is a well-chosen one: it converts the question into evidence rather than a guess.
+
+---
+
+## Appendix — Pass 2: arithmetic, independently recomputed
+
+Every figure the two documents changed in v1.2/v1.3 was re-derived from scratch (exact McNemar
+rejection region, `math.comb`, no library statistics) rather than checked by eye.
+
+**B.1 — `-ml` §3.4 Rule 3 and the resolving-power tables.** Exact MDD₈₀ under the nested
+alternative (π_c = 0, reject when `b ≥ b_min(α)`), bisected on δ, ceilinged to 0.1 pp:
+
+| n | exact δ (pp) | ceil 0.1 | note's published | `8/n` (the retired mnemonic) |
+|---|---|---|---|---|
+| 12 | 57.794 | **57.8** | 57.8 | 66.7 |
+| 20 | 36.646 | **36.7** | 36.7 | 40.0 |
+| 30 | 25.075 | **25.1** | 25.1 | 26.7 |
+| 38 | 20.009 | **20.1** | 20.1 | 21.1 |
+| 40 | 19.046 | **19.1** | 19.1 | 20.0 |
+| 48 | 15.972 | **16.0** | 16.0 | 16.7 |
+| 60 | 12.857 | **12.9** | 12.9 | 13.3 |
+| 85 | 9.142 | **9.2** | 9.2 | 9.4 |
+| 120 | 6.509 | **6.6** | 6.6 | 6.7 |
+
+All nine reproduce. The rounding argument reproduces too: power at n=40 is **0.7980** at 19.0 pp and
+**0.8023** at 19.1 pp, so ceiling — not nearest — is what makes the printed sentence true.
+`b_min(c=0)` is **6** at α=0.05 and **7** at α=0.025, so the floor is `6/n` and `7/n` respectively,
+as Rule 2 states. Guard-judge at α=0.025: floor 17.5 / 23.3 pp, MDD₈₀ **21.9 / 28.7 pp** — both
+match §7.3. Boundary tier at n=15, α=0.05: **47.6 pp**, matching the correction of v1.1's "53 pp".
+McNemar exact at b=12, c=0 is **p = 0.000488**, matching §4.5.3's 0.00049. The v1.1 "~65 pp"
+correction to 57.8 pp is confirmed as an `8/n` artefact.
+
+Rule 5's identity also holds independently: with m = 7 turns and ρ = 1, `DEFF = 1 + (m−1)ρ = 7`,
+width ratio `√7 = 2.646` (v1.1's "≈2.6"), and `n_eff = 280/7 = 40` — exactly the conversation count.
+The self-correction is right, and the ρ=1 unit test it prescribes is the correct guard.
+
+**B.2 — M-1, the `z` constant.** MOVER-D on the five `(a,b,c,d)` fixtures under
+`z = 1.959963984540054` versus `z = 1.96`:
+
+| fixture | z = 1.9599… | z = 1.96 | max shift |
+|---|---|---|---|
+| (34,6,0,0) | [3.176, 29.072] | [3.176, 29.073] | 3.02e-04 pp |
+| (30,6,0,4) | [3.851, 27.703] | [3.850, 27.703] | 2.61e-04 pp |
+| (33,6,1,0) | [−0.986, 26.858] | [−0.987, 26.858] | 3.01e-04 pp |
+| (20,8,2,10) | [0.171, 28.779] | [0.171, 28.779] | 2.64e-04 pp |
+| (72,10,2,1) | [1.480, 18.213] | [1.480, 18.213] | 1.85e-04 pp |
+
+All five reproduce the note's published 1-dp bounds under either constant; worst endpoint shift
+**3.02 × 10⁻⁴ pp**. Contested finding withdrawn, disposition corrected above.
+
+**B.3 — B-2's fixture count, from the origin file.** `test_metrics.py` assertions exercising the two
+functions: `recall_at_k` — 8 single-assert bodies, one 3-row parametrize, and two bodies carrying
+**two** asserts each (`hit_outside_top_k_window`, `handles_retrieved_shorter_than_k`) = 12 value
+assertions + 1 `pytest.raises` = **13**. `mrr` — a 3-row parametrize plus 3 single-assert bodies = 6
+value + 1 raise = **7**. Total **20 = 18 + 2**; parametrized **6**, inline **14**;
+`check_regression` **6**, all excluded. Matches plan §3.1 point 2 exactly.
+`git log -1 -- …/test_metrics.py` → `9650a3858b9d5c4e7e934f977839fc1a61c84b1b`, the recorded
+`sourceGitSha`.
+
+## Appendix — Pass 1
 
 ### A.1 — Verification performed
 
