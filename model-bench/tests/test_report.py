@@ -21,6 +21,7 @@ from conftest import (
     run,
 )
 
+from modelbench import stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import compare_report
@@ -188,6 +189,12 @@ def test_the_tool_caller_resolving_power_line_is_the_notes_verbatim_string() -> 
 
     A line missing the unit, the design effect, the best-case caveat or the conditionality clause
     fails, whatever number it prints. This is the acceptance surface for plan §3.9 point 2.
+
+    **The floor sentence carries `at any Holm step (alpha <= A_family)`** — v1.6 §7.1's template,
+    which names *both* αs because they differ whenever k > 1 and a reader shown one cannot tell
+    which bound it governs (review M-ML-6). This pack is k=1, so both print 0.05 and only the
+    wording moves. §7.2's rendered example still shows the pre-v1.6 sentence; §7.1's template is
+    the one v1.6 changed, and it is what this asserts.
     """
     pack = PackRef(
         packId="tool-caller-shop-assistant",
@@ -222,7 +229,8 @@ def test_the_tool_caller_resolving_power_line_is_the_notes_verbatim_string() -> 
     assert (
         "This pack resolves differences of >=57.8 pp with 80% power at n=12 effective "
         "conversations (12 units, design effect 1.00, by-construction, alpha=0.05). Differences "
-        "below 50.0 pp cannot reach significance at any observed outcome. Best case — assumes the "
+        "below 50.0 pp cannot reach significance at any observed outcome, at any Holm step "
+        "(alpha <= 0.05). Best case — assumes the "
         "candidate wins every conversation the models differ on; if it loses one for every two it "
         "wins, 80% power is not reached at any effect size at this n. Inference is conditional on "
         "the 12 scripts in tool-caller-shop-assistant@1.0.0; generalization to unwritten scripts "
@@ -531,6 +539,13 @@ def test_the_family_table_and_the_verdicts_agree_on_every_row() -> None:
     printed rule concluded it had cleared its step while the verdict said it had not. Whatever the
     decision is, the table has to state it rather than leave the reader to derive it from a
     threshold that is only valid under a step-down the report never showed.
+
+    **Under v1.6 the agreed answer is the other one** (review M-ML-6). `falseSuspendRate` is
+    b=6, c=0 → p=0.031 at a rank-2 Holm step of 0.05, and its 15.0 pp is no longer below a floor
+    printed at α/k: the fix-round build agreed with the threshold by *demoting* the metric against
+    a 17.5 pp floor, which reduced Holm to Bonferroni for the whole `[6/n, 7/n)` band and printed a
+    sentence that a p=0.031 outcome had just falsified. The table and the prose still have to
+    agree; they now agree on **distinguishable**.
     """
     arms, pack = _two_metric_arms(a_wins_first=8, a_wins_second=6)
     md = compare_report(arms, pack=pack)
@@ -540,19 +555,63 @@ def test_the_family_table_and_the_verdicts_agree_on_every_row() -> None:
     assert rows and "distinguishable" in rows[0] and "not distinguishable" not in rows[0]
     rows = [ln for ln in md.splitlines() if ln.startswith("| falseSuspendRate |")]
     assert rows and "0.0500" in rows[0]
-    assert "not distinguishable" in rows[0]
-    # ...and the prose above it must not claim the opposite
+    assert "not distinguishable" not in rows[0]
+    # ...and the prose above it must say the same thing
     section = md.split("### falseSuspendRate")[1].split("###")[0]
+    assert "is better than" in section
+    assert "below 15.0 pp cannot reach significance at any observed outcome, at any Holm step " \
+        "(alpha <= 0.05)" in section
+
+
+def test_a_floor_demotion_is_named_in_both_the_prose_and_the_decision_column() -> None:
+    """Rule 7's demote-and-name path, as rendered output rather than as a `Verdict` field.
+
+    It is reachable only on the substitute path now (m-ML-6 raises on the McNemar one), so the
+    fixture declares a measured design effect: at DEFF = 2 on 40 items the floor moves to 30.0 pp
+    while a 20.0 pp difference still has an interval excluding zero. A reader must be able to see
+    *why* the metric was not ranked, in the table and in the prose, without deriving it.
+    """
+    arms, pack = _two_metric_arms(a_wins_first=8, a_wins_second=6)
+    arms = [
+        run(r.runId, items=list(r.items), aggregates=r.aggregates, design_effect=2.0,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey=r.modelKey, packId=PACK_ID))
+        for r in arms
+    ]
+    md = compare_report(arms, pack=pack)
+
+    rows = [ln for ln in md.splitlines() if ln.startswith(f"| {METRIC} |")]
+    assert rows and "not distinguishable — below the observable floor" in rows[0]
+    section = md.split(f"### {METRIC}")[1].split("###")[0]
+    assert "is below this pack's observable floor" in section
+    assert "differences below 30.0 pp cannot reach significance" in section
     assert "is better than" not in section
+
+
+def test_the_report_refuses_a_short_holm_ladder_rather_than_dropping_a_metric(monkeypatch) -> None:
+    """P2-3's consumer half — `zip(tables, steps, tallies)` truncated to the shortest.
+
+    The ladder is the public API S2 wires against, and a metric silently vanishing from a report is
+    the one failure this component must not have: a pre-registered verdict metric that is not
+    printed is indistinguishable, to a reader, from one that was never pre-registered. `strict=True`
+    turns it into a `ValueError` at the point of truncation (3.12 has it).
+    """
+    arms, pack = _two_metric_arms(a_wins_first=8, a_wins_second=6)
+    real = stats.holm_steps
+    monkeypatch.setattr(
+        stats, "holm_steps", lambda p_values, *, alpha: real(p_values, alpha=alpha)[:-1]
+    )
+    with pytest.raises(ValueError):
+        compare_report(arms, pack=pack)
 
 
 def test_holm_is_applied_and_not_merely_printed() -> None:
     """`stats.verdict`'s `alpha_step` existed for exactly this and was passed by nothing (B-1).
 
     `falseSuspendRate` is b=8, c=1 -> p = 0.039: above the plain Bonferroni alpha/k = 0.025 every
-    metric was decided at, below its own Holm step of 0.05, and its 17.5 pp sits exactly on the
-    alpha=0.025 floor so Rule 7 does not demote it. The step-down is therefore the only thing that
-    can make it distinguishable, and the mutation `alpha = resolving.alpha` is visible right here.
+    metric was decided at, below its own Holm step of 0.05, and its 17.5 pp is above the 15.0 pp
+    unadjusted floor so Rule 7 does not demote it. The step-down is therefore the only thing that
+    can make it distinguishable, and the mutation `alpha = resolving.alpha_mdd` is visible here.
     `falseAdvanceRate` is b=8, c=0 -> p = 0.008, which clears the alpha/2 step so Holm does not
     stop before reaching the second metric.
     """
@@ -645,6 +704,14 @@ def test_a_pack_below_b_min_says_no_difference_is_resolvable() -> None:
     assert "No difference is resolvable" in md
     assert "b_min=6" in md
     assert "is better than" not in md
+    # The floor sentence is still printed, because it takes the **other** alpha and is a different
+    # claim (M-ML-6): here it is unattainable too, and says so instead of quoting the 105.0 pp
+    # threshold `6/5.71` would format to — a number no observed difference could ever exceed.
+    assert (
+        "No observed difference can reach significance at any Holm step (alpha <= 0.05): the "
+        "floor of 6 net wins exceeds the 5.71429 effective units available."
+    ) in md
+    assert "105.0 pp" not in md
     # and the "best case" caveat goes with it: it qualifies an MDD figure that is not printed.
     # Found by reading the rendered line, not by an assertion about a return value.
     assert "Best case" not in md
@@ -681,7 +748,11 @@ def test_a_weaker_basis_in_either_arm_moves_the_report_off_mcnemar() -> None:
     md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
     assert "decided by: cluster-bootstrap" in md
     assert "design effect 1.00, assumed" in md
-    assert "anti-conservative under clustering — not the decision" in md
+    # The label says what the two instruments each did: the interval decides, McNemar vetoes
+    # (review B-ML-2). At DEFF = 1.00 the widening is a no-op and the veto is the whole of the
+    # path's conservatism, which is exactly the corner the blocker was about.
+    assert "in conjunction with McNemar's exact test" in md
+    assert "may withhold a verdict but never carries one on its own" in md
 
 
 def test_the_design_effect_is_the_max_of_the_two_arms() -> None:
@@ -696,6 +767,26 @@ def test_the_design_effect_is_the_max_of_the_two_arms() -> None:
     assert "design effect 2.00" in md
     assert "design effect 1.00" not in md
     assert "n=20 effective items (40 units" in md
+
+
+def test_two_measured_bases_at_deff_one_still_do_not_let_mcnemar_decide() -> None:
+    """P2-1's report mirror — the seam S2's runner will actually produce.
+
+    `report.py` takes the weaker of the two *actual* bases (m-ML-4), so two measured arms print
+    `measured`; Rule 4's branch condition is `by-construction`, so `measured` at a design effect of
+    exactly 1.0 must still decide by the substitute. Widening the branch to admit `"measured"` was
+    green across the whole delivered suite.
+    """
+    a, b = _nested_arms()
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, design_effect=1.0,
+            basis="measured", fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, design_effect=1.0,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "design effect 1.00, measured" in md
+    assert "decided by: cluster-bootstrap" in md
+    assert "decided by: mcnemar-exact" not in md
 
 
 def test_two_measured_bases_print_measured_not_assumed() -> None:

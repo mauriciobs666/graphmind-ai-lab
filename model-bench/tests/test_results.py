@@ -108,6 +108,36 @@ def test_a_future_schema_version_is_quarantined_as_unknown_schema(tmp_root) -> N
     assert invalid[0].benchSchemaVersion == 99
 
 
+def test_a_boolean_schema_version_is_refused_at_both_enforcement_points(tmp_root) -> None:
+    """P2-2 — `True == 1`, so `True in REQUIRED_BY_SCHEMA` was `True` and the two sides disagreed.
+
+    `load_history` learned an `isinstance(schema, bool)` guard in the fix round; `validate()` did
+    not. The result: `store()` accepted the record and wrote the file, and the reader it was
+    written for immediately quarantined it — with a `bool` landing in an `InvalidRecord` field
+    typed `int | None`. Neither side was tested, so removing *either* guard was green.
+
+    A record that cannot be read back is not a record. The two enforcement points must agree, and
+    the one that agrees honestly is refusal at write time (plan §3.4.5).
+    """
+    bad = _run("r1", fingerprint_fields=model_fields(benchSchemaVersion=True))
+    assert [p.field for p in bad.fingerprint.validate()] == ["benchSchemaVersion"]
+    assert [p.reason for p in bad.fingerprint.validate()] == ["unknown"]
+    with pytest.raises(InvalidFingerprint):
+        store(bad, tmp_root)
+    assert not list((tmp_root / "results").rglob("*.json"))
+
+    # ...and the reader keeps its own guard, because a hand-edited file never passed `store()`
+    # (AC-2's whole point). Written past the writer, it comes back quarantined and never valid.
+    good = store(_run("r2"), tmp_root)
+    raw = json.loads(good.read_text())
+    raw["fingerprint"]["benchSchemaVersion"] = True
+    good.write_text(json.dumps(raw))
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert invalid[0].reason == "unknown_schema"
+    assert invalid[0].benchSchemaVersion is None  # a bool never reaches an `int | None` field
+
+
 def test_a_truncated_file_is_quarantined_as_unparseable(tmp_root) -> None:
     store(_run("r1"), tmp_root)
     path = tmp_root / "results" / "runs" / "r1.json"
@@ -353,6 +383,22 @@ def test_store_refuses_a_run_id_carrying_a_path_separator(tmp_root) -> None:
     with pytest.raises(ValueError) as excinfo:
         store(_run("pack-qwen/qwen3-4b-2507-01"), tmp_root)
     assert "runId" in str(excinfo.value)
+    assert not list((tmp_root / "results").rglob("*.json"))
+
+
+def test_store_refuses_an_empty_run_id(tmp_root) -> None:
+    """P2-4 — the only member of the guard's set that the first clause does not already catch.
+
+    `Path(".").name` is `""`, so `"." != ""` already fails the bare-filename check and that member
+    of `{"", ".", ".."}` is unreachable. **`Path("..").name` is `".."`, so `".."` is not** — the
+    finding says two-thirds of the set is unreachable and one-third is. None of the three was
+    tested, which is why the difference had never been measured: dropping the whole clause was
+    green, and so was dropping only the reachable half.
+    """
+    for empty in ("", ".", ".."):
+        with pytest.raises(ValueError) as excinfo:
+            store(_run(empty), tmp_root)
+        assert "runId" in str(excinfo.value)
     assert not list((tmp_root / "results").rglob("*.json"))
 
 

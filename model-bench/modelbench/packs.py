@@ -22,6 +22,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, NamedTuple
 
+from modelbench.stats import ALPHA_FAMILY
+
 
 class PackConfigError(ValueError):
     """A manifest that cannot be honestly reported from. Raised, never warned."""
@@ -43,9 +45,24 @@ class PackMetrics(NamedTuple):
         return len(self.verdictMetrics)
 
     @property
-    def alpha(self) -> float:
-        """Family-adjusted α (§3.3). A k-member family computes at α/k, and that is not optional."""
-        return 0.05 / self.k
+    def alpha_family(self) -> float:
+        """The **unadjusted** α — the *floor's*, whatever *k* is (`-ml` v1.6 §7.1, M-ML-6).
+
+        The floor asserts *"below this, nothing can reach significance at any observed outcome"*,
+        which is true only at the loosest Holm step a member can face. Computed at α/k it is `7/n`
+        and the sentence is false: at n=40 a rank-2 member with b=6, c=0 reaches p=0.031 and clears
+        its own 0.05 step, 15.0 pp below the 17.5 pp such a floor would print.
+        """
+        return ALPHA_FAMILY
+
+    @property
+    def alpha_mdd(self) -> float:
+        """The **family-adjusted** α, `α/k` — the *MDD's* (§3.3). Not optional, and not the floor's.
+
+        The MDD promises power whatever rank the member draws under Holm, so it takes the tightest
+        step. This is also the *pre-registration* α that `stats.verdict`'s third precondition pins.
+        """
+        return self.alpha_family / self.k
 
 
 class PackRef(NamedTuple):
@@ -117,8 +134,9 @@ def pack_ref_from_manifest(path: Path | str) -> PackRef:
     walk, no data-file row-count identity check and no provenance check — those are `load_pack` /
     `validate_pack` (plan §3.6a, S2). It exists because S1 ships `compare`, and a comparison cannot
     resolve its analysis unit or its verdict family without the manifest's `sampling` and `metrics`
-    blocks. `contentHash` is left empty here: at S1 the authoritative hash for a comparison is the
-    one each run recorded in its own fingerprint, which is what the AC-3 banner reads.
+    blocks. `contentHash` is `None` here — "not loaded", not "empty" (review m-5/P2-5): at S1 the
+    authoritative hash for a comparison is the one each run recorded in its own fingerprint, which
+    is what the AC-3 banner reads.
     """
     manifest = json.loads(Path(path).read_text(encoding="utf-8"))
     sampling = manifest.get("sampling") or {}

@@ -63,6 +63,12 @@ def _pp(value: float, places: int = 1) -> str:
     return f"{value * 100:.{places}f}"
 
 
+def _sentence(clause: str) -> str:
+    """A clause promoted to its own sentence. Not `str.capitalize`, which lower-cases the rest —
+    it would print "at any holm step" in the one line whose job is to be quotable."""
+    return clause[0].upper() + clause[1:] + "."
+
+
 def _fp(run: RunResult, name: str, default: str = "") -> str:
     return str(run.fingerprint.get(name, default))
 
@@ -164,20 +170,21 @@ def resolving_power_line(rp: stats.ResolvingPower, pack: PackRef) -> str:
     unit_plural = f"{rp.unit_kind}s"
     sample_noun = _SAMPLE_NOUN.get(rp.unit_kind, unit_plural)
     if rp.mdd80 is None:
-        # Below b_min(alpha) effective units no effect size attains the power and the floor exceeds
-        # 100 pp, so both sentences would print figures the instrument cannot deliver (M-ML-1).
-        sentences = [stats.unattainable_clause(rp, unit_plural)]
+        # Below b_min(alpha_mdd) effective units no effect size attains the power, so the MDD
+        # sentence would print a figure the instrument cannot deliver (M-ML-1). The floor sentence
+        # is printed either way: it takes the other alpha and can still be attainable when the MDD
+        # is not, and where it is not, `floor_clause` says so without quoting a >100 pp threshold.
+        sentences = [
+            stats.unattainable_clause(rp, unit_plural),
+            _sentence(stats.floor_clause(rp)),
+        ]
     else:
         sentences = [
             (
                 f"This pack resolves differences of >={_pp(rp.mdd80)} pp with 80% power at "
-                f"n={rp.n_effective:g} effective {unit_plural} ({rp.n_units} units, design effect "
-                f"{rp.design_effect:.2f}, {rp.basis}, alpha={rp.alpha:g})."
+                f"{stats.provenance(rp, unit_plural)}."
             ),
-            (
-                f"Differences below {stats.format_floor_pp(rp.observable_floor)} pp cannot reach "
-                "significance at any observed outcome."
-            ),
+            _sentence(stats.floor_clause(rp)),
         ]
     # The power model is strict dominance, which is the most favourable case, so the figure is a
     # lower bound and must carry its label. Below n_eff = 20 the 2:1 discordance mix reaches 80%
@@ -358,7 +365,6 @@ def compare_report(
     lines += ["## Verdicts", "", f"Comparison kind: **{_comparison_kind(a, b)}** (§3.7).", ""]
 
     family = list(pack.metrics.verdictMetrics)
-    alpha = 0.05 / len(family)
     unit_kind = unit_kind_for_role(pack.role)
     # A basis is only as strong as its weakest arm, and the degradation is fail-safe: any arm whose
     # determinism probe did not run and agree drops the whole comparison to "assumed", which via
@@ -389,16 +395,23 @@ def compare_report(
             unit_kind=unit_kind,
             design_effect=design_effect,
             basis=basis,
-            alpha=alpha,
+            # The two αs come from the pack's pre-registered family, which is the only thing that
+            # fixes *k*. They are different numbers whenever k > 1, and each bound takes the one
+            # that keeps its own sentence true (`-ml` v1.6 §7.1, review M-ML-6).
+            alpha_family=pack.metrics.alpha_family,
+            alpha_mdd=pack.metrics.alpha_mdd,
         )
         tables.append((metric, outcomes, rp))
         _a, table_b, table_c, _d = outcomes.table
         p_values.append(stats.mcnemar_exact(table_b, table_c))
 
-    steps = stats.holm_steps(p_values, alpha=0.05)
+    steps = stats.holm_steps(p_values, alpha=pack.metrics.alpha_family)
 
     computed: list[tuple[str, stats.Verdict, stats.HolmStep]] = []
-    for (metric, outcomes, rp), step, tally in zip(tables, steps, tallies):
+    # `strict=True`: a Holm ladder shorter than the family would otherwise truncate the loop and
+    # a pre-registered verdict metric would vanish from the report — indistinguishable, to a
+    # reader, from one that was never pre-registered (review P2-3).
+    for (metric, outcomes, rp), step, tally in zip(tables, steps, tallies, strict=True):
         v = stats.verdict(
             outcomes,
             resolving=rp,
@@ -438,8 +451,10 @@ def compare_report(
             f"Holm–Bonferroni across the {len(family)} pre-registered verdict metrics, applied: "
             f"the smallest p is tested at alpha/{len(family)}, the next at "
             f"alpha/{len(family) - 1}, and the first non-rejection stops the procedure. Every "
-            f"resolving-power figure above is computed at the family-adjusted alpha={alpha:g} "
-            "(§7.1).",
+            f"**MDD** above is computed at the family-adjusted alpha="
+            f"{pack.metrics.alpha_mdd:g}; every **observable floor** is computed at the unadjusted "
+            f"alpha={pack.metrics.alpha_family:g}, the loosest step a member can face, because "
+            "that is the only alpha at which the floor's own sentence is true (§7.1).",
             "",
             "| metric | McNemar p | Holm-adjusted threshold | decision |",
             "|---|---|---|---|",

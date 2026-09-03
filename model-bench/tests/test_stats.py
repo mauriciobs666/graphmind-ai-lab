@@ -10,6 +10,7 @@ version does not typecheck, and the honest one is the only one that runs".
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import math
 from fractions import Fraction
@@ -21,6 +22,7 @@ from modelbench.stats import (
     BootstrapResult,
     DuplicateAnalysisUnit,
     PairedOutcomes,
+    Rule7Violation,
     UnattainablePower,
     b_min,
     cluster_bootstrap,
@@ -221,7 +223,9 @@ def test_direct_construction_cannot_bypass_the_duplicate_guard() -> None:
 # --- Rule 2: resolving power's inputs have no defaults -------------------------------------------
 
 
-@pytest.mark.parametrize("omitted", ["unit_kind", "design_effect", "basis", "alpha"])
+@pytest.mark.parametrize(
+    "omitted", ["unit_kind", "design_effect", "basis", "alpha_family", "alpha_mdd"]
+)
 def test_resolving_power_inputs_are_keyword_only_with_no_default(omitted: str) -> None:
     """`-ml` §3.4 Rule 2 / §9.2(b) — 'the absence of a default is itself the test'.
 
@@ -232,7 +236,8 @@ def test_resolving_power_inputs_are_keyword_only_with_no_default(omitted: str) -
         "unit_kind": "conversation",
         "design_effect": 1.0,
         "basis": "by-construction",
-        "alpha": 0.05,
+        "alpha_family": 0.05,
+        "alpha_mdd": 0.05,
     }
     kwargs.pop(omitted)
     with pytest.raises(TypeError):
@@ -245,7 +250,8 @@ def test_resolving_power_inputs_are_keyword_only_with_no_default(omitted: str) -
 
 def test_resolving_power_reports_effective_units() -> None:
     rp = resolving_power(
-        48, unit_kind="conversation", design_effect=4.0, basis="assumed", alpha=0.05
+        48, unit_kind="conversation", design_effect=4.0, basis="assumed",
+        alpha_family=0.05, alpha_mdd=0.05,
     )
     assert rp.n_effective == 12.0
     assert rp.n_units == 48
@@ -287,35 +293,84 @@ def test_mdd_and_floor_reproduce_the_notes_table(n_eff, exact_pp, printed_pp, fl
 
 @pytest.mark.parametrize(
     "n_eff,mdd_pp,floor_pp",
-    # `-ml` §7.1's α = 0.025 column — the step a two-member `verdictMetrics` family must clear.
-    # 46.6 at n=15 is the note's v1.5 correction; 58.3 and 23.3 were already truncations.
+    # `-ml` **v1.6** §7.1/§7.3 — the MDD column at the family-adjusted α = 0.025 (unchanged), and
+    # the floor beside it at the **unadjusted** α = 0.05 (review M-ML-6). v1.2–v1.5's second floor
+    # column (58.3 / 46.6 / 23.3 / 17.5) is deleted: it asserted impossibilities that are
+    # attainable, since a member tested at a 0.05 Holm step reaches significance at `6/n`.
     [
-        (12.0, "65.6", "58.3"),
-        (15.0, "54.2", "46.6"),
-        (30.0, "28.7", "23.3"),
-        (40.0, "21.9", "17.5"),
+        (12.0, "65.6", "50.0"),
+        (15.0, "54.2", "40.0"),
+        (30.0, "28.7", "20.0"),
+        (40.0, "21.9", "15.0"),
     ],
 )
-def test_mdd_and_floor_at_the_family_adjusted_alpha(n_eff, mdd_pp, floor_pp) -> None:
+def test_the_mdd_takes_the_family_alpha_and_the_floor_the_unadjusted_one(
+    n_eff, mdd_pp, floor_pp
+) -> None:
+    """The two bounds on one printed line take **opposite** αs, on purpose (`-ml` v1.6 Rule 3).
+
+    The MDD claims *"resolves >= X with 80% power"*, which is true only at the tightest step a
+    member can be required to clear, α/k. The floor claims *"below Y nothing can reach significance
+    at any observed outcome"*, which is true only at the **loosest** step it can face, the
+    unadjusted α — printed at α/k it is `7/n`, and at n=40 a rank-2 member with b=6, c=0 clears its
+    0.05 Holm step at p=0.031 while its 15.0 pp sits below the printed 17.5. Same falsity class as
+    the `15.8` withdrawn in v1.5.
+    """
     assert f"{min_detectable_difference(n_eff, alpha=0.025) * 100:.1f}" == mdd_pp
-    assert format_floor_pp(observable_floor(n_eff, alpha=0.025)) == floor_pp
+    assert format_floor_pp(observable_floor(n_eff, alpha=0.05)) == floor_pp
+
+
+def test_resolving_power_computes_each_bound_at_its_own_alpha() -> None:
+    """M-ML-6 in one object: `ResolvingPower` carries both αs and uses each where it belongs.
+
+    The mutation this exists to kill is the delivered one — `observable_floor(n_eff,
+    alpha=alpha_mdd)` — which printed 17.5 pp at n=40, k=2 and made the floor's own sentence false.
+    """
+    rp = resolving_power(
+        40, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.025,
+    )
+    assert rp.alpha_family == 0.05
+    assert rp.alpha_mdd == 0.025
+    assert rp.observable_floor == 6 / 40            # b_min(0.05), never b_min(0.025) = 7
+    assert format_floor_pp(rp.observable_floor) == "15.0"
+    assert f"{rp.mdd80 * 100:.1f}" == "21.9"        # and the MDD is still at α/k
 
 
 def test_the_floor_truncation_is_guarded_against_the_bin_edge() -> None:
-    """`7/40 = 0.175` is `174.99999999999997` bins in IEEE doubles (`-ml` §7.1's α=0.025, n=40 row).
+    """The guard stays; its justification changed with v1.6, and the wording follows it.
 
-    Naive truncation prints **17.4** for a floor the note publishes as **17.5**, so the `+ 1e-12`
-    guard is load-bearing rather than defensive — it mirrors the `- 1e-12` on the MDD's ceiling.
-    Every exact-bin row in the note's two floor columns is checked here in one place.
+    `7/40 = 0.175` is `174.99999999999997` bins in IEEE doubles, so naive truncation prints
+    **17.4** where the value is 17.5. That cell was the α=0.025, n=40 floor — **the column v1.6
+    deleted** (M-ML-6) — so this guard is now **defensive, not a regression pin on a published
+    figure**: swept over `n <= 2000` with the floor's `b_min = 6`, naive truncation never misfires.
+    It is kept because `b_min` is a function of α, not the constant 6 (`-ml` §3.4 Rule 3a): any
+    future α reopens the hazard, and the cost is one term.
+
+    It is pinned **by the code's own expression**. `math.floor(x / precision)` and
+    `math.floor(x * 1000)` are not interchangeable — the double nearest `0.001` is slightly above
+    it, so the division rounds down across the bin edge where the multiplication does not — and
+    testing the expression the code does not use is exactly how the original sweep missed this.
     """
     import math
 
-    assert math.floor((7 / 40) / 0.001) == 174  # unguarded: the wrong bin
-    for smallest, n, expected in [
-        (6, 12, "50.0"), (6, 15, "40.0"), (6, 20, "30.0"), (6, 30, "20.0"), (6, 40, "15.0"),
-        (6, 48, "12.5"), (6, 60, "10.0"), (6, 120, "5.0"), (7, 40, "17.5"),
+    assert math.floor((7 / 40) / 0.001) == 174  # the code's expression: the wrong bin
+    assert math.floor((7 / 40) * 1000) == 175  # an equivalent-looking one: no hazard to find
+    assert format_floor_pp(7 / 40) == "17.5"  # guarded, whatever alpha put a 7 there
+    # and the truncation is against the caller's `precision`, not a hardcoded 1000: the two agree
+    # at the printed precision and nowhere else, which is what makes an "equivalent-looking"
+    # rewrite of the expression invisible to a test that only ever passes the default.
+    assert format_floor_pp(0.1234, precision=0.01) == "12.0"
+
+    # Every floor the note now prints is `6/n`, and at that numerator the hazard is absent over
+    # the whole range any pack could reach. This is what makes the guard defensive.
+    for n in range(1, 2001):
+        assert math.floor((6 / n) / 0.001 + 1e-12) == math.floor((6 / n) / 0.001)
+    for n, expected in [
+        (12, "50.0"), (15, "40.0"), (20, "30.0"), (30, "20.0"), (40, "15.0"),
+        (48, "12.5"), (60, "10.0"), (120, "5.0"),
     ]:
-        assert format_floor_pp(smallest / n) == expected
+        assert format_floor_pp(6 / n) == expected
 
 
 def test_the_floor_truncates_and_never_ceilings_an_inexact_value() -> None:
@@ -390,9 +445,13 @@ def _rp(
     unit_kind: str = "item",
     deff: float = 1.0,
     basis: str = "by-construction",
-    alpha: float = 0.05,
+    alpha_mdd: float = 0.05,
+    alpha_family: float = 0.05,
 ):
-    return resolving_power(n, unit_kind=unit_kind, design_effect=deff, basis=basis, alpha=alpha)
+    return resolving_power(
+        n, unit_kind=unit_kind, design_effect=deff, basis=basis,
+        alpha_family=alpha_family, alpha_mdd=alpha_mdd,
+    )
 
 
 def test_verdict_requires_the_resolving_power_to_belong_to_this_table() -> None:
@@ -417,14 +476,14 @@ def test_verdict_requires_the_family_adjusted_alpha() -> None:
     with pytest.raises(ValueError):
         verdict(
             _outcomes(34, 6, 0, 0),
-            resolving=_rp(40, alpha=0.05),
+            resolving=_rp(40, alpha_mdd=0.05),
             metric_name="m",
             family=["m", "other"],
         )
     # the same call at alpha = 0.05/2 is accepted
     verdict(
         _outcomes(34, 6, 0, 0),
-        resolving=_rp(40, alpha=0.025),
+        resolving=_rp(40, alpha_mdd=0.025),
         metric_name="m",
         family=["m", "other"],
     )
@@ -526,7 +585,9 @@ def test_a_design_effect_above_one_moves_the_decision_to_the_bootstrap() -> None
         bootstrap_seed=20260902,
     )
     assert v.decided_by == "cluster-bootstrap"
-    assert "anti-conservative under clustering — not the decision" in v.text
+    assert "Decided by the cluster-bootstrap CI on the paired difference, widened by " \
+        "sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test" \
+        in v.text
 
 
 def test_an_assumed_basis_also_moves_the_decision_off_mcnemar() -> None:
@@ -535,6 +596,28 @@ def test_an_assumed_basis_also_moves_the_decision_off_mcnemar() -> None:
     v = verdict(
         _outcomes(34, 6, 0, 0),
         resolving=_rp(40, deff=1.0, basis="assumed"),
+        metric_name="m",
+        family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert v.decided_by == "cluster-bootstrap"
+
+
+def test_a_measured_basis_at_deff_one_also_moves_the_decision_off_mcnemar() -> None:
+    """P2-1 — Rule 4's branch condition is `by-construction`, and the third enum value was untested.
+
+    `mcnemar_may_decide` widened to `basis in ("by-construction", "measured")` — letting a measured
+    basis into the McNemar seat at `design_effect == 1.0` — survived all 296 tests: `"assumed"` was
+    covered at this boundary and `"measured"` was not. It became reachable in the fix round
+    (`report.py` now preserves the weaker of the two *actual* bases instead of collapsing to
+    `"assumed"`), and S2's runner is what will start producing it.
+
+    A measured DEFF of exactly 1.0 is an estimate that came back at 1.0, not a design that makes it
+    1.0 — the distinction Rule 4 is drawing is *provenance*, not magnitude.
+    """
+    v = verdict(
+        _outcomes(34, 6, 0, 0),
+        resolving=_rp(40, deff=1.0, basis="measured"),
         metric_name="m",
         family=["m"],
         bootstrap_seed=20260902,
@@ -701,13 +784,74 @@ def test_the_mcnemar_path_satisfies_rule_7_by_construction() -> None:
     already implies `|b - c| / n >= b_min(alpha) / n`. So the invariant never fires on the valid
     branch, and every time it *does* fire it is reporting a defect in the substitute instrument.
     """
-    for n in (12, 20, 30, 38, 40, 48, 85):
+    smallest = b_min(0.05)
+    assert smallest == 6
+    for m in range(401):
         for alpha in (0.05, 0.025):
-            floor = b_min(alpha) / n
-            for b in range(n + 1):
-                for c in range(n + 1 - b):
-                    if mcnemar_exact(b, c) <= alpha:
-                        assert abs(b - c) / n >= floor
+            # `mcnemar_exact(b, c)` depends on `m = b + c` and `k = min(b, c)` only, and is
+            # increasing in `k` while `|b - c| = m - 2k` decreases: so the largest rejecting `k`
+            # is the only case that can violate the bound. Binary search it rather than sweeping
+            # 80k tables, which is what makes `b + c <= 400` affordable here.
+            lo, hi = -1, m // 2 + 1
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if mcnemar_exact(m - mid, mid) <= alpha:
+                    lo = mid
+                else:
+                    hi = mid
+            if lo >= 0:
+                assert (m - 2 * lo) >= smallest
+
+
+def test_rule_7_raises_on_the_mcnemar_path_where_it_is_a_theorem() -> None:
+    """m-ML-6 — the response splits by path, because the invariant has two different statuses.
+
+    On `mcnemar-exact` it is a **theorem**: with the floor at the unadjusted α, `p <= alpha_step <=
+    alpha_family` implies `|b−c| >= b_min(0.05) = 6`, hence `|diff| >= 6/n`, at every Holm step —
+    verified exhaustively over every `(b, c)` with `b + c <= 400` by the test above. So a fire
+    there cannot come from the data; it can only come from a defect in one of the two independent
+    routes that produce the two numbers, and **silently demoting it discards exactly the detector
+    property Rule 7 exists for** ("a substituted instrument surfaces as a contradiction rather than
+    as a plausible number"). The only way to reach the branch is to build the corrupted state, so
+    that is what this does: a `ResolvingPower` whose floor did not come from `b_min/n_effective`.
+    """
+    honest = _rp(40)
+    corrupted = dataclasses.replace(honest, observable_floor=0.30)
+    with pytest.raises(Rule7Violation) as excinfo:
+        verdict(_outcomes(34, 6, 0, 0), resolving=corrupted, metric_name="m", family=["m"])
+    assert "mcnemar-exact" in str(excinfo.value)
+
+    # ...and the same corruption on the substitute path demotes and names, rather than raising:
+    # there the invariant is a guard, and raising would abort on ordinary clustered data.
+    substitute = dataclasses.replace(corrupted, design_effect=1.0, basis="assumed")
+    v = verdict(
+        _outcomes(34, 6, 0, 0), resolving=substitute, metric_name="m", family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert v.decided_by == "cluster-bootstrap"
+    assert v.floor_demoted is True
+    assert v.distinguishable is False
+
+
+def test_verdict_refuses_a_holm_step_outside_the_two_alphas() -> None:
+    """The theorem's premise, made checkable rather than assumed (`-ml` v1.6 §3.4 Rule 7).
+
+    Holm's own steps are `α/(k−i)`, which lie in `[alpha_mdd, alpha_family]` by construction. A
+    step outside that range is a caller defect, and left unchecked it would surface as the
+    `Rule7Violation` above — a "module bug" raised at the wrong module.
+    """
+    rp = _rp(40, alpha_mdd=0.025)
+    for bad in (0.0125, 0.10):
+        with pytest.raises(ValueError):
+            verdict(
+                _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m",
+                family=["m", "other"], alpha_step=bad,
+            )
+    for good in (0.025, 0.05):
+        verdict(
+            _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m",
+            family=["m", "other"], alpha_step=good,
+        )
 
 
 def test_the_converse_of_rule_7_is_not_an_invariant() -> None:
@@ -743,6 +887,75 @@ def test_the_clustered_interval_widens_with_the_declared_design_effect() -> None
         widths.append(v.ci[1] - v.ci[0])
     assert widths == sorted(widths)
     assert len(set(round(w, 6) for w in widths)) == 4
+
+
+# --- B-ML-2: the substitute may never declare what the exact test refuses ------------------------
+
+
+@pytest.mark.parametrize("b,c", [(7, 1), (9, 2), (11, 3)])
+def test_the_substitute_path_never_declares_what_the_exact_test_refuses(b: int, c: int) -> None:
+    """B-ML-2 — the untested corner is the **default** one, and it was anti-conservative.
+
+    At `design_effect == 1.0` with `basis == "assumed"` — the fail-safe every comparison carries
+    until S2 lands the determinism probe — the decision moves off McNemar and `sqrt(1.0)` widens
+    nothing, so a bare percentile interval decided. These three tables were measured firing at
+    p = 0.057–0.070, where the exact test refuses. Rule 7 does not catch them: 15.0, 17.5 and
+    20.0 pp are all **at or above** the 15.0 pp floor.
+
+    The fix is Rule 4's permitted form: on any non-`by-construction` path the decision is a
+    **conjunction** — the widened CI excludes zero **and** `mcnemar_exact <= alpha_step`. The
+    objection to McNemar under clustering is that it *rejects* too readily, so a necessary
+    condition only ever removes rejections and the result is uniformly at least as conservative as
+    either instrument alone.
+    """
+    rp = _rp(40, deff=1.0, basis="assumed")
+    v = verdict(
+        _outcomes(40 - b - c, b, c, 0), resolving=rp, metric_name="m", family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert 0.05 < mcnemar_exact(b, c) < 0.08  # the exact test refuses, and not by a wide margin
+    assert v.ci[0] > 0  # the interval on its own would have ranked it
+    assert abs(v.diff) >= rp.observable_floor  # so Rule 7 is not what saves it
+    assert v.floor_demoted is False
+    assert v.distinguishable is False
+    assert "The cluster-bootstrap interval" in v.text
+    assert "the exact paired test does not reach alpha=0.05" in v.text
+    assert "on this path the exact test is a necessary condition, and it is not met" in v.text
+
+
+@pytest.mark.parametrize("deff,basis", [(1.0, "assumed"), (1.0, "measured"), (2.0, "measured")])
+def test_the_conjunction_still_ranks_a_table_both_instruments_accept(deff, basis) -> None:
+    """The veto only *removes* rejections — it must not remove the ones both instruments allow.
+
+    `(34, 6, 0, 0)` is p=0.031 and a widened interval that excludes zero at DEFF 1 and 2, and its
+    15.0 pp is not below the 15.0 pp floor at DEFF 1. A conjunction that never ranks anything would
+    pass B-ML-2's test and be useless.
+    """
+    rp = _rp(40, deff=deff, basis=basis)
+    v = verdict(
+        _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m", family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert v.decided_by == "cluster-bootstrap"
+    assert v.distinguishable is (deff == 1.0)  # at DEFF 2 the floor has moved to 30.0 pp
+    if deff == 1.0:
+        assert "is better than" in v.text
+
+
+def test_at_deff_one_the_substitute_interval_is_narrower_than_the_mover_d_it_replaces() -> None:
+    """Why the veto is *needed* rather than merely permitted — B-ML-2's mechanism, in one number.
+
+    `sqrt(1.0) = 1.0`, so at the default basis the "widened" interval is the bare percentile one,
+    and it is **narrower** than the MOVER-D that McNemar's own path would have quantified with.
+    The interval cannot be what makes this path conservative, so something else has to be, and
+    that is the conjunction. Above DEFF 1 the widening takes over — the test below.
+    """
+    lo, hi = mover_d_interval(34, 6, 0, 0)
+    v = verdict(
+        _outcomes(34, 6, 0, 0), resolving=_rp(40, deff=1.0, basis="assumed"),
+        metric_name="m", family=["m"], bootstrap_seed=20260902,
+    )
+    assert (v.ci[1] - v.ci[0]) < (hi - lo)
 
 
 def test_the_clustered_interval_is_not_narrower_than_the_mover_d_it_replaces() -> None:
@@ -801,7 +1014,8 @@ def test_mdd_refuses_to_invent_a_figure_when_no_effect_size_attains_the_power() 
 
 def test_resolving_power_reports_an_absent_mdd_rather_than_a_false_one() -> None:
     rp = resolving_power(
-        40, unit_kind="item", design_effect=7.0, basis="measured", alpha=0.05
+        40, unit_kind="item", design_effect=7.0, basis="measured",
+        alpha_family=0.05, alpha_mdd=0.05,
     )
     assert rp.n_effective == pytest.approx(40 / 7)
     assert rp.mdd80 is None
@@ -838,15 +1052,32 @@ def test_holm_stops_at_the_first_non_rejection() -> None:
     assert [s.tested for s in steps] == [True, False]
 
 
+def test_holm_steps_returns_one_step_per_family_member_in_the_callers_order() -> None:
+    """P2-3 — the ladder is consumed positionally, so its length is part of its contract.
+
+    `holm_steps` ended `return [s for s in steps if s is not None]`, a type narrowing over a
+    placeholder list: every index is assigned today, but the filter means a ladder that ever
+    returned short would do so **silently**, and `report.py` zipped it un-`strict` against the
+    metric tables — dropping a pre-registered verdict metric from the report with no error. The
+    list is now built without a filter, so it cannot shorten, and the consumer zips strictly.
+    """
+    for p_values in ([0.5], [0.008, 0.031], [0.9, 0.01, 0.5, 0.02], [0.04] * 7):
+        steps = holm_steps(p_values, alpha=0.05)
+        assert len(steps) == len(p_values)
+        assert [s.p for s in steps] == list(p_values)  # caller's order, not sorted order
+        assert sorted(s.rank for s in steps) == list(range(len(p_values)))
+
+
 def test_verdict_decides_at_the_holm_step_it_is_given() -> None:
     """B-1 — `alpha_step` was built for exactly this and was passed by nothing.
 
     b=8, c=1 gives p = 0.0390625: not distinguishable at the plain Bonferroni α/k = 0.025 that
     every metric was decided at, distinguishable at its own Holm step of 0.05. Its 17.5 pp
-    difference sits exactly **on** the α=0.025 floor, so Rule 7 does not demote it — see
-    `test_rule_7_uses_the_family_adjusted_floor_the_report_prints` for why that matters.
+    difference is above the 15.0 pp floor, so Rule 7 does not demote it — see
+    `test_the_unadjusted_floor_does_not_take_back_a_holm_step_down_gain` for the case where the
+    two came into conflict, and for which of them v1.6 moved.
     """
-    outcomes, rp = _outcomes(31, 8, 1, 0), _rp(40, alpha=0.025)
+    outcomes, rp = _outcomes(31, 8, 1, 0), _rp(40, alpha_mdd=0.025)
     bonferroni = verdict(outcomes, resolving=rp, metric_name="m", family=["m", "other"])
     holm = verdict(
         outcomes, resolving=rp, metric_name="m", family=["m", "other"], alpha_step=0.05
@@ -856,38 +1087,37 @@ def test_verdict_decides_at_the_holm_step_it_is_given() -> None:
     assert holm.alpha_used == 0.05
 
 
-def test_rule_7_uses_the_family_adjusted_floor_the_report_prints() -> None:
-    """Rule 7 is measured against `resolving.observable_floor`, i.e. the floor at **α/k**.
+def test_the_unadjusted_floor_does_not_take_back_a_holm_step_down_gain() -> None:
+    """M-ML-6's counterfactual, as a verdict rather than as two numbers.
 
-    `-ml` §7.1 fixes the printed floor at α/k because "a metric can be required to clear that
-    step", and that is the sentence the report renders beside every verdict. Holm's own step for a
-    rank-1 member is the looser α/(k−1), so the two can disagree at the margin: b=6, c=0 at n=40 is
-    p=0.031, which clears a Holm step of 0.05, while its 15.0 pp sits below the 17.5 pp floor the
-    report prints at α=0.025.
+    The delivered build printed the floor at α/k, so a rank-2 member with b=6, c=0 at n=40 cleared
+    its 0.05 Holm step (p=0.031) and was then demoted by a 17.5 pp floor — reducing Holm to
+    Bonferroni for every difference in `[6/n, 7/n)`, which is *precisely* the band §7.3 already
+    prices as the cost of a second verdict metric. The build charged that price twice.
 
-    The conservative resolution is deliberate: the decision follows the floor the report **prints**,
-    so a reader can never find the verdict contradicting the honesty line two paragraphs below it.
-    The cost is a Holm gain forgone at the boundary; the alternative is printing two floors, which
-    multiplies the surface on which the instrument can contradict itself.
+    With the floor at the unadjusted α it is 15.0 pp, the 15.0 pp difference is not below it, and
+    the Holm gain survives. The α/k floor is not merely expensive, it is **false**: it says this
+    outcome cannot reach significance, and this outcome did.
     """
-    rp = _rp(40, alpha=0.025)
+    rp = _rp(40, alpha_mdd=0.025)
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m", family=["m", "other"],
         alpha_step=0.05,
     )
     assert mcnemar_exact(6, 0) <= 0.05  # it clears its own Holm step
-    assert abs(v.diff) < rp.observable_floor  # and is still below the printed floor
-    assert v.distinguishable is False
-    assert v.floor_demoted is True
+    assert rp.observable_floor == 6 / 40  # and the floor no longer forbids what just happened
+    assert abs(v.diff) == pytest.approx(rp.observable_floor)
+    assert v.floor_demoted is False
+    assert v.distinguishable is True
 
 
 def test_a_metric_past_the_holm_stop_is_not_tested_and_says_so() -> None:
     """§3.3 — 'stop at the first non-rejection and mark the remainder not tested'."""
-    # b=8, c=1 is p = 0.039 and 17.5 pp, which clears both its Holm step of 0.05 and the α=0.025
+    # b=8, c=1 is p = 0.039 and 17.5 pp, which clears both its Holm step of 0.05 and the 15.0 pp
     # floor — so it *would* be distinguishable, and the stop is the only thing preventing it.
     # Asserting the passthrough `v.holm_tested` on a case that was non-significant anyway left the
     # mutation `significant = raw_significant and not holm_tested` alive.
-    outcomes, rp = _outcomes(31, 8, 1, 0), _rp(40, alpha=0.025)
+    outcomes, rp = _outcomes(31, 8, 1, 0), _rp(40, alpha_mdd=0.025)
     tested = verdict(
         outcomes, resolving=rp, metric_name="m", family=["m", "other"], alpha_step=0.05
     )

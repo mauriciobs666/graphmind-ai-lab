@@ -2,6 +2,83 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-03 — S1 second gate round: the floor's α, McNemar as a veto, Rule 7 by path
+
+**What:** Closed the second round of gate findings on S1 —
+`docs/reviews/small-model-benchmarking-ml.md` `## Pass 2` (**B-ML-2**, **M-ML-6**, **m-ML-6**) and
+`docs/reviews/small-model-benchmarking-impl.md` `## Pass 2` (**P2-1**…**P2-5**) — against method
+note **v1.6**, which landed this morning and changed Rules 3, 4, 6 and 7, §3.3, §7.1 and §7.3.
+Test-first throughout; 296 → 314 tests, and 22 mutations run with **one survivor, equivalent by
+construction** (see below).
+
+**M-ML-6 — the observable floor moves to the unadjusted α, and `ResolvingPower` carries two αs.**
+The floor claims *"below Y nothing can reach significance at any observed outcome"*, which is true
+only at the **loosest** Holm step a member can face. Printed at α/k it is `7/n` and **false**: at
+n=40 a rank-2 member with b=6, c=0 reaches p=0.031, clears its own 0.05 step, and its 15.0 pp sits
+below the 17.5 pp the old floor printed. `resolving_power` now takes `alpha_family` **and**
+`alpha_mdd`, both keyword-only with no default, and each bound is computed at its own — the floor
+at `alpha_family`, the MDD unchanged at `α/k`. §7.1's mandatory sentence names both. The third α,
+Holm's data-dependent `alpha_step`, stays `verdict()`'s parameter rather than becoming a field:
+it is known only after the family is ranked, so a field would be `None` until it was not, and the
+number would have two homes. The sweep went past `stats.py`: `PackMetrics.alpha` — a code-side
+restatement of exactly this α — is now `alpha_family` / `alpha_mdd`, and `report.py` reads them
+instead of recomputing `0.05 / len(family)` inline. `stats.ALPHA_FAMILY` is the single home of the
+unadjusted 0.05.
+
+*Consequence, taken deliberately:* the α/k floor was reducing Holm to Bonferroni for every
+difference in `[6/n, 7/n)` — precisely the band §7.3 already prices as the cost of a second verdict
+metric — so the build was charging that price twice. It no longer is, and the rendered family table
+for the review's own case now reads `distinguishable` where it read `not distinguishable — below
+the observable floor`.
+
+**B-ML-2 — the substitute path is a conjunction, not an interval.** At `design_effect == 1.0` with
+`basis == "assumed"` — the fail-safe **every** comparison carries until S2 lands the determinism
+probe — the decision moves off McNemar and `sqrt(1.0)` widens nothing, so a bare percentile interval
+was deciding. Reproduced at n=40: `(b=7, c=1)`, `(9, 2)` and `(11, 3)` all rendered
+*distinguishable* at p = 0.057–0.070, where the exact test refuses, and Rule 7 does not catch them
+because 15.0, 17.5 and 20.0 pp are all **at or above** the floor. The non-`by-construction` decision
+is now *"the widened CI excludes zero **and** `mcnemar_exact <= alpha_step`"*. Note v1.6's Rule 4
+permits this explicitly: the objection to McNemar under clustering is that it *rejects* too readily,
+and a necessary condition only ever removes rejections, so the pair is uniformly at least as
+conservative as either instrument alone. The verdict strings say which instrument played which
+role — one sentence for both paths would have contradicted one of them.
+
+**m-ML-6 — Rule 7 splits by path.** On `mcnemar-exact` the invariant is a **theorem** (re-verified
+here by binary search over every `b + c <= 400` at both αs, zero violations), so a fire is a module
+bug and now raises `Rule7Violation`; silently demoting discarded exactly the detector property the
+rule exists for. On `cluster-bootstrap` it stays demote-and-name, because a widened interval and a
+shrunken effective *n* legitimately disagree there. Sequenced **after** M-ML-6, as the review
+required: at α/k the McNemar branch is reachable and the raise would have fired on correct data. A
+fifth precondition makes the theorem's premise checkable rather than assumed — `alpha_step` must
+lie in `[alpha_mdd, alpha_family]`, which Holm's own steps do by construction.
+
+**The bin-edge truncation guard stays; its justification was corrected.** It was load-bearing on the
+17.5 pp cell at n=40 — **the cell M-ML-6 deleted**. Swept to n ≤ 2000: with `b_min = 7` naive
+truncation misfires at n = 5, 10, 20, 40; with `b_min = 6`, which the floor now always uses, never.
+So the guard is **defensive**, kept because `b_min` is a function of α and any future α reopens the
+hazard, and its test is no longer a regression pin on a published figure. Both the code comment and
+the test say so. The `floor(x/precision)` expression is still pinned by the code's own form — a
+test now also pins the `precision` parameter, since `floor(x*1000)` agrees at the default and
+nowhere else, which is how the original sweep missed the hazard.
+
+**Engineering findings.** **P2-1** — `"measured"` at DEFF 1.0 had no test at Rule 4's branch, and
+widening `mcnemar_may_decide` to admit it survived all 296 tests; two mirror tests (unit and report)
+now close it. **P2-2** — `validate()` accepted `benchSchemaVersion: true` (`True == 1`) while
+`load_history` quarantined it, so `store()` wrote a record the reader refused; the bool guard now
+lives at both enforcement points, and a quarantined bool no longer lands in a field typed
+`int | None`. **P2-3** — `holm_steps` builds its list without a `None`-filter and `report.py` zips
+`strict=True`, so a short ladder raises instead of silently dropping a pre-registered verdict
+metric. **P2-4** — accepted in part, with a correction: `Path(".").name` is `""` so `"."` is
+redundant, but **`Path("..").name` is `".."`**, so `".."` is *not* already caught and stays; one
+third of the guard was unreachable, not two thirds. **P2-5** — `packs.py`'s `contentHash` docstring
+now says `None`, matching the code.
+
+**Verification.** `.venv/bin/python -m pytest -q` → `314 passed`; `.venv/bin/ruff check .` → clean.
+22 mutations run against the fixes, **21 killed**. The survivor — restoring `holm_steps`'
+`None`-filter — is **equivalent by construction**: every index is assigned, so the filter changes
+no output on its own. Compounding it with a ladder that actually returns short is killed twice over
+(the strict zip and the length invariant), which is the honest statement of what P2-3's fix buys.
+
 ## 2026-09-03 — S1 gate remediation: both blockers, all ten majors, and Rule 7
 
 **What:** Fixed the findings of the two independent S1 gates —

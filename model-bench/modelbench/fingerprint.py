@@ -172,7 +172,12 @@ class Fingerprint:
             return [FieldProblem(field="benchSchemaVersion", reason="absent")]
         if schema is None:
             return [FieldProblem(field="benchSchemaVersion", reason="null")]
-        if schema not in REQUIRED_BY_SCHEMA:
+        # `isinstance(schema, bool)` first, because `True == 1`: without it `True` is *in*
+        # `REQUIRED_BY_SCHEMA` and validates as schema 1, so `store()` writes a record that
+        # `load_history` — which does carry the guard — immediately quarantines, with a bool
+        # landing in an `InvalidRecord.benchSchemaVersion` typed `int | None` (review P2-2). The
+        # two enforcement points have to agree, and this is the one that can refuse the write.
+        if isinstance(schema, bool) or schema not in REQUIRED_BY_SCHEMA:
             return [FieldProblem(field="benchSchemaVersion", reason="unknown")]
 
         problems: list[FieldProblem] = []

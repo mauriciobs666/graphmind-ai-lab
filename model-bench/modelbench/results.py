@@ -387,7 +387,13 @@ def store(run: RunResult, root: Path) -> Path:
     # (`qwen/qwen3-4b-2507`), and the slugging is S2's runner. Until then an unslugged id raised a
     # bare `FileNotFoundError` from `pathlib` — loud, but not a named reason — and a segment that
     # happened to name an existing directory would have written outside `runs/` (review m-7).
-    if run.runId != Path(run.runId).name or run.runId in {"", ".", ".."}:
+    # `{"", ".."}`, not `{"", ".", ".."}`: `Path(".").name` is `""`, so `"."` is already caught
+    # by the first clause — but **`Path("..").name` is `".."`**, so `".."` is not, and dropping it
+    # would write `results/runs/..json`. Review P2-4 called two-thirds of the set unreachable;
+    # measured here, one-third is (see `test_store_refuses_an_empty_run_id`). An unreachable guard
+    # reads as a case someone thought about, which is worse than no guard at all — so the one that
+    # is unreachable goes and the two that are not stay.
+    if run.runId != Path(run.runId).name or run.runId in {"", ".."}:
         raise ValueError(
             f"runId {run.runId!r} is not a bare filename; a record is written to "
             "results/runs/<runId>.json, so the id must already carry plan §3.5's slug"
@@ -451,7 +457,14 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
                 InvalidRecord(
                     path=path,
                     runId=run.runId,
-                    benchSchemaVersion=schema if isinstance(schema, int) else None,
+                    # `not isinstance(schema, bool)` as well, because `True` is an `int` and
+                    # this field is typed `int | None`: a quarantined bool would otherwise be
+                    # reported as the schema version `True` (review P2-2).
+                    benchSchemaVersion=(
+                        schema
+                        if isinstance(schema, int) and not isinstance(schema, bool)
+                        else None
+                    ),
                     problems=[FieldProblem(field="benchSchemaVersion", reason="unknown")],
                     reason="unknown_schema",
                 )

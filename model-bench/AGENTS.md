@@ -22,18 +22,26 @@ those three commands are still absent, so the stage boundary is checked rather t
 formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
 plan deliberately does not restate them, and neither should this file. Its shape is §3.4's **seven**
 binding rules, written so the anti-conservative version does not typecheck: `resolving_power`'s
-`design_effect`/`basis`/`unit_kind`/`alpha` are keyword-only **with no defaults**,
-`min_detectable_difference` takes `n_effective: float` so a raw observation count raises, and
-**Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
-`resolving.observable_floor`, compared against the exact float and never the printed one.
+`design_effect`/`basis`/`unit_kind`/`alpha_family`/`alpha_mdd` are keyword-only **with no
+defaults**, `min_detectable_difference` takes `n_effective: float` so a raw observation count
+raises, and **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
+`resolving.observable_floor`, compared against the exact float and never the printed one, and it
+**raises** on the `mcnemar-exact` path (there it is a theorem) while it demotes-and-names on the
+substitute one.
 
 **Four honesty rules that are easy to break silently, and what holds each in place.**
 
-- **The floor truncates; the MDD ceilings.** One principle — round each printed bound in the
-  direction that keeps its own claim true — and `stats.format_floor_pp` is the *only* place the
-  floor's direction lives. Assert through it, never with `round(...)` in a test: re-rounding
-  asserts the presentation layer against itself. Its `+ 1e-12` guard is load-bearing, not
-  defensive (`7/40` is `174.99999999999997` bins).
+- **Every printed bound takes the rounding direction, the α and the denominator that keep *its
+  own* claim true.** One principle, three instances, and two bounds side by side routinely take
+  opposite values of the same parameter: the floor **truncates** at the **unadjusted α** over the
+  **unfloored** `n_eff`; the MDD **ceilings** at **α/k** over the **floored** one. So
+  `ResolvingPower` carries both αs (`alpha_family`, `alpha_mdd`) and the printed line names both;
+  `alpha_step` is Holm's data-dependent third and reaches `verdict()` as a parameter, since it is
+  known only after ranking. `stats.format_floor_pp` is the *only* place the floor's direction
+  lives — assert through it, never with `round(...)` in a test, which asserts the presentation
+  layer against itself. Its `+ 1e-12` guard is **defensive** since the floor moved to `6/n`
+  (nothing the note prints needs it), kept because `b_min` is a function of α; pin it with the
+  code's own `floor(x/precision)`, never `floor(x*1000)`, which has no hazard to find.
 - **`RunResult.designEffect`/`basis` and `BinaryMetric.unit` carry no defaults.** In each case the
   value a forgetful caller wants is the anti-conservative one, so a default rebuilds gate B-1 at
   that seam. The legacy fallbacks live in `from_dict` only, where they are §3.4.3 reader rules.
@@ -42,7 +50,8 @@ binding rules, written so the anti-conservative version does not typecheck: `res
   unit kind; a pooled count prints its `k/n` and no interval.
 - **Holm needs two passes.** The step a metric is tested at depends on every other member's
   p-value, so `compare_report` computes every paired table first, then `stats.holm_steps`, then the
-  verdicts. `holm_thresholds` was replaced by `holm_steps` because a threshold without the
+  verdicts, zipped `strict=True` so a short ladder cannot drop a metric.
+  `holm_thresholds` was replaced by `holm_steps` because a threshold without the
   step-down stop is unusable — and the rendered family table carries a `decision` column for the
   same reason.
 
