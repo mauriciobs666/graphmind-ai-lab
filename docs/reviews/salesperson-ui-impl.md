@@ -2236,3 +2236,433 @@ Coupling, three directions, each a full gate run: `FILTER` constant narrowed alo
 **407/408**. The gate does self-check its own `RETURN` list — and, as follow-up 16 says, cannot see a
 constant and header that are wrong *together*, which is exactly the state `LOOKUP` sat in from
 `bcd2dcc` (2026-08-28) to S7c3 while reporting 408/408.
+
+---
+
+## Pass 10 — 2026-09-03 (S8: the `/shop/api` router, the error map and the two-half gate)
+
+**Reviewed:** commit **`81a1268`** — `falkorchat/storefront_api.py` (new, ~1090), `app.py`
+(+102/−2), `schemas.py` (+6/−2), `tests/test_storefront_api.py` (new, ~1900, 99 node ids),
+`tests/test_app.py` (+159/−4) — against `docs/plans/salesperson-ui.md` **v1.19** (`732f5e0`)
+§5.1 S8, §5.2, §5.3, §4.7, §4.9, §6.2, and against `docs/reviews/salesperson-ui.md` `## Pass 8`'s
+stopping rule, which named this gate as its payoff. Not reviewed: S9/S10/S12 content, the SPA,
+`storefront.py` (byte-untouched — confirmed by `git diff --stat 81a1268^ 81a1268`, empty).
+
+**CPG: considered, not relevant — `cpg_falkorchat` predates `storefront.py` and models none of
+`storefront_api.py`, which this commit creates; every claim below is from direct read, execution
+against the live FalkorDB, or source mutation.**
+
+**Verdict: needs changes** — **2 blockers, 3 majors, 4 minors, 3 nits**. The gate is real: I ran all
+eight failure demonstrations, and I could not weaken it from inside its own subject. But its handler
+half enumerates the wrong set, and the response that slips through is not hypothetical — I reproduced
+two of them against the delivered app. **The good news is that both blockers are small and land in
+the same place**, and the gate's own machinery is what makes the fixes checkable.
+
+### What I ran (all of it, solo)
+
+Full suite **2582 passed / 14 deselected** (20.8 s) — matches the brief's figure, re-derived, not
+inherited. `tests/test_storefront_api.py` alone: 99 passed, 3.6 s. **21 source mutations** of
+`storefront_api.py` and `app.py`, each applied to a byte-restored copy and reverted after
+(`md5sum` re-checked: `storefront_api.py` `edac9f1a…`, `app.py` `e6bf735a…`,
+`test_storefront_api.py` `0374ffd2…`; `git status` on `falkor-chat/` clean). Four throw-away probe
+files under `tests/`, all removed. Full mutation ledger: **Appendix P10-A**.
+
+**Database.** `ws:test` and `reference` only. **`ws:acme` was never touched** — its node inventory
+is identical before and after (14 labels, `Message` 52, `Entity` 544, `WorkflowRun` 21). See
+*Environment note* at the end: `reference` was **already** stripped when I arrived, which the brief
+did not know.
+
+### The judgment you asked me to rule on — the S8/S10 fork
+
+**Correctly not escalated, and the boundary is drawn in the right place.** Three independent pieces
+of evidence, none of which is the implementer's own argument:
+
+- **The gate is not evaluable on a partial surface, by its own construction.** `evaluate_gate`'s
+  first check is `set(storefront_routes(app)) == set(ROUTE_CLASSES)`, and `ROUTE_CLASSES` *is*
+  §5.3's eleven-row table. Eight or nine routes fails that line before either half runs. The
+  declaration half is `{declared} ∪ {handler-produced} == FLAT_TABLE`, read off `app.routes` — a
+  set equality over the whole table, which cannot be restricted to a subset without editing the
+  table the gate exists to check.
+- **S8's own done-condition names the route.** "*The two `no graph access` routes are asserted
+  negatively*: … `GET /shop/api/health` **and `POST /shop/api/presenter/session`** still answer
+  their normal `200`/`403`/`422`." A step whose done-condition names a route cannot be done without
+  it. §6.2's `S8/S10` bullet hedges the same way; §5.1's S10 row is the only place that reads
+  otherwise, and its Files column already contains `storefront_api.py`.
+- **The strongest evidence is a negative one:** `storefront.py` — S10's *other* file, and the home
+  of `presenter_login`/`list_participants`/`reset_all` — is byte-identical to its parent. The
+  implementer built the three routes without touching the file S10 owns, which is exactly the line
+  a scope fork should be held at.
+
+**Is anything of S10's *content* pre-empted?** Only what could not be avoided. Absent, correctly:
+the login's fixed per-attempt delay, the observational attempt counter, and reset-everyone's
+**stop-intake** flag (`Storefront` state). Present-but-S10's-to-move: the constant-time tripwire
+extension to `presenter_login` (S6-4) and the roster/`incomplete` assertions — all tests *of code
+S8 wrote*, so they had to exist now. The S7-ships-the-wait/S9-ships-the-cancellation parallel holds:
+`Storefront._await_quiesce` (`storefront.py:842`) documents the identical "waiting subsumes
+cancelling for correctness" reasoning, and the router's reset-all drain is its per-roster twin.
+
+**`_STEP_10_INTERIM` is right on the boundary and wrong on the inventory** — see **P10-6**. Cost to
+S10: one re-derivation, not a rewrite.
+
+### Blockers
+
+#### P10-1 · **Blocker** · the handler half enumerates the *delta* against a baseline app, not the handlers on the app — and the twelve it subtracts include the one that provably fires
+
+`registered_storefront_handlers` (`tests/test_storefront_api.py:203`) computes
+`{handlers on this app} − {handlers on create_app(dev_surface=False)}`. §5.1 S8 asks for "the
+handlers **actually registered on the app object**". The storefront app carries **17**; the gate
+sees **5**. Subtracted: `ServiceError` and eleven workflow/search handlers — all registered by
+`app.py:81`'s `_register_error_handlers`, which runs on every app including this one.
+
+`ServiceError` is not inert on `/shop/api`. `services.post_message` →
+`_validate_and_derive_role` raises `ThreadNotFoundError` / `UnknownActorError` / `UnknownMemberError`
+(`services.py:833-846`), and `Storefront._await_quiesce`'s own docstring names the reset window in
+which the first of those fires. Reproduced against the delivered app (Appendix P10-A, probe 3):
+
+```
+POST /shop/api/messages -> 404 {"error":"ThreadNotFoundError","detail":"th-swept-away"}
+```
+
+`404` is **not** in that route's `responses={…}` (200/401/409/422), **not** in `TABLE`, and produced
+by a handler the gate subtracts — so all three of the gate, the declaration half and
+`test_no_route_can_raise_a_refusal_it_does_not_declare` are silent. This is the unruled
+`(route, response)` §5.3 spent eight passes closing, arriving from the server. C13 does shout, which
+is the designed backstop working — but "the error map is total by type" is the claim this step
+exists to make true, and as delivered it is not.
+
+**Suggested fix (expect to beat it):** stop subtracting. Enumerate `app.exception_handlers` whole and
+require every entry to be classified — `CROSS_CUTTING_HANDLERS`, `ENVELOPE_HANDLERS`, or a new
+`INHERITED_HANDLERS` frozenset that must state, per type, either "cannot fire on a `/shop/api`
+route" or the `(route, response)` rows it adds to §5.3's table. The `ServiceError` family needs the
+second: at minimum `POST /shop/api/messages` gains rows for the reset-window refusals. A cheaper
+90 % version is a single storefront-scoped `ServiceError` handler re-shaping them into the
+storefront envelope with a plan token, so the client keys on a token rather than a Python class name.
+
+#### P10-2 · **Blocker** · `POST /shop/api/session` answers a **bare `500`** for a condition `storefront.py` documents as a `503` — the unreachability argument is boot-time only
+
+`DemoNotSeededError` (`storefront.py:103`) is the one `StorefrontError` subclass of seven with no
+handler and no route `except`. Its own docstring says "**Maps to `503`**, naming `seed_demo.sh`".
+The `join` route documents the omission and argues structural unreachability (preflight asks the
+identical question; the demo `Agent` survives both resets). **The preflight is a boot-time check,
+not an invariant.** Reproduced (Appendix P10-A, probe 2) — same app, lifespan entered, `Agent`
+deleted out of band afterwards:
+
+```
+before delete -> 200
+after  delete -> 500 Internal Server Error      # plain text, not even JSON
+```
+
+S8's done-condition says "**no route anywhere answers a bare `500`**", asserted only against a
+stubbed repository, so the sweep never reaches this. This is also the plan's own C6b posture one
+exception over: `409 unscoped_participant` is carried precisely because a graph can be unhealthy in
+ways the storefront did not cause.
+
+**Suggested fix:** catch it in `join` like the other six — `503 demo_not_seeded` (nothing was
+written, so C9's "nothing changed" is exactly right), declare it, add the §5.3 row; the AST check
+then picks it up for free. **And close the family structurally**, so the next one cannot hide: a
+guard asserting every `StorefrontError` subclass is either caught by a route or handler-mapped. I
+wrote and ran it — it flags `DemoNotSeededError` and nothing else (Appendix P10-A, probe 4).
+
+### Majors
+
+#### P10-3 · **Major** · `RequestValidationError` is classed as an envelope handler, so the one handler whose route set is *derivable* is excluded from the cross product
+
+`ENVELOPE_HANDLERS` "contribute nothing to the `{handlers} × {routes}` cross product; what covers
+them is the declaration half plus the per-route contract tests". For `StorefrontHTTPError` that now
+holds (`test_no_route_can_raise_a_refusal_it_does_not_declare`). For `RequestValidationError` it does
+not: it is produced by the framework, not by a route body, so no AST check sees it, and the
+declaration half only compares two hand-written enumerations that can be wrong together.
+
+**Mutation M-C, survived:** give `GET /shop/api/catalog` a `page: int = Query(1, ge=1)`. The route
+now produces `422 validation_failed`, undeclared and untabled — **99 passed**.
+
+**Suggested fix, verified before writing it.** `422`-producibility is mechanically derivable from
+the route object: `route.body_field is not None or dependant.query_params or dependant.path_params`
+(recursing into sub-dependencies). Run against the delivered app it reproduces **exactly** the five
+routes that declare `422` and exactly the six that do not; asserted as
+`{(m, p, 422, "validation_failed")} == {422 rows of FLAT_TABLE}` it is green today and red under
+M-C. Full listing and both runs in Appendix P10-A.
+
+#### P10-4 · **Major** · §4.8 F8's *second* ordering on reset-all is code without a test, and the obvious test cannot reach it
+
+`presenter_reset_all` catches the sweep's `TimeoutError`, re-reads the roster, and has an inner
+`except redis_exceptions.TimeoutError: unresolved = None` for the re-read failing too. That inner
+branch is **untested** — mutation M-N (`unresolved = None` → `raise`) leaves **99 passed**. It is
+S10's done-condition verbatim ("*a stub whose re-read **also** raises `TimeoutError` still returns
+`504`, with no state body, never a `500`*"), but S8 shipped the code.
+
+**And it is unreachable by the obvious stub**, which is this coordination's signature defect for the
+third time: `_FailingMethodRepo` fails one method for all calls, so failing `list_participants`
+breaks the *pre-drain* roster read (line 976) and the request never reaches the inner branch. The
+test needs a repo whose `list_participants` raises **only on the second call**.
+
+**Suggested fix:** a `_FailingAfterNCalls` variant, asserting `504`, `body["error"] ==
+"reset_state_unknown"`, **`"participants" not in body`** (or `is None`) and `repo.calls == 1` on the
+sweep. Whoever writes it should first confirm it goes red without the inner `except` — the branch
+under test is the one an over-general stub silently skips.
+
+#### P10-5 · **Major** · two declared rows have no producer, and the file's own claim that they do is what would stop the next reviewer looking
+
+The module docstring narrows the acknowledged residue with: "*every declared entry is proved
+producible by a contract test below, so the declaration and the implementation disagree loudly
+instead of agreeing by omission*". Two counter-examples, both mutations that survive:
+
+- **M-D** — delete `reset`'s `except UnknownParticipantError` branch entirely: **99 passed**.
+  `(404, "unknown_participant")` is declared on `POST /shop/api/reset` and sits in `TABLE`; nothing
+  produces it.
+- **M-V** — delete `advance_order`'s `except UnknownOrderError` branch: **99 passed**. That escape
+  is a `StorefrontError`, i.e. **a bare `500`** (P10-2's family).
+
+The pairing is a convention, not a mechanism: nothing links a declared row to a test. **Suggested
+fix:** either write the two missing contract tests (a `_FailingMethodRepo` raising
+`UnknownParticipantError` from `reset_participant`; one raising `UnknownOrderError` from the
+advance), or — better, because it does not decay — make the link mechanical by tagging each contract
+test with the `(method, path, status, token)` it proves and asserting the tag set covers
+`FLAT_TABLE`. That turns "proved producible" from a docstring into the gate's third half.
+
+### Minors
+
+- **P10-6 · `_STEP_10_INTERIM` miscounts the reads it hands over.** It says "*the three private
+  reads in `build_storefront_router` → deleted with them*". There are **four** (`repo`, `services`,
+  `agent_id`, `presenter_key`, lines 451–454) and exactly **two** go with S10: `repo` (used only at
+  921/976/988/1004, all presenter routes) and `presenter_key` (only at 580). `services` is used by
+  `GET /messages`, `POST /messages` and `/order/advance`; `agent_id` by `POST /messages`. The
+  adjacent comment's "*S9/S10 delete every use of them*" is unestablished for `services`: neither
+  S9's nor S10's row moves `read_messages` or `get_current_order` onto `Storefront`. Fix: say
+  "two of the four", name them, and say `services`/`agent_id` stay.
+- **P10-7 · the `welcome` fallback is untested and unspecified.** M-O (`WELCOME.get(language,
+  FALLBACK)` → `WELCOME[language]`) survives: **99 passed**. `WELCOME` covers exactly
+  `config.STOREFRONT_LOCALES`'s default `("en","pt-BR","es")`, so the fallback is only reachable
+  through `FALKORCHAT_STOREFRONT_LOCALES` — a real deployment knob. One test joining under a
+  configured locale absent from `WELCOME`, asserting the `en` line; plus the §5.2 spec line P10-R6
+  asks for.
+- **P10-8 · `cross_cutting_response` raises `KeyError` where its sibling path shouts.**
+  `_cross_cutting_json` handles `answer is None` with a logged, conservative `504`; an unclassified
+  `(method, path)` instead raises `KeyError` **inside an exception handler**. Unreachable today only
+  because `app.py:408`'s bare `/health` catches `Exception` broadly — a property of another module.
+  Fix: `ROUTE_CLASSES.get(...)` and route a miss down the same loud path.
+- **P10-9 · a `writes` route's *pre-write* read failures are reported as "may have committed".**
+  `presenter_reset_all`'s roster read (line 976) sits outside the `try`, so a `TimeoutError` there
+  yields `504 reset_state_unknown` when nothing was attempted; `_TIMEOUT` freezes that as expected
+  without naming it. The same holds for `get_participant`'s resolve on all five writing routes.
+  Conservative and licensed by §5.3's class map — C4's action is a safe re-read — but the test that
+  encodes it should say *why* it is right, or the next reader will read it as an attribution.
+
+### Nits
+
+- **P10-10** · `_PresenterSessions.verify`'s constant-time claim is unpinned — M-P (`compare_digest`
+  loop → `token in candidates`) survives, **99 passed**. Note also that `any()` short-circuits, so
+  the loop is constant-time *per comparison*, not per call; the docstring's "costs the same time" is
+  true for a wrong token and not for a right one. Harmless (the response already reveals validity),
+  but the sentence overstates.
+- **P10-11** · `PARTICIPANT_ROUTES`/`PRESENTER_ROUTES` are hand-maintained, and the AST check's
+  dependency attribution rides on them. `PARTICIPANT ∪ PRESENTER ∪ OPEN == ROUTE_CLASSES` catches a
+  twelfth route but not a route that *gains* `Depends(get_participant)` while staying in `OPEN`.
+  Derive the sets from each route's `dependant` instead — the same walk P10-3's fix needs.
+- **P10-12** · `/openapi.json`, `/docs`, `/redoc` are reachable on the storefront deployment (all
+  `200`, verified). §4.9's "the route table contains **only** …" is literally false and
+  `_FASTAPI_BUILTIN_PATHS` subtracts them silently. No participant data leaks, so this is a wording
+  fix in §4.9, not a change — but the exemption should be stated where the claim is.
+  *(Side note in the other direction: the `x-storefront-tokens` extension keys survive into
+  `/openapi.json` intact, which makes §5.3's completeness table machine-readable off a running
+  server. That was not asked for and is worth keeping.)*
+
+### The six plan/implementation calls you asked me to rule on
+
+1. **The S8/S10 boundary — correct as built; the fork was rightly not escalated.** §6.2 already
+   hedges `S8/S10`; §5.1's S10 row is the outlier and its own Files column contradicts it. Plan fix:
+   S10's row gains "*the three presenter routes are delivered by S8 (its gate is evaluated over all
+   eleven); S10 moves them onto `Storefront` and adds the delay/counter and stop-intake*". Carries
+   P10-6.
+2. **`DemoNotSeededError` — implementation defect** (P10-2). The unreachability argument is sound
+   for the boot-time snapshot and unsound as an invariant; reproduced as a bare `500`. The plan owes
+   the row, but the code should not have shipped the `500` while waiting for it.
+3. **`422` field granularity — correct as built.** FastAPI keys `responses` by status; the
+   collapse is a genuine narrowing, both fields are proved by execution, and the test file states
+   the departure. Plan fix: one sentence in §5.3 saying the *field* axis is proved by execution, not
+   by declaration. Optional and beat-able: an `x-storefront-fields` key alongside the tokens would
+   make the table's own key declarable — I would not spend it unless the client tier wants it.
+4. **`5xx` on `POST /presenter/reset-all` — plan defect (wording).** The implementation is right and
+   tested: the row is made producible as *any* unmapped graph error (a `redis.ResponseError` from
+   `reset_all_participants`), which is §5.2's stated stance. §5.3's row should say "any unmapped
+   graph error" rather than naming the `Thread` UNIQUE violation it structurally cannot raise.
+5. **`GET /shop/api/messages`'s `reads-only` class — correct as built, and the pin is sufficient.**
+   `services.read_messages` keys on `since is not None` (`services.py:970`), and the route's
+   `since: int = Query(0, ge=0)` makes `None` unreachable from **any** caller — so the classification
+   is safe against a future client, not merely against a future implementer. The remaining risk is
+   the route dropping `since=` from the call, and M-E reddens two tests including the zero-cursor
+   graph assertion. No change needed.
+6. **`welcome` — plan defect.** §5.2 names a field it never specifies. The invention (per-locale,
+   `en` fallback, server-side because the line is minted before the SPA knows the language was
+   accepted) is sound and I would adopt it verbatim into §5.2. Carries P10-7's missing test.
+
+### What's solid
+
+The gate is the real thing, and I attacked it rather than read it. All eight failure demonstrations
+run and each matches on its own message; nine further mutations of my own — a seam reorder, a
+mis-dispatching handler, a re-classified route, an op-token swap, a mount-ordering inversion, the
+config-vs-parameter image wiring, the guard removal — were caught, several by three or four tests at
+once. **Keying `ROUTE_CLASSES` on `(METHOD, path)` is the single best decision in the commit**:
+`/shop/api/messages` genuinely is two classes, and a path-keyed table would have handed one of them
+the other's row silently.
+
+**The single-seam decision is safe, and I verified the property it rests on independently.**
+`_UNAVAILABLE`/`_TIMEOUT` (`tests/test_storefront_api.py:1487-1506`) are literal dicts with a comment
+saying exactly why. Mutation M-A reorders `cross_cutting_response` so a reads-only route swallows a
+`ConnectionError` as `graph_read_timeout` — the gate goes red *and* two of the three execution
+parametrisations go red, from expectations that never read the seam. The seam is shared; the
+expectations are not.
+
+**Both first-pass mutants are genuinely fixed, not narrated as fixed.** M-J (`errors()[0]` →
+`[-1]`) reddens `test_join_reports_the_first_violation_by_declaration_order`; M-K (drop the
+`presenter_configured` guard) reddens `test_an_unset_presenter_key_never_reaches_the_comparison`. The
+two-violation fixture and the `compare_digest` spy both do the work claimed for them.
+
+**The auth matrix is not a paper exercise.** 17 of its 33 cells assert the weak negative
+`status not in (401, 403)`, which I distrusted — so I printed all 33 actual responses (Appendix
+P10-A, probe 1). Every one is substantively right; none passes on a `500` or a spurious code, and
+`POST /order/advance` → `404` is the only surprise and is correct (no order exists). M-G (403→401 on
+the wrong credential type) reddens two cells.
+
+The image-wiring test is **stronger than the plan asked for** — two populated trees with *different
+extensions*, so all three ways of getting the forwarding wrong fail with wrong URLs rather than
+null ones, and `app.state.storefront_preflight["images"] == 3` pins §4.7's "built at startup only"
+in the same test. The three "beat the brief" items are real: the AST `.lookup(` check with its own
+non-vacuity control is a strict improvement on the grep it replaces, `storefrontEnabled` reporting
+the app's wiring closes the import-time-flag trap for a second surface, and
+`test_no_route_can_raise_a_refusal_it_does_not_declare` closes a residue neither half of the gate
+covers — it is what catches M-D2, and P10-5 is a request to finish it, not a criticism of it.
+
+### Open questions
+
+1. **Does the `ServiceError` family get storefront rows, or a storefront-scoped re-shaping handler?**
+   (P10-1) Rows keep one envelope per response and cost §5.3 several lines; a re-shaping handler
+   keeps the client on plan tokens but changes a response the legacy surface also serves. Architect's
+   call — it is the only P10 finding with a design fork.
+2. **Does `POST /shop/api/messages` need a *stated* response for the reset-all window at all**, or
+   does S10's stop-intake flag change what that window produces? P10-1's row set depends on the
+   answer, so the two may be worth deciding together rather than S8 guessing now.
+
+### Environment note (the brief's DB claim was already stale)
+
+The brief states `reference` held the 15-product catalog and that all three verify scripts exit `0`.
+**Before I ran anything**, `reference` held only a stray `timers-stale-key@v1` `WorkflowDef` + 4
+`Step`s, and `verify_catalog.sh` exited **1**. I re-seeded the half I disturbed —
+`./scripts/seed_catalog.sh` → `./scripts/verify_catalog.sh` exit **0**. The `WorkflowDef` registry
+(`triage@v1`, `access-request@v1`, `salesperson@v7`) is **still absent**, so
+`verify_workflows.sh acme` and `verify_salesperson.sh acme` exit `1` — as they did on arrival.
+I did **not** restore them: `seed_workflows.sh acme` / `seed_salesperson.sh acme` write into
+`ws:acme`, which the brief told me to keep untouched. `ws:acme`'s inventory is identical to my
+arrival snapshot. **`teco`'s call whether to re-seed.**
+
+### Appendix P10-A — mutation ledger and probe transcripts
+
+**Method.** `falkorchat/storefront_api.py` and `falkorchat/app.py` were mutated from a byte-copy held
+outside the repo and restored after every run (`md5sum` re-verified; `git status` on `falkor-chat/`
+clean at the end). Command: `.venv/bin/python -m pytest tests/test_storefront_api.py -q -rf`
+(150-test runs for the `app.py` mutations, adding `tests/test_app.py`). Baseline: 99 passed.
+
+| # | Mutation | Result |
+|---|---|---|
+| M-A | `cross_cutting_response`: reads-only branch before the `graph_unavailable` branch | **9 failed** — the gate **and** 2 of 3 execution parametrisations |
+| M-B | `_handle_graph_timeout` dispatches `_GRAPH_UNAVAILABLE` (gate seam untouched) | **1 failed** — execution only, which is the point |
+| M-C | `/catalog` gains `page: int = Query(1, ge=1)` | **survived** → P10-3 |
+| M-D | `reset` loses its `except UnknownParticipantError` | **survived** → P10-5 |
+| M-D2 | `reset` raises `404 "no_such_participant"` (undeclared token) | **1 failed** — `test_no_route_can_raise_a_refusal…` |
+| M-E | `GET /messages` drops `since=since` | **2 failed** incl. the zero-`ReadCursor` assertion |
+| M-E2 | `health` returns an undeclared `503` `JSONResponse` | **survived** — the plan's *admitted* residue, confirmed live |
+| M-G | `get_presenter` answers `401` for a wrong credential type | **2 failed** — auth matrix |
+| M-H | roster returns `list_participants` unprojected | **1 failed** |
+| M-J | `422` selection rule takes `errors()[-1]` | **1 failed** |
+| M-K | `presenter_configured` guard removed | **1 failed** |
+| M-N | reset-all's second-timeout `unresolved = None` → `raise` | **survived** → P10-4 |
+| M-O | `_welcome` loses its locale fallback | **survived** → P10-7 |
+| M-P | presenter-token verify → `token in candidates` | **survived** → P10-10 |
+| M-S | reset-all always reports `incomplete` | **1 failed** |
+| M-U | `JoinIn` loses `_nonblank` | **1 failed** |
+| M-V | `advance_order` loses its `except UnknownOrderError` | **survived** → P10-5 |
+| M-X2 | `/shop` static mount registered **before** the `/shop/api` router (`app.py`) | **76 failed** |
+| M-Y | `Storefront` built from `config.STOREFRONT_DIR`, mount from the parameter (`app.py`) | **2 failed** |
+| M-Z | the `storefront and dev_surface` guard removed (`app.py`) | **1 failed** |
+
+**Probe 1 — the 33 auth-matrix cells, actual responses.** Every cell substantively correct; the
+weak-negative `not in (401, 403)` cells resolve to `200` except `POST /order/advance` → `404`
+(no order exists) and the two `POST /…/session` cells → `200`. No `500`, no `422`.
+
+**Probe 2 — `DemoNotSeededError` (P10-2).** Seeded `ws:test`, lifespan entered (preflight passed),
+then `MATCH (a:Agent) DETACH DELETE a` out of band:
+
+```
+before delete -> 200
+after  delete -> 500 Internal Server Error
+post message  -> 400 {"error":"UnknownMemberError","detail":"['assistant']"}
+```
+
+The third line is P10-1's family from the same probe.
+
+**Probe 3 — `ServiceError` on a live route (P10-1).** `Storefront.resolve_token` patched to hand back
+a record whose `thread_id` no longer exists — the state `_await_quiesce`'s docstring describes for
+the reset window:
+
+```
+POST  /shop/api/messages       -> 404 {"error":"ThreadNotFoundError","detail":"th-swept-away"}
+GET   /shop/api/messages       -> 200 []
+GET   /shop/api/state          -> 200 {...}
+POST  /shop/api/reset          -> 200 {...}
+POST  /shop/api/order/advance  -> 404 {"error":"no_current_order",...}
+```
+
+Handlers on the storefront app: `HTTPException`, `RequestValidationError`,
+`WebSocketRequestValidationError`, `ServiceError`, `WorkflowDefSpecError`,
+`WorkflowDefNotFoundError`, `WorkflowDefConflictError`, `WorkflowRunNotFoundError`,
+`WorkflowRunNotWaitingError`, `WorkflowInputRejectedError`, `WorkflowConfigError`,
+`WorkflowEngineDisabledError`, `SearchNotAvailableError`, `StorefrontHTTPError`,
+`FalkorDBUnreachableError`, `ConnectionError`, `TimeoutError` — **17**.
+What `registered_storefront_handlers` returns: `ConnectionError`, `FalkorDBUnreachableError`,
+`RequestValidationError`, `StorefrontHTTPError`, `TimeoutError` — **5**.
+
+**Probe 4 — the two candidate fixes, run before being written into this review.**
+
+*P10-2's family guard* — subclasses of `StorefrontError` in `storefront.py` minus every name caught
+in an `except` in `storefront_api.py` and every key of `CROSS_CUTTING_HANDLERS`/`ENVELOPE_HANDLERS`:
+
+```
+subclasses: ['DemoNotSeededError', 'OrderTransitionRefusedError', 'QuiesceTimeoutError',
+             'ResetStateUnknownError', 'UnknownOrderError', 'UnknownParticipantError',
+             'UnscopedParticipantError']
+unmapped  : ['DemoNotSeededError']
+```
+
+*P10-3's `422` derivation* — `route.body_field is not None or dependant.query_params or
+dependant.path_params` (recursing into sub-dependencies), against the delivered app:
+
+| route | body | query | declares `422` |
+|---|---|---|---|
+| `GET /shop/api/health` | – | – | no |
+| `POST /shop/api/session` | yes | – | **yes** |
+| `GET /shop/api/state` | – | – | no |
+| `GET /shop/api/messages` | – | `since`, `limit` | **yes** |
+| `POST /shop/api/messages` | yes | – | **yes** |
+| `GET /shop/api/catalog` | – | – | no |
+| `POST /shop/api/order/advance` | yes | – | **yes** |
+| `POST /shop/api/reset` | – | – | no |
+| `POST /shop/api/presenter/session` | yes | – | **yes** |
+| `GET /shop/api/presenter/participants` | – | – | no |
+| `POST /shop/api/presenter/reset-all` | – | – | no |
+
+Exact agreement, both directions. Asserted as
+`{(m, p, 422, "validation_failed") for validating routes} == {422 rows of FLAT_TABLE}`: **1 passed**
+on the delivered app, **1 failed** under M-C.
+
+**Hypotheses ruled out** (recorded so the next pass does not re-walk them):
+
+- *`HEAD` on a `GET` route reaches the endpoint and `KeyError`s in `cross_cutting_response`.* **No.**
+  FastAPI's `APIRoute` — unlike Starlette's `Route` — does **not** add `HEAD` to a `GET` route, so
+  `HEAD /shop/api/state` falls through to the `/shop` `StaticFiles` mount and answers `404`;
+  `OPTIONS`/`DELETE` answer `405`. Verified against the delivered app.
+- *The bare `GET /health` can reach `_cross_cutting_json` with an unclassified path.* **No.**
+  `app.py:417-420` catches `Exception` around `services.ping`.
+- *`since=0` is falsy and takes `read_messages`' cursor path.* **No.** `services.py:970` keys on
+  `since is not None`.
+- *`x-storefront-tokens` breaks OpenAPI generation.* **No.** `/openapi.json` → `200`, extensions
+  emitted verbatim; `/docs` → `200`.
