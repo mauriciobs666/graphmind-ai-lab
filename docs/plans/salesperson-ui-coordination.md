@@ -137,7 +137,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8b** — close Pass 10: the gate's input set (P10-1), `DemoNotSeededError` (P10-2), 3 majors, minors, `_STEP_10_INTERIM` | `coder` (**fresh** — S8's author ended at 363k tok / 94 tools) | `ae53c04f390f58db7` | delivered `18b675a` | `storefront_api.py` (+310/−65), both test files (+~1030); `app.py` and `schemas.py` **untouched** | `analyst` (Pass 11) → — | 316k tok / 121 tools |
 | **v1.21** — §5.3's owed row, §4.9's false negative claim, §5.1's S10 clause | `architect` (fresh) | `ad81e9cdb12dfbb28` | **accepted — committed `ac6741c`** (54/10). **Killed by a 529 after the edits, before the report; resumed rather than respawned** — the work was on disk. **Derived the owed row from `services.post_message` rather than transcribing my brief.** Found the row falsifies two sentences v1.20 asserted twice (§5.2 *and* §5.3: "join is the only route that can produce this token") — **left alone, §5.3 would have carried the new row and a sentence denying it could exist**. Found the generation rule did not derive the row either, and added a third narrowing (a *measured* route set) so it is derived rather than remembered. **P10-12 named three FastAPI doc routes; there are four** — teco re-verified by enumerating `create_app(...).routes` | `docs/plans/salesperson-ui.md` **v1.21**; S10 the only moved row, teco-verified | **none — plan gates stopped** | 146k tok / 3 tools (resumed leg) |
 | **S8b gate** — Pass 11: is P10-1 closed? is `SERVICE_ERROR_ROUTES` a measurement? + S8b's three counter-claims against Pass 10 | `analyst` (**fresh, not Pass 10's author**) | `a6adcb0f5a590acce` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 4 minor, 4 nits), committed `a80a232`. **All six Pass 10 mutation survivors die**; 18 mutations on byte-copies, all five files md5-matched to `HEAD` after. **P10-1 is closed as reported and its class re-opens one bucket over** — `INHERITED_HANDLERS` excuses 11 of 17 handlers by prose and credits a sweep that arms only `ServiceError` faults (P11-1, N-F escaped), and `_raised_refusals` reads only `StorefrontHTTPError` calls while its own docstring and `StarletteHTTPException`'s exemption both claim it catches a bare `HTTPException` (P11-2, N-E escaped green). **Adjudicated S8b's three counter-claims: 1 upheld-with-correction (the escape count is *two*, not three — S8b's own docstring concedes `UnknownActorError` is unreachable through the wire), 1 upheld on half, 1 not sustained** (P10-1 asserted no blast radius, so the measurement strengthens an absence rather than fixing an error). Verified independently by me: `ws:acme` 14 labels / `Message` 52 / `Entity` 544 / `WorkflowRun` 21, unchanged; `falkor-chat/` tree clean; P11-2 and P11-5 reproduced at source. | `docs/reviews/salesperson-ui-impl.md` `## Pass 11` + Appendix P11-A | — | 198k tok / 86 tools |
-| **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh** — S8b's author ended at 316k tok / 121 tools; the findings are self-contained) | `a213382761bc926ec` | in-flight (**holds the live DB**) | `storefront_api.py`, both test files | `analyst` (Pass 12) → — | — |
+| **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh**) | `a213382761bc926ec` | **delivered — committed `2e27835`** | `storefront_api.py` (+45/−3), `test_storefront_api.py` (+434/−31, 7 tests) | `analyst` (Pass 12) → — | 196k tok / 77 tools |
+| **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` | — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1645,3 +1646,66 @@ same way the code under review does**, which is the exact standard Pass 10 and P
 holding this build to (a positive control that finds a known defect, a negative one that stays
 quiet). Mine has had neither; it has been a one-liner I re-derive from memory each time, and it has
 been wrong twice out of three in a way that a two-line control would have caught instantly.
+
+## S8c's method — fix the test, not the code (teco, 2026-09-03)
+
+S8c closed two majors, four minors, four nits and a carry-over that had been open across two passes,
+and the AST of `storefront_api.py` is **identical to its predecessor once docstrings and string values
+are normalized** — I verified this rather than taking it on report. The only executable change in the
+source file is one reason string. Every other fix landed in the tests.
+
+That is the correct shape for this round and worth naming, because it is easy to mistake a large diff
+for a large change. Pass 11's findings were almost entirely *claims that named a mechanism that could
+not check them*: a docstring crediting a sweep that armed the wrong faults, an exemption citing an AST
+walk that read the wrong node type, a test whose name said "every candidate" over a set of size one.
+None of those is a bug in the application. Fixing them means building the missing mechanism, which is
+test surface — 434 lines of it — while the shipped behaviour stays byte-stable. A round that had
+"fixed" them by editing the application would have been the wrong round.
+
+**Two things S8c did that I did not ask for and would not have specified:**
+
+- **It added a mutation Pass 11's ledger did not contain**, on the grounds that N-F as the ledger
+  applies it — a literal `raise` in a route body — is not the shape S9 will actually take. It added
+  the realistic one, a fourth `services.start_workflow_run` call, and showed the guard reddens on
+  *that*. This is the difference between demonstrating a guard fires and demonstrating it fires on
+  the thing it exists for, and it is the direct answer to my override: the guard is only worth its
+  sequencing if it catches S9's real shape.
+- **It declined a fix the reviewer offered.** Pass 11 gave P11-10 two options, drop the MRO walk or
+  pin both halves; S8c kept the walk and pinned both, arguing the walk is the fail-safe direction for
+  a handler whose entire purpose is that no Python class name reaches a participant. Same on P11-8,
+  where deleting the dead recursion would have silently under-derived the `422` set in P10-3's
+  direction. A reviewer's menu is not an instruction, and an implementer that argues its way off the
+  menu with a reason is doing the job.
+
+**And one honest disclosure that changed how I verified.** S8c reported that it never ran the full
+suite *before* editing — it carried `2608/14` from my brief rather than re-deriving it — and told me
+to treat its `+7` as a two-file measurement carried across. That disclosure is exactly why I re-ran
+the full suite solo myself (**2615 passed / 14 deselected**) instead of accepting the arithmetic. An
+agent that flags which of its numbers is inherited rather than observed is more useful than one whose
+figures are uniformly confident, and the flag cost it nothing.
+
+## Why Pass 12 went to a fresh reviewer, on the precedent I set at Pass 11 (teco, 2026-09-03)
+
+Same shape as before, and I applied the rule I had already written down. S8c **disputes Pass 11
+twice** — that P11-9's reproduction command does not reproduce, and that Pass 11's N-K kill count was
+one, not two, the difference being `set` iteration order over `str`. Resuming Pass 11's author to
+adjudicate a challenge to Pass 11 is self-judgment, which is the precise reason Pass 11 itself was
+dispatched fresh rather than to Pass 10's author.
+
+Cost pointed the same way without being decisive: Pass 11's author ended at **86 tool uses**, and a
+mutation-heavy re-check would have carried it well past 100. The review document revising in place is
+what makes the fresh dispatch cheap — the new reviewer inherits the whole written record, including
+the ledger it is being asked to re-derive, without inheriting the author's stake in it.
+
+## Held: the S7→S8c documentation debt, deliberately not dispatched yet (teco, 2026-09-03)
+
+`falkor-chat/docs/HISTORY.md` and `docs/SERVER.md` §1.3/§1.4 owe entries for S7, S7c, S8, S8b and now
+S8c, plus the new `/shop/api` surface. This is a real debt and it is **held on purpose, not
+forgotten**: a `HISTORY.md` entry describes a delivered change, and S8c is delivered *pending* Pass
+12. If that gate returns findings, the entry changes. Splitting the unit — documenting S7/S7c/S8 now
+and S8b/S8c later — would produce two entries for one continuous piece of work and a worse document
+than waiting produces.
+
+It also does not need the live database, which makes it the one unit available to run in parallel
+during a gate. That is why it is tempting, and it is not a good enough reason. It gets dispatched as
+a single unit once the S8 chain closes.
