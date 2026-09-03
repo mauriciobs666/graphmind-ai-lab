@@ -107,31 +107,36 @@ def _paired_rows(a: RunResult, b: RunResult, metric: str, pack: PackRef) -> Pair
     counted as a failure — a precondition failure must never be laundered into the numerator. That
     is `-ml` §10's risk R2, rated **high**: a model that collapses early otherwise scores *better*
     on every conditional count downstream.
+
+    **Which state a row is in is `ItemResult.scored_outcome`'s call, and nothing is inferred here**
+    (review P3-1). This function once carried two defaults of its own — a missing scoreability
+    declaration read as scoreable, a missing count read as a failure — which combined into a
+    verdict of `+100.0 pp, p=0.002` against an arm holding no data whatsoever.
     """
     by_key = {item.pairingKey: item for item in b.items}
     a_units = _unit_ids(a.items, pack)
     unit_ids: list[str] = []
     a_ok: list[bool] = []
     b_ok: list[bool] = []
-    only_in_a = only_in_b = asymmetry_a = asymmetry_b = unscoreable_both = 0
+    only_in_a = asymmetry_a = asymmetry_b = unscoreable_both = 0
     for item, unit_id in zip(a.items, a_units):
         other = by_key.get(item.pairingKey)
         if other is None:
             only_in_a += 1
             continue
-        a_scoreable = item.scoreable.get(metric, True)
-        b_scoreable = other.scoreable.get(metric, True)
-        if not (a_scoreable and b_scoreable):
-            if a_scoreable:
+        a_outcome = item.scored_outcome(metric)
+        b_outcome = other.scored_outcome(metric)
+        if a_outcome is None or b_outcome is None:
+            if b_outcome is None and a_outcome is not None:
                 asymmetry_a += 1
-            elif b_scoreable:
+            elif a_outcome is None and b_outcome is not None:
                 asymmetry_b += 1
             else:
                 unscoreable_both += 1
             continue
         unit_ids.append(unit_id)
-        a_ok.append(item.counts.get(metric, 0) > 0)
-        b_ok.append(other.counts.get(metric, 0) > 0)
+        a_ok.append(a_outcome)
+        b_ok.append(b_outcome)
     a_keys = {item.pairingKey for item in a.items}
     only_in_b = sum(1 for item in b.items if item.pairingKey not in a_keys)
     return PairedRows(
@@ -180,10 +185,10 @@ def resolving_power_line(rp: stats.ResolvingPower, pack: PackRef) -> str:
         ]
     else:
         sentences = [
-            (
-                f"This pack resolves differences of >={_pp(rp.mdd80)} pp with 80% power at "
-                f"{stats.provenance(rp, unit_plural)}."
-            ),
+            # The stem has one home, in `stats`, because M-ML-7's fix edits it and a second copy
+            # here is a scheduled drift (review m-ML-8) — as `provenance`, `floor_clause` and
+            # `unattainable_clause` already are.
+            f"{stats.mdd_clause(rp, unit_plural)}.",
             _sentence(stats.floor_clause(rp)),
         ]
     # The power model is strict dominance, which is the most favourable case, so the figure is a
@@ -200,8 +205,8 @@ def resolving_power_line(rp: stats.ResolvingPower, pack: PackRef) -> str:
         )
     if best_case is not None and rp.n_effective < 20:
         best_case += (
-            "; if it loses one for every two it wins, 80% power is not reached at any effect size "
-            "at this n."
+            f"; if it loses one for every two it wins, {rp.power:.0%} power is not reached at any "
+            "effect size at this n."
         )
     elif best_case is not None:
         best_case += "."
@@ -218,8 +223,24 @@ def resolving_power_line(rp: stats.ResolvingPower, pack: PackRef) -> str:
     return " ".join(sentences)
 
 
-def _decision(v: stats.Verdict, step: stats.HolmStep) -> str:
+#: What replaces a verdict when the paired intersection is empty (review P3-1). The two ways in
+#: are a scorer that emitted no data for the metric and an arm that could not score a single item;
+#: neither is an outcome, and the tally printed under it says which one happened.
+_NO_PAIRED_DATA = (
+    "**No verdict: no paired data.** No {unit} is scoreable for `{metric}` in both arms, so there "
+    "is no paired table, no interval and no verdict. An arm carrying no data for a metric is not "
+    "an arm that failed every {unit} of it (`-ml` §4.3)."
+)
+
+#: Only the metric's own section has a tally under it; the headline repeats the refusal without
+#: pointing at a table that is not beside it.
+_NO_PAIRED_DATA_TALLY = " The tally below says where the rows went."
+
+
+def _decision(v: stats.Verdict | None, step: stats.HolmStep) -> str:
     """What the family table says happened, so no reader has to re-derive it from a threshold."""
+    if v is None:
+        return "no verdict — no paired data"
     if not step.tested:
         return "not tested (Holm stops here)"
     if v.distinguishable:
@@ -276,11 +297,28 @@ def _comparison_pair(
     return a, b
 
 
+#: The `--negative-control` mode's banner (review P3-4). The mode puts **two copies of one stored
+#: record** in the two arms, so `b = c = 0` is arithmetic, not a measurement, and the report it
+#: writes is durable and filed next to real comparisons under a filename that differs only in its
+#: sequence number. Without this it reads as a validated null — the one output a tool whose value
+#: claim is *"it refuses to report a number it cannot stand behind"* cannot afford (`-ml` §9,
+#: plan §3.9(5)). It is the first thing in the document because it changes how everything below
+#: it is read.
+_NEGATIVE_CONTROL_BANNER = (
+    "> **NEGATIVE CONTROL (WIRING SMOKE CHECK)** — both arms are the *same stored record*, so "
+    "`b = c = 0 by construction` and this comparison **cannot fail**. It proves the mode is "
+    "wired; it says nothing about whether the harness is sound. The real negative control is two "
+    "**independent** runs of the same model and is an acceptance step, not this (`-ml` §9, "
+    "plan §5 test 19a)."
+)
+
+
 def compare_report(
     runs: Sequence[RunResult],
     *,
     pack: PackRef,
     invalid: Sequence[InvalidRecord] = (),
+    negative_control: bool = False,
 ) -> str:
     """Render the markdown comparison for one pack. Never ranks across roles or packs."""
     check_sampling_contract(pack)
@@ -290,6 +328,8 @@ def compare_report(
         raise PackConfigError("headlineMetric is not a member of verdictMetrics")
 
     lines: list[str] = [f"# Comparison — {pack.label} ({pack.role})", ""]
+    if negative_control:
+        lines += [_NEGATIVE_CONTROL_BANNER, ""]
 
     # --- banners: never silent, and never a reason to drop a record -----------------------------
     versions = {_fp(r, "packVersion") for r in runs}
@@ -381,7 +421,7 @@ def compare_report(
     # exist. The delivered build ran one pass, decided every metric at the plain Bonferroni
     # `resolving.alpha`, and then printed a Holm table beside verdicts that had not used it —
     # `stats.verdict`'s `alpha_step` was built for exactly this and was passed by nothing (B-1).
-    tables: list[tuple[str, stats.PairedOutcomes, stats.ResolvingPower]] = []
+    tables: list[tuple[str, stats.PairedOutcomes, stats.ResolvingPower | None]] = []
     p_values: list[float] = []
     tallies: list[str] = []
     for metric in family:
@@ -390,16 +430,24 @@ def compare_report(
             unit_kind, list(zip(rows.unit_ids, rows.a_ok, rows.b_ok))
         )
         tallies.append(_pairing_tally(rows, f"{unit_kind}s", a.modelKey, b.modelKey))
-        rp = stats.resolving_power(
-            outcomes.n_units,
-            unit_kind=unit_kind,
-            design_effect=design_effect,
-            basis=basis,
-            # The two αs come from the pack's pre-registered family, which is the only thing that
-            # fixes *k*. They are different numbers whenever k > 1, and each bound takes the one
-            # that keeps its own sentence true (`-ml` v1.6 §7.1, review M-ML-6).
-            alpha_family=pack.metrics.alpha_family,
-            alpha_mdd=pack.metrics.alpha_mdd,
+        # An empty intersection has no resolving power to describe — `n_effective` of zero is not a
+        # small sample, it is no sample — so the metric gets no verdict rather than a figure
+        # computed from nothing (review P3-1). It stays in the family: *k* is fixed by
+        # pre-registration, not by how much data arrived.
+        rp = (
+            stats.resolving_power(
+                outcomes.n_units,
+                unit_kind=unit_kind,
+                design_effect=design_effect,
+                basis=basis,
+                # The two αs come from the pack's pre-registered family, which is the only thing
+                # that fixes *k*. They are different numbers whenever k > 1, and each bound takes
+                # the one that keeps its own sentence true (`-ml` v1.6 §7.1, review M-ML-6).
+                alpha_family=pack.metrics.alpha_family,
+                alpha_mdd=pack.metrics.alpha_mdd,
+            )
+            if outcomes.n_units
+            else None
         )
         tables.append((metric, outcomes, rp))
         _a, table_b, table_c, _d = outcomes.table
@@ -407,11 +455,22 @@ def compare_report(
 
     steps = stats.holm_steps(p_values, alpha=pack.metrics.alpha_family)
 
-    computed: list[tuple[str, stats.Verdict, stats.HolmStep]] = []
+    computed: list[tuple[str, stats.Verdict | None, stats.HolmStep]] = []
     # `strict=True`: a Holm ladder shorter than the family would otherwise truncate the loop and
     # a pre-registered verdict metric would vanish from the report — indistinguishable, to a
     # reader, from one that was never pre-registered (review P2-3).
     for (metric, outcomes, rp), step, tally in zip(tables, steps, tallies, strict=True):
+        if rp is None:
+            computed.append((metric, None, step))
+            lines += [
+                f"### {metric}",
+                "",
+                _NO_PAIRED_DATA.format(unit=unit_kind, metric=metric) + _NO_PAIRED_DATA_TALLY,
+                "",
+                tally,
+                "",
+            ]
+            continue
         v = stats.verdict(
             outcomes,
             resolving=rp,
@@ -421,7 +480,10 @@ def compare_report(
             b_label=b.modelKey,
             alpha_step=step.threshold,
             holm_tested=step.tested,
-            bootstrap_seed=20260902,
+            # The pack's declaration, never a literal here: `sampling.seed` is a manifest field
+            # (§3.3) and a second copy in the renderer is a second home for the one number that
+            # makes a bootstrap-decided verdict reproducible (review P3-5).
+            bootstrap_seed=pack.seed,
         )
         computed.append((metric, v, step))
         lines += [
@@ -431,7 +493,15 @@ def compare_report(
             "",
             tally,
             f"- marginal Wilson intervals overlap: {'yes' if v.marginal_overlap else 'no'}",
-            f"- decided by: {v.decided_by}",
+            # The seed is named only where a resample actually decided: on `mcnemar-exact` no
+            # bootstrap ran, and quoting a seed there would claim a reproducibility that is not at
+            # issue (review P3-5).
+            (
+                f"- decided by: {v.decided_by} (seed {pack.seed}, from the pack's "
+                "`sampling.seed`)"
+                if v.decided_by == "cluster-bootstrap"
+                else f"- decided by: {v.decided_by}"
+            ),
             "",
             resolving_power_line(rp, pack),
             "",
@@ -460,15 +530,24 @@ def compare_report(
             "|---|---|---|---|",
         ]
         for metric, v, step in computed:
+            # A member with no paired table has no p-value to print. `mcnemar_exact(0, 0)` returns
+            # 1.0 and would render as `1.000`, which reads as a test that was run and found nothing
+            # — so the cell says what actually happened instead (review P3-1).
+            p_cell = "—" if v is None else f"{v.mcnemar_p:.3f}"
             lines.append(
-                f"| {metric} | {v.mcnemar_p:.3f} | {step.threshold:.4f} | {_decision(v, step)} |"
+                f"| {metric} | {p_cell} | {step.threshold:.4f} | {_decision(v, step)} |"
             )
         lines.append("")
 
     # --- presentation: a headline exists only if the pack declared one ---------------------------
     if pack.metrics.headlineMetric is not None:
         headline = next(v for m, v, _ in computed if m == pack.metrics.headlineMetric)
-        lines += [f"**Headline ({headline.metric_name}):** {headline.text}", ""]
+        headline_text = (
+            _NO_PAIRED_DATA.format(unit=unit_kind, metric=pack.metrics.headlineMetric)
+            if headline is None
+            else headline.text
+        )
+        lines += [f"**Headline ({pack.metrics.headlineMetric}):** {headline_text}", ""]
     else:
         # No summary line above the verdicts, and no arithmetic combining them (§3.3(i)). The
         # metrics stand side by side in the manifest's declared order, which is how they were

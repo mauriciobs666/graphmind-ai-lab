@@ -65,6 +65,11 @@ never overwrites an earlier same-day comparison — the filename carries a two-d
 exits `0` whatever the scores, including when every stored record turns out to be invalid: that is
 a report, not an operational failure, and the excluded records are named in it with their reasons.
 
+`--negative-control` puts **two copies of one stored record** in the two arms, so `b = c = 0` is
+arithmetic rather than a measurement. It proves the mode is wired and nothing more, and the report
+it writes says so in a banner at the top — the real negative control is two *independent* runs of
+the same model, and that is an acceptance step.
+
 `attest`, `validate` and `run` are stage S2 and are deliberately not wired yet.
 
 Python 3.12, matching every other component. **Zero runtime dependencies** — stdlib only, on

@@ -85,6 +85,14 @@ class PackRef(NamedTuple):
     metrics: PackMetrics
     pairingKey: tuple[str, ...]
     analysisUnit: str
+    #: `sampling.seed` (§3.3) — the pack's declared resample seed, and the **only** home for it.
+    #: `report.py` carried it as the literal `20260902`, duplicating a manifest field this type
+    #: had no room for, so the pack's own declaration could not reach the decision it governs
+    #: (review P3-5). `-ml` §3.2d requires the seed recorded "so a report is reproducible", and on
+    #: the fail-safe path — every comparison, until S2's determinism probe lands — the seeded
+    #: bootstrap is what decides. **No default:** a seed conjured by omission reproduces nothing,
+    #: and it is the same defaulting shape `-ml` §3.4 Rule 2 refuses for the design effect.
+    seed: int
 
     @property
     def analysisUnitIndex(self) -> int:
@@ -145,6 +153,12 @@ def pack_ref_from_manifest(path: Path | str) -> PackRef:
         raise PackConfigError(f"{path}: sampling.pairingKey is absent or empty")
     if "analysisUnit" not in sampling:
         raise PackConfigError(f"{path}: sampling.analysisUnit is absent")
+    if "seed" not in sampling:
+        raise PackConfigError(
+            f"{path}: sampling.seed is absent; the resample seed is what makes a "
+            "bootstrap-decided verdict reproducible, and every comparison takes that path until "
+            "a determinism probe establishes the design effect by construction (-ml §3.2d)"
+        )
     ref = PackRef(
         packId=manifest["packId"],
         packVersion=manifest["packVersion"],
@@ -153,6 +167,7 @@ def pack_ref_from_manifest(path: Path | str) -> PackRef:
         metrics=metrics_from_manifest(manifest.get("metrics") or {}),
         pairingKey=pairing_key,
         analysisUnit=sampling["analysisUnit"],
+        seed=sampling["seed"],
     )
     check_sampling_contract(ref)
     return ref

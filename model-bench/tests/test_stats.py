@@ -28,6 +28,7 @@ from modelbench.stats import (
     cluster_bootstrap,
     design_effect,
     effective_n,
+    floor_clause,
     format_floor_pp,
     holm_steps,
     mcnemar_exact,
@@ -38,6 +39,7 @@ from modelbench.stats import (
     paired_bootstrap,
     paired_cluster_bootstrap,
     resolving_power,
+    unattainable_clause,
     verdict,
     width_inflation,
     wilson_interval,
@@ -386,6 +388,34 @@ def test_the_floor_truncates_and_never_ceilings_an_inexact_value() -> None:
     assert (6 / 38) * 100 >= printed
 
 
+def test_the_floor_at_exactly_b_min_effective_units_is_still_attainable() -> None:
+    """Review m-ML-7 — `floor_clause`'s `> 1.0` boundary was load-bearing and untested: mutating
+    it to `>= 1.0` survived all 314 tests while printing two false clauses at `n_eff == b_min`.
+
+    At `n_eff = 6` with `alpha_family = 0.05` the floor is exactly `6/6 = 1.0`. The `exceeds the
+    units available` form would claim no observed difference can reach significance — but `b=6,
+    c=0` on 6 units is a 100 pp difference at `p = 0.031`, which does. The strict `>` is what keeps
+    the attainable form, and this pins the boundary from both sides.
+    """
+    rp = resolving_power(
+        6, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05,
+    )
+    assert rp.observable_floor == 1.0
+    assert mcnemar_exact(b_min(0.05), 0) <= 0.05  # the outcome the mutant declares impossible
+    clause = floor_clause(rp)
+    assert clause.startswith("differences below 100.0 pp cannot reach significance")
+    assert "exceeds" not in clause
+
+    # ...and one effective unit fewer is genuinely unattainable, so the other form is not dead.
+    thin = resolving_power(
+        5, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05,
+    )
+    assert thin.observable_floor > 1.0
+    assert "exceeds the 5 effective units available" in floor_clause(thin)
+
+
 def test_mdd_is_ceilinged_so_the_printed_number_actually_delivers_its_power() -> None:
     """`-ml` §3.4 Rule 3 / §9.3 — rounding to nearest would print 19.0 pp, whose measured power is
     0.798, below the 0.80 the sentence claims. 19.1 pp gives 0.8023."""
@@ -565,6 +595,62 @@ def test_a_negative_observed_difference_keeps_its_sign_when_not_distinguishable(
     assert "Observed difference -12.5 pp, 95% CI [-26.9, 1.0] pp covers zero" in v.text
 
 
+def test_an_observed_difference_above_the_mdd_renders_the_notes_alternate_clause() -> None:
+    """M-ML-7 / P3-2 — the closing clause was fixed prose and false on 17% of the tables that
+    printed it. `-ml` v1.7 §3.2e mandates the alternate wording verbatim, discordance counts
+    included: they are the reason the two numbers point opposite ways, and without them the
+    sentence reads as the instrument contradicting itself.
+
+    This is §7.1's *normal case for a model swap* — a candidate that wins more than it loses
+    without strictly dominating — not a corner.
+    """
+    v = verdict(_outcomes(1, 13, 5, 1), resolving=_rp(20), metric_name="m", family=["m"])
+    assert v.distinguishable is False
+    assert "is below that" not in v.text
+    assert (
+        "This pack resolves differences of >=36.7 pp with 80% power at n=20 effective items "
+        "(20 units, design effect 1.00, by-construction, alpha=0.05); the observed 40.0 pp is "
+        "above that, but the MDD assumes strict dominance and this comparison is not strictly "
+        "dominant (b=13, c=5), so the difference required for 80% power at this discordance mix "
+        "is larger (§7.1)."
+    ) in v.text
+
+
+def test_the_alternate_clause_names_the_discordance_split_of_the_losing_direction() -> None:
+    """The note's own second case, `(n=30, b=5, c=13)` — the candidate *loses* more than it wins,
+    and the counts printed must be this table's, not the winning direction's."""
+    v = verdict(_outcomes(6, 5, 13, 6), resolving=_rp(30), metric_name="m", family=["m"])
+    assert "the observed 26.7 pp is above that, but the MDD assumes strict dominance" in v.text
+    assert "not strictly dominant (b=5, c=13)" in v.text
+
+
+def test_the_rendered_power_is_the_power_the_mdd_was_computed_at() -> None:
+    """Review n-ML-6 — `"80% power"` was hard-coded in three rendered strings while `power` is a
+    `resolving_power` parameter, so a caller who passed 0.90 got three sentences claiming a power
+    the figure beside them does not have."""
+    rp = resolving_power(
+        40, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05, power=0.90,
+    )
+    v = verdict(_outcomes(33, 6, 1, 0), resolving=rp, metric_name="m", family=["m"])
+    assert "90% power" in v.text
+    assert "80% power" not in v.text
+    # ...and the unattainable replacement, the other sentence that names it.
+    thin = resolving_power(
+        5, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05, power=0.90,
+    )
+    assert thin.mdd80 is None
+    assert "no effect size attains 90% power." in unattainable_clause(thin, "items")
+
+
+def test_an_observed_difference_below_the_mdd_keeps_the_notes_original_clause() -> None:
+    """The conditional's other branch stays exactly as `-ml` §3.2e verdict 2 publishes it."""
+    v = verdict(_outcomes(33, 6, 1, 0), resolving=_rp(40), metric_name="m", family=["m"])
+    assert "the observed 12.5 pp is below that." in v.text
+    assert "strictly dominant" not in v.text
+
+
 def test_verdict_carries_the_marginal_overlap_diagnostic() -> None:
     """FR-15's literal rule survives as a printed diagnostic, never as the verdict (`-ml` §3.2)."""
     v = verdict(_outcomes(34, 6, 0, 0), resolving=_rp(40), metric_name="m", family=["m"])
@@ -601,6 +687,41 @@ def test_an_assumed_basis_also_moves_the_decision_off_mcnemar() -> None:
         bootstrap_seed=20260902,
     )
     assert v.decided_by == "cluster-bootstrap"
+
+
+@pytest.mark.parametrize("basis", ["assumed", "measured"])
+def test_the_fail_safe_path_names_the_basis_and_not_a_widening_that_did_not_happen(basis) -> None:
+    """Review P3-3 — the trailing label said *"widened by sqrt(DEFF)=1.00 for the declared
+    clustering"* on the path **every** comparison takes until S2's determinism probe lands. At
+    `design_effect == 1.0` nothing was widened and no clustering was declared: what displaced
+    McNemar is the unverified basis, and the sentence never named it.
+    """
+    v = verdict(
+        _outcomes(34, 6, 0, 0),
+        resolving=_rp(40, deff=1.0, basis=basis),
+        metric_name="m",
+        family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert "for the declared clustering" not in v.text
+    assert (
+        f"not widened (sqrt(DEFF)=1.00), because this comparison's design effect is {basis} "
+        "rather than established by construction"
+    ) in v.text
+
+
+def test_a_real_widening_still_names_the_clustering_it_corrected_for() -> None:
+    """The other side of P3-3's conditional: where the design effect *is* above 1.0 the widening
+    happened and the original wording is true, so it must survive."""
+    v = verdict(
+        _outcomes(34, 6, 0, 0),
+        resolving=_rp(40, deff=2.0, basis="measured"),
+        metric_name="m",
+        family=["m"],
+        bootstrap_seed=20260902,
+    )
+    assert "widened by sqrt(DEFF)=1.41 for the declared clustering" in v.text
+    assert "not widened" not in v.text
 
 
 def test_a_measured_basis_at_deff_one_also_moves_the_decision_off_mcnemar() -> None:
@@ -1131,3 +1252,143 @@ def test_a_metric_past_the_holm_stop_is_not_tested_and_says_so() -> None:
     assert v.floor_demoted is False
     assert v.holm_tested is False
     assert "Not tested: Holm–Bonferroni stops at the first non-rejection" in v.text
+
+
+def test_the_unattainable_clause_quotes_the_mdds_alpha_not_the_floors() -> None:
+    """Review P3-6 — `unattainable_clause` quoting `b_min(alpha_family)` instead of
+    `b_min(alpha_mdd)` survived all 314 tests: the two differ only at k>1 and nothing asserted the
+    figure at k=2.
+
+    This is the note's own §7.1 corner (statistics review Pass 3, Part 1 item 3): at k=2,
+    `n_units=13`, `DEFF=2` the rejection region is empty at `alpha_mdd = 0.025`, whose `b_min` is
+    **7**, above the 6 floored effective units — while `b_min(alpha_family) = 6` *is* attainable,
+    which is precisely why the floor sentence is printed separately and survives. A clause quoting
+    6 here contradicts its own "no effect size attains 80% power" in the same sentence.
+    """
+    rp = resolving_power(
+        13, unit_kind="item", design_effect=2.0, basis="measured",
+        alpha_family=0.05, alpha_mdd=0.025,
+    )
+    assert rp.mdd80 is None
+    assert b_min(0.05) == 6 and b_min(0.025) == 7  # the divergence the mutant hid
+    clause = unattainable_clause(rp, "items")
+    assert "b_min=7 net wins any outcome must reach at that alpha" in clause
+    assert "alpha=0.025" in clause
+    assert "b_min=6" not in clause
+
+
+# --- P3-11 / n-ML-5: the design-effect guards ---------------------------------------------------
+
+
+@pytest.mark.parametrize("deff", [0.0, 0.5, 0.999])
+def test_resolving_power_refuses_a_design_effect_below_one(deff: float) -> None:
+    """Review P3-11 and n-ML-5. Two findings, one guard.
+
+    P3-11: removing `resolving_power`'s check survived the suite, and with it gone a
+    `design_effect` of 0 raised a bare `ZeroDivisionError` from `n_units / design_effect` — at the
+    one seam S2's runner supplies — instead of the named error.
+
+    n-ML-5: the check was `<= 0`, so `DEFF = 0.5` was accepted although `-ml` §3.4 Rule 2's sketch
+    says `>= 1.0` and both `verdict()` and `paired_cluster_bootstrap` enforce it. A design effect
+    below 1 *doubles* `n_effective` and shrinks **both** printed bounds — anti-conservative in the
+    module whose stated shape is *"the anti-conservative version does not typecheck"* — and the
+    refusal arrived a layer later, after the figure had already been computed and could be printed.
+    Rule 2's bound belongs at construction.
+    """
+    with pytest.raises(ValueError, match="design_effect"):
+        resolving_power(
+            40, unit_kind="item", design_effect=deff, basis="assumed",
+            alpha_family=0.05, alpha_mdd=0.05,
+        )
+
+
+def test_resolving_power_accepts_a_design_effect_of_exactly_one() -> None:
+    """The boundary from the other side: 1.0 is the no-clustering case and must not be refused."""
+    rp = resolving_power(
+        40, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05,
+    )
+    assert rp.n_effective == 40.0
+
+
+def test_verdict_refuses_a_design_effect_below_one_before_choosing_an_instrument() -> None:
+    """Review P3-11 — Rule 4's **precondition 4**. `-ml` §9 check 2(c) names the other three, all
+    of which are tested; removing this one survived the suite.
+
+    **Removing it also survives the obvious test**, and that is the trap worth pinning: at
+    `DEFF = 0.5` the McNemar branch is not taken, so the decision falls through to
+    `paired_cluster_bootstrap`, which raises the *same sentence* one layer down. A test that only
+    reads the message cannot tell the precondition from its echo.
+
+    So the property asserted is the **ordering** Rule 4 states — every precondition is checked
+    before any instrument is selected. `bootstrap_seed=None` makes the two orders visibly
+    different: with the check present the design effect is refused; without it, the run gets as far
+    as choosing the bootstrap and complains about the missing seed instead, having already accepted
+    an anti-conservative design effect.
+    """
+    below = dataclasses.replace(_rp(40), design_effect=0.5, n_effective=80.0)
+    with pytest.raises(ValueError, match="precondition 4") as excinfo:
+        verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"],
+                bootstrap_seed=None)
+    assert "bootstrap seed" not in str(excinfo.value)
+
+
+def test_holm_steps_has_no_alpha_default_to_drift_from_alpha_family() -> None:
+    """Reviews P3-13 and n-ML-4 — `holm_steps(p_values, *, alpha: float = 0.05)` restated the
+    literal that `ALPHA_FAMILY` exists to be the single home of, 830 lines below that constant's
+    own docstring: *"One home, because … a second literal `0.05` is how they drift apart"*.
+
+    `report.py` always passes `pack.metrics.alpha_family`, so the default was **unreachable** —
+    which is precisely why it would rot unnoticed. Plan §4 S1's surface sketch is at v1.7 the
+    no-default form, and this pins the code to it: the parameter is keyword-only and required, so
+    the family α has one home and no caller can inherit a stale one by omission.
+    """
+    params = inspect.signature(holm_steps).parameters
+    assert params["alpha"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["alpha"].default is inspect.Parameter.empty
+    with pytest.raises(TypeError):
+        holm_steps([0.01, 0.2])  # type: ignore[call-arg]
+
+
+def test_the_wilson_bounds_are_clamped_to_a_probability() -> None:
+    """Review P3-15 — removing `wilson_interval`'s `max(0.0, …)` / `min(1.0, …)` survived the
+    suite. The effect is tiny but it is a *rate*: the unclamped bounds leave `[0, 1]` by one or two
+    ulps, and a printed `-0.000` or a `1.000` that is not 1 is an instrument reporting an
+    impossible probability.
+
+    Both cells were re-derived here rather than quoted: sweeping every `n <= 400`, the unclamped
+    upper bound at `s = n` exceeds 1.0 for **73** values of *n*, worst at `n = 16`
+    (`1.0000000000000002`), and the unclamped lower bound at `s = 0` goes below 0.0 for **60**,
+    worst at `n = 27` (`-6.94e-18`). So neither case is a one-off.
+    """
+    assert wilson_interval(16, 16)[1] == 1.0
+    assert wilson_interval(0, 27)[0] == 0.0
+    # ...and the clamp is not flattening an ordinary interval on the way past.
+    lo, hi = wilson_interval(34, 40)
+    assert 0.0 < lo < hi < 1.0
+
+
+def test_an_observed_difference_exactly_at_the_mdd_takes_the_above_that_branch() -> None:
+    """M-ML-7's comparison is strict (`<`), and the boundary is **reachable** rather than
+    theoretical: mutating it to `<=` survived the round's first mutation pass.
+
+    Swept for the equality `|diff| == mdd80` over every `6 <= n <= 120` at k = 1 and k = 2 — the
+    MDD is ceilinged to a multiple of 0.001 and `|diff|` is `(b-c)/n`, so most `n` cannot produce
+    it. Three cases can, all at k = 2: `n = 90` (mdd 10.0 pp, `|b-c| = 9`), `n = 100` (9.0 pp, 9)
+    and `n = 120` (7.5 pp, 9). At exactly the MDD the pack **does** resolve the difference — the
+    sentence beside it says *"resolves differences of >= 10.0 pp"* — so *"the observed 10.0 pp is
+    below that"* is false, and it is false for the second time in the same sentence.
+    """
+    rp = _rp(90, alpha_mdd=0.025)
+    assert rp.mdd80 == 0.1
+    v = verdict(
+        _outcomes(28, 21, 12, 29),
+        resolving=rp,
+        metric_name="m",
+        family=["m", "other"],
+        alpha_step=0.05,
+    )
+    assert v.distinguishable is False
+    assert abs(v.diff) == rp.mdd80  # the equality the sweep found
+    assert "the observed 10.0 pp is above that" in v.text
+    assert "is below that" not in v.text

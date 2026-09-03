@@ -262,3 +262,24 @@ def test_a_frozen_fingerprint_does_not_share_its_mapping_with_the_caller() -> No
     assert fp.validate() == []
     with pytest.raises(TypeError):
         fp.fields["kvCacheSetting"] = ""  # type: ignore[index]
+
+
+def test_the_arm_kind_discriminator_keeps_absent_distinct_from_null() -> None:
+    """Review P3-10 — the module's first principle is *"absent is not empty, and `null` is
+    neither"*, and §3.4.2's three states are tested for the **fields** but not for the field that
+    decides which contract the fields are read against.
+
+    `from_dict` defaults a missing `armKind` to `""`, reported as `absent`; changing that default
+    to `None` — reported as `null` — survived all 314 tests. A record with no `armKind` key and one
+    that says `"armKind": null` are two different failures: the first was never written, the second
+    was written by something that had the value and lost it.
+    """
+    absent = Fingerprint.from_dict({"benchSchemaVersion": 1})
+    assert absent.validate() == [FieldProblem(field="armKind", reason="absent")]
+
+    nulled = Fingerprint.from_dict({"armKind": None, "benchSchemaVersion": 1})
+    assert nulled.validate() == [FieldProblem(field="armKind", reason="null")]
+
+    # ...and a value that is neither is the third reason, so none of the three collapses.
+    bogus = Fingerprint.from_dict({"armKind": "robot", "benchSchemaVersion": 1})
+    assert bogus.validate() == [FieldProblem(field="armKind", reason="unknown")]

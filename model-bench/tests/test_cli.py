@@ -43,7 +43,7 @@ def workspace(tmp_path):
     return tmp_path
 
 
-def _store_arm(root, name: str, correct: int, total: int = 40) -> None:
+def _store_arm(root, name: str, correct: int, total: int = 40, session: str = "s1") -> None:
     items = [
         item(f"g{i:02d}", correct=i < correct, metric="falseAdvanceRate") for i in range(total)
     ]
@@ -53,6 +53,7 @@ def _store_arm(root, name: str, correct: int, total: int = 40) -> None:
             items=items,
             aggregates=classification_aggregates(correct, total),
             fingerprint_fields=model_fields(modelKey=name, packId=PACK),
+            session_id=session,
         ),
         root,
     )
@@ -211,3 +212,94 @@ def test_module_entrypoint_exists() -> None:
     import modelbench.__main__ as entry
 
     assert hasattr(entry, "main")
+
+
+def test_the_negative_control_report_says_on_its_face_that_it_is_a_smoke_check(
+    workspace, capsys
+) -> None:
+    """Review P3-4 (major) — the mode wrote a durable report indistinguishable from a real
+    comparison, filed beside it under a filename differing only in its sequence number.
+
+    `grep -ic negative` on the produced report returned **0**: what a reader got was an ordinary
+    `b=0, c=0` "not distinguishable" verdict with both arms bearing the same label. `-ml` §9 and
+    plan §3.9(5) are explicit that the real negative control is two *independent* runs and that two
+    copies **cannot fail** — so a stored artifact reading as a validated null is the one output
+    this tool's value claim cannot afford.
+    """
+    _store_arm(workspace, "cand", 34)
+    assert main(["compare", "--pack", PACK, "--negative-control", "--root", str(workspace)]) == 0
+    out = capsys.readouterr().out
+    report = next((workspace / "reports").glob("*.md")).read_text(encoding="utf-8")
+
+    assert "NEGATIVE CONTROL (WIRING SMOKE CHECK)" in report
+    assert "b = c = 0 by construction" in report
+    assert "cannot fail" in report
+    # It is on stdout too — a reader who never opens the file still sees it.
+    assert "NEGATIVE CONTROL (WIRING SMOKE CHECK)" in out
+
+
+def test_an_ordinary_comparison_carries_no_negative_control_banner(workspace, capsys) -> None:
+    """The negative of P3-4: a banner that appears on every report says nothing."""
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    assert main(["compare", "--pack", PACK, "--root", str(workspace)]) == 0
+    assert "NEGATIVE CONTROL" not in capsys.readouterr().out
+
+
+def test_compare_session_restricts_the_arm_set_to_that_session(workspace, capsys) -> None:
+    """Review P3-8 — `--session` was entirely untested: deleting its filter left 314 passed, and
+    `grep -n session tests/test_cli.py` returned nothing. It is one of `compare`'s four options and
+    the one FR-16's same-session pairing rests on; Pass 1's m-4 closed the same gap for `--role`.
+
+    Asserted as *which arms reached the report*, from both sides: the named session's two arms are
+    there and the other session's is not.
+    """
+    _store_arm(workspace, "cand", 40, session="s1")
+    _store_arm(workspace, "incumbent", 34, session="s1")
+    _store_arm(workspace, "outlier", 20, session="s2")
+
+    assert main(["compare", "--pack", PACK, "--session", "s1", "--root", str(workspace)]) == 0
+    out = capsys.readouterr().out
+    assert "| cand | falseAdvanceRate |" in out
+    assert "| incumbent | falseAdvanceRate |" in out
+    assert "outlier" not in out
+    assert "paired, same session" in out
+
+
+def test_compare_session_naming_a_session_with_one_arm_reports_too_few_arms(
+    workspace, capsys
+) -> None:
+    """The filter's other direction, and the one an unfiltered `--session` cannot fake: a session
+    holding a single run has nothing to compare, and the report says exactly that (review M-6)."""
+    _store_arm(workspace, "cand", 40, session="s1")
+    _store_arm(workspace, "incumbent", 34, session="s1")
+    _store_arm(workspace, "outlier", 20, session="s2")
+
+    assert main(["compare", "--pack", PACK, "--session", "s2", "--root", str(workspace)]) == 0
+    out = capsys.readouterr().out
+    assert "fewer than two arms were selected" in out
+    assert "is better than" not in out
+
+
+def test_the_report_filename_is_the_manifests_pack_id_not_the_directory_name(
+    workspace, tmp_path
+) -> None:
+    """Review P3-14 — `_cmd_compare` called `_report_path(root, args.pack)` while the parameter is
+    named `pack_id` and the docstring promises `reports/<pack-id>-<date>-<n>.md`. `args.pack` is
+    the pack **directory**; the two coincide by the §3.3 `packs/<pack-id>/` convention and nothing
+    enforces it. This is the other half of Pass 1's m-6, which fixed the `load_history` call and
+    left the filename on the directory name.
+    """
+    other_dir = workspace / "packs" / "a-directory-with-another-name"
+    other_dir.mkdir(parents=True)
+    (other_dir / "pack.json").write_text(json.dumps(MANIFEST))
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+
+    assert main(
+        ["compare", "--pack", "a-directory-with-another-name", "--root", str(workspace)]
+    ) == 0
+    names = [p.name for p in (workspace / "reports").glob("*.md")]
+    assert len(names) == 1
+    assert names[0].startswith(f"{PACK}-")
+    assert not names[0].startswith("a-directory-with-another-name")

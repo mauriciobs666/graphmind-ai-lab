@@ -462,6 +462,10 @@ class ResolvingPower:
     #: `None` when no effect size attains the power at this `n_effective` — fewer than
     #: `b_min(alpha_mdd)` effective units, so the rejection region is empty (review M-ML-1).
     mdd80: float | None
+    #: The power the MDD was computed at. A **field**, not a literal in three rendered strings:
+    #: `resolving_power` takes `power` as a parameter, so a caller passing 0.90 used to get three
+    #: sentences claiming 80% (review n-ML-6). Every one of them renders this instead.
+    power: float
 
 
 def resolving_power(
@@ -486,8 +490,19 @@ def resolving_power(
     the constant 6 — so the formula stays general while the *choice* lives here, in one auditable
     place.
     """
-    if design_effect <= 0:
-        raise ValueError("design_effect must be positive")
+    # Rule 2's bound, at construction (reviews P3-11, n-ML-5). `<= 0` was the old check: it caught
+    # the `ZeroDivisionError` and let `DEFF = 0.5` through, which *doubles* `n_effective` and
+    # shrinks **both** printed bounds. `verdict()` and `paired_cluster_bootstrap` both refuse below
+    # 1.0, so the value was refused one layer later — after the anti-conservative figure had been
+    # computed and could be rendered. In a module whose stated shape is "the anti-conservative
+    # version does not typecheck", the bound belongs where the object is made. (`effective_n` keeps
+    # the looser `> 0`: it is Rule 5's arithmetic, not a printed bound, and the rho=1 identity test
+    # exercises it directly.)
+    if not design_effect >= 1.0:  # NaN-safe: `< 1.0` would admit a NaN design effect
+        raise ValueError(
+            f"design_effect must be >= 1.0, not {design_effect!r}; a design effect below 1 "
+            "inflates the effective sample and shrinks both printed bounds (-ml §3.4 Rule 2)"
+        )
     n_eff = n_units / design_effect
     try:
         mdd80: float | None = min_detectable_difference(n_eff, alpha=alpha_mdd, power=power)
@@ -503,6 +518,7 @@ def resolving_power(
         n_effective=n_eff,
         observable_floor=observable_floor(n_eff, alpha=alpha_family),
         mdd80=mdd80,
+        power=power,
     )
 
 
@@ -601,17 +617,50 @@ def unattainable_clause(resolving: ResolvingPower, unit_plural: str) -> str:
     return (
         f"No difference is resolvable at {provenance(resolving, unit_plural)}: that is fewer than "
         f"the b_min={b_min(resolving.alpha_mdd)} net wins any outcome must reach at that alpha, so "
-        "no effect size attains 80% power."
+        f"no effect size attains {resolving.power:.0%} power."
     )
 
 
-def _mdd_clause(resolving: ResolvingPower, unit_plural: str, diff: float) -> str:
-    """`-ml` §3.2e verdict 2's second half, verbatim, or its unattainable replacement."""
+def mdd_clause(resolving: ResolvingPower, unit_plural: str) -> str:
+    """§7.1's MDD sentence, without its closing clause or its full stop.
+
+    Public, and public for the same reason `provenance`, `floor_clause` and `unattainable_clause`
+    are: `report.py` renders this stem too, in the standalone resolving-power line, and it spelled
+    it out in full — the one string of the four left with two homes, in the module whose own
+    docstring says *"two copies of this string is one copy and one drift"* (review m-ML-8). The
+    drift was scheduled rather than hypothetical: M-ML-7's fix edits exactly this string.
+
+    Callers add the punctuation their sentence needs: a full stop where the line stands alone, or
+    `-ml` §3.2e verdict 2's closing clause where an observed difference is being compared to it.
+    """
+    if resolving.mdd80 is None:  # pragma: no cover - callers branch on `mdd80` before arriving
+        raise ValueError("no MDD exists at this n_effective; render `unattainable_clause` instead")
+    return (
+        f"This pack resolves differences of >={_pp(resolving.mdd80)} pp with "
+        f"{resolving.power:.0%} power at {provenance(resolving, unit_plural)}"
+    )
+
+
+def _mdd_clause(resolving: ResolvingPower, unit_plural: str, diff: float, b: int, c: int) -> str:
+    """`-ml` v1.7 §3.2e verdict 2's second half, or its unattainable replacement.
+
+    **The closing clause is conditional, and that is the note's rule, not a preference** (review
+    M-ML-7 / P3-2). `the observed X pp is below that` was fixed prose and is false whenever
+    `|diff| >= mdd80` — §7.1's *normal case for a model swap*, a candidate that wins more than it
+    loses without strictly dominating: measured, 268 of the 1 580 by-construction tables that
+    print this clause printed it falsely. The alternate wording is v1.7's, verbatim, **discordance
+    counts included** — they are the reason the two numbers point opposite ways, and without them
+    the sentence looks like the instrument contradicting itself.
+    """
     if resolving.mdd80 is None:
         return unattainable_clause(resolving, unit_plural)
+    stem = mdd_clause(resolving, unit_plural)
+    if abs(diff) < resolving.mdd80:
+        return f"{stem}; the observed {_pp(abs(diff))} pp is below that."
     return (
-        f"This pack resolves differences of >={_pp(resolving.mdd80)} pp with 80% power at "
-        f"{provenance(resolving, unit_plural)}; the observed {_pp(abs(diff))} pp is below that."
+        f"{stem}; the observed {_pp(abs(diff))} pp is above that, but the MDD assumes strict "
+        f"dominance and this comparison is not strictly dominant (b={b}, c={c}), so the difference "
+        f"required for {resolving.power:.0%} power at this discordance mix is larger (§7.1)."
     )
 
 
@@ -692,7 +741,16 @@ def verdict(
             "alpha_family, the MDD did not (-ml §3.4 Rule 4, precondition 3)"
         )
     if resolving.design_effect < 1.0:
-        raise ValueError("design_effect must be >= 1.0")
+        # Rule 4's precondition 4, checked **here and before any instrument is selected**. It is
+        # not redundant with `paired_cluster_bootstrap`'s identical bound: that one fires only on
+        # the path that reaches the resample, and it fires after the branch has already been taken
+        # — so a `verdict()` missing this check raised the *same sentence* from one layer down and
+        # was indistinguishable in a test that only read the message (review P3-11, and why this
+        # one names its own function).
+        raise ValueError(
+            "verdict() precondition 4: resolving.design_effect must be >= 1.0, not "
+            f"{resolving.design_effect!r} (-ml §3.4 Rule 4)"
+        )
     if alpha_step is not None and not (
         resolving.alpha_mdd - 1e-12 <= alpha_step <= resolving.alpha_family + 1e-12
     ):
@@ -847,16 +905,36 @@ def verdict(
         text = (
             f"Not distinguishable at this sample size. Observed difference {diff * 100:+.1f} pp, "
             f"95% CI [{_pp(ci[0])}, {_pp(ci[1])}] pp covers zero (b={b}, c={c}, McNemar exact "
-            f"p={p:.3f}). {_mdd_clause(resolving, unit_plural, diff)} "
+            f"p={p:.3f}). {_mdd_clause(resolving, unit_plural, diff, b, c)} "
             "Neither model is ranked above the other."
         )
 
     if decided_by == "cluster-bootstrap":
         # Every string on this path carries the label, not two of the five: a reader who sees only
         # one verdict must still be told which instrument produced it (`-ml` §3.4 Rule 4).
+        #
+        # **What the widening clause says is conditional on whether a widening happened** (review
+        # P3-3). `sqrt(DEFF)` is 1.00 at `design_effect == 1.0` — nothing was widened and no
+        # clustering was declared — and that is the path *every* comparison carries until S2's
+        # determinism probe lands, so the fixed prose *"for the declared clustering"* was false on
+        # the default path and true only on the rare one. What actually displaced McNemar there is
+        # Rule 4's other half, the `basis`: the design effect is asserted rather than established
+        # by construction. `-ml` §3.4 Rule 4 requires "the design effect and its basis printed" on
+        # this path; naming the basis here is what discharges the second half of that (the
+        # provenance parenthetical prints it three lines away, in the MDD's sentence, where a
+        # reader has no reason to read it as the reason the instrument changed).
+        if resolving.design_effect > 1.0:
+            widening = (
+                f"widened by sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared "
+                "clustering"
+            )
+        else:
+            widening = (
+                "not widened (sqrt(DEFF)=1.00), because this comparison's design effect is "
+                f"{resolving.basis} rather than established by construction"
+            )
         text += (
-            f" Decided by the cluster-bootstrap CI on the paired difference, widened by "
-            f"sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared clustering, in "
+            f" Decided by the cluster-bootstrap CI on the paired difference, {widening}, in "
             f"conjunction with McNemar's exact test (p={p:.3f}) as a necessary condition: under "
             "clustering McNemar rejects too readily, so it may withhold a verdict but never "
             "carries one on its own."
@@ -890,8 +968,15 @@ class HolmStep:
     rejected: bool
 
 
-def holm_steps(p_values: Sequence[float], *, alpha: float = 0.05) -> list["HolmStep"]:
+def holm_steps(p_values: Sequence[float], *, alpha: float) -> list["HolmStep"]:
     """Holm–Bonferroni across the pre-registered family, in the caller's order (§3.3).
+
+    **`alpha` is keyword-only with no default** (reviews P3-13, n-ML-4, plan §4 S1 at v1.7). It
+    carried `= 0.05`, a second literal of the number `ALPHA_FAMILY` exists to be the single home
+    of — in the module whose constant docstring says *"a second literal `0.05` is how they drift
+    apart"*. `report.py` always passed `pack.metrics.alpha_family`, so the default was unreachable,
+    which is what would have let it rot: the family α has one home, and no caller inherits it by
+    omission.
 
     Order the p-values; test the smallest at α/k, the next at α/(k−1), … **stopping at the first
     non-rejection** — every later member is then `tested=False` and can never be rejected, whatever

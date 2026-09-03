@@ -2,6 +2,110 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-03 — S1 third gate round: absence is not an outcome, and five sentences that were false
+
+**What:** Closed the third round of gate findings on S1 —
+`docs/reviews/small-model-benchmarking-impl.md` `## Pass 3` (**P3-1**…**P3-15**) and
+`docs/reviews/small-model-benchmarking-ml.md` `## Pass 3` (**M-ML-7**, **m-ML-7**, **m-ML-8**,
+**n-ML-4**…**n-ML-6**) — against method note **v1.7** and plan **v1.7**. Test-first throughout;
+314 → 353 tests, and 28 mutations run against the fixes with **27 killed and one equivalent by
+construction**. This round is dominated by a single failure mode: **the blocker and four of the six
+majors are about what the report *says* rather than what it computes** — two false clauses, one
+disclosure the report omitted entirely, and one number it never printed — and every one was found
+by rendering a report and reading it, not by an assertion. The remaining two majors are tests that
+could not fail.
+
+**P3-1 (blocker) — an arm holding no data for a metric was scored as failing every item.**
+`report.py` carried two defaults of its own: a missing `scoreable` entry read as *scoreable*, and a
+missing `counts` entry then scored the row a **loss**. Together they rendered
+*"cand is better than incumbent: +100.0 pp (95% CI [60.8, 100.0] pp) … p=0.002"* against an arm
+whose ten items carried `counts={}` and `scoreable={}` — while the §4.3 tally, whose entire job is
+to make dropped rows visible, printed `0 unscoreable in both`. Absence was laundered into the
+denominator's complement, the mirror image of the laundering `-ml` §4.3 forbids. Which state a row
+is in is now **`ItemResult.scored_outcome`'s call and nothing else's**, with three declared answers:
+absent or `False` in `scoreable` is *no outcome* and routes through the tally; `True` **must** carry
+a count, and one that does not is refused (`IncompleteItemRecord`) rather than read as a zero — a
+scorer that declares an item scored must supply its score. A metric whose paired intersection is
+empty now renders an explicit refusal with the tally beneath it and gets **no** `ResolvingPower`
+(`n_effective` of zero is not a small sample); its Holm row prints `—` and `no verdict — no paired
+data` rather than `mcnemar_exact(0, 0)`'s misleading `1.000`. **This is a contract on S2's scorers**
+and is recorded in `AGENTS.md`.
+
+**M-ML-7 / P3-2 (found independently by both gates) — the "not distinguishable" verdict asserted
+the observed difference was below the MDD without checking.** `"; the observed X pp is below that."`
+was fixed prose, false whenever `|diff| >= mdd80` — which is §7.1's *normal case for a model swap*,
+a candidate that wins more than it loses without strictly dominating. Measured by the statistics
+gate: 268 of the 1 580 by-construction tables that print the clause printed it falsely. Note v1.7
+§3.2e mandates a conditional clause and publishes the alternate wording verbatim, discordance
+counts included; it is implemented as published. The comparison is **strict**, and that boundary is
+reachable rather than theoretical — swept over `6 <= n <= 120`, `|diff| == mdd80` occurs at k=2 for
+n = 90, 100 and 120, where "below that" is false a second way — so it has its own test.
+
+**P3-3 — the fail-safe path claimed a widening that never happened.** The cluster-path label read
+*"widened by sqrt(DEFF)=1.00 **for the declared clustering**"* at `design_effect == 1.0`: nothing
+was widened and no clustering was declared, on the path **every** comparison carries until S2's
+determinism probe lands. What actually displaces McNemar there is Rule 4's other half, the
+`basis` — and the sentence never named it. The clause is now conditional: it names the design
+effect where one was applied, and the basis where none was. **The sentence itself is not note-owned
+prose** — `-ml` §3.4 Rule 4 requires "the design effect and its basis printed" on this path but
+publishes no string for it, which is recorded as an open item for `data-scientist`.
+
+**P3-4 — `--negative-control` wrote a durable report indistinguishable from a real comparison.**
+The mode puts two copies of one record in both arms, so `b = c = 0` is arithmetic; the report said
+nothing about that (`grep -ic negative` returned 0) and was filed beside real comparisons under a
+filename differing only in its sequence number. A reader got a plausible validated null. The report
+now opens with a banner naming it a wiring smoke check that **cannot fail**, and pointing at the
+real negative control (two independent runs, an acceptance step). The code comment that claimed the
+report already said this is corrected.
+
+**P3-5 — the bootstrap seed was a literal in the renderer and was never printed.** `report.py`
+passed `bootstrap_seed=20260902`, duplicating the manifest's `sampling.seed` in a type that had no
+field for it, so the pack's own declaration could not reach the decision — and on the fail-safe path
+the seeded bootstrap is what decides. `PackRef` now carries `seed` with **no default**, read from
+the manifest (a manifest omitting it is refused by name), and the `decided by:` line prints it where
+a resample actually ran. The test asserting the printed line was not enough on its own: it left the
+literal alive, printing one seed over an interval resampled at another. It now asserts that two
+packs differing only in `seed` render **different intervals** — possible only at a fixture coarse
+enough for the percentile to move (n=12, b=5, c=3; at n=40 the rendered bounds are identical at
+every seed tried). The fingerprint half stays S2's.
+
+**P3-6, P3-7 — two tests that could not fail.** The suite's only k=2 α assertion was
+`"alpha=0.025" in md`, satisfied by the family-wise paragraph rather than by the MDD sentence it was
+placed to guard, so `provenance` naming the wrong α survived; it now asserts the whole provenance
+parenthetical, and the floor's own α beside it. The exploratory-label test asserted two strings'
+presence and not their pairing, so **inverting** the filter — labelling the pre-registered verdict
+metrics "exploratory" and hiding the genuinely exploratory ones — was green; it now asserts the
+rendered line whole plus the negative. Both inversions now fail.
+
+**The minors and nits.** `compare --session` had no test at all (P3-8) and now has two, from both
+directions. `index.csv`'s `valid` column (P3-9), the `armKind` absent-vs-null discriminator
+(P3-10), `verdict()`'s and `resolving_power`'s design-effect guards (P3-11), `compare_report`'s
+headline-membership guard (P3-12, whose failure mode was a bare `StopIteration`), `wilson_interval`'s
+probability clamps and `pack_ref_from_manifest`'s `analysisUnit` check (P3-15) each gained the one
+assertion that kills their surviving mutation. `holm_steps`' `alpha` default — the second literal
+`0.05` in the module that declares there is only one (P3-13, n-ML-4) — is **removed** rather than
+re-pointed at `ALPHA_FAMILY`, matching plan v1.7's signature block. `resolving_power` now refuses
+`design_effect < 1.0` at construction instead of `<= 0` (n-ML-5): below 1 a design effect *inflates*
+effective *n* and shrinks both printed bounds, and the refusal used to arrive a layer later. The
+report filename is now the manifest's `packId`, not the pack directory name (P3-14) — the half
+Pass 1's m-6 left behind. m-ML-7's `floor_clause` boundary, m-ML-8's duplicated MDD stem and
+n-ML-6's hard-coded `"80% power"` were closed by the same round.
+
+**One correction to a test, not to the code.** `verdict()`'s design-effect precondition raised the
+*same sentence* as `paired_cluster_bootstrap`'s identical bound one layer down, so the obvious test
+passed with the precondition deleted. What it asserts now is the **ordering** Rule 4 states — every
+precondition checked before any instrument is selected — which is visible only when the two orders
+produce different errors.
+
+**Verification.** `.venv/bin/python -m pytest -q -m "" -rsx` → **353 passed**, nothing skipped,
+deselected or xfailed; `--collect-only` collects 353, so the run count equals the collected count.
+`.venv/bin/ruff check .` → clean. 28 distinct mutations run, **27 killed**. The survivor is
+**equivalent by construction**: restoring `report.py`'s duplicate of the MDD stem with *identical*
+text renders identically, so no test can distinguish it. The mutation that matters — the same stem
+edited in `stats.py` while the duplicate stays stale, which is exactly the drift m-ML-8 predicted
+M-ML-7's fix would cause — **is** killed, by the test asserting the report renders
+`stats.mdd_clause`'s own string.
+
 ## 2026-09-03 — S1 second gate round: the floor's α, McNemar as a veto, Rule 7 by path
 
 **What:** Closed the second round of gate findings on S1 —

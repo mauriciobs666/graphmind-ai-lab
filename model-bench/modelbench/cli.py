@@ -111,8 +111,9 @@ def _select_arms(
             )
         candidates = [by_key[m] for m in wanted]
     if negative_control and candidates:
-        # Two copies of ONE record, deliberately: the mode's own docstring and the report say why
-        # this cannot fail (`-ml` §9).
+        # Two copies of ONE record, deliberately. The mode's own `--help` text and the report's
+        # first banner both say why this cannot fail (`-ml` §9) — the report said nothing at all
+        # until review P3-4, and this comment claimed otherwise while it did.
         return [candidates[0], candidates[0]]
     return candidates
 
@@ -143,12 +144,17 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         print(f"model-bench: {exc}", file=sys.stderr)
         return EXIT_USAGE
     try:
-        markdown = compare_report(arms, pack=pack, invalid=invalid)
+        markdown = compare_report(
+            arms, pack=pack, invalid=invalid, negative_control=args.negative_control
+        )
     except PackConfigError as exc:
         print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
         return EXIT_BAD_PACK
 
-    target = Path(args.out) if args.out else _report_path(root, args.pack)
+    # The manifest's `packId`, not the pack **directory** name — the same distinction the
+    # `load_history` call above draws, and the half Pass 1's m-6 left behind: `_report_path`'s
+    # parameter is `pack_id` and its docstring promises `reports/<pack-id>-…` (review P3-14).
+    target = Path(args.out) if args.out else _report_path(root, pack.packId)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(markdown, encoding="utf-8")
     print(markdown)

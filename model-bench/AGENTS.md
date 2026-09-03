@@ -29,7 +29,7 @@ raises, and **Rule 7 is enforced inside `verdict()`** — no path returns `disti
 **raises** on the `mcnemar-exact` path (there it is a theorem) while it demotes-and-names on the
 substitute one.
 
-**Four honesty rules that are easy to break silently, and what holds each in place.**
+**Five honesty rules that are easy to break silently, and what holds each in place.**
 
 - **Every printed bound takes the rounding direction, the α and the denominator that keep *its
   own* claim true.** One principle, three instances, and two bounds side by side routinely take
@@ -42,9 +42,22 @@ substitute one.
   layer against itself. Its `+ 1e-12` guard is **defensive** since the floor moved to `6/n`
   (nothing the note prints needs it), kept because `b_min` is a function of α; pin it with the
   code's own `floor(x/precision)`, never `floor(x*1000)`, which has no hazard to find.
-- **`RunResult.designEffect`/`basis` and `BinaryMetric.unit` carry no defaults.** In each case the
-  value a forgetful caller wants is the anti-conservative one, so a default rebuilds gate B-1 at
-  that seam. The legacy fallbacks live in `from_dict` only, where they are §3.4.3 reader rules.
+- **Nothing that shapes a decision carries a default.** `RunResult.designEffect`/`basis`,
+  `BinaryMetric.unit`, `PackRef.seed` (the pack's `sampling.seed`, which the report both uses and
+  prints) and `holm_steps`' `alpha` are all required: in each case the value a forgetful caller
+  wants is the anti-conservative or unreproducible one, so a default rebuilds gate B-1 at that
+  seam. `resolving_power` refuses `design_effect < 1.0` at construction, not `<= 0` — below 1 it
+  *inflates* effective *n* and shrinks both printed bounds. The legacy fallbacks live in
+  `from_dict` only, where they are §3.4.3 reader rules.
+- **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome`
+  is the only place that decides, and it has three answers: `metric` absent from `scoreable`, or
+  declared `False`, is **no outcome** (the row leaves the paired table and lands in the §4.3
+  tally); declared `True` **must** carry a `counts` entry, and one that does not is refused
+  (`IncompleteItemRecord`), never read as a zero. **This is a contract on S2's scorers**: emit a
+  count for every metric you declare scoreable. `report.py` infers nothing — its two old defaults
+  (absent = scoreable, absent count = failure) turned an arm holding no data at all into
+  *"+100.0 pp, p=0.002"*. A metric with an empty paired intersection gets an explicit refusal and
+  no resolving power, because `n_effective` of zero is not a small sample.
 - **A Wilson interval prints only over the analysis unit.** `-ml` §4.4: *"Never print a Wilson
   interval over a turn-pooled count."* `report.py` compares `BinaryMetric.unit` against the role's
   unit kind; a pooled count prints its `k/n` and no interval.
@@ -53,7 +66,7 @@ substitute one.
   verdicts, zipped `strict=True` so a short ladder cannot drop a metric.
   `holm_thresholds` was replaced by `holm_steps` because a threshold without the
   step-down stop is unusable — and the rendered family table carries a `decision` column for the
-  same reason.
+  same reason. `holm_steps`' `alpha` is required, so `ALPHA_FAMILY` stays the only `0.05`.
 
 **The analysis unit is pack data, never a call-site choice.** `report.py` resolves it from
 `PackRef.analysisUnit` (§3.3 fixes it by rule as `pairingKey[0]`). `PairedOutcomes.from_units`

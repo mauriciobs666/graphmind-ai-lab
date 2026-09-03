@@ -24,7 +24,7 @@ from conftest import (
 from modelbench import stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
-from modelbench.report import compare_report
+from modelbench.report import compare_report, resolving_power_line
 from modelbench.results import InvalidRecord, ItemResult
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
@@ -206,6 +206,7 @@ def test_the_tool_caller_resolving_power_line_is_the_notes_verbatim_string() -> 
         ),
         pairingKey=("scriptId", "replicate", "turnIndex"),
         analysisUnit="scriptId",
+        seed=20260902,
     )
     metric = "cleanThroughTurn4"
     a_items = [
@@ -238,6 +239,23 @@ def test_the_tool_caller_resolving_power_line_is_the_notes_verbatim_string() -> 
     ) in md
 
 
+def test_the_mdd_sentence_stem_has_exactly_one_home() -> None:
+    """Review m-ML-8 — `stats._mdd_clause` and `report.resolving_power_line` each spelled the stem
+    out in full. `provenance`, `floor_clause` and `unattainable_clause` were made public precisely
+    so the report could not carry a second copy, and this one was left behind; M-ML-7's fix edits
+    exactly this string, so the drift was scheduled rather than hypothetical.
+
+    Asserted as *the report renders the stats module's string*, not as two literals that happen to
+    match today.
+    """
+    rp = stats.resolving_power(
+        40, unit_kind="item", design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05,
+    )
+    line = resolving_power_line(rp, guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert stats.mdd_clause(rp, "items") + "." in line
+
+
 def test_the_power_ceiling_sentence_is_dropped_above_n_eff_twenty() -> None:
     """`-ml` §7.1 — the 2:1 row prints only where the caveat becomes the finding (n_eff < 20)."""
     md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
@@ -263,6 +281,7 @@ def _clustered_fixture():
         metrics=PackMetrics(verdictMetrics=(metric,), headlineMetric=metric),
         pairingKey=("scriptId", "replicate"),
         analysisUnit="scriptId",
+        seed=20260902,
     )
     items = [
         item(
@@ -327,11 +346,18 @@ def test_the_analysis_unit_id_is_the_cluster_key_and_the_guard_therefore_fires(m
 
 
 def test_no_caller_can_choose_the_analysis_unit() -> None:
-    """Plan §3.3 — 'no call site chooses it, and there is no parameter through which one could'."""
+    """Plan §3.3 — 'no call site chooses it, and there is no parameter through which one could'.
+
+    Asserted as a **closed** parameter set rather than as the absence of a `unit_kind` name: a
+    whitelist fails when *any* new knob appears, which is the only form that catches an analysis
+    unit arriving under a name nobody thought to forbid. Growing it is therefore a deliberate act.
+    `negative_control` joined it in review P3-4 — it selects a banner, and reads nothing about the
+    data.
+    """
     import inspect
 
     params = inspect.signature(compare_report).parameters
-    assert set(params) == {"runs", "pack", "invalid"}
+    assert set(params) == {"runs", "pack", "invalid", "negative_control"}
 
 
 # --- S1 done-condition 8: headlineMetric null -----------------------------------------------------
@@ -369,7 +395,14 @@ def test_a_null_headline_renders_both_verdicts_and_no_headline() -> None:
     assert "**Headline" not in md
     assert "declares no headline metric" in md
     assert "Holm" in md  # k = 2 makes family-wise error control mandatory (plan §3.3(ii))
-    assert "alpha=0.025" in md
+    # Review P3-6 — a bare `"alpha=0.025" in md` was satisfied by the **family-wise paragraph**
+    # ("computed at the family-adjusted alpha=0.025"), not by the MDD sentence it was placed to
+    # guard, so `provenance` printing `alpha_family` where it must print `alpha_mdd` survived the
+    # whole suite. The two αs differ only at k>1, and this is the suite's only k=2 α assertion.
+    # Asserting the **whole parenthetical** is what binds the number to the bound it governs.
+    assert "design effect 1.00, by-construction, alpha=0.025)" in md
+    # ...and the floor, in the same report, takes the *other* α — the unadjusted one (M-ML-6).
+    assert "at any Holm step (alpha <= 0.05)" in md
 
 
 def test_a_manifest_omitting_the_headline_key_fails_validation() -> None:
@@ -401,8 +434,16 @@ def test_a_metric_outside_the_verdict_family_is_labelled_exploratory() -> None:
                 parseFailures=0, n=40),
             fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
     md = compare_report([a, b], pack=pack)
-    assert "sideMetric" in md
-    assert "exploratory — no significance claim" in md
+    # Review P3-7 — the two assertions this replaces were `"sideMetric" in md` (also true from the
+    # Arms table) and `"exploratory — no significance claim" in md` (true of whichever metric got
+    # listed). They asserted the presence of two strings in a document, not the **pairing** between
+    # them, so inverting the filter to `m.name in family` — which labels the *pre-registered
+    # verdict metrics* "exploratory" and hides the genuinely exploratory ones — left the suite
+    # green. The rendered line whole, plus the negative, is what pins the requirement.
+    assert "- `sideMetric` — exploratory — no significance claim" in md
+    assert f"- `{METRIC}` — exploratory" not in md
+    # ...and the pre-registered metric still gets its verdict, which the inversion also removes.
+    assert f"### {METRIC}" in md
 
 
 # --- S1 done-condition 6: the deterministic arm ---------------------------------------------------
@@ -474,7 +515,7 @@ def test_a_pack_ref_whose_analysis_unit_is_not_the_outermost_key_is_refused() ->
     pack = PackRef(
         packId="p", packVersion="1.0.0", contentHash="e" * 64, role="tool-caller",
         metrics=PackMetrics(verdictMetrics=("m",), headlineMetric="m"),
-        pairingKey=("scriptId", "replicate"), analysisUnit="replicate",
+        pairingKey=("scriptId", "replicate"), analysisUnit="replicate", seed=20260902,
     )
     with pytest.raises(PackConfigError):
         compare_report(_nested_arms(), pack=pack)
@@ -863,6 +904,103 @@ def test_an_item_present_in_only_one_arm_is_counted_and_named() -> None:
     assert "4 present in cand only" in md
 
 
+# --- P3-1: absence of data is not an outcome ----------------------------------------------------
+
+
+def _bare(item_id: str, *, scoreable: dict, counts: dict) -> ItemResult:
+    """An item whose `scoreable`/`counts` maps are exactly as given — including empty."""
+    return ItemResult(
+        itemId=item_id,
+        pairingKey=(item_id,),
+        outcome="pass",
+        scoreable=scoreable,
+        counts=counts,
+        latencyMs=1300.0,
+        detail={},
+    )
+
+
+def _pair_of_arms(a_items, b_items):
+    fields = model_fields(packId=PACK_ID)
+    a = run("cand", items=a_items, aggregates=classification_aggregates(len(a_items), len(a_items)),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=b_items, aggregates=classification_aggregates(0, len(b_items)),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    return a, b
+
+
+def test_an_arm_carrying_no_data_for_a_metric_is_not_scored_as_failing_every_item() -> None:
+    """Review P3-1 (blocker) — the two defaults in `_paired_rows` combined into a false positive.
+
+    `item.scoreable.get(metric, True)` admitted an item that never mentions the metric, and
+    `item.counts.get(metric, 0) > 0` then scored it a **loss**. An arm carrying no data at all
+    rendered *"cand is better than incumbent … +100.0 pp … p=0.002"* while the §4.3 tally, whose
+    entire job is to make dropped rows visible, printed `0 unscoreable in both`.
+
+    A missing declaration is not a declaration: absence routes through the tally, never into the
+    numerator's complement (`-ml` §4.3, risk R2).
+    """
+    a_items = [_bare(f"g{i:02d}", scoreable={METRIC: True}, counts={METRIC: 1}) for i in range(10)]
+    b_items = [_bare(f"g{i:02d}", scoreable={}, counts={}) for i in range(10)]
+    a, b = _pair_of_arms(a_items, b_items)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert "is better than" not in md
+    assert "+100.0 pp" not in md
+    assert "paired n: 0 of 10 items" in md
+    # Arm B declares nothing for the metric, so every row is an asymmetry — an undeclared metric
+    # is exactly as unscoreable as a declared precondition failure, and lands in the same tally.
+    assert "10 scoreable for cand only" in md
+    assert "No verdict: no paired data" in md
+
+
+def test_neither_arm_declaring_a_metric_is_unscoreable_in_both() -> None:
+    """The other half of the same default: when *both* arms are silent the rows are neither arm's
+    finding, and the tally must say so rather than crediting one of them."""
+    a_items = [_bare(f"g{i:02d}", scoreable={}, counts={}) for i in range(10)]
+    b_items = [_bare(f"g{i:02d}", scoreable={}, counts={}) for i in range(10)]
+    a, b = _pair_of_arms(a_items, b_items)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "10 unscoreable in both" in md
+    assert "is better than" not in md
+
+
+def test_a_metric_with_no_paired_rows_renders_a_refusal_rather_than_raising() -> None:
+    """The legitimate case of the same shape: a candidate that collapses so completely that no
+    item is scoreable for it. That is real data and a real finding, so it must render — and
+    `resolving_power(0 units)` would raise `n_effective must be positive`, aborting the whole
+    report including the tally that carries the finding."""
+    a_items = [_bare(f"g{i:02d}", scoreable={METRIC: True}, counts={METRIC: 1}) for i in range(10)]
+    b_items = [_bare(f"g{i:02d}", scoreable={METRIC: False}, counts={}) for i in range(10)]
+    a, b = _pair_of_arms(a_items, b_items)
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    assert "No verdict: no paired data" in md
+    assert "paired n: 0 of 10 items" in md
+    assert "10 scoreable for cand only" in md
+    assert "is better than" not in md
+    # The headline may not be synthesised from a metric that has no verdict either.
+    assert f"**Headline ({METRIC}):**" in md
+    assert "no paired data" in md.split(f"**Headline ({METRIC}):**")[1]
+
+
+def test_a_no_verdict_metric_is_named_as_such_in_the_family_table() -> None:
+    """With k>1 the Holm table has a row per pre-registered member, and a member with no paired
+    data must not print a p-value and a threshold as though a test had been run."""
+    other = "unsafeAdvanceRate"
+    a_items = [
+        _bare(f"g{i:02d}", scoreable={METRIC: True, other: True}, counts={METRIC: 1, other: 1})
+        for i in range(10)
+    ]
+    b_items = [
+        _bare(f"g{i:02d}", scoreable={METRIC: True}, counts={METRIC: 0}) for i in range(10)
+    ]
+    a, b = _pair_of_arms(a_items, b_items)
+    md = compare_report([a, b], pack=guard_pack(headline=None, verdicts=(METRIC, other)))
+    row = [ln for ln in md.splitlines() if ln.startswith(f"| {other} |")]
+    assert row == [f"| {other} | — | 0.0500 | no verdict — no paired data |"]
+
+
 # --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------
 
 
@@ -910,7 +1048,7 @@ def test_pack_ref_content_hash_is_none_until_s2_computes_it(tmp_path) -> None:
     manifest = tmp_path / "pack.json"
     manifest.write_text(json.dumps({
         "packId": "p", "packVersion": "1.0.0", "role": "guard-judge",
-        "sampling": {"pairingKey": ["itemId"], "analysisUnit": "itemId"},
+        "sampling": {"pairingKey": ["itemId"], "analysisUnit": "itemId", "seed": 20260902},
         "metrics": {"verdictMetrics": ["m"], "headlineMetric": "m"},
     }))
     ref = pack_ref_from_manifest(manifest)
@@ -954,7 +1092,7 @@ def _toolcall_pack():
         metrics=PackMetrics(
             verdictMetrics=("cleanThroughTurn4",), headlineMetric="cleanThroughTurn4"
         ),
-        pairingKey=("scriptId", "replicate"), analysisUnit="scriptId",
+        pairingKey=("scriptId", "replicate"), analysisUnit="scriptId", seed=20260902,
     )
 
 
@@ -1012,3 +1150,128 @@ def test_the_denominator_unit_survives_a_disk_round_trip(tmp_path) -> None:
     restored = RunResult.from_dict(json.loads(path.read_text()))
     assert restored == original
     assert {m.unit for m in restored.aggregates.named_metrics()} == {"conversation", "turn"}
+
+
+# --- P3-5: the bootstrap seed is the pack's declaration, not a literal in the renderer ----------
+
+
+def _seed_arms(a_ok: list[bool], b_ok: list[bool]):
+    """Two arms over `len(a_ok)` items with exactly the given per-item outcomes, on the fail-safe
+    (`basis="assumed"`) path so the seeded cluster bootstrap is what decides."""
+    def arm(name, oks, correct):
+        items = [
+            ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",),
+                       outcome="pass" if ok else "fail", scoreable={METRIC: True},
+                       counts={METRIC: 1 if ok else 0}, latencyMs=1300.0, detail={})
+            for i, ok in enumerate(oks)
+        ]
+        return run(name, items=items,
+                   aggregates=classification_aggregates(correct, len(oks)), basis="assumed",
+                   fingerprint_fields=model_fields(modelKey=name, packId=PACK_ID))
+    return [arm("cand", a_ok, sum(a_ok)), arm("incumbent", b_ok, sum(b_ok))]
+
+
+def test_the_bootstrap_seed_comes_from_the_pack_and_is_printed_beside_the_instrument() -> None:
+    """Review P3-5 (major) — `report.py` passed `bootstrap_seed=20260902`, a magic literal
+    duplicating the manifest's `sampling.seed` (plan §3.3) that `PackRef` had no field for, so the
+    pack's own declaration could not reach the decision. `-ml` §3.2d requires the seed recorded
+    "so a report is reproducible"; it was in neither the fingerprint nor the report, and on the
+    fail-safe path — which *every* comparison takes until S2's determinism probe lands — the
+    bootstrap is what decides. A reader handed a bootstrap-decided verdict could not reproduce it.
+
+    The fingerprint half stays S2's (that is the runner's record, not the reporter's).
+    """
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))._replace(seed=4242)
+    a_ok = [True] * 40
+    b_ok = [i >= 6 for i in range(40)]
+    md = compare_report(_seed_arms(a_ok, b_ok), pack=pack)
+    assert "- decided by: cluster-bootstrap (seed 4242, from the pack's `sampling.seed`)" in md
+    assert "20260902" not in md
+
+
+def test_the_printed_seed_is_the_seed_the_interval_was_resampled_at() -> None:
+    """The half the rendered line alone cannot prove, and the one P3-5 is actually about.
+
+    Asserting only *"seed 4242"* appears left `bootstrap_seed=20260902` — the literal this finding
+    removes — alive: the report printed the pack's seed over an interval resampled at a different
+    one, which is precisely the unreproducible verdict. So the seed has to be bound to the number
+    it explains.
+
+    Most binary fixtures cannot show it: the percentile bootstrap over ±1/0 unit differences lands
+    on a coarse lattice, and at n=40 the displayed bounds are identical at every seed tried
+    (measured: one distinct rendered interval across seeds 1–39). At **n=12 with b=5, c=3** the
+    lattice is coarse enough for the percentile to move — seeds 1 and 5 render `[-25.0, 58.3]` and
+    `[-33.3, 58.3]` pp — which is what makes this assertion possible at all.
+    """
+    a_ok = [True] * 5 + [False] * 3 + [True] * 4
+    b_ok = [False] * 5 + [True] * 3 + [True] * 4
+    arms = _seed_arms(a_ok, b_ok)
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))
+
+    one = compare_report(arms, pack=pack._replace(seed=1))
+    five = compare_report(arms, pack=pack._replace(seed=5))
+
+    assert "(seed 1, from the pack's `sampling.seed`)" in one
+    assert "(seed 5, from the pack's `sampling.seed`)" in five
+    assert "[-25.0, 58.3] pp" in one
+    assert "[-33.3, 58.3] pp" in five
+
+
+def test_the_seed_is_not_printed_where_no_bootstrap_decided_anything() -> None:
+    """The seed is provenance for an instrument that ran. On the `mcnemar-exact` path no resample
+    happened, so naming a seed there would claim a reproducibility that is not at issue."""
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "- decided by: mcnemar-exact" in md
+    assert "seed" not in md
+
+
+def test_a_manifest_that_declares_no_resample_seed_is_refused(tmp_path) -> None:
+    """The other half of P3-5: `PackRef.seed` has no default, so a manifest omitting
+    `sampling.seed` must be a named refusal rather than a `KeyError` or a conjured number.
+
+    A default would rebuild the defect it replaces — a seed nobody declared reproduces nothing —
+    and it is the same defaulting shape `-ml` §3.4 Rule 2 refuses for `design_effect`.
+    """
+    from modelbench.packs import pack_ref_from_manifest
+
+    manifest = tmp_path / "pack.json"
+    manifest.write_text(json.dumps({
+        "packId": "p", "packVersion": "1.0.0", "role": "guard-judge",
+        "sampling": {"pairingKey": ["itemId"], "analysisUnit": "itemId"},
+        "metrics": {"verdictMetrics": ["m"], "headlineMetric": "m"},
+    }))
+    with pytest.raises(PackConfigError, match="sampling.seed is absent"):
+        pack_ref_from_manifest(manifest)
+
+
+def test_a_pack_ref_built_in_code_with_an_out_of_family_headline_is_refused() -> None:
+    """Review P3-12 — `compare_report`'s headline-membership guard was untested: deleting it left
+    the suite green, and the only test of the rule goes through `metrics_from_manifest`, which a
+    `PackRef` built in code bypasses entirely. S2 and every fixture here build one that way.
+
+    Without the guard the failure is not a refusal but a bare `StopIteration` with no message, from
+    `next(v for m, v, _ in computed if m == pack.metrics.headlineMetric)` — a generator exhausting
+    two hundred lines from the rule it violated.
+    """
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))._replace(
+        metrics=PackMetrics(verdictMetrics=("someOtherMetric",), headlineMetric=METRIC)
+    )
+    with pytest.raises(PackConfigError, match="headlineMetric"):
+        compare_report(_nested_arms(), pack=pack)
+
+
+def test_a_manifest_that_declares_no_analysis_unit_is_refused_by_name(tmp_path) -> None:
+    """Review P3-15 — removing `pack_ref_from_manifest`'s `"analysisUnit" not in sampling` check
+    survived the suite, degrading a named `PackConfigError` into a `KeyError` that `_cmd_compare`
+    happens to catch and reports as *"invalid pack: 'analysisUnit'"* — a bare key name where the
+    operator needs to be told which declaration is missing and why it matters."""
+    from modelbench.packs import pack_ref_from_manifest
+
+    manifest = tmp_path / "pack.json"
+    manifest.write_text(json.dumps({
+        "packId": "p", "packVersion": "1.0.0", "role": "guard-judge",
+        "sampling": {"pairingKey": ["itemId"], "seed": 20260902},
+        "metrics": {"verdictMetrics": ["m"], "headlineMetric": "m"},
+    }))
+    with pytest.raises(PackConfigError, match="sampling.analysisUnit is absent"):
+        pack_ref_from_manifest(manifest)

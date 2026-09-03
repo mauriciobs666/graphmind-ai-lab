@@ -41,6 +41,10 @@ class InvalidFingerprint(ValueError):
     """Raised by `store()`. A result whose environment is not fully recorded is not a result."""
 
 
+class IncompleteItemRecord(ValueError):
+    """An item declares a metric scoreable and records no count for it (review P3-1)."""
+
+
 # --- metric values ---------------------------------------------------------------------------
 # Every rate prints as `k/n = p̂ [lo, hi]` — never a bare percentage, never without its denominator
 # (`-ml` §3.2a). Carrying the numerator and denominator in the type is what makes that possible.
@@ -115,6 +119,36 @@ class ItemResult:
     counts: Mapping[str, int]
     latencyMs: float | None
     detail: Mapping[str, Any] = field(default_factory=dict)
+
+    def scored_outcome(self, metric: str) -> bool | None:
+        """This item's outcome for `metric` — `None` when it carries none (review P3-1).
+
+        **The three states are declared, never inferred**, and this is the one place that decides
+        which of them a record is in:
+
+        * `metric` absent from `scoreable` — the item makes no statement about it, so there is no
+          outcome. It was read as *scoreable* by default, and the count default then scored it a
+          **loss**: an arm carrying no data at all for a metric rendered *"cand is better than
+          incumbent … +100.0 pp … p=0.002"* while the §4.3 tally reported `0 unscoreable in both`.
+          Absence is not a declaration, in either map.
+        * `scoreable[metric] is False` — a declared precondition failure, `None`, and `-ml` §4.3's
+          paired corollary counts it as an `asymmetry` finding about the arm that could not
+          produce it.
+        * `scoreable[metric] is True` — the arm says it scored this item, so the count must be
+          there. **A metric declared scoreable and left out of `counts` is refused**, never read
+          as a zero: publishing a failure the scorer never observed is §4.3's laundering pointed
+          the other way, and the shape of the two maps cannot distinguish it from a scorer that
+          simply dropped the key. **S2's scorers must emit a `counts` entry for every metric they
+          declare scoreable** — that is what makes this a contract rather than a default.
+        """
+        if not self.scoreable.get(metric, False):
+            return None
+        if metric not in self.counts:
+            raise IncompleteItemRecord(
+                f"item {self.itemId!r} declares {metric!r} scoreable and records no count for it; "
+                "an absent count is not a zero, and a scored item must carry its score (-ml §4.3)"
+            )
+        return self.counts[metric] > 0
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -16,6 +16,7 @@ from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
     ClassificationAggregates,
+    IncompleteItemRecord,
     InvalidFingerprint,
     ItemResult,
     RunResult,
@@ -239,6 +240,41 @@ def test_models_with_stored_results_excludes_deterministic_arms(tmp_root) -> Non
     assert models_with_stored_results(tmp_root) == ["qwen/qwen3-4b-2507"]
 
 
+# --- P3-1: an item's metric outcome is declared, never inferred --------------------------------
+
+
+def _item(scoreable: dict, counts: dict) -> ItemResult:
+    return ItemResult(
+        itemId="i1", pairingKey=("i1",), outcome="pass",
+        scoreable=scoreable, counts=counts, latencyMs=None, detail={},
+    )
+
+
+def test_an_undeclared_metric_is_not_scoreable() -> None:
+    """Review P3-1 — `scoreable.get(metric, True)` read an item that never mentions the metric as
+    a scoreable one, and the count default then scored it a loss. Absence is not a declaration."""
+    assert _item({}, {}).scored_outcome("falseAdvanceRate") is None
+
+
+def test_a_declared_precondition_failure_is_not_scoreable() -> None:
+    assert _item({"m": False}, {}).scored_outcome("m") is None
+
+
+def test_a_declared_scoreable_metric_returns_its_recorded_outcome() -> None:
+    assert _item({"m": True}, {"m": 1}).scored_outcome("m") is True
+    assert _item({"m": True}, {"m": 0}).scored_outcome("m") is False
+
+
+def test_an_item_that_declares_a_metric_scoreable_and_records_no_count_is_refused() -> None:
+    """The self-contradictory record: the arm says it scored the item and supplies no score.
+    Reading the absent count as `0` publishes a failure the scorer never observed, which is the
+    laundering `-ml` §4.3 forbids, pointed the other way. **This is a contract S2's scorers must
+    honour**: a metric declared scoreable carries a count, always."""
+    with pytest.raises(IncompleteItemRecord) as excinfo:
+        _item({"m": True}, {}).scored_outcome("m")
+    assert "m" in str(excinfo.value) and "i1" in str(excinfo.value)
+
+
 def test_a_fingerprint_dataclass_keeps_absent_distinct_from_null() -> None:
     absent = Fingerprint(armKind="model", fields=model_fields(kvCacheSetting=...))
     nulled = Fingerprint(armKind="model", fields=model_fields(kvCacheSetting=None))
@@ -434,3 +470,29 @@ def test_the_index_latency_columns_are_p50_and_p95(tmp_root) -> None:
     assert 45.0 <= p50 <= 55.0
     assert 90.0 <= p95 <= 100.0
     assert p95 > p50
+
+
+def test_the_index_valid_column_distinguishes_a_usable_record_from_a_quarantined_one(
+    tmp_root,
+) -> None:
+    """Review P3-9 — hardcoding `_index_row(run, valid=True)` survived the whole suite, so a
+    regression marking every stored record usable would not have been caught. `index.csv` is the
+    only place an operator sees which of a history's runs are usable at a glance.
+
+    The invalid record has to be written by hand: `store()` refuses an incomplete fingerprint and
+    has no bypass flag (§3.4.5 point 1), so a blanked field can only arrive by editing the file —
+    which is exactly the provenance `load_history` quarantines and the index must flag.
+    """
+    store(_run("good"), tmp_root)
+    store(_run("hand_edited"), tmp_root)
+    path = tmp_root / "results" / "runs" / "hand_edited.json"
+    raw = json.loads(path.read_text())
+    raw["fingerprint"]["kvCacheSetting"] = ""
+    path.write_text(json.dumps(raw))
+
+    text = rebuild_index(tmp_root).read_text()
+    lines = text.splitlines()
+    header = lines[0].split(",")
+    by_run = {row.split(",")[header.index("runId")]: row.split(",") for row in lines[1:]}
+    assert by_run["good"][header.index("valid")] == "yes"
+    assert by_run["hand_edited"][header.index("valid")] == "no"

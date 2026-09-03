@@ -108,6 +108,7 @@ def guard_pack(
         metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
         pairingKey=("itemId",),
         analysisUnit="itemId",
+        seed=20260902,
     )
 
 
