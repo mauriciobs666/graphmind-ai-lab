@@ -48,9 +48,23 @@ class InvalidFingerprint(ValueError):
 
 @dataclass(frozen=True)
 class BinaryMetric:
+    """A count and the unit its denominator is in — the second half is not optional.
+
+    `-ml` §4.4's first mandatory consequence is verbatim *"Never print a Wilson interval over a
+    turn-pooled count"*, and `report.py` could not honour it because a `BinaryMetric` carried no
+    denominator unit: a per-conversation rate and a turn-pooled one were the same type, so the Arms
+    table rendered a Wilson interval over both (review M-ML-3). `unit` is what tells them apart —
+    `"conversation"`, `"item"`, `"query"` for an analysis-unit rate, `"turn"` or `"call"` for a
+    pooled one (§4.2's denominators).
+
+    **No default**, for the reason Rule 2 gives about `design_effect`: the value a forgetful caller
+    would want is the analysis unit, and that is exactly the value that licenses the interval.
+    """
+
     name: str
     successes: int
     n: int
+    unit: str
 
     @property
     def rate(self) -> float | None:
@@ -69,7 +83,10 @@ MetricValue = BinaryMetric | ContinuousMetric
 
 @dataclass(frozen=True)
 class TurnPositionRate:
-    """One column of `-ml` §4.4's per-position table: n is **conversations**, never turns."""
+    """One column of `-ml` §4.4's per-position table: n is **conversations**, never turns.
+
+    Its `metric.unit` is therefore the analysis unit, which is what makes a per-position interval
+    printable at all."""
 
     turnIndex: int
     metric: BinaryMetric
@@ -239,8 +256,14 @@ class RunResult:
     fingerprint: Fingerprint
     items: tuple[ItemResult, ...]
     aggregates: Aggregates
-    designEffect: float = 1.0
-    basis: Basis = "assumed"
+    #: Both are **required, with no dataclass default** (plan v1.5 §3.5, review M-2 / m-ML-3).
+    #: `designEffect = 1.0` is the anti-conservative value, so a default here rebuilds gate B-1's
+    #: "default by omission" at the seam S2's runner constructs — and it makes DC-5's clause
+    #: "report.py refuses to render one when the required input is absent" true only vacuously,
+    #: because with a default the input can never *be* absent. The legacy fallback lives in
+    #: `from_dict`, where it means "a record written before these fields existed" (§3.4.3).
+    designEffect: float
+    basis: Basis
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -264,7 +287,10 @@ class RunResult:
             armKind=d["armKind"],
             fingerprint=Fingerprint.from_dict(d["fingerprint"]),
             items=tuple(ItemResult.from_dict(i) for i in d.get("items", [])),
-            aggregates=_aggregates_from_dict(d.get("aggregates", {"kind": "classification"})),
+            # No `.get` default: fabricating an empty `ClassificationAggregates` for a record
+            # that has no aggregates block repairs the one absence this module exists to report
+            # (review n-3). A `KeyError` here surfaces as `unparseable` in `load_history`.
+            aggregates=_aggregates_from_dict(d["aggregates"]),
             designEffect=d.get("designEffect", 1.0),
             basis=d.get("basis", "assumed"),
         )
@@ -293,13 +319,19 @@ class InvalidRecord:
 
 def _metric_to_dict(m: MetricValue) -> dict[str, Any]:
     if isinstance(m, BinaryMetric):
-        return {"type": "binary", "name": m.name, "successes": m.successes, "n": m.n}
+        return {
+            "type": "binary", "name": m.name, "successes": m.successes, "n": m.n, "unit": m.unit,
+        }
     return {"type": "continuous", "name": m.name, "mean": m.mean, "n": m.n}
 
 
 def _metric_from_dict(d: Mapping[str, Any]) -> MetricValue:
     if d["type"] == "binary":
-        return BinaryMetric(name=d["name"], successes=d["successes"], n=d["n"])
+        # No `.get` fallback: a stored count whose denominator unit is unknown is exactly the
+        # record §4.4 says must not be given an interval, and guessing one restores the defect.
+        return BinaryMetric(
+            name=d["name"], successes=d["successes"], n=d["n"], unit=d["unit"]
+        )
     return ContinuousMetric(name=d["name"], mean=d["mean"], n=d["n"])
 
 
@@ -330,7 +362,7 @@ def _aggregates_to_dict(agg: Aggregates) -> dict[str, Any]:
 
 
 def _aggregates_from_dict(d: Mapping[str, Any]) -> Aggregates:
-    cls = _AGGREGATE_BY_KIND[d.get("kind", "classification")]
+    cls = _AGGREGATE_BY_KIND[d["kind"]]
     return cls(**{k: _decode(v) for k, v in d.items() if k != "kind"})
 
 
@@ -351,6 +383,15 @@ def store(run: RunResult, root: Path) -> Path:
     if problems:
         detail = ", ".join(f"{p.field} ({p.reason})" for p in problems)
         raise InvalidFingerprint(f"run {run.runId} has an incomplete fingerprint: {detail}")
+    # Plan §3.5 specifies `modelSlug` sanitisation precisely because real model keys contain `/`
+    # (`qwen/qwen3-4b-2507`), and the slugging is S2's runner. Until then an unslugged id raised a
+    # bare `FileNotFoundError` from `pathlib` — loud, but not a named reason — and a segment that
+    # happened to name an existing directory would have written outside `runs/` (review m-7).
+    if run.runId != Path(run.runId).name or run.runId in {"", ".", ".."}:
+        raise ValueError(
+            f"runId {run.runId!r} is not a bare filename; a record is written to "
+            "results/runs/<runId>.json, so the id must already carry plan §3.5's slug"
+        )
     target = runs_dir(root)
     target.mkdir(parents=True, exist_ok=True)
     path = target / f"{run.runId}.json"
@@ -390,10 +431,22 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
             )
             continue
 
+        # The pack filter may only drop a record that **says** it belongs to another pack. A
+        # `packId` that is absent, null or blank is a required-field failure, and skipping it here
+        # put the record in neither returned list — the comparison quietly lost an arm and the
+        # report said nothing, against AC-2's "excluded on read *and named*" (review M-1).
+        #
+        # The filter now applies to an unknown schema too, whose `packId` is right there and
+        # readable, so another pack's future-schema record is no longer surfaced as this pack's
+        # exclusion — but it stays **off** `unparseable` above, because a truncated file genuinely
+        # cannot declare its pack (review m-1).
         schema = run.fingerprint.benchSchemaVersion
-        if run.fingerprint.get("packId") != packId and schema in REQUIRED_BY_SCHEMA:
+        declared = run.fingerprint.get("packId")
+        if isinstance(declared, str) and declared and declared != packId:
             continue
-        if not isinstance(schema, int) or schema not in REQUIRED_BY_SCHEMA:
+        if not isinstance(schema, int) or isinstance(schema, bool) or (
+            schema not in REQUIRED_BY_SCHEMA
+        ):
             invalid.append(
                 InvalidRecord(
                     path=path,

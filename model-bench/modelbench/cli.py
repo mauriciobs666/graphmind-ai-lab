@@ -22,6 +22,11 @@ from modelbench.packs import PackConfigError, pack_ref_from_manifest
 from modelbench.report import compare_report
 from modelbench.results import RunResult, load_history, models_with_stored_results, rebuild_index
 
+
+class UnknownModelKey(ValueError):
+    """`--models` named a key with no stored run for this pack (§3.6a's exit 2)."""
+
+
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_BAD_PACK = 4
@@ -94,7 +99,17 @@ def _select_arms(
     if models:
         wanted = [m.strip() for m in models.split(",") if m.strip()]
         by_key = {r.modelKey: r for r in candidates}
-        candidates = [by_key[m] for m in wanted if m in by_key]
+        # A key with no stored run was silently dropped, which is how a user reached a one-arm
+        # comparison — `--models cand,incumbnet` rendered a report asserting a reason that is
+        # untrue of it. A typo in a model key is a usage error, not a comparison (review M-6).
+        missing = [m for m in wanted if m not in by_key]
+        if missing:
+            raise UnknownModelKey(
+                f"no stored run for {', '.join(repr(m) for m in missing)} in this pack "
+                "(and session, if --session was given); "
+                "`model-bench models --tested --pack <id>` lists what is stored"
+            )
+        candidates = [by_key[m] for m in wanted]
     if negative_control and candidates:
         # Two copies of ONE record, deliberately: the mode's own docstring and the report say why
         # this cannot fail (`-ml` §9).
@@ -114,13 +129,19 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
         return EXIT_BAD_PACK
 
-    valid, invalid = load_history(root, packId=args.pack)
-    arms = _select_arms(
-        valid,
-        models=args.models,
-        session=args.session,
-        negative_control=args.negative_control,
-    )
+    # The manifest's `packId`, not the pack **directory** name: they coincide by the §3.3
+    # convention (`packs/<pack-id>/`) and nothing enforces it, so this was latent (review m-6).
+    valid, invalid = load_history(root, packId=pack.packId)
+    try:
+        arms = _select_arms(
+            valid,
+            models=args.models,
+            session=args.session,
+            negative_control=args.negative_control,
+        )
+    except UnknownModelKey as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     try:
         markdown = compare_report(arms, pack=pack, invalid=invalid)
     except PackConfigError as exc:

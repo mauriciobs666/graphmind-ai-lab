@@ -42,7 +42,10 @@ Stakeholder decisions, 2026-09-02:
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | delivered | commit `ab91419` — 8 modules + 6 test files, **233 tests**, offline | U5a + U5b → — | 258k tok / 70 tools |
 | U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
-| U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | in-flight | `model-bench/**` | `analyst` + `data-scientist` re-gate → — | — |
+| U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | delivered | 14 files, +1909/−168, **296 tests**; 34 mutations, 0 survivors | U7a + U7b → — | 322k tok / 74 tools |
+| U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | in-flight | `docs/reviews/small-model-benchmarking-impl.md` | — (is the gate) | — |
+| U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
+| U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
 | U6c — Appendix A `PackRef` + §3.4.1 enumeration are stale | `architect` (fresh) | `a5ca583515c0979f1` | accepted | `docs/plans/small-model-benchmarking.md` **v1.5** | teco-verified | 116k tok / 43 tools |
@@ -413,3 +416,37 @@ re-drawn against U4's actual delivery before dispatch.
   — n=40, `|diff| = 15.0 pp` exactly at the α=0.05 floor, `p = 0.109375`, not distinguishable.
   Significance depends on the discordance **split**, not on `b − c`. Asserting the converse would
   have failed against an existing fixture.
+
+- **2026-09-03 — U6a delivered: 233 → 296 tests, both blockers closed, 34 mutations run with
+  **zero** survivors** — including all ten the gate had left alive. Two of its *own* new mutations
+  initially survived, both for exactly the reason the gate's M-4 names: **a test asserting a
+  passthrough field rather than the behaviour it gates.** Both were rewritten onto fixtures where
+  the distinction bites (DEFF 1.335, where the exact floor is 20.025 pp and the printed one 20.0, so
+  an observed 20.0 pp sits in the gap).
+- **B-ML-1 fixed as the *minimal* fix, declared as such, with the reason.** The structurally right
+  primitive resamples clusters of paired differences, but `PairedOutcomes` carries one row per
+  analysis unit and the grouping could only come from a pack declaring `replicatesPerScript > 1` —
+  which **Rule 6 makes a validation error** while only the one-level bootstrap exists. Building it
+  now would have had no data to consume and no seam to reach it. The rendered effect is the point:
+  the CI that was *identical* at DEFF 2, 4 and 7 now widens ([0.9, 32.7] → [−5.0, 40.0] →
+  [−11.5, 48.1]) and the DEFF-7 line stops claiming "resolves ≥100.0 pp with 80% power".
+- **B-1's fix required reading the output, not just fixing the decision.** `compare_report` now runs
+  **two passes** (Holm is a property of the family, so no verdict can be decided until every p-value
+  exists), and the family table gained a `decision` column — because a reader applying a printed
+  threshold still reaches the opposite conclusion unless the table states the outcome. **Public API
+  change for S2: `holm_thresholds` is gone, replaced by `holm_steps`; `verdict()` gained
+  `holm_tested`.**
+- **The implementer found a factual error in teco's brief, and it was load-bearing.** The brief
+  relayed a sweep claiming naive truncation never misfires; `7/40` is `174.99999999999997` bins in
+  IEEE doubles, so naive truncation prints **17.4** where `-ml` §7.1 publishes **17.5**. The
+  adjudicator's sweep had covered only the α=0.05 column. **Teco's own first verification appeared
+  to refute the finding — because it computed in percentage points while the code computes in
+  proportions.** Re-checking in the code's own units confirmed the implementer. *Verify in the units
+  the code uses, not the units the document prints.*
+- **A methodology gap neither the note nor either review had reached, raised by the implementer:**
+  Rule 7's floor is computed at **α/k** while Holm's actual step for a rank-*i* member is the looser
+  **α/(k−i)**, and they disagree at the margin (b=6, c=0 at n=40 clears a Holm step of 0.05 while
+  its 15.0 pp sits below the printed 17.5 pp floor). Resolved **conservatively** — the decision
+  follows the floor the report *prints*, so a verdict can never contradict the honesty line beside
+  it — with the forgone Holm gain documented in a named test. Routed to `data-scientist` for a
+  clause in §3.3/§7.1.

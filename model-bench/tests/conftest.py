@@ -130,9 +130,11 @@ def item(
     )
 
 
-def classification_aggregates(successes: int, n: int, metric: str = "falseAdvanceRate"):
+def classification_aggregates(
+    successes: int, n: int, metric: str = "falseAdvanceRate", unit: str = "item"
+):
     return ClassificationAggregates(
-        perClass=(BinaryMetric(name=metric, successes=successes, n=n),),
+        perClass=(BinaryMetric(name=metric, successes=successes, n=n, unit=unit),),
         parseFailures=0,
         n=n,
     )

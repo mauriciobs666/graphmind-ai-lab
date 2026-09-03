@@ -119,14 +119,46 @@ def test_compare_with_an_out_path(workspace, tmp_path) -> None:
 
 
 def test_compare_selects_the_named_models(workspace, capsys) -> None:
+    """Review M-6 — the shipped assertion was only `"third" in out`, which holds whether or not the
+    filter runs, so deleting `--models` entirely was green. The arm that must *not* be there is
+    what makes this a test; it is matched on its Arms-table row, because the word "candidate"
+    appears in every report's best-case caveat."""
     _store_arm(workspace, "cand", 40)
     _store_arm(workspace, "incumbent", 34)
     _store_arm(workspace, "third", 20)
     code = main(
         ["compare", "--pack", PACK, "--models", "third,incumbent", "--root", str(workspace)]
     )
+    out = capsys.readouterr().out
     assert code == 0
-    assert "third" in capsys.readouterr().out
+    assert "| third |" in out and "| incumbent |" in out
+    assert "| cand |" not in out
+
+
+def test_compare_exits_two_naming_a_models_key_with_no_stored_run(workspace, capsys) -> None:
+    """Review M-6 — `[by_key[m] for m in wanted if m in by_key]` dropped an unmatched key in
+    silence, so `--models cand,incumbnet` rendered a **one-arm** report that then asserted a
+    deterministic-arm reason that is untrue. A typo in a model key is a usage error (§3.6a's
+    exit 2), not a comparison."""
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    code = main(
+        ["compare", "--pack", PACK, "--models", "cand,incumbnet", "--root", str(workspace)]
+    )
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "incumbnet" in err
+    assert not list((workspace / "reports").glob("*.md"))
+
+
+def test_a_single_selected_arm_is_reported_as_such(workspace, capsys) -> None:
+    """Review M-6's rendered half: one arm is not two deterministic arms."""
+    _store_arm(workspace, "cand", 40)
+    code = main(["compare", "--pack", PACK, "--models", "cand", "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "fewer than two arms" in out
+    assert "two deterministic arms" not in out
 
 
 def test_an_unknown_pack_exits_four(workspace, capsys) -> None:

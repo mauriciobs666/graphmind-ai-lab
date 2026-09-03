@@ -20,10 +20,31 @@ those three commands are still absent, so the stage boundary is checked rather t
 
 **`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` and no other source.** Every
 formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
-plan deliberately does not restate them, and neither should this file. Its shape is §3.4's six
+plan deliberately does not restate them, and neither should this file. Its shape is §3.4's **seven**
 binding rules, written so the anti-conservative version does not typecheck: `resolving_power`'s
-`design_effect`/`basis`/`unit_kind`/`alpha` are keyword-only **with no defaults**, and
-`min_detectable_difference` takes `n_effective: float` so a raw observation count raises.
+`design_effect`/`basis`/`unit_kind`/`alpha` are keyword-only **with no defaults**,
+`min_detectable_difference` takes `n_effective: float` so a raw observation count raises, and
+**Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
+`resolving.observable_floor`, compared against the exact float and never the printed one.
+
+**Four honesty rules that are easy to break silently, and what holds each in place.**
+
+- **The floor truncates; the MDD ceilings.** One principle — round each printed bound in the
+  direction that keeps its own claim true — and `stats.format_floor_pp` is the *only* place the
+  floor's direction lives. Assert through it, never with `round(...)` in a test: re-rounding
+  asserts the presentation layer against itself. Its `+ 1e-12` guard is load-bearing, not
+  defensive (`7/40` is `174.99999999999997` bins).
+- **`RunResult.designEffect`/`basis` and `BinaryMetric.unit` carry no defaults.** In each case the
+  value a forgetful caller wants is the anti-conservative one, so a default rebuilds gate B-1 at
+  that seam. The legacy fallbacks live in `from_dict` only, where they are §3.4.3 reader rules.
+- **A Wilson interval prints only over the analysis unit.** `-ml` §4.4: *"Never print a Wilson
+  interval over a turn-pooled count."* `report.py` compares `BinaryMetric.unit` against the role's
+  unit kind; a pooled count prints its `k/n` and no interval.
+- **Holm needs two passes.** The step a metric is tested at depends on every other member's
+  p-value, so `compare_report` computes every paired table first, then `stats.holm_steps`, then the
+  verdicts. `holm_thresholds` was replaced by `holm_steps` because a threshold without the
+  step-down stop is unusable — and the rendered family table carries a `decision` column for the
+  same reason.
 
 **The analysis unit is pack data, never a call-site choice.** `report.py` resolves it from
 `PackRef.analysisUnit` (§3.3 fixes it by rule as `pairingKey[0]`). `PairedOutcomes.from_units`

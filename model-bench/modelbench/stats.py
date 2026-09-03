@@ -5,19 +5,25 @@ Every formula, constant, threshold, tolerance, bootstrap parameter and verdict s
 note's, cited by section. The plan deliberately does not restate them: two copies of a formula is
 one copy and one bug (plan §3.9).
 
-The shape of this module is `-ml` §3.4's six binding rules, written so that "the anti-conservative
-version does not typecheck, and the honest one is the only one that runs":
+The shape of this module is `-ml` §3.4's **seven** binding rules, written so that "the
+anti-conservative version does not typecheck, and the honest one is the only one that runs":
 
 1. `PairedOutcomes.from_units` is the constructor, and a repeated analysis-unit id raises.
 2. `resolving_power`'s `unit_kind`/`design_effect`/`basis`/`alpha` are keyword-only with **no
    defaults** — a default of 1.0 would rebuild gate B-1 by omission.
-3. `min_detectable_difference` is computed exactly over the McNemar rejection region and rounded
-   **up**; the `8/n` mnemonic is not code, and `n_effective` is a `float`, never an observation
-   count.
+3. MDD and floor are rounded in **opposite** directions, each the direction that keeps its own
+   claim true: `min_detectable_difference` ceilings the value, `format_floor_pp` truncates at
+   print. `n_effective` is a `float`, never an observation count, and the `8/n` mnemonic is not
+   code.
 4. `verdict()` asserts four preconditions and refuses, and lets McNemar decide **only** at
-   `design_effect == 1.0 and basis == "by-construction"`.
+   `design_effect == 1.0 and basis == "by-construction"`. The substitute is
+   `paired_cluster_bootstrap`, whose interval responds to the declared design effect.
 5. The design effect is a **variance** ratio — the width ratio squared.
 6. `cluster_bootstrap` is one level only; a pack needing two must fail validation (S2).
+7. No verdict path returns `distinguishable` below `resolving.observable_floor`, enforced in
+   `verdict()` against the **exact** floor. It is the only cheap check tying together two
+   quantities computed by completely independent routes, which is what makes a substituted
+   instrument surface as a contradiction rather than as a plausible number.
 """
 
 from __future__ import annotations
@@ -41,6 +47,10 @@ DecidedBy = Literal["mcnemar-exact", "cluster-bootstrap"]
 
 class DuplicateAnalysisUnit(ValueError):
     """A unit id appeared twice, so the rows are not independent (`-ml` §3.4 Rule 1)."""
+
+
+class UnattainablePower(ValueError):
+    """No effect size reaches the requested power at this `n_effective` (`-ml` §7.1)."""
 
 
 # --- intervals ----------------------------------------------------------------------------------
@@ -119,6 +129,40 @@ def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[floa
     n = len(diffs)
     means = sorted(sum(rng.choice(diffs) for _ in range(n)) / n for _ in range(B))
     return _percentile(means, 2.5), _percentile(means, 97.5)
+
+
+def paired_cluster_bootstrap(
+    diffs: Sequence[float], *, design_effect: float, B: int, seed: int
+) -> tuple[float, float]:
+    """The paired-difference interval for a clustered design (`-ml` §3.4 Rule 4's second branch).
+
+    **This is the smallest honest version, not the structurally right one, and the difference is
+    worth stating.** `PairedOutcomes` carries one row per analysis unit and no grouping, so there is
+    no structure in which a paired resample *of clusters of rows* could be expressed; the grouping
+    would have to come from a pack declaring `replicatesPerScript > 1`, which Rule 6 makes a
+    validation error while only the one-level `cluster_bootstrap` exists. So the interval is
+    computed by resampling the rows and then inflating the percentile half-widths about the point
+    estimate by `sqrt(design_effect)`.
+
+    That conversion is exact rather than a fudge: `-ml` §3.4 Rule 5 defines the Kish design effect
+    as a **variance** ratio and CI half-width scales as `1/sqrt(n)`, so `sqrt(DEFF)` is precisely
+    the factor that carries an interval computed at `n_units` to one computed at
+    `n_units / DEFF`. What it cannot do is *discover* clustering the declared `design_effect` did
+    not already state — which is why the declaration is a required, defaulted-nowhere input
+    (Rule 2) rather than something the resample infers.
+
+    The structurally right version, when a pack that needs it exists: give `PairedOutcomes` an
+    optional cluster grouping and resample clusters of paired differences.
+    """
+    if design_effect < 1.0:
+        raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
+    lo, hi = paired_bootstrap(diffs, B=B, seed=seed)
+    point = sum(diffs) / len(diffs)
+    scale = math.sqrt(design_effect)
+    return (
+        max(-1.0, point - (point - lo) * scale),
+        min(1.0, point + (hi - point) * scale),
+    )
 
 
 def cluster_bootstrap(
@@ -254,7 +298,7 @@ class PairedOutcomes:
 
 
 @lru_cache(maxsize=None)
-def _b_min(alpha: float) -> int:
+def b_min(alpha: float) -> int:
     """Smallest net win count that can reach significance at `alpha` (`-ml` §3.2b's floor table)."""
     b = 1
     while mcnemar_exact(b, 0) > alpha:
@@ -270,10 +314,10 @@ def _mcnemar_power(n: int, delta: float, *, alpha: float) -> float:
     That model is the most favourable case, so every MDD it yields is a lower bound on the
     difference actually needed — which is why the report labels the figure `best case`.
     """
-    b_min = _b_min(alpha)
-    if b_min > n:
+    smallest = b_min(alpha)
+    if smallest > n:
         return 0.0
-    return sum(comb(n, i) * delta**i * (1 - delta) ** (n - i) for i in range(b_min, n + 1))
+    return sum(comb(n, i) * delta**i * (1 - delta) ** (n - i) for i in range(smallest, n + 1))
 
 
 def _require_effective(n_effective: float) -> int:
@@ -298,8 +342,22 @@ def _require_effective(n_effective: float) -> int:
 def min_detectable_difference_exact(
     n_effective: float, *, alpha: float, power: float = 0.80
 ) -> float:
-    """The exact δ at which P(reject) first reaches `power`, unrounded (`-ml` §3.4 Rule 3)."""
+    """The exact δ at which P(reject) first reaches `power`, unrounded (`-ml` §3.4 Rule 3).
+
+    Raises `UnattainablePower` when no effect size reaches `power` — below `b_min(alpha)` units the
+    McNemar rejection region is empty and `_mcnemar_power` is identically zero, at which point the
+    bisection would converge on its upper bracket and hand back `1.0`. Returning that figure lets
+    the report print *"resolves differences of >=100.0 pp with 80% power"* for a configuration whose
+    power is exactly **zero**; `-ml` §7.1's discordance-mix table already calls this state
+    **unattainable** (review M-ML-1).
+    """
     n = _require_effective(n_effective)
+    if _mcnemar_power(n, 1.0, alpha=alpha) < power:
+        raise UnattainablePower(
+            f"no effect size reaches {power:.0%} power at n_effective={n_effective:g} "
+            f"(floored to {n} units, fewer than b_min={b_min(alpha)} at alpha={alpha:g}): the "
+            "McNemar rejection region is empty, so power is zero at every difference (-ml §7.1)"
+        )
     lo, hi = 0.0, 1.0
     for _ in range(200):
         mid = (lo + hi) / 2
@@ -330,9 +388,19 @@ def observable_floor(n_effective: float, *, alpha: float) -> float:
 
     Below it, no paired binary result reaches significance whatever happens. It takes `alpha`
     because the floor is `6/n` only at α=0.05 — at α=0.025 it is `7/n`.
+
+    **It divides by the unfloored `n_effective`, where `min_detectable_difference` floors first,
+    and that asymmetry is deliberate** (review n-ML-1, which asked for one line of consistency;
+    this is that line, and it declines to unify them). Rule 3's principle is "round each printed
+    bound in the direction that keeps its own claim true", and the two claims point opposite ways:
+    the MDD says *"resolves >= X with 80% power"*, so a **larger** X is the conservative error and
+    flooring `n` produces it; the floor says *"below Y nothing can reach significance"*, so a
+    **smaller** Y is the conservative error and only the unfloored denominator produces it.
+    Sharing a denominator would make one of the two anti-conservative. `_require_effective` is
+    still called for its type check, whose refusal of a raw `int` is Rule 2's.
     """
     _require_effective(n_effective)
-    return _b_min(alpha) / n_effective
+    return b_min(alpha) / n_effective
 
 
 @dataclass(frozen=True)
@@ -344,7 +412,9 @@ class ResolvingPower:
     basis: Basis
     n_effective: float
     observable_floor: float
-    mdd80: float
+    #: `None` when no effect size attains the power at this `n_effective` — fewer than
+    #: `b_min(alpha)` effective units, so the rejection region is empty (review M-ML-1).
+    mdd80: float | None
 
 
 def resolving_power(
@@ -364,6 +434,10 @@ def resolving_power(
     if design_effect <= 0:
         raise ValueError("design_effect must be positive")
     n_eff = n_units / design_effect
+    try:
+        mdd80: float | None = min_detectable_difference(n_eff, alpha=alpha, power=power)
+    except UnattainablePower:
+        mdd80 = None
     return ResolvingPower(
         n_units=n_units,
         unit_kind=unit_kind,
@@ -372,7 +446,7 @@ def resolving_power(
         basis=basis,  # type: ignore[arg-type]
         n_effective=n_eff,
         observable_floor=observable_floor(n_eff, alpha=alpha),
-        mdd80=min_detectable_difference(n_eff, alpha=alpha, power=power),
+        mdd80=mdd80,
     )
 
 
@@ -392,14 +466,83 @@ class Verdict:
     decided_by: DecidedBy
     marginal_overlap: bool
     alpha_used: float
+    floor_demoted: bool = False
+    holm_tested: bool = True
 
 
 def _pp(value: float, places: int = 1) -> str:
     return f"{value * 100:.{places}f}"
 
 
+def format_floor_pp(value: float, *, precision: float = 0.001) -> str:
+    """Render the observable floor in percentage points, **truncated** (`-ml` §3.4 Rule 3).
+
+    One principle, two directions: round each printed bound in the direction that keeps its own
+    claim true. The floor carries *"differences below Y cannot reach significance at any observed
+    outcome"*, so it must truncate — at n=38 the exact floor is `6/38 = 15.789` pp and printing the
+    ceiling `15.8` makes the sentence false, because the attainable observed difference `6/38` is
+    below 15.8 and *does* reach significance (b=6, c=0, p=1/32). The MDD rounds the other way, and
+    `min_detectable_difference` does that ceiling on the value itself.
+
+    Truncation is **guarded**, mirroring the `- 1e-12` on the ceiling side, because a floor that
+    lands exactly on a 0.1 pp bin edge is the common case rather than the exotic one: `7/40 = 0.175`
+    is `174.99999999999997` bins in IEEE doubles, and naive truncation prints `17.4` for the
+    α=0.025, n=40 row the note publishes as **17.5**.
+
+    This is the presentation layer only. `ResolvingPower.observable_floor` stays exact, because
+    Rule 7 compares against it and an invariant must not inherit the printer's rounding.
+    """
+    steps = math.floor(value / precision + 1e-12)
+    return f"{steps * precision * 100:.1f}"
+
+
 def _plural(unit_kind: str) -> str:
     return f"{unit_kind}s"
+
+
+def _provenance(resolving: ResolvingPower, unit_plural: str) -> str:
+    """§7.1's mandatory parenthetical — the unit, the raw unit count, the design effect and its
+    basis are what make a resolving-power figure auditable, and a bare `n` is the shape gate B-1
+    rejected."""
+    return (
+        f"n={resolving.n_effective:g} effective {unit_plural} ({resolving.n_units} units, "
+        f"design effect {resolving.design_effect:.2f}, {resolving.basis}, "
+        f"alpha={resolving.alpha:g})"
+    )
+
+
+def unattainable_clause(resolving: ResolvingPower, unit_plural: str) -> str:
+    """What replaces the MDD and floor sentences when `mdd80` is `None` (review M-ML-1).
+
+    Below `b_min(alpha)` effective units the rejection region is empty: power is zero at every
+    difference and the floor exceeds 1.0, so quoting either figure prints a number the instrument
+    cannot deliver — the delivered build printed *"resolves >=100.0 pp with 80% power"*.
+    """
+    return (
+        f"No difference is resolvable at {_provenance(resolving, unit_plural)}: that is fewer than "
+        f"the b_min={b_min(resolving.alpha)} net wins any outcome must reach, so no effect size "
+        "attains 80% power and no observed difference can reach significance."
+    )
+
+
+def _mdd_clause(resolving: ResolvingPower, unit_plural: str, diff: float) -> str:
+    """`-ml` §3.2e verdict 2's second half, verbatim, or its unattainable replacement."""
+    if resolving.mdd80 is None:
+        return unattainable_clause(resolving, unit_plural)
+    return (
+        f"This pack resolves differences of >={_pp(resolving.mdd80)} pp with 80% power at "
+        f"{_provenance(resolving, unit_plural)}; the observed {_pp(abs(diff))} pp is below that."
+    )
+
+
+def _floor_clause(resolving: ResolvingPower, unit_plural: str) -> str:
+    """The floor half of §7.1's line, quoted where Rule 7's demotion has to justify itself."""
+    if resolving.mdd80 is None:
+        return unattainable_clause(resolving, unit_plural)
+    return (
+        f"differences below {format_floor_pp(resolving.observable_floor)} pp cannot reach "
+        f"significance at any observed outcome, at {_provenance(resolving, unit_plural)}."
+    )
 
 
 def verdict(
@@ -411,6 +554,7 @@ def verdict(
     a_label: str = "A",
     b_label: str = "B",
     alpha_step: float | None = None,
+    holm_tested: bool = True,
     bootstrap_seed: int | None = None,
 ) -> Verdict:
     """Decide one pre-registered metric, or refuse (`-ml` §3.4 Rule 4).
@@ -421,8 +565,13 @@ def verdict(
     cluster-bootstrap CI on the paired difference takes its place.
 
     `alpha_step` carries §3.3's Holm–Bonferroni step for this metric when the caller is testing a
-    family; it defaults to `resolving.alpha`, which is the most conservative step. The
+    family; it defaults to `resolving.alpha`, which is the most conservative step. `holm_tested` is
+    the other half of Holm: `False` means a metric ranked ahead of this one failed its own step, so
+    Holm stops and this member is **not tested at all**, whatever its own p-value. The
     `resolving.alpha == 0.05 / len(family)` precondition is unaffected either way.
+
+    **Rule 7 is enforced here, on every path**, not left to a test the implementer may or may not
+    write: no verdict returns `distinguishable` when `|diff|` is below `resolving.observable_floor`.
     """
     if resolving.n_units != outcomes.n_units:
         raise ValueError(
@@ -463,16 +612,36 @@ def verdict(
     if mcnemar_may_decide:
         ci = mover_d_interval(a, b, c, d)
         decided_by: DecidedBy = "mcnemar-exact"
-        significant = p <= alpha
+        raw_significant = p <= alpha
     else:
         if bootstrap_seed is None:
             raise ValueError(
                 "the clustered decision path needs a bootstrap seed; it goes into the environment "
                 "fingerprint so the report is reproducible (-ml §3.2d)"
             )
-        ci = paired_bootstrap(outcomes.unit_diffs(), B=10_000, seed=bootstrap_seed)
+        ci = paired_cluster_bootstrap(
+            outcomes.unit_diffs(),
+            design_effect=resolving.design_effect,
+            B=10_000,
+            seed=bootstrap_seed,
+        )
         decided_by = "cluster-bootstrap"
-        significant = ci[0] > 0 or ci[1] < 0
+        raw_significant = ci[0] > 0 or ci[1] < 0
+
+    # `-ml` §3.4 Rule 7 — the observable floor is a property of the *decision*, on every path, and
+    # it is compared against the exact float, never `format_floor_pp`'s truncation: an invariant
+    # that inherits the presentation layer's rounding can fire, or fail to fire, by 0.05 pp.
+    #
+    # It never fires on the McNemar branch — significance there already implies
+    # `|b - c| / n >= b_min(alpha) / n`, exhaustively, which is exactly what makes it a detector
+    # rather than a formality. When it *does* fire it is reporting that the substitute instrument
+    # and the report's own honesty line disagree about the same number, and the note is explicit
+    # that the verdict is the wrong one of the two. The converse is deliberately not enforced:
+    # `|diff| >= floor` does not imply distinguishable, because significance depends on the
+    # discordance split rather than on `b - c` (§3.2c row 4 is the counterexample).
+    below_floor = abs(diff) < resolving.observable_floor
+    floor_demoted = raw_significant and holm_tested and below_floor
+    significant = raw_significant and holm_tested and not below_floor
 
     ci_excludes_zero = ci[0] > 0 or ci[1] < 0
     unit_plural = _plural(resolving.unit_kind)
@@ -490,11 +659,25 @@ def verdict(
             f"n={n} paired {unit_plural} (unit: {resolving.unit_kind}, design effect "
             f"{resolving.design_effect:.2f}), McNemar exact p={p:.3f} (b={b}, c={c})."
         )
-        if decided_by == "cluster-bootstrap":
-            text += (
-                " Decided by the cluster-bootstrap CI on the paired difference; McNemar's p is "
-                "anti-conservative under clustering — not the decision."
-            )
+    elif not holm_tested:
+        text = (
+            f"Not distinguishable at this sample size. Not tested: Holm–Bonferroni stops at the "
+            f"first non-rejection in the pre-registered family, and a metric ranked ahead of "
+            f"{metric_name} did not clear its own step. McNemar exact p={p:.3f} (b={b}, c={c}) is "
+            "printed without a significance claim (§3.3). Neither model is ranked above the other."
+        )
+    elif floor_demoted:
+        instrument = (
+            "cluster-bootstrap" if decided_by == "cluster-bootstrap" else "MOVER-D effect-size"
+        )
+        text = (
+            f"Not distinguishable at this sample size. The {instrument} interval "
+            f"[{_pp(ci[0])}, {_pp(ci[1])}] pp excludes zero, but the observed "
+            f"{_pp(abs(diff))} pp is below this pack's observable floor: "
+            f"{_floor_clause(resolving, unit_plural)} An interval alone cannot support a claim the "
+            "sample size cannot reach, so the floor decides (-ml §3.4 Rule 7). Neither model is "
+            "ranked above the other."
+        )
     elif ci_excludes_zero:
         text = (
             f"Not distinguishable at this sample size. The effect-size interval "
@@ -506,17 +689,18 @@ def verdict(
         text = (
             f"Not distinguishable at this sample size. Observed difference {diff * 100:+.1f} pp, "
             f"95% CI [{_pp(ci[0])}, {_pp(ci[1])}] pp covers zero (b={b}, c={c}, McNemar exact "
-            f"p={p:.3f}). This pack resolves differences of >={_pp(resolving.mdd80)} pp with 80% "
-            f"power at n={resolving.n_effective:g} effective {unit_plural} ({resolving.n_units} "
-            f"units, design effect {resolving.design_effect:.2f}, {resolving.basis}, "
-            f"alpha={resolving.alpha:g}); the observed {_pp(abs(diff))} pp is below that. "
+            f"p={p:.3f}). {_mdd_clause(resolving, unit_plural, diff)} "
             "Neither model is ranked above the other."
         )
-        if decided_by == "cluster-bootstrap":
-            text += (
-                " Decided by the cluster-bootstrap CI on the paired difference; McNemar's p is "
-                "anti-conservative under clustering — not the decision."
-            )
+
+    if decided_by == "cluster-bootstrap":
+        # Every string on this path carries the label, not two of the five: a reader who sees only
+        # one verdict must still be told which instrument produced it (`-ml` §3.4 Rule 4).
+        text += (
+            f" Decided by the cluster-bootstrap CI on the paired difference, widened by "
+            f"sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared clustering; "
+            "McNemar's p is anti-conservative under clustering — not the decision."
+        )
 
     return Verdict(
         metric_name=metric_name,
@@ -530,18 +714,46 @@ def verdict(
         decided_by=decided_by,
         marginal_overlap=overlap,
         alpha_used=alpha,
+        floor_demoted=floor_demoted,
+        holm_tested=holm_tested,
     )
 
 
-def holm_thresholds(p_values: Sequence[float], *, alpha: float = 0.05) -> list[float]:
-    """Holm–Bonferroni step for each p-value, in the caller's order (§3.3).
+@dataclass(frozen=True)
+class HolmStep:
+    """One family member's Holm–Bonferroni outcome (§3.3)."""
 
-    Order the p-values; test the smallest at α/k, the next at α/(k−1), … The adjusted threshold is
-    printed beside each p-value, which is what makes the correction auditable.
+    p: float
+    rank: int
+    threshold: float
+    tested: bool
+    rejected: bool
+
+
+def holm_steps(p_values: Sequence[float], *, alpha: float = 0.05) -> list["HolmStep"]:
+    """Holm–Bonferroni across the pre-registered family, in the caller's order (§3.3).
+
+    Order the p-values; test the smallest at α/k, the next at α/(k−1), … **stopping at the first
+    non-rejection** — every later member is then `tested=False` and can never be rejected, whatever
+    its own p-value. That stop is the half the delivered build omitted: without it
+    `holm_steps([0.30, 0.04])` prints a 0.05 threshold beside p=0.30 and a reader applying the
+    printed rule concludes the opposite of the verdict (B-1, M-ML-2).
+
+    The `threshold` is still reported for a member past the stop, because §3.3 requires the adjusted
+    threshold printed beside each p-value and that is what makes the correction auditable; `tested`
+    is what says whether the comparison against it means anything.
     """
     k = len(p_values)
     order = sorted(range(k), key=lambda i: p_values[i])
-    steps = [0.0] * k
+    steps: list[HolmStep | None] = [None] * k
+    stopped = False
     for rank, idx in enumerate(order):
-        steps[idx] = alpha / (k - rank)
-    return steps
+        threshold = alpha / (k - rank)
+        rejected = (not stopped) and p_values[idx] <= threshold
+        steps[idx] = HolmStep(
+            p=p_values[idx], rank=rank, threshold=threshold,
+            tested=not stopped, rejected=rejected,
+        )
+        if not stopped and not rejected:
+            stopped = True
+    return [s for s in steps if s is not None]

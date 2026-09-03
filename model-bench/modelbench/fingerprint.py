@@ -25,6 +25,7 @@ collapses the two states §3.4.2 exists to separate.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, NamedTuple
@@ -143,6 +144,12 @@ class Fingerprint:
     armKind: str
     fields: Mapping[str, Any]
 
+    def __post_init__(self) -> None:
+        # `frozen=True` on a dataclass holding a live `dict` the caller still references is frozen
+        # in name only: the record could change under a report that had already validated it. A
+        # copy behind a `MappingProxyType` makes the freeze real (review n-2).
+        object.__setattr__(self, "fields", MappingProxyType(dict(self.fields)))
+
     @property
     def benchSchemaVersion(self) -> Any:
         return self.fields.get("benchSchemaVersion")
@@ -197,4 +204,14 @@ class Fingerprint:
         return self.armKind == other.armKind and dict(self.fields) == dict(other.fields)
 
     def __hash__(self) -> int:
-        return hash((self.armKind, tuple(sorted(self.fields))))
+        """Hash the field *values*, not just their names (review n-2).
+
+        Hashing `tuple(sorted(self.fields))` — the keys alone — satisfied the contract (equal
+        objects hash equal) but collided every fingerprint with the same key set, which is every
+        fingerprint of the same arm kind. `json` with `sort_keys=True` is what makes it safe: the
+        values include lists and nested dicts, so `repr` would order two equal dicts differently by
+        insertion order and break `equal -> equal hash`, and `hash(tuple(sorted(items)))` would
+        raise on the unhashable ones.
+        """
+        canonical = json.dumps(dict(self.fields), sort_keys=True, default=repr)
+        return hash((self.armKind, canonical))

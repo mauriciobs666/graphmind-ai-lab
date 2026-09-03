@@ -15,6 +15,7 @@ from conftest import deterministic_fields, model_fields, run
 from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
+    ClassificationAggregates,
     InvalidFingerprint,
     ItemResult,
     RunResult,
@@ -156,9 +157,9 @@ def test_load_history_is_scoped_to_one_pack(tmp_root) -> None:
     other = _run("theirs", fingerprint_fields=model_fields(packId="embedder-graphrag-retrieval"))
     store(other, tmp_root)
 
-    valid, _ = load_history(tmp_root, packId=PACK)
+    valid, invalid = load_history(tmp_root, packId=PACK)
     assert [r.runId for r in valid] == ["mine"]
-    assert "packId" not in inspect.signature(load_history).parameters or True
+    assert invalid == []
     assert list(inspect.signature(load_history).parameters) == ["root", "packId"]
 
 
@@ -213,3 +214,177 @@ def test_a_fingerprint_dataclass_keeps_absent_distinct_from_null() -> None:
     nulled = Fingerprint(armKind="model", fields=model_fields(kvCacheSetting=None))
     assert [p.reason for p in absent.validate()] == ["absent"]
     assert [p.reason for p in nulled.validate()] == ["null"]
+
+
+# --- M-1 / m-1: which records the pack filter may drop, and which are findings ------------------
+
+
+@pytest.mark.parametrize("packid_value", ["", None, ...])
+def test_a_record_that_cannot_declare_its_pack_is_named_never_silently_dropped(
+    tmp_root, packid_value
+) -> None:
+    """Review M-1 — AC-2's guarantee is "excluded on read **and** named", and this was an absence.
+
+    `packId` is a `REQUIRED_NONEMPTY` field, so a record whose `packId` was blanked or deleted on
+    disk failed the `!=` pack test, was skipped before validation ever ran, and appeared in
+    **neither** returned list: the comparison quietly lost an arm and the report said nothing. This
+    module's own docstring says an unreadable record "is a finding, not an absence".
+    """
+    path = store(_run("r1"), tmp_root)
+    raw = json.loads(path.read_text())
+    if packid_value is ...:
+        del raw["fingerprint"]["packId"]
+    else:
+        raw["fingerprint"]["packId"] = packid_value
+    path.write_text(json.dumps(raw))
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [r.runId for r in invalid] == ["r1"]
+    assert invalid[0].reason == "field"
+    assert "packId" in [p.field for p in invalid[0].problems]
+
+
+@pytest.mark.parametrize("field_name", ["packId", "kvCacheSetting", "modelKey", "runtimeName"])
+def test_the_read_side_quarantines_every_required_field_not_just_one(tmp_root, field_name) -> None:
+    """DC-1's read-side test blanked only `kvCacheSetting`; the exhaustive per-field loop ran
+    against `Fingerprint.validate()` and never through `load_history`, which is the seam AC-2 is
+    actually about (review M-1)."""
+    path = store(_run("r1"), tmp_root)
+    raw = json.loads(path.read_text())
+    raw["fingerprint"][field_name] = ""
+    path.write_text(json.dumps(raw))
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [p.field for p in invalid[0].problems] == [field_name]
+
+
+def test_a_record_belonging_to_another_pack_is_not_this_packs_exclusion(tmp_root) -> None:
+    """Review m-1 — an unknown schema short-circuited the pack filter, so an
+    `embedder-graphrag-retrieval` record at `benchSchemaVersion: 99` was reported as an AC-2
+    exclusion in a `tool-caller` comparison. Its `packId` is right there and readable."""
+    path = store(_run("theirs", fingerprint_fields=model_fields(packId="embedder-x")), tmp_root)
+    raw = json.loads(path.read_text())
+    raw["fingerprint"]["benchSchemaVersion"] = 99
+    path.write_text(json.dumps(raw))
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert invalid == []
+
+
+def test_an_unparseable_record_is_still_this_packs_finding(tmp_root) -> None:
+    """The pack filter stays **off** `unparseable`: a truncated file cannot declare its pack, so
+    dropping it would be the silent absence M-1 is about (review m-1's stated boundary)."""
+    store(_run("r1"), tmp_root)
+    path = tmp_root / "results" / "runs" / "r1.json"
+    path.write_text(path.read_text()[:40])
+    valid, invalid = load_history(tmp_root, packId="some-other-pack")
+    assert [r.reason for r in invalid] == ["unparseable"]
+
+
+# --- M-2 / m-ML-3: the record seam carries no anti-conservative default -------------------------
+
+
+@pytest.mark.parametrize("omitted", ["designEffect", "basis"])
+def test_run_result_requires_the_design_effect_and_its_basis(omitted: str) -> None:
+    """Plan v1.5 §3.5 — "required, no defaults". `-ml` §3.4 Rule 2 removes the `1.0` default from
+    `resolving_power` precisely so no caller can assert DEFF = 1 by omission; a default on
+    `RunResult` restores it one layer out, at the seam S2's runner constructs.
+
+    It also makes DC-5's clause "`report.py` refuses to render one when the required input is
+    absent" true only vacuously: with a default the input can never *be* absent.
+    """
+    import dataclasses
+
+    field = {f.name: f for f in dataclasses.fields(RunResult)}[omitted]
+    assert field.default is dataclasses.MISSING
+    assert field.default_factory is dataclasses.MISSING
+
+    kwargs = {
+        "runId": "r", "sessionId": None, "role": "guard-judge", "armKind": "model",
+        "fingerprint": Fingerprint(armKind="model", fields=model_fields()),
+        "items": (), "aggregates": ClassificationAggregates(),
+        "designEffect": 1.0, "basis": "by-construction",
+    }
+    kwargs.pop(omitted)
+    with pytest.raises(TypeError):
+        RunResult(**kwargs)
+
+
+def test_from_dict_is_the_one_place_the_legacy_fallback_belongs(tmp_root) -> None:
+    """Plan v1.5 — `d.get("designEffect", 1.0)` there means "a record written before these fields
+    existed": a *reader's* compatibility rule under §3.4.3, not a constructor's default."""
+    record = _run("r1").to_dict()
+    del record["designEffect"]
+    del record["basis"]
+    restored = RunResult.from_dict(record)
+    assert restored.designEffect == 1.0
+    assert restored.basis == "assumed"
+
+
+# --- n-3: an absent aggregates block is a finding, not something to repair ----------------------
+
+
+def test_a_record_with_no_aggregates_block_is_quarantined(tmp_root) -> None:
+    """Review n-3 — `from_dict` defaulted a missing block to `{"kind": "classification"}`,
+    fabricating an empty `ClassificationAggregates` for a record that has none. In a module whose
+    thesis is "an unreadable record is a finding, not an absence", this one absence was repaired
+    instead of reported."""
+    path = store(_run("r1"), tmp_root)
+    raw = json.loads(path.read_text())
+    del raw["aggregates"]
+    path.write_text(json.dumps(raw))
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [r.reason for r in invalid] == ["unparseable"]
+
+
+# --- m-7: `store()` names the reason instead of raising from pathlib ---------------------------
+
+
+def test_store_refuses_a_run_id_carrying_a_path_separator(tmp_root) -> None:
+    """Review m-7 — plan §3.5 specifies `modelSlug` sanitisation precisely because real model keys
+    contain `/` (`qwen/qwen3-4b-2507`), and the slugging is S2's runner. Today an unslugged id
+    raised a bare `FileNotFoundError` from `pathlib`, and a segment naming an existing directory
+    would have written outside `runs/`."""
+    with pytest.raises(ValueError) as excinfo:
+        store(_run("pack-qwen/qwen3-4b-2507-01"), tmp_root)
+    assert "runId" in str(excinfo.value)
+    assert not list((tmp_root / "results").rglob("*.json"))
+
+
+# --- m-4: the two derived views' untested filters ----------------------------------------------
+
+
+def test_models_with_stored_results_filters_by_role(tmp_root) -> None:
+    """Review m-4 — `--role` is a shipped flag whose filter could be deleted entirely in green."""
+    store(_run("tc"), tmp_root)
+    store(run("gj", role="guard-judge", fingerprint_fields=model_fields(modelKey="other-model")),
+          tmp_root)
+    assert models_with_stored_results(tmp_root, role="tool-caller") == ["qwen/qwen3-4b-2507"]
+    assert models_with_stored_results(tmp_root, role="guard-judge") == ["other-model"]
+    assert len(models_with_stored_results(tmp_root)) == 2
+
+
+def test_the_index_latency_columns_are_p50_and_p95(tmp_root) -> None:
+    """Review m-4 — the index test asserted only the header and the runId, so computing
+    `latencyMsP95` at the 50th percentile was green."""
+    items = [
+        ItemResult(itemId=f"i{i}", pairingKey=(f"i{i}",), outcome="pass", scoreable={},
+                   counts={}, latencyMs=float(i), detail={})
+        for i in range(1, 101)
+    ]
+    store(_run("r1", items=items), tmp_root)
+    text = rebuild_index(tmp_root).read_text()
+    header, row = text.splitlines()[0].split(","), text.splitlines()[1].split(",")
+    p50 = float(row[header.index("latencyMsP50")])
+    p95 = float(row[header.index("latencyMsP95")])
+    # The *definition* is deliberately not pinned here — nearest-rank vs interpolation is plan
+    # v1.5 §6's open R-13, and `_percentile` has two copies. What is pinned is that the two columns
+    # are different percentiles of the same sample, which is what the surviving mutation denied.
+    assert 45.0 <= p50 <= 55.0
+    assert 90.0 <= p95 <= 100.0
+    assert p95 > p50

@@ -59,7 +59,11 @@ class PackRef(NamedTuple):
 
     packId: str
     packVersion: str
-    contentHash: str
+    #: `None` until S2's `load_pack` computes it. `""` was indistinguishable from a hash that
+    #: failed to compute, in a field whose whole job is identity (review m-5). Nothing reads it at
+    #: S1: the AC-3 banner reads each run's own recorded `fingerprint.packContentHash`, which is
+    #: the right source at this stage.
+    contentHash: str | None
     role: str
     metrics: PackMetrics
     pairingKey: tuple[str, ...]
@@ -126,7 +130,7 @@ def pack_ref_from_manifest(path: Path | str) -> PackRef:
     ref = PackRef(
         packId=manifest["packId"],
         packVersion=manifest["packVersion"],
-        contentHash="",
+        contentHash=None,
         role=manifest["role"],
         metrics=metrics_from_manifest(manifest.get("metrics") or {}),
         pairingKey=pairing_key,

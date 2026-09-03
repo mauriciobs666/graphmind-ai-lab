@@ -5,8 +5,14 @@ Every fixture is a hand-built `RunResult`; no LM Studio, no network, no pack on 
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import (
+    BinaryMetric,
+    PackMetrics,
+    PackRef,
+    ToolCallAggregates,
     classification_aggregates,
     deterministic_fields,
     guard_pack,
@@ -16,9 +22,9 @@ from conftest import (
 )
 
 from modelbench.fingerprint import FieldProblem
-from modelbench.packs import PackConfigError, PackMetrics, PackRef, metrics_from_manifest
+from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import compare_report
-from modelbench.results import InvalidRecord
+from modelbench.results import InvalidRecord, ItemResult
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
 METRIC = "falseAdvanceRate"
@@ -205,10 +211,10 @@ def test_the_tool_caller_resolving_power_line_is_the_notes_verbatim_string() -> 
     ]
     fields = model_fields(packId="tool-caller-shop-assistant")
     a = run("cand", role="tool-caller", items=a_items,
-            aggregates=classification_aggregates(12, 12, metric),
+            aggregates=classification_aggregates(12, 12, metric, unit="conversation"),
             fingerprint_fields={**fields, "modelKey": "cand"})
     b = run("incumbent", role="tool-caller", items=b_items,
-            aggregates=classification_aggregates(6, 12, metric),
+            aggregates=classification_aggregates(6, 12, metric, unit="conversation"),
             fingerprint_fields={**fields, "modelKey": "incumbent"})
 
     md = compare_report([a, b], pack=pack)
@@ -263,7 +269,7 @@ def _clustered_fixture():
     fields = model_fields(packId="tool-caller-clustered")
     arms = [
         run(name, role="tool-caller", items=items,
-            aggregates=classification_aggregates(24, 48, metric),
+            aggregates=classification_aggregates(24, 48, metric, unit="conversation"),
             fingerprint_fields={**fields, "modelKey": name})
         for name in ("cand", "incumbent")
     ]
@@ -476,3 +482,442 @@ def test_every_rate_prints_with_its_denominator() -> None:
     """`-ml` §3.2a — 'never a bare percentage, never without its denominator'."""
     md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
     assert "40/40" in md and "34/40" in md
+
+
+# --- B-1 / M-ML-2: Holm-Bonferroni is applied, and the table says what it decided -----------------
+
+
+def _two_metric_arms(a_wins_first: int, a_wins_second: int, total: int = 40):
+    """Two co-equal verdict metrics over the same 40 paired items, perfectly nested per metric.
+
+    `a_wins_*` is the number of items arm A gets right and arm B does not, so the paired table is
+    `b = a_wins_*, c = 0` — the `guard-judge` shape review B-1 reproduced at k = 2.
+    """
+    second = "falseSuspendRate"
+
+    def items(first_correct: int, second_correct: int):
+        built = []
+        for i in range(total):
+            built.append(
+                item(f"g{i:02d}", correct=True, metric=METRIC).__class__(
+                    itemId=f"g{i:02d}",
+                    pairingKey=(f"g{i:02d}",),
+                    outcome="pass",
+                    scoreable={METRIC: True, second: True},
+                    counts={
+                        METRIC: 1 if i < first_correct else 0,
+                        second: 1 if i < second_correct else 0,
+                    },
+                    latencyMs=1300.0,
+                    detail={},
+                )
+            )
+        return built
+
+    fields = model_fields(packId=PACK_ID)
+    a = run("cand", items=items(total, total), aggregates=classification_aggregates(total, total),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=items(total - a_wins_first, total - a_wins_second),
+            aggregates=classification_aggregates(total - a_wins_first, total),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    return [a, b], guard_pack(headline=None, verdicts=(METRIC, second))
+
+
+def test_the_family_table_and_the_verdicts_agree_on_every_row() -> None:
+    """Review B-1, as rendered output rather than as an assertion about a return value.
+
+    The delivered report printed *"does not reach alpha=0.025 (p=0.031)"* for `falseSuspendRate`
+    and, two paragraphs below, its Holm-adjusted threshold as `0.0500` — so a reader applying the
+    printed rule concluded it had cleared its step while the verdict said it had not. Whatever the
+    decision is, the table has to state it rather than leave the reader to derive it from a
+    threshold that is only valid under a step-down the report never showed.
+    """
+    arms, pack = _two_metric_arms(a_wins_first=8, a_wins_second=6)
+    md = compare_report(arms, pack=pack)
+
+    assert "| metric | McNemar p | Holm-adjusted threshold | decision |" in md
+    rows = [ln for ln in md.splitlines() if ln.startswith(f"| {METRIC} |")]
+    assert rows and "distinguishable" in rows[0] and "not distinguishable" not in rows[0]
+    rows = [ln for ln in md.splitlines() if ln.startswith("| falseSuspendRate |")]
+    assert rows and "0.0500" in rows[0]
+    assert "not distinguishable" in rows[0]
+    # ...and the prose above it must not claim the opposite
+    section = md.split("### falseSuspendRate")[1].split("###")[0]
+    assert "is better than" not in section
+
+
+def test_holm_is_applied_and_not_merely_printed() -> None:
+    """`stats.verdict`'s `alpha_step` existed for exactly this and was passed by nothing (B-1).
+
+    `falseSuspendRate` is b=8, c=1 -> p = 0.039: above the plain Bonferroni alpha/k = 0.025 every
+    metric was decided at, below its own Holm step of 0.05, and its 17.5 pp sits exactly on the
+    alpha=0.025 floor so Rule 7 does not demote it. The step-down is therefore the only thing that
+    can make it distinguishable, and the mutation `alpha = resolving.alpha` is visible right here.
+    `falseAdvanceRate` is b=8, c=0 -> p = 0.008, which clears the alpha/2 step so Holm does not
+    stop before reaching the second metric.
+    """
+    second = "falseSuspendRate"
+    fields = model_fields(packId=PACK_ID)
+
+    def items(is_a: bool):
+        built = []
+        for i in range(40):
+            # falseAdvanceRate: A right everywhere, B wrong on 0..7        -> b=8,  c=0
+            first_ok = True if is_a else i >= 8
+            # falseSuspendRate: A wrong only on 38, B wrong on 0..7        -> b=8,  c=1
+            second_ok = (i != 38) if is_a else (i >= 8)
+            built.append(
+                ItemResult(
+                    itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+                    scoreable={METRIC: True, second: True},
+                    counts={METRIC: int(first_ok), second: int(second_ok)},
+                    latencyMs=1300.0, detail={},
+                )
+            )
+        return built
+
+    a = run("cand", items=items(True), aggregates=classification_aggregates(40, 40),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=items(False), aggregates=classification_aggregates(32, 40),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=None, verdicts=(METRIC, second)))
+    section = md.split(f"### {second}")[1].split("### ")[0]
+    assert "(b=8, c=1)" in section
+    assert "is better than" in section
+    assert "p=0.039" in section
+    row = next(ln for ln in md.splitlines() if ln.startswith(f"| {second} |"))
+    assert "0.0500" in row and "| distinguishable |" in row
+
+
+def test_a_metric_past_the_holm_stop_is_rendered_as_not_tested() -> None:
+    """§3.3 — 'stopping at the first non-rejection'; the remainder is marked, never rejected.
+
+    Both metrics land at p = 0.125 (b=6, c=1). The smaller fails its α/2 = 0.025 step, so Holm
+    stops and the second is not tested at all — the delivered `holm_thresholds` printed it a 0.05
+    threshold with no way for a reader to know it was unusable.
+    """
+    second = "falseSuspendRate"
+    fields = model_fields(packId=PACK_ID)
+
+    def items(a_side: bool):
+        built = []
+        for i in range(40):
+            # b = 6, c = 1 on both metrics
+            a_ok = i >= 1 if a_side else (i >= 7 or i == 0)
+            built.append(
+                ItemResult(
+                    itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+                    scoreable={METRIC: True, second: True},
+                    counts={METRIC: int(a_ok), second: int(a_ok)},
+                    latencyMs=1300.0, detail={},
+                )
+            )
+        return built
+
+    a = run("cand", items=items(True), aggregates=classification_aggregates(39, 40),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=items(False), aggregates=classification_aggregates(34, 40),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=None, verdicts=(METRIC, second)))
+    assert "not tested (Holm stops here)" in md
+    assert "is better than" not in md
+
+
+# --- M-ML-1: no MDD exists below b_min, and the line must not invent one --------------------------
+
+
+def test_a_pack_below_b_min_says_no_difference_is_resolvable() -> None:
+    """Review M-ML-1 — the line rendered *"resolves >=100.0 pp with 80% power"* at zero power.
+
+    n_units = 40 at DEFF = 7 gives n_eff = 5.71, floored to 5, and b_min(0.05) = 6: the McNemar
+    rejection region is empty, so `_mcnemar_power` is zero at every δ and the bisection converged
+    on its upper bracket.
+    """
+    a, b = _nested_arms()
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, design_effect=7.0,
+            basis="measured", fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, design_effect=7.0,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "with 80% power" not in md
+    assert "100.0 pp" not in md
+    assert "No difference is resolvable" in md
+    assert "b_min=6" in md
+    assert "is better than" not in md
+    # and the "best case" caveat goes with it: it qualifies an MDD figure that is not printed.
+    # Found by reading the rendered line, not by an assertion about a return value.
+    assert "Best case" not in md
+
+
+# --- n-4 / m-ML-5: the conditionality clause names the pack's own sample noun ---------------------
+
+
+def test_the_conditionality_clause_names_the_packs_own_sample_noun() -> None:
+    """`-ml` §4.5.1(ii)'s clause was written for the conversation pack; the claim is right for all
+    of them, the noun is not. An item-level pack read *"conditional on the 40 items ...
+    generalization to unwritten scripts"*."""
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "conditional on the 40 items" in md
+    assert "generalization to unwritten items" in md
+    assert "unwritten scripts" not in md
+
+
+# --- M-3 / m-ML-4: the fail-safe propagation is decision 4's whole justification -----------------
+
+
+def test_a_weaker_basis_in_either_arm_moves_the_report_off_mcnemar() -> None:
+    """Review M-3 — plan-review N-2's mechanism, and at report level nothing held it in place.
+
+    Every report fixture used `design_effect=1.0, basis="by-construction"`, so the clustered branch
+    of `verdict()` was exercised only through direct `stats.verdict` calls: forcing
+    `basis = "by-construction"` unconditionally in `compare_report` left all 233 tests green.
+    """
+    a, b = _nested_arms()
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, basis="by-construction",
+            fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, basis="assumed",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "decided by: cluster-bootstrap" in md
+    assert "design effect 1.00, assumed" in md
+    assert "anti-conservative under clustering — not the decision" in md
+
+
+def test_the_design_effect_is_the_max_of_the_two_arms() -> None:
+    """Review M-3 — forcing `design_effect = 1.0` in `compare_report` was green."""
+    a, b = _nested_arms()
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, design_effect=1.0,
+            basis="measured", fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, design_effect=2.0,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "design effect 2.00" in md
+    assert "design effect 1.00" not in md
+    assert "n=20 effective items (40 units" in md
+
+
+def test_two_measured_bases_print_measured_not_assumed() -> None:
+    """Review m-ML-4 — the decision rule is fail-safe and stays unchanged, but printing `assumed`
+    for two genuinely **measured** design effects is false provenance in the one sentence whose
+    entire job is auditability (`-ml` §7.1)."""
+    a, b = _nested_arms()
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, design_effect=2.0,
+            basis="measured", fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, design_effect=2.0,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "design effect 2.00, measured" in md
+    assert "assumed" not in md
+    # the decision is unchanged: `measured` is still not `by-construction`
+    assert "decided by: cluster-bootstrap" in md
+
+
+# --- M-5 / M-ML-4: the paired-n intersection, and the trace it must leave -----------------------
+
+
+def test_a_precondition_failure_is_dropped_from_the_pair_and_printed() -> None:
+    """`-ml` §4.3 risk R2 — 'a model that collapses early scores *better* on the conditional
+    counts', rated **high**. Replacing the filter with `if False:` left all 233 tests green: no
+    fixture in the suite ever set `scoreable=False`, though `conftest.item()` takes the parameter.
+
+    §4.3 rule 2 also requires the excluded items counted in their own tally and printed, and §4.3's
+    paired corollary the **`asymmetry`** count — items scoreable for exactly one model — as a
+    finding about the arm that could not produce them. `grep -rn asymmetry modelbench/` returned
+    nothing.
+    """
+    total = 40
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(total)]
+    b_items = [
+        item(f"g{i:02d}", correct=i >= 6, metric=METRIC, scoreable=i >= 10)
+        for i in range(total)
+    ]
+    fields = model_fields(packId=PACK_ID)
+    a = run("cand", items=a_items, aggregates=classification_aggregates(40, total),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=b_items, aggregates=classification_aggregates(34, total),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    # Arm B could not score its first ten items, and those are exactly the six it got wrong plus
+    # four it got right — so the intersection is 30 rows and the discordance vanishes with them.
+    # That is R2 in miniature: laundering them in would have made the candidate look better.
+    assert "n=30 effective items (30 units" in md
+    assert "n=40 effective items" not in md
+    assert "paired n: 30 of 40 items" in md
+    assert "10 scoreable for cand only" in md
+    assert "0 scoreable for incumbent only" in md
+    assert "(b=0, c=0" in md
+
+
+def test_the_paired_n_tally_is_printed_even_when_nothing_was_dropped() -> None:
+    """A reader cannot see that `n` shrank unless the tally is there when it did not (M-ML-4)."""
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "paired n: 40 of 40 items" in md
+    assert "asymmetry" in md
+
+
+def test_an_item_present_in_only_one_arm_is_counted_and_named() -> None:
+    a_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(40)]
+    b_items = [item(f"g{i:02d}", correct=i >= 6, metric=METRIC) for i in range(36)]
+    fields = model_fields(packId=PACK_ID)
+    a = run("cand", items=a_items, aggregates=classification_aggregates(40, 40),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("incumbent", items=b_items, aggregates=classification_aggregates(30, 36),
+            fingerprint_fields={**fields, "modelKey": "incumbent"})
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "paired n: 36 of 40 items" in md
+    assert "4 present in cand only" in md
+
+
+# --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_fewer_than_two_arms_prints_its_own_reason(count: int) -> None:
+    """Review M-6 — `_comparison_pair` returned `None` for both cases and the report printed one
+    explanation for both, so a one-arm comparison asserted a deterministic-arm reason that is
+    untrue. The route in is `--models` naming a key with no stored run."""
+    arms = _nested_arms()[:count]
+    md = compare_report(arms, pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "fewer than two arms" in md
+    assert "two deterministic arms" not in md
+
+
+# --- m-2: the unpaired label names what actually differed --------------------------------------
+
+
+def test_a_content_hash_only_divergence_is_not_labelled_a_version_difference() -> None:
+    """Review m-2 — one report, two adjacent lines contradicting each other: the banner said the
+    declared versions matched and the comparison-kind line said they did not."""
+    a, b = _nested_arms()
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates,
+            fingerprint_fields=model_fields(
+                modelKey="incumbent", packId=PACK_ID, packContentHash="f" * 64))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "unpaired (same pack version, different content hash)" in md
+    assert "unpaired (different pack version)" not in md
+
+
+# --- m-5: `PackRef.contentHash` is not yet computable, and says so ------------------------------
+
+
+def test_pack_ref_content_hash_is_none_until_s2_computes_it(tmp_path) -> None:
+    """Review m-5 — `pack_ref_from_manifest` set it to `""` by design and nothing reads it: the
+    AC-3 banner correctly reads each run's own `fingerprint.packContentHash`. A field that is
+    always the empty string is a trap for the S2 author who fills it in and expects the report to
+    use it, because `""` is indistinguishable from a hash that failed to compute.
+
+    `None` makes "not yet computed" expressible. **This makes `PackRef.contentHash` a
+    `str | None`, which plan Appendix A's identity triple does not yet allow for** — reported to
+    `architect` rather than fixed here.
+    """
+    from modelbench.packs import pack_ref_from_manifest
+
+    manifest = tmp_path / "pack.json"
+    manifest.write_text(json.dumps({
+        "packId": "p", "packVersion": "1.0.0", "role": "guard-judge",
+        "sampling": {"pairingKey": ["itemId"], "analysisUnit": "itemId"},
+        "metrics": {"verdictMetrics": ["m"], "headlineMetric": "m"},
+    }))
+    ref = pack_ref_from_manifest(manifest)
+    assert ref.contentHash is None
+    assert ref.label == "p@1.0.0"
+
+
+# --- M-ML-3: a Wilson interval is printed only over the analysis unit ---------------------------
+
+
+def _toolcall_arm(run_id: str):
+    """`-ml` §4.3's real denominators: `cleanThroughTurn4` is per conversation, `restraint` is per
+    turn, and the funnel counts are per turn or per call. Figures from review M-ML-3's table."""
+    return run(
+        run_id,
+        role="tool-caller",
+        items=[
+            item(f"S-{i:02d}", correct=i < 9, metric="cleanThroughTurn4",
+                 pairing=(f"S-{i:02d}", "0"))
+            for i in range(12)
+        ],
+        aggregates=ToolCallAggregates(
+            cleanThroughTurn=BinaryMetric(
+                name="cleanThroughTurn4", successes=9, n=12, unit="conversation"
+            ),
+            restraint=BinaryMetric(name="restraint", successes=38, n=40, unit="turn"),
+            funnel=(
+                BinaryMetric(name="nativeCallEmitted", successes=142, n=320, unit="turn"),
+            ),
+        ),
+        fingerprint_fields=model_fields(
+            modelKey=run_id, packId="tool-caller-shop-assistant"
+        ),
+    )
+
+
+def _toolcall_pack():
+    return PackRef(
+        packId="tool-caller-shop-assistant", packVersion="1.0.0", contentHash=None,
+        role="tool-caller",
+        metrics=PackMetrics(
+            verdictMetrics=("cleanThroughTurn4",), headlineMetric="cleanThroughTurn4"
+        ),
+        pairingKey=("scriptId", "replicate"), analysisUnit="scriptId",
+    )
+
+
+def test_no_wilson_interval_is_printed_over_a_turn_pooled_count() -> None:
+    """`-ml` §4.4's first mandatory consequence, verbatim: *"Never print a Wilson interval over a
+    turn-pooled count."*
+
+    The Arms table rendered `wilson_interval(successes, n)` for **every** `BinaryMetric`, and
+    `ToolCallAggregates.named_metrics()` returns `restraint` and the funnel counts, which §4.3
+    defines as turn- and call-denominated. Measured in review M-ML-3: `nativeCallEmitted` at
+    142/320 turns printed **[0.390, 0.499]**, a 10.8 pp interval where the honest bound at the
+    §4.5.1(i) cap (12 clusters) is ~48.7 pp — understated 4.5x. The `exploratory` label mitigates
+    the *verdict* risk and does not cure the *interval*: a printed +-5 pp reads as precision
+    whatever it is labelled.
+    """
+    md = compare_report([_toolcall_arm("cand"), _toolcall_arm("incumbent")], pack=_toolcall_pack())
+
+    clean = next(ln for ln in md.splitlines() if "| cleanThroughTurn4 |" in ln)
+    assert "9/12" in clean
+    assert "[0.468, 0.911]" in clean  # legitimate: n is conversations, the analysis unit
+
+    for name, k_n in (("restraint", "38/40"), ("nativeCallEmitted", "142/320")):
+        row = next(ln for ln in md.splitlines() if f"| {name} |" in ln)
+        assert k_n in row  # the count itself is never suppressed
+        assert "[" not in row.split("|")[-2]
+        assert "n is turns" in row
+    assert "[0.390, 0.499]" not in md
+    assert "not the analysis unit" in md
+
+
+def test_the_suppressed_interval_carries_its_reason() -> None:
+    md = compare_report([_toolcall_arm("cand"), _toolcall_arm("incumbent")], pack=_toolcall_pack())
+    assert "Never print a Wilson interval over a turn-pooled count" in md
+
+
+def test_a_binary_metric_must_declare_its_denominator_unit() -> None:
+    """No default, for the reason `-ml` §3.4 Rule 2 gives about `design_effect`: the anti-
+    conservative value here is "the analysis unit", which is what licenses the interval, so a
+    default is the caller who forgets clustering all over again. `BinaryMetric` carrying no
+    denominator unit is the proximate cause review M-ML-3 names — `report.py` could not tell a
+    per-analysis-unit rate from a turn-pooled one."""
+    import dataclasses
+
+    field = {f.name: f for f in dataclasses.fields(BinaryMetric)}["unit"]
+    assert field.default is dataclasses.MISSING
+    with pytest.raises(TypeError):
+        BinaryMetric(name="m", successes=1, n=2)
+
+
+def test_the_denominator_unit_survives_a_disk_round_trip(tmp_path) -> None:
+    from modelbench.results import RunResult, store
+
+    original = _toolcall_arm("cand")
+    path = store(original, tmp_path)
+    restored = RunResult.from_dict(json.loads(path.read_text()))
+    assert restored == original
+    assert {m.unit for m in restored.aggregates.named_metrics()} == {"conversation", "turn"}

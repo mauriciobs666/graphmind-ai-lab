@@ -2,6 +2,131 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-03 — S1 gate remediation: both blockers, all ten majors, and Rule 7
+
+**What:** Fixed the findings of the two independent S1 gates —
+`docs/reviews/small-model-benchmarking-impl.md` (`analyst`: 1 blocker, 6 majors, 7 minors, 4 nits)
+and `docs/reviews/small-model-benchmarking-ml.md` (`data-scientist`: 1 blocker, 4 majors, 5 minors,
+3 nits) — against plan v1.5 and method note v1.5. Test-first throughout; every fix was
+mutation-tested and the reviewer's **ten surviving mutations are now all killed**.
+
+**The two blockers.**
+
+- **B-ML-1 — the clustered decision path did not cluster.** `verdict()`'s substitute for McNemar
+  was `paired_bootstrap` over the *rows* of the paired table: an i.i.d. resample of observations
+  the declared design effect says are correlated, so the interval was identical at DEFF 2, 4 and 7
+  and *narrower* than the MOVER-D it replaced. It changed the instrument's name, not its interval.
+  New primitive `paired_cluster_bootstrap` inflates the percentile half-widths about the point
+  estimate by `sqrt(design_effect)` — the Kish variance ratio is exactly the quantity that converts
+  (`-ml` §3.4 Rule 5). **This is the note's "smallest honest version", taken deliberately:** the
+  structurally right fix resamples clusters of paired differences, and `PairedOutcomes` carries one
+  row per analysis unit with no grouping, which could only come from a pack declaring
+  `replicatesPerScript > 1` — something Rule 6 makes a validation error while only the one-level
+  `cluster_bootstrap` exists. Building it now would have had no data to consume and no seam to
+  reach it.
+- **B-1 / M-ML-2 — Holm–Bonferroni was printed and never applied.** `report.py` called `verdict()`
+  without `alpha_step`, so every metric was decided at plain Bonferroni α/k, and `holm_thresholds`
+  had no step-down stop. `compare_report` now runs **two passes** — Holm is a property of the
+  family, so no verdict can be decided until every p-value exists — and `holm_thresholds` is
+  replaced by `holm_steps`, returning a `HolmStep` per member with its rank, threshold, `tested`
+  and `rejected`. `verdict()` gained `holm_tested`, which is the stop.
+
+**Rule 7 (`-ml` v1.5 §3.4), enforced in `verdict()` rather than left to a test.** No verdict path
+returns `distinguishable` when `|diff|` is below `resolving.observable_floor`. Three decisions in
+it, each with a reason:
+
+- **It demotes and says so; it does not raise.** The note's contrast is code-versus-test, not
+  raise-versus-demote, and a raise would be unreachable in practice: the √DEFF-widened bootstrap
+  and McNemar's exact rejection region are different instruments that do not align by construction
+  (measured — at DEFF 2 on the `(34, 6, 0, 0)` table the widened interval still excludes zero while
+  15.0 pp sits below the 30.0 pp floor). The demotion renders the contradiction it resolved, which
+  surfaces the defect more loudly than a traceback the report never prints.
+- **It compares against the exact float, never `format_floor_pp`'s truncation** — otherwise the
+  invariant inherits the presentation layer's rounding and can fire, or fail to fire, by 0.05 pp.
+- **The converse is not asserted.** `|diff| >= floor` does not imply distinguishable; §3.2c's row 4
+  `(20, 8, 2, 10)` is the counterexample already in the suite — 15.0 pp exactly on the α=0.05
+  floor, p = 7/64, not distinguishable.
+
+It never fires on the McNemar branch: `test_the_mcnemar_path_satisfies_rule_7_by_construction`
+checks every `(b, c)` split at n ∈ {12, 20, 30, 38, 40, 48, 85} and α ∈ {0.05, 0.025}. That
+asymmetry is what makes it a detector rather than a formality.
+
+**The floor's rounding direction, per the adjudication: the floor truncates, the MDD ceilings.**
+`stats.format_floor_pp` is the one place the direction lives, and it is where the report and the
+verdict strings both print from — the tests assert **through the formatter**, because re-rounding
+inside a test (`round(observable_floor(...) * 100, 1)`) asserts the presentation layer's arithmetic
+against itself. `ResolvingPower.observable_floor` stays exact, so Rule 7's guard is not weakened.
+Truncation is guarded (`math.floor(x / precision + 1e-12)`), mirroring the MDD's `- 1e-12`, and
+**the guard is load-bearing rather than defensive**: `7/40 = 0.175` is `174.99999999999997` bins in
+IEEE doubles, so naive truncation prints `17.4` for the α=0.025, n=38–40 row the note publishes as
+**17.5**. Corrected cells: 15.8→15.7 (n=38), 7.1→7.0 (n=85), 46.7→46.6 (n=15, α=0.025); 58.3 and
+23.3 were already truncations.
+
+**The other majors.**
+
+- `load_history` validated *after* the pack filter, so a record whose `packId` was blanked or
+  deleted on disk landed in **neither** returned list — the comparison quietly lost an arm (M-1).
+  The filter now drops only a record that *says* it belongs to another pack; it also applies to an
+  unknown schema, whose `packId` is readable, and stays **off** `unparseable`, which cannot declare
+  one (m-1).
+- `RunResult.designEffect`/`basis` lost their dataclass defaults (M-2, m-ML-3, plan v1.5 §3.5). The
+  legacy fallback stays in `from_dict`, where it is a reader's §3.4.3 compatibility rule.
+- `BinaryMetric` gained a required `unit`, and the Arms table prints a Wilson interval only over
+  the analysis unit (M-ML-3). §4.4's first mandatory consequence is verbatim *"Never print a Wilson
+  interval over a turn-pooled count"*, and a turn-pooled 142/320 was printing ±5 pp where the
+  honest bound is ~48.7 pp. The count is never suppressed; only the precision claim is.
+- `_paired_rows` returns a `PairedRows` tally and every verdict prints it — the `asymmetry` count
+  §4.3's paired corollary requires, plus rows present in one arm only and unscoreable in both
+  (M-5, M-ML-4). It is printed even when nothing was dropped, because otherwise a reader cannot
+  tell a shrunken `n` from a full one.
+- `min_detectable_difference` raises `UnattainablePower` below `b_min(alpha)` units instead of
+  converging on its bisection bracket and returning `1.0`; `ResolvingPower.mdd80` is then `None`
+  and the line reads *"No difference is resolvable…"* (M-ML-1). The delivered build printed
+  *"resolves differences of >=100.0 pp with 80% power"* where power is identically **zero**.
+- A comparison with fewer than two arms has its own reason, and `--models` naming a key with no
+  stored run exits **2** rather than silently rendering a one-arm report (M-6).
+- The basis/design-effect propagation is now tested at report level (M-3), and prints the **weaker
+  of the two actual bases** rather than collapsing to `assumed` — false provenance in the one
+  sentence whose job is auditability (m-ML-4). The decision rule is unchanged.
+- `REQUIRED_BY_SCHEMA` and `FORBIDDEN_BY_ARM_KIND` are pinned against **independently transcribed
+  literals**, by name and by tier (M-4). Parametrizing over them meant deleting an entry deleted
+  its test case rather than failing one.
+
+**Minors and nits:** the unpaired label distinguishes a content-hash divergence from a version one
+(m-2); `_unit_ids` is called by `_paired_rows` instead of being dead code the docstring names
+(m-3); `--role` and the index's `latencyMsP95` gained tests (m-4); `PackRef.contentHash` is
+`str | None` so "not yet computed" is expressible (m-5); `compare` filters by the manifest's
+`packId`, not the directory name (m-6); `store()` refuses a `runId` that is not a bare filename
+(m-7); the tautological assertion is gone (n-1); `Fingerprint` copies its mapping behind a
+`MappingProxyType` and hashes its **values** (n-2); an absent `aggregates` block is reported as
+`unparseable` rather than repaired into an empty one (n-3); the conditionality clause names the
+pack's own sample noun (n-4, m-ML-5); the `-ml` §3.2c fixtures are republished at 10 dp and
+asserted at the mandated **1e-9 on the proportion**, with the docstring's margin claim corrected
+from four orders to three (m-ML-1); `test_z_95_matches_the_inverse_normal_cdf` records that the
+pinned literal is one ULP from `NormalDist().inv_cdf(0.975)` and must not be tightened to `==`
+(n-ML-3).
+
+**One finding declined, with its reason.** n-ML-1 asked for the floor and the MDD to share a
+denominator (`observable_floor` divides by the unfloored `n_effective`; `min_detectable_difference`
+floors first). Unifying them would make one of the two anti-conservative: Rule 3's principle is to
+round each printed bound in the direction that keeps its own claim true, and the two claims point
+opposite ways — a **larger** MDD is the safe error, a **smaller** floor is. The asymmetry is now
+documented at `observable_floor`, which is the one line the finding asked for.
+
+**Two defects found by reading rendered output, not assertions** — the same discipline that caught
+the CI-orientation bug at S1. The "Best case — assumes the candidate wins every…" caveat was still
+printing where no MDD exists, qualifying a figure that is not on the page; and the clustered label
+was appended to two of the five verdict strings rather than all of them, so a reader seeing only a
+demoted verdict was never told which instrument produced it.
+
+**Verification, from `model-bench/`:** `.venv/bin/python -m pytest -q` → **296 passed** in 2.12s,
+exit 0 (0 failed, 0 skipped, 0 deselected — the `live` marker still deselects nothing because no
+live test exists until S2). `.venv/bin/ruff check .` → `All checks passed!`. **34 source mutations
+against a scratch copy — 34 killed, 0 survivors**, including all ten the `analyst` gate reported as
+surviving and 24 new ones aimed at this change's own fixes. Two of the new ones initially survived,
+both because a test asserted a passthrough field instead of the behaviour it gates; both tests were
+rewritten onto cases where the mutation changes a verdict.
+
 ## 2026-09-03 — S1: fingerprint, results, stats, report, CLI (no model calls)
 
 **What:** Built the harness core per stage S1 of `docs/plans/small-model-benchmarking.md` §4 —
