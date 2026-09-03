@@ -55,7 +55,8 @@ Stakeholder decisions, 2026-09-02:
 | U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | **accepted** — `e8bedce` | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | self → **approve with suggestions** (0 blockers, 5 majors) | 213k tok / 64 tools |
 | U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | delivered — **approve with suggestions** (1 major M-ML-8, 4 minors, 2 nits); note revised to **v1.8**; one sub-claim sent back for reproduction, uncommitted until answered | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4`; `docs/plans/small-model-benchmarking-ml.md` v1.8 | self → approve w/ suggestions | 229k tok / 71 tools |
 | U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | **accepted** — `aebb611` | `docs/plans/small-model-benchmarking.md` v1.8 (+434/−62) | U15 → — | 173k tok / 80 tools |
-| U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | in-flight | `docs/reviews/small-model-benchmarking.md` next `## Pass N` | — → — | — |
+| U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | **accepted** — `ff499d5` | `docs/reviews/small-model-benchmarking.md` `## Pass 3` | self → **needs changes** (2 blockers, 6 majors) | 174k tok / 55 tools |
+| U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed, `aee9ac26e4c41f8ea`) | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.9 | re-gate → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.9 | `analyst` → — | — |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | in-flight | `model-bench/**` | re-gate (both, fresh) → — | — |
@@ -878,3 +879,57 @@ own brief had told U14 to decide for itself (exclude-and-name in the existing
 fixing two findings over, and per-metric suppression leaves a partially-trusted arm in the
 comparison). Left alone, two units in flight would have shipped a plan and an implementation that
 disagreed about the same check.
+
+
+### The plan gate found what four code gates structurally could not
+
+`ff499d5`. **Needs changes** — and the two blockers are both about **S3**, the stakeholder's stated
+scope boundary for this pass, which no amount of S1 review could ever have surfaced.
+
+**G3-1: the `embedder` arm cannot produce a storable fingerprint, so S3 is unbuildable as
+specified.** `runtimeName`/`runtimeVersion` are `REQUIRED_NONEMPTY`; their only source is the chat
+route's `runtime` object; §3.8.1 issues only `POST /api/v0/embeddings`, which carries none of it.
+And v1.8's own §3.4.4a — the "no fallback, no default, refuse instead" rule I had just endorsed —
+is what makes it fatal rather than merely awkward: `store()` refuses, correctly, and the run cannot
+complete. **A correct rule applied to an incompletely-enumerated source set.** The gate's
+generalisation is the finding worth keeping: *§3.4.4a is a source-of-truth section governing one of
+four sources*, and both blockers are instances of that single gap rather than two coincidences.
+
+**Note what this says about gate placement, because it is the transferable lesson.** Four passes of
+S1 code review — 353 tests, hundreds of mutations, two independent reviewers per pass — could not
+have found this. It is not in the code; it is in the specification of a stage not yet built, and it
+only becomes visible when someone traces a *required field* back to the *call surface* that would
+have to supply it. Reviewing the plan for S2 before implementing S2 is what caught it, and the cost
+of catching it here rather than in S3 is one document revision instead of a stage rebuilt after a
+live run fails at `store()`.
+
+**Two findings landed inside a unit already executing, and were relayed rather than queued.** G3-6
+and G3-7 are defects in **DC-10 itself** — the done-condition I had sent U14 two messages earlier as
+authoritative:
+
+- **G3-6** — DC-10's selector compares **two disjoint vocabularies**. `BinaryMetric.unit` is a
+  denominator noun; `PackRef.analysisUnit` is a `pairingKey` component name (`packs.py:130`
+  constrains it to `pairingKey[0]`). `metric.unit == pack.analysisUnit` is **never true**, so a
+  cross-check written literally from DC-10 checks nothing and passes. I verified the two
+  vocabularies are structurally distinct before relaying.
+- **G3-7** — DC-10 counts `scored_outcome(metric) is not None`, but that method **raises** for the
+  sibling malformation, producing an uncaught traceback at exit 1. **P4-5's shape, arriving through
+  the specification written to fix P4-4** — the same defect class, in the fix for its neighbour, one
+  document apart.
+
+Both went to U14 by `SendMessage` within the same turn the gate landed. The rule that a finding
+invalidating a still-running sibling's premise gets relayed immediately paid for itself twice here:
+U14 was actively writing that check, and a selector that is never true is invisible in a green suite.
+
+**A caution I put in the relay and would put in any like it:** the working tree is being edited by
+U14 *while* the gate's line-number citations were taken from a pre-edit state, so I told it to
+confirm the predicate against its own working copy rather than trusting a line number, and to check
+which exception path actually renders before widening any `except`. Precise citations decay fastest
+in exactly the situation where relaying them matters most.
+
+**One claim of mine the gate checked and confirmed, with a correction attached:** the
+`lmsCliCommit` → `residencySource` swap really is free (30 fields before and after; `results/` never
+existed in any commit) — but the edit list was understated by a fourth site that would have shipped
+silently wrong (`conftest.py:39` still declares residency elements as `{modelKey, sizeBytes}` against
+§3.4.4a's `{id, state}`, and `REQUIRED_PRESENT` never checks element shape). A verified claim and an
+incomplete one, in the same sentence.
