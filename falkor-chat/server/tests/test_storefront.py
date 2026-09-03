@@ -66,16 +66,36 @@ AGENT = "assistant"
 LOCALES = ("en", "pt-BR", "es")
 
 # How long the stub turn in `test_the_reset_waits_for_an_in_flight_turn…` holds
-# the turn map before finishing. It only has to be long enough that the reset is
-# reliably issued *while* the turn is still in flight — nothing asserts a
-# duration, so this value carries no margin to get wrong (see that test).
+# the turn map before finishing. Nothing asserts a duration against it, so it is
+# not a timing budget; it only has to be long enough that the reset is reliably
+# issued *while* the turn is still in flight. Since S8-1 that is a margin, not
+# nothing — `started_at` is stamped on `_call_bounded`'s worker thread, so this
+# has to outlast that thread's start skew, measured at 0.12–0.15 ms over 20
+# samples against the 150 ms here. Losing it fails loudly and in the right
+# words ("the reset was not issued while the turn was in flight"), which is the
+# whole difference S8-1 bought.
 TURN_WORK_S = 0.15
 
-# The ceiling `_call_bounded` gives a `quiesce_s=0` reset. Three orders of
-# magnitude above the ~0.2 ms these actually take: it is not a performance
-# assertion, it is what turns a broken `_await_quiesce` deadline into a *failing
-# test* instead of a hang (review `docs/reviews/salesperson-ui-impl.md`
-# `## Pass 7`, S7-3).
+# The ceiling `_call_bounded` gives a `quiesce_s=0` reset. Not a performance
+# assertion — it is what turns a broken `_await_quiesce` deadline into a
+# *failing test* instead of a hang (review
+# `docs/reviews/salesperson-ui-impl.md` `## Pass 7`, S7-3).
+#
+# The three calls that take this bound are not the same size. Measured over
+# three runs: ~0.2 ms twice, for the two refusals, which come back before they
+# touch the graph — and ~2.5 ms once, in
+# `test_an_idle_participant_is_not_made_to_wait`, the only bounded call that
+# commits a write. So the margin is ~360x, not the ~5000x the refusals alone
+# suggest, and that write is where tightening this constant bites first: a
+# tripped bound there leaves a daemon thread that goes on to delete and re-mint
+# a subgraph in the shared `ws:test` *after* its test has ended, under a message
+# blaming a hung wait (Pass 8, S8-2).
+#
+# It stays at 1.0 s rather than being widened away from that write, because the
+# tightness is doing work: with `_await_quiesce` mutated to sleep a blind 2 s
+# and then report idle, this bound is what reddens the idle test — the one
+# assertion in the file that answers "the reset waited when it had nothing to
+# wait for".
 IMMEDIATE_S = 1.0
 
 
@@ -83,9 +103,21 @@ def _call_bounded(fn, *args, seconds=IMMEDIATE_S, **kwargs):
     """Call `fn` on a daemon thread and **fail** if it has not returned in
     `seconds`.
 
-    Returns `{started_at, returned_at, seconds}` — monotonic instants either
-    side of the call, for tests that assert an *ordering* against another
-    thread — plus exactly one of `result` / `error`.
+    Returns `{started_at, returned_at, result}`, or **re-raises** whatever the
+    call raised. The two instants are monotonic readings either side of the
+    call, for tests that assert an *ordering* against another thread, and both
+    are taken **on the thread that makes the call** — a `started_at` read on the
+    calling thread instead would be the moment this test *asked* for the call,
+    which precedes the moment the daemon thread begins it by the whole
+    thread-start skew, and `started_at < …` would then tolerate that skew in the
+    direction that passes (review `## Pass 8`, S8-1).
+
+    Re-raising rather than handing back a captured exception is what keeps this
+    from inverting `pytest.raises`: a call that raises fails the test whether or
+    not the call site remembered to look, so the two sites that *expect* a
+    refusal say so in the ordinary idiom — `with pytest.raises(...)` around the
+    bounded call — and a site that expects success needs no bookkeeping
+    assertion at all (S8-3).
 
     Why this and not the simpler `t0`/`assert elapsed < …` around a direct call:
     the thing being bounded is `_await_quiesce`'s own deadline, so a test that
@@ -100,25 +132,25 @@ def _call_bounded(fn, *args, seconds=IMMEDIATE_S, **kwargs):
     is a daemon so a genuinely hung call cannot keep the interpreter alive.
     """
     box: dict = {}
-    started = time.monotonic()
 
     def run():
+        box["started_at"] = time.monotonic()
         try:
             box["result"] = fn(*args, **kwargs)
-        except BaseException as exc:  # noqa: BLE001 — re-asserted by the caller
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the caller below
             box["error"] = exc
         finally:
             box["returned_at"] = time.monotonic()
 
     worker = threading.Thread(target=run, daemon=True)
-    box["started_at"] = started
     worker.start()
     worker.join(timeout=seconds)
-    box["seconds"] = time.monotonic() - started
     assert not worker.is_alive(), (
         f"{getattr(fn, '__name__', fn)!r} did not return within {seconds}s — "
         "a wait bounded by the code under test hung instead of failing"
     )
+    if "error" in box:
+        raise box["error"]
     return box
 
 
@@ -1534,7 +1566,6 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
         outcome = _call_bounded(stocked.reset_participant, record, seconds=10)
     finally:
         turn.join(timeout=5)
-    assert "error" not in outcome, outcome.get("error")
     result = outcome["result"]
     finished_at = turn_result["finished_at"]
 
@@ -1545,6 +1576,12 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
     #
     #   worker:  ├─ in flight ─────────── finished_at ──┤
     #   reset:      started_at ─────── (blocked) ─── returned_at
+    #
+    # Both of the reset's instants are read on the daemon thread that makes the
+    # call, which is what makes "no margin" literally true: a `started_at` read
+    # out here on the main thread would be stamped before that thread was even
+    # scheduled, and the first line below would then pass on the strength of the
+    # thread-start skew alone (Pass 8, S8-1).
     #
     # Every other assertion in this test is also satisfied by the ordering in
     # which the worker finishes *before* the reset starts — nothing to wait for
@@ -1586,9 +1623,9 @@ def test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running(
     # so this must refuse at once — and a broken `_await_quiesce` deadline would
     # otherwise block on a wall clock this test does not control, which is a CI
     # job timeout naming no test at all rather than a failure (Pass 7, S7-3).
-    outcome = _call_bounded(shop.reset_participant, record)
+    with pytest.raises(QuiesceTimeoutError):
+        _call_bounded(shop.reset_participant, record)
 
-    assert isinstance(outcome.get("error"), QuiesceTimeoutError)
     assert _one(conn, "MATCH (n) RETURN count(n)") == before
     assert _thread_message_count(conn, record.thread_id) == 2
     assert shop.turn_in_flight(record.participant_id) is True
@@ -1606,9 +1643,10 @@ def test_an_idle_participant_is_not_made_to_wait(stocked, conn):
     shop = _storefront(stocked._services, quiesce_s=0)
     record, _ctx = _busy_participant(shop, conn)
 
+    # Bounded by `IMMEDIATE_S`, and this is the one bounded call that writes —
+    # read that constant's comment before changing it.
     outcome = _call_bounded(shop.reset_participant, record)
 
-    assert "error" not in outcome, outcome.get("error")
     assert outcome["result"]["threadId"] != record.thread_id
 
 
@@ -1783,10 +1821,8 @@ def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypa
     busy = _storefront(stocked._services, quiesce_s=0)
     busy.set_turn_state(record.participant_id, TURN_THINKING)
     # Bounded for the same reason as above (S7-3): fail, never hang.
-    assert isinstance(
-        _call_bounded(busy.reset_participant, record).get("error"),
-        QuiesceTimeoutError,
-    )
+    with pytest.raises(QuiesceTimeoutError):
+        _call_bounded(busy.reset_participant, record)
 
     monkeypatch.setattr(
         stocked._repo, "reset_participant",
